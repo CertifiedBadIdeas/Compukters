@@ -136,7 +136,7 @@ internal fun interface ProgramVmSessionFactory {
 
     fun restoreBoot(): ProgramVmRestoration? = null
 
-    fun discardCheckpoint(): Unit = error("checkpoint consumption is unavailable")
+    fun discardCheckpoint() = Unit
 }
 
 internal data class ProgramVmRestoration(
@@ -190,7 +190,9 @@ internal class NativeProgramVmSessionFactory(
         return ProgramVmRestoration(NativeProgramVmSession(restored.session, context), restored.hostStateBytes())
     }
 
-    override fun discardCheckpoint() = requireNotNull(filesystem).discardCheckpoint()
+    override fun discardCheckpoint() {
+        filesystem?.discardCheckpoint()
+    }
 }
 
 private class NativeProgramVmSession(

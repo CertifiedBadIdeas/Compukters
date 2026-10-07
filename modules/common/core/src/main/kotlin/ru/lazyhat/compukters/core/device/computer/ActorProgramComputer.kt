@@ -71,13 +71,16 @@ class ActorProgramComputer(
     private var lastObservedServerTick = -1L
     private var hostCompletionTick: Long? = null
 
+    var restoring: Boolean = false
+        private set
+
     var state: ProgramRuntimeState = ProgramRuntimeState.Idle
         private set
 
     var fileSystemGeneration: Long? = null
         private set
 
-    fun turnOn(): CompletableFuture<ProgramRuntimeActorReply> {
+    fun turnOn(requiredCheckpoint: Boolean = false): CompletableFuture<ProgramRuntimeActorReply> {
         checkOwner()
         if (closeResult != null) return CompletableFuture.failedFuture(IllegalStateException("computer is closed"))
         bootRequest?.let { previous ->
@@ -87,7 +90,44 @@ class ActorProgramComputer(
                 return previous.copy()
             }
         }
-        return lifecycleRequest(ProgramRuntimeActorCommand::StartBoot).also { bootRequest = it }.copy()
+        val prepared =
+            lifecycleRequest { id ->
+                ProgramRuntimeActorCommand.RestoreOrBoot(id, maxOf(0, lastObservedServerTick), requiredCheckpoint)
+            }
+        val version = lifecycle
+        restoring = true
+        val restored =
+            prepared.thenCompose { reply ->
+                checkOwner()
+                val checkpoint =
+                    reply.value as? ProgramRuntimeActorValue.RestorationPrepared
+                        ?: return@thenCompose CompletableFuture.completedFuture(reply)
+                if (version != lifecycle || closeResult != null) {
+                    return@thenCompose CompletableFuture.failedFuture<ProgramRuntimeActorReply>(
+                        IllegalStateException("restoration was cancelled"),
+                    )
+                }
+                try {
+                    addon.restoreCheckpoint(checkpoint.addonStateBytes(), checkpoint.programScopes)
+                } catch (failure: Exception) {
+                    runCatching(addon::reset).onFailure(failure::addSuppressed)
+                    return@thenCompose observe(
+                        service.request(lease.endpoint) { id ->
+                            ProgramRuntimeActorCommand.AbortRestoration(id, failure.message ?: "Addon resource restoration failed")
+                        },
+                        version,
+                    )
+                }
+                observe(
+                    service.request(lease.endpoint) { id ->
+                        ProgramRuntimeActorCommand.CompleteRestoration(id, maxOf(0, lastObservedServerTick))
+                    },
+                    version,
+                )
+            }
+        restored.whenComplete { _, _ -> if (version == lifecycle) restoring = false }
+        bootRequest = restored
+        return restored.copy()
     }
 
     fun reboot(): CompletableFuture<ProgramRuntimeActorReply> =
@@ -106,7 +146,10 @@ class ActorProgramComputer(
         send { id ->
             val prepared = command(id)
             require(
-                prepared !is ProgramRuntimeActorCommand.Start &&
+                prepared !is ProgramRuntimeActorCommand.RestoreOrBoot &&
+                    prepared !is ProgramRuntimeActorCommand.CompleteRestoration &&
+                    prepared !is ProgramRuntimeActorCommand.AbortRestoration &&
+                    prepared !is ProgramRuntimeActorCommand.Start &&
                     prepared !is ProgramRuntimeActorCommand.StartBoot &&
                     prepared !is ProgramRuntimeActorCommand.Reboot &&
                     prepared !is ProgramRuntimeActorCommand.Shutdown,
@@ -200,15 +243,22 @@ class ActorProgramComputer(
         }
     }
 
+    fun hibernateAsync(worldTick: Long): CompletableFuture<Long?> {
+        checkOwner()
+        closeResult?.let { return it.copy() }
+        collectAddonCompletions()
+        val resources = addon.checkpoint()
+        return hibernateAsync(worldTick, resources)
+    }
+
     /** Final acknowledged world results enter the worker before capture; undelivered requests are cancelled. */
-    fun hibernateAsync(
+    internal fun hibernateAsync(
         worldTick: Long,
         addonState: ByteArray,
     ): CompletableFuture<Long?> {
         checkOwner()
         require(worldTick >= 0)
         closeResult?.let { return it.copy() }
-        collectAddonCompletions()
         val effects =
             buildList {
                 pendingOutput?.let { add(ProgramRuntimeActorEffect.CompleteRedstoneOutput(it.requestId, it.packed, it.result)) }
@@ -217,6 +267,7 @@ class ActorProgramComputer(
             }
         val request = ProgramActorHibernation(worldTick, addonState, effects)
         lifecycle++
+        restoring = false
         pendingOutput = null
         pendingSound = null
         pendingRedstoneInputs.clear()
@@ -235,6 +286,7 @@ class ActorProgramComputer(
         checkOwner()
         closeResult?.let { return it.copy() }
         lifecycle++
+        restoring = false
         pendingOutput = null
         pendingSound = null
         pendingRedstoneInputs.clear()
@@ -333,6 +385,7 @@ class ActorProgramComputer(
         val submitted = service.request(lease.endpoint, command)
         if (submitted.isCompletedExceptionally) return submitted
         lifecycle++
+        restoring = false
         pendingOutput = null
         pendingSound = null
         pendingRedstoneInputs.clear()

@@ -18,6 +18,7 @@
 
 package ru.lazyhat.compukters.core.device.runtime.program
 
+import ru.lazyhat.compukters.api.addon.AddonCheckpointCodec
 import ru.lazyhat.compukters.api.addon.ProgramAddonCompletion
 import ru.lazyhat.compukters.api.addon.ProgramAddonDispatch
 import ru.lazyhat.compukters.api.addon.ProgramAddonHost
@@ -28,6 +29,8 @@ internal object EmptyProgramAddonHost : ProgramAddonHost {
     override val capabilitySchemas: List<HostCapabilitySchema> = emptyList()
 
     override fun dispatch(request: ProgramAddonRequest): ProgramAddonDispatch = error("an addon request cannot target the empty host")
+
+    override fun checkpoint(): ByteArray = byteArrayOf()
 
     override fun reset() = Unit
 }
@@ -75,6 +78,13 @@ private class CompositeProgramAddonHost(
             completions += polled
         }
         return completions
+    }
+
+    override fun checkpoint(): ByteArray = AddonCheckpointCodec.encode(hosts.map { it.checkpoint() })
+
+    override fun restoreCheckpoint(state: ByteArray) {
+        val parts = AddonCheckpointCodec.decode(state, hosts.size)
+        hosts.forEachIndexed { index, host -> host.restoreCheckpoint(parts[index]) }
     }
 
     override fun reset() = applyToAll(hosts, ProgramAddonHost::reset)

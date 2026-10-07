@@ -32,6 +32,31 @@ import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class ScopedProgramAddonHostTest {
+    @Test fun `checkpoint restores parent resources filters retired scopes and creates new scopes lazily`() {
+        val original = programScopedAddonHostOf { RecordingHost() }
+        original.dispatch(request(0, 1))
+        original.programStarted(7)
+        original.dispatch(request(7, 2))
+        original.programStarted(12)
+        original.dispatch(request(12, 3))
+        val saved = original.checkpoint()
+        val created = mutableListOf<RecordingHost>()
+        val restored = programScopedAddonHostOf { RecordingHost().also { created += it } }
+        restored.restoreCheckpoint(saved, listOf(0, 7, 20))
+        assertEquals(3, created.size) // Initial empty root plus two materialized saved scopes.
+        assertTrue(created.first().closed)
+        assertEquals(1, created[1].calls)
+        assertEquals(1, created[2].calls)
+        assertFailsWith<IllegalArgumentException> { restored.dispatch(request(12, 4)) }
+        restored.dispatch(request(20, 5))
+        assertEquals(4, created.size)
+        assertFailsWith<IllegalArgumentException> { restored.programStarted(20) }
+        restored.programStarted(21)
+        restored.close()
+        assertTrue(created.all { it.closed })
+        original.close()
+    }
+
     @Test fun `nested programs retain parents and release only the completed child`() {
         val created = mutableListOf<RecordingHost>()
         val host = programScopedAddonHostOf { RecordingHost().also { created += it } }
@@ -100,6 +125,20 @@ class ScopedProgramAddonHostTest {
             List(minOf(maximumCompletions, pending.size)) {
                 pending.removeFirst()
             }
+
+        override fun checkpoint(): ByteArray =
+            java.nio.ByteBuffer
+                .allocate(4)
+                .putInt(calls)
+                .array()
+
+        override fun restoreCheckpoint(state: ByteArray) {
+            require(state.size == 4)
+            calls =
+                java.nio.ByteBuffer
+                    .wrap(state)
+                    .int
+        }
 
         override fun reset() {
             closed = true

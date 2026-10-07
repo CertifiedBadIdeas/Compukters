@@ -57,6 +57,12 @@ sealed interface AddonCallResult<out T> {
 }
 
 interface AddonHostHandler : AutoCloseable {
+    fun checkpoint(): ByteArray = throw UnsupportedOperationException("Addon handler does not support hibernation")
+
+    fun restoreCheckpoint(state: ByteArray) {
+        require(state.isEmpty()) { "Addon handler checkpoint is unsupported" }
+    }
+
     fun reset() = Unit
 
     override fun close() = reset()
