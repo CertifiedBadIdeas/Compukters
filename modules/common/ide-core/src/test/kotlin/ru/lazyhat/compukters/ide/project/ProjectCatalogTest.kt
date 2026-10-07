@@ -34,6 +34,40 @@ import kotlin.test.assertTrue
 
 class ProjectCatalogTest {
     @Test
+    fun `existing projects register in place persist and deduplicate without copying`() {
+        val root = createTempDirectory("compukters-catalog-")
+        val external = ProjectCatalog.open(createTempDirectory("compukters-external-")).create("existing")
+        val catalog = ProjectCatalog.open(root)
+        val registered = catalog.register(external.handle.canonicalPath)
+        assertEquals(external.handle.canonicalPath, registered.handle.canonicalPath)
+        assertEquals("existing", registered.manifest.name)
+        assertEquals(registered.directoryName, catalog.register(external.handle.canonicalPath).directoryName)
+        assertEquals(listOf(registered), ProjectCatalog.open(root).projects().map { it.copy(handle = registered.handle) })
+        assertEquals(1, root.listDirectoryEntries().size)
+        assertTrue(
+            root
+                .listDirectoryEntries()
+                .single()
+                .toFile()
+                .isFile,
+        )
+        external.handle.canonicalPath.moveTo(external.handle.canonicalPath.resolveSibling("moved"))
+        assertFalse(registered.handle.isValid())
+    }
+
+    @Test
+    fun `invalid registration publishes nothing and owned project registration deduplicates`() {
+        val root = createTempDirectory("compukters-catalog-invalid-")
+        val catalog = ProjectCatalog.open(root)
+        assertFailsWith<Exception> { catalog.register(createTempDirectory("compukters-no-manifest-")) }
+        assertTrue(root.listDirectoryEntries().isEmpty())
+        val owned = catalog.create("owned")
+        assertEquals(owned.directoryName, catalog.register(owned.handle.canonicalPath).directoryName)
+        assertEquals(1, catalog.projects().size)
+        assertFailsWith<IllegalArgumentException> { catalog.create(".registered-user") }
+    }
+
+    @Test
     fun `catalog creates and lists canonical projects without a lock`() {
         val root = createTempDirectory("compukters-projects-")
         val catalog = ProjectCatalog.open(root)

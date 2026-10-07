@@ -51,6 +51,7 @@ class ProjectPath private constructor(
             require(value.isNotEmpty() && !value.startsWith('/') && '\\' !in value) { "project path must be relative" }
             val components = value.split('/')
             require(components.none { it.isEmpty() || it == "." || it == ".." }) { "project path is not canonical" }
+            require(components.none { it.equals(".git", ignoreCase = true) }) { "Git metadata is not project content" }
             components.forEach { component ->
                 val bytes =
                     try {
