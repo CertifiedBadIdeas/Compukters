@@ -202,11 +202,19 @@ object IdeRenderer {
             val projectLabel = workspace.project.displayName.take(projectLabelWidth)
             ui(IdeTextKind.Header, "$projectLabel ▾", projectControl.left + 5, projectControl.top + 5)
             val active = workspace.activeFile?.value ?: "No file"
+            val fileColors = IdeGitFileColors(workspace.git.status ?: workspace.git.result?.status)
+            val activeLeft = projectControl.right + 7
+            val activeWidth = ((geometry.header.right - activeLeft - 6) / font.cellWidth).coerceAtLeast(0)
+            val targetText = " · ${targetLabel(targetState)}"
+            val visibleActive = active.take((activeWidth - targetText.length).coerceAtLeast(0))
+            ui(IdeTextKind.Header, visibleActive, activeLeft, geometry.header.top + 7, fileColors.color(active), geometry.header)
             ui(
                 IdeTextKind.Header,
-                "$active · ${targetLabel(targetState)}",
-                projectControl.right + 7,
+                targetText,
+                activeLeft + visibleActive.length * font.cellWidth,
                 geometry.header.top + 7,
+                IdeColors.MUTED,
+                geometry.header,
             )
             toolbar(workspace, targetState, toolingState, busy, workspace.activeFile != null || selectedTreePath != null)
             toolWindows(workspace)
@@ -466,19 +474,7 @@ object IdeRenderer {
                             check.top + 5,
                             clip = check,
                         )
-                        val kind = change.workingTree ?: change.index ?: "changed"
-                        val color =
-                            if (kind == "added" ||
-                                kind == "untracked"
-                            ) {
-                                IdeColors.STRING
-                            } else if (kind == "removed" ||
-                                kind == "missing"
-                            ) {
-                                IdeColors.ERROR
-                            } else {
-                                IdeColors.INFO
-                            }
+                        val color = IdeGitFileColors.color(change)
                         ui(IdeTextKind.Source, change.path.value, row.left + 26, row.top + 5, color, row)
                     }
                 }
@@ -876,6 +872,7 @@ object IdeRenderer {
             val bounds = geometry.tree ?: return
             scissors += IdeScissorDraw(IdeScissorKind.Tree, bounds, Z_CLIP)
             val rows = bounds.height / UI_LINE_HEIGHT
+            val fileColors = IdeGitFileColors(workspace.git.status ?: workspace.git.result?.status)
             workspace.explorerRows().drop(treeFirstRow).take(rows).forEachIndexed { index, row ->
                 val y = bounds.top + 4 + index * UI_LINE_HEIGHT
                 if (
@@ -901,12 +898,21 @@ object IdeRenderer {
                             val entry = row.entry
                             val marker = if (entry.kind is ru.lazyhat.compukters.ide.project.tree.ProjectFileKind.Directory) "▸ " else "  "
                             val selected = entry.path == selectedTreePath || entry.path == workspace.activeFile
+                            if (selected) {
+                                fills +=
+                                    IdeFillDraw(
+                                        IdeFillKind.Selection,
+                                        IdeRect(bounds.left, y - 3, bounds.right, minOf(bounds.bottom, y + UI_LINE_HEIGHT - 3)),
+                                        IdeColors.SELECTION,
+                                        Z_SELECTION,
+                                    )
+                            }
                             Triple(
                                 marker + entry.path.value.substringAfterLast('/'),
                                 entry.path.value.count {
                                     it == '/'
                                 } + 1,
-                                if (selected) IdeColors.ACCENT else IdeColors.TEXT,
+                                fileColors.color(entry.path.value),
                             )
                         }
 
@@ -1168,6 +1174,28 @@ object IdeRenderer {
                     IdeColors.LINE_NUMBER,
                     bounds,
                 )
+                editor.gitLineChanges.forEach { change ->
+                    val deleted = change.kind == ru.lazyhat.compukters.ide.git.GitLineChangeKind.Deleted
+                    val anchor = change.firstLine.coerceAtMost(editor.totalLines - 1)
+                    val applies =
+                        if (deleted) {
+                            lineNumber == anchor
+                        } else {
+                            lineNumber >= change.firstLine &&
+                                lineNumber.toLong() < change.firstLine.toLong() + change.lineCount
+                        }
+                    if (applies) {
+                        val top = if (deleted && change.firstLine >= editor.totalLines) rowTop + font.cellHeight - 2 else rowTop
+                        val marker = IdeRect(codeLeft - 5, top, codeLeft - 2, if (deleted) top + 2 else rowTop + font.cellHeight)
+                        val color =
+                            when (change.kind) {
+                                ru.lazyhat.compukters.ide.git.GitLineChangeKind.Added -> IdeColors.GIT_ADDED
+                                ru.lazyhat.compukters.ide.git.GitLineChangeKind.Modified -> IdeColors.GIT_MODIFIED
+                                ru.lazyhat.compukters.ide.git.GitLineChangeKind.Deleted -> IdeColors.GIT_DELETED
+                            }
+                        fills += IdeFillDraw(IdeFillKind.GitChange, marker, color, Z_TEXT)
+                    }
+                }
                 occurrenceHighlights(editor, line, lineStart, codeLeft, rowTop)
                 selection(editor, line, lineStart, codeLeft, rowTop)
                 styledLine(editor, lineNumber, line, lineStart, codeLeft, y)
@@ -2378,6 +2406,8 @@ object IdeRenderer {
             -> IdeColors.STRING
 
             KotlinLexicalKind.Escape -> IdeColors.STRING_ESCAPE
+
+            KotlinLexicalKind.FunctionCall -> IdeColors.FUNCTION
 
             KotlinLexicalKind.Number -> IdeColors.NUMBER
 

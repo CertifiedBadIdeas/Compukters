@@ -36,6 +36,61 @@ class JGitBackendTest {
     private val backend = JGitBackend(GitLimits()) { }
 
     @Test
+    fun `source changes compare unsaved buffers with HEAD without touching disk or index`() {
+        val project = ProjectCatalog.open(createTempDirectory("compukters-git-markers-")).create("demo")
+        val root = project.handle.canonicalPath
+        val path = ProjectPath.file("src/main.kt")
+        val source = root.resolve(path.value)
+        source.writeText("one\ntwo\nthree\nfour\n")
+        run(project, GitOperation.Init)
+        run(project, GitOperation.CommitSelected(listOf(path), "Initial", "Tester", "test@example.invalid"))
+        val index = Files.readAllBytes(root.resolve(".git/index"))
+        val result = run(project, GitOperation.SourceChanges(path, "one\nchanged\nthree\nadded\nfour\n"))
+        assertEquals(
+            listOf(GitLineChange(1, 1, GitLineChangeKind.Modified), GitLineChange(3, 1, GitLineChangeKind.Added)),
+            result.lineChanges,
+        )
+        assertEquals(
+            listOf(GitLineChange(3, 0, GitLineChangeKind.Deleted)),
+            run(project, GitOperation.SourceChanges(path, "one\ntwo\nthree\n")).lineChanges,
+        )
+        assertEquals("one\ntwo\nthree\nfour\n", source.readText())
+        assertTrue(index.contentEquals(Files.readAllBytes(root.resolve(".git/index"))))
+        assertTrue(result.status.changes.none { it.path == path })
+        assertTrue(run(project, GitOperation.SourceChanges(path, source.readText())).lineChanges.isEmpty())
+        assertTrue(run(project, GitOperation.SourceChanges(path, source.readText().replace("\n", "\r\n"))).lineChanges.isEmpty())
+        assertTrue(run(project, GitOperation.SourceChanges(path, "a\u0000b")).lineChanges.isEmpty())
+        val bounded = JGitBackend(GitLimits(diffBytes = 8)) { }
+        assertTrue(
+            bounded
+                .execute(
+                    project.handle,
+                    GitOperation.SourceChanges(path, "oversized buffer"),
+                    null,
+                    GitCancellation(),
+                ).lineChanges
+                .isEmpty(),
+        )
+        assertTrue(
+            bounded.execute(project.handle, GitOperation.SourceChanges(path, "short"), null, GitCancellation()).lineChanges.isEmpty(),
+        )
+        root.resolve(".gitignore").writeText("src/ignored.kt\n")
+        val ignored = ProjectPath.file("src/ignored.kt")
+        root.resolve(ignored.value).writeText("ignored")
+        assertTrue(run(project, GitOperation.SourceChanges(ignored, "ignored edit")).lineChanges.isEmpty())
+        val new = ProjectPath.file("src/new.kt")
+        root.resolve(new.value).writeText("new")
+        assertEquals(
+            listOf(GitLineChange(0, 1, GitLineChangeKind.Added)),
+            run(project, GitOperation.SourceChanges(new, "new edit")).lineChanges,
+        )
+        val fresh = ProjectCatalog.open(createTempDirectory("compukters-git-unborn-markers-")).create("demo")
+        assertFalse(run(fresh, GitOperation.SourceChanges(path, "new")).status.available)
+        run(fresh, GitOperation.Init)
+        assertEquals(GitLineChangeKind.Added, run(fresh, GitOperation.SourceChanges(path, "new")).lineChanges.single().kind)
+    }
+
+    @Test
     fun `selected commits use saved working files and preserve unrelated staged contents`() {
         val project = ProjectCatalog.open(createTempDirectory("compukters-git-selected-")).create("demo")
         val root = project.handle.canonicalPath

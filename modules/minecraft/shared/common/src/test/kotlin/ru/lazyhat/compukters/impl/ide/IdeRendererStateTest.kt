@@ -94,6 +94,109 @@ import kotlin.test.assertTrue
 
 class IdeRendererStateTest {
     @Test
+    fun `Git gutter marks additions and deletions at both document boundaries`() {
+        val geometry = geometry()
+        val kinds = ru.lazyhat.compukters.ide.git.GitLineChangeKind.entries
+        for (kind in kinds) {
+            for (firstLine in if (kind == ru.lazyhat.compukters.ide.git.GitLineChangeKind.Deleted) listOf(0, 1) else listOf(0)) {
+                val marker =
+                    ru.lazyhat.compukters.ide.git.GitLineChange(
+                        firstLine,
+                        if (kind ==
+                            ru.lazyhat.compukters.ide.git.GitLineChangeKind.Deleted
+                        ) {
+                            0
+                        } else {
+                            1
+                        },
+                        kind,
+                    )
+                val editor = semanticEditor("val value = 1", gitLineChanges = listOf(marker)) { _, _ -> IdeSemanticInteraction.None }
+                val fill =
+                    IdeRenderer.extract(workspaceState(editor, IdeBuildState.Idle), geometry).fills.single {
+                        it.kind ==
+                            IdeFillKind.GitChange
+                    }
+                assertTrue(geometry.editor.contains(fill.bounds))
+                assertEquals(
+                    if (kind ==
+                        ru.lazyhat.compukters.ide.git.GitLineChangeKind.Deleted
+                    ) {
+                        2
+                    } else {
+                        IdeCodeFontProfile.DEFAULT.cellHeight
+                    },
+                    fill.bounds.height,
+                )
+            }
+        }
+        val invisible =
+            ru.lazyhat.compukters.ide.git
+                .GitLineChange(3, 1, ru.lazyhat.compukters.ide.git.GitLineChangeKind.Added)
+        val editor = semanticEditor("val value = 1", gitLineChanges = listOf(invisible)) { _, _ -> IdeSemanticInteraction.None }
+        assertTrue(
+            IdeRenderer.extract(workspaceState(editor, IdeBuildState.Idle), geometry).fills.none { it.kind == IdeFillKind.GitChange },
+        )
+    }
+
+    @Test
+    fun `Git colors survive selected file rows and line markers preserve source styles`() {
+        val path = ProjectPath.file("src/main.kt")
+        val change =
+            ru.lazyhat.compukters.ide.git
+                .GitChange(path, null, "modified")
+        val marker =
+            ru.lazyhat.compukters.ide.git
+                .GitLineChange(0, 1, ru.lazyhat.compukters.ide.git.GitLineChangeKind.Modified)
+        val editor = semanticEditor("val value = 1", gitLineChanges = listOf(marker)) { _, _ -> IdeSemanticInteraction.None }
+        val base = workspaceState(editor, IdeBuildState.Idle)
+        val page = base.page as IdePageState.Workspace
+        val state =
+            base.copy(
+                page =
+                    IdePageState.Workspace(
+                        page.value.copy(
+                            git =
+                                page.value.git.copy(
+                                    status =
+                                        ru.lazyhat.compukters.ide.git
+                                            .GitStatus(true, changes = listOf(change)),
+                                ),
+                        ),
+                    ),
+            )
+        val geometry = geometry()
+        val model = IdeRenderer.extract(state, geometry, selectedTreePath = path)
+        assertEquals(IdeColors.GIT_MODIFIED, model.text.single { it.kind == IdeTextKind.TreeRow && it.value.trim() == "main.kt" }.color)
+        assertEquals(IdeColors.GIT_MODIFIED, model.text.single { it.kind == IdeTextKind.Header && it.value == path.value }.color)
+        val fill = model.fills.single { it.kind == IdeFillKind.GitChange }
+        assertEquals(IdeColors.GIT_MODIFIED, fill.color)
+        assertTrue(geometry.editor.contains(fill.bounds))
+        assertTrue(model.fills.any { it.kind == IdeFillKind.Selection && geometry.tree!!.contains(it.bounds) })
+        assertTrue(model.text.any { it.kind == IdeTextKind.Source && it.value == "val" && it.color == IdeColors.KEYWORD })
+        val colors =
+            IdeGitFileColors(
+                ru.lazyhat.compukters.ide.git.GitStatus(
+                    true,
+                    changes =
+                        listOf(
+                            change,
+                            ru.lazyhat.compukters.ide.git
+                                .GitChange(ProjectPath.file("src/new.kt"), "added", "modified"),
+                            ru.lazyhat.compukters.ide.git
+                                .GitChange(ProjectPath.file("src/untracked.kt"), null, "untracked"),
+                            ru.lazyhat.compukters.ide.git
+                                .GitChange(ProjectPath.file("src/nested/conflict.kt"), "conflict", "modified"),
+                        ),
+                ),
+            )
+        assertEquals(IdeColors.GIT_ADDED, colors.color("src/new.kt"))
+        assertEquals(IdeColors.GIT_UNTRACKED, colors.color("src/untracked.kt"))
+        assertEquals(IdeColors.GIT_CONFLICT, colors.color("src"))
+        assertEquals(IdeColors.TEXT, colors.color("src/clean.kt"))
+    }
+
+    @Test
     fun `left tool stripe anchors Git Log at bottom and history leaves source visible`() {
         val editor = semanticEditor("val value = 1") { _, _ -> IdeSemanticInteraction.None }
         val base = workspaceState(editor, IdeBuildState.Idle)
@@ -824,7 +927,7 @@ class IdeRendererStateTest {
         assertEquals(IdeTextStyle.Semantic(SemanticCategory.LocalVariable), value.style)
         val keyword = model.text.single { it.sourceRange == EditorRange(secondStart, secondStart + 3) }
         assertEquals(IdeTextStyle.Lexical(KotlinLexicalKind.Keyword), keyword.style)
-        val selection = model.fills.single { it.kind == IdeFillKind.Selection }
+        val selection = model.fills.single { it.kind == IdeFillKind.Selection && geometry.editor.contains(it.bounds) }
         assertEquals(geometry.editor.top, selection.bounds.top)
         assertEquals(geometry.editor.top + IdeCodeFontProfile.DEFAULT.cellHeight, selection.bounds.bottom)
         val caret = model.fills.single { it.kind == IdeFillKind.Caret }
@@ -1661,6 +1764,7 @@ class IdeRendererStateTest {
         methodUsages: List<ru.lazyhat.compukters.ide.analysis.MethodUsageCount> = emptyList(),
         caretUtf16: Int = 0,
         completion: ((AnalysisSnapshotIdentity, VirtualSourcePath) -> IdeCompletionState)? = null,
+        gitLineChanges: List<ru.lazyhat.compukters.ide.git.GitLineChange> = emptyList(),
         interaction: (AnalysisSnapshotIdentity, VirtualSourcePath) -> IdeSemanticInteraction,
     ): IdeEditorView.Text {
         val document = EditorDocument(source)
@@ -1685,6 +1789,7 @@ class IdeRendererStateTest {
             lexical = lexical,
             find = find,
             occurrenceRanges = occurrences,
+            gitLineChanges = gitLineChanges,
             analysis =
                 IdeAnalysisState.Active(
                     identity,

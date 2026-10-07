@@ -98,6 +98,64 @@ import kotlin.test.assertTrue
 
 class IdeClientControllerTest {
     @Test
+    fun `Git inspection is read only throttled and rejects old buffer and project results`() {
+        val fixture = ControllerFixture(preferences = preferences("demo", "src/main.kt"), additionalProject = true)
+        fixture.workspace.inspectEnabled = true
+        fixture.startAndTick()
+        assertEquals(1, fixture.workspace.inspections.size)
+        assertTrue(
+            fixture.controller
+                .viewState()
+                .busy
+                .isEmpty(),
+        )
+        fixture.controller.dispatch(IdeCommand.Edit(IdeEditorInput.Type("edit")))
+        val status =
+            GitStatus(
+                true,
+                changes =
+                    listOf(
+                        ru.lazyhat.compukters.ide.git
+                            .GitChange(ProjectPath.file("src/main.kt"), null, "modified"),
+                    ),
+            )
+        val markers =
+            listOf(
+                ru.lazyhat.compukters.ide.git
+                    .GitLineChange(0, 1, ru.lazyhat.compukters.ide.git.GitLineChangeKind.Modified),
+            )
+        fixture.workspace.inspections[0].complete(GitResult(status, lineChanges = markers))
+        fixture.controller.tick()
+        assertEquals(status, fixture.workspaceView().git.status)
+        assertTrue(fixture.textEditor().gitLineChanges.isEmpty())
+        fixture.clock.now = 1000
+        fixture.controller.tick()
+        assertEquals(2, fixture.workspace.inspections.size)
+        fixture.workspace.inspections[1].complete(GitResult(status, lineChanges = markers))
+        fixture.controller.tick()
+        assertEquals(markers, fixture.textEditor().gitLineChanges)
+        fixture.workspace.completeSave()
+        fixture.controller.tick()
+        fixture.clock.now = 2000
+        fixture.controller.tick()
+        val beforeForeground = fixture.workspace.inspections.last()
+        fixture.controller.dispatch(IdeCommand.GitVisible(true))
+        val fresh = status.copy(changes = emptyList())
+        fixture.workspace.completeGit(GitResult(fresh))
+        fixture.controller.tick()
+        beforeForeground.complete(GitResult(status))
+        fixture.controller.tick()
+        assertEquals(fresh, fixture.workspaceView().git.status)
+        val stale = fixture.workspace.inspections.last()
+        fixture.controller.dispatch(IdeCommand.OpenProject("other"))
+        fixture.controller.tick()
+        stale.complete(GitResult(status))
+        fixture.controller.tick()
+        assertEquals(null, fixture.workspaceView().git.status)
+        fixture.controller.close()
+    }
+
+    @Test
     fun `bottom history preserves commit preview and draft and resets on project change`() {
         val fixture = ControllerFixture(preferences = preferences("demo", "src/main.kt"), additionalProject = true)
         fixture.startAndTick()
@@ -1676,6 +1734,16 @@ internal class ControlledWorkspace(
     private val other = ProjectPath.file("src/other.kt")
     val openResults = mutableMapOf<ProjectPath, ProjectFileOpenResult>()
     val saveRequests = mutableListOf<IdeSaveRequest>()
+    var inspectEnabled = false
+    val inspections = mutableListOf<CompletableFuture<GitResult?>>()
+
+    override fun inspectGit(
+        project: ProjectHandle,
+        source: GitOperation.SourceChanges?,
+        cancellation: ru.lazyhat.compukters.ide.git.GitCancellation,
+    ): CompletableFuture<GitResult?> =
+        if (inspectEnabled) CompletableFuture<GitResult?>().also(inspections::add) else CompletableFuture.completedFuture(null)
+
     val gitRequests = mutableListOf<Pair<ProjectHandle, GitOperation>>()
     private val pendingGitResults = ArrayDeque<CompletableFuture<GitResult>>()
 

@@ -41,6 +41,15 @@ Open **Commit** using its icon on the left-hand tool stripe. For a project witho
 The **Changes** tab lists modified, new and deleted files with checkboxes. Click the checkbox beside a file to include
 its current saved content in the next commit; the heading selects or clears all changed files.
 
+File names in the project tree, active-file title and Changes use Git colors: blue for modified files,
+green for added files, brown for untracked files, gray for deleted files and red for conflicts. Folder colors
+summarize their descendants; selection keeps a separate background.
+
+The source editor marks added and modified lines in its left gutter; a short gray tick marks a deletion.
+These markers compare the current buffer, including unsaved edits, with **HEAD**. Background inspection runs
+at most once per second without saving or pausing typing. Ignored files have no new-file markers; binary files
+and comparisons exceeding the configured limits omit markers.
+
 Click a file name to preview its difference from **HEAD**. Added lines are green and deleted lines are red. On a wide
 window, the preview appears beside the list; on a narrow window, it opens the **Diff** tab. The list and the wide
 preview scroll independently.
@@ -63,7 +72,7 @@ and its file selection while retaining the author fields for the IDE session. Ch
 and file selection. **Editor** returns to the source editor; Escape closes an open menu, leaves a focused commit
 field, then returns to the editor.
 
-Before a Git operation, the IDE saves modified open buffers. It pauses editing while the operation runs and refreshes
+Before a foreground Git operation, the IDE saves modified open buffers. It pauses editing while the operation runs and refreshes
 files, tree and analysis after operations which change the working tree. Save conflicts must be resolved first.
 Git metadata is hidden from the project tree and excluded from compiler snapshots and executable deployment.
 At a short viewport, scroll the panel to reach the commit fields and actions.

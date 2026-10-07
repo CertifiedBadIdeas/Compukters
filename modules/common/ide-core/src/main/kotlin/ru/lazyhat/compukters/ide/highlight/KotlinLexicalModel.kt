@@ -21,6 +21,7 @@ package ru.lazyhat.compukters.ide.highlight
 enum class KotlinLexicalKind {
     Keyword,
     Identifier,
+    FunctionCall,
     TypeLike,
     Number,
     String,

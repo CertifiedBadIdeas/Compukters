@@ -162,6 +162,13 @@ while Git runs, rejects results from a departed project and invalidates affected
 A failed create/import/clone retains the current project instead of clearing its buffers prematurely. File/folder
 renames rebase cached descendant paths while preserving editor state.
 
+Read-only `inspectGit` shares the bounded I/O executor but bypasses foreground save barriers and edit suspension.
+The controller admits at most one inspection, throttled to one second, and checks project generation, foreground
+operation identity and buffer revision before displaying line changes. `SourceChanges` compares the supplied
+buffer with HEAD using bounded HistogramDiff, normalizes CRLF/LF and leaves disk/index untouched. Binary,
+ignored new files and over-budget comparisons omit markers. Status colors share one projection for tree,
+parent folders, active-file title and Commit rows; gutter markers do not replace syntax or semantic coloring.
+
 Remote operations admit HTTPS URLs without embedded credentials, query or fragment. Tokens live in masked client
 session input and an explicitly closeable credential object; no credential data enters preferences, project files,
 worker snapshots or server payloads. JGit copies are cleared after each operation. Commit author identity is explicit.

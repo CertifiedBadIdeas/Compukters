@@ -96,6 +96,12 @@ sealed interface GitOperation {
         val againstHead: Boolean = false,
     ) : GitOperation
 
+    /** Read-only comparison of the current editor buffer with HEAD. */
+    data class SourceChanges(
+        val path: ProjectPath,
+        val text: String,
+    ) : GitOperation
+
     data class Stage(
         val path: ProjectPath,
     ) : GitOperation
@@ -159,11 +165,24 @@ data class GitStatus(
     val state: String? = null,
 )
 
+enum class GitLineChangeKind { Added, Modified, Deleted }
+
+data class GitLineChange(
+    val firstLine: Int,
+    val lineCount: Int,
+    val kind: GitLineChangeKind,
+) {
+    init {
+        require(firstLine >= 0 && lineCount >= 0)
+    }
+}
+
 data class GitResult(
     val status: GitStatus,
     val message: String? = null,
     val diff: String? = null,
     val history: List<GitCommit> = emptyList(),
+    val lineChanges: List<GitLineChange> = emptyList(),
 )
 
 object GitRemote {

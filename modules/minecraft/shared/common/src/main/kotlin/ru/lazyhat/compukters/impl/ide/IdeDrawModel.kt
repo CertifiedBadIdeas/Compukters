@@ -57,6 +57,7 @@ enum class IdeTextRotation { None, Clockwise90 }
 enum class IdeFillKind {
     CurrentLine,
     DiagnosticMarker,
+    GitChange,
     Background,
     Border,
     Shadow,
