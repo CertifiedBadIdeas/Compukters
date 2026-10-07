@@ -39,6 +39,7 @@ import ru.lazyhat.compukters.compiler.artifact.model.TypeId
 import ru.lazyhat.compukters.compiler.artifact.model.TypeRef
 import ru.lazyhat.compukters.compiler.artifact.model.ValueType
 import ru.lazyhat.compukters.compiler.artifact.write.ArtifactWriter
+import java.util.IdentityHashMap
 
 /**
  * Tooling-only concrete-template symbols carried by ordinary artifact exports.
@@ -159,6 +160,7 @@ object LibrarySpecializations {
         val typeImports = linkedMapOf<Int, TypeRef.Imported>()
         val functionImports = linkedMapOf<Int, FunctionRef.Imported>()
         val fieldImports = linkedMapOf<Int, FieldRef.Imported>()
+        val moduleHashes = IdentityHashMap<Module, ByteArray>()
 
         fun addImport(
             module: Module,
@@ -182,7 +184,7 @@ object LibrarySpecializations {
                     ModuleId.of(0u),
                     StringId.of(index.toUInt()),
                     signature ?: TypeRef.Imported(id),
-                    ArtifactWriter.moduleSemanticHash(module),
+                    moduleHashes.getOrPut(module) { ArtifactWriter.moduleSemanticHash(module) }.copyOf(),
                 )
             return id
         }

@@ -23,7 +23,10 @@ addon mods, with optional Create, Sable and Propulsion integrations for Minecraf
   All twelve primitive arrays support size and initializer constructors, factories, indexed access, direct iteration,
   resizing and overlapping copies, with compact byte/short storage. `List`, `MutableList` and `ArrayList` specialize
   all primitive element types with unboxed storage and nominal boxing for nullable and `Any` views. Generic and
-  collection floating equality preserve NaN and signed-zero behavior. The canonical `stdlib:core` moves to `1.9.0`.
+  collection floating equality preserve NaN and signed-zero behavior. Primitive integral ranges/progressions support
+  stored bounds, steps, iterators and safe termination at numeric limits; floating ranges use IEEE membership.
+  Signed narrow bit operations are available through `kotlin.experimental`. Platform classes with generic supertypes
+  share their canonical identity across source and compiled library code. The canonical `stdlib:core` moves to `1.9.0`.
   The canonical `kotlin:builtins` library moves to `1.8.0`; the new unsigned forms require Runtime ABI 1.14.
 
 - Guest Kotlin supports inherited generic interface selection methods with typed predicates through concrete

@@ -1754,6 +1754,7 @@ fn entry_argument_limits() -> EntryArgumentLimits {
 fn k2_int_loops_execute_across_quota_slices_without_host_io() {
     let path = std::env::var("COMPUKTER_KOTLIN_INT_LOOPS_ARTIFACT")
         .expect("COMPUKTER_KOTLIN_INT_LOOPS_ARTIFACT must be set for this conformance test");
+    execute_primitive_program(std::path::Path::new(&format!("{path}.ranges.cpkt")));
     let bytes = fs::read(path).expect("K2 Int loops output must exist");
     let verified = verify_artifact(Arc::from(bytes), ArtifactLimits::default())
         .expect("pinned VM must verify K2 Int loops output");
