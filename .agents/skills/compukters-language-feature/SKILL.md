@@ -9,8 +9,12 @@ Keep the accepted Guest Kotlin surface, emitted artifact, VM behavior, IDE model
 
 ## Establish the Contract
 
-Read the relevant entry in `docs/developers/kotlin-support.md` and the compilation boundary in `docs/contributors/architecture.md`. Distinguish
-among these claims before changing code:
+Start at `docs/developers/kotlin-support.md`, then read the relevant owning topic under
+`docs/developers/kotlin/`. For library APIs use `docs/developers/stdlib-support.md` and its `stdlib/` topics;
+for device contracts use `docs/developers/guest-platform-support.md`, and for tooling-only claims use
+`docs/developers/ide-support.md`. Read the compilation boundary in
+`docs/contributors/architecture/compiler.md` through the architecture index. Distinguish among these claims
+before changing code:
 
 - K2 accepts the source;
 - Compukters lowers and verifies it;
@@ -46,8 +50,10 @@ artifact/conformance coverage for the Kotlin-to-Rust boundary, VM tests for exec
 for tooling-only behavior. Exercise rejection paths when unsupported shapes must produce diagnostics rather than
 invalid artifacts or runtime faults.
 
-When Guest Kotlin support changes, update the affected `docs/developers/kotlin-support.md` entry and its exact evidence in the
-same commit. Keep checked entries tied to stable repository paths and named test behavior.
-Use the Guest Kotlin row in `docs/contributors/verification.md` to select affected tests, conformance scenarios, and lint.
-Do not automatically run `verifyLocalFull` after a language or library iteration or completed feature; reserve it
-for release preparation or an explicit user request, following `AGENTS.md`.
+When Guest Kotlin support changes, update the affected owning topic and its exact evidence in the same commit.
+Keep `docs/developers/kotlin-support.md` and `stdlib-support.md` as policy/navigation indexes; update them
+only when their boundaries or navigation change. Do not duplicate library inventories in language topics. Keep
+supported entries tied to stable repository paths and named test behavior. Use the Guest Kotlin row in
+`docs/contributors/verification.md` to select affected tests, conformance scenarios, and lint. Do not
+automatically run `verifyLocalFull` after a language or library iteration or completed feature; reserve it for
+release preparation or an explicit user request, following `AGENTS.md`.

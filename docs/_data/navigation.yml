@@ -59,11 +59,41 @@
         - title: Kotlin support
           url: /KOTLIN-SUPPORT/
           description: Supported language features and their exact boundaries.
+          children:
+            - title: Projects
+              url: /KOTLIN-SUPPORT/projects/
+            - title: Primitives
+              url: /KOTLIN-SUPPORT/primitives/
+            - title: Control flow
+              url: /KOTLIN-SUPPORT/control-flow/
+            - title: Functions and generics
+              url: /KOTLIN-SUPPORT/functions/
+            - title: Objects and MFVC
+              url: /KOTLIN-SUPPORT/objects/
+            - title: Nullability and exceptions
+              url: /KOTLIN-SUPPORT/nullability/
+            - title: Tasks
+              url: /KOTLIN-SUPPORT/tasks/
         - title: Standard library
           url: /STDLIB-SUPPORT/
           description: Available Kotlin library functions and collections.
+          children:
+            - title: Core and text
+              url: /STDLIB-SUPPORT/core-text/
+            - title: Arrays and ranges
+              url: /STDLIB-SUPPORT/arrays-ranges/
+            - title: Collections
+              url: /STDLIB-SUPPORT/collections/
+            - title: Console I/O
+              url: /STDLIB-SUPPORT/io/
+        - title: IDE support
+          url: /IDE-SUPPORT/
+          description: Diagnostics, completion, navigation and project tooling.
     - title: APIs and extensions
       items:
+        - title: Guest platform support
+          url: /GUEST-PLATFORM-SUPPORT/
+          description: Executable core and device contracts with their evidence.
         - title: API reference
           url: /API/
           description: Browse generated signatures for core and every addon.
@@ -94,6 +124,23 @@
         - title: Architecture
           url: /ARCHITECTURE/
           description: Compiler, native runtime, actor host, and ownership.
+          children:
+            - title: Compiler and platform
+              url: /ARCHITECTURE/compiler/
+            - title: Tooling and IDE
+              url: /ARCHITECTURE/tooling/
+            - title: Runtime ownership
+              url: /ARCHITECTURE/runtime/
+            - title: Filesystem and lifetime
+              url: /ARCHITECTURE/persistence/
+            - title: Minecraft and addons
+              url: /ARCHITECTURE/world-integration/
+            - title: Guest execution
+              url: /ARCHITECTURE/guest-execution/
+            - title: Module ownership
+              url: /ARCHITECTURE/modules/
+            - title: ABI reference
+              url: /ARCHITECTURE/abi/
         - title: Module and package guide
           url: /PACKAGE-GUIDELINE/
           description: Put changes in the layer that owns their behavior.

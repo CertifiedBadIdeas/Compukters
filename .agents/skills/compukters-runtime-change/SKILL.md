@@ -9,12 +9,14 @@ Preserve deterministic bounded execution and single ownership across the Rust VM
 
 ## Locate Ownership
 
-Read the runtime ownership section of `docs/contributors/architecture.md` and the relevant VM documentation. Identify the owning
-layer before editing:
+Read the ownership map in `docs/contributors/architecture.md`, then
+`docs/contributors/architecture/runtime.md` and, for storage/lifecycle work,
+`docs/contributors/architecture/persistence.md`, plus the relevant VM documentation. Identify the owning layer
+before editing:
 
 - `host/compukter-vm` owns decoding and verification internals, execution, managed memory, quotas, capabilities,
   terminal state, guest filesystem and persistence, and host-neutral sessions;
-- `native-runtime` owns JDK 25 FFM layouts, safe Kotlin adapters, native lifetime, and error mapping;
+- `native-runtime-api` owns the Java 21 typed session contract; `native-runtime-ffm` owns JDK 25 FFM and `native-runtime-jni` owns Java 21 JNI layouts, transport, native lifetime, and error mapping;
 - `core` owns loader-independent `ProgramRuntimeHost` behavior, bounded advancement, and host capabilities;
 - Minecraft modules adapt the host to game lifecycle but do not own a second VM, filesystem, or terminal model.
 

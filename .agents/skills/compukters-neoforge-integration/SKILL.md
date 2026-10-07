@@ -9,9 +9,12 @@ Keep loader-specific code at the edge and validate behavior at the lowest layer 
 
 ## Place Ownership Correctly
 
-Read the relevant ownership and runtime sections in `docs/contributors/architecture.md`. Put loader-independent Minecraft behavior
-in `v26_1-common`, NeoForge registration and adapters in `v26_1-neoforge`, and behavior that does not need
-`net.minecraft.*` in `core` or its owning lower module. `core` must not import Minecraft classes.
+Read `docs/contributors/architecture.md`, then the relevant contracts in `architecture/world-integration.md`,
+`architecture/runtime.md` and `architecture/persistence.md` beneath `docs/contributors`. Put canonical
+loader-independent Minecraft behavior in `modules/minecraft/shared/common`, canonical NeoForge registration
+and adapters in `modules/minecraft/shared/neoforge`, target-specific compatibility/packaging in the version
+leaves, and behavior that does not need `net.minecraft.*` in `core` or its owning lower module. `core` must
+not import Minecraft classes.
 
 Determine the side and lifecycle before editing: physical client, logical server, server tick, level save, chunk
 load/unload, block destruction, viewer open/close, or server shutdown. Preserve server-thread confinement and keep

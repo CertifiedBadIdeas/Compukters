@@ -23,8 +23,10 @@ Classify the earliest failing boundary:
 - VM quota, managed allocation, capability suspension/resume, filesystem, or terminal behavior;
 - loader-independent Minecraft carrier behavior versus NeoForge registration, lifecycle, payload, or GameTest behavior.
 
-Use `docs/contributors/architecture.md` to identify the owner. For Guest Kotlin claims, also inspect the evidence recorded in
-`docs/developers/kotlin-support.md`.
+Use `docs/contributors/architecture.md` to identify the owner, then follow its relative link to the detailed
+layer document. For Guest Kotlin claims, use `docs/developers/kotlin-support.md` or `stdlib-support.md` to
+locate the owning topic and inspect its exact evidence; Guest device/API and IDE claims have separate support
+pages linked from those indexes.
 
 ## Narrow the Boundary
 
