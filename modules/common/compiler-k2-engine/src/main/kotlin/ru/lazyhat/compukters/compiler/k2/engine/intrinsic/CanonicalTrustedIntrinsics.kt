@@ -53,20 +53,18 @@ object CanonicalTrustedIntrinsics {
             primitive("kotlin", "builtins", "kotlin", "Boolean.not", "fun():Boolean")
             primitive("kotlin", "builtins", "kotlin", "Char.compareTo", "fun(Char):Int")
             primitive("kotlin", "builtins", "kotlin", "Char.toInt", "fun():Int")
-            primitive("kotlin", "builtins", "kotlin", "CharArray.<init>", "constructor(Int)")
-            primitive("kotlin", "builtins", "kotlin", "CharArray.get", "fun(Int):Char")
-            primitive("kotlin", "builtins", "kotlin", "CharArray.set", "fun(Int,Char):Unit")
-            primitive("kotlin", "builtins", "kotlin", "CharArray.size", "val():Int")
-            primitive("kotlin", "builtins", "kotlin", "IntArray.<init>", "constructor(Int)")
-            primitive("kotlin", "builtins", "kotlin", "IntArray.get", "fun(Int):Int")
-            primitive("kotlin", "builtins", "kotlin", "IntArray.iterator", "fun():IntIterator")
-            primitive("kotlin", "builtins", "kotlin", "IntArray.set", "fun(Int,Int):Unit")
-            primitive("kotlin", "builtins", "kotlin", "IntArray.size", "val():Int")
-            primitive("kotlin", "builtins", "kotlin", "DoubleArray.<init>", "constructor(Int)")
-            primitive("kotlin", "builtins", "kotlin", "DoubleArray.get", "fun(Int):Double")
-            primitive("kotlin", "builtins", "kotlin", "DoubleArray.iterator", "fun():DoubleIterator")
-            primitive("kotlin", "builtins", "kotlin", "DoubleArray.set", "fun(Int,Double):Unit")
-            primitive("kotlin", "builtins", "kotlin", "DoubleArray.size", "val():Int")
+            GuestPrimitive.entries.forEach { primitive ->
+                val name = primitive.sourceName
+                val array = "${name}Array"
+                val iterator = if (primitive.unsigned) "Iterator<$name>" else "${name}Iterator"
+                primitive("kotlin", "builtins", "kotlin", "$array.<init>", "constructor(Int)")
+                primitive("kotlin", "builtins", "kotlin", "$array.<init>", "constructor(Int,(Int)->$name)")
+                primitive("kotlin", "builtins", "kotlin", "$array.get", "fun(Int):$name")
+                primitive("kotlin", "builtins", "kotlin", "$array.set", "fun(Int,$name):Unit")
+                primitive("kotlin", "builtins", "kotlin", "$array.size", "val():Int")
+                primitive("kotlin", "builtins", "kotlin", "$array.iterator", "fun():$iterator")
+                primitive("kotlin", "builtins", "kotlin", primitive.arrayFactory.removePrefix("kotlin."), "fun($name):$array")
+            }
             primitive("kotlin", "builtins", "kotlin", "CharSequence.get", "fun(Int):Char")
             primitive("kotlin", "builtins", "kotlin", "Comparable.compareTo", "fun(T):Int")
             primitive("kotlin", "builtins", "kotlin", "Enum.name", "val():String")
@@ -148,10 +146,8 @@ object CanonicalTrustedIntrinsics {
             primitive("kotlin", "builtins", "kotlin", "Unit.toString", "fun():String")
             primitive("kotlin", "builtins", "kotlin", "arrayOf", "fun(T):Array<T>")
             primitive("kotlin", "builtins", "kotlin", "arrayOfNulls", "fun(Int):Array<T?>")
-            primitive("kotlin", "builtins", "kotlin", "intArrayOf", "fun(Int):IntArray")
-            primitive("kotlin", "builtins", "kotlin", "doubleArrayOf", "fun(Double):DoubleArray")
             primitive("kotlin", "builtins", "kotlin", "toString", "fun(T?.):String")
-            listOf("IntArray", "DoubleArray", "CharArray", "Array<T>").forEach { array ->
+            (GuestPrimitive.entries.map { "${it.sourceName}Array" } + "Array<T>").forEach { array ->
                 primitive("kotlin", "builtins", "kotlin.collections", "copyOf", "fun($array.):$array")
                 primitive(
                     "kotlin",

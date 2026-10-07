@@ -20,6 +20,8 @@ addon mods, with optional Create, Sable and Propulsion integrations for Minecraf
   `UInt` and `ULong`, with arithmetic, comparisons, conversions, increment/decrement and applicable bit operations.
   Nullable signatures and nominal wrappers preserve source type through `Any?` casts. Unsigned division, comparisons
   and decimal text preserve the full bit range. `Boolean.and/or/xor` and Char arithmetic are available.
+  All twelve primitive arrays support size and initializer constructors, factories, indexed access, direct iteration,
+  resizing and overlapping copies, with compact byte/short storage.
   The canonical `kotlin:builtins` library moves to `1.8.0`; the new unsigned forms require Runtime ABI 1.14.
 
 - Guest Kotlin supports inherited generic interface selection methods with typed predicates through concrete

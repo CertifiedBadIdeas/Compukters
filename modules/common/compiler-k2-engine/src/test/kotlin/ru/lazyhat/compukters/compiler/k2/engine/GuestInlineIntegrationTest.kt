@@ -92,6 +92,9 @@ class GuestInlineIntegrationTest {
                 check((byte + short).toLong() == -32641L)
             }
             fun conversions() {
+                val maxByte: UByte = 255u
+                val maxShort: UShort = 65535u
+                check(maxByte.toInt() == 255 && maxShort.toInt() == 65535)
                 check(255.toUByte().toInt() == 255)
                 check((-1).toUShort().toInt() == 65535)
                 check(65536.toShort().toInt() == 0)
@@ -143,7 +146,187 @@ class GuestInlineIntegrationTest {
                 check(boxedFloat.equals(Float.NaN))
                 check(boxedDouble.equals(Double.NaN))
             }
+            fun booleanArrays() {
+                val empty = BooleanArray(2)
+                check(empty.size == 2 && empty[0] == false)
+                var calls = 0
+                val array = BooleanArray(3) { index -> check(index == calls); calls++; index == 1 }
+                check(calls == 3 && array[1] == true)
+                var visited = 0
+                for (value in array) { check(value == array[visited]); visited++ }
+                check(visited == 3)
+                array[0] = true
+                check(array[0] == true)
+                val factory = booleanArrayOf(true, false)
+                check(factory.size == 2 && factory[0] == true && factory[1] == false)
+            }
+            fun byteArrays() {
+                val empty = ByteArray(2)
+                check(empty.size == 2 && empty[0] == 0.toByte())
+                var calls = 0
+                val array = ByteArray(3) { index -> check(index == calls); calls++; (index - 2).toByte() }
+                check(calls == 3 && array[1] == (-1).toByte())
+                var visited = 0
+                for (value in array) { check(value == array[visited]); visited++ }
+                check(visited == 3)
+                array[0] = (-1).toByte()
+                check(array[0] == (-1).toByte())
+                val factory = byteArrayOf((-1).toByte(), 0.toByte())
+                check(factory.size == 2 && factory[0] == (-1).toByte() && factory[1] == 0.toByte())
+            }
+            fun shortArrays() {
+                val empty = ShortArray(2)
+                check(empty.size == 2 && empty[0] == 0.toShort())
+                var calls = 0
+                val array = ShortArray(3) { index -> check(index == calls); calls++; (index - 2).toShort() }
+                check(calls == 3 && array[1] == (-1).toShort())
+                var visited = 0
+                for (value in array) { check(value == array[visited]); visited++ }
+                check(visited == 3)
+                array[0] = (-1).toShort()
+                check(array[0] == (-1).toShort())
+                val factory = shortArrayOf((-1).toShort(), 0.toShort())
+                check(factory.size == 2 && factory[0] == (-1).toShort() && factory[1] == 0.toShort())
+            }
+            fun charArrays() {
+                val empty = CharArray(2)
+                check(empty.size == 2 && empty[0] == '\u0000')
+                var calls = 0
+                val array = CharArray(3) { index -> check(index == calls); calls++; 'a' + index }
+                check(calls == 3 && array[1] == 'b')
+                var visited = 0
+                for (value in array) { check(value == array[visited]); visited++ }
+                check(visited == 3)
+                array[0] = 'b'
+                check(array[0] == 'b')
+                val factory = charArrayOf('b', '\u0000')
+                check(factory.size == 2 && factory[0] == 'b' && factory[1] == '\u0000')
+            }
+            fun intArrays() {
+                val empty = IntArray(2)
+                check(empty.size == 2 && empty[0] == 0)
+                var calls = 0
+                val array = IntArray(3) { index -> check(index == calls); calls++; index - 2 }
+                check(calls == 3 && array[1] == -1)
+                var visited = 0
+                for (value in array) { check(value == array[visited]); visited++ }
+                check(visited == 3)
+                array[0] = -1
+                check(array[0] == -1)
+                val factory = intArrayOf(-1, 0)
+                check(factory.size == 2 && factory[0] == -1 && factory[1] == 0)
+            }
+            fun longArrays() {
+                val empty = LongArray(2)
+                check(empty.size == 2 && empty[0] == 0L)
+                var calls = 0
+                val array = LongArray(3) { index -> check(index == calls); calls++; index.toLong() - 2L }
+                check(calls == 3 && array[1] == -1L)
+                var visited = 0
+                for (value in array) { check(value == array[visited]); visited++ }
+                check(visited == 3)
+                array[0] = -1L
+                check(array[0] == -1L)
+                val factory = longArrayOf(-1L, 0L)
+                check(factory.size == 2 && factory[0] == -1L && factory[1] == 0L)
+            }
+            fun floatArrays() {
+                val empty = FloatArray(2)
+                check(empty.size == 2 && empty[0] == 0.0f)
+                var calls = 0
+                val array = FloatArray(3) { index -> check(index == calls); calls++; index.toFloat() - 2.0f }
+                check(calls == 3 && array[1] == -1.0f)
+                var visited = 0
+                for (value in array) { check(value == array[visited]); visited++ }
+                check(visited == 3)
+                array[0] = -1.0f
+                check(array[0] == -1.0f)
+                val factory = floatArrayOf(-1.0f, 0.0f)
+                check(factory.size == 2 && factory[0] == -1.0f && factory[1] == 0.0f)
+            }
+            fun doubleArrays() {
+                val empty = DoubleArray(2)
+                check(empty.size == 2 && empty[0] == 0.0)
+                var calls = 0
+                val array = DoubleArray(3) { index -> check(index == calls); calls++; index.toDouble() - 2.0 }
+                check(calls == 3 && array[1] == -1.0)
+                var visited = 0
+                for (value in array) { check(value == array[visited]); visited++ }
+                check(visited == 3)
+                array[0] = -1.0
+                check(array[0] == -1.0)
+                val factory = doubleArrayOf(-1.0, 0.0)
+                check(factory.size == 2 && factory[0] == -1.0 && factory[1] == 0.0)
+            }
+            fun ubyteArrays() {
+                val empty = UByteArray(2)
+                check(empty.size == 2 && empty[0] == 0u.toUByte())
+                var calls = 0
+                val array = UByteArray(3) { index -> check(index == calls); calls++; (index + 254).toUByte() }
+                check(calls == 3 && array[1] == 255u.toUByte())
+                var visited = 0
+                for (value in array) { check(value == array[visited]); visited++ }
+                check(visited == 3)
+                array[0] = 255u.toUByte()
+                check(array[0] == 255u.toUByte())
+                val factory = ubyteArrayOf(255u.toUByte(), 0u.toUByte())
+                check(factory.size == 2 && factory[0] == 255u.toUByte() && factory[1] == 0u.toUByte())
+            }
+            fun ushortArrays() {
+                val empty = UShortArray(2)
+                check(empty.size == 2 && empty[0] == 0u.toUShort())
+                var calls = 0
+                val array = UShortArray(3) { index -> check(index == calls); calls++; (index + 65534).toUShort() }
+                check(calls == 3 && array[1] == 65535u.toUShort())
+                var visited = 0
+                for (value in array) { check(value == array[visited]); visited++ }
+                check(visited == 3)
+                array[0] = 65535u.toUShort()
+                check(array[0] == 65535u.toUShort())
+                val factory = ushortArrayOf(65535u.toUShort(), 0u.toUShort())
+                check(factory.size == 2 && factory[0] == 65535u.toUShort() && factory[1] == 0u.toUShort())
+            }
+            fun uintArrays() {
+                val empty = UIntArray(2)
+                check(empty.size == 2 && empty[0] == 0u)
+                var calls = 0
+                val array = UIntArray(3) { index -> check(index == calls); calls++; index.toUInt() + 4294967294u }
+                check(calls == 3 && array[1] == 4294967295u)
+                var visited = 0
+                for (value in array) { check(value == array[visited]); visited++ }
+                check(visited == 3)
+                array[0] = 4294967295u
+                check(array[0] == 4294967295u)
+                val factory = uintArrayOf(4294967295u, 0u)
+                check(factory.size == 2 && factory[0] == 4294967295u && factory[1] == 0u)
+            }
+            fun ulongArrays() {
+                val empty = ULongArray(2)
+                check(empty.size == 2 && empty[0] == 0uL)
+                var calls = 0
+                val array = ULongArray(3) { index -> check(index == calls); calls++; index.toULong() + 18446744073709551614uL }
+                check(calls == 3 && array[1] == 18446744073709551615uL)
+                var visited = 0
+                for (value in array) { check(value == array[visited]); visited++ }
+                check(visited == 3)
+                array[0] = 18446744073709551615uL
+                check(array[0] == 18446744073709551615uL)
+                val factory = ulongArrayOf(18446744073709551615uL, 0uL)
+                check(factory.size == 2 && factory[0] == 18446744073709551615uL && factory[1] == 0uL)
+            }
             fun main() {
+                booleanArrays()
+                byteArrays()
+                shortArrays()
+                charArrays()
+                intArrays()
+                longArrays()
+                floatArrays()
+                doubleArrays()
+                ubyteArrays()
+                ushortArrays()
+                uintArrays()
+                ulongArrays()
                 nullableFloating()
                 signedNarrow()
                 shortArithmetic()

@@ -58,12 +58,15 @@ class PlatformModuleCodecTest {
                 emptyList(),
             )
         assertEquals(module, PlatformBundleCodec.decodeModule(PlatformBundleCodec.encodeModule(module)))
-        val doubleModule =
-            module.copy(
-                sources = listOf(source.copy(content = ImmutableBytes.of("external fun DoubleArray.copyInto()".encodeToByteArray()))),
-                declarations = listOf(declaration.copy(signature = "fun(DoubleArray.DoubleArray,Int,Int,Int):DoubleArray")),
-            )
-        assertEquals(doubleModule, PlatformBundleCodec.decodeModule(PlatformBundleCodec.encodeModule(doubleModule)))
+        listOf("Boolean", "Byte", "Short", "Char", "Int", "Long", "Float", "Double", "UByte", "UShort", "UInt", "ULong").forEach { name ->
+            val array = "${name}Array"
+            val primitiveModule =
+                module.copy(
+                    sources = listOf(source.copy(content = ImmutableBytes.of("external fun $array.copyInto()".encodeToByteArray()))),
+                    declarations = listOf(declaration.copy(signature = "fun($array.$array,Int,Int,Int):$array")),
+                )
+            assertEquals(primitiveModule, PlatformBundleCodec.decodeModule(PlatformBundleCodec.encodeModule(primitiveModule)))
+        }
         listOf("fun(String.IntArray,Int,Int,Int):IntArray", "fun(IntArray.IntArray,Int,Int,String):IntArray").forEach { signature ->
             assertFailsWith<IllegalArgumentException> {
                 PlatformBundleCodec.encodeModule(module.copy(declarations = listOf(declaration.copy(signature = signature))))

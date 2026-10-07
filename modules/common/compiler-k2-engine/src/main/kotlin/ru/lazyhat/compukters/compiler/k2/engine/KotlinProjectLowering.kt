@@ -3540,7 +3540,7 @@ internal object KotlinProjectLowering {
             } else if (expression is IrConst && expression.value == null) {
                 TopLevelInitializer.Null
             } else {
-                val value = (expression as? IrConst)?.value
+                val value = (expression as? IrConst)?.primitiveLiteralValue()
                 if (value !is Byte && value !is Short && value !is Int && value !is Long && value !is Float && value !is Double &&
                     value !is Boolean &&
                     value !is Char &&
@@ -5447,38 +5447,8 @@ private class FunctionCompiler(
                 emit(Instruction.Call(Destination.Unit, FunctionRef.Imported(external.importId), listOf(destination) + arguments))
             }
         }
-        if (target.parentAsClass.symbol == kotlinCharArrayClass &&
-            call.type.isExactClass(kotlinCharArrayClass) &&
-            arguments.size == 1 &&
-            arguments[0].type == intType
-        ) {
-            val length = compileExpression(arguments.single())
-            prepareAllocationBlock()
-            return allocate(charArrayType).also { destination ->
-                emit(Instruction.NewArray(destination, (charArrayType as ValueType.Ref).type, length))
-            }
-        }
-        if (target.parentAsClass.symbol == kotlinIntArrayClass &&
-            call.type.isExactClass(kotlinIntArrayClass) &&
-            arguments.size == 1 &&
-            arguments[0].type == intType
-        ) {
-            val length = compileExpression(arguments.single())
-            prepareAllocationBlock()
-            return allocate(intArrayType).also { destination ->
-                emit(Instruction.NewArray(destination, (intArrayType as ValueType.Ref).type, length))
-            }
-        }
-        if (target.parentAsClass.symbol == kotlinDoubleArrayClass &&
-            call.type.isExactClass(kotlinDoubleArrayClass) &&
-            arguments.size == 1 &&
-            arguments[0].type == intType
-        ) {
-            val length = compileExpression(arguments.single())
-            prepareAllocationBlock()
-            return allocate(doubleArrayType).also { destination ->
-                emit(Instruction.NewArray(destination, (doubleArrayType as ValueType.Ref).type, length))
-            }
+        GuestPrimitive.array(resolvedType(call.type))?.let { primitive ->
+            return compilePrimitiveArrayConstructor(call, primitive)
         }
         if (call.type == kotlinStringType &&
             arguments.size == 3 &&
@@ -5511,6 +5481,43 @@ private class FunctionCompiler(
                 ),
             )
         }
+    }
+
+    private fun compilePrimitiveArrayConstructor(
+        call: IrConstructorCall,
+        primitive: GuestPrimitive,
+    ): RegisterId {
+        val arguments = call.arguments.filterNotNull()
+        if (arguments.size !in 1..2 || valueType(arguments[0].type, call) != ValueType.I32) {
+            throw UnsupportedKotlinIr(call, "primitive array constructor requires an Int size and optional initializer")
+        }
+        val length = compileExpression(arguments[0])
+        val initializer = arguments.getOrNull(1)?.let(::compileExpression)
+        val shape = arguments.getOrNull(1)?.let { resolvedType(it.type).guestFunctionShape() }
+        prepareAllocationBlock()
+        val arrayType = valueType(call.type, call) as ValueType.Ref
+        val array = allocate(arrayType)
+        emit(Instruction.NewArray(array, arrayType.type, length))
+        if (initializer == null) return array
+        val invoke =
+            shape?.let(invokeFunctionIds::get)
+                ?: throw UnsupportedKotlinIr(call, "primitive array initializer has an unsupported function signature")
+        val index = allocate(ValueType.I32).also { emit(Instruction.Move(it, emitI32Constant(0, call))) }
+        val condition = createBlock(loopHeader = true)
+        val body = createBlock()
+        val exit = createBlock()
+        jumpTo(condition)
+        currentBlock = condition
+        val hasNext = allocate(ValueType.Bool).also { emit(Instruction.Less(OrderedScalarValueType.I32, it, index, length)) }
+        emit(Instruction.Branch(hasNext, blockId(body), blockId(exit)))
+        currentBlock = body
+        val element = allocate(primitive.scalar)
+        emit(Instruction.CallInterface(Destination.Register(element), FunctionRef.Local(invoke), listOf(initializer, index)))
+        emit(Instruction.ArrayStore(array, index, element))
+        emit(Instruction.Add(index, index, emitI32Constant(1, call)))
+        jumpTo(condition)
+        currentBlock = exit
+        return array
     }
 
     private fun compileConstructorArguments(
@@ -5898,24 +5905,8 @@ private class FunctionCompiler(
                     ?: throw UnsupportedKotlinIr(property, "data class hash field is unavailable")
             val sourceType = resolvedType(requireNotNull(property.backingField).type)
             val arrayElement =
-                when {
-                    sourceType.isExactClass(kotlinCharArrayClass) -> {
-                        ValueType.Char
-                    }
-
-                    sourceType.isExactClass(kotlinIntArrayClass) -> {
-                        ValueType.I32
-                    }
-
-                    sourceType.isExactClass(kotlinDoubleArrayClass) -> {
-                        ValueType.F64
-                    }
-
-                    else -> {
-                        guestTypes.arrayElement(sourceType.makeNotNull())?.let {
-                            guestTypes.valueClassBox(it)?.let { box -> ValueType.Ref(it.isNullable(), box.type) } ?: valueType(it, property)
-                        }
-                    }
+                GuestPrimitive.array(sourceType.makeNotNull())?.scalar ?: guestTypes.arrayElement(sourceType.makeNotNull())?.let {
+                    guestTypes.valueClassBox(it)?.let { box -> ValueType.Ref(it.isNullable(), box.type) } ?: valueType(it, property)
                 }
             val value = allocate(field.type)
             emit(Instruction.FieldGet(value, RegisterId.of(0u), FieldRef.Local(field.id)))
@@ -6294,8 +6285,7 @@ private class FunctionCompiler(
             prepareAllocationBlock()
             return allocate(stringType).also { emit(Instruction.StringConcat(it, left, right)) }
         }
-        compileIntArrayFactory(call, target)?.let { return it }
-        compileDoubleArrayFactory(call, target)?.let { return it }
+        compilePrimitiveArrayFactory(call, target)?.let { return it }
         compileReferenceArrayFactory(call, target)?.let { return it }
         trustedIntrinsic(target)?.let { intrinsic ->
             val arguments =
@@ -6811,36 +6801,19 @@ private class FunctionCompiler(
     }
 
     @OptIn(UnsafeDuringIrConstructionAPI::class)
-    private fun compileIntArrayFactory(
+    private fun compilePrimitiveArrayFactory(
         call: IrCall,
         target: IrSimpleFunction,
     ): RegisterId? {
-        if (!call.type.isExactClass(kotlinIntArrayClass) || target.fqNameWhenAvailable?.asString() != "kotlin.intArrayOf") {
-            return null
-        }
+        val primitive = GuestPrimitive.array(resolvedType(call.type)) ?: return null
+        if (target.fqNameWhenAvailable?.asString() != primitive.arrayFactory) return null
         val elements =
             directVarargElements(
                 call,
-                "intArrayOf requires a direct vararg",
-                "spread intArrayOf arguments are outside the project subset",
+                "primitive array factory requires a direct vararg",
+                "spread primitive array arguments are outside the project subset",
             )
-        return compileArrayElements(call, intArrayType as ValueType.Ref, elements, ::compileExpression)
-    }
-
-    private fun compileDoubleArrayFactory(
-        call: IrCall,
-        target: IrSimpleFunction,
-    ): RegisterId? {
-        if (!call.type.isExactClass(kotlinDoubleArrayClass) || target.fqNameWhenAvailable?.asString() != "kotlin.doubleArrayOf") {
-            return null
-        }
-        val elements =
-            directVarargElements(
-                call,
-                "doubleArrayOf requires a direct vararg",
-                "spread doubleArrayOf arguments are outside the project subset",
-            )
-        return compileArrayElements(call, doubleArrayType as ValueType.Ref, elements, ::compileExpression)
+        return compileArrayElements(call, valueType(call.type, call) as ValueType.Ref, elements, ::compileExpression)
     }
 
     private fun directVarargElements(
@@ -7338,80 +7311,25 @@ private class FunctionCompiler(
         ) {
             return compileStringArrayCopyOfRange(call, arguments)
         }
-        if (arguments.size == 1 &&
-            argumentExpressions[0].type.isExactClass(kotlinCharArrayClass) &&
-            name == "<get-size>" &&
-            fqName == "kotlin.CharArray.<get-size>"
-        ) {
+        val primitiveArray = argumentExpressions.firstOrNull()?.let { GuestPrimitive.array(resolvedType(it.type)) }
+        if (primitiveArray != null && fqName == "${primitiveArray.arrayName}.<get-size>" && arguments.size == 1) {
             return result(ValueType.I32) { Instruction.ArrayLength(it, arguments[0]) }
         }
-        if (arguments.size == 1 &&
-            argumentExpressions[0].type.isExactClass(kotlinIntArrayClass) &&
-            name == "<get-size>" &&
-            fqName == "kotlin.IntArray.<get-size>"
-        ) {
-            return result(ValueType.I32) { Instruction.ArrayLength(it, arguments[0]) }
+        if (primitiveArray != null && fqName == "${primitiveArray.arrayName}.get" && arguments.size == 2) {
+            return result(primitiveArray.scalar) { Instruction.ArrayLoad(it, arguments[0], arguments[1]) }
         }
-        if (arguments.size == 1 &&
-            argumentExpressions[0].type.isExactClass(kotlinDoubleArrayClass) &&
-            name == "<get-size>" &&
-            fqName == "kotlin.DoubleArray.<get-size>"
-        ) {
-            return result(ValueType.I32) { Instruction.ArrayLength(it, arguments[0]) }
+        if (primitiveArray != null && fqName == "${primitiveArray.arrayName}.set" && arguments.size == 3) {
+            emit(Instruction.ArrayStore(arguments[0], arguments[1], arguments[2]))
+            return null
         }
         if (arguments.size == 1 && isSupportedReferenceArray(argumentExpressions[0].type) && name == "<get-size>") {
             return result(ValueType.I32) { Instruction.ArrayLength(it, arguments[0]) }
-        }
-        if (arguments.size == 2 &&
-            argumentExpressions[0].type.isExactClass(kotlinCharArrayClass) &&
-            name == "get" &&
-            fqName == "kotlin.CharArray.get"
-        ) {
-            return result(ValueType.Char) { Instruction.ArrayLoad(it, arguments[0], arguments[1]) }
-        }
-        if (arguments.size == 2 &&
-            argumentExpressions[0].type.isExactClass(kotlinIntArrayClass) &&
-            name == "get" &&
-            fqName == "kotlin.IntArray.get"
-        ) {
-            return result(ValueType.I32) { Instruction.ArrayLoad(it, arguments[0], arguments[1]) }
-        }
-        if (arguments.size == 2 &&
-            argumentExpressions[0].type.isExactClass(kotlinDoubleArrayClass) &&
-            name == "get" &&
-            fqName == "kotlin.DoubleArray.get"
-        ) {
-            return result(ValueType.F64) { Instruction.ArrayLoad(it, arguments[0], arguments[1]) }
         }
         if (arguments.size == 2 && isSupportedReferenceArray(argumentExpressions[0].type) && name == "get") {
             val box = guestTypes.valueClassBox(resolvedType(call.type))
             return result(box?.let { ValueType.Ref(call.type.isNullable(), it.type) } ?: valueType(call.type, call)) {
                 Instruction.ArrayLoad(it, arguments[0], arguments[1])
             }
-        }
-        if (arguments.size == 3 &&
-            argumentExpressions[0].type.isExactClass(kotlinCharArrayClass) &&
-            name == "set" &&
-            fqName == "kotlin.CharArray.set"
-        ) {
-            emit(Instruction.ArrayStore(arguments[0], arguments[1], arguments[2]))
-            return null
-        }
-        if (arguments.size == 3 &&
-            argumentExpressions[0].type.isExactClass(kotlinIntArrayClass) &&
-            name == "set" &&
-            fqName == "kotlin.IntArray.set"
-        ) {
-            emit(Instruction.ArrayStore(arguments[0], arguments[1], arguments[2]))
-            return null
-        }
-        if (arguments.size == 3 &&
-            argumentExpressions[0].type.isExactClass(kotlinDoubleArrayClass) &&
-            name == "set" &&
-            fqName == "kotlin.DoubleArray.set"
-        ) {
-            emit(Instruction.ArrayStore(arguments[0], arguments[1], arguments[2]))
-            return null
         }
         if (arguments.size == 3 && isSupportedReferenceArray(argumentExpressions[0].type) && name == "set") {
             emit(Instruction.ArrayStore(arguments[0], arguments[1], arguments[2]))
@@ -7647,10 +7565,7 @@ private class FunctionCompiler(
         if (fqName !in setOf("kotlin.collections.copyOf", "kotlin.collections.copyInto") || !target.isExternal) return null
         val receiverExpression = call.arguments.firstOrNull() ?: return null
         val receiverType = resolvedType(receiverExpression.type)
-        if (!receiverType.isExactClass(kotlinIntArrayClass) && !receiverType.isExactClass(kotlinDoubleArrayClass) &&
-            !receiverType.isExactClass(kotlinCharArrayClass) &&
-            !isSupportedReferenceArray(receiverType)
-        ) {
+        if (GuestPrimitive.array(receiverType) == null && !isSupportedReferenceArray(receiverType)) {
             return null
         }
         var owner = target.parent
@@ -7661,9 +7576,7 @@ private class FunctionCompiler(
         // admitted storage shape and arity, not that substituted signature.
         val arrayName =
             when {
-                receiverType.isExactClass(kotlinIntArrayClass) -> "IntArray"
-                receiverType.isExactClass(kotlinDoubleArrayClass) -> "DoubleArray"
-                receiverType.isExactClass(kotlinCharArrayClass) -> "CharArray"
+                GuestPrimitive.array(receiverType) != null -> "${requireNotNull(GuestPrimitive.array(receiverType)).sourceName}Array"
                 else -> "Array<T>"
             }
         val arity = target.parameters.count { it.kind == IrParameterKind.Regular }
@@ -8030,7 +7943,7 @@ private class FunctionCompiler(
     private fun compileForLoop(block: IrBlock) {
         val iterator = block.statements.firstOrNull() as? IrVariable
         val iteratorCall = iterator?.initializer as? IrCall
-        if (iteratorCall?.targetFqName() in setOf("kotlin.IntArray.iterator", "kotlin.DoubleArray.iterator")) {
+        if (GuestPrimitive.entries.any { iteratorCall?.targetFqName() == "${it.arrayName}.iterator" }) {
             compilePrimitiveArrayForLoop(block)
         } else if (iteratorCall?.targetFqName() in
             setOf("kotlin.collections.Iterable.iterator", "kotlin.collections.List.iterator")
@@ -8207,13 +8120,14 @@ private class FunctionCompiler(
         val iterator = block.statements[0] as? IrVariable ?: return null
         if (iterator.origin.toString() != "FOR_LOOP_ITERATOR") return null
         val iteratorCall = iterator.initializer as? IrCall ?: return null
-        if (iteratorCall.targetFqName() !in setOf("kotlin.IntArray.iterator", "kotlin.DoubleArray.iterator")) return null
         val array = iteratorCall.arguments.filterNotNull().singleOrNull() ?: return null
-        if (!array.type.isExactClass(kotlinIntArrayClass) && !array.type.isExactClass(kotlinDoubleArrayClass)) return null
-        val double = array.type.isExactClass(kotlinDoubleArrayClass)
-        val canonical =
-            canonicalIntForLoopBody(block, iterator, if (double) doubleType else intType, if (double) "DoubleIterator" else "IntIterator")
-                ?: return null
+        val primitive = GuestPrimitive.array(resolvedType(array.type)) ?: return null
+        if (iteratorCall.targetFqName() != "${primitive.arrayName}.iterator") return null
+        val loopBody = ((block.statements[1] as? IrWhileLoop)?.body as? IrBlock) ?: return null
+        val loopVariable = loopBody.statements.firstOrNull() as? IrVariable ?: return null
+        if (GuestPrimitive.scalar(resolvedType(loopVariable.type)) != primitive) return null
+        val iteratorName = if (primitive.unsigned) "Iterator" else "${primitive.sourceName}Iterator"
+        val canonical = canonicalIntForLoopBody(block, iterator, loopVariable.type, iteratorName) ?: return null
         return PrimitiveArrayForLoopPlan(canonical, array)
     }
 
@@ -9145,7 +9059,8 @@ private class LiteralCollector(
     }
 
     override fun visitConst(expression: IrConst) {
-        expression.value
+        expression
+            .primitiveLiteralValue()
             ?.takeIf {
                 it is String || it is Byte || it is Short || it is Int || it is Long || it is Float || it is Double || it is Boolean ||
                     it is Char
@@ -9169,7 +9084,7 @@ private class LiteralCollector(
         doubleCompanionConstant(expression.symbol.owner)?.let(values::add)
         if (fqName == "kotlin.emptyArray" || fqName == "kotlin.collections.emptyList") {
             values += 0
-        } else if (fqName == "kotlin.arrayOf" || fqName == "kotlin.intArrayOf" || fqName == "kotlin.doubleArrayOf" ||
+        } else if (fqName == "kotlin.arrayOf" || GuestPrimitive.entries.any { fqName == it.arrayFactory } ||
             fqName == "kotlin.collections.listOf"
         ) {
             val size = (expression.arguments.filterNotNull().singleOrNull() as? IrVararg)?.elements?.size
@@ -9458,8 +9373,16 @@ private fun Any.toArtifactConstant(literalIds: Map<Utf16Literal, Utf16LiteralId>
         else -> error("unsupported literal $this")
     }
 
+@OptIn(UnsafeDuringIrConstructionAPI::class)
+private fun IrConst.primitiveLiteralValue(): Any? =
+    when (GuestPrimitive.scalar(type)) {
+        GuestPrimitive.UBYTE -> (value as? Number)?.toInt()?.and(255) ?: value
+        GuestPrimitive.USHORT -> (value as? Number)?.toInt()?.and(65535) ?: value
+        else -> value
+    }
+
 private fun IrConst.toArtifactConstant(literalIds: Map<Utf16Literal, Utf16LiteralId>): Constant =
-    when (val literal = value) {
+    when (val literal = primitiveLiteralValue()) {
         is String -> Constant.StringLiteral(requireNotNull(literalIds[Utf16Literal.fromString(literal)]))
         is Byte -> Constant.I32(literal.toInt())
         is Short -> Constant.I32(literal.toInt())

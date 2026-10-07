@@ -38,7 +38,8 @@ class CanonicalPlatformSourceTest {
         val arrays = root.resolve("builtins/kotlin/Arrays.kt").readText()
         val primitives = root.resolve("builtins/kotlin/PrimitiveTypes.kt").readText()
 
-        assertTrue("public class IntArray external constructor(size: Int)" in arrays)
+        assertTrue("public class IntArray {" in arrays)
+        assertTrue("public external constructor(size: Int)" in arrays)
         assertTrue("public external fun intArrayOf(vararg elements: Int): IntArray" in arrays)
         assertTrue("public class Long private constructor()" in primitives)
         assertTrue("public const val MIN_VALUE: Long" in primitives)

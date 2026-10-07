@@ -2676,7 +2676,7 @@ fn k2_primitives_preserve_numeric_boundaries_and_nominal_types() {
     let mut session = Session::admit(verified.clone(), list_no_io_profile(), &[]).expect("primitive program must admit");
     session.start(&[]).expect("primitive program must start");
     for _ in 0..10_000 {
-        match session.advance(64, 16).expect("primitive program must advance") {
+        match session.advance(512, 16).expect("primitive program must advance") {
             AdvanceOutcome::SliceExhausted => {},
             AdvanceOutcome::Halted(None) => return,
             AdvanceOutcome::UncaughtException => panic!("primitive assertion failed: {}", session.uncaught_exception_diagnostic(&verified).unwrap()),

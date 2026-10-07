@@ -89,6 +89,8 @@ tasks.processResources {
 
 tasks.test {
     dependsOn(tasks.jar)
+    inputs.dir(platformSourceRoot)
+    inputs.file(tasks.jar.flatMap { it.archiveFile })
     doFirst {
         systemProperty("compukters.platform.source-root", layout.projectDirectory.dir("src/platform").asFile.absolutePath)
         systemProperty("compukters.platform.source-archive", tasks.jar.get().archiveFile.get().asFile.absolutePath)
