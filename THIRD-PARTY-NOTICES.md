@@ -13,6 +13,29 @@ media inventory are documented in [MEDIA-LICENSES.md](MEDIA-LICENSES.md).
 `licenses/distribution-components.tsv` is the machine-readable inventory used
 by archive verification. Dependency version changes must update both files.
 
+## Client IDE Git
+
+The client IDE privately embeds Eclipse JGit 7.8.0.202609011348-r, JavaEWAH
+1.2.3 and Apache Commons Codec 1.22.1. Their classes are relocated beneath
+`ru.lazyhat.compukters.internal.vendor`; the loader supplies SLF4J, with no
+additional logging API nested in the outer archive.
+
+- JGit: copyright Eclipse contributors; Eclipse Distribution License 1.0
+  (BSD-3-Clause). The original `about.html` is preserved at
+  `licenses/jvm/jgit-7.8.0.202609011348-r-EDL-1.0.html`.
+  Upstream: <https://projects.eclipse.org/projects/technology.jgit>.
+- JavaEWAH: Apache-2.0. The complete license and source attribution are in
+  `licenses/jvm/javaewah-1.2.3-Apache-2.0.txt` and
+  `licenses/jvm/javaewah-1.2.3-PROVENANCE.txt`.
+  Upstream: <https://github.com/lemire/javaewah>.
+- Commons Codec: copyright the Apache Software Foundation; Apache-2.0.
+  Original license and NOTICE are preserved in
+  `licenses/jvm/commons-codec-1.22.1-Apache-2.0.txt` and
+  `licenses/jvm/commons-codec-1.22.1-NOTICE.txt`.
+  Upstream: <https://commons.apache.org/proper/commons-codec/>.
+
+These files are packaged beneath `META-INF/licenses/jvm/`.
+
 ## XZ decompression
 
 The outer mod archive contains XZ for Java 1.12 for deterministic compression

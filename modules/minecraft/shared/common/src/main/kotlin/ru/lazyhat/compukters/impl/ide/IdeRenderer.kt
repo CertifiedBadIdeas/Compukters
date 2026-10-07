@@ -40,9 +40,11 @@ import ru.lazyhat.compukters.ide.client.state.IdeEditorView
 import ru.lazyhat.compukters.ide.client.state.IdePageState
 import ru.lazyhat.compukters.ide.client.state.IdeToolingState
 import ru.lazyhat.compukters.ide.client.state.IdeViewState
+import ru.lazyhat.compukters.ide.client.state.IdeWorkspaceView
 import ru.lazyhat.compukters.ide.client.target.IdeAttachedTarget
 import ru.lazyhat.compukters.ide.client.target.IdeTargetState
 import ru.lazyhat.compukters.ide.editor.EditorRange
+import ru.lazyhat.compukters.ide.git.GitOperation
 import ru.lazyhat.compukters.ide.highlight.KotlinLexicalKind
 import ru.lazyhat.compukters.ide.project.fs.ProjectPath
 
@@ -78,7 +80,7 @@ object IdeRenderer {
             return output.build()
         }
         when (val page = state.page) {
-            is IdePageState.Start -> output.start(page, state.target)
+            is IdePageState.Start -> output.start(page, state.target, state.busy)
             is IdePageState.Workspace -> output.workspace(page.value, state.target, state.tooling, state.busy, caretVisible)
         }
         output.terminalTool(state.target)
@@ -109,6 +111,7 @@ object IdeRenderer {
         private val scissors = mutableListOf<IdeScissorDraw>()
         private val hitTargets = mutableListOf<IdeHitTarget>()
         private val icons = mutableListOf<IdeIconDraw>()
+        private var gitScrollMaximum: Int? = null
 
         fun base() {
             fills += IdeFillDraw(IdeFillKind.Background, geometry.viewport, IdeColors.DIM, Z_BACKGROUND)
@@ -129,20 +132,32 @@ object IdeRenderer {
         fun start(
             page: IdePageState.Start,
             targetState: IdeTargetState,
+            busy: Set<IdeBusyOperation>,
         ) {
             ui(IdeTextKind.Header, "Compukters IDE · ${targetLabel(targetState)}", geometry.header.left + 6, geometry.header.top + 7)
-            val create =
-                IdeRect(
-                    geometry.toolbar.left + 6,
-                    geometry.toolbar.top + 3,
-                    geometry.toolbar.left + 106,
-                    geometry.toolbar.bottom - 3,
-                )
-            val open = IdeRect(create.right + 4, create.top, create.right + 104, create.bottom)
-            target(IdeHitAction.CreateProject, create, true)
-            target(IdeHitAction.OpenProject, open, true)
-            ui(IdeTextKind.Toolbar, "Create project", create.left + 4, create.top + 4)
-            ui(IdeTextKind.Toolbar, "Open project", open.left + 4, open.top + 4)
+            listOf(
+                IdeHitAction.CreateProject to "Create",
+                IdeHitAction.OpenExisting to "Open directory",
+                IdeHitAction.CloneProject to "Clone HTTPS",
+                if (IdeBusyOperation.Project in
+                    busy
+                ) {
+                    IdeHitAction.GitCancel to "Cancel clone"
+                } else {
+                    IdeHitAction.GitAuthenticate to "HTTPS token"
+                },
+            ).forEachIndexed { index, (action, label) ->
+                val width = (geometry.toolbar.width - 12) / 4
+                val bounds =
+                    IdeRect(
+                        geometry.toolbar.left + 6 + index * width,
+                        geometry.toolbar.top + 3,
+                        geometry.toolbar.left + 6 + (index + 1) * width - 4,
+                        geometry.toolbar.bottom - 3,
+                    )
+                target(action, bounds, busy.isEmpty() || action == IdeHitAction.GitCancel, label)
+                ui(IdeTextKind.Toolbar, label, bounds.left + 4, bounds.top + 4, clip = bounds)
+            }
             val maximumRows = geometry.editor.height / UI_LINE_HEIGHT
             page.projects.take(maximumRows).forEachIndexed { index, project ->
                 ui(
@@ -152,6 +167,7 @@ object IdeRenderer {
                     geometry.editor.top + 6 + index * UI_LINE_HEIGHT,
                 )
             }
+            if (busy.isNotEmpty()) ui(IdeTextKind.Status, "Opening project…", geometry.status.left + 6, geometry.status.top + 5)
             page.error?.let {
                 ui(
                     IdeTextKind.Status,
@@ -183,24 +199,37 @@ object IdeRenderer {
                 geometry.header.top + 7,
             )
             toolbar(workspace, targetState, toolingState, busy, workspace.activeFile != null || selectedTreePath != null)
+            val gitTool =
+                IdeRect(
+                    geometry.toolStripe.left,
+                    geometry.toolbar.bottom + TERMINAL_TOOL_HEIGHT,
+                    geometry.toolStripe.right,
+                    geometry.toolbar.bottom + TERMINAL_TOOL_HEIGHT + 36,
+                )
+            target(IdeHitAction.GitToggle, gitTool, true, "Git repositories", selected = workspace.git.visible)
+            ui(IdeTextKind.ToolStripe, "Git", gitTool.right - 5, gitTool.top + 6, rotation = IdeTextRotation.Clockwise90)
             tree(workspace)
-            when (val editor = workspace.editor) {
-                IdeEditorView.Empty -> {
-                    ui(IdeTextKind.Source, "Open a file", geometry.editor.left + 8, geometry.editor.top + 8, IdeColors.MUTED)
-                }
+            if (workspace.git.visible) {
+                gitPanel(workspace, busy)
+            } else {
+                when (val editor = workspace.editor) {
+                    IdeEditorView.Empty -> {
+                        ui(IdeTextKind.Source, "Open a file", geometry.editor.left + 8, geometry.editor.top + 8, IdeColors.MUTED)
+                    }
 
-                is IdeEditorView.Binary -> {
-                    ui(
-                        IdeTextKind.Binary,
-                        "Binary file · ${editor.bytes} bytes",
-                        geometry.editor.left + 8,
-                        geometry.editor.top + 8,
-                        IdeColors.MUTED,
-                    )
-                }
+                    is IdeEditorView.Binary -> {
+                        ui(
+                            IdeTextKind.Binary,
+                            "Binary file · ${editor.bytes} bytes",
+                            geometry.editor.left + 8,
+                            geometry.editor.top + 8,
+                            IdeColors.MUTED,
+                        )
+                    }
 
-                is IdeEditorView.Text -> {
-                    editor(editor, caretVisible, workspace.diagnostics)
+                    is IdeEditorView.Text -> {
+                        editor(editor, caretVisible, workspace.diagnostics)
+                    }
                 }
             }
             diagnostics(workspace)
@@ -219,7 +248,7 @@ object IdeRenderer {
             control: IdeRect,
         ) {
             val availableHeight = (geometry.status.top - geometry.header.bottom - 4).coerceAtLeast(PROJECT_ROW_HEIGHT)
-            val projectRows = ((availableHeight / PROJECT_ROW_HEIGHT) - 1).coerceAtLeast(0)
+            val projectRows = ((availableHeight / PROJECT_ROW_HEIGHT) - 4).coerceAtLeast(0)
             val visibleProjects = workspace.projects.take(projectRows)
             val width = minOf(PROJECT_SWITCHER_WIDTH, geometry.panel.right - control.left - 4).coerceAtLeast(control.width)
             val bounds =
@@ -227,7 +256,7 @@ object IdeRenderer {
                     control.left,
                     geometry.header.bottom,
                     control.left + width,
-                    geometry.header.bottom + (visibleProjects.size + 1) * PROJECT_ROW_HEIGHT + 2,
+                    geometry.header.bottom + (visibleProjects.size + 4) * PROJECT_ROW_HEIGHT + 2,
                 )
             panel(IdePanelKind.ProjectSwitcher, bounds, IdeColors.PANEL_ALT, Z_PROJECT_SWITCHER)
             scissors += IdeScissorDraw(IdeScissorKind.ProjectSwitcher, bounds, Z_PROJECT_SWITCHER)
@@ -251,10 +280,127 @@ object IdeRenderer {
                 )
                 ui(IdeTextKind.ProjectChoice, project.displayName, row.left + 6, row.top + 5, clip = bounds, z = Z_PROJECT_SWITCHER_TEXT)
             }
-            val createTop = bounds.top + 1 + visibleProjects.size * PROJECT_ROW_HEIGHT
-            val create = IdeRect(bounds.left + 1, createTop, bounds.right - 1, createTop + PROJECT_ROW_HEIGHT)
-            target(IdeHitAction.CreateProject, create, true, z = Z_PROJECT_SWITCHER_TARGET)
-            ui(IdeTextKind.ProjectAction, "+ New Project", create.left + 6, create.top + 5, clip = bounds, z = Z_PROJECT_SWITCHER_TEXT)
+            listOf(
+                IdeHitAction.CreateProject to "+ New project",
+                IdeHitAction.OpenExisting to "Open existing directory",
+                IdeHitAction.CloneProject to "Clone HTTPS repository",
+                IdeHitAction.GitAuthenticate to "HTTPS token · session only",
+            ).forEachIndexed { index, (action, label) ->
+                val top = bounds.top + 1 + (visibleProjects.size + index) * PROJECT_ROW_HEIGHT
+                val row = IdeRect(bounds.left + 1, top, bounds.right - 1, top + PROJECT_ROW_HEIGHT)
+                target(action, row, true, z = Z_PROJECT_SWITCHER_TARGET)
+                ui(IdeTextKind.ProjectAction, label, row.left + 6, row.top + 5, clip = bounds, z = Z_PROJECT_SWITCHER_TEXT)
+            }
+        }
+
+        private fun gitPanel(
+            workspace: IdeWorkspaceView,
+            busy: Set<IdeBusyOperation>,
+        ) {
+            val bounds = geometry.editor
+            val view = workspace.git
+            val status = view.result?.status
+            val available = status?.available == true
+            val idle = busy.isEmpty()
+            val running = IdeBusyOperation.Git in busy
+            var left = bounds.left + 6
+            var top = bounds.top + 6 - view.scroll * 20
+
+            fun button(
+                label: String,
+                action: IdeHitAction,
+                enabled: Boolean = idle,
+                operation: GitOperation? = null,
+            ) {
+                val width = label.length * 6 + 12
+                if (left + width > bounds.right - 6) {
+                    left = bounds.left + 6
+                    top += 24
+                }
+                val rect = IdeRect(left, top, left + width, top + 20)
+                if (rect.top >= bounds.top + 6 && rect.bottom <= bounds.bottom - 6) {
+                    target(action, rect, enabled, label, gitOperation = operation)
+                    ui(IdeTextKind.Toolbar, label, left + 6, top + 6, if (enabled) IdeColors.TEXT else IdeColors.DISABLED, clip = rect)
+                }
+                left += width + 4
+            }
+            button("Editor", IdeHitAction.GitClose, true)
+            button("Status", IdeHitAction.GitOperation, operation = GitOperation.Status)
+            if (!available) button("Init", IdeHitAction.GitOperation, operation = GitOperation.Init)
+            if (available) {
+                button("Origin", IdeHitAction.GitRemote)
+                button("Commit", IdeHitAction.GitCommit, idle && status.changes.any { it.index != null })
+                button("History", IdeHitAction.GitOperation, operation = GitOperation.History)
+                button("New branch", IdeHitAction.GitBranch)
+                button("Fetch", IdeHitAction.GitOperation, operation = GitOperation.Fetch)
+                button("Pull FF", IdeHitAction.GitOperation, operation = GitOperation.Pull)
+                button("Push", IdeHitAction.GitOperation, operation = GitOperation.Push)
+            }
+            button(if (view.authenticated) "Replace token" else "HTTPS token", IdeHitAction.GitAuthenticate)
+            if (view.authenticated) button("Forget token", IdeHitAction.GitForgetCredentials)
+            if (running) button("Cancel", IdeHitAction.GitCancel, true)
+            top += 26
+            val content = IdeRect(bounds.left + 6, bounds.top + 6, bounds.right - 6, bounds.bottom - 6)
+            var rowIndex = 0
+
+            fun row(
+                label: String,
+                action: IdeHitAction? = null,
+                operation: GitOperation? = null,
+                enabled: Boolean = idle,
+            ) {
+                val y = top + rowIndex++ * 20
+                if (y < content.top || y + 20 > content.bottom) return
+                val rect = IdeRect(content.left, y, content.right, y + 20)
+                if (action != null) target(action, rect, enabled, label, gitOperation = operation)
+                ui(IdeTextKind.Source, label, rect.left + 4, y + 5, clip = rect)
+            }
+            row(
+                if (running) {
+                    "Git operation in progress…"
+                } else if (!available) {
+                    "No Git repository · use Init or Clone"
+                } else {
+                    "${status.branch ?: "Detached HEAD"} · ${status.head?.take(8) ?: "No commits"} · ${status.state}"
+                },
+            )
+            status?.upstream?.let { row("Upstream: $it") }
+            val result = view.result
+            val diff = result?.diff
+            if (diff != null) {
+                row("Diff · use Status to return to changes")
+                diff.lineSequence().forEach { row(it) }
+            } else if (!result?.history.isNullOrEmpty()) {
+                row("History · use Status to return to changes")
+                result?.history?.forEach { row("${it.id.take(8)} ${it.author} · ${it.message}") }
+            } else {
+                if (available) {
+                    row("Branches · click to switch (clean working tree required)")
+                    status.branches.forEach { branch ->
+                        row(
+                            if (branch == status.branch) "● $branch" else "Switch: $branch",
+                            IdeHitAction.GitOperation,
+                            GitOperation.SwitchBranch(branch),
+                            idle && branch != status.branch,
+                        )
+                    }
+                    row("Changes · index / working tree")
+                    if (status.changes.isEmpty()) row("Working tree is clean")
+                    status.changes.forEach { change ->
+                        row("${change.index ?: "—"} / ${change.workingTree ?: "—"}  ${change.path.value}")
+                        if (change.workingTree != null) {
+                            row("  Stage ${change.path.value}", IdeHitAction.GitOperation, GitOperation.Stage(change.path))
+                            row("  Working diff", IdeHitAction.GitOperation, GitOperation.Diff(change.path))
+                        }
+                        if (change.index != null) {
+                            row("  Unstage ${change.path.value}", IdeHitAction.GitOperation, GitOperation.Unstage(change.path))
+                            row("  Staged diff", IdeHitAction.GitOperation, GitOperation.Diff(change.path, staged = true))
+                        }
+                    }
+                }
+            }
+            val totalHeight = top + view.scroll * 20 + rowIndex * 20 - (bounds.top + 6)
+            gitScrollMaximum = ((totalHeight - (bounds.height - 12)).coerceAtLeast(0) + 19) / 20
         }
 
         private fun toolbar(
@@ -304,7 +450,9 @@ object IdeRenderer {
                 selected = formatBusy,
             )
             action(IdeIconKind.Resolve, IdeHitAction.Resolve, toolingReady, toolingUnavailable ?: "Resolve dependencies")
-            if (build is IdeBuildState.Compiling || build is IdeBuildState.Saving) {
+            if (IdeBusyOperation.Clone in busy || IdeBusyOperation.Git in busy) {
+                action(IdeIconKind.Cancel, IdeHitAction.GitCancel, tooltip = "Cancel Git operation")
+            } else if (build is IdeBuildState.Compiling || build is IdeBuildState.Saving) {
                 action(IdeIconKind.Cancel, IdeHitAction.Cancel, tooltip = "Cancel build")
             } else {
                 action(IdeIconKind.Build, IdeHitAction.Build, toolingReady, toolingUnavailable ?: "Build (Ctrl+F9)")
@@ -1450,17 +1598,8 @@ object IdeRenderer {
             val top = geometry.panel.top + (geometry.panel.height - height) / 2
             val bounds = IdeRect(left, top, left + width, top + height)
             panel(IdePanelKind.Dialog, bounds, IdeColors.PANEL_ALT, Z_DIALOG)
-            val promptKind = prompt.kind
-            val title =
-                when (promptKind) {
-                    IdePromptKind.CreateProject -> "Create project"
-                    IdePromptKind.CreateText -> "Create text file"
-                    IdePromptKind.CreateDirectory -> "Create directory"
-                    is IdePromptKind.Rename -> "Rename ${promptKind.source.value}"
-                    IdePromptKind.RenameSymbol -> "Rename symbol · new name"
-                }
-            ui(IdeTextKind.Dialog, title, bounds.left + 10, bounds.top + 10, clip = bounds, z = Z_DIALOG_TEXT)
-            ui(IdeTextKind.Dialog, prompt.value + "_", bounds.left + 10, bounds.top + 34, clip = bounds, z = Z_DIALOG_TEXT)
+            ui(IdeTextKind.Dialog, prompt.title, bounds.left + 10, bounds.top + 10, clip = bounds, z = Z_DIALOG_TEXT)
+            ui(IdeTextKind.Dialog, prompt.displayValue + "_", bounds.left + 10, bounds.top + 34, clip = bounds, z = Z_DIALOG_TEXT)
             prompt.error?.let { ui(IdeTextKind.Dialog, it, bounds.left + 10, bounds.top + 54, IdeColors.ERROR, bounds, Z_DIALOG_TEXT) }
             val dismiss = IdeRect(bounds.right - 78, bounds.bottom - 26, bounds.right - 10, bounds.bottom - 8)
             val confirm = IdeRect(dismiss.left - 76, dismiss.top, dismiss.left - 8, dismiss.bottom)
@@ -1521,6 +1660,7 @@ object IdeRenderer {
             z: Int = Z_TARGET,
             selected: Boolean = false,
             choiceIndex: Int? = null,
+            gitOperation: GitOperation? = null,
         ) {
             panels +=
                 IdePanelDraw(
@@ -1533,7 +1673,7 @@ object IdeRenderer {
                     },
                     z - CONTROL_BACKGROUND_OFFSET,
                 )
-            hitTargets += IdeHitTarget(action, bounds, enabled, tooltip, focusGroup, z, selected, choiceIndex)
+            hitTargets += IdeHitTarget(action, bounds, enabled, tooltip, focusGroup, z, selected, choiceIndex, gitOperation = gitOperation)
         }
 
         fun build(): IdeDrawModel =
@@ -1544,6 +1684,7 @@ object IdeRenderer {
                 scissors.toList(),
                 hitTargets.toList(),
                 icons.toList(),
+                gitScrollMaximum,
             )
 
         private fun projectGlyphs(source: String): String {

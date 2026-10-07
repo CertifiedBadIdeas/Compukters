@@ -148,7 +148,10 @@ internal class IdeScreen(
             val outsideSwitcher =
                 switcherAction != IdeHitAction.ProjectSwitcher &&
                     switcherAction != IdeHitAction.ProjectChoice &&
-                    switcherAction != IdeHitAction.CreateProject
+                    switcherAction != IdeHitAction.CreateProject &&
+                    switcherAction != IdeHitAction.OpenExisting &&
+                    switcherAction != IdeHitAction.CloneProject &&
+                    switcherAction != IdeHitAction.GitAuthenticate
             if (outsideSwitcher) {
                 projectSwitcherOpen = false
                 input.pointerActivity()
@@ -544,12 +547,14 @@ internal class IdeScreen(
         val chooser =
             (analysis?.interaction as? IdeSemanticInteraction.Chooser) != null
         return IdeFocusState(
-            focusArea,
+            if ((state.page as? IdePageState.Workspace)?.value?.git?.visible == true) IdeFocusArea.Editor else focusArea,
             completion,
             chooser,
             state.dialog,
             geometry().codeRows.coerceAtLeast(1),
             analysis?.parameterInfo != null,
+            gitVisible = (state.page as? IdePageState.Workspace)?.value?.git?.visible == true,
+            gitScrollMaximum = pointerContext(geometry()).gitScrollMaximum,
             findVisible = editor?.find != null,
             usagesFocused = (state.page as? IdePageState.Workspace)?.value?.usages?.focused == true,
             findFocused = editor?.find?.focused == true,
@@ -585,7 +590,9 @@ internal class IdeScreen(
             is IdePageState.Workspace -> {
                 IdePointerContext(
                     geometry,
-                    editor = page.value.editor as? IdeEditorView.Text,
+                    editor = (page.value.editor as? IdeEditorView.Text).takeUnless { page.value.git.visible },
+                    gitVisible = page.value.git.visible,
+                    gitScrollMaximum = model.gitScrollMaximum ?: 0,
                     usages = page.value.usages,
                     projects = page.value.projects,
                     tree = page.value.tree.flatten(),
@@ -612,6 +619,39 @@ internal class IdeScreen(
             IdeHitAction.ProjectSwitcher -> {
                 projectSwitcherOpen = !projectSwitcherOpen
                 if (projectSwitcherOpen) terminalOverlay.hide()
+            }
+
+            IdeHitAction.OpenExisting -> {
+                projectSwitcherOpen = false
+                prompt.open(IdePromptKind.OpenExisting)
+            }
+
+            IdeHitAction.CloneProject -> {
+                projectSwitcherOpen = false
+                prompt.open(IdePromptKind.CloneRemote)
+            }
+
+            IdeHitAction.GitToggle -> {
+                val page = application.controller.viewState().page as? IdePageState.Workspace ?: return false
+                application.controller.dispatch(IdeCommand.GitVisible(!page.value.git.visible))
+                focusArea = IdeFocusArea.Editor
+            }
+
+            IdeHitAction.GitRemote -> {
+                prompt.open(IdePromptKind.GitRemoteUrl)
+            }
+
+            IdeHitAction.GitBranch -> {
+                prompt.open(IdePromptKind.GitBranch)
+            }
+
+            IdeHitAction.GitCommit -> {
+                prompt.open(IdePromptKind.GitCommitMessage)
+            }
+
+            IdeHitAction.GitAuthenticate -> {
+                projectSwitcherOpen = false
+                prompt.open(IdePromptKind.GitUsername)
             }
 
             IdeHitAction.CreateText -> {

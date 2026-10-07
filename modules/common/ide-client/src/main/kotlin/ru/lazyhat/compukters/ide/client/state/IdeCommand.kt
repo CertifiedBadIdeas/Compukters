@@ -47,6 +47,7 @@ sealed interface IdeCommand {
 
     data class ScrollGit(
         val lines: Int,
+        val maximum: Int = 1_000_000,
     ) : IdeCommand
 
     data class SetGitCredentials(

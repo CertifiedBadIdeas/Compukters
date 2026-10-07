@@ -22,6 +22,9 @@ plugins {
 
 val pinnedKotlinVersion = libsCatalog().findVersion("kotlin").get().requiredVersion
 val pinnedXzVersion = libsCatalog().findVersion("xz").get().requiredVersion
+val pinnedJGitVersion = libsCatalog().findVersion("jgit").get().requiredVersion
+val pinnedJavaEwahVersion = libsCatalog().findVersion("javaewah").get().requiredVersion
+val pinnedCodecVersion = libsCatalog().findVersion("commons-codec").get().requiredVersion
 
 val systemPrograms =
     mapOf(
@@ -73,6 +76,11 @@ tasks.processResources {
     listOf(
         "antlr4-runtime-4.13.2-BSD-3-Clause.txt",
         "xz-java-$pinnedXzVersion-0BSD.txt",
+        "jgit-$pinnedJGitVersion-EDL-1.0.html",
+        "javaewah-$pinnedJavaEwahVersion-Apache-2.0.txt",
+        "javaewah-$pinnedJavaEwahVersion-PROVENANCE.txt",
+        "commons-codec-$pinnedCodecVersion-Apache-2.0.txt",
+        "commons-codec-$pinnedCodecVersion-NOTICE.txt",
     ).forEach { filename ->
         from(rootProject.layout.projectDirectory.file("licenses/jvm/$filename")) {
             into("META-INF/licenses/jvm")

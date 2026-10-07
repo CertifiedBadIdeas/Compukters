@@ -21,6 +21,44 @@ import kotlin.test.assertNull
 
 class IdePromptTest {
     @Test
+    fun `clone and commit forms emit commands only after all fields are admitted`() {
+        val prompt = IdePromptController()
+        prompt.open(IdePromptKind.CloneRemote, "https://example.com/team/demo.git")
+        assertNull(prompt.confirm())
+        assertEquals("demo", prompt.state?.value)
+        assertEquals(IdeCommand.CloneProject("demo", "https://example.com/team/demo.git"), prompt.confirm())
+        prompt.open(IdePromptKind.CloneRemote, "https://user:secret@example.com/demo.git")
+        assertNull(prompt.confirm())
+        assertNotNull(prompt.state?.error)
+        prompt.open(IdePromptKind.GitCommitMessage, "Add program")
+        assertNull(prompt.confirm())
+        prompt.type("Player")
+        assertNull(prompt.confirm())
+        prompt.type("player@example.com")
+        assertEquals(
+            IdeCommand.Git(
+                ru.lazyhat.compukters.ide.git.GitOperation
+                    .Commit("Add program", "Player", "player@example.com"),
+            ),
+            prompt.confirm(),
+        )
+    }
+
+    @Test
+    fun `authentication masks token and preserves spaces without retaining prompt`() {
+        val prompt = IdePromptController()
+        prompt.open(IdePromptKind.GitUsername, "player")
+        assertNull(prompt.confirm())
+        prompt.type(" token value ")
+        kotlin.test.assertFalse(prompt.state.toString().contains("token value"))
+        kotlin.test.assertFalse(prompt.state!!.displayValue.contains("token value"))
+        val command = prompt.confirm() as IdeCommand.SetGitCredentials
+        assertNull(prompt.state)
+        assertEquals(" token value ", command.credentials!!.token().concatToString())
+        command.credentials!!.close()
+    }
+
+    @Test
     fun `symbol rename prompt emits refactoring not filesystem mutation`() {
         val prompt = IdePromptController()
         prompt.open(IdePromptKind.RenameSymbol)

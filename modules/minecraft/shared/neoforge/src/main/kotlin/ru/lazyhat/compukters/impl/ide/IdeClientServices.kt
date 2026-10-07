@@ -73,6 +73,7 @@ import ru.lazyhat.compukters.ide.compiler.profile.PlatformCatalog
 import ru.lazyhat.compukters.ide.compiler.profile.ProfileResolution
 import ru.lazyhat.compukters.ide.compiler.profile.ResolvedPlatformModule
 import ru.lazyhat.compukters.ide.compiler.profile.TargetCompileProfile
+import ru.lazyhat.compukters.ide.git.JGitBackend
 import ru.lazyhat.compukters.ide.project.ProjectLockCodec
 import ru.lazyhat.compukters.ide.project.ProjectLockService
 import ru.lazyhat.compukters.ide.project.ProjectResolution
@@ -417,7 +418,7 @@ internal object ProductionIdeApplicationFactory {
         tooling: (DefaultIdeWorkspace) -> CompletableFuture<IdeClientTooling>,
     ): IdeClientApplication {
         val clientLimits = IdeClientLimits()
-        val workspace = DefaultIdeWorkspace(paths.projects, clientLimits = clientLimits)
+        val workspace = DefaultIdeWorkspace(paths.projects, clientLimits = clientLimits, gitBackend = JGitBackend())
         val clock = IdeControllerClock.System
         val targetPort = targetTransport.openPort()
         val targetTerminal = targetTransport.openTerminal()

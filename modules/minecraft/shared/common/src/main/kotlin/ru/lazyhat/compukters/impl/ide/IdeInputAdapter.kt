@@ -63,6 +63,8 @@ data class IdeFocusState(
     val findFocused: Boolean = false,
     val findSelectedText: String? = null,
     val usagesFocused: Boolean = false,
+    val gitVisible: Boolean = false,
+    val gitScrollMaximum: Int = 1_000_000,
 ) {
     companion object {
         val Initial = IdeFocusState(IdeFocusArea.Editor)
@@ -83,6 +85,8 @@ data class IdePointerContext(
     val hitTargets: List<IdeHitTarget> = emptyList(),
     val dialog: IdeDialogState? = null,
     val usages: ru.lazyhat.compukters.ide.client.analysis.IdeUsages? = null,
+    val gitVisible: Boolean = false,
+    val gitScrollMaximum: Int = 1_000_000,
 )
 
 data class IdeExplorerDragVisual(
@@ -131,6 +135,16 @@ class IdeInputAdapter(
                 IdeKeyCode.ENTER -> return dispatch(IdeCommand.OpenUsage())
                 IdeKeyCode.ESCAPE -> return dispatch(IdeCommand.CloseUsages)
                 IdeKeyCode.TAB -> return dispatch(IdeCommand.UnfocusUsages)
+            }
+        }
+        if (focus.gitVisible && focus.area == IdeFocusArea.Editor) {
+            return when (event.key) {
+                IdeKeyCode.ESCAPE -> dispatch(IdeCommand.GitVisible(false))
+                IdeKeyCode.UP -> dispatch(IdeCommand.ScrollGit(-1, focus.gitScrollMaximum))
+                IdeKeyCode.DOWN -> dispatch(IdeCommand.ScrollGit(1, focus.gitScrollMaximum))
+                IdeKeyCode.PAGE_UP -> dispatch(IdeCommand.ScrollGit(-focus.editorPageRows, focus.gitScrollMaximum))
+                IdeKeyCode.PAGE_DOWN -> dispatch(IdeCommand.ScrollGit(focus.editorPageRows, focus.gitScrollMaximum))
+                else -> false
             }
         }
         if (focus.area == IdeFocusArea.Editor) {
@@ -187,6 +201,7 @@ class IdeInputAdapter(
         event: IdeCharacterInput,
         focus: IdeFocusState,
     ): Boolean {
+        if (focus.gitVisible) return true
         if (focus.usagesFocused) return true
         if (focus.dialog != null || focus.area != IdeFocusArea.Editor) return false
         if (focus.findFocused) return dispatch(IdeCommand.EditFind(IdeEditorInput.Type(event.text)))
@@ -319,6 +334,7 @@ class IdeInputAdapter(
             .asReversed()
             .firstOrNull { it.enabled && it.bounds.contains(x, y) }
             ?.let { target ->
+                target.gitOperation?.let { return dispatch(IdeCommand.Git(it)) }
                 if (target.action == IdeHitAction.DiagnosticChoice) {
                     val row = target.diagnostic ?: return false
                     return dispatch(IdeCommand.OpenDiagnostic(row))
@@ -358,6 +374,7 @@ class IdeInputAdapter(
                 if (handled) pointerActivity()
                 return handled
             }
+        if (context.gitVisible && geometry.editor.contains(x, y)) return true
         if (geometry.editor.contains(x, y)) {
             if (context.usages?.focused == true) sink.dispatch(IdeCommand.UnfocusUsages)
             if (context.editor?.find != null) sink.dispatch(IdeCommand.FocusFind(false))
@@ -432,6 +449,22 @@ class IdeInputAdapter(
         dialog: IdeDialogState?,
     ): Boolean =
         when (action) {
+            IdeHitAction.GitClose -> {
+                dispatch(IdeCommand.GitVisible(false))
+            }
+
+            IdeHitAction.GitForgetCredentials -> {
+                dispatch(IdeCommand.SetGitCredentials(null))
+            }
+
+            IdeHitAction.GitCancel -> {
+                dispatch(IdeCommand.CancelGit)
+            }
+
+            IdeHitAction.GitOperation -> {
+                false
+            }
+
             IdeHitAction.FindFocus -> {
                 dispatch(IdeCommand.FocusFind(true))
             }
@@ -480,6 +513,13 @@ class IdeInputAdapter(
                 uiActions.activate(action)
             }
 
+            IdeHitAction.OpenExisting,
+            IdeHitAction.CloneProject,
+            IdeHitAction.GitToggle,
+            IdeHitAction.GitRemote,
+            IdeHitAction.GitBranch,
+            IdeHitAction.GitCommit,
+            IdeHitAction.GitAuthenticate,
             IdeHitAction.CreateProject,
             IdeHitAction.OpenProject,
             IdeHitAction.ProjectSwitcher,
@@ -544,6 +584,10 @@ class IdeInputAdapter(
         vertical: Double,
         context: IdePointerContext,
     ): Boolean {
+        if (context.gitVisible && context.geometry.editor.contains(x, y)) {
+            sink.dispatch(IdeCommand.ScrollGit((-vertical * SCROLL_ROWS).toInt(), context.gitScrollMaximum))
+            return true
+        }
         if (context.usages != null && context.geometry.diagnostics?.contains(x, y) == true) {
             val rows = (-vertical * SCROLL_ROWS).toInt()
             if (rows != 0) sink.dispatch(IdeCommand.MoveUsage(rows))

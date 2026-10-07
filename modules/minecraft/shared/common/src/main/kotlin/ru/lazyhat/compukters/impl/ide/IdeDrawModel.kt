@@ -75,6 +75,17 @@ enum class IdeScissorKind { Tree, Editor, Diagnostics, Completion, SemanticPopup
 enum class IdeHitAction {
     CreateProject,
     OpenProject,
+    OpenExisting,
+    CloneProject,
+    GitToggle,
+    GitClose,
+    GitOperation,
+    GitRemote,
+    GitBranch,
+    GitCommit,
+    GitAuthenticate,
+    GitForgetCredentials,
+    GitCancel,
     ProjectSwitcher,
     ProjectChoice,
     CreateText,
@@ -180,6 +191,7 @@ data class IdeHitTarget(
     val selected: Boolean = false,
     val choiceIndex: Int? = null,
     val diagnostic: ru.lazyhat.compukters.ide.client.state.IdeDiagnosticRow? = null,
+    val gitOperation: ru.lazyhat.compukters.ide.git.GitOperation? = null,
 )
 
 data class IdeDrawModel(
@@ -189,4 +201,5 @@ data class IdeDrawModel(
     val scissors: List<IdeScissorDraw>,
     val hitTargets: List<IdeHitTarget>,
     val icons: List<IdeIconDraw>,
+    val gitScrollMaximum: Int? = null,
 )
