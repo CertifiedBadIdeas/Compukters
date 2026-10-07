@@ -57,6 +57,13 @@ interface IdeWorkspace : AutoCloseable {
         cancellation: GitCancellation,
     ): CompletableFuture<GitResult> = CompletableFuture.failedFuture(UnsupportedOperationException("Git is unavailable"))
 
+    /** Optional, read-only editor decoration refresh; never saves or changes working files. */
+    fun inspectGit(
+        project: ProjectHandle,
+        source: GitOperation.SourceChanges?,
+        cancellation: GitCancellation,
+    ): CompletableFuture<GitResult?> = CompletableFuture.completedFuture(null)
+
     fun tree(project: ProjectHandle): CompletableFuture<ProjectTree>
 
     fun open(

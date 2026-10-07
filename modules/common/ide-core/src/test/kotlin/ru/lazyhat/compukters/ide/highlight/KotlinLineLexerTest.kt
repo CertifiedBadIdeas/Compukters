@@ -26,6 +26,18 @@ import kotlin.test.assertTrue
 
 class KotlinLineLexerTest {
     @Test
+    fun `numeric ranges member calls annotations and Unicode escapes have distinct spans`() {
+        val source = "@file:pkg.Annotation val x = 1..10; 0xFFuL; 0b101L; 1.5e-2f; 1.toString(); foo (x); \"\\u0041\""
+        val tokens = scan(source).spans.map { source.substring(it.startUtf16, it.endUtf16) to it.kind }
+        assertTrue("@file:pkg.Annotation" to KotlinLexicalKind.Annotation in tokens)
+        for (literal in listOf("1", "10", "0xFFuL", "0b101L", "1.5e-2f")) assertTrue(literal to KotlinLexicalKind.Number in tokens)
+        assertTrue("toString" to KotlinLexicalKind.FunctionCall in tokens)
+        assertTrue("foo" to KotlinLexicalKind.FunctionCall in tokens)
+        assertTrue("\\u0041" to KotlinLexicalKind.Escape in tokens)
+        assertFalse(tokens.any { it.first.contains("..") && it.second == KotlinLexicalKind.Number })
+    }
+
+    @Test
     fun `classifies the immediate lexical surface with non-overlapping spans`() {
         val source = "@Ann fun Main(value: Int) = 1.5e+2f + \"a\\nb\" + 'x' // tail"
         val line = scan(source)
@@ -85,7 +97,7 @@ class KotlinLineLexerTest {
 
         assertEquals(
             listOf(
-                "println" to KotlinLexicalKind.Identifier,
+                "println" to KotlinLexicalKind.FunctionCall,
                 "(" to KotlinLexicalKind.Operator,
                 "\"" to KotlinLexicalKind.String,
                 "${'$'}{" to KotlinLexicalKind.Escape,

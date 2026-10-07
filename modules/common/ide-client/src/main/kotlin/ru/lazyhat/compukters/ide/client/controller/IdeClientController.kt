@@ -196,6 +196,12 @@ class IdeClientController(
     private var bottomPanel =
         ru.lazyhat.compukters.ide.client.state
             .IdeBottomPanelView()
+    private var inspectionCancellation: GitCancellation? = null
+    private var latestInspection = 0L
+    private var lastInspectionMillis = Long.MIN_VALUE
+    private var inspectedPath: ProjectPath? = null
+    private var inspectedRevision: Long? = null
+    private var gitLineChanges = emptyList<ru.lazyhat.compukters.ide.git.GitLineChange>()
     private var pushAfterCommit = false
     private var pendingGit: GitOperation? = null
     private var latestGitOperation = 0L
@@ -435,6 +441,7 @@ class IdeClientController(
 
             IdeCommand.CancelGit -> {
                 gitCancellation?.cancel()
+                inspectionCancellation?.cancel()
             }
 
             is IdeCommand.CreateProject -> {
@@ -752,6 +759,7 @@ class IdeClientController(
             }
         if (active != null && pendingRename == null && IdeBusyOperation.Git !in state.busy) saveDocument(active)
         refreshAnalysisState()
+        inspectGit()
     }
 
     fun viewState(): IdeViewState {
@@ -798,6 +806,7 @@ class IdeClientController(
         if (closed) return
         closed = true
         gitCancellation?.cancel()
+        inspectionCancellation?.cancel()
         gitCredentials?.close()
         gitCredentials = null
         gitDraft.close()
@@ -1569,6 +1578,9 @@ class IdeClientController(
             publishStatus("Finish the current operation before using Git", IdeProblemSeverity.Warning)
             return
         }
+        gitLineChanges = emptyList()
+        inspectedRevision = null
+        lastInspectionMillis = Long.MIN_VALUE
         gitView = gitView.copy(menu = null)
         pendingGit = operation
         continueGit()
@@ -1616,6 +1628,7 @@ class IdeClientController(
             gitView = gitView.copy(result = event.result ?: gitView.result, scroll = 0, previewScroll = 0)
         }
         event.result?.status?.let { status ->
+            gitView = gitView.copy(status = status)
             val available = status.changes.mapTo(mutableSetOf()) { it.path }
             gitView =
                 gitView.copy(
@@ -1651,6 +1664,30 @@ class IdeClientController(
         requestPoll()
         if (event.failure != null && event.operation != GitOperation.Status) requestGit(GitOperation.Status)
         if (push) requestGit(GitOperation.Push)
+    }
+
+    private fun inspectGit() {
+        val selected = project ?: return
+        if (creatingProject || inspectionCancellation != null || pendingGit != null || IdeBusyOperation.Git in state.busy ||
+            IdeBusyOperation.Project in state.busy
+        ) {
+            return
+        }
+        val now = clock.nowMillis()
+        if (lastInspectionMillis != Long.MIN_VALUE && now - lastInspectionMillis < 1000) return
+        lastInspectionMillis = now
+        val cancellation = GitCancellation()
+        inspectionCancellation = cancellation
+        val operationId = nextOperationId++
+        latestInspection = operationId
+        val current = editor
+        val source = current?.let { GitOperation.SourceChanges(it.path, it.document.materialize()) }
+        val revision = current?.document?.revision
+        val capturedGeneration = generation
+        val foreground = latestGitOperation
+        workspace.inspectGit(selected.handle, source, cancellation).whenComplete { result, _ ->
+            enqueue(IdeEvent.GitInspected(capturedGeneration, operationId, foreground, source?.path, revision, result))
+        }
     }
 
     private fun requestPoll() {
@@ -1779,6 +1816,46 @@ class IdeClientController(
 
             is IdeEvent.ToolingFailed -> {
                 acceptToolingFailure(event.detail)
+            }
+
+            is IdeEvent.GitInspected -> {
+                if (event.operationId != latestInspection) return
+                inspectionCancellation = null
+                if (event.foregroundOperation != latestGitOperation || IdeBusyOperation.Git in state.busy || pendingGit != null) return
+                gitView =
+                    gitView.copy(
+                        status =
+                            event.result?.status ?: ru.lazyhat.compukters.ide.git
+                                .GitStatus(false),
+                    )
+                if (editor?.path == event.path && editor?.document?.revision == event.documentRevision) {
+                    inspectedPath = event.path
+                    inspectedRevision = event.documentRevision
+                    gitLineChanges =
+                        java.util.Collections.unmodifiableList(
+                            event.result
+                                ?.lineChanges
+                                .orEmpty()
+                                .toList(),
+                        )
+                    val status = gitView.status
+                    val path = event.path
+                    if (status?.available == true && path != null && gitLineChanges.isNotEmpty() &&
+                        status.changes.none { it.path == path }
+                    ) {
+                        gitView =
+                            gitView.copy(
+                                status =
+                                    status.copy(
+                                        changes =
+                                            status.changes +
+                                                ru.lazyhat.compukters.ide.git
+                                                    .GitChange(path, null, "modified"),
+                                    ),
+                            )
+                    }
+                }
+                publishWorkspace()
             }
 
             is IdeEvent.GitFinished -> {
@@ -2021,6 +2098,13 @@ class IdeClientController(
             closeAnalysisFile()
             creatingProject = false
         }
+        inspectionCancellation?.cancel()
+        inspectionCancellation = null
+        latestInspection = nextOperationId++
+        lastInspectionMillis = Long.MIN_VALUE
+        inspectedPath = null
+        inspectedRevision = null
+        gitLineChanges = emptyList()
         gitView = IdeGitView(authenticated = gitCredentials != null)
         bottomPanel =
             ru.lazyhat.compukters.ide.client.state.IdeBottomPanelView(
@@ -2702,6 +2786,7 @@ class IdeClientController(
             admittedAnalysisState(this),
             find = find.view(document),
             occurrenceRanges = occurrenceRanges(document, highlighter.snapshot()),
+            gitLineChanges = if (inspectedPath == path && inspectedRevision == document.revision) gitLineChanges else emptyList(),
         )
     }
 
@@ -3840,6 +3925,8 @@ private fun IdeEvent.generationOrNull(): Long? =
         is IdeEvent.CompletionModuleEnabled,
         is IdeEvent.CompletionModuleRollbackCompleted,
         -> null
+
+        is IdeEvent.GitInspected -> generation
 
         is IdeEvent.GitFinished -> generation
 

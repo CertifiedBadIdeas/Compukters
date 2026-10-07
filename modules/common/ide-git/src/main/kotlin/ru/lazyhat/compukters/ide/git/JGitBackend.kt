@@ -20,6 +20,9 @@ package ru.lazyhat.compukters.ide.git
 
 import org.eclipse.jgit.api.Git
 import org.eclipse.jgit.api.MergeCommand
+import org.eclipse.jgit.diff.HistogramDiff
+import org.eclipse.jgit.diff.RawText
+import org.eclipse.jgit.diff.RawTextComparator
 import org.eclipse.jgit.lib.Constants
 import org.eclipse.jgit.lib.ProgressMonitor
 import org.eclipse.jgit.lib.Repository
@@ -32,6 +35,7 @@ import org.eclipse.jgit.transport.UsernamePasswordCredentialsProvider
 import org.eclipse.jgit.treewalk.CanonicalTreeParser
 import org.eclipse.jgit.treewalk.EmptyTreeIterator
 import org.eclipse.jgit.treewalk.FileTreeIterator
+import org.eclipse.jgit.treewalk.TreeWalk
 import org.eclipse.jgit.treewalk.filter.PathFilter
 import ru.lazyhat.compukters.ide.project.ProjectHandle
 import ru.lazyhat.compukters.ide.project.fs.ProjectPath
@@ -100,7 +104,11 @@ class JGitBackend internal constructor(
         cancellation.check()
         check(project.isValid()) { "Project root changed" }
         val metadata = project.canonicalPath.resolve(".git")
-        if (operation == GitOperation.Status && !Files.exists(metadata, LinkOption.NOFOLLOW_LINKS)) return GitResult(GitStatus(false))
+        if ((operation == GitOperation.Status || operation is GitOperation.SourceChanges) &&
+            !Files.exists(metadata, LinkOption.NOFOLLOW_LINKS)
+        ) {
+            return GitResult(GitStatus(false))
+        }
         if (operation == GitOperation.Init) {
             check(!Files.exists(metadata, LinkOption.NOFOLLOW_LINKS)) { "Project already has Git metadata" }
             Git
@@ -123,6 +131,7 @@ class JGitBackend internal constructor(
             var message: String? = null
             var diff: String? = null
             var history = emptyList<GitCommit>()
+            var lineChanges = emptyList<GitLineChange>()
             when (operation) {
                 GitOperation.Init, GitOperation.Status -> {
                     Unit
@@ -139,6 +148,10 @@ class JGitBackend internal constructor(
 
                 is GitOperation.Diff -> {
                     diff = diff(git, operation, project)
+                }
+
+                is GitOperation.SourceChanges -> {
+                    lineChanges = sourceChanges(git, operation, cancellation)
                 }
 
                 is GitOperation.Stage -> {
@@ -313,7 +326,13 @@ class JGitBackend internal constructor(
             }
             check(project.isValid()) { "Project root changed during Git operation" }
             checkStorage(git.repository, cancellation)
-            return GitResult(status(git), message, diff, Collections.unmodifiableList(history.toList()))
+            return GitResult(
+                status(git),
+                message,
+                diff,
+                Collections.unmodifiableList(history.toList()),
+                Collections.unmodifiableList(lineChanges.toList()),
+            )
         }
     }
 
@@ -407,6 +426,59 @@ class JGitBackend internal constructor(
             Collections.unmodifiableList(changes),
             git.repository.repositoryState.name,
         )
+    }
+
+    private fun sourceChanges(
+        git: Git,
+        operation: GitOperation.SourceChanges,
+        cancellation: GitCancellation,
+    ): List<GitLineChange> {
+        val repository = git.repository
+        val currentBytes = operation.text.replace("\r\n", "\n").toByteArray(Charsets.UTF_8)
+        if (currentBytes.size > limits.diffBytes || RawText.isBinary(currentBytes)) return emptyList()
+        val head = repository.resolve(Constants.HEAD)
+        val previousBytes =
+            if (head == null) {
+                byteArrayOf()
+            } else {
+                RevWalk(repository).use { walk ->
+                    val tree = walk.parseCommit(head).tree
+                    TreeWalk.forPath(repository, operation.path.value, tree)?.use { entry ->
+                        val loader = repository.open(entry.getObjectId(0), Constants.OBJ_BLOB)
+                        if (loader.size > limits.diffBytes) return emptyList()
+                        loader.getBytes(limits.diffBytes)
+                    } ?: byteArrayOf()
+                }
+            }
+        if (previousBytes.isEmpty() && repository.readDirCache().findEntry(operation.path.value) < 0 &&
+            operation.path.value !in git.status().call().untracked
+        ) {
+            return emptyList()
+        }
+        if (RawText.isBinary(previousBytes)) return emptyList()
+        cancellation.check()
+        val previous = RawText(previousBytes.toString(Charsets.UTF_8).replace("\r\n", "\n").toByteArray(Charsets.UTF_8))
+        val current = RawText(currentBytes)
+        val algorithm =
+            HistogramDiff().apply {
+                setMaxChainLength(64)
+                setFallbackAlgorithm(null)
+            }
+        val edits = algorithm.diff(RawTextComparator.DEFAULT, previous, current)
+        if (edits.size > limits.files) return emptyList()
+        return edits.map { edit ->
+            cancellation.check()
+            val count = edit.endB - edit.beginB
+            GitLineChange(
+                edit.beginB,
+                count,
+                when {
+                    count == 0 -> GitLineChangeKind.Deleted
+                    edit.beginA == edit.endA -> GitLineChangeKind.Added
+                    else -> GitLineChangeKind.Modified
+                },
+            )
+        }
     }
 
     private fun diff(

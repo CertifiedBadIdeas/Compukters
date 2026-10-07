@@ -36,7 +36,10 @@ physical paths are bounded`.
 Create, clone HTTPS repositories, open existing project directories in place and switch projects. The Git panel
 provides status, colored HEAD-to-working preview, checkbox-selected commits and editable commit/author fields,
 Changes/Diff tabs, a bottom Git Log window switching with Problems, branch/repository menus, fetch,
-fast-forward-only pull and push. A left icon stripe groups tool windows; all IDE text uses bundled JetBrains Mono. Private repository credentials are
+fast-forward-only pull and push. A left icon stripe groups tool windows; all IDE text uses bundled JetBrains Mono.
+Git colors cover the tree, active title and Changes rows, including parent folders.
+Read-only background inspection supplies bounded HEAD-to-buffer gutter changes, including unsaved text,
+without a save barrier; project, operation and document-revision checks reject stale results. Private repository credentials are
 masked and session-only. Save barriers and generation checks protect open
 buffers; tree/analysis refresh follows working-tree updates. File/folder rename rebases open descendant paths.
 `.git` is excluded from project content and compiler snapshots. SSH, merge, submodules, LFS and linked worktrees are deferred.
@@ -52,6 +55,9 @@ hosting/authentication and visible interaction remain part of the manual scenari
 **Status:** Supported.
 
 Edits propagate lexical state and remain identical to a full scan.
+Lexical fallback colors function calls, qualified/use-site annotations and complete Unicode escapes.
+Numeric scanning distinguishes ranges and member access from decimal, exponent, hexadecimal, binary and
+unsigned literals. Available semantic highlighting takes precedence over lexical fallback.
 
 **Evidence:**
 [`IncrementalKotlinHighlighterTest`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/ide-core/src/test/kotlin/ru/lazyhat/compukters/ide/highlight/IncrementalKotlinHighlighterTest.kt),

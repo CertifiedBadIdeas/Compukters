@@ -107,6 +107,15 @@ sealed interface IdeEvent {
         val result: ProjectDependencyRollback,
     ) : IdeEvent
 
+    data class GitInspected(
+        val generation: Long,
+        val operationId: Long,
+        val foregroundOperation: Long,
+        val path: ProjectPath?,
+        val documentRevision: Long?,
+        val result: GitResult?,
+    ) : IdeEvent
+
     data class GitFinished(
         val generation: Long,
         val operationId: Long,
@@ -249,6 +258,7 @@ internal fun IdeEvent.copyForQueue(): IdeEvent =
         is IdeEvent.FormatCompleted,
         is IdeEvent.DeleteAdmitted,
         is IdeEvent.MutationCompleted,
+        is IdeEvent.GitInspected,
         is IdeEvent.GitFinished,
         is IdeEvent.ComputerImportCompleted,
         is IdeEvent.ComputerImportFailed,

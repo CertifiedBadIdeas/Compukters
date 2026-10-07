@@ -145,11 +145,15 @@ listed in [Kotlin support](developers/kotlin-support.md) and [standard library s
   or on its own tab. Branches and repository/account actions use menus. A left icon stripe opens tool windows, with
   Git Log at the bottom; history opens below the editor and switches with Problems. All IDE text uses JetBrains Mono. Unrelated staged
   changes remain preserved. Commit & Push pushes only after a successful commit, and failed commits keep their drafts.
+  Git status colors cover file names and folders; source gutters mark added, modified and deleted lines against
+  HEAD, including unsaved edits, through read-only background inspection.
 - Text-entry dialogs show a labeled input field with a contrasting background, focus border and visible caret.
   Long values scroll to keep the end of the input visible; authentication tokens remain masked.
 - File switches preserve caret, viewport and undo history in a bounded document cache. The editor highlights the
   current line and uses contrasting panels, draggable dividers and popup shadows; automatic IDE scaling leaves
   more room for code without changing terminal scaling.
+- Kotlin lexical highlighting colors function calls, qualified/use-site annotations and Unicode escapes;
+  numeric literals remain separate from range operators and member access while semantic colors take precedence.
 - `Alt+F7` opens semantic Find Usages with navigable context. Clickable problems, gutter markers, status counts
   and `F2` / `Shift+F2` navigation use matching source text and reject stale locations. Method declarations show
   non-zero project usage counts that distinguish overloads and remain stable during unrelated edits.

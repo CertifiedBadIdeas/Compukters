@@ -57,7 +57,7 @@ object KotlinLineLexer {
                 char == '"' -> scanQuoted('"', KotlinLexicalKind.String)
                 char == '\'' -> scanQuoted('\'', KotlinLexicalKind.Character)
                 char == '`' -> scanBacktickedIdentifier()
-                char == '@' -> add(offset, ++offset, KotlinLexicalKind.Annotation)
+                char == '@' -> scanAnnotation()
                 isIdentifierStart(offset) -> scanIdentifier()
                 char.isDigit() -> scanNumber()
                 else -> add(offset, ++offset, KotlinLexicalKind.Operator)
@@ -115,7 +115,10 @@ object KotlinLineLexer {
                     '\\' -> {
                         add(segmentStart, offset, kind)
                         val escapeStart = offset++
-                        if (offset < input.length) offset++
+                        if (offset < input.length) {
+                            val unicode = input[offset++] == 'u'
+                            if (unicode) repeat(4) { if (offset < input.length && input[offset].digitToIntOrNull(16) != null) offset++ }
+                        }
                         add(escapeStart, offset, KotlinLexicalKind.Escape)
                         segmentStart = offset
                     }
@@ -202,32 +205,60 @@ object KotlinLineLexer {
                 when {
                     text in KEYWORDS -> KotlinLexicalKind.Keyword
                     Character.isUpperCase(input.codePointAt(start)) -> KotlinLexicalKind.TypeLike
+                    nextNonWhitespace() == '(' -> KotlinLexicalKind.FunctionCall
                     else -> KotlinLexicalKind.Identifier
                 }
             add(start, offset, kind)
         }
 
-        private fun scanNumber() {
+        private fun nextNonWhitespace(): Char? {
+            var next = offset
+            while (next < input.length && input[next].isWhitespace()) next++
+            return if (next < input.length) input[next] else null
+        }
+
+        private fun scanAnnotation() {
             val start = offset++
-            var exponent = false
             while (offset < input.length) {
-                val char = input[offset]
                 when {
-                    char.isLetterOrDigit() || char == '_' || char == '.' -> {
-                        exponent = char == 'e' || char == 'E' || char == 'p' || char == 'P'
-                        offset++
-                    }
-
-                    exponent && (char == '+' || char == '-') -> {
-                        exponent = false
-                        offset++
-                    }
-
-                    else -> {
-                        break
-                    }
+                    isIdentifierPart(offset) -> offset += input.scalarWidth(offset)
+                    input[offset] == '.' || input[offset] == ':' -> offset++
+                    else -> break
                 }
             }
+            add(start, offset, KotlinLexicalKind.Annotation)
+        }
+
+        private fun scanNumber() {
+            val start = offset
+
+            fun digits(base: Int) {
+                while (offset < input.length && (input[offset] == '_' || input[offset].digitToIntOrNull(base) != null)) offset++
+            }
+            val hexadecimal = input.matches(offset, "0x") || input.matches(offset, "0X")
+            val binary = input.matches(offset, "0b") || input.matches(offset, "0B")
+            if (hexadecimal || binary) {
+                offset += 2
+                digits(if (hexadecimal) 16 else 2)
+            } else {
+                digits(10)
+                if (offset + 1 < input.length && input[offset] == '.' && input[offset + 1].isDigit()) {
+                    offset++
+                    digits(10)
+                }
+                if (offset < input.length && input[offset] in "eE") {
+                    var next = offset + 1
+                    if (next < input.length && input[next] in "+-") next++
+                    if (next < input.length && input[next].isDigit()) {
+                        offset = next
+                        digits(10)
+                    }
+                }
+                if (offset < input.length && input[offset] in "fF") offset++
+            }
+            if (offset < input.length && input[offset] in "uU") offset++
+            if (offset < input.length && input[offset] in "lL") offset++
+            if (offset == start) offset++
             add(start, offset, KotlinLexicalKind.Number)
         }
 

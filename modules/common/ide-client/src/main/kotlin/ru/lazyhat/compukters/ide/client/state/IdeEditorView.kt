@@ -73,7 +73,9 @@ sealed interface IdeEditorView {
         val readOnly: Boolean = false,
         val find: IdeFindView? = null,
         occurrenceRanges: List<EditorRange> = emptyList(),
+        gitLineChanges: List<ru.lazyhat.compukters.ide.git.GitLineChange> = emptyList(),
     ) : IdeEditorView {
+        val gitLineChanges = Collections.unmodifiableList(gitLineChanges.toList())
         val occurrenceRanges = Collections.unmodifiableList(occurrenceRanges.toList())
         val visibleLines: List<String> = Collections.unmodifiableList(visibleLines.toList())
         val visibleLineStartsUtf16: List<Int> = Collections.unmodifiableList(visibleLineStartsUtf16.toList())

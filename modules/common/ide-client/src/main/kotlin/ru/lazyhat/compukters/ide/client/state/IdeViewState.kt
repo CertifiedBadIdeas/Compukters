@@ -146,6 +146,7 @@ data class IdeGitView(
     val menu: IdeGitMenu? = null,
     val draft: IdeGitDraftView = IdeGitDraftView(),
     val history: List<ru.lazyhat.compukters.ide.git.GitCommit> = emptyList(),
+    val status: ru.lazyhat.compukters.ide.git.GitStatus? = null,
 )
 
 sealed interface IdeProjectRequest {

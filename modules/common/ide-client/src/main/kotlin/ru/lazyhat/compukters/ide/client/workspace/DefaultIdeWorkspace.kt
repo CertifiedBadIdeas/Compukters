@@ -107,6 +107,12 @@ class DefaultIdeWorkspace internal constructor(
         cancellation: GitCancellation,
     ) = submit("git") { checkNotNull(gitBackend) { "Git is unavailable" }.execute(project, operation, credentials, cancellation) }
 
+    override fun inspectGit(
+        project: ProjectHandle,
+        source: GitOperation.SourceChanges?,
+        cancellation: GitCancellation,
+    ) = submit("inspectGit") { gitBackend?.execute(project, source ?: GitOperation.Status, null, cancellation) }
+
     override fun tree(project: ProjectHandle) = submit("tree") { ProjectTreeStore(project, projectLimits).scan() }
 
     override fun open(
