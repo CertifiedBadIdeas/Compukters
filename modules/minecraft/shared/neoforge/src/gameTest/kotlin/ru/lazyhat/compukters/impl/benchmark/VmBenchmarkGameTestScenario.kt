@@ -113,6 +113,12 @@ internal object VmBenchmarkGameTestScenario {
                     }
                 if (!completed) terminals = null
                 helper.assertTrue(completed, "physical computers did not complete the area benchmark")
+                helper.assertTrue(
+                    VmBenchmarkCommands.areaSnapshot(server)?.status == VmBenchmarkAreaStatus.COMPLETED &&
+                        first.runtimeState == ProgramComputerState.WaitingForInput &&
+                        second.runtimeState == ProgramComputerState.WaitingForInput,
+                    "physical CPU benchmark has not finished returning both computers to their shell prompts",
+                )
             }.thenExecute {
                 terminals = null
                 val position = helper.absolutePos(firstPosition)
@@ -120,6 +126,11 @@ internal object VmBenchmarkGameTestScenario {
                     server.createCommandSourceStack(),
                     "compukters vmbench area ${position.x} ${position.y} ${position.z} " +
                         "${position.x} ${position.y} ${position.z} redstone 2",
+                )
+                val snapshot = requireNotNull(VmBenchmarkCommands.areaSnapshot(server))
+                helper.assertTrue(
+                    snapshot.workload == VmBenchmarkAreaWorkload.REDSTONE && snapshot.scheduledComputers == 1,
+                    "physical redstone benchmark command did not schedule its computer: $snapshot",
                 )
             }.thenWaitUntil {
                 val signal = helper.level.getSignal(helper.absolutePos(firstPosition), Direction.DOWN)
