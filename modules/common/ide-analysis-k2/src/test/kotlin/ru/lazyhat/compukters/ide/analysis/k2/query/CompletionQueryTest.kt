@@ -43,7 +43,7 @@ class CompletionQueryTest {
     @Test
     fun `hash collections complete with specialized nullable results`() {
         for (attachedSources in listOf(false, true)) {
-            val source = "import kotlin.collections.*\nfun main() { val map = HashMap<String, Int>(); map. }"
+            val source = "import kotlin.collections.*\nfun main() { val map = mutableMapOf(\"a\" to 1); map. }"
             K2QueryFixture.sourceWithGuestApi(attachedSources, "main.kt" to source).use { fixture ->
                 val items = fixture.complete("main.kt", source.indexOf("map.") + 4).items
                 for (name in listOf("get", "put", "remove")) {
@@ -51,8 +51,9 @@ class CompletionQueryTest {
                 }
                 assertEquals("Boolean", items.single { it.insertText == "containsKey" }.callablePresentation?.returnType)
                 assertTrue(items.any { it.insertText == "entries" })
+                assertEquals("Int", items.single { it.insertText == "getOrPut" }.callablePresentation?.returnType)
             }
-            val setSource = "import kotlin.collections.*\nfun main() { val set = HashSet<String>(); set. }"
+            val setSource = "import kotlin.collections.*\nfun main() { val set = mutableSetOf(\"a\"); set. }"
             K2QueryFixture.sourceWithGuestApi(attachedSources, "main.kt" to setSource).use { fixture ->
                 val items = fixture.complete("main.kt", setSource.indexOf("set.") + 4).items
                 assertEquals("Boolean", items.single { it.insertText == "add" }.callablePresentation?.returnType)

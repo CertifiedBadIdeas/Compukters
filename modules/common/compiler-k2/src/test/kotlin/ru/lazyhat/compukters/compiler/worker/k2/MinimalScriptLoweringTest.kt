@@ -3402,6 +3402,166 @@ class MinimalScriptLoweringTest {
         }
 
     @Test
+    fun `hash collection factories preserve arguments pairs and defaults`() =
+        withAdapter { adapter ->
+            val source =
+                """
+                import kotlin.collections.*
+
+                object Calls { var order: Int = 0; var hashes: Int = 0; var defaults: Int = 0; var receivers: Int = 0; var keys: Int = 0 }
+                class Key(val id: Int) {
+                    override fun hashCode(): Int {
+                        check(Calls.order == 123)
+                        Calls.hashes += 1
+                        return 0
+                    }
+                    override fun equals(other: Any?): Boolean = other is Key && id == other.id
+                }
+                fun argumentFailure(): Pair<Key, String> { throw IllegalArgumentException("argument") }
+                fun entry(index: Int, id: Int, value: String): Pair<Key, String> {
+                    Calls.order = Calls.order * 10 + index
+                    check(Calls.hashes == 0)
+                    return Key(id) to value
+                }
+                class Box(val value: Int)
+                fun receiver(map: MutableMap<Int, Int>): MutableMap<Int, Int> { Calls.receivers += 1; return map }
+                fun key(): Int { Calls.keys += 1; return 4 }
+                fun early(map: MutableMap<Int, Int>): Int {
+                    map.getOrPut(9) { return 41 }
+                    return 0
+                }
+                fun main() {
+                    val map = mapOf(entry(1, 7, "old"), entry(2, 8, "other"), entry(3, 7, "new"))
+                    check(map.size == 2 && map[Key(7)] == "new" && Calls.hashes == 4)
+                    Calls.order = 0; Calls.hashes = 0
+                    var argumentFailed = false
+                    try { mapOf(entry(1, 7, "a"), argumentFailure()) }
+                    catch (e: IllegalArgumentException) { argumentFailed = true }
+                    check(argumentFailed && Calls.order == 1 && Calls.hashes == 0)
+                    check(mapOf<Int, Int>().isEmpty())
+                    check(mutableMapOf<Int, Int>().isEmpty())
+                    check(setOf<Int?>().isEmpty() && mutableSetOf<Int?>().isEmpty())
+                    val nullable = mutableMapOf<String?, Int?>(null to null, "a" to 3, "a" to 4)
+                    check(nullable.size == 2 && nullable.containsKey(null) && nullable["a"] == 4)
+                    check(nullable.getOrPut("a") { Calls.defaults += 1; 99 } == 4 && Calls.defaults == 0)
+                    check(nullable.getOrPut(null) { Calls.defaults += 1; 8 } == 8 && nullable[null] == 8)
+                    check(nullable.getOrPut("nil") { Calls.defaults += 1; null } == null)
+                    check(nullable.getOrPut("nil") { Calls.defaults += 1; null } == null && Calls.defaults == 3)
+                    val ints = mutableMapOf(1 to 2)
+                    check(early(ints) == 41 && !ints.containsKey(9))
+                    check(receiver(ints).getOrPut(key()) { 70 } == 70 && Calls.receivers == 1 && Calls.keys == 1)
+                    val fallback: () -> Int = { 77 }
+                    check(ints.getOrPut(5, fallback) == 77)
+                    check(ints.getOrPut(2) { ints[2] = 50; 60 } == 60 && ints[2] == 60)
+                    var failed = false
+                    try { ints.getOrPut(3) { throw IllegalArgumentException("default") } }
+                    catch (e: IllegalArgumentException) { failed = true }
+                    check(failed && !ints.containsKey(3))
+                    val box = Box(7)
+                    val pair = Pair(5, box)
+                    val (number, same) = pair
+                    check(number == 5 && same === box)
+                    check(pair == (5 to box) && pair.hashCode() == 31 * 5 + box.hashCode())
+                    check(pair.copy(first = 8, second = box).first == 8)
+                    check((1 to "x").toString() == "(1, x)")
+                    val set = mutableSetOf<Int?>(null, 1, 1)
+                    check(set.size == 2 && set.contains(null) && set.add(2))
+                    println("hash factories ok")
+                }
+                """.trimIndent()
+            val result = adapter.compile(request(source))
+            val bytes = assertNotNull(result.artifact, result.diagnostics.joinToString()).toByteArray()
+            System.getProperty("compukter.vm.hashCollectionsArtifact")?.let { output ->
+                Path.of("$output.factories.cpkt").writeBytes(bytes)
+            }
+        }
+
+    @Test
+    fun `hash collection factories preserve value classes and generic forwarding`() =
+        withAdapter { adapter ->
+            val source =
+                """
+                import kotlin.collections.*
+                value class DeviceId(val value: Int)
+                value class Point(val x: Int, val label: String)
+                class Box(val value: Int)
+                fun <K, V> create(key: K, value: V): MutableMap<K, V> = mutableMapOf(key to value)
+                fun <T> unique(value: T): Set<T> = setOf(value, value)
+                fun main() {
+                    val box = Box(7)
+                    val valuePair = DeviceId(7) to Point(2, "p")
+                    check(valuePair.first == DeviceId(7) && valuePair.second == Point(2, "p"))
+                    val devices = mutableMapOf(DeviceId(7) to box, DeviceId(7) to box)
+                    check(devices.size == 1 && devices[DeviceId(7)] === box)
+                    check(create(DeviceId(8), Point(3, "q"))[DeviceId(8)] == Point(3, "q"))
+                    check(unique(DeviceId(7)).size == 1)
+                    check(setOf(Point(1, "a"), Point(1, "a")).size == 1)
+                    val typed: Any = 7 to "a"
+                    val universal: Any = Pair<Any?, Any?>(7, "a")
+                    check(typed == universal && universal == typed && typed.hashCode() == universal.hashCode())
+                    check(Pair<Int?, String?>(null, null).hashCode() == 0)
+                    check(Pair<Int?, String?>(null, null).toString() == "(null, null)")
+                    check((Float.NaN to 1) == (Float.NaN to 1))
+                    check((0f to 1) != (-0f to 1))
+                    val nominal: Any = DeviceId(7) to "a"
+                    check(nominal != typed)
+
+                    println("hash factory values ok")
+                }
+                """.trimIndent()
+            val result = adapter.compile(request(source))
+            val bytes = assertNotNull(result.artifact, result.diagnostics.joinToString()).toByteArray()
+            System.getProperty("compukter.vm.hashCollectionsArtifact")?.let { output ->
+                Path.of("$output.factory-values.cpkt").writeBytes(bytes)
+            }
+        }
+
+    @Test
+    fun `hash collection Pair API executes without collection construction`() =
+        withAdapter { adapter ->
+            val source =
+                """
+                value class Point(val x: Int, val label: String)
+                fun main() {
+                    val pair = 7 to Point(2, "p")
+                    val (number, point) = pair
+                    check(number == 7 && point == Point(2, "p"))
+                    check(pair.copy(8, point).first == 8)
+                    val typed: Any = 7 to "a"
+                    val universal: Any = Pair<Any?, Any?>(7, "a")
+                    check(typed == universal && typed.hashCode() == universal.hashCode())
+                    check((1 to "x").toString() == "(1, x)")
+                    println("pair ok")
+                }
+                """.trimIndent()
+            val result = adapter.compile(request(source))
+            val bytes = assertNotNull(result.artifact, result.diagnostics.joinToString()).toByteArray()
+            System.getProperty("compukter.vm.hashCollectionsArtifact")?.let { output ->
+                Path.of("$output.pair.cpkt").writeBytes(bytes)
+            }
+        }
+
+    @Test
+    fun `hash collection spread factories report a target diagnostic`() =
+        withAdapter { adapter ->
+            for (source in listOf(
+                "val values = arrayOf(1 to 2); mapOf(*values)",
+                "val values = arrayOf(1 to 2); mutableMapOf(*values)",
+                "val values = arrayOf(\"a\"); setOf(*values)",
+                "val values = arrayOf(\"a\"); mutableSetOf(*values)",
+            )) {
+                val result = adapter.compile(request("import kotlin.collections.*\nfun main() { $source }"))
+                assertNull(result.artifact)
+                assertTrue(
+                    result.diagnostics.any {
+                        it.code == "UNSUPPORTED_IR" && it.message.contains("spread hash collection factory")
+                    },
+                    result.diagnostics.toString(),
+                )
+            }
+        }
+
+    @Test
     fun `hash collections support all twelve primitive families`() =
         withAdapter { adapter ->
             val cases =
@@ -3424,6 +3584,11 @@ class MinimalScriptLoweringTest {
                     group
                         .mapIndexed { index, (type, first, second) ->
                             """
+                            val built$index = mutableMapOf($first to $second, $first to $first)
+                            check(built$index.size == 1 && built$index[$first] == $first)
+                            check(built$index.getOrPut($second) { $second } == $second)
+                            check(setOf($first, $first, $second).size == 2)
+                            check(mutableSetOf($first, $second).remove($first))
                             val map$index = HashMap<$type, $type>(0)
                             check(map$index.put($first, $second) == null)
                             check(map$index[$first] == $second)
