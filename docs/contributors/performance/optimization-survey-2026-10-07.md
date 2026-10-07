@@ -11,6 +11,9 @@ This investigation follows the [Runtime 0.20.0 baseline]({{ '/VM-PERFORMANCE-202
 
 Parent revision: `d85f8096a1574443dff43b88951c157bc752390b`; VM: `18103f01963874510fa25d4396a2dc3e7ee47640` (Runtime 0.20.0). The current compiler freshly generated all six builtin artifacts and the two larger collection-conformance inputs; earlier cached artifacts were not used for these inventories. Source line counts include comments/blank lines and directly compiled helpers, excluding linked platform-library sources. Sizes use KiB = 1024 bytes.
 
+Follow-up: [implemented path pooling and measured before/after results]({{ '/VM-DEBUG-PATHS-2026-10-07/' | relative_url }}).
+The estimates and baseline evidence below remain the original pre-change investigation.
+
 ## Builtin program sizes
 
 | Program | Source lines | Artifact, KiB | CODE | DEBUG + source positions | GC root maps |

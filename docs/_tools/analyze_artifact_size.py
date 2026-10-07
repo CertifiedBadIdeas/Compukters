@@ -17,7 +17,7 @@ NAMES = {
     0x101: 'TYPES', 0x102: 'CONSTANTS', 0x103: 'IMPORTS', 0x104: 'EXPORTS',
     0x105: 'FIELDS', 0x106: 'FUNCTIONS', 0x107: 'BLOCKS', 0x108: 'CODE',
     0x109: 'EXCEPTIONS', 0x10a: 'UTF16_LITERALS', 0x10b: 'SAFEPOINT_ROOTS',
-    0x110: 'DEBUG', 0x8001: 'DEBUG_SOURCE_POSITIONS',
+    0x110: 'DEBUG', 0x111: 'DEBUG_PATHS', 0x8001: 'DEBUG_SOURCE_POSITIONS',
 }
 
 
@@ -61,7 +61,7 @@ def analyze(path):
         previous_end = offset + length
         name = NAMES.get(kind, hex(kind))
         sections.append(dict(kind=name, scope=scope, flags=flags, bytes=length, records=elements))
-        if kind in {0x110, 0x8001, 0x10b}:
+        if kind in {0x110, 0x111, 0x8001, 0x10b}:
             tables[(scope, kind)] = indexed(data[offset:offset + length], elements)
     sizes, records = Counter(), Counter()
     for section in sections:
@@ -80,19 +80,28 @@ def analyze(path):
             idx, line, column = struct.unpack('<III', row)
             require(idx < len(debug) and idx not in positions, 'invalid debug position index')
             positions[idx] = (line, column)
+        pool = tables.get((scope, 0x111))
+        if pool is not None:
+            require(pool and debug, 'orphan or empty path pool')
+            require(len(set(pool)) == len(pool), 'duplicate pool path')
+            path_bytes += sum(map(len, pool))
         parsed, scope_paths = [], Counter()
         for row in debug:
             require(len(row) >= 28, 'invalid debug record')
             function, block, instruction, start, end, parent, size = struct.unpack_from('<7I', row)
-            require(28 + size == len(row), 'invalid debug path length')
-            source = row[28:].decode('utf-8')
+            if pool is None:
+                require(28 + size == len(row), 'invalid debug path length')
+                source = row[28:].decode('utf-8')
+                path_bytes += size
+            else:
+                require(len(row) == 28 and size < len(pool), 'invalid debug path ID')
+                source = pool[size].decode('utf-8')
             scope_paths[source] += 1
-            path_bytes += size
             parsed.append((function, block, instruction, start, end, parent, source))
         paths.update(scope_paths)
         # Model: replace repeated path bytes with a u32 ID (reusing length's
         # field), plus a new indexed UTF-8 pool and one 32-byte directory entry.
-        if scope_paths:
+        if scope_paths and pool is None:
             pool = align8(16 + 4 * (len(scope_paths) + 1)) + sum(len(p.encode()) for p in scope_paths)
             intern_saving += sum(len(p.encode()) * n for p, n in scope_paths.items()) - pool - 32
         parents = {row[5] for row in parsed if row[5] != 0xffffffff}

@@ -69,14 +69,21 @@ object ArtifactReader {
                 val length = directory.u64().checkedInt("section length")
                 val count = directory.u32().checkedInt("section record count")
                 require(directory.u32() == 0u) { "non-zero section reserved field" }
-                require(flags == if (kind == DEBUG || kind >= 0x8000) 0u else 3u) { "invalid section flags" }
+                require(
+                    flags ==
+                        when {
+                            kind == DEBUG_PATHS -> 1u
+                            kind == DEBUG || kind >= 0x8000 -> 0u
+                            else -> 3u
+                        },
+                ) { "invalid section flags" }
                 require(offset >= align8(directoryEnd.toInt()) && offset.toLong() + length <= payloadEnd) { "section is outside artifact" }
                 Section(kind, scope, count, bytes.copyOfRange(offset, offset + length))
             }
         require(sections.map { it.scope to it.kind }.toSet().size == sections.size) { "duplicate artifact section" }
         val manifest = decodeManifest(sections.singleSection(MANIFEST, 0).payload)
         val moduleRecords = indexed(sections.singleSection(MODULES, 0)).map(::decodeModuleRecord)
-        require(sections.filter { it.kind == DEBUG_SOURCE_POSITIONS }.all { it.scope in 1..moduleRecords.size }) {
+        require(sections.filter { it.kind == DEBUG_SOURCE_POSITIONS || it.kind == DEBUG_PATHS }.all { it.scope in 1..moduleRecords.size }) {
             "debug source positions must have module scope"
         }
         val capabilities = indexed(sections.singleSection(CAPABILITIES, 0)).map(::decodeCapability)
@@ -171,13 +178,34 @@ private fun decodeModule(
     val decodedFunctions = records(FUNCTIONS).map(::decodeFunction)
     val rootsByFunction = records(SAFEPOINT_ROOTS).map(::decodeSafepointRoots).groupBy { it.function }
     require(rootsByFunction.keys.all { it.value.toInt() in decodedFunctions.indices }) { "root map owner is outside function table" }
+    val paths =
+        sections.singleOrNull { it.kind == DEBUG_PATHS && it.scope == scope }?.let(::indexed)?.map {
+            val path =
+                try {
+                    strictUtf8(it)
+                } catch (failure: java.nio.charset.CharacterCodingException) {
+                    throw IllegalArgumentException("debug path is not UTF-8", failure)
+                }
+            require(canonicalSourcePath(path)) { "debug source path is not canonical" }
+            MetadataText.of(path)
+        }
+    if (paths != null) {
+        require(paths.isNotEmpty() && paths.distinct().size == paths.size) { "invalid debug path pool" }
+        require(sections.any { it.kind == DEBUG && it.scope == scope }) { "debug path pool requires DEBUG" }
+    }
     val debug =
         sections
             .singleOrNull { it.kind == DEBUG && it.scope == scope }
             ?.let(::indexed)
             .orEmpty()
-            .map(::decodeDebug)
+            .map { decodeDebug(it, paths) }
             .toMutableList()
+    debug.forEachIndexed { index, entry ->
+        require(entry.inlineParent == null || entry.inlineParent.value < index.toUInt()) { "invalid inline debug parent" }
+    }
+    if (paths != null) {
+        require(debug.map(DebugEntry::sourcePath).distinct() == paths) { "debug path pool must follow first-use order" }
+    }
     var previousPosition = -1
     sections.singleOrNull { it.kind == DEBUG_SOURCE_POSITIONS && it.scope == scope }?.let(::indexed).orEmpty().forEach { bytes ->
         val cursor = Cursor(bytes)
@@ -448,7 +476,10 @@ private fun decodeException(bytes: ByteArray): ExceptionEntry {
     return result
 }
 
-private fun decodeDebug(bytes: ByteArray): DebugEntry {
+private fun decodeDebug(
+    bytes: ByteArray,
+    paths: List<MetadataText>?,
+): DebugEntry {
     val c = Cursor(bytes)
     val function = FunctionId.of(c.u32())
     val block = BlockId.of(c.u32())
@@ -466,7 +497,14 @@ private fun decodeDebug(bytes: ByteArray): DebugEntry {
             }
         }
     ; val length = c.u32().checkedInt("debug path")
-    val path = MetadataText.of(strictUtf8(c.bytes(length)))
+    val path =
+        if (paths ==
+            null
+        ) {
+            MetadataText.of(strictUtf8(c.bytes(length)))
+        } else {
+            requireNotNull(paths.getOrNull(length)) { "debug path index is outside pool" }
+        }
     require(c.done())
     return DebugEntry(function, block, instruction, start, end, parent, path)
 }
@@ -1093,4 +1131,10 @@ private const val EXCEPTIONS = 0x0109
 private const val UTF16_LITERALS = 0x010a
 private const val SAFEPOINT_ROOTS = 0x010b
 private const val DEBUG = 0x0110
+
+private fun canonicalSourcePath(path: String): Boolean =
+    path.isNotEmpty() && !path.startsWith('/') && !path.contains('\\') &&
+        path.split('/').all { it.isNotEmpty() && it != "." && it != ".." }
+
+private const val DEBUG_PATHS = 0x0111
 private const val DEBUG_SOURCE_POSITIONS = 0x8001
