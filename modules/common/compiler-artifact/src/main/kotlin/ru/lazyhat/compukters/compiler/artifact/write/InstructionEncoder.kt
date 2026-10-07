@@ -59,6 +59,7 @@ internal fun encodeInstruction(
 
         is Instruction.Convert -> {
             opcode = 0x04u
+            form = (if (instruction.unsignedSource) 1u else 0u) or (if (instruction.unsignedDestination) 2u else 0u)
             operands.writeRegister(instruction.destination)
             operands.writeRegister(instruction.source)
         }

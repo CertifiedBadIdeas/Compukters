@@ -38,6 +38,8 @@ sealed interface Instruction {
     data class Convert(
         val destination: RegisterId,
         val source: RegisterId,
+        val unsignedSource: Boolean = false,
+        val unsignedDestination: Boolean = false,
     ) : Instruction
 
     data class Add(
@@ -502,3 +504,21 @@ sealed interface Instruction {
 
     data object Unreachable : Instruction
 }
+
+/** Unsigned forms interpret integer register bits without changing their physical representation. */
+fun Instruction.usesUnsignedSemantics(): Boolean =
+    when (this) {
+        is Instruction.Convert -> unsignedSource || unsignedDestination
+        is Instruction.Add -> type == ScalarValueType.U32 || type == ScalarValueType.U64
+        is Instruction.Subtract -> type == ScalarValueType.U32 || type == ScalarValueType.U64
+        is Instruction.Multiply -> type == ScalarValueType.U32 || type == ScalarValueType.U64
+        is Instruction.Divide -> type == ScalarValueType.U32 || type == ScalarValueType.U64
+        is Instruction.Remainder -> type == ScalarValueType.U32 || type == ScalarValueType.U64
+        is Instruction.Equal -> type == ScalarValueType.U32 || type == ScalarValueType.U64
+        is Instruction.Less -> type == OrderedScalarValueType.U32 || type == OrderedScalarValueType.U64
+        is Instruction.LessOrEqual -> type == OrderedScalarValueType.U32 || type == OrderedScalarValueType.U64
+        is Instruction.Greater -> type == OrderedScalarValueType.U32 || type == OrderedScalarValueType.U64
+        is Instruction.GreaterOrEqual -> type == OrderedScalarValueType.U32 || type == OrderedScalarValueType.U64
+        is Instruction.StringValueOf -> type == StringValueType.U32 || type == StringValueType.U64
+        else -> false
+    }

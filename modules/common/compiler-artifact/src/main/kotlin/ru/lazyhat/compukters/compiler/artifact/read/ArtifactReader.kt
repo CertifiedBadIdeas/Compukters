@@ -498,7 +498,8 @@ private fun decodeCode(bytes: ByteArray): List<Instruction> {
                 }
 
                 0x04u -> {
-                    Instruction.Convert(r(), r())
+                    require(form <= 3u)
+                    Instruction.Convert(r(), r(), unsignedSource = form and 1u != 0u, unsignedDestination = form and 2u != 0u)
                 }
 
                 0x10u -> {
@@ -743,6 +744,8 @@ private fun decodeCode(bytes: ByteArray): List<Instruction> {
                             5u -> StringValueType.BOOL
                             6u -> StringValueType.CHAR
                             7u -> StringValueType.REFERENCE
+                            8u -> StringValueType.U32
+                            9u -> StringValueType.U64
                             else -> error("unsupported string conversion form $form")
                         }
                     Instruction.StringValueOf(type, r(), r())
@@ -1003,7 +1006,7 @@ private fun UInt.fieldRef(): FieldRef =
         FieldRef.Imported(ImportId.of(this and 0x7fff_ffffu))
     }
 
-private fun scalar(form: UInt) = ScalarValueType.entries.single { it.ordinal + 1 == form.toInt() }
+private fun scalar(form: UInt) = ScalarValueType.entries.single { it.artifactForm == form }
 
 private fun ordered(form: UInt) = OrderedScalarValueType.entries.single { it.name == scalar(form).name }
 

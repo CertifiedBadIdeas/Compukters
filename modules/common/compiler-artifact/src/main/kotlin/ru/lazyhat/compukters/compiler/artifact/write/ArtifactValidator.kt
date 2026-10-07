@@ -49,6 +49,7 @@ import ru.lazyhat.compukters.compiler.artifact.model.TypeId
 import ru.lazyhat.compukters.compiler.artifact.model.TypeRef
 import ru.lazyhat.compukters.compiler.artifact.model.ValueType
 import ru.lazyhat.compukters.compiler.artifact.model.hasStructuredHostResponse
+import ru.lazyhat.compukters.compiler.artifact.model.usesUnsignedSemantics
 
 internal fun validateArtifact(
     artifact: Artifact,
@@ -489,6 +490,13 @@ internal fun validateArtifact(
                 block.instructions.any { it is Instruction.StringValueOf && it.type == StringValueType.F32 }
             }
         }
+    if (artifact.minimumRuntimeAbi < AbiVersion(1u, 14u) &&
+        artifact.modules.any { module ->
+            module.blocks.any { block -> block.instructions.any { it.usesUnsignedSemantics() } }
+        }
+    ) {
+        add(ArtifactWriteErrorCode.INVALID_RANGE, "unsigned numeric forms require minimum runtime ABI 1.14")
+    }
     if (artifact.minimumRuntimeAbi < AbiVersion(1u, 13u) && artifact.modules.any { it.hasStructuredHostResponse() }) {
         add(ArtifactWriteErrorCode.INVALID_RANGE, "Structured host responses require minimum runtime ABI 1.13")
     }
@@ -1169,8 +1177,30 @@ internal fun validateArtifact(
                         }
 
                         is Instruction.Convert -> {
-                            register(instruction.destination, "destination")
-                            register(instruction.source, "source")
+                            val destination = register(instruction.destination, "destination")
+                            val source = register(instruction.source, "source")
+                            val numeric = setOf(ValueType.I32, ValueType.I64, ValueType.F32, ValueType.F64)
+                            if ((source != null && destination != null) &&
+                                !(
+                                    (source in numeric && destination in numeric) ||
+                                        (source == ValueType.Char && destination == ValueType.I32) ||
+                                        (source == ValueType.I32 && destination == ValueType.Char)
+                                )
+                            ) {
+                                add(ArtifactWriteErrorCode.INVALID_RANGE, "convert register types are incompatible", location)
+                            }
+                            if (instruction.unsignedSource && destination == ValueType.Char) {
+                                add(ArtifactWriteErrorCode.INVALID_RANGE, "unsigned convert cannot target Char", location)
+                            }
+                            if ((instruction.unsignedSource && source !in setOf(ValueType.I32, ValueType.I64)) ||
+                                (instruction.unsignedDestination && destination !in setOf(ValueType.I32, ValueType.I64))
+                            ) {
+                                add(
+                                    ArtifactWriteErrorCode.INVALID_RANGE,
+                                    "unsigned convert requires integer source/destination kinds",
+                                    location,
+                                )
+                            }
                         }
 
                         is Instruction.Add,
@@ -1221,7 +1251,16 @@ internal fun validateArtifact(
                                         )
                                     }
                                 }
-                            if (type !in setOf(ScalarValueType.I32, ScalarValueType.I64, ScalarValueType.F32, ScalarValueType.F64)) {
+                            if (type !in
+                                setOf(
+                                    ScalarValueType.I32,
+                                    ScalarValueType.I64,
+                                    ScalarValueType.F32,
+                                    ScalarValueType.F64,
+                                    ScalarValueType.U32,
+                                    ScalarValueType.U64,
+                                )
+                            ) {
                                 add(ArtifactWriteErrorCode.INVALID_RANGE, "$name requires a numeric scalar form", location)
                             }
                             registers
