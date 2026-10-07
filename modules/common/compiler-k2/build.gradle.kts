@@ -286,6 +286,7 @@ tasks.withType<Test>().configureEach {
 
 tasks.test {
     inputs.files(rootProject.file("examples/hello/greeting.kt"), rootProject.file("examples/hello/main.kt"))
+    inputs.dir(rootProject.layout.projectDirectory.dir("examples/inventory-report/src"))
     dependsOn(tasks.jar)
     filter.excludeTestsMatching("ru.lazyhat.compukters.compiler.worker.integration.*")
     inputs.file(workerJar)
@@ -1193,6 +1194,8 @@ val generateHashCollectionsConformanceArtifact = tasks.register<Test>("generateH
     filter.includeTestsMatching("*hash collections preserve nominal value class keys*")
     filter.includeTestsMatching("*hash collections preserve primitive and nullable storage*")
     filter.includeTestsMatching("*hash collections support all twelve primitive families*")
+    filter.includeTestsMatching("*hash collection inventory example compiles and executes*")
+    inputs.dir(rootProject.layout.projectDirectory.dir("examples/inventory-report/src"))
     filter.includeTestsMatching("*hash collection Pair API executes without collection construction*")
     filter.includeTestsMatching("*hash collection spread factories report a target diagnostic*")
     filter.includeTestsMatching("*hash collection factories preserve arguments pairs and defaults*")
@@ -1209,6 +1212,7 @@ val generateHashCollectionsConformanceArtifact = tasks.register<Test>("generateH
     outputs.file(artifact.map { it.asFile.resolveSibling("${it.asFile.name}.factories.cpkt") })
     outputs.file(artifact.map { it.asFile.resolveSibling("${it.asFile.name}.factory-values.cpkt") })
     outputs.file(artifact.map { it.asFile.resolveSibling("${it.asFile.name}.pair.cpkt") })
+    outputs.file(artifact.map { it.asFile.resolveSibling("${it.asFile.name}.inventory.cpkt") })
     (0..5).forEach { batch -> outputs.file(artifact.map { it.asFile.resolveSibling("hash-scalars-$batch.cpkt") }) }
     doFirst {
         systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
