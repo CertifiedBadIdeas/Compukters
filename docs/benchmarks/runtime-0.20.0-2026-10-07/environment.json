@@ -1,0 +1,454 @@
+{
+  "started_utc": "2026-10-07T19:34:04.694433+00:00",
+  "runtime_version": "0.20.0",
+  "rounds": 3,
+  "samples_per_round": 7,
+  "parent_revision": "dadd76c72154f6f725295519da66eaf21ac72bf8",
+  "vm_revision": "18103f01963874510fa25d4396a2dc3e7ee47640",
+  "cpu": {
+    "lscpu": [
+      {
+        "field": "Architecture:",
+        "data": "x86_64"
+      },
+      {
+        "field": "CPU op-mode(s):",
+        "data": "32-bit, 64-bit"
+      },
+      {
+        "field": "Address sizes:",
+        "data": "48 bits physical, 48 bits virtual"
+      },
+      {
+        "field": "Byte Order:",
+        "data": "Little Endian"
+      },
+      {
+        "field": "CPU(s):",
+        "data": "32"
+      },
+      {
+        "field": "On-line CPU(s) list:",
+        "data": "0-31"
+      },
+      {
+        "field": "Vendor ID:",
+        "data": "AuthenticAMD"
+      },
+      {
+        "field": "Model name:",
+        "data": "AMD Ryzen 9 9950X3D 16-Core Processor"
+      },
+      {
+        "field": "CPU family:",
+        "data": "26"
+      },
+      {
+        "field": "Model:",
+        "data": "68"
+      },
+      {
+        "field": "Thread(s) per core:",
+        "data": "2"
+      },
+      {
+        "field": "Core(s) per socket:",
+        "data": "16"
+      },
+      {
+        "field": "Socket(s):",
+        "data": "1"
+      },
+      {
+        "field": "Stepping:",
+        "data": "0"
+      },
+      {
+        "field": "Microcode version:",
+        "data": "0xb404035"
+      },
+      {
+        "field": "Frequency boost:",
+        "data": "enabled"
+      },
+      {
+        "field": "CPU(s) scaling MHz:",
+        "data": "41%"
+      },
+      {
+        "field": "CPU max MHz:",
+        "data": "5756.4521"
+      },
+      {
+        "field": "CPU min MHz:",
+        "data": "624.1940"
+      },
+      {
+        "field": "BogoMIPS:",
+        "data": "8599.98"
+      },
+      {
+        "field": "Flags:",
+        "data": "fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush mmx fxsr sse sse2 ht syscall nx mmxext fxsr_opt pdpe1gb rdtscp lm constant_tsc rep_good amd_lbr_v2 nopl xtopology nonstop_tsc cpuid extd_apicid aperfmperf rapl pni pclmulqdq monitor ssse3 fma cx16 sse4_1 sse4_2 movbe popcnt aes xsave avx f16c rdrand lahf_lm cmp_legacy svm extapic cr8_legacy abm sse4a misalignsse 3dnowprefetch osvw ibs skinit wdt tce topoext perfctr_core perfctr_nb bpext perfctr_llc mwaitx cpuid_fault cpb cat_l3 cdp_l3 hw_pstate ssbd mba perfmon_v2 ibrs ibpb stibp ibrs_enhanced vmmcall fsgsbase tsc_adjust bmi1 avx2 smep bmi2 erms invpcid cqm rdt_a avx512f avx512dq rdseed adx smap avx512ifma clflushopt clwb avx512cd sha_ni avx512bw avx512vl xsaveopt xsavec xgetbv1 xsaves cqm_llc cqm_occup_llc cqm_mbm_total cqm_mbm_local user_shstk avx_vnni avx512_bf16 clzero irperf xsaveerptr rdpru wbnoinvd cppc arat npt lbrv svm_lock nrip_save tsc_scale vmcb_clean flushbyasid decodeassists pausefilter pfthreshold avic v_vmsave_vmload vgif x2avic v_spec_ctrl vnmi avx512vbmi umip pku ospke avx512_vbmi2 gfni vaes vpclmulqdq avx512_vnni avx512_bitalg avx512_vpopcntdq rdpid bus_lock_detect movdiri movdir64b overflow_recov succor smca fsrm avx512_vp2intersect flush_l1d amd_lbr_pmc_freeze"
+      },
+      {
+        "field": "Virtualization:",
+        "data": "AMD-V"
+      },
+      {
+        "field": "L1d cache:",
+        "data": "768 KiB (16 instances)"
+      },
+      {
+        "field": "L1i cache:",
+        "data": "512 KiB (16 instances)"
+      },
+      {
+        "field": "L2 cache:",
+        "data": "16 MiB (16 instances)"
+      },
+      {
+        "field": "L3 cache:",
+        "data": "128 MiB (2 instances)"
+      },
+      {
+        "field": "NUMA node(s):",
+        "data": "1"
+      },
+      {
+        "field": "NUMA node0 CPU(s):",
+        "data": "0-31"
+      },
+      {
+        "field": "Vulnerability Gather data sampling:",
+        "data": "Not affected"
+      },
+      {
+        "field": "Vulnerability Ghostwrite:",
+        "data": "Not affected"
+      },
+      {
+        "field": "Vulnerability Indirect target selection:",
+        "data": "Not affected"
+      },
+      {
+        "field": "Vulnerability Itlb multihit:",
+        "data": "Not affected"
+      },
+      {
+        "field": "Vulnerability L1tf:",
+        "data": "Not affected"
+      },
+      {
+        "field": "Vulnerability Mds:",
+        "data": "Not affected"
+      },
+      {
+        "field": "Vulnerability Meltdown:",
+        "data": "Not affected"
+      },
+      {
+        "field": "Vulnerability Mmio stale data:",
+        "data": "Not affected"
+      },
+      {
+        "field": "Vulnerability Old microcode:",
+        "data": "Not affected"
+      },
+      {
+        "field": "Vulnerability Reg file data sampling:",
+        "data": "Not affected"
+      },
+      {
+        "field": "Vulnerability Retbleed:",
+        "data": "Not affected"
+      },
+      {
+        "field": "Vulnerability Spec rstack overflow:",
+        "data": "Mitigation; IBPB on VMEXIT only"
+      },
+      {
+        "field": "Vulnerability Spec store bypass:",
+        "data": "Mitigation; Speculative Store Bypass disabled via prctl"
+      },
+      {
+        "field": "Vulnerability Spectre v1:",
+        "data": "Mitigation; usercopy/swapgs barriers and __user pointer sanitization"
+      },
+      {
+        "field": "Vulnerability Spectre v2:",
+        "data": "Mitigation; Enhanced / Automatic IBRS; IBPB conditional; STIBP always-on; PBRSB-eIBRS Not affected; BHI Not affected"
+      },
+      {
+        "field": "Vulnerability Srbds:",
+        "data": "Not affected"
+      },
+      {
+        "field": "Vulnerability Tsa:",
+        "data": "Not affected"
+      },
+      {
+        "field": "Vulnerability Tsx async abort:",
+        "data": "Not affected"
+      },
+      {
+        "field": "Vulnerability Vmscape:",
+        "data": "Mitigation; IBPB on VMEXIT"
+      }
+    ]
+  },
+  "kernel": "7.2.8-zen1-2-zen",
+  "rustc": "rustc 1.99.0 (b940084d7 2026-09-28)\nbinary: rustc\ncommit-hash: b940084d7eb6a299eb4bfeb8e34901bc051e7ac4\ncommit-date: 2026-09-28\nhost: x86_64-unknown-linux-gnu\nrelease: 1.99.0\nLLVM version: 23.1.1",
+  "java": "openjdk version \"25.0.4.1\" 2026-08-18\nOpenJDK Runtime Environment (build 25.0.4.1)\nOpenJDK 64-Bit Server VM (build 25.0.4.1, mixed mode, sharing)",
+  "governor": "powersave",
+  "boost": "1",
+  "allowed_cpus": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10,
+    11,
+    12,
+    13,
+    14,
+    15,
+    16,
+    17,
+    18,
+    19,
+    20,
+    21,
+    22,
+    23,
+    24,
+    25,
+    26,
+    27,
+    28,
+    29,
+    30,
+    31
+  ],
+  "affinity": "No explicit affinity or fixed frequency; inherited allowed CPU set.",
+  "cargo_profile": "release, thin LTO, one codegen unit, CARGO_PROFILE_RELEASE_DEBUG=1",
+  "binary_sha256": "6093d847db448b1ae2e30072853231fa41602a8c72eedc61731c71ed4e2eed0b",
+  "commands": [
+    {
+      "round": 1,
+      "suite": "transient-allocations",
+      "argv": [
+        "/home/lzwork/CompuktersMod/Compukters/.worktrees/vm-performance/build/reports/benchmarks/runtime-0.20.0-2026-10-07/guest-benchmark",
+        "/home/lzwork/CompuktersMod/Compukters/.worktrees/vm-performance/modules/common/compiler-k2/build/generated/benchmarks/transient-allocations",
+        "/home/lzwork/CompuktersMod/Compukters/.worktrees/vm-performance/build/reports/benchmarks/runtime-0.20.0-2026-10-07/rounds/round-1/transient-allocations",
+        "7",
+        "16384",
+        "untraced"
+      ],
+      "started_utc": "2026-10-07T19:34:04.740148+00:00",
+      "host_before": {
+        "load": [
+          14.52001953125,
+          9.32421875,
+          4.734375
+        ],
+        "meminfo": "MemTotal:       32384740 kB\nMemFree:        15178640 kB\nMemAvailable:   19687512 kB\nBuffers:             144 kB\nCached:          4563732 kB\nSwapCached:       384760 kB\nActive:          8309696 kB\nInactive:        4946592 kB\nActive(anon):    7696220 kB\nInactive(anon):  1185056 kB\nActive(file):     613476 kB\nInactive(file):  3761536 kB\nUnevictable:       47092 kB\nMlocked:             680 kB\nSwapTotal:      33554428 kB\nSwapFree:       26208308 kB\nZswap:           1809880 kB\nZswapped:        6658904 kB\nDirty:            233552 kB\nWriteback:             0 kB\nAnonPages:       8707980 kB\nMapped:          1448436 kB\nShmem:            141896 kB\nKReclaimable:     599760 kB\nSlab:            1055020 kB\nSReclaimable:     540432 kB\nSUnreclaim:       514588 kB\nKernelStack:       36640 kB\nPageTables:       101156 kB\nSecPageTables:      6268 kB\nNFS_Unstable:          0 kB\nBounce:                0 kB\nWritebackTmp:          0 kB\nCommitLimit:    49746796 kB\nCommitted_AS:   27910812 kB\nVmallocTotal:   34359738367 kB\nVmallocUsed:      190180 kB\nVmallocChunk:          0 kB\nPercpu:            35072 kB\nHardwareCorrupted:     0 kB\nAnonHugePages:   6447104 kB\nShmemHugePages:        0 kB\nShmemPmdMapped:        0 kB\nFileHugePages:         0 kB\nFilePmdMapped:         0 kB\nCmaTotal:              0 kB\nCmaFree:               0 kB\nUnaccepted:            0 kB\nBalloon:               0 kB\nGPUActive:             0 kB\nGPUReclaim:            0 kB\nHugePages_Total:       0\nHugePages_Free:        0\nHugePages_Rsvd:        0\nHugePages_Surp:        0\nHugepagesize:       2048 kB\nHugetlb:               0 kB\nDirectMap4k:     1088248 kB\nDirectMap2M:    30951424 kB\nDirectMap1G:     2097152 kB\n",
+        "cpu_pressure": "some avg10=0.50 avg60=3.68 avg300=2.17 total=17499236\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=0\n",
+        "memory_pressure": "some avg10=0.21 avg60=0.67 avg300=0.33 total=1959523\nfull avg10=0.21 avg60=0.66 avg300=0.32 total=1926464\n"
+      },
+      "finished_utc": "2026-10-07T19:34:13.311209+00:00",
+      "host_after": {
+        "load": [
+          12.44091796875,
+          9.04931640625,
+          4.69384765625
+        ],
+        "meminfo": "MemTotal:       32384740 kB\nMemFree:        14543624 kB\nMemAvailable:   19455280 kB\nBuffers:             144 kB\nCached:          4968416 kB\nSwapCached:       509424 kB\nActive:          8395128 kB\nInactive:        5458276 kB\nActive(anon):    7781136 kB\nInactive(anon):  1292456 kB\nActive(file):     613992 kB\nInactive(file):  4165820 kB\nUnevictable:       47092 kB\nMlocked:             680 kB\nSwapTotal:      33554428 kB\nSwapFree:       26212576 kB\nZswap:           1803212 kB\nZswapped:        6530344 kB\nDirty:            117556 kB\nWriteback:             0 kB\nAnonPages:       8899972 kB\nMapped:          1552316 kB\nShmem:            142352 kB\nKReclaimable:     597744 kB\nSlab:            1054920 kB\nSReclaimable:     540400 kB\nSUnreclaim:       514520 kB\nKernelStack:       36640 kB\nPageTables:       102892 kB\nSecPageTables:      6280 kB\nNFS_Unstable:          0 kB\nBounce:                0 kB\nWritebackTmp:          0 kB\nCommitLimit:    49746796 kB\nCommitted_AS:   27356900 kB\nVmallocTotal:   34359738367 kB\nVmallocUsed:      191404 kB\nVmallocChunk:          0 kB\nPercpu:            35072 kB\nHardwareCorrupted:     0 kB\nAnonHugePages:   6447104 kB\nShmemHugePages:        0 kB\nShmemPmdMapped:        0 kB\nFileHugePages:         0 kB\nFilePmdMapped:         0 kB\nCmaTotal:              0 kB\nCmaFree:               0 kB\nUnaccepted:            0 kB\nBalloon:               0 kB\nGPUActive:             0 kB\nGPUReclaim:            0 kB\nHugePages_Total:       0\nHugePages_Free:        0\nHugePages_Rsvd:        0\nHugePages_Surp:        0\nHugepagesize:       2048 kB\nHugetlb:               0 kB\nDirectMap4k:     1219320 kB\nDirectMap2M:    30820352 kB\nDirectMap1G:     2097152 kB\n",
+        "cpu_pressure": "some avg10=0.18 avg60=3.12 avg300=2.10 total=17504156\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=0\n",
+        "memory_pressure": "some avg10=0.07 avg60=0.56 avg300=0.31 total=1960889\nfull avg10=0.07 avg60=0.55 avg300=0.31 total=1927822\n"
+      }
+    },
+    {
+      "round": 1,
+      "suite": "collection-reuse",
+      "argv": [
+        "/home/lzwork/CompuktersMod/Compukters/.worktrees/vm-performance/build/reports/benchmarks/runtime-0.20.0-2026-10-07/guest-benchmark",
+        "/home/lzwork/CompuktersMod/Compukters/.worktrees/vm-performance/modules/common/compiler-k2/build/generated/benchmarks/collection-reuse",
+        "/home/lzwork/CompuktersMod/Compukters/.worktrees/vm-performance/build/reports/benchmarks/runtime-0.20.0-2026-10-07/rounds/round-1/collection-reuse",
+        "7",
+        "262144",
+        "untraced"
+      ],
+      "started_utc": "2026-10-07T19:34:13.311625+00:00",
+      "host_before": {
+        "load": [
+          12.44091796875,
+          9.04931640625,
+          4.69384765625
+        ],
+        "meminfo": "MemTotal:       32384740 kB\nMemFree:        14543624 kB\nMemAvailable:   19455280 kB\nBuffers:             144 kB\nCached:          4968416 kB\nSwapCached:       509424 kB\nActive:          8395128 kB\nInactive:        5458276 kB\nActive(anon):    7781136 kB\nInactive(anon):  1292456 kB\nActive(file):     613992 kB\nInactive(file):  4165820 kB\nUnevictable:       47092 kB\nMlocked:             680 kB\nSwapTotal:      33554428 kB\nSwapFree:       26212576 kB\nZswap:           1803212 kB\nZswapped:        6530344 kB\nDirty:            117556 kB\nWriteback:             0 kB\nAnonPages:       8899972 kB\nMapped:          1552316 kB\nShmem:            142352 kB\nKReclaimable:     597744 kB\nSlab:            1054920 kB\nSReclaimable:     540400 kB\nSUnreclaim:       514520 kB\nKernelStack:       36640 kB\nPageTables:       102892 kB\nSecPageTables:      6280 kB\nNFS_Unstable:          0 kB\nBounce:                0 kB\nWritebackTmp:          0 kB\nCommitLimit:    49746796 kB\nCommitted_AS:   27356900 kB\nVmallocTotal:   34359738367 kB\nVmallocUsed:      191404 kB\nVmallocChunk:          0 kB\nPercpu:            35072 kB\nHardwareCorrupted:     0 kB\nAnonHugePages:   6447104 kB\nShmemHugePages:        0 kB\nShmemPmdMapped:        0 kB\nFileHugePages:         0 kB\nFilePmdMapped:         0 kB\nCmaTotal:              0 kB\nCmaFree:               0 kB\nUnaccepted:            0 kB\nBalloon:               0 kB\nGPUActive:             0 kB\nGPUReclaim:            0 kB\nHugePages_Total:       0\nHugePages_Free:        0\nHugePages_Rsvd:        0\nHugePages_Surp:        0\nHugepagesize:       2048 kB\nHugetlb:               0 kB\nDirectMap4k:     1219320 kB\nDirectMap2M:    30820352 kB\nDirectMap1G:     2097152 kB\n",
+        "cpu_pressure": "some avg10=0.18 avg60=3.12 avg300=2.10 total=17504156\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=0\n",
+        "memory_pressure": "some avg10=0.07 avg60=0.56 avg300=0.31 total=1960889\nfull avg10=0.07 avg60=0.55 avg300=0.31 total=1927822\n"
+      },
+      "finished_utc": "2026-10-07T19:34:26.426968+00:00",
+      "host_after": {
+        "load": [
+          10.68115234375,
+          8.78369140625,
+          4.65380859375
+        ],
+        "meminfo": "MemTotal:       32384740 kB\nMemFree:        15262260 kB\nMemAvailable:   20608476 kB\nBuffers:             144 kB\nCached:          5402652 kB\nSwapCached:       501192 kB\nActive:          7255236 kB\nInactive:        5848296 kB\nActive(anon):    6632040 kB\nInactive(anon):  1258240 kB\nActive(file):     623196 kB\nInactive(file):  4590056 kB\nUnevictable:       47092 kB\nMlocked:             680 kB\nSwapTotal:      33554428 kB\nSwapFree:       26232124 kB\nZswap:           1802360 kB\nZswapped:        6519224 kB\nDirty:            128816 kB\nWriteback:             8 kB\nAnonPages:       7688940 kB\nMapped:          1620652 kB\nShmem:            142356 kB\nKReclaimable:     598864 kB\nSlab:            1054480 kB\nSReclaimable:     540368 kB\nSUnreclaim:       514112 kB\nKernelStack:       37632 kB\nPageTables:       102032 kB\nSecPageTables:      6280 kB\nNFS_Unstable:          0 kB\nBounce:                0 kB\nWritebackTmp:          0 kB\nCommitLimit:    49746796 kB\nCommitted_AS:   27300588 kB\nVmallocTotal:   34359738367 kB\nVmallocUsed:      192572 kB\nVmallocChunk:          0 kB\nPercpu:            35072 kB\nHardwareCorrupted:     0 kB\nAnonHugePages:   5369856 kB\nShmemHugePages:        0 kB\nShmemPmdMapped:        0 kB\nFileHugePages:         0 kB\nFilePmdMapped:         0 kB\nCmaTotal:              0 kB\nCmaFree:               0 kB\nUnaccepted:            0 kB\nBalloon:               0 kB\nGPUActive:             0 kB\nGPUReclaim:            0 kB\nHugePages_Total:       0\nHugePages_Free:        0\nHugePages_Rsvd:        0\nHugePages_Surp:        0\nHugepagesize:       2048 kB\nHugetlb:               0 kB\nDirectMap4k:     1219320 kB\nDirectMap2M:    30820352 kB\nDirectMap1G:     2097152 kB\n",
+        "cpu_pressure": "some avg10=0.05 avg60=2.55 avg300=2.01 total=17510713\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=0\n",
+        "memory_pressure": "some avg10=0.02 avg60=0.46 avg300=0.30 total=1961292\nfull avg10=0.02 avg60=0.45 avg300=0.29 total=1928214\n"
+      }
+    },
+    {
+      "round": 2,
+      "suite": "collection-reuse",
+      "argv": [
+        "/home/lzwork/CompuktersMod/Compukters/.worktrees/vm-performance/build/reports/benchmarks/runtime-0.20.0-2026-10-07/guest-benchmark",
+        "/home/lzwork/CompuktersMod/Compukters/.worktrees/vm-performance/modules/common/compiler-k2/build/generated/benchmarks/collection-reuse",
+        "/home/lzwork/CompuktersMod/Compukters/.worktrees/vm-performance/build/reports/benchmarks/runtime-0.20.0-2026-10-07/rounds/round-2/collection-reuse",
+        "7",
+        "262144",
+        "untraced"
+      ],
+      "started_utc": "2026-10-07T19:34:26.427503+00:00",
+      "host_before": {
+        "load": [
+          10.68115234375,
+          8.78369140625,
+          4.65380859375
+        ],
+        "meminfo": "MemTotal:       32384740 kB\nMemFree:        15262260 kB\nMemAvailable:   20608488 kB\nBuffers:             144 kB\nCached:          5402652 kB\nSwapCached:       501192 kB\nActive:          7255236 kB\nInactive:        5848308 kB\nActive(anon):    6632040 kB\nInactive(anon):  1258240 kB\nActive(file):     623196 kB\nInactive(file):  4590068 kB\nUnevictable:       47092 kB\nMlocked:             680 kB\nSwapTotal:      33554428 kB\nSwapFree:       26232124 kB\nZswap:           1802360 kB\nZswapped:        6519224 kB\nDirty:            128796 kB\nWriteback:            28 kB\nAnonPages:       7688940 kB\nMapped:          1620652 kB\nShmem:            142356 kB\nKReclaimable:     598864 kB\nSlab:            1054480 kB\nSReclaimable:     540368 kB\nSUnreclaim:       514112 kB\nKernelStack:       37632 kB\nPageTables:       102032 kB\nSecPageTables:      6280 kB\nNFS_Unstable:          0 kB\nBounce:                0 kB\nWritebackTmp:          0 kB\nCommitLimit:    49746796 kB\nCommitted_AS:   27300588 kB\nVmallocTotal:   34359738367 kB\nVmallocUsed:      192572 kB\nVmallocChunk:          0 kB\nPercpu:            35072 kB\nHardwareCorrupted:     0 kB\nAnonHugePages:   5369856 kB\nShmemHugePages:        0 kB\nShmemPmdMapped:        0 kB\nFileHugePages:         0 kB\nFilePmdMapped:         0 kB\nCmaTotal:              0 kB\nCmaFree:               0 kB\nUnaccepted:            0 kB\nBalloon:               0 kB\nGPUActive:             0 kB\nGPUReclaim:            0 kB\nHugePages_Total:       0\nHugePages_Free:        0\nHugePages_Rsvd:        0\nHugePages_Surp:        0\nHugepagesize:       2048 kB\nHugetlb:               0 kB\nDirectMap4k:     1219320 kB\nDirectMap2M:    30820352 kB\nDirectMap1G:     2097152 kB\n",
+        "cpu_pressure": "some avg10=0.05 avg60=2.55 avg300=2.01 total=17510713\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=0\n",
+        "memory_pressure": "some avg10=0.02 avg60=0.46 avg300=0.30 total=1961292\nfull avg10=0.02 avg60=0.45 avg300=0.29 total=1928214\n"
+      },
+      "finished_utc": "2026-10-07T19:34:39.461636+00:00",
+      "host_after": {
+        "load": [
+          8.73974609375,
+          8.4501953125,
+          4.6103515625
+        ],
+        "meminfo": "MemTotal:       32384740 kB\nMemFree:        14618312 kB\nMemAvailable:   20098580 kB\nBuffers:             144 kB\nCached:          5536012 kB\nSwapCached:       590340 kB\nActive:          7657272 kB\nInactive:        6057560 kB\nActive(anon):    7033132 kB\nInactive(anon):  1334424 kB\nActive(file):     624140 kB\nInactive(file):  4723136 kB\nUnevictable:       47092 kB\nMlocked:             680 kB\nSwapTotal:      33554428 kB\nSwapFree:       26232148 kB\nZswap:           1783728 kB\nZswapped:        6430748 kB\nDirty:             24636 kB\nWriteback:             0 kB\nAnonPages:       8165952 kB\nMapped:          1638148 kB\nShmem:            142364 kB\nKReclaimable:     598892 kB\nSlab:            1054852 kB\nSReclaimable:     540396 kB\nSUnreclaim:       514456 kB\nKernelStack:       37920 kB\nPageTables:       102928 kB\nSecPageTables:      6280 kB\nNFS_Unstable:          0 kB\nBounce:                0 kB\nWritebackTmp:          0 kB\nCommitLimit:    49746796 kB\nCommitted_AS:   28029592 kB\nVmallocTotal:   34359738367 kB\nVmallocUsed:      192876 kB\nVmallocChunk:          0 kB\nPercpu:            35072 kB\nHardwareCorrupted:     0 kB\nAnonHugePages:   5462016 kB\nShmemHugePages:        0 kB\nShmemPmdMapped:        0 kB\nFileHugePages:         0 kB\nFilePmdMapped:         0 kB\nCmaTotal:              0 kB\nCmaFree:               0 kB\nUnaccepted:            0 kB\nBalloon:               0 kB\nGPUActive:             0 kB\nGPUReclaim:            0 kB\nHugePages_Total:       0\nHugePages_Free:        0\nHugePages_Rsvd:        0\nHugePages_Surp:        0\nHugepagesize:       2048 kB\nHugetlb:               0 kB\nDirectMap4k:     1219320 kB\nDirectMap2M:    30820352 kB\nDirectMap1G:     2097152 kB\n",
+        "cpu_pressure": "some avg10=0.01 avg60=2.02 avg300=1.92 total=17517829\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=0\n",
+        "memory_pressure": "some avg10=0.00 avg60=0.36 avg300=0.28 total=1962363\nfull avg10=0.00 avg60=0.36 avg300=0.28 total=1929280\n"
+      }
+    },
+    {
+      "round": 2,
+      "suite": "transient-allocations",
+      "argv": [
+        "/home/lzwork/CompuktersMod/Compukters/.worktrees/vm-performance/build/reports/benchmarks/runtime-0.20.0-2026-10-07/guest-benchmark",
+        "/home/lzwork/CompuktersMod/Compukters/.worktrees/vm-performance/modules/common/compiler-k2/build/generated/benchmarks/transient-allocations",
+        "/home/lzwork/CompuktersMod/Compukters/.worktrees/vm-performance/build/reports/benchmarks/runtime-0.20.0-2026-10-07/rounds/round-2/transient-allocations",
+        "7",
+        "16384",
+        "untraced"
+      ],
+      "started_utc": "2026-10-07T19:34:39.462032+00:00",
+      "host_before": {
+        "load": [
+          8.73974609375,
+          8.4501953125,
+          4.6103515625
+        ],
+        "meminfo": "MemTotal:       32384740 kB\nMemFree:        14618312 kB\nMemAvailable:   20098580 kB\nBuffers:             144 kB\nCached:          5536012 kB\nSwapCached:       590340 kB\nActive:          7657352 kB\nInactive:        6057560 kB\nActive(anon):    7033212 kB\nInactive(anon):  1334424 kB\nActive(file):     624140 kB\nInactive(file):  4723136 kB\nUnevictable:       47092 kB\nMlocked:             680 kB\nSwapTotal:      33554428 kB\nSwapFree:       26232148 kB\nZswap:           1783728 kB\nZswapped:        6430748 kB\nDirty:             24612 kB\nWriteback:            24 kB\nAnonPages:       8165952 kB\nMapped:          1638148 kB\nShmem:            142364 kB\nKReclaimable:     598892 kB\nSlab:            1054852 kB\nSReclaimable:     540396 kB\nSUnreclaim:       514456 kB\nKernelStack:       37920 kB\nPageTables:       102928 kB\nSecPageTables:      6280 kB\nNFS_Unstable:          0 kB\nBounce:                0 kB\nWritebackTmp:          0 kB\nCommitLimit:    49746796 kB\nCommitted_AS:   28029592 kB\nVmallocTotal:   34359738367 kB\nVmallocUsed:      192876 kB\nVmallocChunk:          0 kB\nPercpu:            35072 kB\nHardwareCorrupted:     0 kB\nAnonHugePages:   5462016 kB\nShmemHugePages:        0 kB\nShmemPmdMapped:        0 kB\nFileHugePages:         0 kB\nFilePmdMapped:         0 kB\nCmaTotal:              0 kB\nCmaFree:               0 kB\nUnaccepted:            0 kB\nBalloon:               0 kB\nGPUActive:             0 kB\nGPUReclaim:            0 kB\nHugePages_Total:       0\nHugePages_Free:        0\nHugePages_Rsvd:        0\nHugePages_Surp:        0\nHugepagesize:       2048 kB\nHugetlb:               0 kB\nDirectMap4k:     1219320 kB\nDirectMap2M:    30820352 kB\nDirectMap1G:     2097152 kB\n",
+        "cpu_pressure": "some avg10=0.01 avg60=2.02 avg300=1.92 total=17517829\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=0\n",
+        "memory_pressure": "some avg10=0.00 avg60=0.36 avg300=0.28 total=1962363\nfull avg10=0.00 avg60=0.36 avg300=0.28 total=1929280\n"
+      },
+      "finished_utc": "2026-10-07T19:34:47.970765+00:00",
+      "host_after": {
+        "load": [
+          7.54931640625,
+          8.2041015625,
+          4.5712890625
+        ],
+        "meminfo": "MemTotal:       32384740 kB\nMemFree:        14621988 kB\nMemAvailable:   20171260 kB\nBuffers:             144 kB\nCached:          5604932 kB\nSwapCached:       595636 kB\nActive:          7660692 kB\nInactive:        6131944 kB\nActive(anon):    7036552 kB\nInactive(anon):  1339804 kB\nActive(file):     624140 kB\nInactive(file):  4792140 kB\nUnevictable:       47092 kB\nMlocked:             680 kB\nSwapTotal:      33554428 kB\nSwapFree:       26234452 kB\nZswap:           1783152 kB\nZswapped:        6423280 kB\nDirty:             27028 kB\nWriteback:             0 kB\nAnonPages:       8174820 kB\nMapped:          1642220 kB\nShmem:            142368 kB\nKReclaimable:     598892 kB\nSlab:            1054600 kB\nSReclaimable:     540396 kB\nSUnreclaim:       514204 kB\nKernelStack:       37392 kB\nPageTables:       102916 kB\nSecPageTables:      6280 kB\nNFS_Unstable:          0 kB\nBounce:                0 kB\nWritebackTmp:          0 kB\nCommitLimit:    49746796 kB\nCommitted_AS:   28004268 kB\nVmallocTotal:   34359738367 kB\nVmallocUsed:      192412 kB\nVmallocChunk:          0 kB\nPercpu:            35072 kB\nHardwareCorrupted:     0 kB\nAnonHugePages:   5464064 kB\nShmemHugePages:        0 kB\nShmemPmdMapped:        0 kB\nFileHugePages:         0 kB\nFilePmdMapped:         0 kB\nCmaTotal:              0 kB\nCmaFree:               0 kB\nUnaccepted:            0 kB\nBalloon:               0 kB\nGPUActive:             0 kB\nGPUReclaim:            0 kB\nHugePages_Total:       0\nHugePages_Free:        0\nHugePages_Rsvd:        0\nHugePages_Surp:        0\nHugepagesize:       2048 kB\nHugetlb:               0 kB\nDirectMap4k:     1219320 kB\nDirectMap2M:    30820352 kB\nDirectMap1G:     2097152 kB\n",
+        "cpu_pressure": "some avg10=0.00 avg60=1.77 avg300=1.86 total=17522753\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=0\n",
+        "memory_pressure": "some avg10=0.00 avg60=0.31 avg300=0.27 total=1962371\nfull avg10=0.00 avg60=0.31 avg300=0.27 total=1929287\n"
+      }
+    },
+    {
+      "round": 3,
+      "suite": "transient-allocations",
+      "argv": [
+        "/home/lzwork/CompuktersMod/Compukters/.worktrees/vm-performance/build/reports/benchmarks/runtime-0.20.0-2026-10-07/guest-benchmark",
+        "/home/lzwork/CompuktersMod/Compukters/.worktrees/vm-performance/modules/common/compiler-k2/build/generated/benchmarks/transient-allocations",
+        "/home/lzwork/CompuktersMod/Compukters/.worktrees/vm-performance/build/reports/benchmarks/runtime-0.20.0-2026-10-07/rounds/round-3/transient-allocations",
+        "7",
+        "16384",
+        "untraced"
+      ],
+      "started_utc": "2026-10-07T19:34:47.971378+00:00",
+      "host_before": {
+        "load": [
+          7.54931640625,
+          8.2041015625,
+          4.5712890625
+        ],
+        "meminfo": "MemTotal:       32384740 kB\nMemFree:        14621988 kB\nMemAvailable:   20171292 kB\nBuffers:             144 kB\nCached:          5604932 kB\nSwapCached:       595636 kB\nActive:          7660692 kB\nInactive:        6131976 kB\nActive(anon):    7036552 kB\nInactive(anon):  1339804 kB\nActive(file):     624140 kB\nInactive(file):  4792172 kB\nUnevictable:       47092 kB\nMlocked:             680 kB\nSwapTotal:      33554428 kB\nSwapFree:       26234452 kB\nZswap:           1783152 kB\nZswapped:        6423280 kB\nDirty:             27000 kB\nWriteback:             0 kB\nAnonPages:       8174820 kB\nMapped:          1642220 kB\nShmem:            142368 kB\nKReclaimable:     598892 kB\nSlab:            1054600 kB\nSReclaimable:     540396 kB\nSUnreclaim:       514204 kB\nKernelStack:       37392 kB\nPageTables:       102916 kB\nSecPageTables:      6280 kB\nNFS_Unstable:          0 kB\nBounce:                0 kB\nWritebackTmp:          0 kB\nCommitLimit:    49746796 kB\nCommitted_AS:   28004268 kB\nVmallocTotal:   34359738367 kB\nVmallocUsed:      192412 kB\nVmallocChunk:          0 kB\nPercpu:            35072 kB\nHardwareCorrupted:     0 kB\nAnonHugePages:   5464064 kB\nShmemHugePages:        0 kB\nShmemPmdMapped:        0 kB\nFileHugePages:         0 kB\nFilePmdMapped:         0 kB\nCmaTotal:              0 kB\nCmaFree:               0 kB\nUnaccepted:            0 kB\nBalloon:               0 kB\nGPUActive:             0 kB\nGPUReclaim:            0 kB\nHugePages_Total:       0\nHugePages_Free:        0\nHugePages_Rsvd:        0\nHugePages_Surp:        0\nHugepagesize:       2048 kB\nHugetlb:               0 kB\nDirectMap4k:     1219320 kB\nDirectMap2M:    30820352 kB\nDirectMap1G:     2097152 kB\n",
+        "cpu_pressure": "some avg10=0.00 avg60=1.77 avg300=1.86 total=17522753\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=0\n",
+        "memory_pressure": "some avg10=0.00 avg60=0.31 avg300=0.27 total=1962371\nfull avg10=0.00 avg60=0.31 avg300=0.27 total=1929287\n"
+      },
+      "finished_utc": "2026-10-07T19:34:56.452149+00:00",
+      "host_after": {
+        "load": [
+          7.0244140625,
+          8.08447265625,
+          4.5517578125
+        ],
+        "meminfo": "MemTotal:       32384740 kB\nMemFree:        14605304 kB\nMemAvailable:   20192836 kB\nBuffers:             144 kB\nCached:          5643448 kB\nSwapCached:       605656 kB\nActive:          7672924 kB\nInactive:        6179392 kB\nActive(anon):    7048784 kB\nInactive(anon):  1348992 kB\nActive(file):     624140 kB\nInactive(file):  4830400 kB\nUnevictable:       47092 kB\nMlocked:             680 kB\nSwapTotal:      33554428 kB\nSwapFree:       26234468 kB\nZswap:           1782164 kB\nZswapped:        6413252 kB\nDirty:             22204 kB\nWriteback:             0 kB\nAnonPages:       8196244 kB\nMapped:          1643972 kB\nShmem:            142368 kB\nKReclaimable:     598892 kB\nSlab:            1054148 kB\nSReclaimable:     540396 kB\nSUnreclaim:       513752 kB\nKernelStack:       37216 kB\nPageTables:       102980 kB\nSecPageTables:      6280 kB\nNFS_Unstable:          0 kB\nBounce:                0 kB\nWritebackTmp:          0 kB\nCommitLimit:    49746796 kB\nCommitted_AS:   28018628 kB\nVmallocTotal:   34359738367 kB\nVmallocUsed:      192156 kB\nVmallocChunk:          0 kB\nPercpu:            35072 kB\nHardwareCorrupted:     0 kB\nAnonHugePages:   5484544 kB\nShmemHugePages:        0 kB\nShmemPmdMapped:        0 kB\nFileHugePages:         0 kB\nFilePmdMapped:         0 kB\nCmaTotal:              0 kB\nCmaFree:               0 kB\nUnaccepted:            0 kB\nBalloon:               0 kB\nGPUActive:             0 kB\nGPUReclaim:            0 kB\nHugePages_Total:       0\nHugePages_Free:        0\nHugePages_Rsvd:        0\nHugePages_Surp:        0\nHugepagesize:       2048 kB\nHugetlb:               0 kB\nDirectMap4k:     1219320 kB\nDirectMap2M:    30820352 kB\nDirectMap1G:     2097152 kB\n",
+        "cpu_pressure": "some avg10=0.00 avg60=1.54 avg300=1.81 total=17528854\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=0\n",
+        "memory_pressure": "some avg10=0.00 avg60=0.27 avg300=0.27 total=1962469\nfull avg10=0.00 avg60=0.27 avg300=0.26 total=1929385\n"
+      }
+    },
+    {
+      "round": 3,
+      "suite": "collection-reuse",
+      "argv": [
+        "/home/lzwork/CompuktersMod/Compukters/.worktrees/vm-performance/build/reports/benchmarks/runtime-0.20.0-2026-10-07/guest-benchmark",
+        "/home/lzwork/CompuktersMod/Compukters/.worktrees/vm-performance/modules/common/compiler-k2/build/generated/benchmarks/collection-reuse",
+        "/home/lzwork/CompuktersMod/Compukters/.worktrees/vm-performance/build/reports/benchmarks/runtime-0.20.0-2026-10-07/rounds/round-3/collection-reuse",
+        "7",
+        "262144",
+        "untraced"
+      ],
+      "started_utc": "2026-10-07T19:34:56.452571+00:00",
+      "host_before": {
+        "load": [
+          7.0244140625,
+          8.08447265625,
+          4.5517578125
+        ],
+        "meminfo": "MemTotal:       32384740 kB\nMemFree:        14605304 kB\nMemAvailable:   20192836 kB\nBuffers:             144 kB\nCached:          5643448 kB\nSwapCached:       605656 kB\nActive:          7672924 kB\nInactive:        6179392 kB\nActive(anon):    7048784 kB\nInactive(anon):  1348992 kB\nActive(file):     624140 kB\nInactive(file):  4830400 kB\nUnevictable:       47092 kB\nMlocked:             680 kB\nSwapTotal:      33554428 kB\nSwapFree:       26234468 kB\nZswap:           1782164 kB\nZswapped:        6413252 kB\nDirty:             22172 kB\nWriteback:             0 kB\nAnonPages:       8196244 kB\nMapped:          1643972 kB\nShmem:            142368 kB\nKReclaimable:     598892 kB\nSlab:            1054148 kB\nSReclaimable:     540396 kB\nSUnreclaim:       513752 kB\nKernelStack:       37216 kB\nPageTables:       102980 kB\nSecPageTables:      6280 kB\nNFS_Unstable:          0 kB\nBounce:                0 kB\nWritebackTmp:          0 kB\nCommitLimit:    49746796 kB\nCommitted_AS:   28018628 kB\nVmallocTotal:   34359738367 kB\nVmallocUsed:      192156 kB\nVmallocChunk:          0 kB\nPercpu:            35072 kB\nHardwareCorrupted:     0 kB\nAnonHugePages:   5484544 kB\nShmemHugePages:        0 kB\nShmemPmdMapped:        0 kB\nFileHugePages:         0 kB\nFilePmdMapped:         0 kB\nCmaTotal:              0 kB\nCmaFree:               0 kB\nUnaccepted:            0 kB\nBalloon:               0 kB\nGPUActive:             0 kB\nGPUReclaim:            0 kB\nHugePages_Total:       0\nHugePages_Free:        0\nHugePages_Rsvd:        0\nHugePages_Surp:        0\nHugepagesize:       2048 kB\nHugetlb:               0 kB\nDirectMap4k:     1219320 kB\nDirectMap2M:    30820352 kB\nDirectMap1G:     2097152 kB\n",
+        "cpu_pressure": "some avg10=0.00 avg60=1.54 avg300=1.81 total=17528854\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=0\n",
+        "memory_pressure": "some avg10=0.00 avg60=0.27 avg300=0.27 total=1962469\nfull avg10=0.00 avg60=0.27 avg300=0.26 total=1929385\n"
+      },
+      "finished_utc": "2026-10-07T19:35:09.482912+00:00",
+      "host_after": {
+        "load": [
+          5.68896484375,
+          7.7373046875,
+          4.494140625
+        ],
+        "meminfo": "MemTotal:       32384740 kB\nMemFree:        14485084 kB\nMemAvailable:   20126720 kB\nBuffers:             144 kB\nCached:          5697372 kB\nSwapCached:       642468 kB\nActive:          7698304 kB\nInactive:        6265048 kB\nActive(anon):    7074104 kB\nInactive(anon):  1380604 kB\nActive(file):     624200 kB\nInactive(file):  4884444 kB\nUnevictable:       47092 kB\nMlocked:             680 kB\nSwapTotal:      33554428 kB\nSwapFree:       26235400 kB\nZswap:           1779352 kB\nZswapped:        6376340 kB\nDirty:              5100 kB\nWriteback:             0 kB\nAnonPages:       8252812 kB\nMapped:          1656288 kB\nShmem:            142532 kB\nKReclaimable:     598892 kB\nSlab:            1053904 kB\nSReclaimable:     540396 kB\nSUnreclaim:       513508 kB\nKernelStack:       37216 kB\nPageTables:       102952 kB\nSecPageTables:      6280 kB\nNFS_Unstable:          0 kB\nBounce:                0 kB\nWritebackTmp:          0 kB\nCommitLimit:    49746796 kB\nCommitted_AS:   28004188 kB\nVmallocTotal:   34359738367 kB\nVmallocUsed:      192084 kB\nVmallocChunk:          0 kB\nPercpu:            35072 kB\nHardwareCorrupted:     0 kB\nAnonHugePages:   5519360 kB\nShmemHugePages:        0 kB\nShmemPmdMapped:        0 kB\nFileHugePages:         0 kB\nFilePmdMapped:         0 kB\nCmaTotal:              0 kB\nCmaFree:               0 kB\nUnaccepted:            0 kB\nBalloon:               0 kB\nGPUActive:             0 kB\nGPUReclaim:            0 kB\nHugePages_Total:       0\nHugePages_Free:        0\nHugePages_Rsvd:        0\nHugePages_Surp:        0\nHugepagesize:       2048 kB\nHugetlb:               0 kB\nDirectMap4k:     1219320 kB\nDirectMap2M:    30820352 kB\nDirectMap1G:     2097152 kB\n",
+        "cpu_pressure": "some avg10=0.00 avg60=1.22 avg300=1.72 total=17534683\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=0\n",
+        "memory_pressure": "some avg10=0.00 avg60=0.21 avg300=0.25 total=1963024\nfull avg10=0.00 avg60=0.21 avg300=0.25 total=1929940\n"
+      }
+    }
+  ],
+  "notes": "No own compilation or profiling overlapped timing. Desktop/other-agent activity uncontrolled. Includes per-invocation warmup and traced correctness control; only untraced samples reported. Construction excludes verification/admission/start; hot operation includes final scans/output copying; teardown excluded.",
+  "finished_utc": "2026-10-07T19:35:09.483577+00:00",
+  "generation_command": "JAVA_HOME=/usr/lib/jvm/java-25-openjdk ./gradlew-sandbox-dev-parallel-summary :compiler-k2:generateTransientAllocationBenchmarkArtifacts :compiler-k2:generateCollectionReuseBenchmarkArtifacts --offline --no-build-cache --max-workers=4",
+  "build_command": "CARGO_TARGET_DIR=.toolchain/build/cargo/guest-benchmark CARGO_PROFILE_RELEASE_DEBUG=1 cargo build --manifest-path host/compukter-vm/Cargo.toml --release --locked --offline --features guest-benchmark --bin guest-benchmark",
+  "worker_jar": "modules/common/compiler-k2/build/libs/compiler-k2-0.5.0.jar",
+  "worker_jar_sha256": "bae4ee90ba482927168e8c6716c25916960268e5d3c07eefae390f79533aec3e"
+}

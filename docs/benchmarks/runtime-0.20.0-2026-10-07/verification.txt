@@ -1,0 +1,15 @@
+JAVA_HOME=/usr/lib/jvm/java-25-openjdk ./gradlew-sandbox-dev-parallel-summary :compiler-k2:generateTransientAllocationBenchmarkArtifacts :compiler-k2:generateCollectionReuseBenchmarkArtifacts --offline --no-build-cache --max-workers=4
+BUILD SUCCESSFUL: 33 actionable tasks executed; build cache disabled.
+CARGO_TARGET_DIR=.toolchain/build/cargo/guest-benchmark CARGO_PROFILE_RELEASE_DEBUG=1 cargo build --manifest-path host/compukter-vm/Cargo.toml --release --locked --offline --features guest-benchmark --bin guest-benchmark
+Release binary built successfully.
+generateTransientAllocationBenchmarkArtifacts: 1 test passed, 0 failures/errors
+generateCollectionReuseBenchmarkArtifacts: 1 test passed, 0 failures/errors
+Round 1 transient-allocations: 7 samples per case, untraced/traced control and checksums/termination passed
+Round 1 collection-reuse: 7 samples per case, untraced/traced control and checksums/termination passed
+Round 2 collection-reuse: 7 samples per case, untraced/traced control and checksums/termination passed
+Round 2 transient-allocations: 7 samples per case, untraced/traced control and checksums/termination passed
+Round 3 transient-allocations: 7 samples per case, untraced/traced control and checksums/termination passed
+Round 3 collection-reuse: 7 samples per case, untraced/traced control and checksums/termination passed
+231 timed samples; 21 per case. Aggregate min/median/max and eight hot work counters verified against raw samples and all three round summaries.
+No VM/Guest production source changed; no Rust unit, conformance, Minecraft or full-checkout gate was run for this measurement-only task.
+Archived sources differ from generated inputs only by trailing spaces/tabs; original and normalized source hashes verified for all eleven files.
