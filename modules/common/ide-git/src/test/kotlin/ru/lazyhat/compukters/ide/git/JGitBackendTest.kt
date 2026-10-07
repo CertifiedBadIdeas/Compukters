@@ -36,6 +36,50 @@ class JGitBackendTest {
     private val backend = JGitBackend(GitLimits()) { }
 
     @Test
+    fun `repository metadata has independent size entry and symlink limits`() {
+        val project = ProjectCatalog.open(createTempDirectory("compukters-git-limits-")).create("demo")
+        run(project, GitOperation.Init)
+        val limited = JGitBackend(GitLimits(repositoryEntries = 1)) { }
+        assertFailsWith<IllegalStateException> { limited.execute(project.handle, GitOperation.Status, null, GitCancellation()) }
+        val tiny = JGitBackend(GitLimits(repositoryBytes = 1)) { }
+        assertFailsWith<IllegalStateException> { tiny.execute(project.handle, GitOperation.Status, null, GitCancellation()) }
+        Files.createSymbolicLink(project.handle.canonicalPath.resolve(".git/link"), project.handle.canonicalPath.resolve("src"))
+        assertFailsWith<IllegalStateException> { run(project, GitOperation.Status) }
+    }
+
+    @Test
+    fun `commit and push ignore executable hooks without changing configured hook path`() {
+        val project = ProjectCatalog.open(createTempDirectory("compukters-git-hooks-")).create("demo")
+        run(project, GitOperation.Init)
+        val hooks = createTempDirectory("compukters-git-hooks-config-")
+        val marker = hooks.resolve("executed")
+        for (name in listOf("post-commit", "pre-push")) {
+            val hook = hooks.resolve(name)
+            hook.writeText("#!/bin/sh\nprintf hook > '$marker'\nexit 1\n")
+            check(hook.toFile().setExecutable(true))
+        }
+        Git.open(project.handle.canonicalPath.toFile()).use { git ->
+            git.repository.config.setString("core", null, "hooksPath", hooks.toString())
+            git.repository.config.save()
+        }
+        run(project, GitOperation.Stage(ProjectPath.file("src")))
+        run(project, commit("without hooks"))
+        val remote = createTempDirectory("compukters-git-hooks-remote-")
+        Git
+            .init()
+            .setBare(true)
+            .setDirectory(remote.toFile())
+            .call()
+            .close()
+        run(project, GitOperation.SetRemote(remote.toUri().toString()))
+        run(project, GitOperation.Push)
+        assertFalse(Files.exists(marker))
+        Git.open(project.handle.canonicalPath.toFile()).use { git ->
+            assertEquals(hooks.toString(), git.repository.config.getString("core", null, "hooksPath"))
+        }
+    }
+
+    @Test
     fun `status staging diff commits and initial unstage preserve independent index state`() {
         val project = ProjectCatalog.open(createTempDirectory("compukters-git-")).create("demo")
         assertFalse(run(project, GitOperation.Status).status.available)

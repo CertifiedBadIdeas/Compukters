@@ -69,7 +69,7 @@ class JGitBackend internal constructor(
                 .setCredentialsProvider(auth)
                 .setProgressMonitor(monitor(cancellation))
                 .call()
-                .use { checkStorage(it.repository) }
+                .use { checkStorage(it.repository, cancellation) }
             cancellation.check()
         } finally {
             auth?.clear()
@@ -118,7 +118,7 @@ class JGitBackend internal constructor(
                     .toPath()
                     .toRealPath() == project.canonicalPath,
             ) { "Git working tree does not match the project" }
-            checkStorage(git.repository)
+            checkStorage(git.repository, cancellation)
             var message: String? = null
             var diff: String? = null
             var history = emptyList<GitCommit>()
@@ -179,11 +179,8 @@ class JGitBackend internal constructor(
                         operation.message.isNotBlank() && operation.message.length <= 8192,
                     ) { "Commit message must be nonempty and bounded" }
                     require(operation.name.isNotBlank() && operation.email.isNotBlank()) { "Commit author name and email are required" }
-                    val config = git.repository.config
-                    val hooks = config.getString("core", null, "hooksPath")
-                    config.setString("core", null, "hooksPath", metadata.resolve("compukters-disabled-hooks").toString())
-                    try {
-                        message =
+                    message =
+                        withoutHooks(git) {
                             git
                                 .commit()
                                 .setMessage(operation.message)
@@ -193,9 +190,7 @@ class JGitBackend internal constructor(
                                 .setSign(false)
                                 .call()
                                 .name
-                    } finally {
-                        if (hooks == null) config.unset("core", null, "hooksPath") else config.setString("core", null, "hooksPath", hooks)
-                    }
+                        }
                 }
 
                 is GitOperation.CreateBranch -> {
@@ -258,14 +253,16 @@ class JGitBackend internal constructor(
                     val source = git.repository.fullBranch
                     val target = git.repository.config.getString("branch", git.repository.branch, "merge") ?: source
                     val results =
-                        git
-                            .push()
-                            .setRefSpecs(RefSpec("$source:$target"))
-                            .setRemote(remote)
-                            .setTimeout(limits.timeoutSeconds)
-                            .setCredentialsProvider(auth)
-                            .setProgressMonitor(monitor(cancellation))
-                            .call()
+                        withoutHooks(git) {
+                            git
+                                .push()
+                                .setRefSpecs(RefSpec("$source:$target"))
+                                .setRemote(remote)
+                                .setTimeout(limits.timeoutSeconds)
+                                .setCredentialsProvider(auth)
+                                .setProgressMonitor(monitor(cancellation))
+                                .call()
+                        }
                     val updates = results.flatMap { it.remoteUpdates }
                     check(updates.isNotEmpty()) { "No branch was selected for push" }
                     check(updates.all { it.status == RemoteRefUpdate.Status.OK || it.status == RemoteRefUpdate.Status.UP_TO_DATE }) {
@@ -280,8 +277,27 @@ class JGitBackend internal constructor(
                 }
             }
             check(project.isValid()) { "Project root changed during Git operation" }
-            checkStorage(git.repository)
+            checkStorage(git.repository, cancellation)
             return GitResult(status(git), message, diff, Collections.unmodifiableList(history.toList()))
+        }
+    }
+
+    private fun <T> withoutHooks(
+        git: Git,
+        action: () -> T,
+    ): T {
+        val config = git.repository.config
+        val original = config.getString("core", null, "hooksPath")
+        val absent =
+            git.repository.directory
+                .toPath()
+                .resolve("compukters-disabled-hooks-${java.util.UUID.randomUUID()}")
+        check(!Files.exists(absent, LinkOption.NOFOLLOW_LINKS))
+        config.setString("core", null, "hooksPath", absent.toString())
+        return try {
+            action()
+        } finally {
+            if (original == null) config.unset("core", null, "hooksPath") else config.setString("core", null, "hooksPath", original)
         }
     }
 
@@ -446,10 +462,20 @@ class JGitBackend internal constructor(
         }
     }
 
-    private fun checkStorage(repository: Repository) {
+    private fun checkStorage(
+        repository: Repository,
+        cancellation: GitCancellation,
+    ) {
         var bytes = 0L
-        Files.walk(repository.directory.toPath()).use { paths ->
+        var entries = 0
+        val root = repository.directory.toPath()
+        val deadline = System.nanoTime() + limits.timeoutSeconds.toLong() * 1_000_000_000
+        Files.walk(root, 33).use { paths ->
             paths.forEach { path ->
+                cancellation.check()
+                check(System.nanoTime() < deadline) { "Git storage validation deadline exceeded" }
+                check(++entries <= limits.repositoryEntries) { "Git repository metadata exceeds entry limit" }
+                check(root.relativize(path).nameCount <= 32) { "Git repository metadata exceeds depth limit" }
                 check(!Files.isSymbolicLink(path)) { "Git metadata contains an unsupported symbolic link" }
                 if (Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS)) {
                     bytes = Math.addExact(bytes, Files.size(path))
