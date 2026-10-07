@@ -710,6 +710,15 @@ registerKotlinVmConformance(
     conformanceScenario = "list-any",
 )
 registerKotlinVmConformance(
+    taskName = "testKotlinMfvcVmConformance",
+    taskDescription = "Executes multi-field value classes through direct and managed use sites with the pinned VM.",
+    artifactTask = ":compiler-k2:generateMfvcConformanceArtifact",
+    artifact = project(":compiler-k2").layout.buildDirectory.file("generated/conformance/kotlin-mfvc.cpkt"),
+    cargoTargetDirectory = ".toolchain/build/cargo/compiler-k2-mfvc-conformance",
+    artifactEnvironmentVariable = "COMPUKTER_KOTLIN_MFVC_ARTIFACT",
+    conformanceScenario = "mfvc",
+)
+registerKotlinVmConformance(
     taskName = "testKotlinValueClassBoxesVmConformance",
     taskDescription = "Executes boxed value classes and nominal collection elements with the pinned Compukter VM.",
     artifactTask = ":compiler-k2:generateValueClassBoxesConformanceArtifact",

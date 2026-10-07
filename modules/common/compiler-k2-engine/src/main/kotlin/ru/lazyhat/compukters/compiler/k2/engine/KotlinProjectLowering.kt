@@ -491,10 +491,14 @@ private data class GuestClosureLayout(
 private data class InlineValueClassLayout(
     val declaration: IrClass,
     val constructor: IrConstructorSymbol,
-    val getter: IrSimpleFunctionSymbol,
-    val underlyingType: IrType,
+    val properties: List<IrProperty>,
+    val underlyingTypes: List<IrType>,
     val intRange: InlineIntRange?,
-)
+) {
+    val getter: IrSimpleFunctionSymbol get() = requireNotNull(properties.first().getter).symbol
+    val underlyingType: IrType get() = underlyingTypes.first()
+    val getters: List<IrSimpleFunctionSymbol> get() = properties.map { requireNotNull(it.getter).symbol }
+}
 
 private data class InlineIntRange(
     val minimum: Int,
@@ -635,7 +639,7 @@ private class InlineValueClassRegistry private constructor(
             return InlineValueClassRegistry(
                 byClass = layoutsByClass,
                 byConstructor = layouts.associateBy(InlineValueClassLayout::constructor),
-                byGetter = layouts.associateBy(InlineValueClassLayout::getter),
+                byGetter = layouts.flatMap { layout -> layout.getters.map { it to layout } }.toMap(),
                 companionClasses = companions.mapTo(mutableSetOf()) { it.symbol },
                 constantsByGetter = constants,
             )
@@ -691,40 +695,30 @@ private class InlineValueClassRegistry private constructor(
             declaration: IrClass,
             pluginContext: IrPluginContext,
         ): InlineValueClassLayout {
-            if (declaration.typeParameters.isNotEmpty()) {
-                throw UnsupportedKotlinIr(declaration, "generic value classes are not supported")
-            }
             val constructor =
                 declaration.constructors.singleOrNull { it.isPrimary }
                     ?: throw UnsupportedKotlinIr(declaration, "value class must have one primary constructor")
             if (declaration.constructors.any { !it.isPrimary }) {
                 throw UnsupportedKotlinIr(declaration, "value class secondary constructors are not supported")
             }
-            val parameter =
-                constructor.parameters.singleOrNull { it.kind == IrParameterKind.Regular }
-                    ?: throw UnsupportedKotlinIr(declaration, "value class must have one underlying property")
-            val property =
-                declaration.declarations.filterIsInstance<IrProperty>().singleOrNull { property ->
-                    property.backingField != null && property.name == parameter.name
-                } ?: throw UnsupportedKotlinIr(declaration, "value class must have one underlying property")
-            if (property.isVar || property.getter == null || property.getter?.origin != IrDeclarationOrigin.DEFAULT_PROPERTY_ACCESSOR) {
-                throw UnsupportedKotlinIr(property, "value class underlying property must be immutable")
-            }
-            if (parameter.type.isNullable() ||
-                parameter.type !in
-                setOf(
-                    pluginContext.irBuiltIns.intType,
-                    pluginContext.irBuiltIns.booleanType,
-                    pluginContext.irBuiltIns.charType,
-                )
-            ) {
-                throw UnsupportedKotlinIr(parameter, "value class underlying type must be a supported non-null scalar")
-            }
+            val parameters = constructor.parameters.filter { it.kind == IrParameterKind.Regular }
+            if (parameters.isEmpty()) throw UnsupportedKotlinIr(declaration, "value class requires underlying properties")
+            val properties =
+                parameters.map { parameter ->
+                    val property =
+                        declaration.declarations.filterIsInstance<IrProperty>().singleOrNull {
+                            it.backingField != null && it.name == parameter.name
+                        } ?: throw UnsupportedKotlinIr(parameter, "value class constructor parameter requires a property")
+                    if (property.isVar || property.getter?.origin != IrDeclarationOrigin.DEFAULT_PROPERTY_ACCESSOR) {
+                        throw UnsupportedKotlinIr(property, "value class underlying properties must be immutable")
+                    }
+                    property
+                }
             val initializers = declaration.declarations.filterIsInstance<IrAnonymousInitializer>()
             val intRange =
                 when (initializers.size) {
                     0 -> null
-                    1 -> parseIntRange(initializers.single(), requireNotNull(property.getter).symbol)
+                    1 -> parseIntRange(initializers.single(), requireNotNull(properties.single().getter).symbol)
                     else -> throw UnsupportedKotlinIr(declaration, "value class supports at most one scalar precondition")
                 }
             val unsupportedParent =
@@ -737,8 +731,8 @@ private class InlineValueClassRegistry private constructor(
             return InlineValueClassLayout(
                 declaration = declaration,
                 constructor = constructor.symbol,
-                getter = requireNotNull(property.getter).symbol,
-                underlyingType = parameter.type,
+                properties = properties,
+                underlyingTypes = parameters.map { it.type },
                 intRange = intRange,
             )
         }
@@ -1011,6 +1005,7 @@ private fun mapGuestValueType(
                     }
                 } else if (inline != null) {
                     if (type.isNullable()) return ValueType.Ref(true, requireNotNull(guestTypes.valueClassBox(type)).type)
+                    guestTypes.valueClassBox(type)?.takeIf { it.inlineType != null }?.let { return requireNotNull(it.inlineType) }
                     mapGuestValueType(
                         resolveUnderlyingType(inline.underlyingType),
                         pluginContext,
@@ -1406,8 +1401,8 @@ internal object KotlinProjectLowering {
                             pluginContext.irBuiltIns.intType -> ValueType.I32
                             pluginContext.irBuiltIns.booleanType -> ValueType.Bool
                             pluginContext.irBuiltIns.charType -> ValueType.Char
-                            else -> return
-                        }
+                            else -> ValueType.Unit
+                        }.takeIf { inline.underlyingTypes.size == 1 } ?: ValueType.Unit
                     }
 
                     scalar != null -> {
@@ -1442,8 +1437,23 @@ internal object KotlinProjectLowering {
                             ?.asString()
                         ?: "value",
                     underlying,
-                )
+                ).also { box ->
+                    box.sourceType = type
+                    if (inline != null) {
+                        val arguments = simple.arguments.filterIsInstance<IrTypeProjection>().map { it.type }
+                        val instance = GuestClassInstance(symbol.owner, arguments)
+                        box.propertyTypes = inline.underlyingTypes.map(instance::substitute)
+                        box.propertyNames = inline.properties.map { it.name.asString() }
+                    } else {
+                        box.propertyTypes = listOf(type)
+                    }
+                }
             }
+            guestTypes
+                .valueClassBox(type)
+                ?.propertyTypes
+                ?.filter { it != type }
+                ?.forEach(::discoverValueClass)
         }
         functionInstances.forEach { instance ->
             instance.declaration.accept(
@@ -1532,6 +1542,7 @@ internal object KotlinProjectLowering {
                     listOfNotNull("kotlin.Array".takeIf { usesStringArray }) +
                     referenceArrays.keys +
                     guestTypes.valueClassBoxes.keys + guestTypes.valueClassBoxes.keys.map { "$it.<boxed-value>" } +
+                    guestTypes.valueClassBoxes.keys.map { "$it.<inline-value>" } +
                     listOf("<boxed-value>", "toString", "hashCode", "equals") +
                     guestTypes.valueClassBoxes.values.flatMap { box ->
                         valueClassInterfaceMethods(box.symbol).map { method ->
@@ -1592,7 +1603,7 @@ internal object KotlinProjectLowering {
                 }
             }
         val literals =
-            (literalCollector.strings + guestTypes.valueClassBoxes.values.flatMap { listOf(it.stringPrefix, ")") })
+            (literalCollector.strings + guestTypes.valueClassBoxes.values.flatMap { it.stringParts })
                 .distinct()
                 .map {
                     Utf16Literal.fromString(it)
@@ -1601,7 +1612,7 @@ internal object KotlinProjectLowering {
         val constantPool = ConstantPoolBuilder()
         (
             (
-                literalCollector.values + guestTypes.valueClassBoxes.values.flatMap { listOf(it.stringPrefix, ")") } +
+                literalCollector.values + guestTypes.valueClassBoxes.values.flatMap { it.stringParts } +
                     topLevelProperties.mapNotNull { property ->
                         when (val initializer = property.initializer) {
                             TopLevelInitializer.Null -> null
@@ -1810,6 +1821,47 @@ internal object KotlinProjectLowering {
                     }?.let { functionIds[it.symbol] }
                     ?.let(FunctionRef::Local)
         }
+        var nextInlineType = externalFunctionTypeBase + externalFunctionImports.size + 3 + localBoxTypeCount
+        guestTypes.valueClassBoxes.toSortedMap().values.filter { it.scalar == ValueType.Unit }.forEach { box ->
+            box.inlineType = ValueType.Inline(TypeRef.Local(TypeId.of((nextInlineType++).toUInt())))
+            box.scalar = requireNotNull(box.inlineType)
+        }
+        val resolvingInline = mutableSetOf<String>()
+
+        fun resolveInlineComponents(box: GuestValueClassBox): List<ValueType> {
+            if (box.componentTypes.isNotEmpty()) return box.componentTypes
+            if (!resolvingInline.add(box.name)) throw UnsupportedKotlinIr(box.symbol.owner, "recursive value-class layout")
+            box.componentTypes =
+                box.propertyTypes.flatMap { source ->
+                    val nested = guestTypes.valueClassBox(source)
+                    if (nested != null && !source.isNullable()) {
+                        resolveInlineComponents(nested)
+                    } else {
+                        listOf(
+                            valueType(
+                                source,
+                                pluginContext,
+                                guestTypes,
+                                stringType,
+                                charArrayType,
+                                stringArrayType,
+                                classTypeIds,
+                                externalClassTypes,
+                                inlineValueClasses,
+                                platformScalars,
+                                box.symbol.owner,
+                                shapeInterfaceTypes,
+                                classInstanceTypeIds = classInstanceTypeIds,
+                            ),
+                        )
+                    }
+                }
+            resolvingInline.remove(box.name)
+            return box.componentTypes
+        }
+        guestTypes.valueClassBoxes.values.forEach { box ->
+            if (box.inlineType == null) box.componentTypes = listOf(box.scalar) else resolveInlineComponents(box)
+        }
         guestTypes.registerReferenceArrays(referenceArrayTypes)
         functionInstances.forEach { instance ->
             validateFunction(
@@ -1942,7 +1994,7 @@ internal object KotlinProjectLowering {
                             declaration,
                             shapeInterfaceTypes,
                             classInstanceTypeIds = classInstanceTypeIds,
-                        ),
+                        ).let { guestTypes.heapType(declaration.type, it) },
                 )
             }
         val captureCellLayoutsBySymbol: Map<IrValueSymbol, GuestCaptureCellLayout> =
@@ -1983,7 +2035,7 @@ internal object KotlinProjectLowering {
                                         declaration,
                                         shapeInterfaceTypes,
                                         classInstanceTypeIds = classInstanceTypeIds,
-                                    ),
+                                    ).let { guestTypes.heapType(declaration.type, it) },
                                 cell = cell,
                             )
                         } +
@@ -2062,8 +2114,10 @@ internal object KotlinProjectLowering {
                 .toSortedMap()
                 .values
                 .filter { it.type is TypeRef.Local }
-        localValueClassBoxes.forEachIndexed { index, box ->
-            box.field = FieldRef.Local(FieldId.of((firstTopLevelField + topLevelFields.size + index).toUInt()))
+        var nextBoxField = firstTopLevelField + topLevelFields.size
+        localValueClassBoxes.forEach { box ->
+            box.field = FieldRef.Local(FieldId.of(nextBoxField.toUInt()))
+            nextBoxField += box.componentTypes.size
         }
         val loweredFunctions = mutableListOf<Function>()
 
@@ -2204,7 +2258,7 @@ internal object KotlinProjectLowering {
                     name = requireNotNull(metadataIds[functionArtifactNames[instance]]),
                     signature = TypeRef.Local(requireNotNull(instanceTypeIds[instance])),
                     flags = flags,
-                    values = (parameterTypes + compiled.localTypes).map(FunctionValue::scalar),
+                    values = (parameterTypes + compiled.localTypes).map(guestTypes::functionValue),
                     parameterCount = parameterTypes.size.toUInt(),
                     firstBlock = BlockId.of(firstBlock.toUInt()),
                     blockCount = compiled.blocks.size.toUInt(),
@@ -2239,7 +2293,7 @@ internal object KotlinProjectLowering {
                     flags = setOf(FunctionFlag.ABSTRACT),
                     values =
                         (listOf(ValueType.Ref(nullable = false, type = interfaceType)) + shape.parameters.map(shapeValueType))
-                            .map(FunctionValue::scalar),
+                            .map(guestTypes::functionValue),
                     parameterCount = (shape.arity + 1).toUInt(),
                     firstBlock = BlockId.of(blocks.size.toUInt()),
                     blockCount = 0u,
@@ -2409,7 +2463,7 @@ internal object KotlinProjectLowering {
                     flags = setOf(FunctionFlag.VIRTUAL),
                     values =
                         (listOf(receiverType) + layout.shape.parameters.map(shapeValueType) + compiled.localTypes)
-                            .map(FunctionValue::scalar),
+                            .map(guestTypes::functionValue),
                     parameterCount = (layout.shape.arity + 1).toUInt(),
                     firstBlock = BlockId.of(firstBlock.toUInt()),
                     blockCount = compiled.blocks.size.toUInt(),
@@ -2551,7 +2605,7 @@ internal object KotlinProjectLowering {
                     name = requireNotNull(metadataIds[constructorName(classInstance)]),
                     signature = TypeRef.Local(requireNotNull(constructorTypeIds[classInstance])),
                     flags = setOf(FunctionFlag.STATIC),
-                    values = (listOf(receiverType) + parameterTypes + compiled.localTypes).map(FunctionValue::scalar),
+                    values = (listOf(receiverType) + parameterTypes + compiled.localTypes).map(guestTypes::functionValue),
                     parameterCount = (parameterTypes.size + 1).toUInt(),
                     firstBlock = BlockId.of(firstBlock.toUInt()),
                     blockCount = compiled.blocks.size.toUInt(),
@@ -3098,6 +3152,11 @@ internal object KotlinProjectLowering {
                         method.parameters.filter { it.kind != IrParameterKind.DispatchReceiver }.map { mapped(it.type) },
                         mapped(method.returnType),
                         method.isSuspend,
+                        inlineValueClasses
+                            .getter(method.symbol)
+                            ?.getters
+                            ?.indexOf(method.symbol)
+                            ?.takeIf { it >= 0 },
                     )
                 }
         }
@@ -3108,10 +3167,12 @@ internal object KotlinProjectLowering {
                 blocks.size.toUInt(),
                 metadataIds,
                 guestTypes.valueClassBoxes.values
-                    .flatMap { listOf(it.stringPrefix, ")") }
+                    .flatMap { it.stringParts }
                     .associateWith { requireNotNull(constantIds[it.toArtifactConstant(literalIds)]) },
                 TypeRef.Imported(ImportId.of(ANY_RUNTIME_TYPE)),
                 stringType,
+                guestTypes,
+                constantIds,
             )
         loweredFunctions += valueClassBoxArtifacts.functions
         blocks += valueClassBoxArtifacts.blocks
@@ -3235,7 +3296,12 @@ internal object KotlinProjectLowering {
                                     ValueType.Ref(false, TypeRef.Imported(ImportId.of(ANY_RUNTIME_TYPE))),
                                     ValueType.Ref(true, TypeRef.Imported(ImportId.of(ANY_RUNTIME_TYPE))),
                                 ),
-                        ) + valueClassBoxArtifacts.types,
+                        ) + valueClassBoxArtifacts.types +
+                        guestTypes.valueClassBoxes.values
+                            .filter { it.inlineType != null }
+                            .sortedBy {
+                                ((requireNotNull(it.inlineType).type as TypeRef.Local).id.value)
+                            }.map { NominalType.InlineValue(requireNotNull(metadataIds["${it.name}.<inline-value>"]), it.componentTypes) },
                 constants = constants,
                 fields = artifactFields + valueClassBoxArtifacts.fields,
                 imports =
@@ -3411,6 +3477,8 @@ internal object KotlinProjectLowering {
         return Artifact(
             minimumRuntimeAbi =
                 when {
+                    modules.any { module -> module.types.any { it is NominalType.InlineValue } } -> AbiVersion(1u, 15u)
+
                     modules.any { module ->
                         module.types.any {
                             it is NominalType.Array &&
@@ -3833,7 +3901,11 @@ internal object KotlinProjectLowering {
                             property,
                             classInstanceTypeIds = classInstanceTypeIds,
                         )
-                    GuestFieldLayout(property, FieldId.of(nextField++), fieldType)
+                    GuestFieldLayout(
+                        property,
+                        FieldId.of(nextField++),
+                        guestTypes.heapType(instance.substitute(requireNotNull(property.backingField).type), fieldType),
+                    )
                 }
             val owner = TypeRef.Local(typeId)
             val entries =
@@ -4843,7 +4915,13 @@ private class FunctionCompiler(
                     val cellType = TypeRef.Local(cell.typeId)
                     val destination = allocate(ValueType.Ref(nullable = false, type = cellType))
                     emit(Instruction.NewObject(destination, cellType))
-                    emit(Instruction.FieldSet(destination, FieldRef.Local(cell.fieldId), source))
+                    emit(
+                        Instruction.FieldSet(
+                            destination,
+                            FieldRef.Local(cell.fieldId),
+                            storedValue(source, statement.type, cell.valueType),
+                        ),
+                    )
                     values[statement.symbol] = destination
                 }
             }
@@ -4865,7 +4943,7 @@ private class FunctionCompiler(
                         Instruction.FieldSet(
                             loadCellReference(statement.symbol, statement),
                             FieldRef.Local(cell.fieldId),
-                            source,
+                            storedValue(source, statement.value.type, cell.valueType),
                         ),
                     )
                 }
@@ -4882,7 +4960,7 @@ private class FunctionCompiler(
                     statement.receiver?.let(::compileExpression)
                         ?: throw UnsupportedKotlinIr(statement, "instance field receiver is missing")
                 val value = compileExpression(statement.value, statement.symbol.owner.type)
-                emit(Instruction.FieldSet(receiver, FieldRef.Local(field.id), value))
+                emit(Instruction.FieldSet(receiver, FieldRef.Local(field.id), storedValue(value, statement.value.type, field.type)))
             }
 
             is IrCall -> {
@@ -5149,7 +5227,13 @@ private class FunctionCompiler(
                         declaration.backingField?.initializer?.expression
                             ?: throw UnsupportedKotlinIr(declaration, "class field initializer is missing")
                     val value = compileExpression(initializer, field.property.backingField?.type)
-                    emit(Instruction.FieldSet(RegisterId.of(0u), FieldRef.Local(field.id), value))
+                    emit(
+                        Instruction.FieldSet(
+                            RegisterId.of(0u),
+                            FieldRef.Local(field.id),
+                            storedValue(value, requireNotNull(field.property.backingField).type, field.type),
+                        ),
+                    )
                 }
 
                 is IrAnonymousInitializer -> {
@@ -5250,9 +5334,11 @@ private class FunctionCompiler(
                     val receiver =
                         expression.receiver?.let(::compileExpression)
                             ?: throw UnsupportedKotlinIr(expression, "instance field receiver is missing")
-                    allocate(instanceField.type).also { destination ->
-                        emit(Instruction.FieldGet(destination, receiver, FieldRef.Local(instanceField.id)))
-                    }
+                    val stored =
+                        allocate(instanceField.type).also { destination ->
+                            emit(Instruction.FieldGet(destination, receiver, FieldRef.Local(instanceField.id)))
+                        }
+                    loadedValue(stored, expression.type, expression)
                 } else {
                     val field =
                         topLevelFieldsByBacking[expression.symbol]
@@ -5346,16 +5432,20 @@ private class FunctionCompiler(
         element: IrElement,
     ): RegisterId {
         captureCells[symbol]?.let { cell ->
-            return allocate(cell.valueType).also { destination ->
-                emit(Instruction.FieldGet(destination, loadCellReference(symbol, element), FieldRef.Local(cell.fieldId)))
-            }
+            val stored =
+                allocate(cell.valueType).also { destination ->
+                    emit(Instruction.FieldGet(destination, loadCellReference(symbol, element), FieldRef.Local(cell.fieldId)))
+                }
+            return loadedValue(stored, symbol.owner.type, element)
         }
         values[symbol]?.let { return it }
         val capture = captureFields[symbol] ?: throw UnsupportedKotlinIr(element, "unknown local value")
         val receiver = closureReceiver ?: throw UnsupportedKotlinIr(element, "closure capture has no environment receiver")
-        return allocate(capture.type).also { destination ->
-            emit(Instruction.FieldGet(destination, receiver, FieldRef.Local(capture.fieldId)))
-        }
+        val stored =
+            allocate(capture.type).also { destination ->
+                emit(Instruction.FieldGet(destination, receiver, FieldRef.Local(capture.fieldId)))
+            }
+        return loadedValue(stored, symbol.owner.type, element)
     }
 
     private fun loadCellReference(
@@ -5387,7 +5477,17 @@ private class FunctionCompiler(
                     capture.cell == null -> loadValue(requireNotNull(capture.symbol), expression)
                     else -> loadCellReference(requireNotNull(capture.symbol), expression)
                 }
-            emit(Instruction.FieldSet(destination, FieldRef.Local(capture.fieldId), value))
+            emit(
+                Instruction.FieldSet(
+                    destination,
+                    FieldRef.Local(capture.fieldId),
+                    storedValue(
+                        value,
+                        capture.symbol?.owner?.type ?: requireNotNull(capture.initialValue).type,
+                        capture.type,
+                    ),
+                ),
+            )
         }
         return destination
     }
@@ -5413,18 +5513,17 @@ private class FunctionCompiler(
             return value
         }
         inlineValueClasses.constructor(call.symbol)?.let { layout ->
-            val argument =
-                target.parameters
-                    .mapIndexedNotNull { index, parameter ->
-                        call.arguments.getOrNull(index)?.takeIf { parameter.kind == IrParameterKind.Regular }
-                    }.singleOrNull()
-                    ?: throw UnsupportedKotlinIr(call, "value class constructor argument is missing")
-            if (argument.type != layout.underlyingType) {
-                throw UnsupportedKotlinIr(call, "value class constructor argument type does not match its underlying scalar")
+            val box = requireNotNull(guestTypes.valueClassBox(resolvedType(call.type)))
+            val simple = resolvedType(call.type) as IrSimpleType
+            val instance = GuestClassInstance(layout.declaration, simple.arguments.filterIsInstance<IrTypeProjection>().map { it.type })
+            val argumentValues = compileConstructorArguments(target, call.arguments, instance, call)
+            if (box.inlineType == null) {
+                val value = argumentValues.single()
+                layout.intRange?.let { emitIntRangePrecondition(value, it, call) }
+                return value
             }
-            val value = compileExpression(argument)
-            layout.intRange?.let { emitIntRangePrecondition(value, it, call) }
-            return value
+            val components = argumentValues.flatMap(::inlineComponents)
+            return allocate(box.scalar).also { emit(Instruction.InlineConstruct(it, components)) }
         }
         val exceptionImport =
             target.parentAsClass
@@ -5713,6 +5812,32 @@ private class FunctionCompiler(
         }
     }
 
+    private fun storedValue(
+        value: RegisterId,
+        source: IrType,
+        storage: ValueType,
+    ): RegisterId =
+        if (registerValueType(value) is ValueType.Inline && storage is ValueType.Ref) boxValue(value, source, storage) else value
+
+    private fun loadedValue(
+        value: RegisterId,
+        source: IrType,
+        element: IrElement,
+    ): RegisterId =
+        if (registerValueType(value) is ValueType.Ref && valueType(source, element) is ValueType.Inline) {
+            unboxValueClass(value, requireNotNull(guestTypes.valueClassBox(resolvedType(source))))
+        } else {
+            value
+        }
+
+    private fun inlineComponents(source: RegisterId): List<RegisterId> {
+        val type = registerValueType(source)
+        if (type !is ValueType.Inline) return listOf(source)
+        return guestTypes.inlineComponents(type).mapIndexed { index, component ->
+            allocate(component).also { emit(Instruction.InlineComponent(it, source, index.toUShort())) }
+        }
+    }
+
     private fun boxValue(
         source: RegisterId,
         sourceType: IrType,
@@ -5724,7 +5849,9 @@ private class FunctionCompiler(
         prepareAllocationBlock()
         val reference = allocate(ValueType.Ref(false, box.type))
         emit(Instruction.NewObject(reference, box.type))
-        emit(Instruction.FieldSet(reference, box.field, source))
+        inlineComponents(source).forEachIndexed { index, component ->
+            emit(Instruction.FieldSet(reference, box.fieldAt(index), component))
+        }
         return allocate(target).also { emit(Instruction.CheckedCast(it, reference, target.type)) }
     }
 
@@ -5734,7 +5861,17 @@ private class FunctionCompiler(
     ): RegisterId {
         val reference = allocate(ValueType.Ref(false, box.type))
         emit(Instruction.CheckedCast(reference, source, box.type))
-        return allocate(box.scalar).also { emit(Instruction.FieldGet(it, reference, box.field)) }
+        val components =
+            box.componentTypes.mapIndexed { index, type ->
+                allocate(type).also { emit(Instruction.FieldGet(it, reference, box.fieldAt(index))) }
+            }
+        return if (box.inlineType == null) {
+            components.single()
+        } else {
+            allocate(box.scalar).also {
+                emit(Instruction.InlineConstruct(it, components))
+            }
+        }
     }
 
     private fun compileReferenceArrayElement(
@@ -6147,14 +6284,57 @@ private class FunctionCompiler(
         doubleCompanionConstant(target)?.let { value ->
             return emitF64Constant(value, call)
         }
-        inlineValueClasses.getter(target.symbol)?.let {
+        inlineValueClasses.getter(target.symbol)?.let { layout ->
             val receiver =
                 target.parameters
                     .mapIndexedNotNull { index, parameter ->
                         call.arguments.getOrNull(index)?.takeIf { parameter.kind == IrParameterKind.DispatchReceiver }
                     }.singleOrNull()
                     ?: throw UnsupportedKotlinIr(call, "value class property getter receiver is missing")
-            return compileExpression(receiver)
+            val source = compileExpression(receiver)
+            val box = requireNotNull(guestTypes.valueClassBox(resolvedType(receiver.type)))
+            if (box.inlineType == null) return source
+            val index = layout.getters.indexOf(target.symbol)
+            val previousCount =
+                box.propertyTypes.take(index).sumOf { type ->
+                    guestTypes
+                        .valueClassBox(type)
+                        ?.takeUnless { type.isNullable() }
+                        ?.componentTypes
+                        ?.size ?: 1
+                }
+            val type = valueType(box.propertyTypes[index], call)
+            if (type is ValueType.Inline) {
+                val leaves = requireNotNull(guestTypes.valueClassBox(box.propertyTypes[index])).componentTypes
+                val extracted =
+                    leaves.mapIndexed { offset, leaf ->
+                        allocate(leaf).also {
+                            emit(Instruction.InlineComponent(it, source, (previousCount + offset).toUShort()))
+                        }
+                    }
+                return allocate(type).also { emit(Instruction.InlineConstruct(it, extracted)) }
+            }
+            return allocate(type).also { emit(Instruction.InlineComponent(it, source, previousCount.toUShort())) }
+        }
+        if (target.fqNameWhenAvailable?.asString() == "kotlin.internal.ir.CHECK_NOT_NULL") {
+            val argument = call.arguments.filterNotNull().single()
+            val value = compileExpression(argument)
+            val type = registerValueType(value)
+            if (type !is ValueType.Ref) return value
+            val absent = allocate(type.copy(nullable = true)).also { emit(Instruction.Null(it)) }
+            val missing = allocate(ValueType.Bool).also { emit(Instruction.RefEqual(it, value, absent)) }
+            val failed = createBlock()
+            val present = createBlock()
+            emit(Instruction.Branch(missing, blockId(failed), blockId(present)))
+            currentBlock = failed
+            prepareAllocationBlock()
+            val npe = TypeRef.Imported(ImportId.of(14u))
+            val failure = allocate(ValueType.Ref(false, npe)).also { emit(Instruction.NewObject(it, npe)) }
+            emit(Instruction.Throw(failure))
+            currentBlock = present
+            val box = guestTypes.valueClassBox(resolvedType(call.type))
+            if (box != null) return unboxValueClass(value, box)
+            return allocate(type.copy(nullable = false)).also { emit(Instruction.CheckedCast(it, value, type.type)) }
         }
         val propertyReceiver = call.dispatchReceiver
         val receiverClassInstance = resolveClassInstance(propertyReceiver?.type)
@@ -6177,7 +6357,7 @@ private class FunctionCompiler(
             val receiver = compileExpression(receiverExpression)
             val parameterType = target.parameters.single { it.kind == IrParameterKind.Regular }.type
             val value = compileExpression(valueExpression, receiverClassInstance?.substitute(parameterType) ?: parameterType)
-            emit(Instruction.FieldSet(receiver, FieldRef.Local(field.id), value))
+            emit(Instruction.FieldSet(receiver, FieldRef.Local(field.id), storedValue(value, valueExpression.type, field.type)))
             return null
         }
         (
@@ -6191,9 +6371,11 @@ private class FunctionCompiler(
                     }.singleOrNull()
                     ?: throw UnsupportedKotlinIr(call, "property getter receiver is missing")
             val receiver = compileExpression(receiverExpression)
-            return allocate(field.type).also { destination ->
-                emit(Instruction.FieldGet(destination, receiver, FieldRef.Local(field.id)))
-            }
+            val stored =
+                allocate(field.type).also { destination ->
+                    emit(Instruction.FieldGet(destination, receiver, FieldRef.Local(field.id)))
+                }
+            return loadedValue(stored, call.type, call)
         }
         throwablePropertyImport(target)?.let { field ->
             val receiverExpression =
@@ -6260,7 +6442,14 @@ private class FunctionCompiler(
                 if (argument !is IrGetObjectValue) compileStatement(argument)
                 return hashValue(loadUnitReference())
             }
-            return hashValue(compileExpression(argument), direct = call.superQualifierSymbol != null)
+            val value = compileExpression(argument)
+            val hashSource =
+                if (registerValueType(value) is ValueType.Inline) {
+                    boxValue(value, argument.type, ValueType.Ref(false, TypeRef.Imported(ImportId.of(ANY_RUNTIME_TYPE))))
+                } else {
+                    value
+                }
+            return hashValue(hashSource, direct = call.superQualifierSymbol != null)
         }
         val memberToString =
             target.parameters.none { it.kind == IrParameterKind.Regular } &&
@@ -7702,6 +7891,17 @@ private class FunctionCompiler(
                             expressions[index].type,
                             ValueType.Ref(false, TypeRef.Imported(ImportId.of(ANY_RUNTIME_TYPE))),
                         )
+                    }
+                }
+            return equalsValue(references[0], references[1])
+        }
+        if (name in setOf("EQEQ", "equals", "eqeq") && arguments.any { registerValueType(it) is ValueType.Inline }) {
+            val references =
+                arguments.mapIndexed { index, value ->
+                    if (registerValueType(value) is ValueType.Ref) {
+                        value
+                    } else {
+                        boxValue(value, expressions[index].type, ValueType.Ref(false, TypeRef.Imported(ImportId.of(ANY_RUNTIME_TYPE))))
                     }
                 }
             return equalsValue(references[0], references[1])

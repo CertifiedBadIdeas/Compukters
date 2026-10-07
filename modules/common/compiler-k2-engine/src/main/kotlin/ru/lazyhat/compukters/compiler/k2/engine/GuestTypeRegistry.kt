@@ -24,6 +24,8 @@ import org.jetbrains.kotlin.ir.types.IrSimpleType
 import org.jetbrains.kotlin.ir.types.IrType
 import org.jetbrains.kotlin.ir.types.IrTypeProjection
 import org.jetbrains.kotlin.ir.util.isNullable
+import ru.lazyhat.compukters.compiler.artifact.model.FunctionValue
+import ru.lazyhat.compukters.compiler.artifact.model.PhysicalShape
 import ru.lazyhat.compukters.compiler.artifact.model.ValueType
 
 internal class GuestTypeRegistry(
@@ -34,6 +36,20 @@ internal class GuestTypeRegistry(
     val valueClassBoxes = linkedMapOf<String, GuestValueClassBox>()
 
     fun valueClassBox(type: IrType): GuestValueClassBox? = valueClassBoxes[type.specializationTypeIdentity().removeSuffix("?")]
+
+    fun heapType(
+        source: IrType,
+        type: ValueType,
+    ): ValueType = if (type is ValueType.Inline) ValueType.Ref(false, requireNotNull(valueClassBox(source)).type) else type
+
+    fun inlineComponents(type: ValueType.Inline): List<ValueType> = valueClassBoxes.values.single { it.inlineType == type }.componentTypes
+
+    fun functionValue(type: ValueType): FunctionValue =
+        if (type is ValueType.Inline) {
+            FunctionValue(type, PhysicalShape(inlineComponents(type).flatMap { FunctionValue.scalar(it).physicalShape.components }))
+        } else {
+            FunctionValue.scalar(type)
+        }
 
     private var referenceArrays: Map<String, ValueType.Ref> = emptyMap()
 
