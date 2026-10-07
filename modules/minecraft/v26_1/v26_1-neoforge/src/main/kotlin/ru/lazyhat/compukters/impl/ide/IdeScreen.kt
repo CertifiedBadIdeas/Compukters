@@ -531,6 +531,9 @@ internal class IdeScreen(
             analysis?.parameterInfo != null,
             gitVisible = (state.page as? IdePageState.Workspace)?.value?.git?.visible == true,
             gitScrollMaximum = pointerContext(geometry()).gitScrollMaximum,
+            gitFieldFocusScroll = pointerContext(geometry()).gitFieldFocusScroll,
+            gitDraft = (state.page as? IdePageState.Workspace)?.value?.git?.draft,
+            gitMenu = (state.page as? IdePageState.Workspace)?.value?.git?.menu,
             findVisible = editor?.find != null,
             usagesFocused = (state.page as? IdePageState.Workspace)?.value?.usages?.focused == true,
             findFocused = editor?.find?.focused == true,
@@ -569,6 +572,10 @@ internal class IdeScreen(
                     editor = (page.value.editor as? IdeEditorView.Text).takeUnless { page.value.git.visible },
                     gitVisible = page.value.git.visible,
                     gitScrollMaximum = model.gitScrollMaximum ?: 0,
+                    gitDraft = page.value.git.draft,
+                    gitPreviewScrollMaximum = model.gitPreviewScrollMaximum ?: 0,
+                    gitPreviewBounds = model.gitPreviewBounds,
+                    gitFieldFocusScroll = model.gitFieldFocusScroll,
                     usages = page.value.usages,
                     projects = page.value.projects,
                     tree = page.value.tree.flatten(),
@@ -614,18 +621,21 @@ internal class IdeScreen(
             }
 
             IdeHitAction.GitRemote -> {
+                application.controller.dispatch(IdeCommand.GitMenu(null))
                 prompt.open(IdePromptKind.GitRemoteUrl)
             }
 
             IdeHitAction.GitBranch -> {
+                application.controller.dispatch(IdeCommand.GitMenu(null))
                 prompt.open(IdePromptKind.GitBranch)
             }
 
             IdeHitAction.GitCommit -> {
-                prompt.open(IdePromptKind.GitCommitMessage)
+                application.controller.dispatch(IdeCommand.GitCommitDraft())
             }
 
             IdeHitAction.GitAuthenticate -> {
+                application.controller.dispatch(IdeCommand.GitMenu(null))
                 projectSwitcherOpen = false
                 prompt.open(IdePromptKind.GitUsername)
             }

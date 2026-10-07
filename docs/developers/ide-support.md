@@ -34,8 +34,9 @@ physical paths are bounded`.
 **Status:** Implemented; in-client visual observation pending for [#703](https://github.com/CertifiedBadIdeas/Compukters/issues/703).
 
 Create, clone HTTPS repositories, open existing project directories in place and switch projects. The Git panel
-provides status, staged/working diff, stage/unstage, commit/history, local branches, fetch, fast-forward-only pull and
-push. Private repository credentials are masked and session-only. Save barriers and generation checks protect open
+provides status, colored HEAD-to-working preview, checkbox-selected commits and editable commit/author fields,
+Changes/Log tabs, branch/repository menus, fetch, fast-forward-only pull and push. Private repository credentials are
+masked and session-only. Save barriers and generation checks protect open
 buffers; tree/analysis refresh follows working-tree updates. File/folder rename rebases open descendant paths.
 `.git` is excluded from project content and compiler snapshots. SSH, merge, submodules, LFS and linked worktrees are deferred.
 

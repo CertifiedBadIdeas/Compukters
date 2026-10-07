@@ -64,6 +64,7 @@ sealed interface IdeCommand {
 
     data class GitFocusField(
         val field: ru.lazyhat.compukters.ide.client.git.IdeGitField?,
+        val scroll: Int? = null,
     ) : IdeCommand
 
     data class EditGitDraft(
@@ -77,6 +78,7 @@ sealed interface IdeCommand {
     data class ScrollGit(
         val lines: Int,
         val maximum: Int = 1_000_000,
+        val area: IdeGitScrollArea = IdeGitScrollArea.Content,
     ) : IdeCommand
 
     data class SetGitCredentials(

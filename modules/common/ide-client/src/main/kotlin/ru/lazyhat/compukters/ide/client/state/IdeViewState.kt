@@ -124,10 +124,13 @@ enum class IdeGitTab { Changes, Diff, Log }
 
 enum class IdeGitMenu { Branches, Repository }
 
+enum class IdeGitScrollArea { Content, Preview }
+
 data class IdeGitView(
     val visible: Boolean = false,
     val result: GitResult? = null,
     val scroll: Int = 0,
+    val previewScroll: Int = 0,
     val authenticated: Boolean = false,
     val tab: IdeGitTab = IdeGitTab.Changes,
     val checkedPaths: Set<ProjectPath> = emptySet(),

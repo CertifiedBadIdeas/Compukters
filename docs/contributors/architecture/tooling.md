@@ -164,8 +164,9 @@ renames rebase cached descendant paths while preserving editor state.
 Remote operations admit HTTPS URLs without embedded credentials, query or fragment. Tokens live in masked client
 session input and an explicitly closeable credential object; no credential data enters preferences, project files,
 worker snapshots or server payloads. JGit copies are cleared after each operation. Commit author identity is explicit.
-The backend commits only staged content, never force-pushes and disables commit/push hooks without saving its temporary
-hook-path override. Linked worktrees, submodule/LFS integration, SSH and merge UI are deferred.
+The UI commits selected saved working files, preserving unrelated staged content. The backend never force-pushes and
+disables commit/push hooks without saving its temporary hook-path override. Linked worktrees, submodule/LFS integration,
+SSH and merge UI are deferred.
 
 Pull uses JGit `FF_ONLY` with rebase disabled and requires a clean working tree. Divergence preserves local HEAD,
 index and working files; tests exercise that exact failure boundary. Cancellation and a 60-second transport/progress
@@ -178,3 +179,11 @@ JavaEWAH and Commons Codec into the private vendor namespace and retain their li
 provided. Both archive gates load and exercise the relocated Git/resource runtime. Behavioral evidence lives in
 `JGitBackendTest`, `GitWorkspaceIntegrationTest`, catalog/compiler/controller tests and shared prompt/input/renderer
 tests. In-client layout and interaction still require an observed scenario under the verification policy.
+
+The Git UI owns session-local checkbox selection and bounded commit/author drafts. It uses `CommitSelected` to commit
+current saved working files for exactly the selected changed paths, with JGit's path-only commit preserving unrelated
+index entries. New selected files are admitted to the index first; failed operations can change selected index entries
+but never implicitly commit unrelated staged content. Preview compares HEAD with the working tree, including an unborn
+HEAD. The draft survives a commit failure and its message clears only on success. Author fields remain in the IDE session;
+project changes clear message/selection. Commit & Push submits push only after the matching successful commit reply.
+Draft editing reuses `EditorDocument`, and controller ownership/save barriers/generation checks remain authoritative.
