@@ -23,7 +23,8 @@ listed in [Kotlin support](developers/kotlin-support.md) and [standard library s
   iteration under ordinary VM heap and instruction budgets. Maps expose live key/value/entry views;
   value-class keys retain nominal value equality, including multi-field layouts. `Pair`/`to`, direct
   `mapOf`/`mutableMapOf`/`setOf`/`mutableSetOf` factories and inline `getOrPut` simplify construction and
-  defaults. Structural collection equality and type-argument widening remain outside this subset.
+  defaults; a runnable inventory-report example demonstrates stock totals and thresholds.
+  Structural collection equality and type-argument widening remain outside this subset.
 
 - All twelve primitive types are supported: `Boolean`, `Char`, `Byte`, `Short`, `Int`, `Long`, `Float`, `Double`,
   `UByte`, `UShort`, `UInt` and `ULong`. Applicable arithmetic, comparisons, conversions, increment/decrement,
