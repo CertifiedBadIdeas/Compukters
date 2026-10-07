@@ -25,6 +25,7 @@ import ru.lazyhat.compukters.api.addon.ProgramAddonHost
 import ru.lazyhat.compukters.api.addon.ProgramAddonRequest
 import ru.lazyhat.compukters.core.device.computer.ActorProgramComputer
 import ru.lazyhat.compukters.core.device.runtime.program.ProgramDeploymentCandidate
+import ru.lazyhat.compukters.core.device.runtime.program.ProgramHostCheckpoint
 import ru.lazyhat.compukters.core.device.runtime.program.ProgramResourceSnapshot
 import ru.lazyhat.compukters.core.device.runtime.program.ProgramRuntimeHost
 import ru.lazyhat.compukters.core.device.runtime.program.ProgramRuntimeState
@@ -78,6 +79,87 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class ProgramRuntimeActorProcessorTest {
+    @Test
+    fun `hibernation drains acknowledged output without pumping and never replays it`() {
+        val session = RecordingSession().apply { retiredPerAdvance = 1 }
+        val port = ActorRedstoneHostPort()
+        val host =
+            ProgramRuntimeHost(
+                object : ProgramVmSessionFactory {
+                    override fun open(artifact: ByteArray) = session
+
+                    override fun boot() = session
+                },
+                redstoneHostPort = port,
+            )
+        val endpoint = VmActorEndpoint(ComputerId.fromLongs(171, 172), 1)
+        ProgramRuntimeActorService(schedulerConfig(), perComputerEntitlement = 1, safeInstructionCapacity = 1).use { service ->
+            var commits = 0
+            val carrier =
+                ActorProgramComputer(service, requireNotNull(service.attach(endpoint, host, port)), {
+                    commits++
+                    RedstoneCommitResult.Committed
+                })
+            carrier.turnOn()
+            awaitQueuedResult(service)
+            service.pump(1)
+            session.nextOutcome = VmOutcome.HostRequestBatch(listOf(VmHostRequest(1, REDSTONE, 6, listOf(VmValue.I32(2), VmValue.I32(7)))))
+            carrier.serverTick(1)
+            awaitQueuedResult(service)
+            service.pump(1)
+            assertEquals(1, commits)
+            val closed = carrier.hibernateAsync(1, byteArrayOf(9))
+            assertEquals(7L, closed.get(TIMEOUT_SECONDS, TimeUnit.SECONDS))
+            assertEquals(listOf<HostResponse>(HostResponse.UnitSuccess), session.responses)
+            val saved = ProgramHostCheckpoint.decode(requireNotNull(session.capturedCheckpoint))
+            assertEquals(RedstoneWire.replaceOutput(0, 2, 7), saved.confirmedRedstoneOutput)
+            assertContentEquals(byteArrayOf(9), saved.addonState)
+            assertEquals(1, session.closeCalls)
+            service.pump(32)
+            assertEquals(1, commits)
+            assertEquals(ProgramRuntimeState.Closed, carrier.state)
+        }
+    }
+
+    @Test
+    fun `undelivered world mutation is failed before checkpoint and cannot run after unload`() {
+        val session = RecordingSession()
+        val port = ActorRedstoneHostPort()
+        val host =
+            ProgramRuntimeHost(
+                object : ProgramVmSessionFactory {
+                    override fun open(artifact: ByteArray) = session
+
+                    override fun boot() = session
+                },
+                redstoneHostPort = port,
+            )
+        val endpoint = VmActorEndpoint(ComputerId.fromLongs(173, 174), 1)
+        ProgramRuntimeActorService(schedulerConfig()).use { service ->
+            var commits = 0
+            val carrier =
+                ActorProgramComputer(service, requireNotNull(service.attach(endpoint, host, port)), {
+                    commits++
+                    RedstoneCommitResult.Committed
+                })
+            carrier.turnOn()
+            awaitQueuedResult(service)
+            service.pump(1)
+            session.nextOutcome = VmOutcome.HostRequestBatch(listOf(VmHostRequest(1, REDSTONE, 6, listOf(VmValue.I32(2), VmValue.I32(7)))))
+            carrier.serverTick(1)
+            awaitQueuedResult(service)
+            assertEquals(0, commits)
+            val closed = carrier.hibernateAsync(1, byteArrayOf())
+            assertEquals(7L, closed.get(TIMEOUT_SECONDS, TimeUnit.SECONDS))
+            assertEquals(1, session.responses.size)
+            assertIs<HostResponse.Failure>(session.responses.single())
+            assertEquals(0, ProgramHostCheckpoint.decode(requireNotNull(session.capturedCheckpoint)).confirmedRedstoneOutput)
+            service.pump(32)
+            assertEquals(0, commits)
+            assertEquals(1, session.closeCalls)
+        }
+    }
+
     @Test
     fun `late reply refunds only its old frame and cannot continue in a new frame`() {
         val session =
@@ -1171,6 +1253,14 @@ class ProgramRuntimeActorProcessorTest {
         var verifiedArtifact: ByteArray? = null
         var canonicalLine: String? = null
         var closeCalls = 0
+        var capturedCheckpoint: ByteArray? = null
+
+        override fun checkpoint(hostState: ByteArray) =
+            record("checkpoint") {
+                check(closeCalls == 0)
+                capturedCheckpoint = hostState.copyOf()
+            }
+
         var nextOutcome: VmOutcome = VmOutcome.SliceExhausted
         var fallbackOutcome: VmOutcome = VmOutcome.SliceExhausted
         var retiredPerAdvance = 0L

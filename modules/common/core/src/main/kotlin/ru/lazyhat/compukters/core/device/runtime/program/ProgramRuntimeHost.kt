@@ -130,12 +130,28 @@ class ProgramRuntimeHost internal constructor(
 
     fun startBoot(): ProgramStartResult = startSession(sessionFactory::boot)
 
+    /** Accepted completions have drained; remaining requests have no acknowledged world result. */
+    internal fun settleExternalRequestsForHibernation() {
+        val active = session ?: return
+        val detail = "Computer hibernated before the external request completed"
+        pendingRedstoneCommit?.let {
+            check(completeRedstoneOutput(it.packed, RedstoneCommitResult.Failed(HostFailureKind.UNAVAILABLE, detail)))
+        }
+        pendingSoundCommit?.let {
+            check(completeSound(SoundCommitResult.Failed(HostFailureKind.UNAVAILABLE, detail)))
+        }
+        pendingAddonRequests.keys.toList().forEach { identity ->
+            check(completeAddon(ProgramAddonCompletion(identity, HostResponse.Failure(HostFailureKind.UNAVAILABLE, detail))))
+        }
+        check(session === active) { "external settlement failed before checkpoint publication" }
+    }
+
     /** The actor must stop advancement and settle all accepted world actions first. */
     internal fun hibernate(
         worldTick: Long,
         addonState: ByteArray,
     ): Boolean {
-        require(worldTick >= 0 && worldTick >= lastObservedTick)
+        require(worldTick >= 0)
         check(preparedRestoration == null) { "cannot capture an unfinished restoration" }
         check(pendingRedstoneCommit == null && pendingSoundCommit == null && pendingAddonRequests.isEmpty()) {
             "external requests must be settled before hibernation"
@@ -149,7 +165,15 @@ class ProgramRuntimeHost internal constructor(
                 programScopes.toList(),
                 pendingTimerRequests.values.map { timer ->
                     val duration = (timer.request.arguments.single() as VmValue.I32).value
-                    ProgramTimerCheckpoint(timer.request.identity, timer.programId, duration, maxOf(0, timer.wakeTick - worldTick))
+                    ProgramTimerCheckpoint(
+                        timer.request.identity,
+                        timer.programId,
+                        duration,
+                        maxOf(
+                            0,
+                            timer.wakeTick - maxOf(worldTick, lastObservedTick),
+                        ),
+                    )
                 },
                 addonState.copyOf(),
             )

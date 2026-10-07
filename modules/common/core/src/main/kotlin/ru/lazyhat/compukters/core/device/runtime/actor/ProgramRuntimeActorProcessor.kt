@@ -46,6 +46,13 @@ internal class ProgramRuntimeActorProcessor(
     private var pendingSoundRequest: ProgramRuntimeRequestId? = null
     val closed = CompletableFuture<Long?>()
     private var lastFileSystemGeneration: Long? = null
+    private val hibernation =
+        java.util.concurrent.atomic
+            .AtomicReference<ProgramActorHibernation?>()
+
+    fun prepareHibernation(request: ProgramActorHibernation) {
+        check(hibernation.compareAndSet(null, request)) { "hibernation already requested" }
+    }
 
     override fun process(command: ProgramRuntimeActorMessage): ProgramRuntimeActorReply? =
         when (command) {
@@ -294,6 +301,31 @@ internal class ProgramRuntimeActorProcessor(
         try {
             val generation =
                 try {
+                    hibernation.get()?.let { request ->
+                        request.effects.forEach { effect ->
+                            when (effect) {
+                                is ProgramRuntimeActorEffect.CompleteAddons -> {
+                                    effect.completions.forEach { host.completeAddon(it) }
+                                }
+
+                                is ProgramRuntimeActorEffect.CompleteRedstoneOutput -> {
+                                    if (pendingRedstoneRequest == effect.outputRequestId) execute(effect)
+                                }
+
+                                is ProgramRuntimeActorEffect.CompleteSound -> {
+                                    if (pendingSoundRequest == effect.soundRequestId) execute(effect)
+                                }
+
+                                is ProgramRuntimeActorEffect.RedstoneInput -> {
+                                    error("invalid final world effect")
+                                }
+                            }
+                        }
+                        host.settleExternalRequestsForHibernation()
+                        addonPort?.clear()
+                        discardAllCandidates()
+                        host.hibernate(request.worldTick, request.addonState)
+                    }
                     captureGeneration()
                     lastFileSystemGeneration
                 } finally {

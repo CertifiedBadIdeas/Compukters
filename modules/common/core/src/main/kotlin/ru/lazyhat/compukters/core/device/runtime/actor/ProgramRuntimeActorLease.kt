@@ -24,8 +24,35 @@ import java.util.concurrent.CompletableFuture
 class ProgramRuntimeActorLease internal constructor(
     val endpoint: VmActorEndpoint,
     private val closed: CompletableFuture<Long?>,
+    private val prepareHibernation: (ProgramActorHibernation) -> Unit,
     private val unregister: () -> CompletableFuture<Boolean>,
 ) {
+    private var closing: CompletableFuture<Long?>? = null
+
     /** Does not require server result pumping; callbacks may execute on the closing worker. */
-    fun closeAsync(): CompletableFuture<Long?> = unregister().thenCompose { closed }.copy()
+    fun closeAsync(): CompletableFuture<Long?> = finishClose(null)
+
+    internal fun hibernateAsync(request: ProgramActorHibernation): CompletableFuture<Long?> = finishClose(request)
+
+    @Synchronized
+    private fun finishClose(request: ProgramActorHibernation?): CompletableFuture<Long?> {
+        closing?.let { return it.copy() }
+        if (request != null) prepareHibernation(request)
+        return unregister().thenCompose { closed }.also { closing = it }.copy()
+    }
+}
+
+internal class ProgramActorHibernation(
+    val worldTick: Long,
+    addonState: ByteArray,
+    effects: List<ProgramRuntimeActorEffect>,
+) {
+    val addonState = addonState.copyOf()
+    val effects = effects.toList()
+
+    init {
+        require(worldTick >= 0 && this.addonState.size <= 1024 * 1024)
+        require(this.effects.size <= 3)
+        require(this.effects.none { it is ProgramRuntimeActorEffect.RedstoneInput })
+    }
 }

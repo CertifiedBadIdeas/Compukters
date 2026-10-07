@@ -22,6 +22,7 @@ import ru.lazyhat.compukters.api.addon.ProgramAddonAction
 import ru.lazyhat.compukters.api.addon.ProgramAddonCompletion
 import ru.lazyhat.compukters.api.addon.ProgramAddonDispatch
 import ru.lazyhat.compukters.api.addon.ProgramAddonHost
+import ru.lazyhat.compukters.core.device.runtime.actor.ProgramActorHibernation
 import ru.lazyhat.compukters.core.device.runtime.actor.ProgramRuntimeActorCommand
 import ru.lazyhat.compukters.core.device.runtime.actor.ProgramRuntimeActorEffect
 import ru.lazyhat.compukters.core.device.runtime.actor.ProgramRuntimeActorLease
@@ -197,6 +198,36 @@ class ActorProgramComputer(
                 submitTurn(worldTick, continuation = true)
             }
         }
+    }
+
+    /** Final acknowledged world results enter the worker before capture; undelivered requests are cancelled. */
+    fun hibernateAsync(
+        worldTick: Long,
+        addonState: ByteArray,
+    ): CompletableFuture<Long?> {
+        checkOwner()
+        require(worldTick >= 0)
+        closeResult?.let { return it.copy() }
+        collectAddonCompletions()
+        val effects =
+            buildList {
+                pendingOutput?.let { add(ProgramRuntimeActorEffect.CompleteRedstoneOutput(it.requestId, it.packed, it.result)) }
+                pendingSound?.let { add(ProgramRuntimeActorEffect.CompleteSound(it.requestId, it.result)) }
+                if (pendingAddonCompletions.isNotEmpty()) add(ProgramRuntimeActorEffect.CompleteAddons(pendingAddonCompletions.toList()))
+            }
+        val request = ProgramActorHibernation(worldTick, addonState, effects)
+        lifecycle++
+        pendingOutput = null
+        pendingSound = null
+        pendingRedstoneInputs.clear()
+        pendingAddonCompletions.clear()
+        outstandingAddonRequests.clear()
+        hostCompletionTick = null
+        val result = lease.hibernateAsync(request)
+        closeResult = result
+        addon.close()
+        publish(ProgramRuntimeState.Closed)
+        return result.copy()
     }
 
     /** The future completes after accepted work drains and native resources close, without requiring result pumping. */
