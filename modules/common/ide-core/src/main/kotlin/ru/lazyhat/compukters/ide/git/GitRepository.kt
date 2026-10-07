@@ -76,9 +76,10 @@ data class GitLimits(
     val diffBytes: Int = 256 * 1024,
     val repositoryBytes: Long = 512L * 1024 * 1024,
     val timeoutSeconds: Int = 60,
+    val repositoryEntries: Int = 100_000,
 ) {
     init {
-        require(files > 0 && history > 0 && diffBytes > 0 && repositoryBytes > 0 && timeoutSeconds > 0)
+        require(files > 0 && history > 0 && diffBytes > 0 && repositoryBytes > 0 && timeoutSeconds > 0 && repositoryEntries > 0)
     }
 }
 
