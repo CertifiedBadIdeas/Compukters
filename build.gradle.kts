@@ -807,6 +807,22 @@ registerKotlinVmConformance(
     conformanceScenario = "filter-not-null",
 )
 registerKotlinVmConformance(
+    taskName = "testKotlinHashCollectionsVmConformance",
+    taskDescription = "Executes bounded Guest hash maps and sets with the pinned Compukter VM.",
+    artifactTask = ":compiler-k2:generateHashCollectionsConformanceArtifact",
+    artifact = project(":compiler-k2").layout.buildDirectory.file("generated/conformance/kotlin-hash-collections.cpkt"),
+    cargoTargetDirectory = ".toolchain/build/cargo/compiler-k2-hash-collections-conformance",
+    artifactEnvironmentVariable = "COMPUKTER_KOTLIN_HASH_COLLECTIONS_ARTIFACT",
+    conformanceScenario = "hash-collections",
+    additionalArtifacts = mapOf(
+        "COMPUKTER_KOTLIN_HASH_VALUES_ARTIFACT" to project(":compiler-k2").layout.buildDirectory.file("generated/conformance/kotlin-hash-collections.cpkt.values.cpkt"),
+        "COMPUKTER_KOTLIN_HASH_PRIMITIVES_ARTIFACT" to project(":compiler-k2").layout.buildDirectory.file("generated/conformance/kotlin-hash-collections.cpkt.primitives.cpkt"),
+        "COMPUKTER_KOTLIN_HASH_FAILURE_ARTIFACT" to project(":compiler-k2").layout.buildDirectory.file("generated/conformance/kotlin-hash-collections.cpkt.failure.cpkt"),
+    ) + (0..5).associate { batch ->
+        "COMPUKTER_KOTLIN_HASH_SCALARS_$batch" to project(":compiler-k2").layout.buildDirectory.file("generated/conformance/hash-scalars-$batch.cpkt")
+    },
+)
+registerKotlinVmConformance(
     taskName = "testKotlinMutableListVmConformance",
     taskDescription = "Executes mutable ArrayList with the pinned Compukter VM.",
     artifactTask = ":compiler-k2:generateMutableListConformanceArtifact",
