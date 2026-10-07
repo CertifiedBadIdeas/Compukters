@@ -128,6 +128,7 @@ supported.
 
 - [x] **`Byte` and `Short` scalar values** — literals, signed widening arithmetic and comparisons,
   conversions, unary plus/minus and increment/decrement use normalized 8-bit and 16-bit values.
+  `kotlin.experimental.and/or/xor/inv` preserve the signed source width.
   Overflow wraps to the source width. Nominal boxes retain the distinction from `Int` through
   nullable signatures, generic functions and `Any` casts. Evidence:
   `all primitive operators preserve narrow signed unsigned and nominal semantics` in
@@ -181,12 +182,13 @@ supported.
   [`tests.rs`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/host/compukter-vm/src/execution/tests.rs).
   Tracking: [#700](https://github.com/CertifiedBadIdeas/Compukters/issues/700).
 
-- [ ] **Integer arithmetic — Partial** — `Int` and `Long` support `+`, `-`, `*`,
+- [x] **Integer arithmetic** — `Int` and `Long` support `+`, `-`, `*`,
   `/`, `%`, unary minus, `and`, `or`, `xor`, `inv`, `shl`, `shr`, and `ushr`
   with VM wrapping and masked-shift semantics. Arithmetic and comparisons mix
   `Int` and `Long` using Kotlin widening rules. Direct `compareTo` calls between
   `Int` and `Long` return `-1`, `0`, or `1` without subtracting the operands.
-  The narrow and unsigned families described above use the same canonical primitive model.
+  Unary plus, increment/decrement, and every Kotlin-defined narrow or unsigned overload use the same canonical primitive model.
+  Signed `Byte`/`Short` bit operations are available through `kotlin.experimental` imports; unsigned shifts are logical.
   Evidence:
   [`KotlinProjectLowering`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/compiler-k2-engine/src/main/kotlin/ru/lazyhat/compukters/compiler/k2/engine/KotlinProjectLowering.kt)
   and [`numeric.rs`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/host/compukter-vm/src/execution/numeric.rs), tests
@@ -207,11 +209,12 @@ supported.
   `testKotlinFloatVmConformance`.
   Tracking: [#620](https://github.com/CertifiedBadIdeas/Compukters/issues/620)
 
-- [ ] **Conversions — Partial** — `Int.toChar()`, `Int.toLong()`, `Long.toInt()`,
-  `Int.toFloat()`, `Long.toFloat()`, `Float.toInt()`, and `Float.toLong()` are
-  lowered, together with Double conversions to/from Int, Long and Float. Other numeric conversions remain outside the
-  source subset. Tracking: [#619](https://github.com/CertifiedBadIdeas/Compukters/issues/619),
-  [#620](https://github.com/CertifiedBadIdeas/Compukters/issues/620)
+- [x] **Primitive numeric conversions** — all signed and unsigned numeric families provide conversions to
+  their applicable primitive destinations. Narrow conversions retain the low 8/16 bits and signedness;
+  widening preserves signed or unsigned magnitude. Floating conversion to `Int`/`Long`/`UInt`/`ULong` saturates at
+  that type's range and maps NaN to zero; byte/short conversions then retain the low bits. `Char.code`, `Char.toInt`, and numeric `toChar` use UTF-16 code units.
+  Evidence: `testKotlinPrimitivesVmConformance`, `testKotlinLongVmConformance`, `testKotlinFloatVmConformance`,
+  `testKotlinDoubleVmConformance`, and native `unsigned_arithmetic_ordering_and_conversion_preserve_full_bit_ranges`.
 
 ## Expressions and control flow
 
@@ -264,15 +267,22 @@ supported.
   [`kotlin_writer.rs`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/compiler-artifact/src/test/rust/executable-conformance/kotlin_writer.rs),
   test `k2_int_loops_execute_across_quota_slices_without_host_io`.
 
-- [ ] **Other ranges, progressions, and iterable `for` loops — Partial** —
-  read-only `List<T>` iteration is supported for the element types below. Stored or materialized progressions,
-  chained `step` calls, general arrays, strings, other collections, custom iterators, ordinary
-  source `do-while`, and labeled jumps to an outer loop publish no artifact.
-  Non-loop `IntRange`, `IntProgression`, `downTo`, `step`, `until`, and `rangeUntil` calls are declaration-only and
-  are not a general executable range API. Evidence:
-  [`MinimalScriptLoweringTest`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/compiler-k2/src/test/kotlin/ru/lazyhat/compukters/compiler/worker/k2/MinimalScriptLoweringTest.kt),
-  test `unsupported loop forms publish no artifact`.
-  Tracking: not scheduled
+- [x] **Primitive ranges and progressions** — signed integral range operators widen to `IntRange` or
+  `LongRange`; unsigned operators widen to `UIntRange` or `ULongRange`. `CharRange` retains UTF-16 values.
+  `..`, `..<`, `until`, `downTo`, positive `step`, membership, stored progressions, chained steps, and iterators
+  execute as ordinary Guest library code. `ClosedRange` and `OpenEndRange` views retain their bounds and membership;
+  requesting an exclusive upper bound for a range ending at the primitive maximum raises `IllegalStateException`.
+  Aligned progression endpoints avoid overflow across the entire signed/unsigned range, and iterators stop before
+  incrementing past the final element. Empty progressions stay empty; an exhausted iterator throws `NoSuchElementException`.
+  `Float`/`Double` closed and open-end ranges support IEEE membership and empty checks, including NaN and signed zero;
+  `Boolean` closed and open-end ranges use its comparable ordering. These ranges do not define iteration.
+  Direct `Int` loops retain the allocation-free path above.
+  Evidence: `primitive ranges preserve bounds steps termination and floating membership`,
+  `allocation free Int loops lower deterministically for vm execution`, and `testKotlinIntLoopsVmConformance`.
+
+- [ ] **Remaining loop forms — Partial** — direct primitive-array and supported iterable loops execute.
+  Ordinary source `do-while`, reference-array iteration, and labeled jumps to an outer loop remain unavailable.
+  Evidence: `unsupported loop forms publish no artifact`.
 
 - [ ] **Destructuring and delegated expressions — Unsupported** — component
   calls, delegated storage, and their generated source shapes are not admitted

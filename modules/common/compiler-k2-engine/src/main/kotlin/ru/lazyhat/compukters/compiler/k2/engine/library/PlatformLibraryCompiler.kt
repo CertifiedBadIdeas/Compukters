@@ -59,6 +59,7 @@ import ru.lazyhat.compukters.compiler.k2.engine.CompilationSession
 import ru.lazyhat.compukters.compiler.k2.engine.KotlinProjectLowering
 import ru.lazyhat.compukters.compiler.k2.engine.PlatformCapabilityShape
 import ru.lazyhat.compukters.compiler.k2.engine.UnsupportedKotlinIr
+import ru.lazyhat.compukters.compiler.k2.engine.hasParameterizedSupertype
 import ru.lazyhat.compukters.compiler.k2.engine.intrinsic.PlatformCapabilityId
 import ru.lazyhat.compukters.compiler.k2.engine.intrinsic.TrustedIntrinsicRegistry
 import ru.lazyhat.compukters.platform.bundle.PlatformModule
@@ -139,7 +140,11 @@ class PlatformLibraryCompiler {
         val templateFunctions =
             collected.functions.filter { function ->
                 !function.isInline &&
-                    (function.typeParameters.isNotEmpty() || (function.parent as? IrClass)?.typeParameters?.isNotEmpty() == true)
+                    (
+                        function.typeParameters.isNotEmpty() || (function.parent as? IrClass)?.let { owner ->
+                            owner.typeParameters.isNotEmpty() || owner.hasParameterizedSupertype()
+                        } == true
+                    )
             }
         val physicalModules =
             filesByPath.entries.associate { (path, file) -> file.fileEntry.name to sourceModules.getValue(path) }

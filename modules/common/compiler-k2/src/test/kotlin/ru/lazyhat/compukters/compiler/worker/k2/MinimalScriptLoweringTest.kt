@@ -2801,18 +2801,24 @@ class MinimalScriptLoweringTest {
                 """.trimIndent()
             val result = adapter.compile(request(source))
             val bytes = assertNotNull(result.artifact, result.diagnostics.joinToString()).toByteArray()
-            val application = ArtifactReader.read(bytes).modules.single { it.kind == ModuleKind.APPLICATION }
+            val decoded = ArtifactReader.read(bytes)
+            val application = decoded.modules.single { it.kind == ModuleKind.APPLICATION }
             val intList =
                 application.types.filterIsInstance<NominalType.Class>().single { type ->
                     application.strings[type.name.value.toInt()].toString() == "kotlin.collections.ArrayList<Int>"
                 }
-            val storage =
-                application.types.filterIsInstance<NominalType.Class>().single { type ->
-                    application.strings[type.name.value.toInt()].toString() == "kotlin.collections.IntMutableListStorage"
-                }
-            val backingType = application.fields[storage.fieldStart.toInt()].type as ValueType.Ref
-            val backingImport = application.imports[((backingType.type as TypeRef.Imported).id.value).toInt()]
-            assertEquals("kotlin.IntArray", application.strings[backingImport.targetName.value.toInt()].toString())
+            val (storageModule, storage) =
+                decoded.modules
+                    .flatMap { module ->
+                        module.types
+                            .filterIsInstance<NominalType.Class>()
+                            .filter { type ->
+                                module.strings[type.name.value.toInt()].toString() == "kotlin.collections.IntMutableListStorage"
+                            }.map { module to it }
+                    }.single()
+            val backingType = storageModule.fields[storage.fieldStart.toInt()].type as ValueType.Ref
+            val backingImport = storageModule.imports[((backingType.type as TypeRef.Imported).id.value).toInt()]
+            assertEquals("kotlin.IntArray", storageModule.strings[backingImport.targetName.value.toInt()].toString())
             val intGet =
                 application.functions
                     .subList(intList.methodStart.toInt(), (intList.methodStart + intList.methodCount).toInt())
@@ -3107,7 +3113,7 @@ class MinimalScriptLoweringTest {
                             require(filtered.size == 1 && genericEqual(filtered[0], value))
                             val mapped = readonly.map { it }
                             require(mapped.size == 2 && genericEqual(mapped[1], other))
-                                    val nulls = ArrayList<T?>(0)
+                                val nulls = ArrayList<T?>(0)
                                 nulls.add(value); nulls.add(null)
                                 val nullAny: List<Any?> = nulls
                                 require(nullAny[0] == (value as Any?) && nullAny[1] == null && nulls.remove(null))
@@ -3139,15 +3145,20 @@ class MinimalScriptLoweringTest {
                     }
                 val result = adapter.compile(request(source))
                 val bytes = assertNotNull(result.artifact, result.diagnostics.joinToString()).toByteArray()
-                val application = ArtifactReader.read(bytes).modules.single { it.kind == ModuleKind.APPLICATION }
+                val decoded = ArtifactReader.read(bytes)
                 entries.forEach { (name, _, _) ->
-                    val storage =
-                        application.types.filterIsInstance<NominalType.Class>().single { type ->
-                            application.strings[type.name.value.toInt()].toString() == "kotlin.collections.${name}MutableListStorage"
-                        }
-                    val backing = application.fields[storage.fieldStart.toInt()].type as ValueType.Ref
-                    val imported = application.imports[(backing.type as TypeRef.Imported).id.value.toInt()]
-                    assertEquals("kotlin.${name}Array", application.strings[imported.targetName.value.toInt()].toString())
+                    val (storageModule, storage) =
+                        decoded.modules
+                            .flatMap { module ->
+                                module.types
+                                    .filterIsInstance<NominalType.Class>()
+                                    .filter { type ->
+                                        module.strings[type.name.value.toInt()].toString() == "kotlin.collections.${name}MutableListStorage"
+                                    }.map { module to it }
+                            }.single()
+                    val backing = storageModule.fields[storage.fieldStart.toInt()].type as ValueType.Ref
+                    val imported = storageModule.imports[(backing.type as TypeRef.Imported).id.value.toInt()]
+                    assertEquals("kotlin.${name}Array", storageModule.strings[imported.targetName.value.toInt()].toString())
                 }
                 System.getProperty("compukter.vm.mutableListArtifact")?.let { output ->
                     Path
@@ -4055,8 +4066,13 @@ class MinimalScriptLoweringTest {
             val source = "import kotlin.collections.listOf\nfun main() { val values = listOf(7); values[1] }"
             val result = adapter.compile(request(source))
             val bytes = assertNotNull(result.artifact, result.diagnostics.joinToString()).toByteArray()
-            val application = ArtifactReader.read(bytes).modules.single { it.kind == ModuleKind.APPLICATION }
-            assertTrue(application.blocks.flatMap(Block::instructions).any { it is Instruction.ArrayLoad })
+            val decoded = ArtifactReader.read(bytes)
+            assertTrue(
+                decoded.modules
+                    .flatMap { it.blocks }
+                    .flatMap(Block::instructions)
+                    .any { it is Instruction.ArrayLoad },
+            )
             System.getProperty("compukter.vm.listBoundsArtifact")?.let { output ->
                 Path.of(output).also { it.parent.createDirectories() }.writeBytes(bytes)
             }
@@ -6333,6 +6349,136 @@ class MinimalScriptLoweringTest {
         }
 
     @Test
+    fun `primitive ranges preserve bounds steps termination and floating membership`() =
+        withAdapter { adapter ->
+            val source =
+                """
+                import kotlin.ranges.*
+                import kotlin.experimental.*
+
+                fun longs() {
+                    var count = 0
+                    for (value in (Long.MAX_VALUE - 2L)..Long.MAX_VALUE) { count++; require(value >= Long.MAX_VALUE - 2L) }
+                    require(count == 3)
+                    count = 0
+                    for (value in Long.MIN_VALUE downTo Long.MIN_VALUE) { require(value == Long.MIN_VALUE); count++ }
+                    require(count == 1)
+                    count = 0
+                    for (value in Long.MIN_VALUE..Long.MAX_VALUE step Long.MAX_VALUE) {
+                        require(value == if (count == 0) Long.MIN_VALUE else if (count == 1) -1L else Long.MAX_VALUE - 1L)
+                        count++
+                    }
+                    require(count == 3)
+                    count = 0
+                    for (value in Long.MAX_VALUE downTo Long.MIN_VALUE step Long.MAX_VALUE) {
+                        require(value == if (count == 0) Long.MAX_VALUE else if (count == 1) 0L else -Long.MAX_VALUE)
+                        count++
+                    }
+                    require(count == 3)
+                    for (value in 0L until Long.MIN_VALUE) require(false)
+                    var sum = 0L
+                    for (value in 1L..<6L step 2L) { if (value == 3L) continue; sum += value }
+                    require(sum == 6L)
+                    val range = 1L..4L
+                    require(2L in range && !(5L in range))
+                    val closedView: ClosedRange<Long> = range
+                    val openView: OpenEndRange<Long> = range
+                    require(closedView.start == 1L && closedView.endInclusive == 4L && 3L in closedView)
+                    require(openView.endExclusive == 5L && !openView.isEmpty())
+                    try { (1L..Long.MAX_VALUE).endExclusive; require(false) } catch (failure: IllegalStateException) {}
+                    val iterator = (1L..1L).iterator()
+                    require(iterator.next() == 1L && !iterator.hasNext())
+                    try { iterator.next(); require(false) } catch (failure: NoSuchElementException) {}
+                }
+                fun unsigned() {
+                    var count = 0
+                    for (value in (UInt.MAX_VALUE - 2u)..UInt.MAX_VALUE) { count++; require(value >= UInt.MAX_VALUE - 2u) }
+                    require(count == 3)
+                    count = 0
+                    for (value in 0u..UInt.MAX_VALUE step Int.MAX_VALUE) {
+                        require(value == if (count == 0) 0u else if (count == 1) 2147483647u else UInt.MAX_VALUE - 1u)
+                        count++
+                    }
+                    require(count == 3)
+                    count = 0
+                    for (value in UInt.MAX_VALUE downTo 0u step Int.MAX_VALUE) { count++ }
+                    require(count == 3)
+                    count = 0
+                    for (value in (ULong.MAX_VALUE - 2uL)..ULong.MAX_VALUE) { count++; require(value >= ULong.MAX_VALUE - 2uL) }
+                    require(count == 3)
+                    count = 0
+                    for (value in 0uL..ULong.MAX_VALUE step Long.MAX_VALUE) {
+                        require(value == if (count == 0) 0uL else if (count == 1) 9223372036854775807uL else ULong.MAX_VALUE - 1uL)
+                        count++
+                    }
+                    require(count == 3)
+                    count = 0
+                    for (value in 0uL downTo 0uL) { require(value == 0uL); count++ }
+                    require(count == 1)
+                    for (value in 1u until 0u) require(false)
+                    for (value in 1uL..<0uL) require(false)
+                    require(UInt.MAX_VALUE in (0u..UInt.MAX_VALUE))
+                    require(ULong.MAX_VALUE in (0uL..ULong.MAX_VALUE))
+                }
+                fun charactersAndNarrow() {
+                    var count = 0
+                    for (value in (Char.MAX_VALUE - 2)..Char.MAX_VALUE) { count++ }
+                    require(count == 3)
+                    count = 0
+                    for (value in Char.MIN_VALUE..Char.MAX_VALUE step 32767) { count++ }
+                    require(count == 3)
+                    for (value in 'a' until Char.MIN_VALUE) require(false)
+                    var text = ""
+                    for (value in 'd' downTo 'a' step 2) text += value
+                    require(text == "db")
+                    var sum = 0
+                    for (value in 1.toByte()..3.toShort()) sum += value
+                    require(sum == 6)
+                    var wide = 0L
+                    for (value in 1.toShort()..3L) wide += value
+                    require(wide == 6L)
+                    var narrowUnsigned = 0u
+                    for (value in 1u.toUByte()..3u.toUShort()) narrowUnsigned += value
+                    require(narrowUnsigned == 6u)
+                    require('b' in ('a'..'c'))
+                    require(127.toByte().inv() == (-128).toByte())
+                    require((240.toByte() and 15.toByte()) == 0.toByte())
+                    require((1.toShort() or 2.toShort()) == 3.toShort())
+                    require((3.toShort() xor 1.toShort()) == 2.toShort())
+                }
+                fun storedAndFloating() {
+                    val stored = (10..20 step 4) step 3
+                    require(stored.first == 10 && stored.last == 16 && stored.step == 3)
+                    var count = 0
+                    for (value in stored) count++
+                    require(count == 3)
+                    val backwards = 3 downTo 1
+                    var sum = 0
+                    for (value in backwards) sum += value
+                    require(sum == 6)
+                    try { (1L..3L) step 0L; require(false) } catch (failure: IllegalArgumentException) {}
+                    try { (0u..3u) step -1; require(false) } catch (failure: IllegalArgumentException) {}
+                    try { LongProgression(0L, 1L, Long.MIN_VALUE); require(false) } catch (failure: IllegalArgumentException) {}
+                    val booleans = false..true
+                    require(false in booleans && true in booleans && !(true in (false..<true)))
+                    require((true..false).isEmpty() && (true..<true).isEmpty())
+                    val closed = 0.0..1.0
+                    require(0.5 in closed && 1.0 in closed && !(Double.NaN in closed))
+                    require((Double.NaN..1.0).isEmpty())
+                    val open = 0.0f..<1.0f
+                    require(0.5f in open && !(1.0f in open) && !(Float.NaN in open))
+                    require((-0.0f..0.0f).contains(0.0f))
+                }
+                fun main() { longs(); unsigned(); charactersAndNarrow(); storedAndFloating() }
+                """.trimIndent()
+            val result = adapter.compile(request(source))
+            val bytes = assertNotNull(result.artifact, result.diagnostics.joinToString()).toByteArray()
+            System.getProperty("compukter.vm.intLoopsArtifact")?.let { output ->
+                Path.of("$output.ranges.cpkt").also { it.parent.createDirectories() }.writeBytes(bytes)
+            }
+        }
+
+    @Test
     fun `allocation free Int loops lower deterministically for vm execution`() =
         withAdapter { adapter ->
             val source =
@@ -6470,8 +6616,6 @@ class MinimalScriptLoweringTest {
     fun `unsupported loop forms publish no artifact`() =
         withAdapter { adapter ->
             listOf(
-                "fun main() { val values = 3 downTo 1; for (value in values) { value + 1 } }",
-                "fun main() { for (value in (1..5 step 2) step 3) { value + 1 } }",
                 "fun main() { for (value in arrayOf(1)) { value + 1 } }",
                 "fun main() { var value = 0; do { value = value + 1 } while (value < 2) }",
             ).forEach { source ->

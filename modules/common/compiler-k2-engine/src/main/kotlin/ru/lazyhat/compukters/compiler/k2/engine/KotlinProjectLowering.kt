@@ -1307,7 +1307,7 @@ internal object KotlinProjectLowering {
         session.recordPlatformSpecializations(
             classInstances
                 .filter { instance ->
-                    instance.arguments.isNotEmpty() &&
+                    (instance.arguments.isNotEmpty() || instance.declaration.hasParameterizedSupertype()) &&
                         (
                             instance.declaration.fqNameWhenAvailable?.asString() in specializedCollectionInterfaces ||
                                 session.trustedPlatformModule(instance.declaration.file.fileEntry.name) != null ||
@@ -3709,7 +3709,10 @@ internal object KotlinProjectLowering {
         if (loweredParameters(function, session).any { !isSupported(it.type) } ||
             !isSupported(function.returnType)
         ) {
-            throw UnsupportedKotlinIr(function, "unsupported function signature")
+            throw UnsupportedKotlinIr(
+                function,
+                "unsupported function signature ${function.fqNameWhenAvailable}: ${function.canonicalPlatformSignature()}",
+            )
         }
     }
 
@@ -7971,8 +7974,10 @@ private class FunctionCompiler(
             setOf("kotlin.collections.Iterable.iterator", "kotlin.collections.List.iterator")
         ) {
             block.statements.forEach(::compileStatement)
-        } else {
+        } else if (intForLoopPlan(block) != null) {
             compileIntForLoop(block)
+        } else {
+            block.statements.forEach(::compileStatement)
         }
     }
 
@@ -8132,7 +8137,7 @@ private class FunctionCompiler(
         val bounds = rangeCall.arguments.filterNotNull()
         if (bounds.size != 2 || bounds.any { it.type != intType }) return null
 
-        val canonical = canonicalIntForLoopBody(block, iterator) ?: return null
+        val canonical = canonicalIntForLoopBody(block, iterator, iteratorName = "Iterator") ?: return null
         return IntForLoopPlan(canonical.loop, canonical.loopVariable, bounds[0], bounds[1], inclusive, descending, step, canonical.body)
     }
 
