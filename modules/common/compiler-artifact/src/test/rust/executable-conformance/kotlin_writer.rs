@@ -1219,6 +1219,11 @@ fn k2_int_list_covariance_boxes_universal_reads() {
 }
 
 fn k2_mutable_list_preserves_growth_mutation_and_views() {
+    let primitive_path = std::env::var("COMPUKTER_KOTLIN_MUTABLE_LIST_ARTIFACT").expect("mutable list artifact must be set");
+    for batch in 0..4 {
+        execute_primitive_program(std::path::Path::new(&primitive_path).with_file_name(format!("primitive-lists-{batch}.cpkt")));
+    }
+
     k2_expected_prints_with_budget(
         "COMPUKTER_KOTLIN_MUTABLE_LIST_ARTIFACT",
         ["mutable list ok\n"],
@@ -2671,6 +2676,10 @@ fn k2_peripheral_queries() {
 
 fn k2_primitives_preserve_numeric_boundaries_and_nominal_types() {
     let path = std::env::var("COMPUKTER_KOTLIN_PRIMITIVES_ARTIFACT").expect("primitive artifact must be configured");
+    execute_primitive_program(std::path::Path::new(&path));
+}
+
+fn execute_primitive_program(path: impl AsRef<std::path::Path>) {
     let verified = verify_artifact(Arc::from(fs::read(path).expect("primitive artifact must exist")), ArtifactLimits::default())
         .expect("primitive artifact must verify");
     let mut session = Session::admit(verified.clone(), list_no_io_profile(), &[]).expect("primitive program must admit");

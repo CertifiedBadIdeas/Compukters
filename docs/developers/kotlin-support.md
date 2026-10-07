@@ -362,8 +362,7 @@ supported.
   Generic classes extending a class other than `Any` remain rejected. Evidence:
   `canonical peripheral companion specializes shared typed queries`, executed by `testKotlinPeripheralQueriesVmConformance`.
   Contravariance, reified parameters, generic
-  value classes, generic methods declaring their own type parameters, and automatic primitive-list `Any` boxing bridges
-  beyond `List<Int>` remain outside the subset. Direct `Any` values use the supported scalar boxes described above. Expansion is
+  value classes and generic methods declaring their own type parameters remain outside the subset. Direct `Any` values use the supported scalar boxes described above. Expansion is
   bounded to 256 function and 256 class variants per compilation. Binary
   generic library templates and runtime instantiation are absent. Evidence:
   [`MinimalScriptLoweringTest`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/compiler-k2/src/test/kotlin/ru/lazyhat/compukters/compiler/worker/k2/MinimalScriptLoweringTest.kt),
@@ -936,7 +935,7 @@ supported.
   executed by `testKotlinFoldVmConformance` with bounded slices.
 
 - [ ] **Read-only `Collection<T>` and `List<T>` — Partial** — direct `listOf(...)`, `listOf<T>()`, and `emptyList<T>()`
-  support `Int`, `String`, supported scalar value classes and supported Guest class references, including nullable elements. `size`, indexed `get`,
+  support all twelve primitives, `String`, supported scalar value classes and supported Guest class references, including nullable elements. `size`, indexed `get`,
   and ordinary `for` iteration execute
   through specialized `ArrayList<T>` instances. Factories create fresh lists with capacity equal to their element count;
   the `List<T>` view can be cast to `MutableList<T>` or `ArrayList<T>` to change the same object. `List<Int>` stores and
@@ -954,8 +953,7 @@ supported.
   `List<Int?>` stores managed Int boxes or null. Nullable lists widen to `List<Any?>` without copying; reads and
   searches preserve null and use value equality. Non-null lists also widen to `List<Any?>`. Evidence:
   `testKotlinNullableCollectionsVmConformance`, test `nullable Int and collection elements preserve values and nulls`.
-  Extension functions are Guest `kotlin.collections` declarations and require imports. Unsupported
-  primitive element types, spread arguments, `Set`, `Map`, sequences, and collection APIs not listed here
+  Extension functions are Guest `kotlin.collections` declarations and require imports. Spread arguments, `Set`, `Map`, sequences, and collection APIs not listed here
   remain unavailable. Generic list implementations are distributed as source bodies in the hybrid `stdlib:core`
   module, alongside ordinary precompiled library implementations. Evidence:
   [`MinimalScriptLoweringTest`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/compiler-k2/src/test/kotlin/ru/lazyhat/compukters/compiler/worker/k2/MinimalScriptLoweringTest.kt),
@@ -1144,11 +1142,20 @@ links to their source files.
   native built-ins and core modules. Regex, Unicode categories, encodings,
   other generic array helpers, and collection conversions are absent. Tracking: not scheduled
 
+- [x] **Primitive list specializations** — `List<T>`, `MutableList<T>`, and `ArrayList<T>` support all twelve
+  primitive element types. Non-null storage uses the corresponding primitive array, including compact byte/short
+  arrays. Nullable storage holds nominal boxes or null. Growth, mutation, removal, iteration, and search preserve
+  values through specialized helpers and `List<T?>` / `List<Any?>` views without copying the list.
+  Generic floating equality and collection search equate NaNs and distinguish signed zeros, while direct primitive
+  floating equality retains IEEE behavior. The existing 256 class/function specialization limits still apply.
+  Available in `stdlib:core` 1.9.0. Evidence: `primitive lists preserve storage mutation nullable and Any views`
+  inspects every backing array and executes four programs through `testKotlinMutableListVmConformance`.
+
 - [ ] **Mutable lists — Partial** — public `MutableCollection<T>` and `MutableList<T>` expose `add(element)`,
   `remove(element)`, `clear`, indexed `add`, `set` returning the previous element, and `removeAt`.
   `MutableIterable<T>.iterator()` returns a `MutableIterator<T>` with `remove`. `ArrayList<T>()` and
   `ArrayList<T>(initialCapacity)` implement these contracts with growing arrays and existing VM allocation quotas.
-  Statically typed `Int` storage and mutation remain unboxed; nullable `Int` uses managed boxes. Supported reference
+  All twelve statically typed primitive families use unboxed array storage and mutation; nullable primitives use managed boxes. Supported reference
   elements retain identity, and removed slots are cleared. Read-only `List` aliases observe the same mutations;
   supported `List<Any>` and `List<Any?>` views use universal read bridges. `MutableList` remains invariant.
   Iterator removal requires one preceding `next` and adjusts the iterator position. Structural changes invalidate
