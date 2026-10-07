@@ -815,6 +815,9 @@ registerKotlinVmConformance(
     artifactEnvironmentVariable = "COMPUKTER_KOTLIN_HASH_COLLECTIONS_ARTIFACT",
     conformanceScenario = "hash-collections",
     additionalArtifacts = mapOf(
+        "COMPUKTER_KOTLIN_HASH_PAIR_ARTIFACT" to project(":compiler-k2").layout.buildDirectory.file("generated/conformance/kotlin-hash-collections.cpkt.pair.cpkt"),
+        "COMPUKTER_KOTLIN_HASH_FACTORY_VALUES_ARTIFACT" to project(":compiler-k2").layout.buildDirectory.file("generated/conformance/kotlin-hash-collections.cpkt.factory-values.cpkt"),
+        "COMPUKTER_KOTLIN_HASH_FACTORIES_ARTIFACT" to project(":compiler-k2").layout.buildDirectory.file("generated/conformance/kotlin-hash-collections.cpkt.factories.cpkt"),
         "COMPUKTER_KOTLIN_HASH_VALUES_ARTIFACT" to project(":compiler-k2").layout.buildDirectory.file("generated/conformance/kotlin-hash-collections.cpkt.values.cpkt"),
         "COMPUKTER_KOTLIN_HASH_PRIMITIVES_ARTIFACT" to project(":compiler-k2").layout.buildDirectory.file("generated/conformance/kotlin-hash-collections.cpkt.primitives.cpkt"),
         "COMPUKTER_KOTLIN_HASH_FAILURE_ARTIFACT" to project(":compiler-k2").layout.buildDirectory.file("generated/conformance/kotlin-hash-collections.cpkt.failure.cpkt"),

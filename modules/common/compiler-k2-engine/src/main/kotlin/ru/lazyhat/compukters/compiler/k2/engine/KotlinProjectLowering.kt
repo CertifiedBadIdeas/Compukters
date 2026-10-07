@@ -212,6 +212,14 @@ private fun IrClass.isManagedPlatformObject(): Boolean =
             ((type as? IrSimpleType)?.classifier as? IrClassSymbol)?.owner?.fqNameWhenAvailable?.asString() != "kotlin.Any"
         }
 
+private val hashCollectionFactories =
+    mapOf(
+        "kotlin.collections.mapOf" to "kotlin.collections.HashMap",
+        "kotlin.collections.mutableMapOf" to "kotlin.collections.HashMap",
+        "kotlin.collections.setOf" to "kotlin.collections.HashSet",
+        "kotlin.collections.mutableSetOf" to "kotlin.collections.HashSet",
+    )
+
 private data class GuestClassInstance(
     val declaration: IrClass,
     val arguments: List<IrType>,
@@ -297,6 +305,13 @@ private fun collectGuestClassInstances(
                                 add(GuestClassInstance(it, listOf(elementType)))
                             }
                         }
+                    }
+                    hashCollectionFactories[
+                        expression.symbol.owner.fqNameWhenAvailable
+                            ?.asString(),
+                    ]?.let { owner ->
+                        val arguments = expression.typeArguments.map { it?.let(substitution) ?: return@let }
+                        byName[owner]?.let { add(GuestClassInstance(it, arguments)) }
                     }
                     if (expression.symbol.owner.fqNameWhenAvailable
                             ?.asString() == "kotlin.collections.mutableListStorage"
@@ -1127,7 +1142,8 @@ internal object KotlinProjectLowering {
 
                 override fun visitCall(expression: IrCall) {
                     val target = expression.symbol.owner
-                    if (target.fqNameWhenAvailable?.asString() in
+                    if (target.fqNameWhenAvailable?.asString() in hashCollectionFactories ||
+                        target.fqNameWhenAvailable?.asString() in
                         setOf("kotlin.collections.listOf", "kotlin.collections.emptyList", "kotlin.collections.mutableListStorage")
                     ) {
                         usesListFactory = true
@@ -6454,6 +6470,9 @@ private class FunctionCompiler(
         if (target.isExternal && targetName in setOf("kotlin.collections.listOf", "kotlin.collections.emptyList")) {
             return compileListFactory(call, targetName == "kotlin.collections.listOf")
         }
+        if (target.isExternal && targetName in hashCollectionFactories) {
+            return compileHashCollectionFactory(call, requireNotNull(hashCollectionFactories[targetName]))
+        }
         if (target.isExternal && targetName == "kotlin.collections.mutableListStorage") {
             return compileMutableListStorage(call)
         }
@@ -7169,6 +7188,76 @@ private class FunctionCompiler(
             }
         }
         return list
+    }
+
+    @OptIn(UnsafeDuringIrConstructionAPI::class)
+    private fun compileHashCollectionFactory(
+        call: IrCall,
+        ownerName: String,
+    ): RegisterId {
+        val types =
+            call.typeArguments.map {
+                it?.let(::resolvedType) ?: throw UnsupportedKotlinIr(call, "hash factory requires concrete type arguments")
+            }
+        val target =
+            genericConstructorLayouts.entries
+                .singleOrNull {
+                    it.key.declaration.fqNameWhenAvailable
+                        ?.asString() == ownerName && it.key.arguments == types
+                }?.value ?: throw UnsupportedKotlinIr(call, "hash collection implementation is unavailable for these types")
+        val elements =
+            directVarargElements(
+                call,
+                "hash collection factories require direct vararg elements",
+                "spread hash collection factory arguments are outside the project subset",
+            )
+        val map = ownerName == "kotlin.collections.HashMap"
+        val insertName = if (map) "put" else "add"
+        val insert =
+            genericMemberFunctionIds.entries.singleOrNull { (method, _) ->
+                method.second == target.instance && method.first.owner.name
+                    .asString() == insertName
+            } ?: throw UnsupportedKotlinIr(call, "hash collection insertion method is unavailable")
+        val pairFields =
+            if (map && elements.isNotEmpty()) {
+                genericFieldsByGetter.entries
+                    .filter { (key, field) ->
+                        (field.property.parent as? IrClass)?.fqNameWhenAvailable?.asString() == "kotlin.Pair" &&
+                            key.second.arguments == types && field.property.name.asString() in setOf("first", "second")
+                    }.sortedBy {
+                        it.value.property.name
+                            .asString()
+                    }
+            } else {
+                emptyList()
+            }
+        if (map && elements.isNotEmpty() && pairFields.size != 2) {
+            throw UnsupportedKotlinIr(call, "Pair fields are unavailable for these types")
+        }
+        val elementType = (call.arguments.filterNotNull().singleOrNull() as? IrVararg)?.varargElementType?.let(::resolvedType)
+        // Kotlin evaluates the complete vararg before entering the factory and invoking user hashing.
+        val values = elements.map { compileExpression(it, elementType) }
+        val capacity = emitI32Constant(elements.size, call)
+        prepareAllocationBlock()
+        val collection = allocate(ValueType.Ref(false, target.ownerType))
+        emit(Instruction.NewObject(collection, target.ownerType))
+        emit(Instruction.Call(Destination.Unit, FunctionRef.Local(target.functionId), listOf(collection, capacity)))
+        val resultType = target.instance.substitute(insert.key.first.owner.returnType)
+        val inserted = allocate(valueType(resultType, call))
+        values.forEach { value ->
+            val arguments =
+                if (map) {
+                    pairFields.map { (_, field) ->
+                        val stored = allocate(field.type)
+                        emit(Instruction.FieldGet(stored, value, FieldRef.Local(field.id)))
+                        loadedValue(stored, types[if (field.property.name.asString() == "first") 0 else 1], call)
+                    }
+                } else {
+                    listOf(value)
+                }
+            emit(Instruction.Call(Destination.Register(inserted), FunctionRef.Local(insert.value), listOf(collection) + arguments))
+        }
+        return collection
     }
 
     @OptIn(UnsafeDuringIrConstructionAPI::class)
@@ -9582,12 +9671,12 @@ private class LiteralCollector(
         if (fqName == "kotlin.emptyArray" || fqName == "kotlin.collections.emptyList") {
             values += 0
         } else if (fqName == "kotlin.arrayOf" || GuestPrimitive.entries.any { fqName == it.arrayFactory } ||
-            fqName == "kotlin.collections.listOf"
+            fqName == "kotlin.collections.listOf" || fqName in hashCollectionFactories
         ) {
             val size = (expression.arguments.filterNotNull().singleOrNull() as? IrVararg)?.elements?.size
             if (size != null) {
                 values.addAll(0..size)
-            } else if (fqName == "kotlin.collections.listOf") {
+            } else if (fqName == "kotlin.collections.listOf" || fqName in hashCollectionFactories) {
                 values += 0
             }
         } else if (fqName in setOf("kotlin.collections.copyOfRange", "kotlin.collections.copyOf", "kotlin.collections.copyInto")) {

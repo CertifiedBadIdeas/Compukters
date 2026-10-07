@@ -38,6 +38,13 @@ class DiagnosticQueryTest {
             value class DeviceId(val value: Int)
             value class Position(val x: Int, val name: String)
             fun main() {
+                val initial = mutableMapOf<DeviceId, Position?>(DeviceId(1) to null)
+                val chosen: Position? = initial.getOrPut(DeviceId(1)) { Position(1, "default") }
+                val immutable = mapOf(DeviceId(2) to Position(2, "b"))
+                val unique = setOf(DeviceId(1), DeviceId(1))
+                val changing = mutableSetOf(Position(1, "a"))
+                val pair = Pair(DeviceId(3), chosen)
+                val (id, position) = pair
                 val map: MutableMap<DeviceId, Position?> = HashMap<DeviceId, Position?>()
                 map[DeviceId(7)] = Position(2, "a")
                 check(map.containsKey(DeviceId(7)))
