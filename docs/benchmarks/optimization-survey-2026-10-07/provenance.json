@@ -1,0 +1,13 @@
+{
+  "parent_revision": "d85f8096a1574443dff43b88951c157bc752390b",
+  "vm_revision": "18103f01963874510fa25d4396a2dc3e7ee47640",
+  "runtime_version": "0.20.0",
+  "profile_binary_sha256": "6093d847db448b1ae2e30072853231fa41602a8c72eedc61731c71ed4e2eed0b",
+  "environment": "../runtime-0.20.0-2026-10-07/environment.json",
+  "analyzer_command": "python3 docs/_tools/analyze_artifact_size.py modules/common/compiler-k2/build/generated/system/*.cpkt modules/common/compiler-k2/build/generated/conformance/kotlin-map-not-null.cpkt modules/common/compiler-k2/build/generated/conformance/kotlin-mutable-list.cpkt modules/common/compiler-k2/build/generated/benchmarks/transient-allocations/while-indexed-256-300.cpkt",
+  "generation_commands": [
+    "JAVA_HOME=/usr/lib/jvm/java-25-openjdk ./gradlew-sandbox-dev-parallel-summary :compiler-k2:generateMapNotNullConformanceArtifact :compiler-k2:generateMutableListConformanceArtifact --offline --no-build-cache --max-workers=4",
+    "JAVA_HOME=/usr/lib/jvm/java-25-openjdk ./gradlew-sandbox-dev-parallel-summary :compiler-k2:generateBootArtifact :compiler-k2:generateShellArtifact :compiler-k2:generateKotlincArtifact :compiler-k2:generateEditArtifact :compiler-k2:generateVmbenchArtifact :compiler-k2:generateVmbenchAgentArtifact --offline --no-build-cache --max-workers=4"
+  ],
+  "notes": "Read-only investigation. Compression/path-pool/coalescing figures are models or offline experiments, not implemented savings. User PID/drone source unavailable; no PID latency or game-tick claim. Profiles include setup and traced controls."
+}

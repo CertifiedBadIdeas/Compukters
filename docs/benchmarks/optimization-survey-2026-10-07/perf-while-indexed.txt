@@ -1,0 +1,27 @@
+# To display the perf.data header info, please use --header/--header-only options.
+#
+#
+# Total Lost Samples: 0
+#
+# Samples: 2K of event 'cycles:u'
+# Event count (approx.): 25012569380
+#
+# Overhead  Symbol                                                                              IPC   [IPC Coverage]
+# ........  ..................................................................................  ....................
+#
+    52.65%  [.] <guest_benchmark::execution::machine::Machine>::run_slice_inner                 -      -
+    10.66%  [.] guest_benchmark::execution::machine::execute_scalar                             -      -
+     9.32%  [.] <guest_benchmark::execution::image::ExecutionImage>::dispatch_target            -      -
+     8.32%  [.] <guest_benchmark::execution::machine::Machine>::read_register                   -      -
+     2.24%  [.] <guest_benchmark::execution::heap::Heap>::read_payload                          -      -
+     1.76%  [.] <guest_benchmark::execution::machine::Machine>::reference_type                  -      -
+     1.74%  [.] 0x000000000018f380                                                              -      -
+     1.72%  [.] <guest_benchmark::execution::machine::Machine>::write_register                  -      -
+     1.46%  [.] <guest_benchmark::execution::image::ExecutionImage>::is_assignable              -      -
+     1.36%  [.] <guest_benchmark::execution::machine::Machine>::trace_block_entry               -      -
+     1.10%  [.] 0x000000000018f384                                                              -      -
+
+
+#
+# (Tip: Save output of perf stat using: perf stat record <target workload>)
+#
