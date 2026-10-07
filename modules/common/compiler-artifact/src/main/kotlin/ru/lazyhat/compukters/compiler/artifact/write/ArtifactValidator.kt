@@ -119,6 +119,31 @@ internal fun validateArtifact(
             }
         }
 
+    fun validateNominalValueType(
+        sourceModule: Int,
+        value: ValueType,
+        location: ArtifactWriteLocation,
+    ) {
+        val reference =
+            when (value) {
+                is ValueType.Inline -> value.type
+                is ValueType.Ref -> value.type
+                else -> return
+            }
+        val identity = resolveType(sourceModule, reference)
+        val nominal = identity?.let { artifact.modules[it.module].types[it.type] }
+        if (nominal == null || (value is ValueType.Inline) != (nominal is NominalType.InlineValue)) {
+            add(
+                ArtifactWriteErrorCode.BAD_REFERENCE,
+                "inline and managed reference representations must match their nominal type",
+                location,
+            )
+        }
+        if (value is ValueType.Inline && artifact.minimumRuntimeAbi < AbiVersion(1u, 15u)) {
+            add(ArtifactWriteErrorCode.INCOMPATIBLE_FEATURE_SET, "inline values require Runtime ABI 1.15", location)
+        }
+    }
+
     fun nominalAssignable(
         source: TypeIdentity,
         destination: TypeIdentity,
@@ -146,6 +171,7 @@ internal fun validateArtifact(
                 }
 
                 is NominalType.Function,
+                is NominalType.InlineValue,
                 -> {}
             }
         }
@@ -159,6 +185,15 @@ internal fun validateArtifact(
         destination: ValueType,
     ): Boolean =
         when {
+            source is ValueType.Inline && destination is ValueType.Inline -> {
+                val sourceIdentity = resolveType(sourceModule, source.type)
+                sourceIdentity != null && sourceIdentity == resolveType(destinationModule, destination.type)
+            }
+
+            source is ValueType.Inline || destination is ValueType.Inline -> {
+                false
+            }
+
             source is ValueType.Ref && destination is ValueType.Ref -> {
                 (!source.nullable || destination.nullable) &&
                     resolveType(sourceModule, source.type)
@@ -204,6 +239,15 @@ internal fun validateArtifact(
         right: ValueType,
     ): Boolean =
         when {
+            left is ValueType.Inline && right is ValueType.Inline -> {
+                val leftIdentity = resolveType(leftModule, left.type)
+                leftIdentity != null && leftIdentity == resolveType(rightModule, right.type)
+            }
+
+            left is ValueType.Inline || right is ValueType.Inline -> {
+                false
+            }
+
             left is ValueType.Ref && right is ValueType.Ref -> {
                 if (left.nullable != right.nullable) {
                     false
@@ -680,6 +724,50 @@ internal fun validateArtifact(
             }
         }
         module.types.forEachIndexed { typeIndex, nominal ->
+            val valueLocation = ArtifactWriteLocation(moduleLocation, "TYPES", typeIndex.toUInt())
+            when (nominal) {
+                is NominalType.InlineValue -> {
+                    nominal.components.forEach { validateNominalValueType(moduleIndex, it, valueLocation) }
+                }
+
+                is NominalType.Array -> {
+                    validateNominalValueType(moduleIndex, nominal.element, valueLocation)
+                }
+
+                is NominalType.Function -> {
+                    validateNominalValueType(moduleIndex, nominal.result, valueLocation)
+                    nominal.parameters.forEach { validateNominalValueType(moduleIndex, it, valueLocation) }
+                }
+
+                else -> {
+                    Unit
+                }
+            }
+            if (nominal is NominalType.Array && nominal.element is ValueType.Inline) {
+                add(
+                    ArtifactWriteErrorCode.BAD_REFERENCE,
+                    "heap arrays require boxed inline elements",
+                    ArtifactWriteLocation(moduleLocation, "TYPES", typeIndex.toUInt()),
+                )
+            }
+            if (nominal is NominalType.InlineValue) {
+                val location = ArtifactWriteLocation(moduleLocation, "TYPES", typeIndex.toUInt())
+                if (artifact.minimumRuntimeAbi < AbiVersion(1u, 15u)) {
+                    add(ArtifactWriteErrorCode.INCOMPATIBLE_FEATURE_SET, "inline value layouts require Runtime ABI 1.15", location)
+                }
+                if (nominal.components.isEmpty() || nominal.components.size > limits.physicalComponentsPerValue) {
+                    add(ArtifactWriteErrorCode.LIMIT_EXCEEDED, "inline layout component count is empty or exceeds limit", location)
+                }
+                nominal.components.forEach { component ->
+                    if (component == ValueType.Unit || component is ValueType.Inline) {
+                        add(
+                            ArtifactWriteErrorCode.BAD_REFERENCE,
+                            "inline layout requires flattened scalar or reference components",
+                            location,
+                        )
+                    }
+                }
+            }
             if (nominal is NominalType.Array && nominal.storage != ArrayStorage.NATURAL) {
                 val location = ArtifactWriteLocation(moduleLocation, "TYPES", typeIndex.toUInt())
                 if (artifact.minimumRuntimeAbi < AbiVersion(1u, 14u)) {
@@ -750,6 +838,7 @@ internal fun validateArtifact(
 
                     is NominalType.Array,
                     is NominalType.Function,
+                    is NominalType.InlineValue,
                     -> null
                 } ?: return@forEachIndexed
             val location = ArtifactWriteLocation(moduleLocation, "TYPES", typeIndex.toUInt())
@@ -806,7 +895,46 @@ internal fun validateArtifact(
                 add(ArtifactWriteErrorCode.INVALID_RANGE, "class initializer cannot suspend", location)
             }
         }
+        module.fields.forEachIndexed { index, field ->
+            val location = ArtifactWriteLocation(moduleLocation, "FIELDS", index.toUInt())
+            validateNominalValueType(moduleIndex, field.type, location)
+            if (field.type is ValueType.Inline) {
+                add(
+                    ArtifactWriteErrorCode.BAD_REFERENCE,
+                    "heap fields require boxed inline values",
+                    location,
+                )
+            }
+        }
         module.functions.forEachIndexed { functionIndex, function ->
+            function.values.forEach {
+                validateNominalValueType(
+                    moduleIndex,
+                    it.semanticType,
+                    ArtifactWriteLocation(moduleLocation, "FUNCTIONS", functionIndex.toUInt()),
+                )
+            }
+            function.values.forEach { value ->
+                val semantic = value.semanticType
+                if (semantic is ValueType.Inline) {
+                    val location = ArtifactWriteLocation(moduleLocation, "FUNCTIONS", functionIndex.toUInt())
+                    val identity = resolveType(moduleIndex, semantic.type)
+                    val layout = identity?.let { artifact.modules[it.module].types[it.type] } as? NominalType.InlineValue
+                    if (artifact.minimumRuntimeAbi < AbiVersion(1u, 15u) || layout == null) {
+                        add(ArtifactWriteErrorCode.BAD_REFERENCE, "inline function value requires an ABI 1.15 nominal layout", location)
+                    } else if (layout.components.none { it == ValueType.Unit || it is ValueType.Inline } &&
+                        value.physicalShape.components !=
+                        layout.components.map {
+                            FunctionValue
+                                .scalar(it)
+                                .physicalShape.components
+                                .single()
+                        }
+                    ) {
+                        add(ArtifactWriteErrorCode.INVALID_RANGE, "inline function value shape differs from nominal layout", location)
+                    }
+                }
+            }
             if (function.values.size > limits.registersPerFunction || function.parameterCount.toLong() > function.values.size) {
                 add(
                     ArtifactWriteErrorCode.INVALID_RANGE,
@@ -882,7 +1010,14 @@ internal fun validateArtifact(
         module.blocks.forEachIndexed { blockIndex, block ->
             var fixedCost = 0uL
             block.instructions.forEach { instruction ->
-                fixedCost += instructionFixedCost(instruction).toULong()
+                fixedCost +=
+                    instructionFixedCost(
+                        instruction,
+                        module.functions
+                            .getOrNull(block.owner.value.toInt())
+                            ?.values
+                            .orEmpty(),
+                    ).toULong()
             }
             if (fixedCost > UInt.MAX_VALUE.toULong()) {
                 add(
@@ -1164,6 +1299,45 @@ internal fun validateArtifact(
                     }
 
                     when (instruction) {
+                        is Instruction.InlineConstruct -> {
+                            val destination = register(instruction.destination, "destination") as? ValueType.Inline
+                            val identity = destination?.let { resolveType(moduleIndex, it.type) }
+                            val layout = identity?.let { artifact.modules[it.module].types[it.type] } as? NominalType.InlineValue
+                            if (layout == null || layout.components.size != instruction.components.size) {
+                                add(
+                                    ArtifactWriteErrorCode.INVALID_RANGE,
+                                    "inline construction requires the exact nominal component layout",
+                                    location,
+                                )
+                            }
+                            instruction.components.forEachIndexed { index, component ->
+                                val actual = register(component, "component")
+                                val expected = layout?.components?.getOrNull(index)
+                                if (actual != null && expected != null && identity != null &&
+                                    !valueTypesMatch(moduleIndex, actual, identity.module, expected)
+                                ) {
+                                    add(ArtifactWriteErrorCode.INVALID_RANGE, "inline component type does not match layout", location)
+                                }
+                            }
+                        }
+
+                        is Instruction.InlineComponent -> {
+                            val source = register(instruction.source, "source") as? ValueType.Inline
+                            val actual = register(instruction.destination, "destination")
+                            val identity = source?.let { resolveType(moduleIndex, it.type) }
+                            val layout = identity?.let { artifact.modules[it.module].types[it.type] } as? NominalType.InlineValue
+                            val expected = layout?.components?.getOrNull(instruction.component.toInt())
+                            if (expected == null || actual == null || identity == null ||
+                                !valueTypesMatch(identity.module, expected, moduleIndex, actual)
+                            ) {
+                                add(
+                                    ArtifactWriteErrorCode.INVALID_RANGE,
+                                    "inline extraction requires an existing component with matching type",
+                                    location,
+                                )
+                            }
+                        }
+
                         Instruction.Unreachable -> {}
 
                         is Instruction.Move -> {

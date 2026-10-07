@@ -62,6 +62,78 @@ import kotlin.test.assertIs
 
 class ArtifactReaderTest {
     @Test
+    fun `inline value layouts and component instructions round trip with strict ABI and shape checks`() {
+        fun r(index: UInt) = RegisterId.of(index)
+        val original =
+            ru.lazyhat.compukters.compiler.artifact.write
+                .minimalArtifact()
+        val base = original.modules.single()
+        val inline = ValueType.Inline(TypeRef.Local(TypeId.of(1u)))
+        val layout = listOf(ValueType.I32, ValueType.F64, ValueType.Bool)
+        val values =
+            layout.map(FunctionValue::scalar) +
+                FunctionValue(inline, PhysicalShape(listOf(PhysicalAtom.I32, PhysicalAtom.F64, PhysicalAtom.I32)))
+        val operations =
+            listOf(
+                Instruction.Const(r(0u), ConstantId.of(0u)),
+                Instruction.Const(r(1u), ConstantId.of(1u)),
+                Instruction.Const(r(2u), ConstantId.of(2u)),
+                Instruction.InlineConstruct(r(3u), listOf(r(0u), r(1u), r(2u))),
+                Instruction.InlineComponent(r(0u), r(3u), 0u),
+                Instruction.Return(Destination.Unit),
+            )
+        val module =
+            base.copy(
+                types = base.types + NominalType.InlineValue(StringId.of(1u), layout),
+                constants = listOf(Constant.I32(42), Constant.F64(3.5.toBits().toULong()), Constant.Bool(true)),
+                functions = base.functions.map { it.copy(values = values) },
+                blocks = listOf(base.blocks.single().copy(instructions = operations)),
+            )
+        val source =
+            original.copy(
+                minimumRuntimeAbi = AbiVersion(1u, 15u),
+                manifest = Manifest(0u, 40u, 1u, 1u, 0u, 0u, 20u, 20u, ByteArray(32), ByteArray(32)),
+                modules = listOf(module),
+            )
+        val encoded = assertIs<ArtifactWriteResult.Success>(ArtifactWriter.write(source)).bytes
+        System.getProperty("compukter.vm.executableArtifact")?.let { path ->
+            java.io
+                .File("$path.inline.cpkt")
+                .apply { parentFile.mkdirs() }
+                .writeBytes(encoded)
+        }
+        val decoded = ArtifactReader.read(encoded).modules.single()
+        assertEquals(module.types, decoded.types)
+        assertEquals(values, decoded.functions.single().values)
+        assertEquals(operations, decoded.blocks.single().instructions)
+        assertIs<ArtifactWriteResult.Failure>(ArtifactWriter.write(source.copy(minimumRuntimeAbi = AbiVersion(1u, 14u))))
+        val badShape =
+            module.copy(
+                functions =
+                    module.functions.map {
+                        it.copy(
+                            values =
+                                values.dropLast(1) + FunctionValue(inline, PhysicalShape(listOf(PhysicalAtom.I32))),
+                        )
+                    },
+            )
+        assertIs<ArtifactWriteResult.Failure>(ArtifactWriter.write(source.copy(modules = listOf(badShape))))
+        val badConstruct =
+            module.copy(
+                blocks =
+                    listOf(
+                        module.blocks.single().copy(
+                            instructions =
+                                operations.map {
+                                    if (it is Instruction.InlineConstruct) it.copy(components = listOf(r(0u), r(0u), r(2u))) else it
+                                },
+                        ),
+                    ),
+            )
+        assertIs<ArtifactWriteResult.Failure>(ArtifactWriter.write(source.copy(modules = listOf(badConstruct))))
+    }
+
+    @Test
     fun `unsigned numeric forms and conversion signedness round trip with ABI gate`() {
         fun r(index: UInt) = RegisterId.of(index)
         val original = languageRuntimeArtifact()

@@ -312,6 +312,7 @@ private fun minimumRuntimeAbi(
     if (modules.any { module -> module.blocks.any { block -> block.instructions.any { it.usesUnsignedSemantics() } } }) {
         required = maxOf(required, AbiVersion(1u, 14u))
     }
+    if (modules.any { module -> module.types.any { it is NominalType.InlineValue } }) required = maxOf(required, AbiVersion(1u, 15u))
     if (modules.any { module -> module.types.any { it is NominalType.Array && it.storage != ArrayStorage.NATURAL } }) {
         required = maxOf(required, AbiVersion(1u, 14u))
     }
@@ -450,7 +451,12 @@ private class ModuleRelocation(
             is TypeRef.Imported -> TypeRef.Imported(import(ref.id))
         }
 
-    fun value(type: ValueType): ValueType = if (type is ValueType.Ref) type.copy(type = type(type.type)) else type
+    fun value(value: ValueType): ValueType =
+        when (value) {
+            is ValueType.Ref -> value.copy(type = type(value.type))
+            is ValueType.Inline -> value.copy(type = type(value.type))
+            else -> value
+        }
 
     fun function(ref: FunctionRef): FunctionRef =
         when (ref) {
@@ -574,6 +580,10 @@ private fun relocateType(
     ids: ModuleRelocation,
 ): NominalType =
     when (type) {
+        is NominalType.InlineValue -> {
+            type.copy(name = ids.string(type.name), components = type.components.map(ids::value))
+        }
+
         is NominalType.Array -> {
             type.copy(name = ids.string(type.name), element = ids.value(type.element), superType = type.superType?.let(ids::type))
         }

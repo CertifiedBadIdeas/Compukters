@@ -96,7 +96,17 @@ internal fun encodeModuleSections(
                 BLOCKS,
                 encodeIndexed(
                     module.blocks.mapIndexed { index, block ->
-                        val cost = block.instructions.sumOf { encodeInstruction(it, limits.codeBytes).fixedCost.toLong() }.toUInt()
+                        val cost =
+                            block.instructions
+                                .sumOf {
+                                    instructionFixedCost(
+                                        it,
+                                        module.functions
+                                            .getOrNull(block.owner.value.toInt())
+                                            ?.values
+                                            .orEmpty(),
+                                    ).toLong()
+                                }.toUInt()
                         val sink = BinarySink(maximum)
                         sink.writeU32(block.owner.value)
                         sink.writeU32(index.toUInt())
@@ -179,6 +189,16 @@ private fun encodeType(
     BinarySink(maximum)
         .apply {
             when (type) {
+                is NominalType.InlineValue -> {
+                    writeU8(4u)
+                    writeU8(0u)
+                    writeU16(0u)
+                    writeU32(type.name.value)
+                    writeU16(type.components.size.toUInt())
+                    writeU16(0u)
+                    type.components.forEach(::writeValueType)
+                }
+
                 is NominalType.Class -> {
                     writeU8(0u)
                     writeU8(
@@ -249,11 +269,18 @@ private fun BinarySink.writeValueType(type: ValueType) {
             ValueType.Bool -> 5u
             ValueType.Char -> 6u
             is ValueType.Ref -> 7u
+            is ValueType.Inline -> 8u
         }
     writeU8(kind)
     writeU8(if (type is ValueType.Ref && type.nullable) 1u else 0u)
     writeU16(0u)
-    writeU32(if (type is ValueType.Ref) encodeTypeRef(type.type) else UInt.MAX_VALUE)
+    writeU32(
+        when (type) {
+            is ValueType.Ref -> encodeTypeRef(type.type)
+            is ValueType.Inline -> encodeTypeRef(type.type)
+            else -> UInt.MAX_VALUE
+        },
+    )
 }
 
 private fun encodeConstant(

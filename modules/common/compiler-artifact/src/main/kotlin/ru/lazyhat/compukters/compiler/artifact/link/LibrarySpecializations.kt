@@ -277,6 +277,7 @@ object LibrarySpecializations {
 
     private fun Module.valueName(value: ValueType): String =
         when (value) {
+            is ValueType.Inline -> "inline:" + referenceName(value.type)
             is ValueType.Ref -> referenceName(value.type) + if (value.nullable) "?" else ""
             else -> value.toString()
         }
@@ -327,7 +328,12 @@ private fun Module.rewrite(
     field: (FieldRef) -> FieldRef = { it },
     string: (StringId) -> StringId = { it },
 ): Module {
-    fun value(value: ValueType): ValueType = if (value is ValueType.Ref) value.copy(type = type(value.type)) else value
+    fun value(value: ValueType): ValueType =
+        when (value) {
+            is ValueType.Ref -> value.copy(type = type(value.type))
+            is ValueType.Inline -> value.copy(type = type(value.type))
+            else -> value
+        }
     return copy(
         name = string(name),
         imports = imports.map { it.copy(targetName = string(it.targetName), expectedSignature = type(it.expectedSignature)) },
@@ -335,6 +341,10 @@ private fun Module.rewrite(
         types =
             types.map {
                 when (it) {
+                    is NominalType.InlineValue -> {
+                        it.copy(name = string(it.name), components = it.components.map(::value))
+                    }
+
                     is NominalType.Class -> {
                         it.copy(
                             name = string(it.name),

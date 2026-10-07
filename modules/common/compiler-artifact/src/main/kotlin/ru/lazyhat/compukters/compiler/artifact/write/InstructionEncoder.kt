@@ -21,9 +21,11 @@ package ru.lazyhat.compukters.compiler.artifact.write
 import ru.lazyhat.compukters.compiler.artifact.model.Destination
 import ru.lazyhat.compukters.compiler.artifact.model.FieldRef
 import ru.lazyhat.compukters.compiler.artifact.model.FunctionRef
+import ru.lazyhat.compukters.compiler.artifact.model.FunctionValue
 import ru.lazyhat.compukters.compiler.artifact.model.Instruction
 import ru.lazyhat.compukters.compiler.artifact.model.RegisterId
 import ru.lazyhat.compukters.compiler.artifact.model.TypeRef
+import ru.lazyhat.compukters.compiler.artifact.model.ValueType
 
 internal data class EncodedInstruction(
     val bytes: ByteArray,
@@ -40,6 +42,20 @@ internal fun encodeInstruction(
     val cost = instructionFixedCost(instruction)
 
     when (instruction) {
+        is Instruction.InlineConstruct -> {
+            opcode = 0x05u
+            operands.writeRegister(instruction.destination)
+            operands.writeUleb128(instruction.components.size.toUInt())
+            instruction.components.forEach(operands::writeRegister)
+        }
+
+        is Instruction.InlineComponent -> {
+            opcode = 0x06u
+            operands.writeRegister(instruction.destination)
+            operands.writeRegister(instruction.source)
+            operands.writeUleb128(instruction.component.toUInt())
+        }
+
         is Instruction.Move -> {
             opcode = 0x01u
             operands.writeRegister(instruction.destination)
@@ -472,6 +488,10 @@ private fun variableCost(
 
 internal fun instructionFixedCost(instruction: Instruction): UInt =
     when (instruction) {
+        is Instruction.InlineConstruct -> variableCost(2u, instruction.components.size)
+
+        is Instruction.InlineComponent -> 2u
+
         is Instruction.Move,
         is Instruction.Const,
         is Instruction.Null,
@@ -569,3 +589,40 @@ internal fun encodeFieldRef(reference: FieldRef): UInt =
         is FieldRef.Local -> reference.id.value
         is FieldRef.Imported -> reference.id.value or 0x8000_0000u
     }
+
+/** Each additional inline component transferred between logical values costs one unit. */
+internal fun instructionFixedCost(
+    instruction: Instruction,
+    values: List<FunctionValue>,
+): UInt {
+    val transferred =
+        when (instruction) {
+            is Instruction.Move -> listOf(instruction.source)
+            is Instruction.Return -> (instruction.value as? Destination.Register)?.let { listOf(it.id) }.orEmpty()
+            is Instruction.Call -> instruction.arguments
+            is Instruction.CallVirtual -> instruction.arguments
+            is Instruction.CallInterface -> instruction.arguments
+            is Instruction.CallSuspend -> instruction.arguments
+            is Instruction.TaskSpawn -> instruction.arguments
+            else -> emptyList()
+        }
+    val additional =
+        transferred.sumOf { register ->
+            values
+                .getOrNull(register.value.toInt())
+                ?.takeIf { it.semanticType is ValueType.Inline }
+                ?.physicalShape
+                ?.components
+                ?.size
+                ?.minus(1)
+                ?.coerceAtLeast(0)
+                ?.toLong() ?: 0L
+        }
+    val result = instructionFixedCost(instruction).toULong() + additional.toULong()
+    if (result >
+        UInt.MAX_VALUE.toULong()
+    ) {
+        throw ArtifactEncodingException(ArtifactWriteErrorCode.OVERFLOW, "inline transfer cost exceeds u32")
+    }
+    return result.toUInt()
+}

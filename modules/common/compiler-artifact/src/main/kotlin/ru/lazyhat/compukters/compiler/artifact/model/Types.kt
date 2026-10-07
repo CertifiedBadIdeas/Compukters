@@ -51,6 +51,11 @@ sealed interface ValueType {
         val nullable: Boolean,
         val type: TypeRef,
     ) : ValueType
+
+    /** A non-null nominal value stored directly as its declared physical components. */
+    data class Inline(
+        val type: TypeRef,
+    ) : ValueType
 }
 
 enum class PhysicalAtom(
@@ -108,6 +113,7 @@ data class FunctionValue(
                                 ValueType.F32 -> PhysicalAtom.F32
                                 ValueType.F64 -> PhysicalAtom.F64
                                 is ValueType.Ref -> PhysicalAtom.REF32
+                                is ValueType.Inline -> error("inline values require their nominal layout")
                                 ValueType.Unit -> error("Unit has no physical value shape")
                             },
                         ),
@@ -212,6 +218,12 @@ enum class RuntimeExceptionKind(
 
 sealed interface NominalType {
     val name: StringId
+
+    /** Flattened immutable payload; components are scalar or managed reference values. */
+    data class InlineValue(
+        override val name: StringId,
+        val components: List<ValueType>,
+    ) : NominalType
 
     data class Class(
         override val name: StringId,
