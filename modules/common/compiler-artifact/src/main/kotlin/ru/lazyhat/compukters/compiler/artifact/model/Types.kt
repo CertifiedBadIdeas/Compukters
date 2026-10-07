@@ -18,6 +18,20 @@
 
 package ru.lazyhat.compukters.compiler.artifact.model
 
+/** Array payload representation; registers retain the element's canonical scalar kind. */
+enum class ArrayStorage(
+    internal val artifactTag: UInt,
+    val requiredElement: ValueType?,
+) {
+    NATURAL(0u, null),
+    I8(1u, ValueType.I32),
+    I16(2u, ValueType.I32),
+    U8(3u, ValueType.I32),
+    U16(4u, ValueType.I32),
+    U32(5u, ValueType.I32),
+    U64(6u, ValueType.I64),
+}
+
 sealed interface ValueType {
     data object Unit : ValueType
 
@@ -223,6 +237,7 @@ sealed interface NominalType {
         override val name: StringId,
         val element: ValueType,
         val superType: TypeRef? = null,
+        val storage: ArrayStorage = ArrayStorage.NATURAL,
     ) : NominalType
 
     data class Function(

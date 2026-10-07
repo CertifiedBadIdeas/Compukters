@@ -508,6 +508,13 @@ only when complete. Other tasks' replies queue without replacing unfinished refe
 buffers and pending plans contribute to execution-resident accounting. Structured programs require Runtime ABI 1.13;
 rebuild addon bundles and programs. Artifact encoding and the native export inventory are unchanged.
 
+Runtime ABI 1.14 adds explicit primitive-array payload storage to array type flags. Bits 1..3 select
+natural (0), signed 8/16-bit (1/2), unsigned 8/16/32/64-bit (3/4/5/6) storage; bit 0 keeps the optional
+array superclass. Packed values load with sign/zero extension into I32 registers; ULong storage uses I64.
+Both writers and Rust admission require the matching scalar element kind and ABI 1.14. Compatibility
+checks include storage so a packed array cannot be used as a natural-width array. Heap accounting and
+sliced copying use payload widths. Container format and exported native C ABI remain unchanged.
+
 Runtime ABI 1.12 extends `string_value_of` (`0x68`) and `value_hash` (`0x69`) with
 form 4 for F64. Both the writer and Rust admission reject these forms below ABI 1.12;
 linking infers the requirement from retained instructions. Double hashing canonicalizes

@@ -23,6 +23,7 @@ import ru.lazyhat.compukters.compiler.artifact.analysis.ReferenceLiveness
 import ru.lazyhat.compukters.compiler.artifact.analysis.TemporaryRegisters
 import ru.lazyhat.compukters.compiler.artifact.analysis.hasHeterogeneousReferenceComparison
 import ru.lazyhat.compukters.compiler.artifact.model.AbiVersion
+import ru.lazyhat.compukters.compiler.artifact.model.ArrayStorage
 import ru.lazyhat.compukters.compiler.artifact.model.Artifact
 import ru.lazyhat.compukters.compiler.artifact.model.Block
 import ru.lazyhat.compukters.compiler.artifact.model.BlockId
@@ -307,6 +308,9 @@ private fun minimumRuntimeAbi(
     modules: List<Module>,
 ): AbiVersion {
     var required = declared
+    if (modules.any { module -> module.types.any { it is NominalType.Array && it.storage != ArrayStorage.NATURAL } }) {
+        required = maxOf(required, AbiVersion(1u, 14u))
+    }
     if (modules.any { it.hasStructuredHostResponse() }) required = maxOf(required, AbiVersion(1u, 13u))
     if (modules.any { module -> module.types.any { it is NominalType.Class && it.runtimeExceptionKind != null } }) {
         required = maxOf(required, AbiVersion(1u, 9u))
