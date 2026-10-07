@@ -192,6 +192,8 @@ data class IdeHitTarget(
     val choiceIndex: Int? = null,
     val diagnostic: ru.lazyhat.compukters.ide.client.state.IdeDiagnosticRow? = null,
     val gitOperation: ru.lazyhat.compukters.ide.git.GitOperation? = null,
+    val gitCommand: ru.lazyhat.compukters.ide.client.state.IdeCommand? = null,
+    val gitTextRange: EditorRange? = null,
 )
 
 data class IdeDrawModel(
@@ -202,4 +204,7 @@ data class IdeDrawModel(
     val hitTargets: List<IdeHitTarget>,
     val icons: List<IdeIconDraw>,
     val gitScrollMaximum: Int? = null,
+    val gitPreviewScrollMaximum: Int? = null,
+    val gitPreviewBounds: IdeRect? = null,
+    val gitFieldFocusScroll: Map<ru.lazyhat.compukters.ide.client.git.IdeGitField, Int> = emptyMap(),
 )

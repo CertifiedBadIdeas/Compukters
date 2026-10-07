@@ -49,6 +49,59 @@ import kotlin.test.assertTrue
 
 class IdeInputAdapterTest {
     @Test
+    fun `Git draft routes typing editing clipboard cursor clicks and commit shortcuts separately from source`() {
+        val fixture = fixture()
+        val message = ru.lazyhat.compukters.ide.client.git.IdeGitField.Message
+        val draft =
+            ru.lazyhat.compukters.ide.client.git.IdeGitDraftView(
+                message =
+                    ru.lazyhat.compukters.ide.client.git
+                        .IdeGitFieldView("a😀b", 4),
+                focused = message,
+            )
+        val focus = IdeFocusState.Editor.copy(gitVisible = true, gitDraft = draft)
+        fixture.adapter.charTyped(IdeCharacterInput("message"), focus)
+        fixture.adapter.keyPressed(key(IdeKeyCode.LEFT), focus)
+        fixture.adapter.keyPressed(key(IdeKeyCode.A, IdeModifier.CONTROL), focus)
+        fixture.adapter.keyPressed(key(IdeKeyCode.ENTER, IdeModifier.CONTROL), focus)
+        assertEquals(
+            listOf(
+                IdeCommand.EditGitDraft(IdeEditorInput.Type("message")),
+                IdeCommand.EditGitDraft(IdeEditorInput.Move(IdeMoveDirection.Left, false)),
+                IdeCommand.EditGitDraft(IdeEditorInput.SelectAll),
+                IdeCommand.GitCommitDraft(),
+            ),
+            fixture.commands,
+        )
+        val geometry = IdeRenderGeometry.compute(1000, 700, 180, 120, true, true, IdeCodeFontProfile.DEFAULT)
+        val rect = IdeRect(geometry.editor.left + 10, geometry.editor.top + 10, geometry.editor.left + 130, geometry.editor.top + 22)
+        val target =
+            IdeHitTarget(
+                IdeHitAction.GitOperation,
+                rect,
+                true,
+                null,
+                IdeFocusGroup.Page,
+                40,
+                gitCommand = IdeCommand.GitFocusField(message),
+                gitTextRange = EditorRange(0, 4),
+            )
+        fixture.adapter.pointerClicked(
+            (rect.left + 2 * geometry.font.cellWidth).toDouble(),
+            rect.top.toDouble(),
+            0,
+            IdePointerContext(geometry, hitTargets = listOf(target), gitVisible = true, gitDraft = draft),
+        )
+        assertEquals(
+            IdeCommand.EditGitDraft(IdeEditorInput.SetCaret(3, false)),
+            fixture.commands.filterIsInstance<IdeCommand.EditGitDraft>().last(),
+        )
+        val menu = focus.copy(gitMenu = ru.lazyhat.compukters.ide.client.state.IdeGitMenu.Branches)
+        fixture.adapter.keyPressed(key(IdeKeyCode.ESCAPE), menu)
+        assertEquals(IdeCommand.GitMenu(null), fixture.commands.last())
+    }
+
+    @Test
     fun `Git view consumes typing and routes scroll keys and operation buttons`() {
         val fixture = fixture()
         val focus = IdeFocusState.Editor.copy(gitVisible = true)

@@ -93,7 +93,7 @@ import kotlin.test.assertTrue
 
 class IdeRendererStateTest {
     @Test
-    fun `Git panel exposes fast forward and file operations without underlying editor source`() {
+    fun `Git panel exposes checkbox commits preview and bounded menus without underlying editor source`() {
         val initial = workspaceState(semanticEditor("hidden source") { _, _ -> IdeSemanticInteraction.None }, IdeBuildState.Idle)
         val page = initial.page as IdePageState.Workspace
         val git =
@@ -111,13 +111,43 @@ class IdeRendererStateTest {
                                         .GitChange(ProjectPath.file("src/main.kt"), "modified", "modified"),
                                 ),
                         ),
+                        diff = "--- a/src/main.kt\n+++ b/src/main.kt\n-old\n+new",
+                    ),
+                checkedPaths = setOf(ProjectPath.file("src/main.kt")),
+                previewPath = ProjectPath.file("src/main.kt"),
+                draft =
+                    ru.lazyhat.compukters.ide.client.git.IdeGitDraftView(
+                        message =
+                            ru.lazyhat.compukters.ide.client.git
+                                .IdeGitFieldView("Change program", 14),
+                        authorName =
+                            ru.lazyhat.compukters.ide.client.git
+                                .IdeGitFieldView("Player", 6),
+                        authorEmail =
+                            ru.lazyhat.compukters.ide.client.git
+                                .IdeGitFieldView("player@example.invalid", 22),
                     ),
             )
         val state = initial.copy(page = IdePageState.Workspace(page.value.copy(git = git)))
         val model = IdeRenderer.extract(state, geometry())
         assertTrue(model.hitTargets.any { it.gitOperation == ru.lazyhat.compukters.ide.git.GitOperation.Pull && it.enabled })
-        assertTrue(model.hitTargets.any { it.gitOperation is ru.lazyhat.compukters.ide.git.GitOperation.Stage })
-        assertTrue(model.hitTargets.any { it.gitOperation is ru.lazyhat.compukters.ide.git.GitOperation.Unstage })
+        assertTrue(
+            model.hitTargets.any {
+                it.gitCommand ==
+                    ru.lazyhat.compukters.ide.client.state.IdeCommand
+                        .GitCheck(ProjectPath.file("src/main.kt"))
+            },
+        )
+        assertTrue(model.hitTargets.any { it.gitCommand is ru.lazyhat.compukters.ide.client.state.IdeCommand.GitCommitDraft && it.enabled })
+        assertFalse(
+            model.hitTargets.any {
+                it.gitOperation is ru.lazyhat.compukters.ide.git.GitOperation.Stage ||
+                    it.gitOperation is ru.lazyhat.compukters.ide.git.GitOperation.Unstage
+            },
+        )
+        assertTrue(model.text.any { it.value == "+new" && it.color == IdeColors.STRING })
+        assertTrue(model.text.any { it.value == "-old" && it.color == IdeColors.ERROR })
+        assertNotNull(model.gitPreviewBounds)
         assertFalse(model.text.any { it.value.contains("hidden source") })
         val small = IdeRenderer.extract(state, IdeRenderGeometry.compute(600, 420, 180, 120, true, true, IdeCodeFontProfile.DEFAULT))
         assertTrue(small.hitTargets.filter { it.gitOperation != null }.all { it.bounds.right <= 600 })
@@ -125,6 +155,65 @@ class IdeRendererStateTest {
         val tiny = IdeRenderer.extract(state, tinyGeometry)
         assertNotNull(tiny.gitScrollMaximum)
         assertTrue(tiny.hitTargets.filter { it.gitOperation != null }.all { tinyGeometry.editor.contains(it.bounds) })
+        val reached = mutableSetOf<ru.lazyhat.compukters.ide.client.git.IdeGitField>()
+        var commitReached = false
+        for (scroll in 0..tiny.gitScrollMaximum!!) {
+            val scrolled =
+                IdeRenderer.extract(
+                    initial.copy(page = IdePageState.Workspace(page.value.copy(git = git.copy(scroll = scroll)))),
+                    tinyGeometry,
+                )
+            val targets = scrolled.hitTargets.filter { it.gitCommand != null }
+            assertTrue(targets.all { tinyGeometry.editor.contains(it.bounds) })
+            targets.forEach { target ->
+                (target.gitCommand as? ru.lazyhat.compukters.ide.client.state.IdeCommand.GitFocusField)?.field?.let(reached::add)
+                if (target.gitCommand is ru.lazyhat.compukters.ide.client.state.IdeCommand.GitCommitDraft) commitReached = true
+            }
+        }
+        assertEquals(
+            ru.lazyhat.compukters.ide.client.git.IdeGitField.entries
+                .toSet(),
+            reached,
+        )
+        assertTrue(commitReached)
+        for ((field, scroll) in tiny.gitFieldFocusScroll) {
+            val focused = git.copy(scroll = scroll, draft = git.draft.copy(focused = field))
+            val fieldModel = IdeRenderer.extract(initial.copy(page = IdePageState.Workspace(page.value.copy(git = focused))), tinyGeometry)
+            assertTrue(
+                fieldModel.fills.any {
+                    it.kind == IdeFillKind.Border && it.color == IdeColors.ACCENT &&
+                        tinyGeometry.editor.contains(it.bounds)
+                },
+            )
+            assertTrue(
+                fieldModel.hitTargets.any {
+                    (it.gitCommand as? ru.lazyhat.compukters.ide.client.state.IdeCommand.GitFocusField)?.field ==
+                        field
+                },
+            )
+        }
+        val branchState =
+            initial.copy(
+                page =
+                    IdePageState.Workspace(
+                        page.value.copy(git = git.copy(menu = ru.lazyhat.compukters.ide.client.state.IdeGitMenu.Branches)),
+                    ),
+            )
+        val branches = IdeRenderer.extract(branchState, geometry())
+        assertTrue(
+            branches.hitTargets.any {
+                it.gitOperation ==
+                    ru.lazyhat.compukters.ide.git.GitOperation
+                        .SwitchBranch("feature") &&
+                    it.enabled
+            },
+        )
+        assertFalse(
+            branches.hitTargets.any {
+                it.gitCommand is ru.lazyhat.compukters.ide.client.state.IdeCommand.GitCommitDraft &&
+                    it.enabled
+            },
+        )
         val prompt = IdePromptState(IdePromptKind.GitToken("player"), "secret-token")
         val masked = IdeRenderer.extract(state, geometry(), prompt = prompt)
         assertFalse(masked.text.any { it.value.contains("secret-token") })
@@ -1578,9 +1667,6 @@ private fun IdeDrawModel.zOrdered(): Boolean {
 private fun IdeDrawModel.sourceDraw(value: String): IdeTextDraw = text.single { it.kind == IdeTextKind.Source && it.value == value }
 
 private fun IdeDrawModel.sourceStyle(value: String): IdeTextStyle = sourceDraw(value).style
-
-private fun IdeRect.contains(other: IdeRect): Boolean =
-    other.left >= left && other.top >= top && other.right <= right && other.bottom <= bottom
 
 private val WORKSPACE_ACTIONS =
     setOf(

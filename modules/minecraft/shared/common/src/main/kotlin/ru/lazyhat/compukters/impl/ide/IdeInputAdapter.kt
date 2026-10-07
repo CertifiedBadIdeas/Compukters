@@ -17,11 +17,15 @@ import ru.lazyhat.compukters.ide.client.analysis.IDE_COMPLETION_VISIBLE_ROWS
 import ru.lazyhat.compukters.ide.client.analysis.IdeAnalysisState
 import ru.lazyhat.compukters.ide.client.analysis.IdeSemanticInteraction
 import ru.lazyhat.compukters.ide.client.files.IdeComputerNode
+import ru.lazyhat.compukters.ide.client.git.IdeGitDraftView
+import ru.lazyhat.compukters.ide.client.git.IdeGitField
 import ru.lazyhat.compukters.ide.client.state.IdeCommand
 import ru.lazyhat.compukters.ide.client.state.IdeConflictAction
 import ru.lazyhat.compukters.ide.client.state.IdeDialogState
 import ru.lazyhat.compukters.ide.client.state.IdeEditorInput
 import ru.lazyhat.compukters.ide.client.state.IdeEditorView
+import ru.lazyhat.compukters.ide.client.state.IdeGitMenu
+import ru.lazyhat.compukters.ide.client.state.IdeGitScrollArea
 import ru.lazyhat.compukters.ide.client.state.IdeHorizontalDirection
 import ru.lazyhat.compukters.ide.client.state.IdeMoveDirection
 import ru.lazyhat.compukters.ide.client.state.IdeProjectSummary
@@ -65,6 +69,9 @@ data class IdeFocusState(
     val usagesFocused: Boolean = false,
     val gitVisible: Boolean = false,
     val gitScrollMaximum: Int = 1_000_000,
+    val gitDraft: IdeGitDraftView? = null,
+    val gitMenu: IdeGitMenu? = null,
+    val gitFieldFocusScroll: Map<IdeGitField, Int> = emptyMap(),
 ) {
     companion object {
         val Initial = IdeFocusState(IdeFocusArea.Editor)
@@ -87,6 +94,10 @@ data class IdePointerContext(
     val usages: ru.lazyhat.compukters.ide.client.analysis.IdeUsages? = null,
     val gitVisible: Boolean = false,
     val gitScrollMaximum: Int = 1_000_000,
+    val gitDraft: IdeGitDraftView? = null,
+    val gitPreviewScrollMaximum: Int = 0,
+    val gitPreviewBounds: IdeRect? = null,
+    val gitFieldFocusScroll: Map<IdeGitField, Int> = emptyMap(),
 )
 
 data class IdeExplorerDragVisual(
@@ -128,7 +139,7 @@ class IdeInputAdapter(
         focus: IdeFocusState,
     ): Boolean {
         focus.dialog?.let { return dialogKey(event, it) }
-        if (focus.usagesFocused) {
+        if (focus.usagesFocused && !focus.gitVisible) {
             when (event.key) {
                 IdeKeyCode.UP -> return dispatch(IdeCommand.MoveUsage(-1))
                 IdeKeyCode.DOWN -> return dispatch(IdeCommand.MoveUsage(1))
@@ -138,13 +149,84 @@ class IdeInputAdapter(
             }
         }
         if (focus.gitVisible && focus.area == IdeFocusArea.Editor) {
+            val draft = focus.gitDraft
+            val focusedField = draft?.focused
+            if (event.key == IdeKeyCode.ESCAPE) {
+                return when {
+                    focus.gitMenu != null -> dispatch(IdeCommand.GitMenu(null))
+                    draft?.focused != null -> dispatch(IdeCommand.GitFocusField(null))
+                    else -> dispatch(IdeCommand.GitVisible(false))
+                }
+            }
+            val control = event.modifiers and IdeModifier.CONTROL != 0
+            val shift = event.modifiers and IdeModifier.SHIFT != 0
+            if (control && event.key == IdeKeyCode.ENTER) return dispatch(IdeCommand.GitCommitDraft(push = shift))
+            if (draft != null && focusedField != null) {
+                if (event.paste) return dispatch(IdeCommand.EditGitDraft(IdeEditorInput.Type(boundedClipboard(clipboard.text()))))
+                if (control && (event.key == IdeKeyCode.C || event.key == IdeKeyCode.X)) {
+                    val field = draft.field(focusedField)
+                    val selected = field.selection?.let { field.text.substring(it.startUtf16, it.endUtf16) }
+                    if (selected != null) clipboardWriter.setText(selected)
+                    return if (event.key == IdeKeyCode.X) dispatch(IdeCommand.EditGitDraft(IdeEditorInput.Cut)) else true
+                }
+                if (event.key == IdeKeyCode.TAB) {
+                    val fields = IdeGitField.entries
+                    val next = fields[Math.floorMod(focusedField.ordinal + if (shift) -1 else 1, fields.size)]
+                    return dispatch(
+                        IdeCommand.GitFocusField(next, focus.gitFieldFocusScroll[next]),
+                    )
+                }
+                val input =
+                    if (control) {
+                        when (event.key) {
+                            IdeKeyCode.A -> IdeEditorInput.SelectAll
+                            IdeKeyCode.Z -> if (shift) IdeEditorInput.Redo else IdeEditorInput.Undo
+                            IdeKeyCode.Y -> IdeEditorInput.Redo
+                            IdeKeyCode.LEFT -> IdeEditorInput.MoveWord(IdeHorizontalDirection.Left, shift)
+                            IdeKeyCode.RIGHT -> IdeEditorInput.MoveWord(IdeHorizontalDirection.Right, shift)
+                            IdeKeyCode.BACKSPACE -> IdeEditorInput.DeleteWordBackward
+                            IdeKeyCode.DELETE -> IdeEditorInput.DeleteWordForward
+                            else -> null
+                        }
+                    } else {
+                        (editorKey(event.key, shift, focus.editorPageRows) as? IdeCommand.Edit)?.input
+                    }
+                return input?.let { dispatch(IdeCommand.EditGitDraft(it)) } ?: true
+            }
             return when (event.key) {
-                IdeKeyCode.ESCAPE -> dispatch(IdeCommand.GitVisible(false))
-                IdeKeyCode.UP -> dispatch(IdeCommand.ScrollGit(-1, focus.gitScrollMaximum))
-                IdeKeyCode.DOWN -> dispatch(IdeCommand.ScrollGit(1, focus.gitScrollMaximum))
-                IdeKeyCode.PAGE_UP -> dispatch(IdeCommand.ScrollGit(-focus.editorPageRows, focus.gitScrollMaximum))
-                IdeKeyCode.PAGE_DOWN -> dispatch(IdeCommand.ScrollGit(focus.editorPageRows, focus.gitScrollMaximum))
-                else -> false
+                IdeKeyCode.TAB -> {
+                    if (focus.gitFieldFocusScroll.isNotEmpty()) {
+                        dispatch(
+                            IdeCommand.GitFocusField(IdeGitField.Message, focus.gitFieldFocusScroll[IdeGitField.Message]),
+                        )
+                    } else {
+                        true
+                    }
+                }
+
+                IdeKeyCode.ESCAPE -> {
+                    dispatch(IdeCommand.GitVisible(false))
+                }
+
+                IdeKeyCode.UP -> {
+                    dispatch(IdeCommand.ScrollGit(-1, focus.gitScrollMaximum))
+                }
+
+                IdeKeyCode.DOWN -> {
+                    dispatch(IdeCommand.ScrollGit(1, focus.gitScrollMaximum))
+                }
+
+                IdeKeyCode.PAGE_UP -> {
+                    dispatch(IdeCommand.ScrollGit(-focus.editorPageRows, focus.gitScrollMaximum))
+                }
+
+                IdeKeyCode.PAGE_DOWN -> {
+                    dispatch(IdeCommand.ScrollGit(focus.editorPageRows, focus.gitScrollMaximum))
+                }
+
+                else -> {
+                    false
+                }
             }
         }
         if (focus.area == IdeFocusArea.Editor) {
@@ -201,7 +283,10 @@ class IdeInputAdapter(
         event: IdeCharacterInput,
         focus: IdeFocusState,
     ): Boolean {
-        if (focus.gitVisible) return true
+        if (focus.gitVisible) {
+            if (focus.gitDraft?.focused != null) dispatch(IdeCommand.EditGitDraft(IdeEditorInput.Type(event.text)))
+            return true
+        }
         if (focus.usagesFocused) return true
         if (focus.dialog != null || focus.area != IdeFocusArea.Editor) return false
         if (focus.findFocused) return dispatch(IdeCommand.EditFind(IdeEditorInput.Type(event.text)))
@@ -334,6 +419,30 @@ class IdeInputAdapter(
             .asReversed()
             .firstOrNull { it.enabled && it.bounds.contains(x, y) }
             ?.let { target ->
+                target.gitCommand?.let { command ->
+                    dispatch(command)
+                    val range = target.gitTextRange
+                    val field = (command as? IdeCommand.GitFocusField)?.field
+                    if (field != null && range != null) {
+                        val text = context.gitDraft?.field(field)?.text ?: return true
+                        val visible = text.substring(range.startUtf16, range.endUtf16)
+                        val column =
+                            ((x - target.bounds.left) / geometry.font.cellWidth).toInt().coerceIn(
+                                0,
+                                visible.codePointCount(0, visible.length),
+                            )
+                        dispatch(
+                            IdeCommand.EditGitDraft(
+                                IdeEditorInput.SetCaret(
+                                    range.startUtf16 + visible.offsetByCodePoints(0, column),
+                                    modifiers and IdeModifier.SHIFT != 0,
+                                ),
+                            ),
+                        )
+                    }
+                    pointerActivity()
+                    return true
+                }
                 target.gitOperation?.let { return dispatch(IdeCommand.Git(it)) }
                 if (target.action == IdeHitAction.DiagnosticChoice) {
                     val row = target.diagnostic ?: return false
@@ -374,7 +483,10 @@ class IdeInputAdapter(
                 if (handled) pointerActivity()
                 return handled
             }
-        if (context.gitVisible && geometry.editor.contains(x, y)) return true
+        if (context.gitVisible && geometry.editor.contains(x, y)) {
+            dispatch(IdeCommand.GitFocusField(null))
+            return true
+        }
         if (geometry.editor.contains(x, y)) {
             if (context.usages?.focused == true) sink.dispatch(IdeCommand.UnfocusUsages)
             if (context.editor?.find != null) sink.dispatch(IdeCommand.FocusFind(false))
@@ -585,7 +697,14 @@ class IdeInputAdapter(
         context: IdePointerContext,
     ): Boolean {
         if (context.gitVisible && context.geometry.editor.contains(x, y)) {
-            sink.dispatch(IdeCommand.ScrollGit((-vertical * SCROLL_ROWS).toInt(), context.gitScrollMaximum))
+            val preview = context.gitPreviewBounds?.contains(x, y) == true
+            sink.dispatch(
+                IdeCommand.ScrollGit(
+                    (-vertical * SCROLL_ROWS).toInt(),
+                    if (preview) context.gitPreviewScrollMaximum else context.gitScrollMaximum,
+                    if (preview) IdeGitScrollArea.Preview else IdeGitScrollArea.Content,
+                ),
+            )
             return true
         }
         if (context.usages != null && context.geometry.diagnostics?.contains(x, y) == true) {

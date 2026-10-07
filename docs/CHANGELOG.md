@@ -130,10 +130,13 @@ listed in [Kotlin support](developers/kotlin-support.md) and [standard library s
 
 ### In-game IDE
 
-- Local projects support HTTPS Git clone, opening existing directories in place, status/diff, stage/unstage,
-  commits/history, branches, fetch, fast-forward-only pull and push. Tokens are masked and session-only; merge and
+- Local projects support HTTPS Git clone, opening existing directories in place, status/diff,
+  selected-file commits, history, branches, fetch, fast-forward-only pull and push. Tokens are masked and session-only; merge and
   SSH are deferred. Git operations save modified buffers first and refresh working files and analysis afterward.
-  Git metadata stays outside compiler/deployment inputs; folder renames update open descendant buffers.
+  Git metadata stays outside compiler/deployment inputs; folder renames update open descendant buffers. Changes uses
+  file checkboxes, an editable commit message and author fields, with a colored HEAD-to-working preview beside the list
+  or on its own tab. Branches and repository/account actions use menus; Log separates commit history. Unrelated staged
+  changes remain preserved. Commit & Push pushes only after a successful commit, and failed commits keep their drafts.
 - Text-entry dialogs show a labeled input field with a contrasting background, focus border and visible caret.
   Long values scroll to keep the end of the input visible; authentication tokens remain masked.
 - File switches preserve caret, viewport and undo history in a bounded document cache. The editor highlights the

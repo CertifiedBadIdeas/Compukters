@@ -344,6 +344,7 @@ class IdeClientController(
 
             is IdeCommand.GitFocusField -> {
                 gitDraft.focus(command.field)
+                command.scroll?.let { gitView = gitView.copy(scroll = it.coerceIn(0, 1_000_000)) }
                 publishWorkspace()
             }
 
@@ -380,15 +381,11 @@ class IdeClientController(
             }
 
             is IdeCommand.ScrollGit -> {
+                val preview = command.area == ru.lazyhat.compukters.ide.client.state.IdeGitScrollArea.Preview
+                val previous = if (preview) gitView.previewScroll else gitView.scroll
+                val scroll = (previous.toLong() + command.lines).coerceIn(0, command.maximum.coerceIn(0, 1_000_000).toLong()).toInt()
                 gitView =
-                    gitView.copy(
-                        scroll =
-                            (gitView.scroll.toLong() + command.lines)
-                                .coerceIn(
-                                    0,
-                                    command.maximum.coerceIn(0, 1_000_000).toLong(),
-                                ).toInt(),
-                    )
+                    if (preview) gitView.copy(previewScroll = scroll) else gitView.copy(scroll = scroll)
                 publishWorkspace()
             }
 
@@ -1545,6 +1542,7 @@ class IdeClientController(
             publishStatus("Finish the current operation before using Git", IdeProblemSeverity.Warning)
             return
         }
+        gitView = gitView.copy(menu = null)
         pendingGit = operation
         continueGit()
     }
@@ -1584,7 +1582,7 @@ class IdeClientController(
         if (event.operationId != latestGitOperation) return
         gitCancellation = null
         state = state.copy(busy = state.busy - IdeBusyOperation.Git)
-        gitView = gitView.copy(result = event.result ?: gitView.result, scroll = 0)
+        gitView = gitView.copy(result = event.result ?: gitView.result, scroll = 0, previewScroll = 0)
         event.result?.status?.let { status ->
             val available = status.changes.mapTo(mutableSetOf()) { it.path }
             gitView =

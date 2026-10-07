@@ -37,30 +37,43 @@ This also supports moving entries. **Shift+F6** is a separate Kotlin symbol refa
 
 ## Git changes and commits
 
-Open **Git** on the right-hand tool stripe. Use **Init** for a project which has no repository yet. The panel shows the
-branch, upstream and changed paths with separate index and working-tree states.
+Open **Git** on the right-hand tool stripe. For a project without a repository, use **Create Git repository**.
+The **Changes** tab lists modified, new and deleted files with checkboxes. Click the checkbox beside a file to include
+its current saved content in the next commit; the heading selects or clears all changed files.
 
-- **Stage** adds the selected path to the index; **Unstage** leaves its working file intact.
-- **Working diff** compares the file with the index; **Staged diff** shows what the next commit will include.
-- **Commit** asks for a message, author name and email and commits the staged content. It does not stage other changes.
-- **History** shows recent commits. Use **Status** to return from diff/history to the changes list or refresh it.
+Click a file name to preview its difference from **HEAD**. Added lines are green and deleted lines are red. On a wide
+window, the preview appears beside the list; on a narrow window, it opens the **Diff** tab. The list and the wide
+preview scroll independently. **Log** shows recent commit messages and authors.
 
-The Git panel scrolls with the mouse wheel or Up/Down and Page Up/Page Down. **Editor** or Escape returns to the editor.
+Enter the commit message, author name and email directly in the labeled fields below Changes. The message supports
+multiple lines, cursor movement, selection, paste and undo/redo. Tab and Shift+Tab move between fields. **Commit**
+includes only checked files; **Commit & Push** pushes after the commit succeeds. Ctrl+Enter commits and
+Ctrl+Shift+Enter commits and pushes. There are no separate Stage/Unstage steps. Unrelated staged changes from an
+external Git client remain in its index and are not included automatically.
+
+A failed commit keeps its draft and checked paths which are still changed. A successful commit clears the message
+and its file selection while retaining the author fields for the IDE session. Changing projects clears the message
+and file selection. **Editor** returns to the source editor; Escape closes an open menu, leaves a focused commit
+field, then returns to the editor.
+
 Before a Git operation, the IDE saves modified open buffers. It pauses editing while the operation runs and refreshes
 files, tree and analysis after operations which change the working tree. Save conflicts must be resolved first.
 Git metadata is hidden from the project tree and excluded from compiler snapshots and executable deployment.
+At a short viewport, scroll the panel to reach the commit fields and actions.
 
 ## Branches and remotes
 
-**New branch** creates and switches to a local branch. Click another branch in the list to switch to it. These actions
-require a clean working tree; preserve your changes in a commit first. **Origin** sets the HTTPS URL of the origin remote.
+Click the branch name to open its menu. **New branch** creates and switches to a local branch; choose another branch
+to switch to it. These actions require a clean working tree; preserve your changes in a commit first.
+**Repository** groups origin and account settings; **Set origin URL** changes the origin remote.
 
-**Fetch** downloads remote refs. **Pull FF** accepts only a fast-forward update and requires a clean working tree. If
+**Fetch** downloads remote refs. **Update** accepts only a fast-forward update and requires a clean working tree. If
 local and remote histories have diverged, it reports an error and preserves local HEAD, index and working files. Merge
 and conflict resolution are deferred; use an external Git client for those operations, then refresh the IDE.
 
 **Push** sends the current branch to its configured upstream, or establishes its first origin upstream. A rejected push
-does not force-update the remote. **HTTPS token**, **Replace token** and **Forget token** manage session authentication;
+does not force-update the remote. **HTTPS account**, **Replace HTTPS token** and **Forget HTTPS token** in the
+Repository menu manage session authentication;
 **Cancel** requests cancellation of a running Git operation. Cancellation does not undo an operation already completed,
 and a network failure during push may require Fetch/Status to inspect the remote result.
 
