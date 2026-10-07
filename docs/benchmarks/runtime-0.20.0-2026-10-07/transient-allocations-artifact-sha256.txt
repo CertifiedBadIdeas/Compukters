@@ -1,0 +1,8 @@
+04c7b10a108d40d959b1adf630ee59a4e6337e748c8205f54323f989fb0f3e31  transient-allocations/fold-256-300.cpkt
+d26e0b3ae6c442033814191409a2adb7a8721c2610a7d03befa81e3dff8988ec  transient-allocations/fold-prebuilt-256-300.cpkt
+1b3c05d7e01acfdb9c02442f14bbf914a687bc7a4c1c9f63b29dd19b5e911dee  transient-allocations/fold-read-var-256-300.cpkt
+135c70c4e1b39d5d4ee98fe8729a61826cde91460a570eb24e27243a8db265d1  transient-allocations/fold-ref-256-300.cpkt
+1b3c05d7e01acfdb9c02442f14bbf914a687bc7a4c1c9f63b29dd19b5e911dee  transient-allocations/fold-val-256-300.cpkt
+0c151b1f4c789752d856b23cba921f5925844243226216771dce34411dfa3197  transient-allocations/fold-write-var-256-300.cpkt
+dffcff56a9db1f5ecda8474409e0069697134fbcf0ebdce926b33a788244bd3f  transient-allocations/for-list-256-300.cpkt
+9fb279c801bb74695a2458b9d7c6e65950a137ce378985ce6b1779e79fa9a38d  transient-allocations/while-indexed-256-300.cpkt

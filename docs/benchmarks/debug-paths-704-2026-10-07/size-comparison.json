@@ -1,0 +1,66 @@
+[
+  {
+    "artifact": "boot",
+    "before_bytes": 40916,
+    "after_bytes": 38444,
+    "saved_bytes": 2472,
+    "legacy_equivalent_sha256": "95964e61f2611e0db67997dfd4351c6748461bf665904b169e24f80ea8860a64",
+    "after_sha256": "b78ff618994b77528b12079e86e734d3ee8a429ccea774ee05f13cc1ab0de103"
+  },
+  {
+    "artifact": "edit",
+    "before_bytes": 220116,
+    "after_bytes": 181788,
+    "saved_bytes": 38328,
+    "legacy_equivalent_sha256": "c70c176189eddfe79f3f0a59dd188ccb1958f5749c496c4bc2ec97218388388a",
+    "after_sha256": "66018bb5dd456094f63fd82a093686d8a6c032a2d000a0fb557f7e63907dfbdd"
+  },
+  {
+    "artifact": "kotlinc",
+    "before_bytes": 40740,
+    "after_bytes": 36252,
+    "saved_bytes": 4488,
+    "legacy_equivalent_sha256": "aaadb78d00a6ac3ef3609cd4f953cbc5bf028e283f866c4a47be560123281252",
+    "after_sha256": "5372a1262b43f1b429867c52b5a424b9b589d96354de3b0a10270b4226bb48a4"
+  },
+  {
+    "artifact": "shell",
+    "before_bytes": 148660,
+    "after_bytes": 127132,
+    "saved_bytes": 21528,
+    "legacy_equivalent_sha256": "b1f13843a9f9e6cdbb34beb13b3cbd86df968437415fef00200f30de0908178e",
+    "after_sha256": "3d09822dd7b60e5c4d3f2a307d736a3e6cb2cdcefae30096606f50aad8e59bc5"
+  },
+  {
+    "artifact": "vmbench-agent",
+    "before_bytes": 43008,
+    "after_bytes": 37504,
+    "saved_bytes": 5504,
+    "legacy_equivalent_sha256": "ae12916ae54ce8512971ea925873df113d0ad39d584dd2cc6f48c5007b146ad3",
+    "after_sha256": "f4519ce045fc1246d5d2157c11cf0d0b1704c280f24fa7890f11afd48250ca73"
+  },
+  {
+    "artifact": "vmbench",
+    "before_bytes": 48672,
+    "after_bytes": 43592,
+    "saved_bytes": 5080,
+    "legacy_equivalent_sha256": "7cbcc4b40efbb9a628dd5c1856ec6f6af021ac49ec964f5bea3dc2aeb3815966",
+    "after_sha256": "372a1f5fcb72ca7ffe16b526d8aa4daef9a65f1187e025766f2b4497ec0f62af"
+  },
+  {
+    "artifact": "kotlin-map-not-null",
+    "before_bytes": 561176,
+    "after_bytes": 397752,
+    "saved_bytes": 163424,
+    "legacy_equivalent_sha256": "f5b4ae4969c2419e287392bc93c0fa3d6229d7af099c09b2babc44facb0140e2",
+    "after_sha256": "f6268884c2c0ec2e83cdb16d9d79d2ac2889a4103a7f584441b31b000f59bdc8"
+  },
+  {
+    "artifact": "kotlin-mutable-list",
+    "before_bytes": 419416,
+    "after_bytes": 290920,
+    "saved_bytes": 128496,
+    "legacy_equivalent_sha256": "01ef57c7301544defdbd113c8b538661fa8922c8a390fd2a40523651716b3b0d",
+    "after_sha256": "4200cb7faf6dc1a1b9774fe4108dfc96e0f39ae4407a8c03ad45ed46174f6a1a"
+  }
+]

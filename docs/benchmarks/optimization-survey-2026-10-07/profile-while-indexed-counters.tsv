@@ -1,0 +1,2 @@
+id	mode	samples	heap_bytes	create_median_ns	hot_min_ns	hot_median_ns	hot_max_ns	hot_fixed_units	hot_dynamic_units	hot_maintenance_units	hot_blocks	hot_executed_instructions	hot_retired_instructions	hot_requests	hot_responses
+while-indexed-256-300	untraced	99	16384	347490	42721691	43604865	49415411	5479180	10	0	849151	2779732	2779732	1	1

@@ -62,6 +62,8 @@ class SectionEncoderTest {
             listOf(
                 emptyList(),
                 List(3) { entry },
+                List(12) { entry.copy(sourcePath = MetadataText.of("src/" + "x".repeat(300) + ".kt")) },
+                List(12) { entry.copy(sourcePath = MetadataText.of("../invalid.kt")) },
                 listOf(entry.copy(sourcePath = MetadataText.of("x".repeat(300)))),
                 listOf(entry.copy(sourceLine = null, sourceColumn = null)),
                 listOf(entry.copy(sourceLine = null)),
@@ -72,7 +74,7 @@ class SectionEncoderTest {
         for (debug in debugCases) {
             val module = base.copy(debug = debug)
             val prepared = ReferenceLiveness.derive(module)
-            for (maximum in 0..256) {
+            for (maximum in (0..256) + listOf(512, 1024, 4096)) {
                 val limits = ArtifactWriteLimits(artifactBytes = maximum)
                 val full = runCatching { encodeModuleSections(prepared, limits).semanticHash }
                 val hash = runCatching { ArtifactWriter.moduleSemanticHash(module, limits) }

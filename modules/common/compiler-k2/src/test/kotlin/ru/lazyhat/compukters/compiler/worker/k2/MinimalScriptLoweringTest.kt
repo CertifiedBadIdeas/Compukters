@@ -4801,6 +4801,7 @@ class MinimalScriptLoweringTest {
                 class Child : Base() {
                     override fun value(): Int = 2
                 }
+                class Inherited : Base()
                 interface Reader {
                     fun read(): Int
                 }
@@ -4811,8 +4812,57 @@ class MinimalScriptLoweringTest {
                 fun classValue(value: Base): Int = value.value()
                 fun interfaceValue(value: Reader): Int = value.read()
 
+                fun finalClassValue(value: Child): Int = value.value()
+                fun finalInterfaceImplementation(value: Box): Int = value.read()
+                fun inheritedValue(value: Inherited): Int = value.value()
+                fun nullableValue(value: Child?): Int = value?.value() ?: -1
+                fun boundFinalValue(value: Child): Int {
+                    val read = value::value
+                    return read()
+                }
+
+                fun unboundFinalValue(value: Child): Int {
+                    val read: (Child) -> Int = Child::value
+                    return read(value)
+                }
+
+                class EarlyReceiver {
+                    val result = read()
+                    val child = Child()
+                    fun read(): Int = finalClassValue(child)
+                }
+                class EarlyBoundReceiver {
+                    val result = read()
+                    val child = Child()
+                    fun read(): Int = boundFinalValue(child)
+                }
+
                 fun main() {
-                    classValue(Child()) + interfaceValue(Box())
+                    val child = Child()
+                    val box = Box()
+                    check(classValue(child) == 2)
+                    check(interfaceValue(box) == 3)
+                    check(finalClassValue(child) == 2)
+                    check(finalInterfaceImplementation(box) == 3)
+                    check(inheritedValue(Inherited()) == 1)
+                    check(nullableValue(child) == 2)
+                    check(nullableValue(null) == -1)
+                    check(boundFinalValue(child) == 2)
+                    check(unboundFinalValue(child) == 2)
+                    var directNullCaught = false
+                    try {
+                        EarlyReceiver()
+                    } catch (failure: NullPointerException) {
+                        directNullCaught = true
+                    }
+                    check(directNullCaught)
+                    var boundNullCaught = false
+                    try {
+                        EarlyBoundReceiver()
+                    } catch (failure: NullPointerException) {
+                        boundNullCaught = true
+                    }
+                    check(boundNullCaught)
                 }
                 """.trimIndent()
 
@@ -4850,7 +4900,24 @@ class MinimalScriptLoweringTest {
             assertEquals(setOf(FunctionFlag.VIRTUAL), methods("Box").single().flags)
             assertTrue(methods("Reader").single().blockCount == 0u)
             assertTrue(listOf("Base", "Child", "Reader", "Box").flatMap(::methods).all { it.owner != null })
+
+            fun body(name: String): List<Instruction> {
+                val function = application.functions.single { application.strings[it.name.value.toInt()].toString() == name }
+                val first = function.firstBlock.value.toInt()
+                return application.blocks.subList(first, first + function.blockCount.toInt()).flatMap(Block::instructions)
+            }
+
+            assertTrue(body("finalClassValue").any { it is Instruction.Call })
+            assertTrue(body("finalClassValue").none { it is Instruction.CallVirtual })
+            assertTrue(body("finalInterfaceImplementation").any { it is Instruction.Call })
+            assertTrue(body("finalInterfaceImplementation").none { it is Instruction.CallVirtual || it is Instruction.CallInterface })
+            assertTrue(body("classValue").any { it is Instruction.CallVirtual })
+            assertTrue(body("interfaceValue").any { it is Instruction.CallInterface })
+            assertTrue(body("inheritedValue").any { it is Instruction.CallVirtual })
             val instructions = application.blocks.flatMap(Block::instructions)
+            val childMethod = FunctionRef.Local(FunctionId.of(application.functions.indexOf(methods("Child").single()).toUInt()))
+            assertTrue(instructions.filterIsInstance<Instruction.Call>().any { it.function == childMethod })
+            assertTrue(instructions.filterIsInstance<Instruction.CallVirtual>().none { it.function == childMethod })
             assertTrue(instructions.any { it is Instruction.CallVirtual })
             assertTrue(instructions.any { it is Instruction.CallInterface })
             assertTrue(first.diagnostics.none { it.severity.name == "ERROR" }, first.diagnostics.toString())

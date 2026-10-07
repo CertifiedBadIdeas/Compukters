@@ -1,0 +1,376 @@
+{
+  "parent_start": "0c73ef4c",
+  "vm": "bac6789",
+  "cpu": 6,
+  "samples_per_round": 7,
+  "rounds": 3,
+  "binary_sha256": "2803360319a7fa0bcac78e0a46fcde0a3b2538b73fea546657064c7c8a391dad",
+  "inputs": {
+    "before": {
+      "before/transient-allocations/while-indexed-256-300.cpkt": "85a540f4d4301b8a64be1f6761d3d634b3ad4b8576f1af492d7afbfd09f7c988",
+      "before/transient-allocations/while-indexed-256-300.kt": "956edbff833777e11b47604a2d0ba198b0517172ecac934d973ae1fa93d21152",
+      "before/transient-allocations/for-list-256-300.cpkt": "5677e7af0089f582b5457e0cc33e44244795e4ccb2d31dccf062fc00f15000aa",
+      "before/transient-allocations/for-list-256-300.kt": "31071590ef1a68c2ca7bcf72f7df99395ffb0a34d6095c7c9702fdd52071e8c8",
+      "before/transient-allocations/fold-256-300.cpkt": "b91a5442d894a7a255ebfdcc36e573320cebc1d8b56c55b4b5463a8c32815963",
+      "before/transient-allocations/fold-256-300.kt": "cfd0928c86da6717938e267320f837983b014545791f48cd7baae259bb651287",
+      "before/transient-allocations/fold-val-256-300.cpkt": "65b29f19397492cd0f146949c13be2094c24431398b0872bfb109cd7eebd0b93",
+      "before/transient-allocations/fold-val-256-300.kt": "0be5e1ea472903950c81c4c8022229bf7728c5c7c9c276755f93f33076fbed95",
+      "before/transient-allocations/fold-read-var-256-300.cpkt": "65b29f19397492cd0f146949c13be2094c24431398b0872bfb109cd7eebd0b93",
+      "before/transient-allocations/fold-read-var-256-300.kt": "5a5d75084fb0c87d4da37d4550c6ae1050c72a71116074fa64c59a7ba8926c2b",
+      "before/transient-allocations/fold-write-var-256-300.cpkt": "3be4a02ef9f91f9615dbc0125a5158b03244998b9812abe8c72a8b6101044cbf",
+      "before/transient-allocations/fold-write-var-256-300.kt": "508fd6f5b0242ae67a9b5f9e5c8f70d9c340f93f7f671ec4729a04099c9d1b14",
+      "before/transient-allocations/fold-ref-256-300.cpkt": "e7197ab645aac9f334e2fb4a5856e00ad7679135ace81ee58204afc25964b7d4",
+      "before/transient-allocations/fold-ref-256-300.kt": "38b5c80324eec4cf7de3843a669f21a1ec3de803e858578236b0a3b2f6451537",
+      "before/transient-allocations/fold-prebuilt-256-300.cpkt": "bad1b84137b93886d39a8ad56ab49a1607dd214b2e1d4d711618318741f4755e",
+      "before/transient-allocations/fold-prebuilt-256-300.kt": "819ec8124f1039ba2cc1c1892ca8ead531a9a8c62363975f94224c1db735636b",
+      "before/transient-allocations/manifest.tsv": "6c96cef707abb5607681ba3208fdab04a8e7e422c28756e268b23d85f768fce3",
+      "before/collection-reuse/map-not-null-1024-100-fresh.cpkt": "be3e430e2a8b214227f5031941a8f7d2145e79b89cd134dd5f41adaaf3cfebce",
+      "before/collection-reuse/map-not-null-1024-100-fresh.kt": "7efa4c4b45e156fab91f8e85639ca4591c76d79c83386b7960da5121f0d3e1f6",
+      "before/collection-reuse/map-not-null-1024-100-reuse-list.cpkt": "3ca45732a01c5e4cd9103b45441a6765475177b169874d04b0d9f5ae1e9b4203",
+      "before/collection-reuse/map-not-null-1024-100-reuse-list.kt": "bf7bf02b2c25fc4854c42f30b6c5d055bef8aa2931cbde3093248d919aa8edd4",
+      "before/collection-reuse/map-not-null-1024-100-reuse-objects.cpkt": "12cbe2038d2cc9cd9435eddb33dabcb3b6cc59c402c0d083378ea2045e3afed5",
+      "before/collection-reuse/map-not-null-1024-100-reuse-objects.kt": "7ec8d9e8f5c2c9c5a9bf9ca5493c0fb9a2c9bdd039e854741ef0ac03aa1811b3",
+      "before/collection-reuse/manifest.tsv": "0737c2b87472b108847117199b8c957730bc4433523b6b948cfe2ba59cbe38d0"
+    },
+    "after": {
+      "after/transient-allocations/while-indexed-256-300.cpkt": "8d560f74cd3c08bc866295f5054e5c1fd21646f998f6bda4f55e3da08cc55016",
+      "after/transient-allocations/while-indexed-256-300.kt": "956edbff833777e11b47604a2d0ba198b0517172ecac934d973ae1fa93d21152",
+      "after/transient-allocations/for-list-256-300.cpkt": "d8765f1e54e0e942fd2aa59750654a9bc85913ddbad14eeda1d1021c30db8132",
+      "after/transient-allocations/for-list-256-300.kt": "31071590ef1a68c2ca7bcf72f7df99395ffb0a34d6095c7c9702fdd52071e8c8",
+      "after/transient-allocations/fold-256-300.cpkt": "d7e2ad3fd90c17609ca425beb2b162217e99ae6943c86c54c8c1dabfadef31e9",
+      "after/transient-allocations/fold-256-300.kt": "cfd0928c86da6717938e267320f837983b014545791f48cd7baae259bb651287",
+      "after/transient-allocations/fold-val-256-300.cpkt": "a0c7a27f34a9ca4e343fb78ac847e23ffe77f0b730f3f00dbad307400eb5e291",
+      "after/transient-allocations/fold-val-256-300.kt": "0be5e1ea472903950c81c4c8022229bf7728c5c7c9c276755f93f33076fbed95",
+      "after/transient-allocations/fold-read-var-256-300.cpkt": "a0c7a27f34a9ca4e343fb78ac847e23ffe77f0b730f3f00dbad307400eb5e291",
+      "after/transient-allocations/fold-read-var-256-300.kt": "5a5d75084fb0c87d4da37d4550c6ae1050c72a71116074fa64c59a7ba8926c2b",
+      "after/transient-allocations/fold-write-var-256-300.cpkt": "c82cfa5b1b83ff41b1d6e527812c25e9fda5f82e364ad9b837bd55499d3c2f7c",
+      "after/transient-allocations/fold-write-var-256-300.kt": "508fd6f5b0242ae67a9b5f9e5c8f70d9c340f93f7f671ec4729a04099c9d1b14",
+      "after/transient-allocations/fold-ref-256-300.cpkt": "6e065f379cc02c5ba3435304b4b443c2064462be940b709924d3dfc35427709e",
+      "after/transient-allocations/fold-ref-256-300.kt": "38b5c80324eec4cf7de3843a669f21a1ec3de803e858578236b0a3b2f6451537",
+      "after/transient-allocations/fold-prebuilt-256-300.cpkt": "04511c9e647688b8bc915d21a7a9595ad74b19d924e047e64afdc76aa26c5f8b",
+      "after/transient-allocations/fold-prebuilt-256-300.kt": "819ec8124f1039ba2cc1c1892ca8ead531a9a8c62363975f94224c1db735636b",
+      "after/transient-allocations/manifest.tsv": "6c96cef707abb5607681ba3208fdab04a8e7e422c28756e268b23d85f768fce3",
+      "after/collection-reuse/map-not-null-1024-100-fresh.cpkt": "82b18f29018fa0544745912db84f176f1c1ae8f02b4937509b96c3677fb35714",
+      "after/collection-reuse/map-not-null-1024-100-fresh.kt": "7efa4c4b45e156fab91f8e85639ca4591c76d79c83386b7960da5121f0d3e1f6",
+      "after/collection-reuse/map-not-null-1024-100-reuse-list.cpkt": "d56f202760c228cc44d277b99b9fe5f55ade35efa5c8f6d58b94084a6a579b95",
+      "after/collection-reuse/map-not-null-1024-100-reuse-list.kt": "bf7bf02b2c25fc4854c42f30b6c5d055bef8aa2931cbde3093248d919aa8edd4",
+      "after/collection-reuse/map-not-null-1024-100-reuse-objects.cpkt": "2283122adcede762fb9076c774768f0d57321cc786db1169415fb584d9927d53",
+      "after/collection-reuse/map-not-null-1024-100-reuse-objects.kt": "7ec8d9e8f5c2c9c5a9bf9ca5493c0fb9a2c9bdd039e854741ef0ac03aa1811b3",
+      "after/collection-reuse/manifest.tsv": "0737c2b87472b108847117199b8c957730bc4433523b6b948cfe2ba59cbe38d0"
+    }
+  },
+  "invocations": [
+    {
+      "command": [
+        "taskset",
+        "-c",
+        "6",
+        "/home/lzwork/CompuktersMod/Compukters/.worktrees/vm-performance/build/reports/benchmarks/final-calls-2026-10-08/guest-benchmark",
+        "/home/lzwork/CompuktersMod/Compukters/.worktrees/vm-performance/build/reports/benchmarks/final-calls-2026-10-08/before/transient-allocations",
+        "/home/lzwork/CompuktersMod/Compukters/.worktrees/vm-performance/build/reports/benchmarks/final-calls-2026-10-08/trials/before-1-loops",
+        "7",
+        "16384",
+        "untraced",
+        "while-indexed,for-list,fold-256"
+      ],
+      "before_utc": "2026-10-07T21:15:30.637938+00:00",
+      "load_before": [
+        6.48388671875,
+        11.79736328125,
+        10.4580078125
+      ],
+      "after_utc": "2026-10-07T21:15:33.536618+00:00",
+      "load_after": [
+        6.525390625,
+        11.71728515625,
+        10.43896484375
+      ]
+    },
+    {
+      "command": [
+        "taskset",
+        "-c",
+        "6",
+        "/home/lzwork/CompuktersMod/Compukters/.worktrees/vm-performance/build/reports/benchmarks/final-calls-2026-10-08/guest-benchmark",
+        "/home/lzwork/CompuktersMod/Compukters/.worktrees/vm-performance/build/reports/benchmarks/final-calls-2026-10-08/before/collection-reuse",
+        "/home/lzwork/CompuktersMod/Compukters/.worktrees/vm-performance/build/reports/benchmarks/final-calls-2026-10-08/trials/before-1-objects",
+        "7",
+        "262144",
+        "untraced",
+        "map-not-null"
+      ],
+      "before_utc": "2026-10-07T21:15:33.536879+00:00",
+      "load_before": [
+        6.525390625,
+        11.71728515625,
+        10.43896484375
+      ],
+      "after_utc": "2026-10-07T21:15:47.826038+00:00",
+      "load_after": [
+        5.98291015625,
+        11.4296875,
+        10.35888671875
+      ]
+    },
+    {
+      "command": [
+        "taskset",
+        "-c",
+        "6",
+        "/home/lzwork/CompuktersMod/Compukters/.worktrees/vm-performance/build/reports/benchmarks/final-calls-2026-10-08/guest-benchmark",
+        "/home/lzwork/CompuktersMod/Compukters/.worktrees/vm-performance/build/reports/benchmarks/final-calls-2026-10-08/after/transient-allocations",
+        "/home/lzwork/CompuktersMod/Compukters/.worktrees/vm-performance/build/reports/benchmarks/final-calls-2026-10-08/trials/after-1-loops",
+        "7",
+        "16384",
+        "untraced",
+        "while-indexed,for-list,fold-256"
+      ],
+      "before_utc": "2026-10-07T21:15:47.826490+00:00",
+      "load_before": [
+        5.98291015625,
+        11.4296875,
+        10.35888671875
+      ],
+      "after_utc": "2026-10-07T21:15:50.624313+00:00",
+      "load_after": [
+        5.82373046875,
+        11.30615234375,
+        10.32470703125
+      ]
+    },
+    {
+      "command": [
+        "taskset",
+        "-c",
+        "6",
+        "/home/lzwork/CompuktersMod/Compukters/.worktrees/vm-performance/build/reports/benchmarks/final-calls-2026-10-08/guest-benchmark",
+        "/home/lzwork/CompuktersMod/Compukters/.worktrees/vm-performance/build/reports/benchmarks/final-calls-2026-10-08/after/collection-reuse",
+        "/home/lzwork/CompuktersMod/Compukters/.worktrees/vm-performance/build/reports/benchmarks/final-calls-2026-10-08/trials/after-1-objects",
+        "7",
+        "262144",
+        "untraced",
+        "map-not-null"
+      ],
+      "before_utc": "2026-10-07T21:15:50.624630+00:00",
+      "load_before": [
+        5.82373046875,
+        11.30615234375,
+        10.32470703125
+      ],
+      "after_utc": "2026-10-07T21:16:04.055398+00:00",
+      "load_after": [
+        5.73291015625,
+        11.013671875,
+        10.244140625
+      ]
+    },
+    {
+      "command": [
+        "taskset",
+        "-c",
+        "6",
+        "/home/lzwork/CompuktersMod/Compukters/.worktrees/vm-performance/build/reports/benchmarks/final-calls-2026-10-08/guest-benchmark",
+        "/home/lzwork/CompuktersMod/Compukters/.worktrees/vm-performance/build/reports/benchmarks/final-calls-2026-10-08/after/transient-allocations",
+        "/home/lzwork/CompuktersMod/Compukters/.worktrees/vm-performance/build/reports/benchmarks/final-calls-2026-10-08/trials/after-2-loops",
+        "7",
+        "16384",
+        "untraced",
+        "while-indexed,for-list,fold-256"
+      ],
+      "before_utc": "2026-10-07T21:16:04.055683+00:00",
+      "load_before": [
+        5.73291015625,
+        11.013671875,
+        10.244140625
+      ],
+      "after_utc": "2026-10-07T21:16:07.315862+00:00",
+      "load_after": [
+        5.73291015625,
+        11.013671875,
+        10.244140625
+      ]
+    },
+    {
+      "command": [
+        "taskset",
+        "-c",
+        "6",
+        "/home/lzwork/CompuktersMod/Compukters/.worktrees/vm-performance/build/reports/benchmarks/final-calls-2026-10-08/guest-benchmark",
+        "/home/lzwork/CompuktersMod/Compukters/.worktrees/vm-performance/build/reports/benchmarks/final-calls-2026-10-08/after/collection-reuse",
+        "/home/lzwork/CompuktersMod/Compukters/.worktrees/vm-performance/build/reports/benchmarks/final-calls-2026-10-08/trials/after-2-objects",
+        "7",
+        "262144",
+        "untraced",
+        "map-not-null"
+      ],
+      "before_utc": "2026-10-07T21:16:07.316271+00:00",
+      "load_before": [
+        5.73291015625,
+        11.013671875,
+        10.244140625
+      ],
+      "after_utc": "2026-10-07T21:16:20.424020+00:00",
+      "load_after": [
+        5.58349609375,
+        10.732421875,
+        10.1650390625
+      ]
+    },
+    {
+      "command": [
+        "taskset",
+        "-c",
+        "6",
+        "/home/lzwork/CompuktersMod/Compukters/.worktrees/vm-performance/build/reports/benchmarks/final-calls-2026-10-08/guest-benchmark",
+        "/home/lzwork/CompuktersMod/Compukters/.worktrees/vm-performance/build/reports/benchmarks/final-calls-2026-10-08/before/transient-allocations",
+        "/home/lzwork/CompuktersMod/Compukters/.worktrees/vm-performance/build/reports/benchmarks/final-calls-2026-10-08/trials/before-2-loops",
+        "7",
+        "16384",
+        "untraced",
+        "while-indexed,for-list,fold-256"
+      ],
+      "before_utc": "2026-10-07T21:16:20.424408+00:00",
+      "load_before": [
+        5.58349609375,
+        10.732421875,
+        10.1650390625
+      ],
+      "after_utc": "2026-10-07T21:16:23.259258+00:00",
+      "load_after": [
+        5.58349609375,
+        10.732421875,
+        10.1650390625
+      ]
+    },
+    {
+      "command": [
+        "taskset",
+        "-c",
+        "6",
+        "/home/lzwork/CompuktersMod/Compukters/.worktrees/vm-performance/build/reports/benchmarks/final-calls-2026-10-08/guest-benchmark",
+        "/home/lzwork/CompuktersMod/Compukters/.worktrees/vm-performance/build/reports/benchmarks/final-calls-2026-10-08/before/collection-reuse",
+        "/home/lzwork/CompuktersMod/Compukters/.worktrees/vm-performance/build/reports/benchmarks/final-calls-2026-10-08/trials/before-2-objects",
+        "7",
+        "262144",
+        "untraced",
+        "map-not-null"
+      ],
+      "before_utc": "2026-10-07T21:16:23.259665+00:00",
+      "load_before": [
+        5.58349609375,
+        10.732421875,
+        10.1650390625
+      ],
+      "after_utc": "2026-10-07T21:16:36.755194+00:00",
+      "load_after": [
+        5.04248046875,
+        10.36767578125,
+        10.0546875
+      ]
+    },
+    {
+      "command": [
+        "taskset",
+        "-c",
+        "6",
+        "/home/lzwork/CompuktersMod/Compukters/.worktrees/vm-performance/build/reports/benchmarks/final-calls-2026-10-08/guest-benchmark",
+        "/home/lzwork/CompuktersMod/Compukters/.worktrees/vm-performance/build/reports/benchmarks/final-calls-2026-10-08/before/transient-allocations",
+        "/home/lzwork/CompuktersMod/Compukters/.worktrees/vm-performance/build/reports/benchmarks/final-calls-2026-10-08/trials/before-3-loops",
+        "7",
+        "16384",
+        "untraced",
+        "while-indexed,for-list,fold-256"
+      ],
+      "before_utc": "2026-10-07T21:16:36.755615+00:00",
+      "load_before": [
+        5.04248046875,
+        10.36767578125,
+        10.0546875
+      ],
+      "after_utc": "2026-10-07T21:16:39.574136+00:00",
+      "load_after": [
+        4.71875,
+        10.2119140625,
+        10.005859375
+      ]
+    },
+    {
+      "command": [
+        "taskset",
+        "-c",
+        "6",
+        "/home/lzwork/CompuktersMod/Compukters/.worktrees/vm-performance/build/reports/benchmarks/final-calls-2026-10-08/guest-benchmark",
+        "/home/lzwork/CompuktersMod/Compukters/.worktrees/vm-performance/build/reports/benchmarks/final-calls-2026-10-08/before/collection-reuse",
+        "/home/lzwork/CompuktersMod/Compukters/.worktrees/vm-performance/build/reports/benchmarks/final-calls-2026-10-08/trials/before-3-objects",
+        "7",
+        "262144",
+        "untraced",
+        "map-not-null"
+      ],
+      "before_utc": "2026-10-07T21:16:39.574507+00:00",
+      "load_before": [
+        4.71875,
+        10.2119140625,
+        10.005859375
+      ],
+      "after_utc": "2026-10-07T21:16:52.930213+00:00",
+      "load_after": [
+        4.36767578125,
+        9.95703125,
+        9.9248046875
+      ]
+    },
+    {
+      "command": [
+        "taskset",
+        "-c",
+        "6",
+        "/home/lzwork/CompuktersMod/Compukters/.worktrees/vm-performance/build/reports/benchmarks/final-calls-2026-10-08/guest-benchmark",
+        "/home/lzwork/CompuktersMod/Compukters/.worktrees/vm-performance/build/reports/benchmarks/final-calls-2026-10-08/after/transient-allocations",
+        "/home/lzwork/CompuktersMod/Compukters/.worktrees/vm-performance/build/reports/benchmarks/final-calls-2026-10-08/trials/after-3-loops",
+        "7",
+        "16384",
+        "untraced",
+        "while-indexed,for-list,fold-256"
+      ],
+      "before_utc": "2026-10-07T21:16:52.930643+00:00",
+      "load_before": [
+        4.36767578125,
+        9.95703125,
+        9.9248046875
+      ],
+      "after_utc": "2026-10-07T21:16:55.670019+00:00",
+      "load_after": [
+        4.09765625,
+        9.80810546875,
+        9.87646484375
+      ]
+    },
+    {
+      "command": [
+        "taskset",
+        "-c",
+        "6",
+        "/home/lzwork/CompuktersMod/Compukters/.worktrees/vm-performance/build/reports/benchmarks/final-calls-2026-10-08/guest-benchmark",
+        "/home/lzwork/CompuktersMod/Compukters/.worktrees/vm-performance/build/reports/benchmarks/final-calls-2026-10-08/after/collection-reuse",
+        "/home/lzwork/CompuktersMod/Compukters/.worktrees/vm-performance/build/reports/benchmarks/final-calls-2026-10-08/trials/after-3-objects",
+        "7",
+        "262144",
+        "untraced",
+        "map-not-null"
+      ],
+      "before_utc": "2026-10-07T21:16:55.670508+00:00",
+      "load_before": [
+        4.09765625,
+        9.80810546875,
+        9.87646484375
+      ],
+      "after_utc": "2026-10-07T21:17:08.542611+00:00",
+      "load_after": [
+        3.484375,
+        9.39208984375,
+        9.73876953125
+      ]
+    }
+  ]
+}

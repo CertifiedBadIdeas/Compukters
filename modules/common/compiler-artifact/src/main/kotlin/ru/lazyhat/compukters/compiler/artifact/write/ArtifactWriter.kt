@@ -81,19 +81,18 @@ private fun encodeArtifact(
     limits: ArtifactWriteLimits,
 ): ArtifactWriteResult.Success {
     val encodedModules = artifact.modules.map { encodeModuleSections(it, limits) }
+    if (encodedModules.sumOf {
+            it
+                .required(SAFEPOINT_ROOTS)
+                .payload.size
+                .toLong()
+        } > limits.artifactBytes
+    ) {
+        throw ArtifactEncodingException(ArtifactWriteErrorCode.LIMIT_EXCEEDED, "expanded safepoint roots exceed artifact byte limit")
+    }
     val debugBytes =
-        encodedModules.sumOf {
-            (
-                it.debug
-                    ?.payload
-                    ?.size
-                    ?.toLong() ?: 0L
-            ) + (
-                it.debugPositions
-                    ?.payload
-                    ?.size
-                    ?.toLong() ?: 0L
-            )
+        encodedModules.sumOf { module ->
+            listOfNotNull(module.debug, module.debugPaths, module.debugPositions).sumOf { it.payload.size.toLong() }
         }
     if (debugBytes > limits.debugBytes) {
         throw ArtifactEncodingException(ArtifactWriteErrorCode.LIMIT_EXCEEDED, "debug metadata exceeds ${limits.debugBytes} bytes")
@@ -111,8 +110,13 @@ private fun encodeArtifact(
         )
     encodedModules.forEachIndexed { moduleIndex, module ->
         val scope = moduleIndex.toUInt() + 1u
-        module.semantic.forEach { sections += PhysicalSection(it.kind, CORE_FLAGS, scope, it.payload, it.count) }
+        module.semantic.forEach { canonical ->
+            val section = if (canonical.kind == SAFEPOINT_ROOTS) module.compactRoots ?: canonical else canonical
+            sections += PhysicalSection(section.kind, CORE_FLAGS, scope, section.payload, section.count)
+        }
+        module.rootRanges?.let { sections += PhysicalSection(it.kind, 1, scope, it.payload, it.count) }
         module.debug?.let { sections += PhysicalSection(it.kind, 0, scope, it.payload, it.count) }
+        module.debugPaths?.let { sections += PhysicalSection(it.kind, 1, scope, it.payload, it.count) }
         module.debugPositions?.let { sections += PhysicalSection(it.kind, 0, scope, it.payload, it.count) }
     }
     sections.sortWith(compareBy(PhysicalSection::scope, PhysicalSection::kind))

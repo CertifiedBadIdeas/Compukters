@@ -46,9 +46,29 @@ inline normalization and linked libraries. Optional module section `DEBUG_SOURCE
 uses the standard indexed envelope; every record is exactly three little-endian `u32` fields: DEBUG record index,
 one-based source line, and one-based UTF-16 column. Indices strictly increase and must address the module's DEBUG
 table; line and column must be positive. Both debug sections count against metadata limits and are excluded from
-module semantic hashes. Existing DEBUG bytes and executable/runtime ABI are unchanged. Older Rust readers skip this
+module semantic hashes. Source positions alone do not change DEBUG encoding or executable/runtime ABI. Older Rust readers skip this
 optional extension; older Kotlin artifact readers may require an update. Old artifacts use source path plus UTF-16
 offset when present, otherwise function and bytecode coordinates. Runtime formatting never reads current source files.
+
+Source builds after [#704](https://github.com/CertifiedBadIdeas/Compukters/issues/704) may also emit module section
+`DEBUG_PATHS` (`0x0111`, flags `CRITICAL = 1`, `SEMANTIC = 0`). Its standard indexed records contain unique,
+canonical relative UTF-8 source paths, ordered by first use in DEBUG; the table is nonempty, requires DEBUG, and
+has no unused entries. Canonical paths are nonempty, have no leading slash or backslash, and contain no empty,
+`.` or `..` slash-delimited segments.
+
+Presence of DEBUG_PATHS selects compact DEBUG: each record is exactly seven little-endian `u32` fields
+(function, block, instruction, start UTF-16 offset, end UTF-16 offset, inline parent, path pool index). The first
+six fields and DEBUG_SOURCE_POSITIONS are unchanged. Without DEBUG_PATHS the last field remains the inline UTF-8
+byte length followed by those path bytes. Pool IDs must be in range; inline parents must precede their child.
+All three sections count toward debug limits and are excluded from semantic hashes. Rust retains shared ranges
+into admitted artifact bytes; it does not expand repeated paths. The writer uses the pool only when aligned
+payload and directory costs decrease the physical artifact size.
+
+Container format remains 3.0, semantic Runtime ABI remains 1.15, and native C ABI remains 20. New readers accept
+legacy artifacts; readers without DEBUG_PATHS support reject its critical section. This is a reader capability
+requirement independent of semantic ABI. Published Runtime 0.20.0 bundles predate this support: compact output
+requires a Runtime rebuilt from the updated source, and a future published bundle/pin update before packaging
+with released natives. This source change alone does not establish production-bundle or release compatibility.
 
 Native C ABI 17 appends a length-prefixed, bounded UTF-8 trace to terminal outcome tags 2 (OOM), 5 (Guest trap), and
 6 (VM fault), after their existing scalar payload. Empty text means unavailable diagnostic text. FFM and JNI validate
@@ -62,6 +82,36 @@ count followed by exact UTF-16. Unit has no payload. The boundary accepts at mos
 unknown versions/tags, invalid widths/Boolean values, over-limit strings and trailing bytes fail before consuming the
 pending request. Existing scalar resume exports remain available. The SDK can now generate Long, Double and Char
 completion handlers, and both JNI and FFM dispatch those responses through this encoding.
+
+## Compact safepoint root ranges
+
+Source builds after [#706](https://github.com/CertifiedBadIdeas/Compukters/issues/706) may emit module section
+`SAFEPOINT_ROOT_RANGES` (`0x0112`, flags `CRITICAL = 1`, `SEMANTIC = 0`, element count 1). Its raw 16-byte payload is
+encoding version (`u32`, currently 1), expanded root record count (`u32`) and canonical expanded indexed payload
+length (`u64`), all little-endian. It requires the module's SAFEPOINT_ROOTS section.
+
+With this marker, each indexed SAFEPOINT_ROOTS record contains function, block, first instruction boundary and
+positive run count (`u32` each), reference count and zero reserved (`u16` each), followed by sorted, unique
+(value ID, physical component ID) `u16` pairs. A range spans consecutive boundaries within one block. Ranges
+are ordered and cannot overlap; adjacent ranges with identical references in the same function/block must be merged.
+Without the marker, retain the existing 16-byte root header and per-boundary records. The writer selects ranges
+only when their aligned payload plus the marker and directory entry is smaller.
+
+Readers reconstruct every original boundary before ordinary verification and execution-image admission. Owners,
+block endpoints, arithmetic, reference counts, expanded row counts, per-function safepoint limits and cumulative
+expanded bytes are checked before expanding ranges. The expanded canonical root payloads across all modules,
+including legacy modules, count against the artifact-byte policy. Kotlin's `ArtifactReader.read(bytes)` defaults
+to a 16 MiB cumulative expansion budget; `read(bytes, maximumExpandedRootBytes)` allows a caller-selected budget.
+The expanded marker count is capped at one million in Kotlin and `records_per_section` in Rust. Rust uses fallible
+allocation and checks reference ordering before expansion. Ranges do not remove GC checkpoints or change root semantics.
+
+Module semantic identity remains the canonical **expanded legacy** encoding: for range-encoded SAFEPOINT_ROOTS,
+the native verifier streams the original indexed envelope, offsets, padding and per-boundary records into the
+existing module hash. Other semantic sections retain raw-payload hashing; the range marker is excluded. Imports,
+precompiled module identities and source diagnostics therefore keep their hashes. Container 3.0, semantic
+Runtime ABI 1.15 and native C ABI 20 remain unchanged. Readers predating the marker reject it as unknown critical.
+Updated source-built natives are required; published Runtime 0.20.0 bundles and their pins do not contain this capability.
+
 
 ## Runtime ABI 1.3
 

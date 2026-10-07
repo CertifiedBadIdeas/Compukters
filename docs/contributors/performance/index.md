@@ -15,6 +15,9 @@ interpreter measurements answer different questions: they exclude Minecraft life
 
 | Report | Scope |
 | --- | --- |
+| [Direct final-class calls, 2026-10-08]({{ '/VM-FINAL-CALLS-2026-10-08/' | relative_url }}) | Compiler devirtualization, matched CPU trials and dispatch conformance |
+| [Builtin sizes and optimization opportunities, 2026-10-07]({{ '/VM-OPTIMIZATION-SURVEY-2026-10-07/' | relative_url }}) | Section inventories, debug/root metadata models and CPU profiles |
+| [Runtime 0.20.0 baseline, 2026-10-07]({{ '/VM-PERFORMANCE-2026-10-07/' | relative_url }}) | Fresh compiled Guest workloads through the untraced interpreter |
 | [VM performance, 2026-10-04]({{ '/VM-PERFORMANCE-2026-10-04/' | relative_url }}) | Recorded hardware and workload baseline |
 | [Production-path optimization, 2026-10-04]({{ '/VM-OPTIMIZATION-2026-10-04/' | relative_url }}) | Paired managed type lookup measurements |
 | [Virtual dispatch, 2026-10-04]({{ '/VM-DISPATCH-2026-10-04/' | relative_url }}) | Paired per-type dispatch lookup measurements |

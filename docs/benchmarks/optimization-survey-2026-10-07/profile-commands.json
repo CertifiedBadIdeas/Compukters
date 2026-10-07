@@ -1,0 +1,77 @@
+[
+  {
+    "case": "while-indexed",
+    "argv": [
+      "perf",
+      "record",
+      "-e",
+      "cycles:u",
+      "-F",
+      "499",
+      "--call-graph",
+      "dwarf",
+      "-o",
+      "build/reports/benchmarks/optimization-survey-2026-10-07/while-indexed.data",
+      "--",
+      "build/reports/benchmarks/runtime-0.20.0-2026-10-07/guest-benchmark",
+      "modules/common/compiler-k2/build/generated/benchmarks/transient-allocations",
+      "build/reports/benchmarks/optimization-survey-2026-10-07/profile-while-indexed",
+      "99",
+      "16384",
+      "untraced",
+      "while-indexed"
+    ],
+    "started_utc": "2026-10-07T19:40:42.305253+00:00",
+    "finished_utc": "2026-10-07T19:40:47.112605+00:00"
+  },
+  {
+    "case": "fold-256",
+    "argv": [
+      "perf",
+      "record",
+      "-e",
+      "cycles:u",
+      "-F",
+      "499",
+      "--call-graph",
+      "dwarf",
+      "-o",
+      "build/reports/benchmarks/optimization-survey-2026-10-07/fold-256.data",
+      "--",
+      "build/reports/benchmarks/runtime-0.20.0-2026-10-07/guest-benchmark",
+      "modules/common/compiler-k2/build/generated/benchmarks/transient-allocations",
+      "build/reports/benchmarks/optimization-survey-2026-10-07/profile-fold-256",
+      "99",
+      "16384",
+      "untraced",
+      "fold-256"
+    ],
+    "started_utc": "2026-10-07T19:40:47.112850+00:00",
+    "finished_utc": "2026-10-07T19:40:55.312029+00:00"
+  },
+  {
+    "case": "map-not-null-1024-100-fresh",
+    "argv": [
+      "perf",
+      "record",
+      "-e",
+      "cycles:u",
+      "-F",
+      "499",
+      "--call-graph",
+      "dwarf",
+      "-o",
+      "build/reports/benchmarks/optimization-survey-2026-10-07/map-not-null-1024-100-fresh.data",
+      "--",
+      "build/reports/benchmarks/runtime-0.20.0-2026-10-07/guest-benchmark",
+      "modules/common/compiler-k2/build/generated/benchmarks/collection-reuse",
+      "build/reports/benchmarks/optimization-survey-2026-10-07/profile-map-not-null-1024-100-fresh",
+      "99",
+      "262144",
+      "untraced",
+      "map-not-null-1024-100-fresh"
+    ],
+    "started_utc": "2026-10-07T19:40:55.312232+00:00",
+    "finished_utc": "2026-10-07T19:41:22.409385+00:00"
+  }
+]

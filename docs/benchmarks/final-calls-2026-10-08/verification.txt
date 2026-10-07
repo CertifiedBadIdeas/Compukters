@@ -1,0 +1,51 @@
+Task starting parent: 0c73ef4c; VM: bac6789, unchanged and clean.
+Worktree: .worktrees/vm-performance; branch: agent/vm-profile-2026-10-07.
+JDK: /usr/lib/jvm/java-25-openjdk.
+All Gradle commands use JAVA_HOME above and ./gradlew-sandbox-dev-parallel-summary.
+
+Baseline generation, before production edits:
+:compiler-k2:generateTransientAllocationBenchmarkArtifacts :compiler-k2:generateCollectionReuseBenchmarkArtifacts --offline
+BUILD SUCCESSFUL in 39s; 33 actionable tasks, 6 executed.
+Log: gradle-20261007T210413Z-398039.log
+
+Red structure test before production edits:
+:compiler-k2:generateDispatchConformanceArtifact --offline
+Expected assertion failure: finalClassValue had no direct Call.
+Log: gradle-20261007T210532Z-406907.log
+
+Initial candidate and benchmark generation:
+testKotlinDispatchVmConformance testKotlinInterfaceDefaultsVmConformance testKotlinInterfaceSuperVmConformance testKotlinNullableReferencesVmConformance :compiler-k2:generateTransientAllocationBenchmarkArtifacts :compiler-k2:generateCollectionReuseBenchmarkArtifacts --offline
+BUILD SUCCESSFUL in 1m 9s; 45 actionable tasks, 21 executed.
+Log: gradle-20261007T210608Z-416275.log
+
+Module checks and collection conformance:
+:compiler-k2-engine:check :compiler-k2:check testKotlinDispatchVmConformance testKotlinGenericLibraryVmConformance testKotlinMapNotNullVmConformance testKotlinMutableListVmConformance testKotlinListAnyQuotaVmConformance
+BUILD SUCCESSFUL in 5m 33s; 93 actionable tasks, 60 executed.
+Log: gradle-20261007T210833Z-431950.log
+An earlier offline invocation failed resolving uncached org.eclipse.jgit:org.eclipse.jgit:7.8.0.202609011348-r in :ide-git:assertNoK2CompilerRuntime. The successful invocation allowed dependency download.
+
+Constructor initialization characterization:
+First fixture read child directly before initialization and K2 rejected UNINITIALIZED_VARIABLE.
+Revised valid source reads through an instance method; both direct and bound-reference paths catch Guest NullPointerException before dispatch. No additional guard was required.
+testKotlinDispatchVmConformance --offline
+BUILD SUCCESSFUL in 15s; 33 actionable tasks, 3 executed.
+Log: gradle-20261007T211440Z-482884.log
+
+Final dispatch fixture adds unbound references; affected lint:
+:compiler-k2:lintKotlin :compiler-k2-engine:lintKotlin testKotlinDispatchVmConformance --offline
+BUILD SUCCESSFUL in 20s; 37 actionable tasks, 4 executed.
+Log: gradle-20261007T211721Z-494186.log
+
+Paired timing trials:
+12 invocations, 3 rounds, 7 untraced samples per case, 6 cases, 252 samples.
+Exact commands/timestamps/input and benchmark hashes: environment.json.
+No own Gradle/check process overlapped these timing trials.
+Initial launch could not execute the copied harness because its executable permission was missing; chmod +x restored it before all recorded trials. No timed partial invocation is included.
+
+Archive and artifact checks:
+python3 docs/benchmarks/final-calls-2026-10-08/compare_trials.py
+All 252 samples, 36 summary rows, medians/min/max, complete variant/trial coverage and seven non-fixed counter equalities verified. Fixed units lower in each case, consistent within each variant.
+Six before/after inventories: same function counts/byte sizes/interface calls; increased direct sites equal reduced virtual sites (32-49 per artifact); zero remaining final-owner non-null dynamic sites.
+All eleven generated source files and two manifest.tsv files identical across compiler variants.
+git diff --check: clean.
+No Minecraft, complete checkout, tagged release or published Runtime bundle claim.

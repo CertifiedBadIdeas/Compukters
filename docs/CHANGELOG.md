@@ -49,6 +49,8 @@ listed in [Kotlin support](developers/kotlin-support.md) and [standard library s
   Precompiled addon libraries and the IDE share the same nominal types and members.
 - Supported classes and interfaces provide instance methods, overrides, virtual/interface dispatch, mutable
   properties, computed accessors, abstract properties and interface defaults, including `super<Interface>` calls.
+  Statically known methods declared in final classes use direct calls, reducing dispatch overhead while calls
+  through parent classes and interfaces retain runtime selection.
   Primary constructors evaluate explicit arguments and defaults in order, then class properties and `init` blocks.
   Sealed interfaces, supported data classes and stateless enums participate in type branches and smart casts;
   exhaustive `when` can return references without an explicit `else`.
@@ -183,6 +185,9 @@ listed in [Kotlin support](developers/kotlin-support.md) and [standard library s
 
 ### Computer runtime
 
+- Compiled programs share repeated debug source paths and store consecutive identical GC root maps as ranges,
+  reducing executable size while retaining source locations, inline diagnostics, module identity and every GC boundary.
+  Compact artifacts require the updated native Runtime reader; old artifacts remain readable.
 - `Ctrl+T` in a computer or IDE target terminal stops the foreground command and its nested processes/tasks,
   releases peripheral control and returns to the shell while retaining output and files. Repeats are ignored;
   an idle shell remains running.

@@ -1,0 +1,29 @@
+Read-only investigation at parent d2afe97e, VM bac6789. No compiler/runtime behavior changed.
+Artifacts reused from the recorded compact root-range stage and frozen October 7 benchmark baseline.
+
+python3 docs/_tools/analyze_linked_calls.py ARTIFACT...
+PASS for 8 compact builtin/conformance artifacts and 4 frozen benchmark artifacts.
+Exact commands and SHA-256 values are in provenance.json.
+Container SHA and ranges, indexed-table lengths/endpoints, function value layouts,
+block owner/index/instruction counts, framed call operands, imports/export signatures
+and imported module semantic-hash references checked by the analyzer.
+
+.toolchain/build/cargo/debug-paths-verify/debug/debug-paths-verify ARTIFACT...
+PASS for all 12 recorded artifacts through public verify_artifact with default ArtifactLimits.
+Verifier was source-built after root ranges #706; binary SHA-256 is in provenance.json.
+
+Inventory consistency checks:
+PASS for all 12 current artifact hashes; sum of per-module function counts equals total;
+final-owner candidates do not exceed virtual sites; final-receiver candidates do not exceed dynamic sites;
+per-model candidate function totals match module totals; owned payload totals match section sums.
+
+Read-only analyzer negative checks on a temporary copy of boot:
+PASS: flip one digest byte -> rejected with 'digest mismatch'.
+PASS: set first CODE instruction length to zero and recompute container SHA-256
+-> rejected with 'instruction frame bounds'. Originals remain unchanged.
+
+Repeat runs with PYTHONHASHSEED=1/2 reproduce inventory.json and benchmark-inventory.json byte-for-byte.
+All 8 compact artifact hashes match the recorded #706 archive; all 4 frozen benchmark hashes match
+the original October 7 baseline. Current analyzer SHA-256 matches provenance.json.
+No timed execution, compiler regeneration, JVM/native transport, Minecraft or release checks run.
+Static estimates are not realized size savings, runtime frequencies or performance measurements.

@@ -1,0 +1,61 @@
+diff --git a/src/execution/image.rs b/src/execution/image.rs
+index 2b487d6..e7a421d 100644
+--- a/src/execution/image.rs
++++ b/src/execution/image.rs
+@@ -1024 +1024,8 @@ impl ExecutionImage {
+-        let actual_type = self.type_index(actual)?;
++        self.dispatch_target_by_type_index(self.type_index(actual)?, declaration)
++    }
++
++    pub(super) fn dispatch_target_by_type_index(
++        &self,
++        actual_type: usize,
++        declaration: usize,
++    ) -> Option<usize> {
+@@ -3023,0 +3031,4 @@ mod tests {
++                assert_eq!(
++                    expected,
++                    image.dispatch_target_by_type_index(actual_type, declaration)
++                );
+@@ -3025,0 +3037,4 @@ mod tests {
++            assert_eq!(
++                None,
++                image.dispatch_target_by_type_index(actual_type, usize::MAX)
++            );
+@@ -3026,0 +3042,5 @@ mod tests {
++        assert_eq!(
++            None,
++            image.dispatch_target_by_type_index(image.type_count(), 0)
++        );
++        assert_eq!(None, image.dispatch_target_by_type_index(usize::MAX, 0));
+diff --git a/src/execution/machine.rs b/src/execution/machine.rs
+index 7df7dff..83a036e 100644
+--- a/src/execution/machine.rs
++++ b/src/execution/machine.rs
+@@ -1452,3 +1452,18 @@ impl Machine {
+-                                    let actual = match self.reference_type(receiver) {
+-                                        Ok(actual) => actual,
+-                                        Err(fault) => return Ok(self.fault(fault)),
++                                    let target = match receiver.domain() {
++                                        super::value::ReferenceDomain::Managed => {
++                                            let type_id = match self.heap.managed_type(receiver) {
++                                                Ok(type_id) => type_id,
++                                                Err(fault) => return Ok(self.fault(fault)),
++                                            };
++                                            self.image.dispatch_target_by_type_index(
++                                                type_id as usize,
++                                                *declaration,
++                                            )
++                                        }
++                                        _ => {
++                                            let actual = match self.reference_type(receiver) {
++                                                Ok(actual) => actual,
++                                                Err(fault) => return Ok(self.fault(fault)),
++                                            };
++                                            self.image.dispatch_target(actual, *declaration)
++                                        }
+@@ -1456,3 +1471 @@ impl Machine {
+-                                    let Some(target) =
+-                                        self.image.dispatch_target(actual, *declaration)
+-                                    else {
++                                    let Some(target) = target else {

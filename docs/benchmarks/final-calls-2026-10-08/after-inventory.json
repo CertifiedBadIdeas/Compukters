@@ -1,0 +1,1412 @@
+[
+  {
+    "path": "build/reports/benchmarks/final-calls-2026-10-08/after/transient-allocations/while-indexed-256-300.cpkt",
+    "sha256": "8d560f74cd3c08bc866295f5054e5c1fd21646f998f6bda4f55e3da08cc55016",
+    "artifact_bytes": 78960,
+    "functions": 134,
+    "functions_by_module": {
+      "app": 125,
+      "kotlin.Any": 9
+    },
+    "call_sites": {
+      "direct": 68,
+      "interface": 29,
+      "virtual": 4
+    },
+    "final_owner_nonnull_dynamic_sites": 0,
+    "final_receiver_nonnull_dynamic_sites": 0,
+    "final_owner_targets": {},
+    "final_receiver_targets": {},
+    "preserved_dispatch_declarations_model": {
+      "functions": 2,
+      "owned_payload_and_index_bytes": 338,
+      "by_section": {
+        "FUNCTIONS": 132,
+        "BLOCKS": 56,
+        "CODE": 38,
+        "SAFEPOINT_ROOTS": 112
+      },
+      "by_module": {
+        "app": 2
+      },
+      "examples": [
+        {
+          "module": "app",
+          "function": 3,
+          "name": "<get-values>",
+          "flags": 0
+        },
+        {
+          "module": "app",
+          "function": 4,
+          "name": "<set-values>",
+          "flags": 0
+        }
+      ]
+    },
+    "callsite_dispatch_model": {
+      "functions": 71,
+      "owned_payload_and_index_bytes": 30468,
+      "by_section": {
+        "FUNCTIONS": 5830,
+        "BLOCKS": 2996,
+        "CODE": 3278,
+        "SAFEPOINT_ROOTS": 6460,
+        "DEBUG": 7936,
+        "DEBUG_SOURCE_POSITIONS": 3968
+      },
+      "by_module": {
+        "app": 65,
+        "kotlin.Any": 6
+      },
+      "examples": [
+        {
+          "module": "app",
+          "function": 3,
+          "name": "isEmpty",
+          "flags": 4
+        },
+        {
+          "module": "app",
+          "function": 8,
+          "name": "removeAt",
+          "flags": 4
+        },
+        {
+          "module": "app",
+          "function": 9,
+          "name": "remove",
+          "flags": 4
+        },
+        {
+          "module": "app",
+          "function": 10,
+          "name": "clear",
+          "flags": 4
+        },
+        {
+          "module": "app",
+          "function": 11,
+          "name": "contains",
+          "flags": 4
+        },
+        {
+          "module": "app",
+          "function": 12,
+          "name": "indexOf",
+          "flags": 4
+        },
+        {
+          "module": "app",
+          "function": 13,
+          "name": "lastIndexOf",
+          "flags": 4
+        },
+        {
+          "module": "app",
+          "function": 14,
+          "name": "iterator",
+          "flags": 4
+        },
+        {
+          "module": "app",
+          "function": 15,
+          "name": "iterator",
+          "flags": 0
+        },
+        {
+          "module": "app",
+          "function": 17,
+          "name": "indexOf",
+          "flags": 0
+        },
+        {
+          "module": "app",
+          "function": 18,
+          "name": "lastIndexOf",
+          "flags": 0
+        },
+        {
+          "module": "app",
+          "function": 19,
+          "name": "contains",
+          "flags": 0
+        },
+        {
+          "module": "app",
+          "function": 20,
+          "name": "iterator",
+          "flags": 0
+        },
+        {
+          "module": "app",
+          "function": 23,
+          "name": "contains",
+          "flags": 0
+        },
+        {
+          "module": "app",
+          "function": 24,
+          "name": "contains",
+          "flags": 0
+        },
+        {
+          "module": "app",
+          "function": 25,
+          "name": "indexOf",
+          "flags": 0
+        },
+        {
+          "module": "app",
+          "function": 26,
+          "name": "lastIndexOf",
+          "flags": 0
+        },
+        {
+          "module": "app",
+          "function": 27,
+          "name": "indexOf",
+          "flags": 0
+        },
+        {
+          "module": "app",
+          "function": 28,
+          "name": "lastIndexOf",
+          "flags": 0
+        },
+        {
+          "module": "app",
+          "function": 29,
+          "name": "iterator",
+          "flags": 0
+        },
+        {
+          "module": "app",
+          "function": 30,
+          "name": "iterator",
+          "flags": 0
+        },
+        {
+          "module": "app",
+          "function": 32,
+          "name": "indexOf",
+          "flags": 8
+        },
+        {
+          "module": "app",
+          "function": 33,
+          "name": "lastIndexOf",
+          "flags": 8
+        },
+        {
+          "module": "app",
+          "function": 35,
+          "name": "indexOf",
+          "flags": 8
+        },
+        {
+          "module": "app",
+          "function": 36,
+          "name": "lastIndexOf",
+          "flags": 8
+        },
+        {
+          "module": "app",
+          "function": 38,
+          "name": "contains",
+          "flags": 8
+        },
+        {
+          "module": "app",
+          "function": 39,
+          "name": "isEmpty",
+          "flags": 8
+        },
+        {
+          "module": "app",
+          "function": 40,
+          "name": "iterator",
+          "flags": 8
+        },
+        {
+          "module": "app",
+          "function": 42,
+          "name": "removeAt",
+          "flags": 8
+        },
+        {
+          "module": "app",
+          "function": 44,
+          "name": "remove",
+          "flags": 8
+        }
+      ]
+    },
+    "notes": "Static call sites, not execution frequency. Models overapproximate dynamic targets by name/arity. They are investigation estimates, not a linker/verifier proof or exact artifact savings. Shared metadata pruning is not modeled; debug parent owners are retained; callsite model requires coordinated pruning of unused declarations and method ranges; retained declarations keep all name/arity candidates."
+  },
+  {
+    "path": "build/reports/benchmarks/final-calls-2026-10-08/after/transient-allocations/for-list-256-300.cpkt",
+    "sha256": "d8765f1e54e0e942fd2aa59750654a9bc85913ddbad14eeda1d1021c30db8132",
+    "artifact_bytes": 79224,
+    "functions": 134,
+    "functions_by_module": {
+      "app": 125,
+      "kotlin.Any": 9
+    },
+    "call_sites": {
+      "direct": 68,
+      "interface": 30,
+      "virtual": 4
+    },
+    "final_owner_nonnull_dynamic_sites": 0,
+    "final_receiver_nonnull_dynamic_sites": 0,
+    "final_owner_targets": {},
+    "final_receiver_targets": {},
+    "preserved_dispatch_declarations_model": {
+      "functions": 2,
+      "owned_payload_and_index_bytes": 338,
+      "by_section": {
+        "FUNCTIONS": 132,
+        "BLOCKS": 56,
+        "CODE": 38,
+        "SAFEPOINT_ROOTS": 112
+      },
+      "by_module": {
+        "app": 2
+      },
+      "examples": [
+        {
+          "module": "app",
+          "function": 3,
+          "name": "<get-values>",
+          "flags": 0
+        },
+        {
+          "module": "app",
+          "function": 4,
+          "name": "<set-values>",
+          "flags": 0
+        }
+      ]
+    },
+    "callsite_dispatch_model": {
+      "functions": 55,
+      "owned_payload_and_index_bytes": 26865,
+      "by_section": {
+        "FUNCTIONS": 4774,
+        "BLOCKS": 2800,
+        "CODE": 2951,
+        "SAFEPOINT_ROOTS": 5588,
+        "DEBUG": 7168,
+        "DEBUG_SOURCE_POSITIONS": 3584
+      },
+      "by_module": {
+        "app": 49,
+        "kotlin.Any": 6
+      },
+      "examples": [
+        {
+          "module": "app",
+          "function": 3,
+          "name": "isEmpty",
+          "flags": 4
+        },
+        {
+          "module": "app",
+          "function": 8,
+          "name": "removeAt",
+          "flags": 4
+        },
+        {
+          "module": "app",
+          "function": 9,
+          "name": "remove",
+          "flags": 4
+        },
+        {
+          "module": "app",
+          "function": 10,
+          "name": "clear",
+          "flags": 4
+        },
+        {
+          "module": "app",
+          "function": 11,
+          "name": "contains",
+          "flags": 4
+        },
+        {
+          "module": "app",
+          "function": 12,
+          "name": "indexOf",
+          "flags": 4
+        },
+        {
+          "module": "app",
+          "function": 13,
+          "name": "lastIndexOf",
+          "flags": 4
+        },
+        {
+          "module": "app",
+          "function": 17,
+          "name": "indexOf",
+          "flags": 0
+        },
+        {
+          "module": "app",
+          "function": 18,
+          "name": "lastIndexOf",
+          "flags": 0
+        },
+        {
+          "module": "app",
+          "function": 19,
+          "name": "contains",
+          "flags": 0
+        },
+        {
+          "module": "app",
+          "function": 23,
+          "name": "contains",
+          "flags": 0
+        },
+        {
+          "module": "app",
+          "function": 24,
+          "name": "contains",
+          "flags": 0
+        },
+        {
+          "module": "app",
+          "function": 25,
+          "name": "indexOf",
+          "flags": 0
+        },
+        {
+          "module": "app",
+          "function": 26,
+          "name": "lastIndexOf",
+          "flags": 0
+        },
+        {
+          "module": "app",
+          "function": 27,
+          "name": "indexOf",
+          "flags": 0
+        },
+        {
+          "module": "app",
+          "function": 28,
+          "name": "lastIndexOf",
+          "flags": 0
+        },
+        {
+          "module": "app",
+          "function": 32,
+          "name": "indexOf",
+          "flags": 8
+        },
+        {
+          "module": "app",
+          "function": 33,
+          "name": "lastIndexOf",
+          "flags": 8
+        },
+        {
+          "module": "app",
+          "function": 35,
+          "name": "indexOf",
+          "flags": 8
+        },
+        {
+          "module": "app",
+          "function": 36,
+          "name": "lastIndexOf",
+          "flags": 8
+        },
+        {
+          "module": "app",
+          "function": 38,
+          "name": "contains",
+          "flags": 8
+        },
+        {
+          "module": "app",
+          "function": 39,
+          "name": "isEmpty",
+          "flags": 8
+        },
+        {
+          "module": "app",
+          "function": 42,
+          "name": "removeAt",
+          "flags": 8
+        },
+        {
+          "module": "app",
+          "function": 44,
+          "name": "remove",
+          "flags": 8
+        },
+        {
+          "module": "app",
+          "function": 47,
+          "name": "remove",
+          "flags": 4
+        },
+        {
+          "module": "app",
+          "function": 57,
+          "name": "contains",
+          "flags": 8
+        },
+        {
+          "module": "app",
+          "function": 58,
+          "name": "isEmpty",
+          "flags": 8
+        },
+        {
+          "module": "app",
+          "function": 60,
+          "name": "clear",
+          "flags": 8
+        },
+        {
+          "module": "app",
+          "function": 61,
+          "name": "remove",
+          "flags": 8
+        },
+        {
+          "module": "app",
+          "function": 63,
+          "name": "kotlin.collections.listIndexOf<Int>",
+          "flags": 2
+        }
+      ]
+    },
+    "notes": "Static call sites, not execution frequency. Models overapproximate dynamic targets by name/arity. They are investigation estimates, not a linker/verifier proof or exact artifact savings. Shared metadata pruning is not modeled; debug parent owners are retained; callsite model requires coordinated pruning of unused declarations and method ranges; retained declarations keep all name/arity candidates."
+  },
+  {
+    "path": "build/reports/benchmarks/final-calls-2026-10-08/after/transient-allocations/fold-256-300.cpkt",
+    "sha256": "d7e2ad3fd90c17609ca425beb2b162217e99ae6943c86c54c8c1dabfadef31e9",
+    "artifact_bytes": 79936,
+    "functions": 134,
+    "functions_by_module": {
+      "app": 125,
+      "kotlin.Any": 9
+    },
+    "call_sites": {
+      "direct": 68,
+      "interface": 30,
+      "virtual": 4
+    },
+    "final_owner_nonnull_dynamic_sites": 0,
+    "final_receiver_nonnull_dynamic_sites": 0,
+    "final_owner_targets": {},
+    "final_receiver_targets": {},
+    "preserved_dispatch_declarations_model": {
+      "functions": 2,
+      "owned_payload_and_index_bytes": 338,
+      "by_section": {
+        "FUNCTIONS": 132,
+        "BLOCKS": 56,
+        "CODE": 38,
+        "SAFEPOINT_ROOTS": 112
+      },
+      "by_module": {
+        "app": 2
+      },
+      "examples": [
+        {
+          "module": "app",
+          "function": 3,
+          "name": "<get-values>",
+          "flags": 0
+        },
+        {
+          "module": "app",
+          "function": 4,
+          "name": "<set-values>",
+          "flags": 0
+        }
+      ]
+    },
+    "callsite_dispatch_model": {
+      "functions": 55,
+      "owned_payload_and_index_bytes": 26867,
+      "by_section": {
+        "FUNCTIONS": 4774,
+        "BLOCKS": 2800,
+        "CODE": 2953,
+        "SAFEPOINT_ROOTS": 5588,
+        "DEBUG": 7168,
+        "DEBUG_SOURCE_POSITIONS": 3584
+      },
+      "by_module": {
+        "app": 49,
+        "kotlin.Any": 6
+      },
+      "examples": [
+        {
+          "module": "app",
+          "function": 3,
+          "name": "isEmpty",
+          "flags": 4
+        },
+        {
+          "module": "app",
+          "function": 8,
+          "name": "removeAt",
+          "flags": 4
+        },
+        {
+          "module": "app",
+          "function": 9,
+          "name": "remove",
+          "flags": 4
+        },
+        {
+          "module": "app",
+          "function": 10,
+          "name": "clear",
+          "flags": 4
+        },
+        {
+          "module": "app",
+          "function": 11,
+          "name": "contains",
+          "flags": 4
+        },
+        {
+          "module": "app",
+          "function": 12,
+          "name": "indexOf",
+          "flags": 4
+        },
+        {
+          "module": "app",
+          "function": 13,
+          "name": "lastIndexOf",
+          "flags": 4
+        },
+        {
+          "module": "app",
+          "function": 17,
+          "name": "indexOf",
+          "flags": 0
+        },
+        {
+          "module": "app",
+          "function": 18,
+          "name": "lastIndexOf",
+          "flags": 0
+        },
+        {
+          "module": "app",
+          "function": 19,
+          "name": "contains",
+          "flags": 0
+        },
+        {
+          "module": "app",
+          "function": 23,
+          "name": "contains",
+          "flags": 0
+        },
+        {
+          "module": "app",
+          "function": 24,
+          "name": "contains",
+          "flags": 0
+        },
+        {
+          "module": "app",
+          "function": 25,
+          "name": "indexOf",
+          "flags": 0
+        },
+        {
+          "module": "app",
+          "function": 26,
+          "name": "lastIndexOf",
+          "flags": 0
+        },
+        {
+          "module": "app",
+          "function": 27,
+          "name": "indexOf",
+          "flags": 0
+        },
+        {
+          "module": "app",
+          "function": 28,
+          "name": "lastIndexOf",
+          "flags": 0
+        },
+        {
+          "module": "app",
+          "function": 32,
+          "name": "indexOf",
+          "flags": 8
+        },
+        {
+          "module": "app",
+          "function": 33,
+          "name": "lastIndexOf",
+          "flags": 8
+        },
+        {
+          "module": "app",
+          "function": 35,
+          "name": "indexOf",
+          "flags": 8
+        },
+        {
+          "module": "app",
+          "function": 36,
+          "name": "lastIndexOf",
+          "flags": 8
+        },
+        {
+          "module": "app",
+          "function": 38,
+          "name": "contains",
+          "flags": 8
+        },
+        {
+          "module": "app",
+          "function": 39,
+          "name": "isEmpty",
+          "flags": 8
+        },
+        {
+          "module": "app",
+          "function": 42,
+          "name": "removeAt",
+          "flags": 8
+        },
+        {
+          "module": "app",
+          "function": 44,
+          "name": "remove",
+          "flags": 8
+        },
+        {
+          "module": "app",
+          "function": 47,
+          "name": "remove",
+          "flags": 4
+        },
+        {
+          "module": "app",
+          "function": 57,
+          "name": "contains",
+          "flags": 8
+        },
+        {
+          "module": "app",
+          "function": 58,
+          "name": "isEmpty",
+          "flags": 8
+        },
+        {
+          "module": "app",
+          "function": 60,
+          "name": "clear",
+          "flags": 8
+        },
+        {
+          "module": "app",
+          "function": 61,
+          "name": "remove",
+          "flags": 8
+        },
+        {
+          "module": "app",
+          "function": 63,
+          "name": "kotlin.collections.listIndexOf<Int>",
+          "flags": 2
+        }
+      ]
+    },
+    "notes": "Static call sites, not execution frequency. Models overapproximate dynamic targets by name/arity. They are investigation estimates, not a linker/verifier proof or exact artifact savings. Shared metadata pruning is not modeled; debug parent owners are retained; callsite model requires coordinated pruning of unused declarations and method ranges; retained declarations keep all name/arity candidates."
+  },
+  {
+    "path": "build/reports/benchmarks/final-calls-2026-10-08/after/collection-reuse/map-not-null-1024-100-fresh.cpkt",
+    "sha256": "82b18f29018fa0544745912db84f176f1c1ae8f02b4937509b96c3677fb35714",
+    "artifact_bytes": 82724,
+    "functions": 130,
+    "functions_by_module": {
+      "app": 124,
+      "kotlin.Any": 6
+    },
+    "call_sites": {
+      "direct": 80,
+      "interface": 34,
+      "virtual": 6
+    },
+    "final_owner_nonnull_dynamic_sites": 0,
+    "final_receiver_nonnull_dynamic_sites": 0,
+    "final_owner_targets": {},
+    "final_receiver_targets": {},
+    "preserved_dispatch_declarations_model": {
+      "functions": 0,
+      "owned_payload_and_index_bytes": 0,
+      "by_section": {},
+      "by_module": {},
+      "examples": []
+    },
+    "callsite_dispatch_model": {
+      "functions": 51,
+      "owned_payload_and_index_bytes": 26591,
+      "by_section": {
+        "FUNCTIONS": 4601,
+        "BLOCKS": 2576,
+        "CODE": 2890,
+        "SAFEPOINT_ROOTS": 5772,
+        "DEBUG": 7168,
+        "DEBUG_SOURCE_POSITIONS": 3584
+      },
+      "by_module": {
+        "app": 47,
+        "kotlin.Any": 4
+      },
+      "examples": [
+        {
+          "module": "app",
+          "function": 3,
+          "name": "isEmpty",
+          "flags": 4
+        },
+        {
+          "module": "app",
+          "function": 8,
+          "name": "removeAt",
+          "flags": 4
+        },
+        {
+          "module": "app",
+          "function": 9,
+          "name": "remove",
+          "flags": 4
+        },
+        {
+          "module": "app",
+          "function": 10,
+          "name": "clear",
+          "flags": 4
+        },
+        {
+          "module": "app",
+          "function": 11,
+          "name": "contains",
+          "flags": 4
+        },
+        {
+          "module": "app",
+          "function": 12,
+          "name": "indexOf",
+          "flags": 4
+        },
+        {
+          "module": "app",
+          "function": 13,
+          "name": "lastIndexOf",
+          "flags": 4
+        },
+        {
+          "module": "app",
+          "function": 17,
+          "name": "indexOf",
+          "flags": 0
+        },
+        {
+          "module": "app",
+          "function": 18,
+          "name": "lastIndexOf",
+          "flags": 0
+        },
+        {
+          "module": "app",
+          "function": 19,
+          "name": "contains",
+          "flags": 0
+        },
+        {
+          "module": "app",
+          "function": 23,
+          "name": "contains",
+          "flags": 0
+        },
+        {
+          "module": "app",
+          "function": 24,
+          "name": "contains",
+          "flags": 0
+        },
+        {
+          "module": "app",
+          "function": 25,
+          "name": "indexOf",
+          "flags": 0
+        },
+        {
+          "module": "app",
+          "function": 26,
+          "name": "lastIndexOf",
+          "flags": 0
+        },
+        {
+          "module": "app",
+          "function": 27,
+          "name": "indexOf",
+          "flags": 0
+        },
+        {
+          "module": "app",
+          "function": 28,
+          "name": "lastIndexOf",
+          "flags": 0
+        },
+        {
+          "module": "app",
+          "function": 32,
+          "name": "indexOf",
+          "flags": 8
+        },
+        {
+          "module": "app",
+          "function": 33,
+          "name": "lastIndexOf",
+          "flags": 8
+        },
+        {
+          "module": "app",
+          "function": 38,
+          "name": "indexOf",
+          "flags": 8
+        },
+        {
+          "module": "app",
+          "function": 39,
+          "name": "lastIndexOf",
+          "flags": 8
+        },
+        {
+          "module": "app",
+          "function": 41,
+          "name": "contains",
+          "flags": 8
+        },
+        {
+          "module": "app",
+          "function": 42,
+          "name": "isEmpty",
+          "flags": 8
+        },
+        {
+          "module": "app",
+          "function": 45,
+          "name": "removeAt",
+          "flags": 8
+        },
+        {
+          "module": "app",
+          "function": 55,
+          "name": "remove",
+          "flags": 8
+        },
+        {
+          "module": "app",
+          "function": 58,
+          "name": "remove",
+          "flags": 4
+        },
+        {
+          "module": "app",
+          "function": 68,
+          "name": "contains",
+          "flags": 8
+        },
+        {
+          "module": "app",
+          "function": 69,
+          "name": "isEmpty",
+          "flags": 8
+        },
+        {
+          "module": "app",
+          "function": 71,
+          "name": "clear",
+          "flags": 8
+        },
+        {
+          "module": "app",
+          "function": 72,
+          "name": "remove",
+          "flags": 8
+        },
+        {
+          "module": "app",
+          "function": 74,
+          "name": "kotlin.collections.listIndexOf<<root>.Cell>",
+          "flags": 2
+        }
+      ]
+    },
+    "notes": "Static call sites, not execution frequency. Models overapproximate dynamic targets by name/arity. They are investigation estimates, not a linker/verifier proof or exact artifact savings. Shared metadata pruning is not modeled; debug parent owners are retained; callsite model requires coordinated pruning of unused declarations and method ranges; retained declarations keep all name/arity candidates."
+  },
+  {
+    "path": "build/reports/benchmarks/final-calls-2026-10-08/after/collection-reuse/map-not-null-1024-100-reuse-list.cpkt",
+    "sha256": "d56f202760c228cc44d277b99b9fe5f55ade35efa5c8f6d58b94084a6a579b95",
+    "artifact_bytes": 82292,
+    "functions": 130,
+    "functions_by_module": {
+      "app": 124,
+      "kotlin.Any": 6
+    },
+    "call_sites": {
+      "direct": 85,
+      "interface": 29,
+      "virtual": 6
+    },
+    "final_owner_nonnull_dynamic_sites": 0,
+    "final_receiver_nonnull_dynamic_sites": 0,
+    "final_owner_targets": {},
+    "final_receiver_targets": {},
+    "preserved_dispatch_declarations_model": {
+      "functions": 0,
+      "owned_payload_and_index_bytes": 0,
+      "by_section": {},
+      "by_module": {},
+      "examples": []
+    },
+    "callsite_dispatch_model": {
+      "functions": 49,
+      "owned_payload_and_index_bytes": 25120,
+      "by_section": {
+        "FUNCTIONS": 4430,
+        "BLOCKS": 2464,
+        "CODE": 2714,
+        "SAFEPOINT_ROOTS": 5576,
+        "DEBUG": 6624,
+        "DEBUG_SOURCE_POSITIONS": 3312
+      },
+      "by_module": {
+        "app": 45,
+        "kotlin.Any": 4
+      },
+      "examples": [
+        {
+          "module": "app",
+          "function": 3,
+          "name": "isEmpty",
+          "flags": 4
+        },
+        {
+          "module": "app",
+          "function": 8,
+          "name": "removeAt",
+          "flags": 4
+        },
+        {
+          "module": "app",
+          "function": 9,
+          "name": "remove",
+          "flags": 4
+        },
+        {
+          "module": "app",
+          "function": 11,
+          "name": "contains",
+          "flags": 4
+        },
+        {
+          "module": "app",
+          "function": 12,
+          "name": "indexOf",
+          "flags": 4
+        },
+        {
+          "module": "app",
+          "function": 13,
+          "name": "lastIndexOf",
+          "flags": 4
+        },
+        {
+          "module": "app",
+          "function": 17,
+          "name": "indexOf",
+          "flags": 0
+        },
+        {
+          "module": "app",
+          "function": 18,
+          "name": "lastIndexOf",
+          "flags": 0
+        },
+        {
+          "module": "app",
+          "function": 19,
+          "name": "contains",
+          "flags": 0
+        },
+        {
+          "module": "app",
+          "function": 23,
+          "name": "contains",
+          "flags": 0
+        },
+        {
+          "module": "app",
+          "function": 24,
+          "name": "contains",
+          "flags": 0
+        },
+        {
+          "module": "app",
+          "function": 25,
+          "name": "indexOf",
+          "flags": 0
+        },
+        {
+          "module": "app",
+          "function": 26,
+          "name": "lastIndexOf",
+          "flags": 0
+        },
+        {
+          "module": "app",
+          "function": 27,
+          "name": "indexOf",
+          "flags": 0
+        },
+        {
+          "module": "app",
+          "function": 28,
+          "name": "lastIndexOf",
+          "flags": 0
+        },
+        {
+          "module": "app",
+          "function": 35,
+          "name": "indexOf",
+          "flags": 8
+        },
+        {
+          "module": "app",
+          "function": 36,
+          "name": "lastIndexOf",
+          "flags": 8
+        },
+        {
+          "module": "app",
+          "function": 38,
+          "name": "contains",
+          "flags": 8
+        },
+        {
+          "module": "app",
+          "function": 39,
+          "name": "isEmpty",
+          "flags": 8
+        },
+        {
+          "module": "app",
+          "function": 42,
+          "name": "removeAt",
+          "flags": 8
+        },
+        {
+          "module": "app",
+          "function": 52,
+          "name": "remove",
+          "flags": 8
+        },
+        {
+          "module": "app",
+          "function": 55,
+          "name": "remove",
+          "flags": 4
+        },
+        {
+          "module": "app",
+          "function": 65,
+          "name": "indexOf",
+          "flags": 8
+        },
+        {
+          "module": "app",
+          "function": 66,
+          "name": "lastIndexOf",
+          "flags": 8
+        },
+        {
+          "module": "app",
+          "function": 69,
+          "name": "remove",
+          "flags": 8
+        },
+        {
+          "module": "app",
+          "function": 71,
+          "name": "contains",
+          "flags": 8
+        },
+        {
+          "module": "app",
+          "function": 72,
+          "name": "isEmpty",
+          "flags": 8
+        },
+        {
+          "module": "app",
+          "function": 74,
+          "name": "kotlin.collections.listIndexOf<<root>.Cell>",
+          "flags": 2
+        },
+        {
+          "module": "app",
+          "function": 75,
+          "name": "kotlin.collections.listLastIndexOf<<root>.Cell>",
+          "flags": 2
+        },
+        {
+          "module": "app",
+          "function": 76,
+          "name": "kotlin.collections.listIndexOf<<root>.Cell?>",
+          "flags": 2
+        }
+      ]
+    },
+    "notes": "Static call sites, not execution frequency. Models overapproximate dynamic targets by name/arity. They are investigation estimates, not a linker/verifier proof or exact artifact savings. Shared metadata pruning is not modeled; debug parent owners are retained; callsite model requires coordinated pruning of unused declarations and method ranges; retained declarations keep all name/arity candidates."
+  },
+  {
+    "path": "build/reports/benchmarks/final-calls-2026-10-08/after/collection-reuse/map-not-null-1024-100-reuse-objects.cpkt",
+    "sha256": "2283122adcede762fb9076c774768f0d57321cc786db1169415fb584d9927d53",
+    "artifact_bytes": 85796,
+    "functions": 130,
+    "functions_by_module": {
+      "app": 124,
+      "kotlin.Any": 6
+    },
+    "call_sites": {
+      "direct": 93,
+      "interface": 29,
+      "virtual": 6
+    },
+    "final_owner_nonnull_dynamic_sites": 0,
+    "final_receiver_nonnull_dynamic_sites": 0,
+    "final_owner_targets": {},
+    "final_receiver_targets": {},
+    "preserved_dispatch_declarations_model": {
+      "functions": 0,
+      "owned_payload_and_index_bytes": 0,
+      "by_section": {},
+      "by_module": {},
+      "examples": []
+    },
+    "callsite_dispatch_model": {
+      "functions": 49,
+      "owned_payload_and_index_bytes": 25129,
+      "by_section": {
+        "FUNCTIONS": 4430,
+        "BLOCKS": 2464,
+        "CODE": 2723,
+        "SAFEPOINT_ROOTS": 5576,
+        "DEBUG": 6624,
+        "DEBUG_SOURCE_POSITIONS": 3312
+      },
+      "by_module": {
+        "app": 45,
+        "kotlin.Any": 4
+      },
+      "examples": [
+        {
+          "module": "app",
+          "function": 3,
+          "name": "isEmpty",
+          "flags": 4
+        },
+        {
+          "module": "app",
+          "function": 8,
+          "name": "removeAt",
+          "flags": 4
+        },
+        {
+          "module": "app",
+          "function": 9,
+          "name": "remove",
+          "flags": 4
+        },
+        {
+          "module": "app",
+          "function": 11,
+          "name": "contains",
+          "flags": 4
+        },
+        {
+          "module": "app",
+          "function": 12,
+          "name": "indexOf",
+          "flags": 4
+        },
+        {
+          "module": "app",
+          "function": 13,
+          "name": "lastIndexOf",
+          "flags": 4
+        },
+        {
+          "module": "app",
+          "function": 17,
+          "name": "indexOf",
+          "flags": 0
+        },
+        {
+          "module": "app",
+          "function": 18,
+          "name": "lastIndexOf",
+          "flags": 0
+        },
+        {
+          "module": "app",
+          "function": 19,
+          "name": "contains",
+          "flags": 0
+        },
+        {
+          "module": "app",
+          "function": 23,
+          "name": "contains",
+          "flags": 0
+        },
+        {
+          "module": "app",
+          "function": 24,
+          "name": "contains",
+          "flags": 0
+        },
+        {
+          "module": "app",
+          "function": 25,
+          "name": "indexOf",
+          "flags": 0
+        },
+        {
+          "module": "app",
+          "function": 26,
+          "name": "lastIndexOf",
+          "flags": 0
+        },
+        {
+          "module": "app",
+          "function": 27,
+          "name": "indexOf",
+          "flags": 0
+        },
+        {
+          "module": "app",
+          "function": 28,
+          "name": "lastIndexOf",
+          "flags": 0
+        },
+        {
+          "module": "app",
+          "function": 35,
+          "name": "indexOf",
+          "flags": 8
+        },
+        {
+          "module": "app",
+          "function": 36,
+          "name": "lastIndexOf",
+          "flags": 8
+        },
+        {
+          "module": "app",
+          "function": 38,
+          "name": "contains",
+          "flags": 8
+        },
+        {
+          "module": "app",
+          "function": 39,
+          "name": "isEmpty",
+          "flags": 8
+        },
+        {
+          "module": "app",
+          "function": 42,
+          "name": "removeAt",
+          "flags": 8
+        },
+        {
+          "module": "app",
+          "function": 52,
+          "name": "remove",
+          "flags": 8
+        },
+        {
+          "module": "app",
+          "function": 55,
+          "name": "remove",
+          "flags": 4
+        },
+        {
+          "module": "app",
+          "function": 65,
+          "name": "indexOf",
+          "flags": 8
+        },
+        {
+          "module": "app",
+          "function": 66,
+          "name": "lastIndexOf",
+          "flags": 8
+        },
+        {
+          "module": "app",
+          "function": 69,
+          "name": "remove",
+          "flags": 8
+        },
+        {
+          "module": "app",
+          "function": 71,
+          "name": "contains",
+          "flags": 8
+        },
+        {
+          "module": "app",
+          "function": 72,
+          "name": "isEmpty",
+          "flags": 8
+        },
+        {
+          "module": "app",
+          "function": 74,
+          "name": "kotlin.collections.listIndexOf<<root>.Cell>",
+          "flags": 2
+        },
+        {
+          "module": "app",
+          "function": 75,
+          "name": "kotlin.collections.listLastIndexOf<<root>.Cell>",
+          "flags": 2
+        },
+        {
+          "module": "app",
+          "function": 76,
+          "name": "kotlin.collections.listIndexOf<<root>.Cell?>",
+          "flags": 2
+        }
+      ]
+    },
+    "notes": "Static call sites, not execution frequency. Models overapproximate dynamic targets by name/arity. They are investigation estimates, not a linker/verifier proof or exact artifact savings. Shared metadata pruning is not modeled; debug parent owners are retained; callsite model requires coordinated pruning of unused declarations and method ranges; retained declarations keep all name/arity candidates."
+  }
+]

@@ -1,0 +1,74 @@
+[
+  {
+    "artifact": "boot",
+    "before_bytes": 38444,
+    "after_bytes": 36036,
+    "saved_bytes": 2408,
+    "before_sha256": "b78ff618994b77528b12079e86e734d3ee8a429ccea774ee05f13cc1ab0de103",
+    "after_sha256": "6bd7f44cec04d4647937b7acc4259938ceb96c3b35e34fb262c08d60ff850406",
+    "expanded_legacy_sha256": "95964e61f2611e0db67997dfd4351c6748461bf665904b169e24f80ea8860a64"
+  },
+  {
+    "artifact": "edit",
+    "before_bytes": 181788,
+    "after_bytes": 154772,
+    "saved_bytes": 27016,
+    "before_sha256": "66018bb5dd456094f63fd82a093686d8a6c032a2d000a0fb557f7e63907dfbdd",
+    "after_sha256": "82b7bf471b982a66cd03653850b39d6491080684241fe8756f18811503d1d00c",
+    "expanded_legacy_sha256": "c70c176189eddfe79f3f0a59dd188ccb1958f5749c496c4bc2ec97218388388a"
+  },
+  {
+    "artifact": "kotlinc",
+    "before_bytes": 36252,
+    "after_bytes": 34252,
+    "saved_bytes": 2000,
+    "before_sha256": "5372a1262b43f1b429867c52b5a424b9b589d96354de3b0a10270b4226bb48a4",
+    "after_sha256": "c1e542e2b4fa7da1a723e787a6e9ecf9f6f71d9235c558c9fb56886b2e4b79f3",
+    "expanded_legacy_sha256": "aaadb78d00a6ac3ef3609cd4f953cbc5bf028e283f866c4a47be560123281252"
+  },
+  {
+    "artifact": "shell",
+    "before_bytes": 127132,
+    "after_bytes": 117828,
+    "saved_bytes": 9304,
+    "before_sha256": "3d09822dd7b60e5c4d3f2a307d736a3e6cb2cdcefae30096606f50aad8e59bc5",
+    "after_sha256": "5c0b15fa4a7f8b0ab4d738659ce4a38d2a454e25d0de4f9af16b9fe8d262d5a3",
+    "expanded_legacy_sha256": "b1f13843a9f9e6cdbb34beb13b3cbd86df968437415fef00200f30de0908178e"
+  },
+  {
+    "artifact": "vmbench-agent",
+    "before_bytes": 37504,
+    "after_bytes": 32568,
+    "saved_bytes": 4936,
+    "before_sha256": "f4519ce045fc1246d5d2157c11cf0d0b1704c280f24fa7890f11afd48250ca73",
+    "after_sha256": "649298a97116a5652cf4efc330433698275e56599788906db50d5c445013d98a",
+    "expanded_legacy_sha256": "ae12916ae54ce8512971ea925873df113d0ad39d584dd2cc6f48c5007b146ad3"
+  },
+  {
+    "artifact": "vmbench",
+    "before_bytes": 43592,
+    "after_bytes": 38656,
+    "saved_bytes": 4936,
+    "before_sha256": "372a1f5fcb72ca7ffe16b526d8aa4daef9a65f1187e025766f2b4497ec0f62af",
+    "after_sha256": "e889da729034301eda8ed764406619cd72347540a3cc7dfc41d939259cc67c9f",
+    "expanded_legacy_sha256": "7cbcc4b40efbb9a628dd5c1856ec6f6af021ac49ec964f5bea3dc2aeb3815966"
+  },
+  {
+    "artifact": "kotlin-map-not-null",
+    "before_bytes": 397752,
+    "after_bytes": 372000,
+    "saved_bytes": 25752,
+    "before_sha256": "f6268884c2c0ec2e83cdb16d9d79d2ac2889a4103a7f584441b31b000f59bdc8",
+    "after_sha256": "3af7db5888b6a6352c860a5e4cc44328524e51b59f5fb9b3f1ba4683b90ba95b",
+    "expanded_legacy_sha256": "f5b4ae4969c2419e287392bc93c0fa3d6229d7af099c09b2babc44facb0140e2"
+  },
+  {
+    "artifact": "kotlin-mutable-list",
+    "before_bytes": 290920,
+    "after_bytes": 271200,
+    "saved_bytes": 19720,
+    "before_sha256": "4200cb7faf6dc1a1b9774fe4108dfc96e0f39ae4407a8c03ad45ed46174f6a1a",
+    "after_sha256": "0ceba9989903a49c7c941a557f28a6b97e4012a3f2037abf9c4dd4edffb8d967",
+    "expanded_legacy_sha256": "01ef57c7301544defdbd113c8b538661fa8922c8a390fd2a40523651716b3b0d"
+  }
+]

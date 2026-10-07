@@ -45,6 +45,8 @@ internal const val EXCEPTIONS = 0x0109
 internal const val UTF16_LITERALS = 0x010a
 internal const val SAFEPOINT_ROOTS = 0x010b
 internal const val DEBUG = 0x0110
+internal const val DEBUG_PATHS = 0x0111
+internal const val SAFEPOINT_ROOT_RANGES = 0x0112
 internal const val DEBUG_SOURCE_POSITIONS = 0x8001
 
 internal data class EncodedSection(
@@ -55,7 +57,10 @@ internal data class EncodedSection(
 
 internal class EncodedModuleSections(
     val semantic: List<EncodedSection>,
+    val compactRoots: EncodedSection?,
+    val rootRanges: EncodedSection?,
     val debug: EncodedSection?,
+    val debugPaths: EncodedSection?,
     val debugPositions: EncodedSection?,
     semanticHash: ByteArray,
 ) {
@@ -70,10 +75,31 @@ internal fun encodeModuleSections(
 ): EncodedModuleSections {
     val maximum = limits.artifactBytes
     val semantic = encodeSemanticSections(module, limits)
-    val debug =
-        module.debug.takeIf(List<DebugEntry>::isNotEmpty)?.let { records ->
-            EncodedSection(DEBUG, encodeIndexed(records.map { encodeDebug(it, maximum) }, maximum), records.size.toUInt())
+    var debug: EncodedSection? = null
+    var debugPaths: EncodedSection? = null
+    if (module.debug.isNotEmpty()) {
+        val plan = planDebugPaths(module, maximum)
+        if (plan.compact) {
+            val paths = plan.paths
+            val pathIds = paths.withIndex().associate { it.value to it.index.toUInt() }
+            val pool = EncodedSection(DEBUG_PATHS, encodeIndexed(paths.map { it.toByteArray() }, maximum), paths.size.toUInt())
+            val compact =
+                EncodedSection(
+                    DEBUG,
+                    encodeIndexed(module.debug.map { encodeDebug(it, maximum, pathIds.getValue(it.sourcePath)) }, maximum),
+                    module.debug.size.toUInt(),
+                )
+            debug = compact
+            debugPaths = pool
+        } else {
+            debug =
+                EncodedSection(
+                    DEBUG,
+                    encodeIndexed(module.debug.map { encodeDebug(it, maximum) }, maximum),
+                    module.debug.size.toUInt(),
+                )
         }
+    }
     val positions =
         module.debug.mapIndexedNotNull { index, entry ->
             validatedSourceLine(entry)?.let { line ->
@@ -89,7 +115,78 @@ internal fun encodeModuleSections(
         positions.takeIf { it.isNotEmpty() }?.let {
             EncodedSection(DEBUG_SOURCE_POSITIONS, encodeIndexed(it, maximum), it.size.toUInt())
         }
-    return EncodedModuleSections(semantic, debug, debugPositions, semanticHash(semantic))
+    val (compactRoots, rootRanges) = encodeRootRanges(module, semantic.single { it.kind == SAFEPOINT_ROOTS }, maximum)
+    return EncodedModuleSections(semantic, compactRoots, rootRanges, debug, debugPaths, debugPositions, semanticHash(semantic))
+}
+
+private data class RootRun(
+    val function: UInt,
+    val roots: ru.lazyhat.compukters.compiler.artifact.model.SafepointRoots,
+    var count: UInt = 1u,
+)
+
+private fun encodeRootRanges(
+    module: Module,
+    legacy: EncodedSection,
+    maximum: Int,
+): Pair<EncodedSection?, EncodedSection?> {
+    val runs = mutableListOf<RootRun>()
+    module.functions.forEachIndexed { function, value ->
+        value.safepointRoots.forEach { roots ->
+            val previous = runs.lastOrNull()
+            if (previous != null && previous.function == function.toUInt() && previous.roots.block == roots.block &&
+                previous.roots.instructionBoundary.toULong() + previous.count == roots.instructionBoundary.toULong() &&
+                previous.roots.references == roots.references
+            ) {
+                previous.count++
+            } else {
+                runs += RootRun(function.toUInt(), roots)
+            }
+        }
+    }
+    // Reject a nonprofitable candidate before encoding its larger records.
+    val compactSize =
+        ((16L + 4L * (runs.size + 1L) + 7L) and -8L) +
+            runs.sumOf { 20L + 4L * it.roots.references.size }
+    if (((compactSize + 7L) and -8L) + 48 >= checkedAlign8(legacy.payload.size)) return null to null
+    val compact =
+        EncodedSection(
+            SAFEPOINT_ROOTS,
+            encodeIndexed(
+                runs.map { run ->
+                    BinarySink(maximum)
+                        .apply {
+                            writeU32(run.function)
+                            writeU32(run.roots.block.value)
+                            writeU32(run.roots.instructionBoundary)
+                            writeU32(run.count)
+                            writeU16(
+                                run.roots.references.size
+                                    .toUInt(),
+                            )
+                            writeU16(0u)
+                            run.roots.references.forEach {
+                                writeU16(it.value.value.toUInt())
+                                writeU16(it.component.toUInt())
+                            }
+                        }.toByteArray()
+                },
+                maximum,
+            ),
+            runs.size.toUInt(),
+        )
+    val marker =
+        EncodedSection(
+            SAFEPOINT_ROOT_RANGES,
+            BinarySink(16)
+                .apply {
+                    writeU32(1u)
+                    writeU32(legacy.count)
+                    writeU64(legacy.payload.size.toULong())
+                }.toByteArray(),
+            1u,
+        )
+    return compact to marker
 }
 
 internal fun encodeModuleSemanticHash(
@@ -196,21 +293,55 @@ private fun encodeSemanticSections(
     )
 }
 
+private data class DebugPathPlan(
+    val paths: List<ru.lazyhat.compukters.compiler.artifact.model.MetadataText>,
+    val compact: Boolean,
+)
+
+// Both the writer and hash-only validator select and bound the same physical representation.
+private fun planDebugPaths(
+    module: Module,
+    maximum: Int,
+): DebugPathPlan {
+    val paths = module.debug.map(DebugEntry::sourcePath).distinct()
+    val pathSizes = paths.associateWith { it.utf8ByteSize }
+
+    fun indexedBytes(
+        count: Int,
+        bytes: Long,
+    ): Long {
+        checkIndexedSize(count, bytes, maximum)
+        return ((16L + 4L * (count + 1L) + 7L) and -8L) + bytes
+    }
+    val poolBytes = indexedBytes(paths.size, pathSizes.values.sumOf { it.toLong() })
+    val compactBytes = indexedBytes(module.debug.size, 28L * module.debug.size)
+    val legacyBytes =
+        ((16L + 4L * (module.debug.size + 1L) + 7L) and -8L) +
+            module.debug.sumOf { 28L + pathSizes.getValue(it.sourcePath) }
+    val compact =
+        ((compactBytes + 7L) and -8L) + ((poolBytes + 7L) and -8L) + 32L <
+            ((legacyBytes + 7L) and -8L)
+    if (compact) {
+        require(
+            paths.all { path ->
+                val text = path.toString()
+                text.isNotEmpty() && !text.startsWith('/') && !text.contains('\\') &&
+                    text.split('/').all { it.isNotEmpty() && it != "." && it != ".." }
+            },
+        ) { "debug source path is not canonical" }
+    } else {
+        indexedBytes(module.debug.size, module.debug.sumOf { 28L + pathSizes.getValue(it.sourcePath) })
+    }
+    return DebugPathPlan(paths, compact)
+}
+
 // Preserve the hash API's encoding checks without materializing non-semantic sections.
 private fun validateDebugEncoding(
     module: Module,
     maximum: Int,
 ) {
     if (module.debug.isEmpty()) return
-    var debugBytes = 0L
-    module.debug.forEach { entry ->
-        val recordBytes = 28L + entry.sourcePath.utf8ByteSize
-        if (recordBytes > maximum) {
-            throw ArtifactEncodingException(ArtifactWriteErrorCode.LIMIT_EXCEEDED, "encoded output exceeds $maximum bytes")
-        }
-        debugBytes = Math.addExact(debugBytes, recordBytes)
-    }
-    checkIndexedSize(module.debug.size, debugBytes, maximum)
+    planDebugPaths(module, maximum)
     var positionCount = 0
     module.debug.forEach { entry ->
         validatedSourceLine(entry)?.let {
@@ -447,6 +578,7 @@ private fun encodeSafepointRoots(
 private fun encodeDebug(
     value: DebugEntry,
     maximum: Int,
+    pathId: UInt? = null,
 ): ByteArray =
     BinarySink(maximum)
         .apply {
@@ -456,9 +588,13 @@ private fun encodeDebug(
             writeU32(value.startUtf16)
             writeU32(value.endUtf16)
             writeU32(value.inlineParent?.value ?: UInt.MAX_VALUE)
-            val path = value.sourcePath.toByteArray()
-            writeU32(path.size.toUInt())
-            writeBytes(path)
+            if (pathId != null) {
+                writeU32(pathId)
+            } else {
+                val path = value.sourcePath.toByteArray()
+                writeU32(path.size.toUInt())
+                writeBytes(path)
+            }
         }.toByteArray()
 
 private fun semanticHash(sections: List<EncodedSection>): ByteArray {

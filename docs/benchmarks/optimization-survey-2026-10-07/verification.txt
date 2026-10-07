@@ -1,0 +1,12 @@
+generateBootArtifact: 1 tests passed, 0 failures/errors
+generateShellArtifact: 1 tests passed, 0 failures/errors
+generateKotlincArtifact: 1 tests passed, 0 failures/errors
+generateEditArtifact: 1 tests passed, 0 failures/errors
+generateVmbenchArtifact: 1 tests passed, 0 failures/errors
+generateVmbenchAgentArtifact: 1 tests passed, 0 failures/errors
+generateMapNotNullConformanceArtifact: 1 tests passed, 0 failures/errors
+generateMutableListConformanceArtifact: 2 tests passed, 0 failures/errors
+while-indexed: 99-sample perf run completed; eight hot work counters match current baseline; profiled timings excluded from ordinary timing claims
+fold-256: 99-sample perf run completed; eight hot work counters match current baseline; profiled timings excluded from ordinary timing claims
+map-not-null-1024-100-fresh: 99-sample perf run completed; eight hot work counters match current baseline; profiled timings excluded from ordinary timing claims
+Analyzer syntax and byte accounting checked across nine freshly generated artifacts. Digest mismatch and malformed indexed endpoints rejected. Artifact lengths and SHA-256 trailers checked. No production VM/compiler changes or ABI changes; no claim of a new optimization, whole-checkout verification or release readiness.

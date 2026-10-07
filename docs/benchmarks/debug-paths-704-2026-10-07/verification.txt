@@ -1,0 +1,31 @@
+Issue: https://github.com/CertifiedBadIdeas/Compukters/issues/704
+Worktree: .worktrees/vm-performance
+Baseline parent: 6528a680
+Baseline VM: 18103f01963874510fa25d4396a2dc3e7ee47640
+Updated VM: 190479a
+
+PASS cargo test --manifest-path host/compukter-vm/Cargo.toml --locked --offline
+545 passed, 10 ignored (unit, integration, documentation).
+Local complete output: build/reports/debug-paths-704/rust-test.txt
+PASS cargo fmt --manifest-path host/compukter-vm/Cargo.toml -- --check
+PASS cargo clippy --manifest-path host/compukter-vm/Cargo.toml --locked --offline --all-targets -- -D warnings
+
+Producer/consumer command:
+JAVA_HOME=/usr/lib/jvm/java-25-openjdk ./gradlew-sandbox-dev-parallel-summary :compiler-artifact:formatKotlin :compiler-artifact:check :compiler-k2:generateBootArtifact :compiler-k2:generateShellArtifact :compiler-k2:generateKotlincArtifact :compiler-k2:generateEditArtifact :compiler-k2:generateVmbenchArtifact :compiler-k2:generateVmbenchAgentArtifact testKotlinMapNotNullVmConformance testKotlinMutableListVmConformance testKotlinExceptionsVmConformance --offline
+PASS BUILD SUCCESSFUL in 1m 29s; 50 tasks, 22 executed, 28 up-to-date.
+161 compiler-artifact JVM tests, zero failures.
+Local complete output: build/agent-logs/gradle-20261007T200658Z-143519.log
+
+PASS all eight files admitted through public verify_artifact with ArtifactLimits::default(), using source-built production Rust (no cfg(test)).
+Local output: build/reports/debug-paths-704/native-verify.txt
+
+PASS python3 docs/benchmarks/debug-paths-704-2026-10-07/verify_legacy_equivalence.py
+All eight compact artifacts expand into legacy bytes with exactly the archived pre-change SHA-256.
+PASS read-only analyzer: eight new hashes match recorded results, complete byte totals reconcile, a corrupted digest is rejected.
+
+PASS negative compatibility check: frozen baseline 0.20.0 guest-benchmark rejects compact boot during verification, before execution:
+BadSection, "unknown required or semantic section".
+Local output: build/reports/debug-paths-704/old-reader/result.txt
+
+No timing improvement, full-checkout verification, GameTests, cross-platform bundle coverage or release readiness claimed.
+Published Runtime 0.20.0 native bundles predate DEBUG_PATHS; packaging requires a future immutable native release and pin update.

@@ -1,0 +1,45 @@
+Retained VM: bac6789 (benchmark-only change); production interpreter experiments reverted.
+Parent task start: ec4ab12c; harness tracking commit: 8291660e.
+
+cargo fmt --manifest-path host/compukter-vm/Cargo.toml --all --check
+PASS
+
+cargo clippy --manifest-path host/compukter-vm/Cargo.toml --all-targets --features guest-benchmark --locked --offline -- -D warnings
+PASS, checked final retained VM with benchmark feature enabled.
+
+cargo test --manifest-path host/compukter-vm/Cargo.toml --locked --offline
+PASS: 548 tests passed, 10 ignored, 18 result groups; no failures.
+Complete local output: build/reports/benchmarks/dispatch-cpu-2026-10-07/rust-test.txt
+
+CARGO_TARGET_DIR=.toolchain/build/cargo/guest-benchmark CARGO_PROFILE_RELEASE_DEBUG=1 cargo build --manifest-path host/compukter-vm/Cargo.toml --release --locked --offline --features guest-benchmark --bin guest-benchmark
+PASS for both baseline and rejected dispatch candidate with identical benchmark source.
+Binary hashes and harness SHA-256: provenance.json.
+
+Exact Linux clock helper compiled with rustc -O --edition=2021 and manually exercised:
+50 ms sleep: 5790 ns thread CPU time; busy loop: 2239103 ns thread CPU time.
+PASS: waiting was excluded and the busy loop consumed positive CPU time.
+
+before ARTIFACT_DIR build/reports/benchmarks/dispatch-cpu-2026-10-07/clock-smoke 3 16384 untraced while-indexed
+PASS: 3 production-path smoke samples, ready/checksum/termination/work controls and nonempty CPU columns.
+
+Paired CPU trials: environment.json lists all 12 exact taskset commands, timestamps and host load.
+PASS: 6 workloads, 2 variants, 3 rounds, 7 samples per case/variant/round = 252 timed samples.
+Every invocation verifies artifacts, warms cases and checks traced versus untraced deterministic work,
+expected ready marker/checksum, termination and repeated sample work counters.
+Our compilation and tests did not overlap these final paired trials.
+
+python3 docs/benchmarks/dispatch-cpu-2026-10-07/compare_trials.py
+PASS: complete 36 case/variant/round groups; exactly 7 samples per group;
+raw and summary CPU/wall medians match; raw hot wall min/max match;
+all eight work counters equal across every variant/round for each case;
+printed JSON reproduces comparison.json exactly.
+
+Artifact and harness hash check:
+PASS: all 11 current/frozen artifact hashes match the retained Runtime 0.20.0 October 7 archive;
+the recorded harness SHA matches src/guest_benchmark.rs in the retained VM.
+
+First rejected caller-frame trial: rejected-call-frame.json records 21 wall samples per variant/case
+for 4 pinned workloads, with equal work counters. No CPU clock was available in that trial.
+Preliminary wall-only dispatch trials are excluded from the final comparison.
+
+No compiler, host JVM adapter, Minecraft or release behavior changed; no full-checkout/release gate claimed.

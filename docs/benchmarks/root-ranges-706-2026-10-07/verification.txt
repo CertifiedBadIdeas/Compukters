@@ -1,0 +1,34 @@
+Issue: https://github.com/CertifiedBadIdeas/Compukters/issues/706
+Worktree: .worktrees/vm-performance
+Baseline parent: 3cf190d4
+Baseline VM: 190479a
+Updated VM: 9968700
+
+PASS cargo test --manifest-path host/compukter-vm/Cargo.toml --locked --offline
+548 passed, 10 ignored (unit/integration/documentation).
+Local full output: build/reports/root-ranges-706/rust-test.txt
+PASS cargo fmt --manifest-path host/compukter-vm/Cargo.toml -- --check
+PASS cargo clippy --manifest-path host/compukter-vm/Cargo.toml --locked --offline --all-targets -- -D warnings
+
+PASS JAVA_HOME=/usr/lib/jvm/java-25-openjdk ./gradlew-sandbox-dev-parallel-summary :compiler-artifact:formatKotlin :compiler-artifact:check :compiler-k2:generateBootArtifact :compiler-k2:generateShellArtifact :compiler-k2:generateKotlincArtifact :compiler-k2:generateEditArtifact :compiler-k2:generateVmbenchArtifact :compiler-k2:generateVmbenchAgentArtifact testKotlinMapNotNullVmConformance testKotlinMutableListVmConformance testKotlinExceptionsVmConformance testKotlinListAnyQuotaVmConformance --offline
+BUILD SUCCESSFUL in 1m 34s; 52 tasks, 23 executed, 29 up-to-date.
+Local full output: build/agent-logs/gradle-20261007T202326Z-181789.log
+
+PASS final focused JVM check after configurable reader budget/order validation:
+JAVA_HOME=/usr/lib/jvm/java-25-openjdk ./gradlew-sandbox-dev-parallel-summary :compiler-artifact:formatKotlin :compiler-artifact:check --offline
+BUILD SUCCESSFUL in 14s; 18 tasks, 9 executed, 9 up-to-date.
+165 artifact JVM tests, zero failures.
+Local full output: build/agent-logs/gradle-20261007T202542Z-192157.log
+
+PASS production-source public verify_artifact admission of all eight measured outputs, including canonical expanded module hash checks.
+Local output: build/reports/root-ranges-706/native-verify.txt
+PASS python3 docs/benchmarks/root-ranges-706-2026-10-07/verify_legacy_equivalence.py
+All eight range outputs reconstruct exact #704 SHA-256, then exact original pre-path-pooling SHA-256.
+PASS analyzer: hashes and byte totals reconcile for eight files; logical empty-root, root-set and repeated-map counts equal the #704 inventory.
+PASS negative reader check: strip nonsemantic debug sections from compact boot, rebuild canonical directory and SHA-256, isolating the new root-range marker.
+Updated native reader accepts; frozen baseline reader rejects with BadSection, "unknown required or semantic section", before execution.
+Local output: build/reports/root-ranges-706/old-reader/result.txt
+
+Scope: artifact encoding/decoding, module hashing, bounded expansion, focused native/JVM execution and small-heap GC/quota coverage.
+No interpreter timing improvement, full-checkout verification, GameTests, cross-platform bundle coverage or release readiness claimed.
+Published Runtime 0.20.0 bundles lack both compact markers; updated source-built natives required. Native release and parent pin update remain separate.

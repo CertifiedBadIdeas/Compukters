@@ -1,0 +1,893 @@
+[
+  {
+    "path": "modules/common/compiler-k2/build/generated/system/boot.cpkt",
+    "sha256": "6bd7f44cec04d4647937b7acc4259938ceb96c3b35e34fb262c08d60ff850406",
+    "artifact_bytes": 36036,
+    "functions": 21,
+    "functions_by_module": {
+      "app": 15,
+      "kotlin.Any": 6
+    },
+    "call_sites": {
+      "direct": 10,
+      "virtual": 13
+    },
+    "final_owner_nonnull_dynamic_sites": 0,
+    "final_receiver_nonnull_dynamic_sites": 0,
+    "final_owner_targets": {},
+    "final_receiver_targets": {},
+    "preserved_dispatch_declarations_model": {
+      "functions": 0,
+      "owned_payload_and_index_bytes": 0,
+      "by_section": {},
+      "by_module": {},
+      "examples": []
+    },
+    "callsite_dispatch_model": {
+      "functions": 2,
+      "owned_payload_and_index_bytes": 532,
+      "by_section": {
+        "FUNCTIONS": 132,
+        "BLOCKS": 168,
+        "CODE": 64,
+        "SAFEPOINT_ROOTS": 168
+      },
+      "by_module": {
+        "kotlin.Any": 2
+      },
+      "examples": [
+        {
+          "module": "kotlin.Any",
+          "function": 0,
+          "name": "toString",
+          "flags": 4
+        },
+        {
+          "module": "kotlin.Any",
+          "function": 3,
+          "name": "toString",
+          "flags": 4
+        }
+      ]
+    },
+    "notes": "Static call sites, not execution frequency. Models overapproximate dynamic targets by name/arity. They are investigation estimates, not a linker/verifier proof or exact artifact savings. Shared metadata pruning is not modeled; debug parent owners are retained; callsite model requires coordinated pruning of unused declarations and method ranges; retained declarations keep all name/arity candidates."
+  },
+  {
+    "path": "modules/common/compiler-k2/build/generated/system/edit.cpkt",
+    "sha256": "82b7bf471b982a66cd03653850b39d6491080684241fe8756f18811503d1d00c",
+    "artifact_bytes": 154772,
+    "functions": 53,
+    "functions_by_module": {
+      "app": 47,
+      "kotlin.Any": 6
+    },
+    "call_sites": {
+      "direct": 144,
+      "virtual": 1
+    },
+    "final_owner_nonnull_dynamic_sites": 0,
+    "final_receiver_nonnull_dynamic_sites": 0,
+    "final_owner_targets": {},
+    "final_receiver_targets": {},
+    "preserved_dispatch_declarations_model": {
+      "functions": 0,
+      "owned_payload_and_index_bytes": 0,
+      "by_section": {},
+      "by_module": {},
+      "examples": []
+    },
+    "callsite_dispatch_model": {
+      "functions": 4,
+      "owned_payload_and_index_bytes": 1080,
+      "by_section": {
+        "FUNCTIONS": 264,
+        "BLOCKS": 336,
+        "CODE": 136,
+        "SAFEPOINT_ROOTS": 344
+      },
+      "by_module": {
+        "kotlin.Any": 4
+      },
+      "examples": [
+        {
+          "module": "kotlin.Any",
+          "function": 0,
+          "name": "toString",
+          "flags": 4
+        },
+        {
+          "module": "kotlin.Any",
+          "function": 1,
+          "name": "hashCode",
+          "flags": 4
+        },
+        {
+          "module": "kotlin.Any",
+          "function": 3,
+          "name": "toString",
+          "flags": 4
+        },
+        {
+          "module": "kotlin.Any",
+          "function": 4,
+          "name": "hashCode",
+          "flags": 4
+        }
+      ]
+    },
+    "notes": "Static call sites, not execution frequency. Models overapproximate dynamic targets by name/arity. They are investigation estimates, not a linker/verifier proof or exact artifact savings. Shared metadata pruning is not modeled; debug parent owners are retained; callsite model requires coordinated pruning of unused declarations and method ranges; retained declarations keep all name/arity candidates."
+  },
+  {
+    "path": "modules/common/compiler-k2/build/generated/system/kotlinc.cpkt",
+    "sha256": "c1e542e2b4fa7da1a723e787a6e9ecf9f6f71d9235c558c9fb56886b2e4b79f3",
+    "artifact_bytes": 34252,
+    "functions": 21,
+    "functions_by_module": {
+      "app": 15,
+      "kotlin.Any": 6
+    },
+    "call_sites": {
+      "direct": 17,
+      "virtual": 7
+    },
+    "final_owner_nonnull_dynamic_sites": 0,
+    "final_receiver_nonnull_dynamic_sites": 0,
+    "final_owner_targets": {},
+    "final_receiver_targets": {},
+    "preserved_dispatch_declarations_model": {
+      "functions": 0,
+      "owned_payload_and_index_bytes": 0,
+      "by_section": {},
+      "by_module": {},
+      "examples": []
+    },
+    "callsite_dispatch_model": {
+      "functions": 6,
+      "owned_payload_and_index_bytes": 1658,
+      "by_section": {
+        "FUNCTIONS": 461,
+        "BLOCKS": 392,
+        "CODE": 241,
+        "SAFEPOINT_ROOTS": 564
+      },
+      "by_module": {
+        "app": 2,
+        "kotlin.Any": 4
+      },
+      "examples": [
+        {
+          "module": "app",
+          "function": 4,
+          "name": "hashCode",
+          "flags": 4
+        },
+        {
+          "module": "app",
+          "function": 6,
+          "name": "hashCode",
+          "flags": 4
+        },
+        {
+          "module": "kotlin.Any",
+          "function": 0,
+          "name": "toString",
+          "flags": 4
+        },
+        {
+          "module": "kotlin.Any",
+          "function": 1,
+          "name": "hashCode",
+          "flags": 4
+        },
+        {
+          "module": "kotlin.Any",
+          "function": 3,
+          "name": "toString",
+          "flags": 4
+        },
+        {
+          "module": "kotlin.Any",
+          "function": 4,
+          "name": "hashCode",
+          "flags": 4
+        }
+      ]
+    },
+    "notes": "Static call sites, not execution frequency. Models overapproximate dynamic targets by name/arity. They are investigation estimates, not a linker/verifier proof or exact artifact savings. Shared metadata pruning is not modeled; debug parent owners are retained; callsite model requires coordinated pruning of unused declarations and method ranges; retained declarations keep all name/arity candidates."
+  },
+  {
+    "path": "modules/common/compiler-k2/build/generated/system/shell.cpkt",
+    "sha256": "5c0b15fa4a7f8b0ab4d738659ce4a38d2a454e25d0de4f9af16b9fe8d262d5a3",
+    "artifact_bytes": 117828,
+    "functions": 43,
+    "functions_by_module": {
+      "app": 37,
+      "kotlin.Any": 6
+    },
+    "call_sites": {
+      "direct": 55,
+      "virtual": 24
+    },
+    "final_owner_nonnull_dynamic_sites": 0,
+    "final_receiver_nonnull_dynamic_sites": 0,
+    "final_owner_targets": {},
+    "final_receiver_targets": {},
+    "preserved_dispatch_declarations_model": {
+      "functions": 0,
+      "owned_payload_and_index_bytes": 0,
+      "by_section": {},
+      "by_module": {},
+      "examples": []
+    },
+    "callsite_dispatch_model": {
+      "functions": 2,
+      "owned_payload_and_index_bytes": 532,
+      "by_section": {
+        "FUNCTIONS": 132,
+        "BLOCKS": 168,
+        "CODE": 64,
+        "SAFEPOINT_ROOTS": 168
+      },
+      "by_module": {
+        "kotlin.Any": 2
+      },
+      "examples": [
+        {
+          "module": "kotlin.Any",
+          "function": 0,
+          "name": "toString",
+          "flags": 4
+        },
+        {
+          "module": "kotlin.Any",
+          "function": 3,
+          "name": "toString",
+          "flags": 4
+        }
+      ]
+    },
+    "notes": "Static call sites, not execution frequency. Models overapproximate dynamic targets by name/arity. They are investigation estimates, not a linker/verifier proof or exact artifact savings. Shared metadata pruning is not modeled; debug parent owners are retained; callsite model requires coordinated pruning of unused declarations and method ranges; retained declarations keep all name/arity candidates."
+  },
+  {
+    "path": "modules/common/compiler-k2/build/generated/system/vmbench-agent.cpkt",
+    "sha256": "649298a97116a5652cf4efc330433698275e56599788906db50d5c445013d98a",
+    "artifact_bytes": 32568,
+    "functions": 20,
+    "functions_by_module": {
+      "app": 11,
+      "kotlin.Any": 9
+    },
+    "call_sites": {
+      "virtual": 1,
+      "direct": 13
+    },
+    "final_owner_nonnull_dynamic_sites": 0,
+    "final_receiver_nonnull_dynamic_sites": 0,
+    "final_owner_targets": {},
+    "final_receiver_targets": {},
+    "preserved_dispatch_declarations_model": {
+      "functions": 0,
+      "owned_payload_and_index_bytes": 0,
+      "by_section": {},
+      "by_module": {},
+      "examples": []
+    },
+    "callsite_dispatch_model": {
+      "functions": 6,
+      "owned_payload_and_index_bytes": 1712,
+      "by_section": {
+        "FUNCTIONS": 422,
+        "BLOCKS": 504,
+        "CODE": 226,
+        "SAFEPOINT_ROOTS": 560
+      },
+      "by_module": {
+        "kotlin.Any": 6
+      },
+      "examples": [
+        {
+          "module": "kotlin.Any",
+          "function": 0,
+          "name": "toString",
+          "flags": 4
+        },
+        {
+          "module": "kotlin.Any",
+          "function": 1,
+          "name": "hashCode",
+          "flags": 4
+        },
+        {
+          "module": "kotlin.Any",
+          "function": 3,
+          "name": "toString",
+          "flags": 4
+        },
+        {
+          "module": "kotlin.Any",
+          "function": 4,
+          "name": "hashCode",
+          "flags": 4
+        },
+        {
+          "module": "kotlin.Any",
+          "function": 6,
+          "name": "toString",
+          "flags": 4
+        },
+        {
+          "module": "kotlin.Any",
+          "function": 7,
+          "name": "hashCode",
+          "flags": 4
+        }
+      ]
+    },
+    "notes": "Static call sites, not execution frequency. Models overapproximate dynamic targets by name/arity. They are investigation estimates, not a linker/verifier proof or exact artifact savings. Shared metadata pruning is not modeled; debug parent owners are retained; callsite model requires coordinated pruning of unused declarations and method ranges; retained declarations keep all name/arity candidates."
+  },
+  {
+    "path": "modules/common/compiler-k2/build/generated/system/vmbench.cpkt",
+    "sha256": "e889da729034301eda8ed764406619cd72347540a3cc7dfc41d939259cc67c9f",
+    "artifact_bytes": 38656,
+    "functions": 32,
+    "functions_by_module": {
+      "app": 23,
+      "kotlin.Any": 9
+    },
+    "call_sites": {
+      "direct": 35,
+      "virtual": 3
+    },
+    "final_owner_nonnull_dynamic_sites": 0,
+    "final_receiver_nonnull_dynamic_sites": 0,
+    "final_owner_targets": {},
+    "final_receiver_targets": {},
+    "preserved_dispatch_declarations_model": {
+      "functions": 0,
+      "owned_payload_and_index_bytes": 0,
+      "by_section": {},
+      "by_module": {},
+      "examples": []
+    },
+    "callsite_dispatch_model": {
+      "functions": 6,
+      "owned_payload_and_index_bytes": 1712,
+      "by_section": {
+        "FUNCTIONS": 422,
+        "BLOCKS": 504,
+        "CODE": 226,
+        "SAFEPOINT_ROOTS": 560
+      },
+      "by_module": {
+        "kotlin.Any": 6
+      },
+      "examples": [
+        {
+          "module": "kotlin.Any",
+          "function": 0,
+          "name": "toString",
+          "flags": 4
+        },
+        {
+          "module": "kotlin.Any",
+          "function": 1,
+          "name": "hashCode",
+          "flags": 4
+        },
+        {
+          "module": "kotlin.Any",
+          "function": 3,
+          "name": "toString",
+          "flags": 4
+        },
+        {
+          "module": "kotlin.Any",
+          "function": 4,
+          "name": "hashCode",
+          "flags": 4
+        },
+        {
+          "module": "kotlin.Any",
+          "function": 6,
+          "name": "toString",
+          "flags": 4
+        },
+        {
+          "module": "kotlin.Any",
+          "function": 7,
+          "name": "hashCode",
+          "flags": 4
+        }
+      ]
+    },
+    "notes": "Static call sites, not execution frequency. Models overapproximate dynamic targets by name/arity. They are investigation estimates, not a linker/verifier proof or exact artifact savings. Shared metadata pruning is not modeled; debug parent owners are retained; callsite model requires coordinated pruning of unused declarations and method ranges; retained declarations keep all name/arity candidates."
+  },
+  {
+    "path": "modules/common/compiler-k2/build/generated/conformance/kotlin-map-not-null.cpkt",
+    "sha256": "3af7db5888b6a6352c860a5e4cc44328524e51b59f5fb9b3f1ba4683b90ba95b",
+    "artifact_bytes": 372000,
+    "functions": 582,
+    "functions_by_module": {
+      "app": 573,
+      "kotlin.Any": 9
+    },
+    "call_sites": {
+      "direct": 234,
+      "interface": 181,
+      "virtual": 254
+    },
+    "final_owner_nonnull_dynamic_sites": 228,
+    "final_receiver_nonnull_dynamic_sites": 228,
+    "final_owner_targets": {
+      "add": 16,
+      "<get-size>": 92,
+      "get": 43,
+      "<set-size>": 21,
+      "indexOf": 14,
+      "removeAt": 14,
+      "next": 21,
+      "iterator": 7
+    },
+    "final_receiver_targets": {
+      "add": 16,
+      "<get-size>": 92,
+      "get": 43,
+      "<set-size>": 21,
+      "indexOf": 14,
+      "removeAt": 14,
+      "next": 21,
+      "iterator": 7
+    },
+    "preserved_dispatch_declarations_model": {
+      "functions": 17,
+      "owned_payload_and_index_bytes": 2841,
+      "by_section": {
+        "FUNCTIONS": 1122,
+        "BLOCKS": 476,
+        "CODE": 323,
+        "SAFEPOINT_ROOTS": 920
+      },
+      "by_module": {
+        "app": 17
+      },
+      "examples": [
+        {
+          "module": "app",
+          "function": 3,
+          "name": "<get-values>",
+          "flags": 0
+        },
+        {
+          "module": "app",
+          "function": 4,
+          "name": "<set-values>",
+          "flags": 0
+        },
+        {
+          "module": "app",
+          "function": 16,
+          "name": "<get-storage>",
+          "flags": 0
+        },
+        {
+          "module": "app",
+          "function": 17,
+          "name": "<set-storage>",
+          "flags": 0
+        },
+        {
+          "module": "app",
+          "function": 20,
+          "name": "<get-modificationCount>",
+          "flags": 0
+        },
+        {
+          "module": "app",
+          "function": 21,
+          "name": "<set-modificationCount>",
+          "flags": 0
+        },
+        {
+          "module": "app",
+          "function": 103,
+          "name": "<get-values>",
+          "flags": 0
+        },
+        {
+          "module": "app",
+          "function": 104,
+          "name": "<set-values>",
+          "flags": 0
+        },
+        {
+          "module": "app",
+          "function": 116,
+          "name": "<get-list>",
+          "flags": 0
+        },
+        {
+          "module": "app",
+          "function": 117,
+          "name": "<get-index>",
+          "flags": 0
+        },
+        {
+          "module": "app",
+          "function": 118,
+          "name": "<set-index>",
+          "flags": 0
+        },
+        {
+          "module": "app",
+          "function": 119,
+          "name": "<get-lastReturned>",
+          "flags": 0
+        },
+        {
+          "module": "app",
+          "function": 120,
+          "name": "<set-lastReturned>",
+          "flags": 0
+        },
+        {
+          "module": "app",
+          "function": 121,
+          "name": "<get-expectedModificationCount>",
+          "flags": 0
+        },
+        {
+          "module": "app",
+          "function": 122,
+          "name": "<set-expectedModificationCount>",
+          "flags": 0
+        },
+        {
+          "module": "app",
+          "function": 133,
+          "name": "<get-list>",
+          "flags": 0
+        },
+        {
+          "module": "app",
+          "function": 134,
+          "name": "<get-iterator>",
+          "flags": 0
+        }
+      ]
+    },
+    "callsite_dispatch_model": {
+      "functions": 156,
+      "owned_payload_and_index_bytes": 71927,
+      "by_section": {
+        "FUNCTIONS": 14092,
+        "BLOCKS": 6776,
+        "CODE": 8591,
+        "SAFEPOINT_ROOTS": 15012,
+        "DEBUG": 18304,
+        "DEBUG_SOURCE_POSITIONS": 9152
+      },
+      "by_module": {
+        "app": 150,
+        "kotlin.Any": 6
+      },
+      "examples": [
+        {
+          "module": "app",
+          "function": 4,
+          "name": "lastIndexOf",
+          "flags": 8
+        },
+        {
+          "module": "app",
+          "function": 13,
+          "name": "remove",
+          "flags": 4
+        },
+        {
+          "module": "app",
+          "function": 14,
+          "name": "clear",
+          "flags": 4
+        },
+        {
+          "module": "app",
+          "function": 15,
+          "name": "contains",
+          "flags": 4
+        },
+        {
+          "module": "app",
+          "function": 17,
+          "name": "lastIndexOf",
+          "flags": 4
+        },
+        {
+          "module": "app",
+          "function": 22,
+          "name": "lastIndexOf",
+          "flags": 0
+        },
+        {
+          "module": "app",
+          "function": 23,
+          "name": "contains",
+          "flags": 0
+        },
+        {
+          "module": "app",
+          "function": 27,
+          "name": "contains",
+          "flags": 0
+        },
+        {
+          "module": "app",
+          "function": 28,
+          "name": "contains",
+          "flags": 0
+        },
+        {
+          "module": "app",
+          "function": 30,
+          "name": "lastIndexOf",
+          "flags": 0
+        },
+        {
+          "module": "app",
+          "function": 32,
+          "name": "lastIndexOf",
+          "flags": 0
+        },
+        {
+          "module": "app",
+          "function": 44,
+          "name": "remove",
+          "flags": 4
+        },
+        {
+          "module": "app",
+          "function": 45,
+          "name": "clear",
+          "flags": 4
+        },
+        {
+          "module": "app",
+          "function": 46,
+          "name": "contains",
+          "flags": 4
+        },
+        {
+          "module": "app",
+          "function": 48,
+          "name": "lastIndexOf",
+          "flags": 4
+        },
+        {
+          "module": "app",
+          "function": 53,
+          "name": "lastIndexOf",
+          "flags": 0
+        },
+        {
+          "module": "app",
+          "function": 54,
+          "name": "contains",
+          "flags": 0
+        },
+        {
+          "module": "app",
+          "function": 58,
+          "name": "contains",
+          "flags": 0
+        },
+        {
+          "module": "app",
+          "function": 59,
+          "name": "contains",
+          "flags": 0
+        },
+        {
+          "module": "app",
+          "function": 61,
+          "name": "lastIndexOf",
+          "flags": 0
+        },
+        {
+          "module": "app",
+          "function": 63,
+          "name": "lastIndexOf",
+          "flags": 0
+        },
+        {
+          "module": "app",
+          "function": 68,
+          "name": "lastIndexOf",
+          "flags": 8
+        },
+        {
+          "module": "app",
+          "function": 71,
+          "name": "lastIndexOf",
+          "flags": 8
+        },
+        {
+          "module": "app",
+          "function": 80,
+          "name": "remove",
+          "flags": 4
+        },
+        {
+          "module": "app",
+          "function": 81,
+          "name": "clear",
+          "flags": 4
+        },
+        {
+          "module": "app",
+          "function": 82,
+          "name": "contains",
+          "flags": 4
+        },
+        {
+          "module": "app",
+          "function": 84,
+          "name": "lastIndexOf",
+          "flags": 4
+        },
+        {
+          "module": "app",
+          "function": 89,
+          "name": "lastIndexOf",
+          "flags": 0
+        },
+        {
+          "module": "app",
+          "function": 90,
+          "name": "contains",
+          "flags": 0
+        },
+        {
+          "module": "app",
+          "function": 94,
+          "name": "contains",
+          "flags": 0
+        }
+      ]
+    },
+    "notes": "Static call sites, not execution frequency. Models overapproximate dynamic targets by name/arity. They are investigation estimates, not a linker/verifier proof or exact artifact savings. Shared metadata pruning is not modeled; debug parent owners are retained; callsite model requires coordinated pruning of unused declarations and method ranges; retained declarations keep all name/arity candidates."
+  },
+  {
+    "path": "modules/common/compiler-k2/build/generated/conformance/kotlin-mutable-list.cpkt",
+    "sha256": "0ceba9989903a49c7c941a557f28a6b97e4012a3f2037abf9c4dd4edffb8d967",
+    "artifact_bytes": 271200,
+    "functions": 407,
+    "functions_by_module": {
+      "app": 398,
+      "kotlin.Any": 9
+    },
+    "call_sites": {
+      "direct": 167,
+      "virtual": 199,
+      "interface": 120
+    },
+    "final_owner_nonnull_dynamic_sites": 184,
+    "final_receiver_nonnull_dynamic_sites": 184,
+    "final_owner_targets": {
+      "<get-size>": 67,
+      "get": 40,
+      "add": 17,
+      "removeAt": 11,
+      "remove": 1,
+      "set": 1,
+      "indexOf": 11,
+      "lastIndexOf": 1,
+      "<set-size>": 15,
+      "next": 15,
+      "iterator": 5
+    },
+    "final_receiver_targets": {
+      "<get-size>": 67,
+      "get": 40,
+      "add": 17,
+      "removeAt": 11,
+      "remove": 1,
+      "set": 1,
+      "indexOf": 11,
+      "lastIndexOf": 1,
+      "<set-size>": 15,
+      "next": 15,
+      "iterator": 5
+    },
+    "preserved_dispatch_declarations_model": {
+      "functions": 2,
+      "owned_payload_and_index_bytes": 338,
+      "by_section": {
+        "FUNCTIONS": 132,
+        "BLOCKS": 56,
+        "CODE": 38,
+        "SAFEPOINT_ROOTS": 112
+      },
+      "by_module": {
+        "app": 2
+      },
+      "examples": [
+        {
+          "module": "app",
+          "function": 3,
+          "name": "<get-values>",
+          "flags": 0
+        },
+        {
+          "module": "app",
+          "function": 4,
+          "name": "<set-values>",
+          "flags": 0
+        }
+      ]
+    },
+    "callsite_dispatch_model": {
+      "functions": 8,
+      "owned_payload_and_index_bytes": 2050,
+      "by_section": {
+        "FUNCTIONS": 554,
+        "BLOCKS": 560,
+        "CODE": 264,
+        "SAFEPOINT_ROOTS": 672
+      },
+      "by_module": {
+        "kotlin.Any": 6,
+        "app": 2
+      },
+      "examples": [
+        {
+          "module": "app",
+          "function": 3,
+          "name": "<get-values>",
+          "flags": 0
+        },
+        {
+          "module": "app",
+          "function": 4,
+          "name": "<set-values>",
+          "flags": 0
+        },
+        {
+          "module": "kotlin.Any",
+          "function": 0,
+          "name": "toString",
+          "flags": 4
+        },
+        {
+          "module": "kotlin.Any",
+          "function": 1,
+          "name": "hashCode",
+          "flags": 4
+        },
+        {
+          "module": "kotlin.Any",
+          "function": 3,
+          "name": "toString",
+          "flags": 4
+        },
+        {
+          "module": "kotlin.Any",
+          "function": 4,
+          "name": "hashCode",
+          "flags": 4
+        },
+        {
+          "module": "kotlin.Any",
+          "function": 6,
+          "name": "toString",
+          "flags": 4
+        },
+        {
+          "module": "kotlin.Any",
+          "function": 7,
+          "name": "hashCode",
+          "flags": 4
+        }
+      ]
+    },
+    "notes": "Static call sites, not execution frequency. Models overapproximate dynamic targets by name/arity. They are investigation estimates, not a linker/verifier proof or exact artifact savings. Shared metadata pruning is not modeled; debug parent owners are retained; callsite model requires coordinated pruning of unused declarations and method ranges; retained declarations keep all name/arity candidates."
+  }
+]

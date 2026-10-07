@@ -1,0 +1,47 @@
+{
+  "utc": "2026-10-07T20:58:21.148901+00:00",
+  "parent": "d2afe97eb7ae8e02a1ac3120e4d794be1fab1d11",
+  "vm": "bac6789f14f0da0079698f54fcbfc5e12d4a340f",
+  "mode": "read-only research; no regenerated artifacts or modified compiler/runtime",
+  "commands": [
+    [
+      "python3",
+      "docs/_tools/analyze_linked_calls.py",
+      "modules/common/compiler-k2/build/generated/system/boot.cpkt",
+      "modules/common/compiler-k2/build/generated/system/edit.cpkt",
+      "modules/common/compiler-k2/build/generated/system/kotlinc.cpkt",
+      "modules/common/compiler-k2/build/generated/system/shell.cpkt",
+      "modules/common/compiler-k2/build/generated/system/vmbench-agent.cpkt",
+      "modules/common/compiler-k2/build/generated/system/vmbench.cpkt",
+      "modules/common/compiler-k2/build/generated/conformance/kotlin-map-not-null.cpkt",
+      "modules/common/compiler-k2/build/generated/conformance/kotlin-mutable-list.cpkt"
+    ],
+    [
+      "python3",
+      "docs/_tools/analyze_linked_calls.py",
+      "modules/common/compiler-k2/build/generated/benchmarks/transient-allocations/while-indexed-256-300.cpkt",
+      "modules/common/compiler-k2/build/generated/benchmarks/transient-allocations/for-list-256-300.cpkt",
+      "modules/common/compiler-k2/build/generated/benchmarks/transient-allocations/fold-256-300.cpkt",
+      "modules/common/compiler-k2/build/generated/benchmarks/collection-reuse/map-not-null-1024-100-fresh.cpkt"
+    ]
+  ],
+  "native_verifier": ".toolchain/build/cargo/debug-paths-verify/debug/debug-paths-verify",
+  "native_verifier_sha256": "2a9370bf62ea1c774ab7bb52dc04d6f53a9b49e0391e15b144b118c604b5aa70",
+  "native_verifier_execution": "public verify_artifact, ArtifactLimits::default(), source-built after root ranges #706; accepted all 12 recorded artifacts",
+  "analyzer_sha256": "d72024d74510de36a9cbafdd3bdaf660a9ce16a7e4cc7c70d530b678bccbf6cc",
+  "container_analyzer_sha256": "1d027c4793777dafcd834fde62fab64dfab7fc3f3fa00f124243f0130a110f02",
+  "artifact_hashes": {
+    "modules/common/compiler-k2/build/generated/system/boot.cpkt": "6bd7f44cec04d4647937b7acc4259938ceb96c3b35e34fb262c08d60ff850406",
+    "modules/common/compiler-k2/build/generated/system/edit.cpkt": "82b7bf471b982a66cd03653850b39d6491080684241fe8756f18811503d1d00c",
+    "modules/common/compiler-k2/build/generated/system/kotlinc.cpkt": "c1e542e2b4fa7da1a723e787a6e9ecf9f6f71d9235c558c9fb56886b2e4b79f3",
+    "modules/common/compiler-k2/build/generated/system/shell.cpkt": "5c0b15fa4a7f8b0ab4d738659ce4a38d2a454e25d0de4f9af16b9fe8d262d5a3",
+    "modules/common/compiler-k2/build/generated/system/vmbench-agent.cpkt": "649298a97116a5652cf4efc330433698275e56599788906db50d5c445013d98a",
+    "modules/common/compiler-k2/build/generated/system/vmbench.cpkt": "e889da729034301eda8ed764406619cd72347540a3cc7dfc41d939259cc67c9f",
+    "modules/common/compiler-k2/build/generated/conformance/kotlin-map-not-null.cpkt": "3af7db5888b6a6352c860a5e4cc44328524e51b59f5fb9b3f1ba4683b90ba95b",
+    "modules/common/compiler-k2/build/generated/conformance/kotlin-mutable-list.cpkt": "0ceba9989903a49c7c941a557f28a6b97e4012a3f2037abf9c4dd4edffb8d967",
+    "modules/common/compiler-k2/build/generated/benchmarks/transient-allocations/while-indexed-256-300.cpkt": "9fb279c801bb74695a2458b9d7c6e65950a137ce378985ce6b1779e79fa9a38d",
+    "modules/common/compiler-k2/build/generated/benchmarks/transient-allocations/for-list-256-300.cpkt": "dffcff56a9db1f5ecda8474409e0069697134fbcf0ebdce926b33a788244bd3f",
+    "modules/common/compiler-k2/build/generated/benchmarks/transient-allocations/fold-256-300.cpkt": "04c7b10a108d40d959b1adf630ee59a4e6337e748c8205f54323f989fb0f3e31",
+    "modules/common/compiler-k2/build/generated/benchmarks/collection-reuse/map-not-null-1024-100-fresh.cpkt": "6aeecc9311de27856be90be6ca8cf920d7cdbe3f85e98b91156791d32f1879af"
+  }
+}
