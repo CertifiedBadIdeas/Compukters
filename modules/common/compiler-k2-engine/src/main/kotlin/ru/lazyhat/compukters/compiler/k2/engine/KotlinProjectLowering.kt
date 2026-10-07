@@ -94,6 +94,7 @@ import org.jetbrains.kotlin.ir.util.resolveFakeOverrideMaybeAbstract
 import org.jetbrains.kotlin.ir.visitors.IrVisitorVoid
 import org.jetbrains.kotlin.name.ClassId
 import org.jetbrains.kotlin.name.FqName
+import org.jetbrains.kotlin.name.Name
 import org.jetbrains.kotlin.types.Variance
 import ru.lazyhat.compukters.compiler.artifact.analysis.ExecutionStorage
 import ru.lazyhat.compukters.compiler.artifact.analysis.hasHeterogeneousReferenceComparison
@@ -331,7 +332,10 @@ private fun collectGuestClassInstances(
             byName[name]?.let { add(GuestClassInstance(it, listOf(argument))) }
         }
         instance.declaration.superTypes.forEach { consider(it, instance::substitute) }
-        instance.declaration.declarations.forEach { declaration -> scan(declaration, instance::substitute) }
+        // Nested classes own independent type parameters and are scanned through their own instances.
+        instance.declaration.declarations.filterNot { it is IrClass }.forEach { declaration ->
+            scan(declaration, instance::substitute)
+        }
     }
     return instances.toList()
 }
@@ -1100,9 +1104,13 @@ internal object KotlinProjectLowering {
         val platformScalars = PlatformScalarRegistry(session.platformScalarTypes, session.platformScalarConstants)
         var usesListFactory = false
 
-        fun isCollectionSource(declaration: IrDeclaration): Boolean =
-            declaration.file.packageFqName == FqName("kotlin.collections") &&
-                session.virtualSourcePath(declaration.file.fileEntry.name) in session.sourcePlatformPaths
+        fun isCollectionSource(declaration: IrDeclaration): Boolean {
+            var parent = declaration.parent
+            while (parent is IrDeclaration) parent = parent.parent
+            val file = parent as? IrFile ?: return false
+            return file.packageFqName == FqName("kotlin.collections") &&
+                session.virtualSourcePath(file.fileEntry.name) in session.sourcePlatformPaths
+        }
         val scannedCollectionHelpers = mutableSetOf<IrSimpleFunctionSymbol>()
         val collectionUsage =
             object : IrVisitorVoid() {
@@ -1111,9 +1119,7 @@ internal object KotlinProjectLowering {
                 }
 
                 override fun visitConstructorCall(expression: IrConstructorCall) {
-                    if (expression.symbol.owner.parentAsClass.fqNameWhenAvailable
-                            ?.asString() == "kotlin.collections.ArrayList"
-                    ) {
+                    if (isCollectionSource(expression.symbol.owner.parentAsClass)) {
                         usesListFactory = true
                     }
                     super.visitConstructorCall(expression)
@@ -1134,7 +1140,25 @@ internal object KotlinProjectLowering {
         (functions + properties).filterNot(::isCollectionSource).forEach { it.accept(collectionUsage, null) }
         val collectionInterfaceClasses =
             specializedCollectionInterfaces.mapNotNull { name ->
-                pluginContext.referenceClass(ClassId.topLevel(FqName(name)))?.owner
+                val classId =
+                    when (name) {
+                        "kotlin.collections.Map.Entry" -> {
+                            ClassId
+                                .topLevel(FqName("kotlin.collections.Map"))
+                                .createNestedClassId(Name.identifier("Entry"))
+                        }
+
+                        "kotlin.collections.MutableMap.MutableEntry" -> {
+                            ClassId
+                                .topLevel(FqName("kotlin.collections.MutableMap"))
+                                .createNestedClassId(Name.identifier("MutableEntry"))
+                        }
+
+                        else -> {
+                            ClassId.topLevel(FqName(name))
+                        }
+                    }
+                pluginContext.referenceClass(classId)?.owner
             }
         val sourceClasses =
             (classes + collectionInterfaceClasses)
@@ -5401,6 +5425,7 @@ private class FunctionCompiler(
         expression: IrExpression,
         expectedType: IrType?,
     ): RegisterId {
+        if (expectedType != null) validateHashCollectionView(expression, expectedType)
         val source =
             if (resolvedType(expression.type) == unitType && expectedType?.let { resolvedType(it).isKotlinAny() } == true) {
                 if (expression !is IrGetObjectValue) compileStatement(expression)
@@ -5443,6 +5468,35 @@ private class FunctionCompiler(
             }
         } else {
             boxValue(source, expression.type, referenceTarget)
+        }
+    }
+
+    private fun validateHashCollectionView(
+        expression: IrExpression,
+        expectedType: IrType,
+    ) {
+        val sourceName =
+            ((resolvedType(expression.type) as? IrSimpleType)?.classifier as? IrClassSymbol)
+                ?.owner
+                ?.fqNameWhenAvailable
+                ?.asString()
+                .orEmpty()
+        val targetName =
+            ((resolvedType(expectedType) as? IrSimpleType)?.classifier as? IrClassSymbol)
+                ?.owner
+                ?.fqNameWhenAvailable
+                ?.asString()
+                .orEmpty()
+        if (!sourceName.startsWith("kotlin.collections.Hash") && sourceName !in hashCollectionInterfaces) return
+        if (targetName !in specializedCollectionInterfaces) return
+        val source = resolveClassInstance(expression.type) ?: return
+        val target = resolveClassInstance(expectedType) ?: return
+        val inherited = resolveMemberOwner(source, target.declaration) ?: return
+        if (inherited.arguments != target.arguments) {
+            throw UnsupportedKotlinIr(
+                expression,
+                "hash collection type argument widening is not supported; retain the original key and element types",
+            )
         }
     }
 
@@ -7421,10 +7475,17 @@ private class FunctionCompiler(
         val owner = (target.parent as? IrClass)?.fqNameWhenAvailable?.asString() ?: return null
         val primitive = GuestPrimitive.entries.singleOrNull { it.qualifiedName == owner } ?: return null
         val name = target.name.asString()
+        val output = GuestPrimitive.scalar(resolvedType(call.type)) ?: return null
+        // K2 numeric equality can retain a nullable receiver type in its guarded conversion branch.
+        if (arguments.size == 1 && name == "to${output.sourceName}" &&
+            registerValueType(arguments[0]) is ValueType.Ref &&
+            expressions.singleOrNull()?.let { GuestPrimitive.scalar(resolvedType(it.type).makeNotNull()) } == primitive
+        ) {
+            return primitiveConvert(unboxScalar(arguments[0], primitive.scalar, primitive), primitive, output, call)
+        }
         val source = expressions.firstOrNull()?.let { GuestPrimitive.scalar(resolvedType(it.type)) } ?: return null
         // Nullable receivers and Any.equals are handled by the reference dispatch path.
         if (arguments.isEmpty() || registerValueType(arguments[0]) is ValueType.Ref) return null
-        val output = GuestPrimitive.scalar(resolvedType(call.type)) ?: return null
 
         fun result(
             type: ValueType = output.scalar,
@@ -8684,7 +8745,7 @@ private class FunctionCompiler(
         val arguments =
             call.typeArguments.map { argument ->
                 val type = argument ?: throw UnsupportedKotlinIr(call, "generic call has an inferred type hole")
-                currentInstance?.substitute(type) ?: type
+                resolvedType(type)
             }
         return GuestFunctionInstance(target, arguments)
     }
@@ -9394,6 +9455,16 @@ private fun collectGuestClosures(functions: List<IrElement>): List<GuestClosureS
     }
 }
 
+private val hashCollectionInterfaces =
+    setOf(
+        "kotlin.collections.Map",
+        "kotlin.collections.MutableMap",
+        "kotlin.collections.Set",
+        "kotlin.collections.MutableSet",
+        "kotlin.collections.Map.Entry",
+        "kotlin.collections.MutableMap.MutableEntry",
+    )
+
 private val specializedCollectionInterfaces =
     setOf(
         "kotlin.collections.Iterable",
@@ -9404,6 +9475,12 @@ private val specializedCollectionInterfaces =
         "kotlin.collections.MutableIterator",
         "kotlin.collections.MutableCollection",
         "kotlin.collections.MutableList",
+        "kotlin.collections.Set",
+        "kotlin.collections.MutableSet",
+        "kotlin.collections.Map",
+        "kotlin.collections.MutableMap",
+        "kotlin.collections.Map.Entry",
+        "kotlin.collections.MutableMap.MutableEntry",
     )
 
 private fun loweredParameters(
@@ -9637,6 +9714,7 @@ private class ReferenceArrayUsageCollector(
         root.accept(
             object : IrVisitorVoid() {
                 override fun visitElement(element: IrElement) {
+                    if (element is IrClass && element !== root) return
                     when (element) {
                         is IrExpression -> consider(element.type, substitute)
                         is IrValueDeclaration -> consider(element.type, substitute)
