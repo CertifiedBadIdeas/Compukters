@@ -84,6 +84,22 @@ data class IdePromptState(
             is IdePromptKind.Rename -> "Rename ${kind.source.value} · destination path"
             IdePromptKind.RenameSymbol -> "Rename symbol · new name"
         }
+    val fieldLabel: String get() =
+        when (kind) {
+            IdePromptKind.CreateProject, is IdePromptKind.CloneName -> "Directory name"
+            IdePromptKind.OpenExisting -> "Absolute directory path"
+            IdePromptKind.CloneRemote, IdePromptKind.GitRemoteUrl -> "HTTPS URL"
+            IdePromptKind.GitBranch -> "Branch name"
+            IdePromptKind.GitCommitMessage -> "Commit message"
+            is IdePromptKind.GitCommitName -> "Author name"
+            is IdePromptKind.GitCommitEmail -> "Author email"
+            IdePromptKind.GitUsername -> "Username"
+            is IdePromptKind.GitToken -> "Token"
+            IdePromptKind.CreateText -> "File path"
+            IdePromptKind.CreateDirectory -> "Directory path"
+            is IdePromptKind.Rename -> "Destination path"
+            IdePromptKind.RenameSymbol -> "New name"
+        }
     val displayValue: String get() = if (kind is IdePromptKind.GitToken) "•".repeat(value.length.coerceAtMost(48)) else value
 
     override fun toString(): String = "IdePromptState(title=$title, value=$displayValue, error=$error)"

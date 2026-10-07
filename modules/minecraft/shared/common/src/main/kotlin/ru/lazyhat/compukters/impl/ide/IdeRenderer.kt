@@ -1599,8 +1599,28 @@ object IdeRenderer {
             val bounds = IdeRect(left, top, left + width, top + height)
             panel(IdePanelKind.Dialog, bounds, IdeColors.PANEL_ALT, Z_DIALOG)
             ui(IdeTextKind.Dialog, prompt.title, bounds.left + 10, bounds.top + 10, clip = bounds, z = Z_DIALOG_TEXT)
-            ui(IdeTextKind.Dialog, prompt.displayValue + "_", bounds.left + 10, bounds.top + 34, clip = bounds, z = Z_DIALOG_TEXT)
-            prompt.error?.let { ui(IdeTextKind.Dialog, it, bounds.left + 10, bounds.top + 54, IdeColors.ERROR, bounds, Z_DIALOG_TEXT) }
+            ui(IdeTextKind.Dialog, prompt.fieldLabel + ":", bounds.left + 10, bounds.top + 30, clip = bounds, z = Z_DIALOG_TEXT)
+            val field = IdeRect(bounds.left + 10, bounds.top + 44, bounds.right - 10, bounds.top + 66)
+            fills += IdeFillDraw(IdeFillKind.Border, field, IdeColors.ACCENT, Z_DIALOG + 1)
+            val inside = IdeRect(field.left + 1, field.top + 1, field.right - 1, field.bottom - 1)
+            fills += IdeFillDraw(IdeFillKind.Background, inside, IdeColors.EDITOR, Z_DIALOG + 2)
+            val columns = ((inside.width - 8) / font.cellWidth).coerceAtLeast(1)
+            val glyphs = projectGlyphs(prompt.displayValue)
+            val length = glyphs.codePointCount(0, glyphs.length)
+            val start = glyphs.offsetByCodePoints(0, (length - columns + 1).coerceAtLeast(0))
+            val visible = glyphs.substring(start)
+            val x = inside.left + 4
+            val rowTop = inside.top + (inside.height - font.cellHeight) / 2
+            code(IdeTextKind.Dialog, visible, x, rowTop + font.glyphDrawOffsetY, IdeColors.TEXT, inside, z = Z_DIALOG_TEXT)
+            val caretX = x + visible.codePointCount(0, visible.length) * font.cellWidth
+            fills +=
+                IdeFillDraw(
+                    IdeFillKind.Caret,
+                    IdeRect(caretX, rowTop, caretX + 1, rowTop + font.cellHeight),
+                    IdeColors.CARET,
+                    Z_DIALOG_TEXT,
+                )
+            prompt.error?.let { ui(IdeTextKind.Dialog, it, bounds.left + 10, bounds.top + 76, IdeColors.ERROR, bounds, Z_DIALOG_TEXT) }
             val dismiss = IdeRect(bounds.right - 78, bounds.bottom - 26, bounds.right - 10, bounds.bottom - 8)
             val confirm = IdeRect(dismiss.left - 76, dismiss.top, dismiss.left - 8, dismiss.bottom)
             target(IdeHitAction.Confirm, confirm, true, focusGroup = IdeFocusGroup.Dialog, z = Z_DIALOG_TARGET)
