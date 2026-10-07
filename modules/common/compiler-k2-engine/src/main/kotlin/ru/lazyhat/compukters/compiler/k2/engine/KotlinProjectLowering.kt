@@ -305,7 +305,7 @@ private fun collectGuestClassInstances(
                             ?.asString() == "kotlin.collections.mutableListStorage"
                     ) {
                         val elementType = expression.typeArguments.singleOrNull()?.let(substitution)
-                        if (elementType != null && elementType.specializationTypeIdentity() != "Int") {
+                        if (elementType != null && (elementType.isNullable() || GuestPrimitive.scalar(elementType) == null)) {
                             byName["kotlin.collections.ReferenceMutableListStorage"]?.let {
                                 add(GuestClassInstance(it, listOf(elementType)))
                             }
@@ -6683,9 +6683,10 @@ private class FunctionCompiler(
         val elementType =
             call.typeArguments.singleOrNull()?.let(::resolvedType)
                 ?: throw UnsupportedKotlinIr(call, "mutable list storage requires a concrete element type")
-        val name = if (elementType == intType) "IntMutableListStorage" else "ReferenceMutableListStorage"
+        val primitive = GuestPrimitive.scalar(elementType)?.takeUnless { elementType.isNullable() }
+        val name = primitive?.let { "${it.sourceName}MutableListStorage" } ?: "ReferenceMutableListStorage"
         val target =
-            if (elementType == intType) {
+            if (primitive != null) {
                 constructorLayouts.values.singleOrNull {
                     it.instance.declaration.fqNameWhenAvailable
                         ?.asString() == "kotlin.collections.$name"
@@ -7680,6 +7681,27 @@ private class FunctionCompiler(
             listOf(leftType, rightType).any { it.isNullable() }
         ) {
             return compileNullableFloatingEquality(arguments, requireNotNull(floatingPrimitive))
+        }
+        // Generic Kotlin equality uses wrapper semantics even in an unboxed specialization.
+        if (name in setOf("EQEQ", "equals", "eqeq") &&
+            expressions.any { expression ->
+                (expression.type as? IrSimpleType)?.classifier is IrTypeParameterSymbol &&
+                    GuestPrimitive.scalar(resolvedType(expression.type).makeNotNull()) in setOf(GuestPrimitive.FLOAT, GuestPrimitive.DOUBLE)
+            }
+        ) {
+            val references =
+                arguments.mapIndexed { index, argument ->
+                    if (registerValueType(argument) is ValueType.Ref) {
+                        argument
+                    } else {
+                        boxValue(
+                            argument,
+                            expressions[index].type,
+                            ValueType.Ref(false, TypeRef.Imported(ImportId.of(ANY_RUNTIME_TYPE))),
+                        )
+                    }
+                }
+            return equalsValue(references[0], references[1])
         }
         val sourcePrimitives = listOf(leftType, rightType).map(GuestPrimitive::scalar)
         val promoted = if (arguments.all { registerValueType(it) !is ValueType.Ref }) promotePrimitives(sourcePrimitives) else null

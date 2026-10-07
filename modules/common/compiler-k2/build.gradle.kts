@@ -1184,8 +1184,12 @@ val generateMutableListConformanceArtifact = tasks.register<Test>("generateMutab
     testClassesDirs = sourceSets.test.get().output.classesDirs
     classpath = sourceSets.test.get().runtimeClasspath
     filter.includeTestsMatching("*mutable ArrayList preserves growth mutation and read only views*")
+    filter.includeTestsMatching("*primitive lists preserve storage mutation nullable and Any views*")
     inputs.file(workerJar)
     outputs.file(mutableListConformanceArtifact)
+    (0..3).forEach { batch ->
+        outputs.file(mutableListConformanceArtifact.map { it.asFile.resolveSibling("primitive-lists-$batch.cpkt") })
+    }
     outputs.file(mutableListConformanceArtifact.map { it.asFile.resolveSibling("${it.asFile.name}.failure.cpkt") })
     doFirst {
         systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)

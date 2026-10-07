@@ -3058,6 +3058,108 @@ class MinimalScriptLoweringTest {
         }
 
     @Test
+    fun `primitive lists preserve storage mutation nullable and Any views`() =
+        withAdapter { adapter ->
+            val cases =
+                listOf(
+                    Triple("Boolean", "true", "false"),
+                    Triple("Byte", "(-128).toByte()", "127.toByte()"),
+                    Triple("Short", "(-32768).toShort()", "32767.toShort()"),
+                    Triple("Char", "'x'", "'y'"),
+                    Triple("Int", "-1", "1"),
+                    Triple("Long", "-1L", "1L"),
+                    Triple("Float", "-1.0f", "1.0f"),
+                    Triple("Double", "-1.0", "1.0"),
+                    Triple("UByte", "255u.toUByte()", "0u.toUByte()"),
+                    Triple("UShort", "65535u.toUShort()", "0u.toUShort()"),
+                    Triple("UInt", "4294967295u", "0u"),
+                    Triple("ULong", "18446744073709551615uL", "0uL"),
+                )
+            cases.chunked(3).forEachIndexed { batch, entries ->
+                val floating = entries.any { it.first == "Float" }
+                val source =
+                    buildString {
+                        appendLine("import kotlin.collections.*")
+                        appendLine(
+                            """
+                            fun <T> genericEqual(left: T, right: T): Boolean = left == right
+                            fun <T> primitiveLists(value: T, other: T) {
+                                val list = ArrayList<T>(0)
+                                var index = 0
+                                while (index < 25) { list.add(value); index++ }
+                                val read: List<T> = list
+                                val any: List<Any?> = read
+                                val nullable: List<T?> = read
+                                require(read.size == 25 && genericEqual(read[24], value))
+                                require(genericEqual(nullable[0], value) && any[0] == (value as Any?))
+                                list.add(1, other)
+                                require(genericEqual(list.set(1, value), other))
+                                require(list.indexOf(value) == 0 && list.lastIndexOf(value) == 25 && list.contains(value))
+                                require(genericEqual(list.removeAt(1), value) && list.remove(value))
+                                val iterator = list.iterator()
+                                require(genericEqual(iterator.next(), value)); iterator.remove()
+                                val readonly = listOf(value, other)
+                                require(readonly.size == 2 && genericEqual(readonly[1], other))
+                            require(genericEqual(readonly.first(), value))
+                            require(genericEqual(readonly.first { genericEqual(it, other) }, other))
+                            require(emptyList<T>().firstOrNull() == null)
+                            val filtered = readonly.filter { genericEqual(it, value) }
+                            require(filtered.size == 1 && genericEqual(filtered[0], value))
+                            val mapped = readonly.map { it }
+                            require(mapped.size == 2 && genericEqual(mapped[1], other))
+                                    val nulls = ArrayList<T?>(0)
+                                nulls.add(value); nulls.add(null)
+                                val nullAny: List<Any?> = nulls
+                                require(nullAny[0] == (value as Any?) && nullAny[1] == null && nulls.remove(null))
+                                list.clear()
+                                require(any.isEmpty() && nullable.isEmpty() && list.isEmpty())
+                            }
+                            """.trimIndent(),
+                        )
+                        if (floating) {
+                            appendLine(
+                                """
+                                fun floatingListEquality() {
+                                    require(genericEqual(Float.NaN, Float.NaN) && genericEqual(Double.NaN, Double.NaN))
+                                    require(!genericEqual(0.0f, -0.0f) && !genericEqual(0.0, -0.0))
+                                    val floats = ArrayList<Float>()
+                                    floats.add(Float.NaN); floats.add(0.0f); floats.add(-0.0f)
+                                    require(floats.indexOf(Float.NaN) == 0 && floats.indexOf(-0.0f) == 2 && floats.indexOf(0.0f) == 1)
+                                    require(floats.contains(Float.NaN) && floats.remove(-0.0f) && floats.lastIndexOf(0.0f) == 1)
+                                    val doubles = listOf(Double.NaN, 0.0, -0.0)
+                                    require(doubles.indexOf(Double.NaN) == 0 && doubles.indexOf(-0.0) == 2)
+                                }
+                                """.trimIndent(),
+                            )
+                        }
+                        appendLine("fun main() {")
+                        entries.forEach { (name, value, other) -> appendLine("primitiveLists<$name>($value, $other)") }
+                        if (floating) appendLine("floatingListEquality()")
+                        appendLine("}")
+                    }
+                val result = adapter.compile(request(source))
+                val bytes = assertNotNull(result.artifact, result.diagnostics.joinToString()).toByteArray()
+                val application = ArtifactReader.read(bytes).modules.single { it.kind == ModuleKind.APPLICATION }
+                entries.forEach { (name, _, _) ->
+                    val storage =
+                        application.types.filterIsInstance<NominalType.Class>().single { type ->
+                            application.strings[type.name.value.toInt()].toString() == "kotlin.collections.${name}MutableListStorage"
+                        }
+                    val backing = application.fields[storage.fieldStart.toInt()].type as ValueType.Ref
+                    val imported = application.imports[(backing.type as TypeRef.Imported).id.value.toInt()]
+                    assertEquals("kotlin.${name}Array", application.strings[imported.targetName.value.toInt()].toString())
+                }
+                System.getProperty("compukter.vm.mutableListArtifact")?.let { output ->
+                    Path
+                        .of(output)
+                        .resolveSibling("primitive-lists-$batch.cpkt")
+                        .also { it.parent.createDirectories() }
+                        .writeBytes(bytes)
+                }
+            }
+        }
+
+    @Test
     fun `mutable ArrayList preserves growth mutation and read only views`() =
         withAdapter { adapter ->
             val source =

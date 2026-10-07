@@ -111,7 +111,7 @@ public class ArrayList<T>(initialCapacity: Int = 10) : MutableList<T> {
     internal fun iteratorAnyNullable(): Iterator<Any?> = ArrayListIterator(this)
 }
 
-// Specialize to the receiver's read view: Int remains unboxed, while Any/Int? reads use bridges.
+// Primitive read views stay unboxed; nullable and Any reads use nominal boxing bridges.
 internal fun <T> List<T>.listIndexOf(element: T): Int {
     var index = 0
     while (index < size) {
@@ -188,11 +188,132 @@ internal fun grownListCapacity(current: Int, minimum: Int): Int {
     return if (grown < minimum) minimum else grown
 }
 
+internal class BooleanMutableListStorage(capacity: Int) : MutableListStorage<Boolean> {
+    private var values: BooleanArray = BooleanArray(checkedListCapacity(capacity))
+    override fun get(index: Int): Boolean = values[index]
+    override fun set(index: Int, element: Boolean): Unit { values[index] = element }
+    override fun clearSlot(index: Int): Unit { values[index] = false }
+    override fun ensureCapacity(minimum: Int): Unit {
+        if (minimum <= values.size) return
+        values = values.copyOf(grownListCapacity(values.size, minimum))
+    }
+}
+
+internal class ByteMutableListStorage(capacity: Int) : MutableListStorage<Byte> {
+    private var values: ByteArray = ByteArray(checkedListCapacity(capacity))
+    override fun get(index: Int): Byte = values[index]
+    override fun set(index: Int, element: Byte): Unit { values[index] = element }
+    override fun clearSlot(index: Int): Unit { values[index] = 0.toByte() }
+    override fun ensureCapacity(minimum: Int): Unit {
+        if (minimum <= values.size) return
+        values = values.copyOf(grownListCapacity(values.size, minimum))
+    }
+}
+
+internal class ShortMutableListStorage(capacity: Int) : MutableListStorage<Short> {
+    private var values: ShortArray = ShortArray(checkedListCapacity(capacity))
+    override fun get(index: Int): Short = values[index]
+    override fun set(index: Int, element: Short): Unit { values[index] = element }
+    override fun clearSlot(index: Int): Unit { values[index] = 0.toShort() }
+    override fun ensureCapacity(minimum: Int): Unit {
+        if (minimum <= values.size) return
+        values = values.copyOf(grownListCapacity(values.size, minimum))
+    }
+}
+
+internal class CharMutableListStorage(capacity: Int) : MutableListStorage<Char> {
+    private var values: CharArray = CharArray(checkedListCapacity(capacity))
+    override fun get(index: Int): Char = values[index]
+    override fun set(index: Int, element: Char): Unit { values[index] = element }
+    override fun clearSlot(index: Int): Unit { values[index] = '\u0000' }
+    override fun ensureCapacity(minimum: Int): Unit {
+        if (minimum <= values.size) return
+        values = values.copyOf(grownListCapacity(values.size, minimum))
+    }
+}
+
 internal class IntMutableListStorage(capacity: Int) : MutableListStorage<Int> {
     private var values: IntArray = IntArray(checkedListCapacity(capacity))
     override fun get(index: Int): Int = values[index]
     override fun set(index: Int, element: Int): Unit { values[index] = element }
     override fun clearSlot(index: Int): Unit { values[index] = 0 }
+    override fun ensureCapacity(minimum: Int): Unit {
+        if (minimum <= values.size) return
+        values = values.copyOf(grownListCapacity(values.size, minimum))
+    }
+}
+
+internal class LongMutableListStorage(capacity: Int) : MutableListStorage<Long> {
+    private var values: LongArray = LongArray(checkedListCapacity(capacity))
+    override fun get(index: Int): Long = values[index]
+    override fun set(index: Int, element: Long): Unit { values[index] = element }
+    override fun clearSlot(index: Int): Unit { values[index] = 0L }
+    override fun ensureCapacity(minimum: Int): Unit {
+        if (minimum <= values.size) return
+        values = values.copyOf(grownListCapacity(values.size, minimum))
+    }
+}
+
+internal class FloatMutableListStorage(capacity: Int) : MutableListStorage<Float> {
+    private var values: FloatArray = FloatArray(checkedListCapacity(capacity))
+    override fun get(index: Int): Float = values[index]
+    override fun set(index: Int, element: Float): Unit { values[index] = element }
+    override fun clearSlot(index: Int): Unit { values[index] = 0.0f }
+    override fun ensureCapacity(minimum: Int): Unit {
+        if (minimum <= values.size) return
+        values = values.copyOf(grownListCapacity(values.size, minimum))
+    }
+}
+
+internal class DoubleMutableListStorage(capacity: Int) : MutableListStorage<Double> {
+    private var values: DoubleArray = DoubleArray(checkedListCapacity(capacity))
+    override fun get(index: Int): Double = values[index]
+    override fun set(index: Int, element: Double): Unit { values[index] = element }
+    override fun clearSlot(index: Int): Unit { values[index] = 0.0 }
+    override fun ensureCapacity(minimum: Int): Unit {
+        if (minimum <= values.size) return
+        values = values.copyOf(grownListCapacity(values.size, minimum))
+    }
+}
+
+internal class UByteMutableListStorage(capacity: Int) : MutableListStorage<UByte> {
+    private var values: UByteArray = UByteArray(checkedListCapacity(capacity))
+    override fun get(index: Int): UByte = values[index]
+    override fun set(index: Int, element: UByte): Unit { values[index] = element }
+    override fun clearSlot(index: Int): Unit { values[index] = 0u.toUByte() }
+    override fun ensureCapacity(minimum: Int): Unit {
+        if (minimum <= values.size) return
+        values = values.copyOf(grownListCapacity(values.size, minimum))
+    }
+}
+
+internal class UShortMutableListStorage(capacity: Int) : MutableListStorage<UShort> {
+    private var values: UShortArray = UShortArray(checkedListCapacity(capacity))
+    override fun get(index: Int): UShort = values[index]
+    override fun set(index: Int, element: UShort): Unit { values[index] = element }
+    override fun clearSlot(index: Int): Unit { values[index] = 0u.toUShort() }
+    override fun ensureCapacity(minimum: Int): Unit {
+        if (minimum <= values.size) return
+        values = values.copyOf(grownListCapacity(values.size, minimum))
+    }
+}
+
+internal class UIntMutableListStorage(capacity: Int) : MutableListStorage<UInt> {
+    private var values: UIntArray = UIntArray(checkedListCapacity(capacity))
+    override fun get(index: Int): UInt = values[index]
+    override fun set(index: Int, element: UInt): Unit { values[index] = element }
+    override fun clearSlot(index: Int): Unit { values[index] = 0u }
+    override fun ensureCapacity(minimum: Int): Unit {
+        if (minimum <= values.size) return
+        values = values.copyOf(grownListCapacity(values.size, minimum))
+    }
+}
+
+internal class ULongMutableListStorage(capacity: Int) : MutableListStorage<ULong> {
+    private var values: ULongArray = ULongArray(checkedListCapacity(capacity))
+    override fun get(index: Int): ULong = values[index]
+    override fun set(index: Int, element: ULong): Unit { values[index] = element }
+    override fun clearSlot(index: Int): Unit { values[index] = 0uL }
     override fun ensureCapacity(minimum: Int): Unit {
         if (minimum <= values.size) return
         values = values.copyOf(grownListCapacity(values.size, minimum))
