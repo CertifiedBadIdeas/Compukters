@@ -23,7 +23,8 @@ import java.io.ByteArrayOutputStream
 internal class BinarySink(
     private val maximumBytes: Int,
 ) {
-    private val output = ByteArrayOutputStream(minOf(maximumBytes, 4_096))
+    // Most sinks encode a single short record or instruction; grow larger sections on demand.
+    private val output = ByteArrayOutputStream(minOf(maximumBytes, 32))
 
     val size: Int
         get() = output.size()
