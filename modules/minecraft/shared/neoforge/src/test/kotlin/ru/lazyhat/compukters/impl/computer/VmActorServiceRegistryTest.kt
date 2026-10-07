@@ -25,6 +25,7 @@ import ru.lazyhat.compukters.core.device.runtime.actor.VmActorSchedulerConfig
 import ru.lazyhat.compukters.core.device.runtime.actor.VmCapacityCalibration
 import ru.lazyhat.compukters.lang.runtime.fs.ComputerId
 import java.util.concurrent.CompletableFuture
+import java.util.concurrent.CountDownLatch
 import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.TimeUnit
 import kotlin.test.Test
@@ -111,6 +112,7 @@ class VmActorServiceRegistryTest {
     @Test
     fun `queued wakeup cannot reopen a stopped or replacement service`() {
         val queued = ConcurrentLinkedQueue<Runnable>()
+        val wakeupScheduled = CountDownLatch(1)
         var opened = 0
         val registry =
             VmActorServiceRegistry<Any>(
@@ -119,7 +121,10 @@ class VmActorServiceRegistryTest {
                     opened++
                     service(ready)
                 },
-                enqueueOnOwner = { _, task -> queued.add(task) },
+                enqueueOnOwner = { _, task ->
+                    queued.add(task)
+                    wakeupScheduled.countDown()
+                },
                 maximumPumpNanosPerTick = TimeUnit.SECONDS.toNanos(5),
             )
         val server = Any()
@@ -130,6 +135,7 @@ class VmActorServiceRegistryTest {
         assertTrue(runtime.registerStandalone(endpoint))
         runtime.request(endpoint, ProgramRuntimeActorCommand::TerminalFullState)
         awaitResults(runtime, 1)
+        assertTrue(wakeupScheduled.await(5, TimeUnit.SECONDS), "worker must schedule the owner wakeup")
         assertEquals(1, queued.size)
         registry.afterTick(server)
         registry.stop(server)
