@@ -86,6 +86,8 @@ before reuse. FIR/IR sessions, source snapshots and request limits remain specif
 
 Within one linking operation, specialization ownership, reachability and relocation share semantic hashes of
 unchanged module instances. Pruned or relocated copies receive fresh hashes; the cache is discarded after linking.
+Hash-only encoding checks debug sizes and source coordinates without materializing debug sections. Full artifact
+encoding still includes those sections.
 
 The packaged tooling payload is validated and published beneath `<world>/compukters/compiler-worker`; temporary
 worker state is kept separately beneath `<world>/compukters/compiler-temp`. Successful server artifacts are stored

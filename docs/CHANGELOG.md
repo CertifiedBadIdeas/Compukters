@@ -20,7 +20,8 @@ listed in [Kotlin support](developers/kotlin-support.md) and [standard library s
 ### Guest Kotlin
 
 - Compilation reuses prepared libraries for repeated module selections, avoids repeated module hashing during
-  linking, and allocates less temporary memory when encoding executable artifacts and library identities.
+  linking, and allocates less temporary memory when encoding executable artifacts and library identities. Semantic
+  hashing checks debug metadata without encoding it.
 - All twelve primitive types are supported: `Boolean`, `Char`, `Byte`, `Short`, `Int`, `Long`, `Float`, `Double`,
   `UByte`, `UShort`, `UInt` and `ULong`. Applicable arithmetic, comparisons, conversions, increment/decrement,
   bit operations, constants, text and console output retain their source semantics. Signed narrow bit operations
