@@ -3308,6 +3308,260 @@ class MinimalScriptLoweringTest {
         }
 
     @Test
+    fun `hash maps and sets preserve collisions nulls mutation and live views`() =
+        withAdapter { adapter ->
+            val source =
+                """
+                import kotlin.collections.*
+
+                object Calls { var hashes: Int = 0 }
+                class Key(val id: Int) {
+                    override fun hashCode(): Int {
+                        if (id == -1) throw IllegalStateException("hash")
+                        Calls.hashes += 1
+                        return -1
+                    }
+                    override fun equals(other: Any?): Boolean {
+                        if (id == -2) throw IllegalArgumentException("equals")
+                        return other is Key && id == other.id
+                    }
+                }
+                fun <K, V> store(map: MutableMap<K, V>, key: K, value: V) { map[key] = value }
+                fun main() {
+                    val map = HashMap<Key?, String?>(0)
+                    val view: Map<Key?, String?> = map
+                    val keys = view.keys
+                    val values = view.values
+                    val entries = view.entries
+                    check(map.isEmpty() && !map.containsKey(null))
+                    check(map.put(null, null) == null && map.containsKey(null))
+                    check(map.put(null, "null key") == null && map.size == 1)
+                    var index = 0
+                    while (index < 80) { store(map, Key(index), "v" + index); index += 1 }
+                    check(Calls.hashes == 80)
+                    check(map.size == 81 && keys.size == 81 && entries.size == 81)
+                    check(map[Key(79)] == "v79" && Key(5) in view)
+                    check(map.put(Key(5), "changed") == "v5" && map.size == 81)
+                    check(values.contains("changed") && !values.contains("v5"))
+                    check(map.remove(Key(40)) == "v40" && !map.containsKey(Key(40)))
+                    check(map.remove(Key(40)) == null)
+                    var hashFailed = false
+                    try { map.put(Key(-1), "broken") } catch (e: IllegalStateException) { hashFailed = true }
+                    var equalsFailed = false
+                    try { map.put(Key(-2), "broken") } catch (e: IllegalArgumentException) { equalsFailed = true }
+                    check(hashFailed && equalsFailed && map.size == 80)
+                    var count = 0
+                    for (entry in entries) { check(keys.contains(entry.key)); count += 1 }
+                    check(count == 80)
+                    count = 0
+                    for ((key, value) in view) { check(view.containsKey(key) && view[key] == value); count += 1 }
+                    check(view.isNotEmpty() && count == 80)
+                    val entry = entries.iterator().next()
+                    check(entries.contains(entry))
+                    val writableEntry = entry as MutableMap.MutableEntry<Key?, String?>
+                    writableEntry.setValue("entry edit")
+                    check(map[entry.key] == "entry edit")
+                    val iterator = keys.iterator()
+                    check(iterator.hasNext())
+                    val key = iterator.next()
+                    map[key] = "replacement"
+                    iterator.next()
+                    map.put(Key(100), "new")
+                    var invalidated = false
+                    try { iterator.next() } catch (e: IllegalStateException) { invalidated = true }
+                    check(invalidated)
+                    map.clear()
+                    check(keys.isEmpty() && values.isEmpty() && entries.isEmpty())
+                    val set = HashSet<Key?>(0)
+                    val read: Set<Key?> = set
+                    check(set.add(null) && !set.add(null))
+                    index = 0
+                    while (index < 80) { check(set.add(Key(index))); index += 1 }
+                    check(!set.add(Key(10)) && read.size == 81 && Key(10) in read)
+                    check(set.remove(Key(10)) && !set.remove(Key(10)))
+                    count = 0
+                    for (element in read) { count += 1 }
+                    check(count == 80)
+                    check(read.fold(0) { total, element -> total + if (element == null) 0 else 1 } == 79)
+                    val removing = set.iterator()
+                    var removed = 0
+                    while (removing.hasNext()) { removing.next(); removing.remove(); removed += 1 }
+                    check(removed == 80 && set.isEmpty())
+                    var invalidRemove = false
+                    try { removing.remove() } catch (e: IllegalStateException) { invalidRemove = true }
+                    check(invalidRemove)
+                    var exhausted = false
+                    try { removing.next() } catch (e: NoSuchElementException) { exhausted = true }
+                    check(exhausted)
+                    println("hash collections ok")
+                }
+                """.trimIndent()
+            val result = adapter.compile(request(source))
+            val bytes = assertNotNull(result.artifact, result.diagnostics.joinToString()).toByteArray()
+            System.getProperty("compukter.vm.hashCollectionsArtifact")?.let { output -> Path.of(output).writeBytes(bytes) }
+        }
+
+    @Test
+    fun `hash collections support all twelve primitive families`() =
+        withAdapter { adapter ->
+            val cases =
+                listOf(
+                    Triple("Boolean", "false", "true"),
+                    Triple("Char", "'a'", "'b'"),
+                    Triple("Byte", "1.toByte()", "2.toByte()"),
+                    Triple("Short", "1.toShort()", "2.toShort()"),
+                    Triple("Int", "1", "2"),
+                    Triple("Long", "1L", "2L"),
+                    Triple("Float", "1f", "2f"),
+                    Triple("Double", "1.0", "2.0"),
+                    Triple("UByte", "1u.toUByte()", "2u.toUByte()"),
+                    Triple("UShort", "1u.toUShort()", "2u.toUShort()"),
+                    Triple("UInt", "1u", "2u"),
+                    Triple("ULong", "1uL", "2uL"),
+                )
+            for ((batch, group) in cases.chunked(2).withIndex()) {
+                val statements =
+                    group
+                        .mapIndexed { index, (type, first, second) ->
+                            """
+                            val map$index = HashMap<$type, $type>(0)
+                            check(map$index.put($first, $second) == null)
+                            check(map$index[$first] == $second)
+                            check(map$index[$second] != $first)
+                            check(map$index.put($first, $first) == $second && map$index.size == 1)
+                            check(map$index.keys.iterator().next() == $first)
+                            check(map$index.values.iterator().next() == $first)
+                            check(map$index.entries.iterator().next().value == $first)
+                            check(map$index.remove($first) == $first && map$index.isEmpty())
+                            val set$index = HashSet<$type>(0)
+                            check(set$index.add($first) && !set$index.add($first) && set$index.add($second))
+                            check(set$index.iterator().next() in set$index)
+                            check(set$index.remove($first) && set$index.size == 1)
+                            """.trimIndent()
+                        }.joinToString("\n")
+                val result = adapter.compile(request("import kotlin.collections.*\nfun main() {\n$statements\n}"))
+                val bytes = assertNotNull(result.artifact, result.diagnostics.joinToString()).toByteArray()
+                System.getProperty("compukter.vm.hashCollectionsArtifact")?.let { output ->
+                    Path.of(output).resolveSibling("hash-scalars-$batch.cpkt").writeBytes(bytes)
+                }
+            }
+        }
+
+    @Test
+    fun `hash collections preserve primitive and nullable storage`() =
+        withAdapter { adapter ->
+            val source =
+                """
+                import kotlin.collections.*
+                fun main() {
+                    val ints: MutableMap<Int, Int> = HashMap<Int, Int>(0)
+                    check(ints.put(7, 8) == null && ints.put(7, 9) == 8 && ints[7] == 9)
+                    check(ints.remove(7) == 9 && ints.isEmpty())
+                    val nullable = HashMap<String, Int?>()
+                    nullable["a"] = null
+                    check(nullable.containsKey("a") && nullable["a"] == null)
+                    nullable["a"] = 42
+                    check(nullable["a"] == 42)
+                    val floats = HashSet<Float>()
+                    check(floats.add(Float.NaN) && !floats.add(0f / 0f))
+                    check(floats.add(0f) && floats.add(-0f) && floats.size == 3)
+                    check(emptyMap<Int, Int>().isEmpty() && emptySet<Float>().isEmpty())
+                    println("hash primitive storage ok")
+                }
+                """.trimIndent()
+            val result = adapter.compile(request(source))
+            val bytes = assertNotNull(result.artifact, result.diagnostics.joinToString()).toByteArray()
+            System.getProperty("compukter.vm.hashCollectionsArtifact")?.let { output ->
+                Path.of("$output.primitives.cpkt").writeBytes(bytes)
+            }
+        }
+
+    @Test
+    fun `hash collections preserve nominal value class keys`() =
+        withAdapter { adapter ->
+            val source =
+                """
+                import kotlin.collections.*
+                value class DeviceId(val value: Int)
+                value class Position(val x: Int, val label: String)
+                fun main() {
+                    val typed = HashMap<DeviceId, String>()
+                    typed[DeviceId(7)] = "first"
+                    check(typed.put(DeviceId(7), "second") == "first" && typed.size == 1)
+                    check(typed[DeviceId(7)] == "second")
+                    val positions = HashSet<Position>()
+                    check(positions.add(Position(2, "a")))
+                    check(!positions.add(Position(2, "a")) && positions.add(Position(2, "b")))
+                    val mixed = HashMap<Any?, String>()
+                    mixed[DeviceId(7)] = "device"
+                    mixed[7] = "int"
+                    mixed[Position(2, "a")] = "position"
+                    mixed[null] = "null"
+                    check(mixed.size == 4 && mixed[DeviceId(7)] == "device" && mixed[7] == "int")
+                    check(mixed[Position(2, "a")] == "position" && mixed[null] == "null")
+                    val nullable = HashSet<DeviceId?>()
+                    check(nullable.add(null) && !nullable.add(null))
+                    check(nullable.add(DeviceId(7)) && !nullable.add(DeviceId(7)))
+                    check(nullable.remove(DeviceId(7)) && nullable.size == 1)
+                    println("hash value classes ok")
+                }
+                """.trimIndent()
+            val result = adapter.compile(request(source))
+            val bytes = assertNotNull(result.artifact, result.diagnostics.joinToString()).toByteArray()
+            System.getProperty("compukter.vm.hashCollectionsArtifact")?.let { output -> Path.of("$output.values.cpkt").writeBytes(bytes) }
+        }
+
+    @Test
+    fun `mutable hash collections remain invariant`() =
+        withAdapter { adapter ->
+            for (source in listOf(
+                "val values: MutableSet<Int> = HashSet<Int>(); val invalid: MutableSet<Any> = values",
+                "val values: MutableMap<String, Int> = HashMap<String, Int>(); val invalid: MutableMap<String, Any> = values",
+            )) {
+                val result = adapter.compile(request("import kotlin.collections.*\nfun main() { $source }"))
+                assertNull(result.artifact)
+                assertTrue(result.diagnostics.any { it.severity == DiagnosticSeverity.ERROR })
+            }
+        }
+
+    @Test
+    fun `hash collections retain ordinary heap quota failures`() =
+        withAdapter { adapter ->
+            val source =
+                """
+                import kotlin.collections.*
+                fun main(args: Array<String>) {
+                    if (args[0] == "negative-map") { HashMap<Int, Int>(-1); return }
+                    if (args[0] == "negative-set") { HashSet<Int>(-1); return }
+                    if (args[0] == "overflow-capacity") { HashMap<Int, Int>(Int.MAX_VALUE); return }
+                    val map = HashMap<Int, Int>(0)
+                    var index = 0
+                    while (index < 100000) { map[index] = index; index += 1 }
+                }
+                """.trimIndent()
+            val result = adapter.compile(request(source))
+            val bytes = assertNotNull(result.artifact, result.diagnostics.joinToString()).toByteArray()
+            System.getProperty("compukter.vm.hashCollectionsArtifact")?.let { output -> Path.of("$output.failure.cpkt").writeBytes(bytes) }
+        }
+
+    @Test
+    fun `hash collection unsupported widening reports a target diagnostic`() =
+        withAdapter { adapter ->
+            for (source in listOf(
+                "val values: Set<Int> = HashSet<Int>(); val invalid: Set<Any> = values",
+                "val values: Map<String, Int> = HashMap<String, Int>(); val invalid: Map<String, Any> = values",
+                "val values = HashSet<Int>(); val invalid: Collection<Any> = values",
+            )) {
+                val result = adapter.compile(request("import kotlin.collections.*\nfun main() { $source }"))
+                assertNull(result.artifact)
+                assertTrue(
+                    result.diagnostics.any { it.code == "UNSUPPORTED_IR" && "type argument widening" in it.message },
+                    result.diagnostics.toString(),
+                )
+            }
+        }
+
+    @Test
     fun `mutable ArrayList preserves growth mutation and read only views`() =
         withAdapter { adapter ->
             val source =

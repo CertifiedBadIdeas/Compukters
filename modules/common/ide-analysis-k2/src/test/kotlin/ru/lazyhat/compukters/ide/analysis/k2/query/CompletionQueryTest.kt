@@ -41,6 +41,27 @@ import kotlin.test.assertTrue
 
 class CompletionQueryTest {
     @Test
+    fun `hash collections complete with specialized nullable results`() {
+        for (attachedSources in listOf(false, true)) {
+            val source = "import kotlin.collections.*\nfun main() { val map = HashMap<String, Int>(); map. }"
+            K2QueryFixture.sourceWithGuestApi(attachedSources, "main.kt" to source).use { fixture ->
+                val items = fixture.complete("main.kt", source.indexOf("map.") + 4).items
+                for (name in listOf("get", "put", "remove")) {
+                    assertEquals("Int?", items.single { it.insertText == name }.callablePresentation?.returnType, name)
+                }
+                assertEquals("Boolean", items.single { it.insertText == "containsKey" }.callablePresentation?.returnType)
+                assertTrue(items.any { it.insertText == "entries" })
+            }
+            val setSource = "import kotlin.collections.*\nfun main() { val set = HashSet<String>(); set. }"
+            K2QueryFixture.sourceWithGuestApi(attachedSources, "main.kt" to setSource).use { fixture ->
+                val items = fixture.complete("main.kt", setSource.indexOf("set.") + 4).items
+                assertEquals("Boolean", items.single { it.insertText == "add" }.callablePresentation?.returnType)
+                assertEquals("MutableIterator<String>", items.single { it.insertText == "iterator" }.callablePresentation?.returnType)
+            }
+        }
+    }
+
+    @Test
     fun `completion distinguishes provider values from imported and unimported device types`() {
         for ((qualified, name) in listOf(
             "compukter.display.TextDisplay" to "TextDisplay",

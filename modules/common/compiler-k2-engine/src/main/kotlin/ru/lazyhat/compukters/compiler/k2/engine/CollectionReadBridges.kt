@@ -50,6 +50,9 @@ internal object CollectionReadBridges {
 
     fun methodName(function: IrSimpleFunction): String? {
         val owner = function.parent as? IrClass ?: return null
+        if (owner.fqNameWhenAvailable?.asString() == "kotlin.collections.HashSet" && function.name.asString() == "iteratorReadOnly") {
+            return "iterator"
+        }
         return views[owner.fqNameWhenAvailable?.asString()]?.methods?.get(function.name.asString())
     }
 

@@ -1182,6 +1182,33 @@ val generateTextStdlibConformanceArtifact = tasks.register<Test>("generateTextSt
     }
 }
 
+val generateHashCollectionsConformanceArtifact = tasks.register<Test>("generateHashCollectionsConformanceArtifact") {
+    description = "Compiles Guest hash maps and sets for pinned VM conformance."
+    group = "verification"
+    dependsOn(tasks.jar)
+    useJUnitPlatform()
+    testClassesDirs = sourceSets.test.get().output.classesDirs
+    classpath = sourceSets.test.get().runtimeClasspath
+    filter.includeTestsMatching("*hash maps and sets preserve collisions nulls mutation and live views*")
+    filter.includeTestsMatching("*hash collections preserve nominal value class keys*")
+    filter.includeTestsMatching("*hash collections preserve primitive and nullable storage*")
+    filter.includeTestsMatching("*hash collections support all twelve primitive families*")
+    filter.includeTestsMatching("*mutable hash collections remain invariant*")
+    filter.includeTestsMatching("*hash collections retain ordinary heap quota failures*")
+    filter.includeTestsMatching("*hash collection unsupported widening reports a target diagnostic*")
+    inputs.file(workerJar)
+    val artifact = layout.buildDirectory.file("generated/conformance/kotlin-hash-collections.cpkt")
+    outputs.file(artifact)
+    outputs.file(artifact.map { it.asFile.resolveSibling("${it.asFile.name}.values.cpkt") })
+    outputs.file(artifact.map { it.asFile.resolveSibling("${it.asFile.name}.primitives.cpkt") })
+    outputs.file(artifact.map { it.asFile.resolveSibling("${it.asFile.name}.failure.cpkt") })
+    (0..5).forEach { batch -> outputs.file(artifact.map { it.asFile.resolveSibling("hash-scalars-$batch.cpkt") }) }
+    doFirst {
+        systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
+        systemProperty("compukter.vm.hashCollectionsArtifact", artifact.get().asFile.absolutePath)
+    }
+}
+
 val generateMutableListConformanceArtifact = tasks.register<Test>("generateMutableListConformanceArtifact") {
     description = "Compiles mutable ArrayList for pinned VM conformance."
     group = "verification"
