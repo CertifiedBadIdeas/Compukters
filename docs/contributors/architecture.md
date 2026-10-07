@@ -514,6 +514,13 @@ array superclass. Packed values load with sign/zero extension into I32 registers
 Both writers and Rust admission require the matching scalar element kind and ABI 1.14. Compatibility
 checks include storage so a packed array cannot be used as a natural-width array. Heap accounting and
 sliced copying use payload widths. Container format and exported native C ABI remain unchanged.
+Unsigned numeric forms 8/9 interpret I32/I64 bits for arithmetic, equality/order and decimal text.
+`convert` carries source/destination unsigned bits while form 0 preserves signed conversion.
+Unsigned widening zero-extends; floating conversions truncate/saturate with NaN or negative input
+to zero. Unsigned integer-to-F64 rounds to nearest with ties to even; F32 follows the Kotlin
+standard library conversion through F64. Verifiers reject
+wrong operand kinds, unknown masks and legacy ABI claims. Zero divisors use the existing managed
+arithmetic exception.
 
 Runtime ABI 1.12 extends `string_value_of` (`0x68`) and `value_hash` (`0x69`) with
 form 4 for F64. Both the writer and Rust admission reject these forms below ABI 1.12;

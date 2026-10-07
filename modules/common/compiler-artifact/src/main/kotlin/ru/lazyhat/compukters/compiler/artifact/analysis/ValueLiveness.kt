@@ -442,7 +442,7 @@ fun Instruction.runtimeExceptionKinds(): Set<RuntimeExceptionKind> {
             else -> null
         }
     return if (scalar == ScalarValueType.I32 ||
-        scalar == ScalarValueType.I64
+        scalar == ScalarValueType.I64 || scalar == ScalarValueType.U32 || scalar == ScalarValueType.U64
     ) {
         setOf(RuntimeExceptionKind.ARITHMETIC)
     } else {

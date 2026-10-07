@@ -148,6 +148,8 @@ enum class ScalarValueType(
     F64(4u, ValueType.F64),
     BOOL(5u, ValueType.Bool),
     CHAR(6u, ValueType.Char),
+    U32(8u, ValueType.I32),
+    U64(9u, ValueType.I64),
 }
 
 /** Scalar kinds accepted by Artifact v1 ordered-comparison forms. */
@@ -160,6 +162,8 @@ enum class OrderedScalarValueType(
     F32(3u, ValueType.F32),
     F64(4u, ValueType.F64),
     CHAR(6u, ValueType.Char),
+    U32(8u, ValueType.I32),
+    U64(9u, ValueType.I64),
 }
 
 /** Operand kinds accepted by Artifact v1 string-value conversion forms. */
@@ -174,6 +178,8 @@ enum class StringValueType(
     BOOL(5u, ValueType.Bool),
     CHAR(6u, ValueType.Char),
     REFERENCE(7u, null),
+    U32(8u, ValueType.I32),
+    U64(9u, ValueType.I64),
 }
 
 /** Operand kinds accepted by Runtime ABI 1.11 value hashing. */

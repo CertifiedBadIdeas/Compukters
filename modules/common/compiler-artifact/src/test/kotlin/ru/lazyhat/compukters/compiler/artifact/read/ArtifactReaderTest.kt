@@ -24,18 +24,23 @@ import ru.lazyhat.compukters.compiler.artifact.model.AbiVersion
 import ru.lazyhat.compukters.compiler.artifact.model.ArrayStorage
 import ru.lazyhat.compukters.compiler.artifact.model.Block
 import ru.lazyhat.compukters.compiler.artifact.model.BlockId
+import ru.lazyhat.compukters.compiler.artifact.model.Constant
+import ru.lazyhat.compukters.compiler.artifact.model.ConstantId
 import ru.lazyhat.compukters.compiler.artifact.model.DebugEntry
 import ru.lazyhat.compukters.compiler.artifact.model.Destination
 import ru.lazyhat.compukters.compiler.artifact.model.Field
 import ru.lazyhat.compukters.compiler.artifact.model.FunctionId
+import ru.lazyhat.compukters.compiler.artifact.model.FunctionValue
 import ru.lazyhat.compukters.compiler.artifact.model.Instruction
 import ru.lazyhat.compukters.compiler.artifact.model.Manifest
 import ru.lazyhat.compukters.compiler.artifact.model.MetadataText
 import ru.lazyhat.compukters.compiler.artifact.model.NominalType
+import ru.lazyhat.compukters.compiler.artifact.model.OrderedScalarValueType
 import ru.lazyhat.compukters.compiler.artifact.model.PhysicalAtom
 import ru.lazyhat.compukters.compiler.artifact.model.PhysicalShape
 import ru.lazyhat.compukters.compiler.artifact.model.RegisterId
 import ru.lazyhat.compukters.compiler.artifact.model.RuntimeExceptionKind
+import ru.lazyhat.compukters.compiler.artifact.model.ScalarValueType
 import ru.lazyhat.compukters.compiler.artifact.model.SemanticFeature
 import ru.lazyhat.compukters.compiler.artifact.model.StringId
 import ru.lazyhat.compukters.compiler.artifact.model.TypeId
@@ -56,6 +61,65 @@ import kotlin.test.assertFailsWith
 import kotlin.test.assertIs
 
 class ArtifactReaderTest {
+    @Test
+    fun `unsigned numeric forms and conversion signedness round trip with ABI gate`() {
+        fun r(index: UInt) = RegisterId.of(index)
+        val original = languageRuntimeArtifact()
+        val module = original.modules.single()
+        val operations =
+            listOf(
+                Instruction.Add(ScalarValueType.U32, r(5u), r(3u), r(7u)),
+                Instruction.Subtract(ScalarValueType.U64, r(10u), r(8u), r(9u)),
+                Instruction.Multiply(ScalarValueType.U32, r(5u), r(3u), r(7u)),
+                Instruction.Equal(ScalarValueType.U64, r(2u), r(8u), r(9u)),
+                Instruction.Less(OrderedScalarValueType.U32, r(2u), r(3u), r(7u)),
+                Instruction.GreaterOrEqual(OrderedScalarValueType.U64, r(2u), r(8u), r(9u)),
+                Instruction.Convert(r(8u), r(3u), unsignedSource = true),
+                Instruction.Convert(r(8u), r(3u), unsignedDestination = true),
+                Instruction.Convert(r(8u), r(3u), unsignedSource = true, unsignedDestination = true),
+            )
+        for (operation in operations) {
+            val first = module.blocks.first()
+            val changed =
+                module.copy(
+                    constants = module.constants + Constant.I64(0),
+                    functions = module.functions.map { it.copy(values = it.values + List(3) { FunctionValue.scalar(ValueType.I64) }) },
+                    blocks =
+                        listOf(
+                            first.copy(
+                                instructions =
+                                    first.instructions.dropLast(1) +
+                                        listOf(
+                                            Instruction.Const(r(8u), ConstantId.of(2u)),
+                                            Instruction.Const(r(9u), ConstantId.of(2u)),
+                                            operation,
+                                        ) + first.instructions.last(),
+                            ),
+                        ) + module.blocks.drop(1),
+                )
+            val source =
+                original.copy(
+                    minimumRuntimeAbi = AbiVersion(1u, 14u),
+                    manifest = Manifest.minimal(maximumBlockCost = 20u),
+                    modules = listOf(changed),
+                )
+            val bytes = assertIs<ArtifactWriteResult.Success>(ArtifactWriter.write(source)).bytes
+            assertEquals(
+                operation,
+                ArtifactReader
+                    .read(bytes)
+                    .modules
+                    .single()
+                    .blocks
+                    .first()
+                    .instructions
+                    .dropLast(1)
+                    .last(),
+            )
+            assertIs<ArtifactWriteResult.Failure>(ArtifactWriter.write(source.copy(minimumRuntimeAbi = AbiVersion(1u, 13u))))
+        }
+    }
+
     @Test
     fun `explicit array storage round trips and rejects legacy ABI or mismatched scalar kinds`() {
         for (storage in ArrayStorage.entries.filter { it != ArrayStorage.NATURAL }) {
