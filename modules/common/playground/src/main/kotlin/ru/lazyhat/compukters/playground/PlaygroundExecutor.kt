@@ -152,7 +152,27 @@ class NativePlaygroundExecutor(
                                 is HostResponse.BoolSuccess -> {
                                     return PlaygroundExecution.PlatformFailure("terminal input returned a Boolean")
                                 }
+
+                                is HostResponse.LongSuccess -> {
+                                    return PlaygroundExecution.PlatformFailure("terminal input returned a Long")
+                                }
+
+                                is HostResponse.DoubleSuccess -> {
+                                    return PlaygroundExecution.PlatformFailure("terminal input returned a Double")
+                                }
+
+                                is HostResponse.CharSuccess -> {
+                                    return PlaygroundExecution.PlatformFailure("terminal input returned a Char")
+                                }
+
+                                is HostResponse.RecordSuccess -> {
+                                    return PlaygroundExecution.PlatformFailure("terminal input returned a record")
+                                }
                             }
+                        }
+
+                        is VmOutcome.ProcessEntered, is VmOutcome.ProcessExited -> {
+                            return@repeat
                         }
 
                         VmOutcome.SliceExhausted -> {
@@ -229,6 +249,10 @@ class NativePlaygroundExecutor(
             is HostResponse.Failure -> PlaygroundExecution.HostFailure(response.kind, response.detail)
             is HostResponse.IntSuccess -> PlaygroundExecution.PlatformFailure("terminal output returned an Int")
             is HostResponse.FloatSuccess -> PlaygroundExecution.PlatformFailure("terminal output returned a Float")
+            is HostResponse.LongSuccess -> PlaygroundExecution.PlatformFailure("terminal output returned a Long")
+            is HostResponse.DoubleSuccess -> PlaygroundExecution.PlatformFailure("terminal output returned a Double")
+            is HostResponse.CharSuccess -> PlaygroundExecution.PlatformFailure("terminal output returned a Char")
+            is HostResponse.RecordSuccess -> PlaygroundExecution.PlatformFailure("terminal output returned a record")
             is HostResponse.BoolSuccess -> PlaygroundExecution.PlatformFailure("terminal output returned a Boolean")
             is HostResponse.StringSuccess -> PlaygroundExecution.PlatformFailure("terminal output returned an input line")
         }
