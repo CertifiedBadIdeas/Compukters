@@ -1,18 +1,24 @@
 ---
 layout: default
 title: Guest standard library support
-description: The Kotlin standard-library APIs available to Compukters programs.
-permalink: /STDLIB-SUPPORT/
 section: developers
+permalink: /STDLIB-SUPPORT/
 ---
 
 # Guest standard library support
 
-Compukters provides a small, versioned Guest Kotlin library. It does not load the Kotlin/JVM standard library into a
-computer. This page describes callable library APIs; [Guest Kotlin support]({{ '/KOTLIN-SUPPORT/' | relative_url }})
-describes language syntax and lowering. The matrix describes this repository revision, including unreleased work.
+Compukters provides native Guest Kotlin libraries, not a Kotlin/JVM classpath. This inventory describes executable APIs in the current checkout, including unreleased work. [Language support]({{ '/KOTLIN-SUPPORT/' | relative_url }}) owns syntax and lowering; the [generated API reference]({{ '/guest-api/' | relative_url }}) owns packages, signatures and KDoc.
 
-## Status legend
+## API groups
+
+| Topic | Contents |
+| --- | --- |
+| [Core and text](stdlib/core-text.md) | Scope functions, preconditions, text search/transformation, parsing, text and hashes |
+| [Arrays and ranges](stdlib/arrays-ranges.md) | All twelve primitive arrays, reference arrays, copying and stored progressions |
+| [Collections](stdlib/collections.md) | Lists, primitive specializations, selection, mutation and iterable helpers |
+| [Console I/O and packages](stdlib/io.md) | Console overloads, module ownership and unavailable packages |
+
+## Status and evidence
 
 - [x] **Supported** — the stated API has execution evidence in the Rust VM.
 - [ ] **Partial** — the named subset works, with the stated limitations.
@@ -23,166 +29,24 @@ Only selected Compukters platform modules participate in Guest name resolution; 
 The [Guest API reference]({{ '/guest-api/' | relative_url }}) indexes public declarations by package and symbol and
 links to their source files.
 
-## Core and text
-
-- [x] **Scope functions** — `let`, `run`, `with`, `apply`, `also`, `takeIf`, and `takeUnless` are available
-  without imports for supported Guest receiver types, including nullable references. Both receiver and receiver-free
-  `run` are available. They are inline: direct lambdas
-  support non-local returns; `let` and `also` receive `it`, while `run`, `with`, and `apply` use a receiver lambda.
-  `apply` and `also` return the original receiver; `takeIf` and `takeUnless` evaluate the predicate once and return
-  the original receiver or null. Evidence: `testKotlinScopeVmConformance` and `MinimalScriptLoweringTest`, test
-  `stdlib scope functions execute with inline receiver and nullable semantics`.
-- [x] **Iteration helpers** — `Iterable<T>.forEach` and `forEachIndexed` visit elements in order without creating a
-  result collection; `forEachIndexed` starts at index zero. Import `kotlin.collections.*` for these iterable helpers.
-  `repeat(times)` is available without an import, calls its action with indexes from zero to `times - 1`, and does
-  nothing for non-positive counts. Direct lambdas are inline and support non-local returns.
-  Evidence: `testKotlinScopeVmConformance` and `MinimalScriptLoweringTest`, test
-  `stdlib scope functions execute with inline receiver and nullable semantics`.
-- [x] **Preconditions** — `require(Boolean)` throws a catchable `IllegalArgumentException` on failure;
-  `check(Boolean)` and `error(String)` throw `IllegalStateException`. Lazy `require`/`check` messages are evaluated
-  only on failure. See [exception semantics]({{ '/KOTLIN-SUPPORT/' | relative_url }}#nullability-and-exceptions). Evidence:
-  [`Assertions.kt`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/guest-platform/src/platform/libraries/stdlib-core/kotlin/Assertions.kt)
-  and the assertions executed by `testKotlinReferenceArrayVmConformance`.
-- [ ] **`String` basics — Partial** — `length`, indexed UTF-16 access, concatenation, equality, and `substring` execute.
-  `startsWith`, `endsWith`, `contains`, and `indexOf` are provided by `stdlib:core`; `indexOf` accepts an optional start
-  index. The library also provides Char search, backward `lastIndexOf`, emptiness/blank checks, Unicode-whitespace
-  `trim`/`trimStart`/`trimEnd`, Char/String delimiter extraction with optional fallback and prefix/suffix removal.
-  Case-sensitive `split(Char|String, limit = 0)` retains empty parts; zero means unlimited, positive limits retain
-  the remaining suffix and negative limits fail. `lines()` recognizes CRLF, LF and CR. `replace(Char, Char)` and
-  `replace(String, String)` replace nonoverlapping matches; empty String delimiters and replacements operate at
-  UTF-16 boundaries. Split results use reusable library-owned `List<String>`/`ArrayList<String>` variants; new
-  element types still specialize locally. Regex, case-insensitive operations, multiple-delimiter overloads,
-  locale-sensitive case conversion, Unicode categories, and broad formatting are absent. Evidence:
-  [`TextSearch.kt`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/guest-platform/src/platform/libraries/stdlib-core/kotlin/text/TextSearch.kt),
-  [`TextSplit.kt`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/guest-platform/src/platform/libraries/stdlib-core/kotlin/text/TextSplit.kt),
-  [`TextReplace.kt`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/guest-platform/src/platform/libraries/stdlib-core/kotlin/text/TextReplace.kt),
-  `testKotlinSubsetVmConformance`, `testKotlinTextStdlibVmConformance` (including invalid limits, length overflow and
-  heap quota failures), and
-  [`text_tests.rs`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/host/compukter-vm/src/execution/text_tests.rs).
-  Tracking: #676
-- [ ] **Numbers and characters — Partial** — the supported `Int`, `Long`, `Float`, `Double`, `Boolean`, and `Char` operations use
-  Guest scalar values. `String.toIntOrNull()` parses optional-sign decimal ASCII digits into an `Int?`, returning null
-  for empty input, invalid characters, or overflow. `Byte`, `Short`, other parsing helpers, and the Kotlin
-  math package are unavailable. Evidence: `testKotlinSubsetVmConformance`, `testKotlinLongVmConformance`, and
-  `testKotlinFloatVmConformance` and `testKotlinDoubleVmConformance`. Tracking: not scheduled
-
-## Arrays and ranges
-
-- [ ] **`Array<T>` — Partial** — `emptyArray<T>()` and direct `arrayOf(...)` work for `String`, supported
-  Guest class references, and `Any`, including nullable forms and boxed `Int?`, including specializations inside generic Guest functions. `size`, indexed `get`,
-  and indexed `set` use the array's concrete element type. `Array<Any>` boxes `Int` on construction or indexed writes,
-  preserves reference identity, and returns the stored box on repeated reads. Factory arguments are evaluated once in
-  source order; reading an uninitialized non-null reference traps. `arrayOfNulls<T>(size)` creates nullable slots for
-  supported references and boxed `Int?`; negative sizes trap. Evidence: `testKotlinMutableListVmConformance`.
-  `copyOfRange` is available only for `Array<String>`.
-  `Array<Int>`, other primitive-to-`Any` boxing, spread arguments, and general array iterators are
-  unavailable. Evidence:
-  [`MinimalScriptLoweringTest`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/compiler-k2/src/test/kotlin/ru/lazyhat/compukters/compiler/worker/k2/MinimalScriptLoweringTest.kt),
-  tests `string arrays can be constructed read and written`, `reference arrays preserve Guest class elements and aliases`,
-  and `reference arrays reject unsupported element representations`; VM tasks `testKotlinReferenceArrayVmConformance`
-  and `testKotlinArgvVmConformance`. Tracking: [#656](https://github.com/CertifiedBadIdeas/Compukters/issues/656)
-- [x] **`IntArray`** — constructor by size, `intArrayOf`, `size`, indexed get/set, and direct `for` iteration use dense
-  unboxed `Int` storage. Evidence: `testKotlinIntArrayVmConformance` and
-  [`MinimalScriptLoweringTest`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/compiler-k2/src/test/kotlin/ru/lazyhat/compukters/compiler/worker/k2/MinimalScriptLoweringTest.kt),
-  test `specialized IntArray lowers deterministically for vm conformance`.
-- [x] **`CharArray`** — construction by size, indexed get/set, `size`, and UTF-16 string materialization execute.
-  Evidence: `testKotlinSubsetVmConformance` and
-  [`kotlin_writer.rs`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/compiler-artifact/src/test/rust/executable-conformance/kotlin_writer.rs),
-  test `k2_char_array_program_executes_exact_utf16_materialization`.
-- [x] **`DoubleArray`** — construction, indexed access, iteration and copying use unboxed F64 storage. See the
-  [language matrix]({{ '/KOTLIN-SUPPORT/' | relative_url }}#types-and-numeric-semantics) for the exact surface.
-  Evidence: `testKotlinDoubleArrayVmConformance`.
-- [ ] **Other primitive arrays — Unsupported** — `BooleanArray`, `ByteArray`, `ShortArray`, `LongArray`, `FloatArray`,
-  and unsigned arrays have no executable Guest API. Tracking: not scheduled
-- [ ] **`IntRange` and `IntProgression` — Partial** — direct `for` loops over `..`, `until`, `..<`, `downTo`, and one
-  positive `step` compile to unboxed scalar loops. Stored range objects and general iteration do not execute. Evidence:
-  `testKotlinIntLoopsVmConformance` and
-  [`IntRange.kt`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/guest-platform/src/platform/libraries/stdlib-core/kotlin/ranges/IntRange.kt).
-  Tracking: not scheduled
-
-## Collections and I/O
-
-- [ ] **Read-only `List<T>` — Partial** — `listOf` and `emptyList` create fresh `ArrayList<T>` instances exposed as
-  `List<T>`, with capacity equal to their element count. Read-only views can be cast to `MutableList<T>` or `ArrayList<T>`
-  to mutate the same object. Supported elements include `Int`, `String`, and Guest class references. `size`, indexed `get`, and direct `for` iteration work; an out-of-range index
-  traps. `Int` storage and typed reads remain unboxed. A `List<Int>` can widen to `List<Any>` without changing list
-  identity; universal reads box each `Int`, and `is Int` / `as Int` recover its type and value. Supported reference lists
-  also widen to `List<Any>` without copying their elements. Direct `listOf<Any>` construction stores mixed boxed `Int`
-  and supported references in one array; indexed reads and iteration preserve element identity. `contains` / `in` and
-  `indexOf` search with supported value equality and return the first index or `-1` when absent. Non-null `Any` supports
-  boxed `Int` value equality, string content equality, explicit Guest `equals` overrides, and data-class equality for
-  supported constructor properties. Other classes use default identity equality. Universal value hashing and text dispatch
-  follow the [object-model semantics]({{ '/KOTLIN-SUPPORT/' | relative_url }}#classes-and-object-model).
-  Nullable elements, including `Int?`, preserve null in storage, iteration, and searches. Nullable and non-null
-  lists widen to `List<Any?>` without copying. Spread arguments are unsupported. Evidence:
-  `testKotlinNullableCollectionsVmConformance`, `testKotlinListVmConformance`, `testKotlinListAnyVmConformance`, `testKotlinListAnyQuotaVmConformance`,
-  `testKotlinListBoundsVmConformance`, `testKotlinListQuotaVmConformance`, and
-  [`Lists.kt`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/guest-platform/src/platform/libraries/stdlib-core/kotlin/collections/Lists.kt). Tracking:
-  [#656](https://github.com/CertifiedBadIdeas/Compukters/issues/656),
-  [#581](https://github.com/CertifiedBadIdeas/Compukters/issues/581)
-- [x] **Nullable element selection** — `Iterable<T>.firstOrNull` / `lastOrNull` support predicate and no-predicate
-  forms, including user-defined iterables. List overloads read first/last elements by index; predicate selection for
-  `List.lastOrNull` searches from the end, whereas `Iterable.lastOrNull` traverses forward. `List.getOrNull` returns
-  null for invalid indexes. Empty or unmatched selections return null. `Int` elements produce `Int?`; nullable
-  references and existing Int boxes retain identity. Evidence: `testKotlinCollectionSelectionVmConformance` and
-  `MinimalScriptLoweringTest`, test `collection nullable selection preserves traversal values and identity`.
-- [x] **Iterable accumulation** — `Iterable<T>.fold(initial: R, operation: (R, T) -> R)` visits elements in order,
-  calling the operation once per element. Empty iterables return the initial value unchanged. Element and accumulator
-  types are independent, including nullable references, `Int?`, and supported Guest classes. Evidence:
-  `testKotlinFoldVmConformance` and `MinimalScriptLoweringTest`, test
-  `Iterable fold specializes independent element and accumulator types`.
-- [ ] **Mutable lists — Partial** — public `MutableCollection<T>`, `MutableList<T>`, `MutableIterable<T>`, and
-  `MutableIterator<T>` provide element addition/removal, indexed insertion/replacement/removal, `clear`, and iterator
-  removal. `ArrayList<T>()` and `ArrayList<T>(initialCapacity)` grow their backing array within VM memory quotas.
-  `Int` uses unboxed storage; references and `Int?` retain their stored values and identity. Read-only `List` views
-  share the object, including supported `Any`/`Any?` views. Mutable element types remain invariant. Structural changes
-  invalidate subsequent iterator `next`/`remove`; `set` does not. Invalid indexes, capacities, and iterator states trap.
-  Bulk mutations, collection constructors, `listIterator`, and `subList` are absent. Evidence:
-  `testKotlinMutableListVmConformance`, tests `mutable ArrayList preserves growth mutation and read only views` and
-  `mutable list element types remain invariant` in `MinimalScriptLoweringTest`.
-- [x] **Iterable transformation** — `Iterable<T>.map(transform: (T) -> R): List<R>` builds a new list in iteration
-  order, calling the transform once per element. Empty inputs do not call it. Independent input/output types include
-  `Int`, nullable elements, and supported Guest references; identity transforms retain stored references and Int boxes.
-  The result uses public `ArrayList` storage and existing VM allocation quotas. Evidence: `testKotlinMapVmConformance`
-  and `MinimalScriptLoweringTest`, test `Iterable map preserves order independent types and nullable identity`.
-  Statically typed `Collection<T>` receivers also expose `map`, reserving their known size for the result;
-  plain `Iterable<T>` receivers retain the growing path.
-- [x] **Non-null transformation** — `Iterable<T>.mapNotNull(transform: (T) -> R?): List<R>` with `R : Any`
-  invokes the transform once per element and retains non-null results in iteration order without an intermediate list.
-  Nullable Int results become ordinary Int elements; reference results retain identity. Empty and all-null results,
-  nullable inputs, independent input/output types and generic forwarding are supported. The result grows with matches.
-  Evidence: `testKotlinMapNotNullVmConformance` and `MinimalScriptLoweringTest`, test
-  `Iterable mapNotNull preserves traversal narrowing and identity`.
-- [x] **Iterable filtering** — `Iterable<T>.filter(predicate: (T) -> Boolean): List<T>` creates a new list of matching
-  elements in iteration order, evaluating the predicate once per element. Nullable types remain nullable; matching
-  references and Int boxes retain identity. Empty or unmatched inputs return an empty list. Evidence:
-  `testKotlinFilterVmConformance` and `MinimalScriptLoweringTest`, test
-  `Iterable filter preserves traversal nullable elements and identity`.
-- [x] **Destination collection operations** — `mapTo`, `filterTo` and `mapNotNullTo` append in iteration order to a
-  supplied mutable collection and return it with its concrete type preserved. Existing elements are retained;
-  programs call `clear()` explicitly to reuse a buffer. Empty inputs invoke no callbacks. Generic forwarding,
-  nullable elements, narrowing non-null results, wider destination element types and preserved reference identity
-  are supported. These operations do not create an intermediate result list. Evidence:
-  `testKotlinDestinationVmConformance` and `MinimalScriptLoweringTest`, test
-  `Iterable destination operations append preserve types and return identity`.
-- [x] **Non-null element selection** — `Iterable<T?>.filterNotNull(): List<T>` removes nulls and narrows the result
-  element type, preserving order and duplicates. `Int?` is unboxed into ordinary Int list storage; references and
-  Int boxes already stored as `Any` retain identity. Ordinary library lists also expose read-only nullable element
-  views without copying. Evidence: `testKotlinFilterNotNullVmConformance` and `MinimalScriptLoweringTest`, test
-  `Iterable filterNotNull narrows boxed Int and reference elements`.
-- [ ] **Other collections and functional helpers — Unsupported** — `Set`, `Map`, sequences and
-  general custom iterator loops have no Guest implementation. Tracking: not scheduled
-- [ ] **Console I/O — Partial** — `print`, `println`, and `readln` support the documented scalar and string forms through
-  the terminal capability. Formatting and other overloads are absent. Evidence: `testKotlinSubsetVmConformance` and
-  [`computer.rs`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/host/compukter-vm/src/computer.rs),
-  test `stdio_read_line_echoes_then_writes_stdout_and_stderr_in_order`. Tracking: not scheduled
-- [ ] **Exceptions — Partial** — supported `throw`, `try`/`catch`/`finally`, exception types, messages and causes follow
-  the [exception matrix]({{ '/KOTLIN-SUPPORT/' | relative_url }}#nullability-and-exceptions). Resource exhaustion and
-  cancellation remain terminal. Evidence: `testKotlinExceptionsVmConformance`.
-- [ ] **Reflection and coroutine libraries — Unsupported** — reflection and ordinary Kotlin coroutine libraries are
-  unavailable. Use the platform's bounded cooperative tasks and channels instead. Tracking: not scheduled
-
 ## Maintenance
 
-When an API becomes executable, update its exact surface and evidence here. Update
-[Guest Kotlin support]({{ '/KOTLIN-SUPPORT/' | relative_url }}) when the source-language boundary changes too.
+Update the API’s owning page together with its exact executable surface and test evidence. Update [language support]({{ '/KOTLIN-SUPPORT/' | relative_url }}) only when syntax or representation boundaries change. Keep each behavior in one inventory; link to shared nullability, equality and callback semantics. A supported API does not imply all overloads from upstream Kotlin are available.
+
+<a id="core-and-text"></a>
+
+[Core and text](stdlib/core-text.md)
+
+<a id="arrays-and-ranges"></a>
+
+[Arrays and ranges](stdlib/arrays-ranges.md)
+
+<a id="collections-and-io"></a>
+
+[Collections and I/O](stdlib/collections.md)
+
+<a id="status-legend"></a>
+
+[Status legend]({{ '/STDLIB-SUPPORT/#status-and-evidence' | relative_url }})
+
+For agents and maintainers: follow the relative document links above, read the relevant entry and its evidence, and update that owning file in the same commit as the implementation. These index files retain the shared policy; topic pages retain the detailed contracts.

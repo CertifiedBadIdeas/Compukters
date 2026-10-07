@@ -121,8 +121,8 @@ block as a portable disk.
 Compukters intentionally supports a focused Kotlin subset. Do not assume arbitrary Kotlin/JVM libraries, Java
 interop, reflection, host threads or ordinary coroutine libraries are available. Collections and exceptions have defined
 supported subsets; check the matrices below for their exact boundaries.
-The [Guest Kotlin support matrix]({{ '/KOTLIN-SUPPORT/' | relative_url }}) describes language features, Guest APIs, and
-IDE behavior. The [stdlib support matrix]({{ '/STDLIB-SUPPORT/' | relative_url }}) lists callable Kotlin APIs.
+The [Guest Kotlin support matrix]({{ '/KOTLIN-SUPPORT/' | relative_url }}) indexes language features and links to the separate Guest API and
+IDE support pages. The [stdlib support matrix]({{ '/STDLIB-SUPPORT/' | relative_url }}) lists callable Kotlin APIs.
 The [Guest API reference]({{ '/guest-api/' | relative_url }}) lets you search declarations by name or package and
 follow source links from their signatures.
 

@@ -10,8 +10,10 @@ boundaries.
 
 ## Identify the Boundary
 
-Read `docs/contributors/architecture.md`, then locate the current source of truth and every reader before editing. Classify the
-change as one or more of:
+Read `docs/contributors/architecture.md` and the relevant boundary in `docs/contributors/architecture/abi.md`,
+then locate the current source of truth and every reader before editing. The ABI reference distinguishes
+feature introduction versions from the active source contract and published Runtime pins. Classify the change
+as one or more of:
 
 - canonical platform bundle encoding, module metadata, graph, identity, or compatibility rules;
 - compiler or analysis worker framing, messages, payload manifest, identity, or limits;
