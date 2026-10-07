@@ -40,6 +40,15 @@ object CompuktersGameTests {
 
     @JvmStatic
     @GameTest(
+        batch = "hibernation",
+        template = EMPTY_TEMPLATE,
+        templateNamespace = "minecraft",
+        timeoutTicks = TIMEOUT_TICKS,
+    )
+    fun computerHibernation(helper: GameTestHelper) = ComputerHibernationGameTestScenario.run(helper)
+
+    @JvmStatic
+    @GameTest(
         batch = "redstone",
         template = EMPTY_TEMPLATE,
         templateNamespace = "minecraft",

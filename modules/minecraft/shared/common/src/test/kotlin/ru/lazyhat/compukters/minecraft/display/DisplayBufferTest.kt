@@ -8,8 +8,32 @@ package ru.lazyhat.compukters.minecraft.display
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNull
 
 class DisplayBufferTest {
+    @Test
+    fun `writer checkpoint restores its screen and never overwrites another active owner`() {
+        val buffer = DisplayBuffer()
+        val owner = Any()
+        assertEquals(DisplayWriteResult.SUCCESS, buffer.writeAt(owner, { true }, 0, 0, "Resume😀"))
+        val rows = requireNotNull(buffer.ownedSnapshot(owner))
+        assertNull(buffer.ownedSnapshot(Any()))
+        buffer.release(owner)
+        val resumed = Any()
+        assertEquals(DisplayWriteResult.SUCCESS, buffer.restoreWriter(resumed, { true }, rows))
+        assertEquals(rows, buffer.rows())
+        assertEquals(
+            DisplayWriteResult.BUSY,
+            buffer.restoreWriter(Any(), { true }, List(DisplayBuffer.HEIGHT) { " ".repeat(DisplayBuffer.WIDTH) }),
+        )
+        assertEquals(rows, buffer.rows())
+        buffer.release(resumed)
+        assertEquals(DisplayWriteResult.INVALID, buffer.restoreWriter(owner, { true }, rows.dropLast(1)))
+        assertNull(buffer.ownedSnapshot(owner))
+        assertEquals(DisplayWriteResult.DISCONNECTED, buffer.restoreWriter(owner, { false }, rows))
+        assertNull(buffer.ownedSnapshot(owner))
+    }
+
     @Test
     fun `writes stay within the fixed grid and preserve unicode code points`() {
         val buffer = DisplayBuffer()

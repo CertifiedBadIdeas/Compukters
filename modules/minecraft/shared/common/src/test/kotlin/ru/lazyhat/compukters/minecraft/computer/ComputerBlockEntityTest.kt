@@ -50,6 +50,35 @@ import kotlin.test.assertTrue
 
 class ComputerBlockEntityTest {
     @Test
+    fun `loaded running computer requires its checkpoint instead of silently cold booting`() {
+        val original = fixture()
+        original.entity.serverTick()
+        val saved = original.entity.saveForTest()
+        original.entity.setRemoved()
+        val loaded = fixture()
+        loaded.entity.loadForTest(saved)
+        loaded.entity.serverTick()
+        assertEquals(listOf(true), loaded.carriers.single().restoreRequirements)
+        assertEquals(original.entity.computerId(), loaded.entity.computerId())
+    }
+
+    @Test
+    fun `halted computer remains powered off after load and explicit reboot preserves identity`() {
+        val original = fixture()
+        original.entity.serverTick()
+        original.carriers.single().publishState(ProgramComputerState.PoweredOff(ProgramComputerStopReason.Halted(null)))
+        val saved = original.entity.saveForTest()
+        original.entity.setRemoved()
+        val loaded = fixture()
+        loaded.entity.loadForTest(saved)
+        loaded.entity.serverTick()
+        assertEquals(0, loaded.carriers.size)
+        assertEquals(ProgramComputerState.PoweredOff(ProgramComputerStopReason.Halted(null)), loaded.entity.runtimeState)
+        assertEquals(ProgramComputerState.Running, loaded.entity.reboot())
+        assertEquals(original.entity.computerId(), loaded.entity.computerId())
+    }
+
+    @Test
     fun `resource snapshot is requested only from an attached carrier`() {
         val fixture = fixture()
         assertNull(fixture.entity.resourceSnapshotAsync().getNow(null))
@@ -338,6 +367,13 @@ class ComputerBlockEntityTest {
         override var state: ProgramComputerState = neverStarted()
             private set
         var turnOnCalls = 0
+        val restoreRequirements = mutableListOf<Boolean>()
+
+        override fun restore(required: Boolean): ProgramComputerState {
+            restoreRequirements += required
+            return turnOn()
+        }
+
         var serverTickCalls = 0
         var shutdownCalls = 0
         var closeCalls = 0

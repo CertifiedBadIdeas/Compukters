@@ -61,6 +61,10 @@ internal interface ComputerCarrier : AutoCloseable {
 
     fun turnOn(): ProgramComputerState
 
+    fun restore(required: Boolean): ProgramComputerState = turnOn()
+
+    val restoring: Boolean get() = false
+
     fun serverTick(
         worldTick: Long,
         redstoneInput: Int? = null,
@@ -112,6 +116,8 @@ internal interface ComputerCarrier : AutoCloseable {
     fun reboot(): ProgramComputerState
 
     fun shutdown()
+
+    fun hibernateAsync(worldTick: Long): CompletableFuture<Long?> = closeAsync()
 
     fun closeAsync(): CompletableFuture<Long?> {
         val generation = filesystemGeneration()
@@ -177,6 +183,13 @@ private class ActorComputerCarrier(
 
     override val state: ProgramComputerState
         get() = observedState
+
+    override val restoring: Boolean get() = delegate.restoring
+
+    override fun restore(required: Boolean): ProgramComputerState {
+        delegate.turnOn(required).whenComplete { _, failure -> if (failure == null) observeRuntime() else actorFailure(failure) }
+        return observedState
+    }
 
     override fun turnOn(): ProgramComputerState {
         delegate.turnOn().whenComplete { _, failure -> if (failure == null) observeRuntime() else actorFailure(failure) }
@@ -280,6 +293,8 @@ private class ActorComputerCarrier(
     }
 
     override fun closeAsync(): CompletableFuture<Long?> = delegate.closeAsync().also { observeRuntime() }
+
+    override fun hibernateAsync(worldTick: Long): CompletableFuture<Long?> = delegate.hibernateAsync(worldTick).also { observeRuntime() }
 
     private fun accepted(command: (ru.lazyhat.compukters.core.device.runtime.actor.ProgramRuntimeRequestId) -> ProgramRuntimeActorCommand) =
         request(command) { (it as ProgramRuntimeActorValue.Accepted).accepted }

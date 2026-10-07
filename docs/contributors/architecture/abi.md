@@ -37,7 +37,22 @@ Decode rejects invalid flags/counts, duplicate timer identities, unknown process
 truncation and trailing bytes. These bytes share the native envelope integrity check; they never mirror VM state.
 Restore parks execution until resource rebinding and durable consumption finish, then recreates timer deadlines
 relative to the activation tick. Cumulative diagnostics survive, while per-tick CPU grants and old compiler
-epochs do not. Actor and Minecraft lifecycle use of this host contract is still under development.
+epochs do not. Actor close drains accepted completions before capture. Undelivered external requests receive a catchable
+unavailable result, so restoration never replays a world mutation. Minecraft adapters use the close barrier
+on chunk unload and before the actor/store shutdown sequence; in-game validation is in progress.
+
+Addon resource checkpoint framing version 1 carries bounded length-prefixed parts (at most 128 parts and
+1 MiB total). Generated host bindings delegate capture and restore to each handler; a handler must explicitly
+implement capture, including a zero-byte payload for stateless handlers. Unsupported capture fails instead of
+assuming a stateful addon is stateless. Process-scoped hosts retain a high-water process ID and independently
+restore resource descriptions for live scopes; retired scopes are dropped and newly entered scopes remain lazy.
+
+Peripheral resource format 2 preserves handle and discovery token high-water marks, ordered discovery
+snapshots and contract/location/persistent-instance descriptors. Exact matching instances may rebind after
+loading; missing, replaced or unidentifiable instances produce stale handles. A physical address alone never
+rebinds an old handle to a replacement. Display identities live in block-entity persistence; display resource
+format 2 restores owned rows and writer leases only after peripheral admission and without overwriting
+another active writer.
 
 ## Native Runtime bundles
 

@@ -51,6 +51,21 @@ internal class DisplayBuffer {
         return DisplayWriteResult.SUCCESS
     }
 
+    fun ownedSnapshot(owner: Any): List<String>? = if (writer?.owner === owner) rows() else null
+
+    fun restoreWriter(
+        owner: Any,
+        stillConnected: () -> Boolean,
+        rows: List<String>,
+    ): DisplayWriteResult {
+        expireWriter()
+        if (writer != null && writer?.owner !== owner) return DisplayWriteResult.BUSY
+        if (!stillConnected()) return DisplayWriteResult.DISCONNECTED
+        if (!applySnapshot(rows)) return DisplayWriteResult.INVALID
+        writer = Writer(owner, stillConnected)
+        return DisplayWriteResult.SUCCESS
+    }
+
     fun release(owner: Any) {
         if (writer?.owner === owner) {
             writer = null
