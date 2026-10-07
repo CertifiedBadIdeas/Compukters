@@ -118,6 +118,65 @@ internal class JniBridge private constructor() : LowLevelVmBridge {
         }
     }
 
+    override fun checkpointSave(
+        handle: Long,
+        storeHandle: Long,
+        id: ByteArray,
+        hostState: ByteArray,
+    ) {
+        requireComputerId(id)
+        requireCheckpointSuccess("checkpoint save", JniNative.checkpointSave(handle, storeHandle, id, hostState))
+    }
+
+    override fun checkpointRestore(
+        storeHandle: Long,
+        boot: Boolean,
+        id: ByteArray,
+        rom: ByteArray,
+        capabilitySchemas: ByteArray,
+    ): ByteArray? {
+        requireComputerId(id)
+        val output = ByteArray(maximumCreateBytes())
+        val written = LongArray(1)
+        val status = JniNative.checkpointRestore(storeHandle, if (boot) 1 else 0, id, rom, capabilitySchemas, output, written)
+        if (status == 43) return null
+        requireCheckpointSuccess("checkpoint restore", status)
+        require(written[0] in 0..output.size.toLong()) { "invalid checkpoint creation length" }
+        return output.copyOf(written[0].toInt())
+    }
+
+    override fun checkpointDiscard(
+        storeHandle: Long,
+        id: ByteArray,
+    ) {
+        requireComputerId(id)
+        requireCheckpointSuccess("checkpoint discard", JniNative.checkpointDiscard(storeHandle, id))
+    }
+
+    override fun checkpointHostState(handle: Long): ByteArray {
+        val size = LongArray(1)
+        requireCheckpointSuccess("checkpoint host size", JniNative.checkpointHostSize(handle, size))
+        require(size[0] in 0..4L * 1024 * 1024) { "invalid checkpoint host size" }
+        val output = ByteArray(size[0].toInt())
+        val written = LongArray(1)
+        requireCheckpointSuccess("checkpoint host copy", JniNative.checkpointHostCopy(handle, output, written))
+        require(written[0] == size[0]) { "checkpoint host size changed during copy" }
+        return output
+    }
+
+    private fun requireCheckpointSuccess(
+        operation: String,
+        status: Int,
+    ) {
+        when (status) {
+            0 -> Unit
+            44 -> throw VmCheckpointException(VmCheckpointFailure.INCOMPATIBLE)
+            45 -> throw VmCheckpointException(VmCheckpointFailure.CORRUPT)
+            46 -> throw VmCheckpointException(VmCheckpointFailure.LIMIT)
+            else -> requireSuccess(operation, status)
+        }
+    }
+
     override fun filesystemGeneration(handle: Long): ByteArray =
         fixedOutput("filesystem generation", MAXIMUM_STORE_GENERATION_BYTES) { output, written ->
             JniNative.filesystemGeneration(handle, output, written)
@@ -552,7 +611,7 @@ internal class JniBridge private constructor() : LowLevelVmBridge {
 
         fun open(library: Path): JniBridge {
             System.load(library.toAbsolutePath().normalize().toString())
-            if (JniNative.abiVersion() != 20) throw VmBridgeException("unsupported Compukter JNI ABI")
+            if (JniNative.abiVersion() != 21) throw VmBridgeException("unsupported Compukter JNI ABI")
             return JniBridge()
         }
     }

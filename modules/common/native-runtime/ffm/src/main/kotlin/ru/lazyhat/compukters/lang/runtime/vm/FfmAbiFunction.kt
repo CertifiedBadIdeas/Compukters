@@ -105,6 +105,31 @@ internal enum class FfmAbiFunction(
             ValueLayout.ADDRESS,
         ),
     ),
+    CHECKPOINT_SAVE(
+        "compukter_checkpoint_save",
+        status(ValueLayout.JAVA_LONG, ValueLayout.JAVA_LONG, ValueLayout.ADDRESS, ValueLayout.ADDRESS, ValueLayout.JAVA_LONG),
+    ),
+    CHECKPOINT_RESTORE(
+        "compukter_checkpoint_restore",
+        status(
+            ValueLayout.JAVA_LONG,
+            ValueLayout.JAVA_INT,
+            ValueLayout.ADDRESS,
+            ValueLayout.ADDRESS,
+            ValueLayout.JAVA_LONG,
+            ValueLayout.ADDRESS,
+            ValueLayout.JAVA_LONG,
+            ValueLayout.ADDRESS,
+            ValueLayout.JAVA_LONG,
+            ValueLayout.ADDRESS,
+        ),
+    ),
+    CHECKPOINT_DISCARD("compukter_checkpoint_discard", status(ValueLayout.JAVA_LONG, ValueLayout.ADDRESS)),
+    CHECKPOINT_HOST_SIZE("compukter_checkpoint_host_size", status(ValueLayout.JAVA_LONG, ValueLayout.ADDRESS)),
+    CHECKPOINT_HOST_COPY(
+        "compukter_checkpoint_host_copy",
+        status(ValueLayout.JAVA_LONG, ValueLayout.ADDRESS, ValueLayout.JAVA_LONG, ValueLayout.ADDRESS),
+    ),
     CLOSE("compukter_close", status(ValueLayout.JAVA_LONG)),
     REDSTONE_SUBMIT_INPUT(
         "compukter_redstone_submit_input",

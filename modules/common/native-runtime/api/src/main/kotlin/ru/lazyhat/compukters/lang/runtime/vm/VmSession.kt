@@ -320,6 +320,16 @@ class VmSession private constructor(
 
     fun confirmRedstoneOutput(packed: Int): Unit = bridge.confirmRedstoneOutput(requireHandle(), RedstoneWire.requireOutputRegister(packed))
 
+    /** The actor must be frozen and its external mutations settled before capture. */
+    fun checkpoint(
+        store: WorldFileSystemStore,
+        id: ComputerId,
+        hostState: ByteArray,
+    ) {
+        require(hostState.size <= 4 * 1024 * 1024) { "checkpoint host state exceeds limits" }
+        store.saveCheckpoint(requireHandle(), bridge, id, hostState.copyOf())
+    }
+
     override fun close() {
         val closing = handle.getAndSet(CLOSED)
         if (closing != CLOSED) {
@@ -360,6 +370,31 @@ class VmSession private constructor(
             val (bridge, result) = store.createMachine(id, romImage.copyOf(), artifact.copyOf(), schemas)
             val handle = decodeNative { WireDecoder(result).createdHandle() }
             return admitted(handle, bridge)
+        }
+
+        /** Leaves the snapshot on disk. Rebind host state and consume it before advancing. */
+        fun restoreInStore(
+            store: WorldFileSystemStore,
+            id: ComputerId,
+            romImage: ByteArray,
+            capabilities: List<HostCapabilitySchema> = emptyList(),
+            boot: Boolean = true,
+        ): VmCheckpointRestoration? {
+            val schemas = HostCapabilitySchemaWire.encode(capabilities)
+            val (bridge, result) = store.restoreCheckpointMachine(boot, id, romImage.copyOf(), schemas)
+            if (result == null) return null
+            val handle = decodeNative { WireDecoder(result).createdHandle() }
+            val session = admitted(handle, bridge)
+            try {
+                return VmCheckpointRestoration(session, bridge.checkpointHostState(handle))
+            } catch (error: Throwable) {
+                try {
+                    session.close()
+                } catch (closeError: Throwable) {
+                    error.addSuppressed(closeError)
+                }
+                throw error
+            }
         }
 
         fun bootInStore(
@@ -957,4 +992,13 @@ class TerminalWireDecoder(
         const val PALETTE_SIZE = 16
         const val MAX_CHANGES = 4_096
     }
+}
+
+class VmCheckpointRestoration internal constructor(
+    val session: VmSession,
+    hostState: ByteArray,
+) {
+    private val hostState = hostState.copyOf()
+
+    fun hostStateBytes(): ByteArray = hostState.copyOf()
 }

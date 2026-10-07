@@ -413,3 +413,13 @@ class VmBridgeException(
     message: String,
     cause: Throwable? = null,
 ) : IllegalStateException(message, cause)
+
+enum class VmCheckpointFailure {
+    INCOMPATIBLE,
+    CORRUPT,
+    LIMIT,
+}
+
+class VmCheckpointException(
+    val failure: VmCheckpointFailure,
+) : IllegalStateException("native checkpoint rejected: $failure")

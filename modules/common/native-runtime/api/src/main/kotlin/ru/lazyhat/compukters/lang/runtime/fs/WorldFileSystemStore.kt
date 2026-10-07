@@ -84,6 +84,31 @@ class WorldFileSystemStore private constructor(
             bridge to bridge.createBootInStore(requireHandle(), id.toByteArray(), romImage, capabilitySchemas)
         }
 
+    internal fun saveCheckpoint(
+        sessionHandle: Long,
+        sessionBridge: LowLevelVmBridge,
+        id: ComputerId,
+        hostState: ByteArray,
+    ) = operationLock.withLock {
+        require(bridge === sessionBridge) { "computer and filesystem store use different runtime bridges" }
+        bridge.checkpointSave(sessionHandle, requireHandle(), id.toByteArray(), hostState)
+    }
+
+    internal fun restoreCheckpointMachine(
+        boot: Boolean,
+        id: ComputerId,
+        romImage: ByteArray,
+        capabilitySchemas: ByteArray,
+    ): Pair<LowLevelVmBridge, ByteArray?> =
+        operationLock.withLock {
+            bridge to bridge.checkpointRestore(requireHandle(), boot, id.toByteArray(), romImage, capabilitySchemas)
+        }
+
+    fun discardCheckpoint(id: ComputerId) =
+        operationLock.withLock {
+            bridge.checkpointDiscard(requireHandle(), id.toByteArray())
+        }
+
     override fun close() =
         operationLock.withLock {
             val closing = handle.getAndSet(CLOSED)
