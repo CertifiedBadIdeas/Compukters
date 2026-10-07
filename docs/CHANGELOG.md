@@ -130,6 +130,10 @@ listed in [Kotlin support](developers/kotlin-support.md) and [standard library s
 
 ### In-game IDE
 
+- Local projects support HTTPS Git clone, opening existing directories in place, status/diff, stage/unstage,
+  commits/history, branches, fetch, fast-forward-only pull and push. Tokens are masked and session-only; merge and
+  SSH are deferred. Git operations save modified buffers first and refresh working files and analysis afterward.
+  Git metadata stays outside compiler/deployment inputs; folder renames update open descendant buffers.
 - File switches preserve caret, viewport and undo history in a bounded document cache. The editor highlights the
   current line and uses contrasting panels, draggable dividers and popup shadows; automatic IDE scaling leaves
   more room for code without changing terminal scaling.

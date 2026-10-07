@@ -144,3 +144,37 @@ build messages remain visible but do not contribute clickable locations or gutte
 The terminal screen can suspend its observation and open the IDE, whose target terminal view consumes the same
 replicated terminal state but does not yet display these standalone-terminal gauges. Returning from the IDE reopens
 the standalone observation without reopening the screen and receives a fresh authoritative terminal state.
+
+## Client-local projects and Git
+
+`ide-core` owns backend-independent Git contracts and the project catalog. Owned projects live beneath the client
+catalog root; external roots are registered in place through bounded catalog records and retain their filesystem
+identity checks. `.git` components are reserved and excluded before tree/content budget accounting, including in
+compiler source scanning. `.gitignore` remains an ordinary editable file. Clone materializes an owned staging root,
+validates the manifest and tree, then publishes it through the catalog's secure directory operation. Failure cleanup
+never follows directory symlinks. Unavailable external roots do not hide other catalog projects.
+
+`ide-git` is the JGit implementation leaf; `ide-client` depends only on the contracts. The NeoForge client injects this
+backend into `DefaultIdeWorkspace`, whose bounded single I/O executor serializes Git and document operations. Git
+results carry controller generation/operation identities. The controller drains dirty buffers first, pauses edits
+while Git runs, rejects results from a departed project and invalidates affected tree/document/analysis/build state.
+A failed create/import/clone retains the current project instead of clearing its buffers prematurely. File/folder
+renames rebase cached descendant paths while preserving editor state.
+
+Remote operations admit HTTPS URLs without embedded credentials, query or fragment. Tokens live in masked client
+session input and an explicitly closeable credential object; no credential data enters preferences, project files,
+worker snapshots or server payloads. JGit copies are cleared after each operation. Commit author identity is explicit.
+The backend commits only staged content, never force-pushes and disables commit/push hooks without saving its temporary
+hook-path override. Linked worktrees, submodule/LFS integration, SSH and merge UI are deferred.
+
+Pull uses JGit `FF_ONLY` with rebase disabled and requires a clean working tree. Divergence preserves local HEAD,
+index and working files; tests exercise that exact failure boundary. Cancellation and a 60-second transport/progress
+timeout bound cooperative operations; already completed mutations are not rolled back. Git defaults bound status and
+branch lists to 4096 entries, history to 100 commits and diff output to 256 KiB. A separate 512 MiB repository metadata
+check runs before/after repository operations and after clone; it is post-transfer validation, not a streaming quota. Metadata validation also limits entries to 100,000 and depth to 32, rejecting symlinks.
+
+The shared Git panel and prompt workflows feed both version-specific screens. Production archives relocate JGit,
+JavaEWAH and Commons Codec into the private vendor namespace and retain their license notices; SLF4J remains loader
+provided. Both archive gates load and exercise the relocated Git/resource runtime. Behavioral evidence lives in
+`JGitBackendTest`, `GitWorkspaceIntegrationTest`, catalog/compiler/controller tests and shared prompt/input/renderer
+tests. In-client layout and interaction still require an observed scenario under the verification policy.
