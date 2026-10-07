@@ -25,12 +25,14 @@ import org.jetbrains.kotlin.ir.declarations.IrSimpleFunction
 import org.jetbrains.kotlin.ir.symbols.IrClassSymbol
 import org.jetbrains.kotlin.ir.symbols.UnsafeDuringIrConstructionAPI
 import org.jetbrains.kotlin.ir.types.IrSimpleType
+import org.jetbrains.kotlin.ir.types.IrType
 import org.jetbrains.kotlin.ir.util.fqNameWhenAvailable
 import ru.lazyhat.compukters.compiler.artifact.model.Block
 import ru.lazyhat.compukters.compiler.artifact.model.BlockId
 import ru.lazyhat.compukters.compiler.artifact.model.ConstantId
 import ru.lazyhat.compukters.compiler.artifact.model.Destination
 import ru.lazyhat.compukters.compiler.artifact.model.Field
+import ru.lazyhat.compukters.compiler.artifact.model.FieldId
 import ru.lazyhat.compukters.compiler.artifact.model.FieldRef
 import ru.lazyhat.compukters.compiler.artifact.model.Function
 import ru.lazyhat.compukters.compiler.artifact.model.FunctionFlag
@@ -85,6 +87,7 @@ internal data class GuestValueClassBridge(
     val parameters: List<ValueType>,
     val result: ValueType,
     val suspending: Boolean,
+    val propertyIndex: Int? = null,
 )
 
 /** A nominal managed wrapper; the underlying scalar remains the direct-call representation. */
@@ -93,14 +96,27 @@ internal class GuestValueClassBox(
     val symbol: IrClassSymbol,
     val displayName: String,
     val propertyName: String,
-    val scalar: ValueType,
+    var scalar: ValueType,
 ) {
+    lateinit var sourceType: IrType
+    var propertyTypes: List<IrType> = emptyList()
+    var propertyNames: List<String> = listOf(propertyName)
+    var inlineType: ValueType.Inline? = null
+    var componentTypes: List<ValueType> = emptyList()
+
+    fun fieldAt(index: Int): FieldRef =
+        if (index == 0) field else FieldRef.Local(FieldId.of((field as FieldRef.Local).id.value + index.toUInt()))
+
     lateinit var type: TypeRef
     lateinit var field: FieldRef
     var toStringTarget: FunctionRef? = null
     var interfaces: List<TypeRef> = emptyList()
     var bridges: List<GuestValueClassBridge> = emptyList()
     val stringPrefix: String get() = "$displayName($propertyName="
+    val stringParts: List<String> get() =
+        propertyNames.mapIndexed { index, property ->
+            if (index == 0) "$displayName($property=" else ", $property="
+        } + ")"
 }
 
 internal data class GuestValueClassBoxArtifacts(
@@ -118,6 +134,8 @@ internal fun lowerValueClassBoxes(
     stringConstants: Map<String, ConstantId>,
     any: TypeRef,
     string: ValueType.Ref,
+    guestTypes: GuestTypeRegistry,
+    constants: Map<ru.lazyhat.compukters.compiler.artifact.model.Constant, ConstantId>,
 ): GuestValueClassBoxArtifacts {
     val types = mutableListOf<NominalType>()
     val fields = mutableListOf<Field>()
@@ -126,6 +144,25 @@ internal fun lowerValueClassBoxes(
 
     fun register(index: UInt) = RegisterId.of(index)
     for (box in boxes) {
+        if (box.inlineType != null) {
+            val lowered =
+                lowerAggregateValueClassBox(
+                    box,
+                    functionBase + functions.size.toUInt(),
+                    blockBase + blocks.size.toUInt(),
+                    strings,
+                    stringConstants,
+                    any,
+                    string,
+                    guestTypes,
+                    constants,
+                )
+            types += lowered.types
+            fields += lowered.fields
+            functions += lowered.functions
+            blocks += lowered.blocks
+            continue
+        }
         val owner = box.type as TypeRef.Local
         val field = box.field as FieldRef.Local
         val receiver = ValueType.Ref(false, owner)

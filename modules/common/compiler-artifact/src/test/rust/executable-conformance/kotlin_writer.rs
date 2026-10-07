@@ -17,6 +17,11 @@ fn main() {
     );
 
     match scenario.as_str() {
+        "mfvc" => {
+            let mut profile = list_no_io_profile();
+            profile.maximum_coroutines = 64;
+            execute_primitive_program_with_profile(std::env::var("COMPUKTER_KOTLIN_MFVC_ARTIFACT").expect("MFVC artifact must be set"), profile);
+        },
         "executable" => pinned_vm_verifies_kotlin_executable_instruction_artifact(),
         "exceptions" => k2_explicit_exception_unwinds_across_guest_calls(),
         "value-class-boxes" => {
@@ -2682,9 +2687,13 @@ fn k2_primitives_preserve_numeric_boundaries_and_nominal_types() {
 }
 
 fn execute_primitive_program(path: impl AsRef<std::path::Path>) {
+    execute_primitive_program_with_profile(path, list_no_io_profile());
+}
+
+fn execute_primitive_program_with_profile(path: impl AsRef<std::path::Path>, profile: ExecutionProfile) {
     let verified = verify_artifact(Arc::from(fs::read(path).expect("primitive artifact must exist")), ArtifactLimits::default())
         .expect("primitive artifact must verify");
-    let mut session = Session::admit(verified.clone(), list_no_io_profile(), &[]).expect("primitive program must admit");
+    let mut session = Session::admit(verified.clone(), profile, &[]).expect("primitive program must admit");
     session.start(&[]).expect("primitive program must start");
     for _ in 0..10_000 {
         match session.advance(512, 16).expect("primitive program must advance") {

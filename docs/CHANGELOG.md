@@ -16,6 +16,12 @@ headings so this page has one stable URL that can be shared outside the reposito
 This release expands the Kotlin available to computer programs and introduces support for independently installed
 addon mods, with optional Create, Sable and Propulsion integrations for Minecraft 1.21.1.
 
+- Guest Kotlin value classes can carry multiple primitive, reference and nested fields, with concrete
+  generic field substitutions. Direct locals and calls keep the payload in compact frames; `Any`, nullable
+  values, interfaces, collections, ordinary fields and lambda/task captures preserve nominal managed
+  identity. Structural equality, hashing and text preserve Kotlin floating semantics. These layouts require
+  Runtime ABI 1.15; existing scalar peripheral handles retain their direct ABI.
+
 - Guest Kotlin supports all twelve primitive scalar types, including `Byte`, `Short`, `UByte`, `UShort`,
   `UInt` and `ULong`, with arithmetic, comparisons, conversions, increment/decrement and applicable bit operations.
   Nullable signatures and nominal wrappers preserve source type through `Any?` casts. Unsigned division, comparisons

@@ -639,11 +639,19 @@ supported.
   implementations of methods and properties; inherited default methods dispatch through that wrapper.
   Interface assignments, casts, nullable receivers and collections preserve nominal type and payload,
   including when the value class and its interface come from a precompiled addon.
-  Generic declarations, reference-backed and multi-property forms remain rejected by Guest lowering.
-  The native Compukters FIR-to-IR pipeline already accepts multi-field declarations without an additional
-  language flag and preserves `MultiFieldValueClassRepresentation`, including mixed primitive fields and
-  nested value classes. This is frontend evidence only; multi-field execution remains unsupported.
-  Evidence: `CompuktersFir2IrPipelineTest`, test
+  Multi-field and reference-backed declarations now retain a nominal inline layout across direct locals,
+  fields reads, methods, parameters, returns, branches and generic function specializations. All primitive
+  leaves, references and nested value classes flatten into compact frame components. Concrete generic
+  value-class fields specialize to their source arguments. `Any`, nullable values, interfaces, object
+  fields, reference arrays, lists and lambda captures use nominal managed boxes; reads recover the direct
+  layout. Interface bridges, child-task captures, structural equality/hash/text and named-argument order
+  are exercised by `MinimalScriptLoweringTest`, test
+  `multi field value classes preserve direct layouts nested calls and managed boundaries`, executed by
+  `testKotlinMfvcVmConformance`. Float/Double structural equality preserves NaN and signed zero.
+  Multi-field precompiled producer/consumer identity and matching IDE coverage are still being completed
+  under [#701](https://github.com/CertifiedBadIdeas/Compukters/issues/701).
+  The native FIR-to-IR pipeline accepts these declarations without an additional language flag and
+  preserves `MultiFieldValueClassRepresentation`; evidence: `CompuktersFir2IrPipelineTest`, test
   `multi field value classes resolve on Guest platform and retain their IR representation`.
   Scalar execution evidence:
   [`MinimalScriptLoweringTest`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/compiler-k2/src/test/kotlin/ru/lazyhat/compukters/compiler/worker/k2/MinimalScriptLoweringTest.kt),

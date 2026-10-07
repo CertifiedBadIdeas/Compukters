@@ -1017,6 +1017,25 @@ val generateValueClassBoxesConformanceArtifact = tasks.register<Test>("generateV
     }
 }
 
+val generateMfvcConformanceArtifact = tasks.register<Test>("generateMfvcConformanceArtifact") {
+    description = "Compiles nominal value-class boxes and collections for pinned VM conformance."
+    group = "verification"
+    dependsOn(tasks.jar)
+    useJUnitPlatform()
+    testClassesDirs = sourceSets.test.get().output.classesDirs
+    classpath = sourceSets.test.get().runtimeClasspath
+    filter.includeTestsMatching("*multi field value classes preserve direct layouts nested calls and managed boundaries*")
+    inputs.files(addonGuestApiFixtureBundle)
+    inputs.file(workerJar)
+    val artifact = layout.buildDirectory.file("generated/conformance/kotlin-mfvc.cpkt")
+    outputs.file(artifact)
+    doFirst {
+        systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
+        systemProperty("compukters.addonGuestApiFixture", addonGuestApiFixtureBundle.singleFile.absolutePath)
+        systemProperty("compukter.vm.mfvcArtifact", artifact.get().asFile.absolutePath)
+    }
+}
+
 val generateNullableCollectionsConformanceArtifact = tasks.register<Test>("generateNullableCollectionsConformanceArtifact") {
     description = "Compiles nullable Int and collection elements for pinned VM conformance."
     group = "verification"

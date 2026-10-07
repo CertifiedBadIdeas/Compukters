@@ -1773,15 +1773,84 @@ class MinimalScriptLoweringTest {
         }
 
     @Test
-    fun `boxed support retains rejection of unsupported value class declarations`() =
+    fun `multi field value classes preserve direct layouts nested calls and managed boundaries`() =
         withAdapter { adapter ->
-            for (source in listOf(
-                "value class Unsupported(val value: String); fun main() { val values = listOf(Unsupported(\"text\")) }",
-                "value class Unsupported<T>(val value: T); fun main() { val values = listOf(Unsupported(1)) }",
-            )) {
-                val result = adapter.compile(request(source))
-                assertNull(result.artifact)
-                assertTrue(result.diagnostics.any { it.code == "UNSUPPORTED_IR" }, result.diagnostics.joinToString())
+            val result =
+                adapter.compile(
+                    request(
+                        """
+                        import compukter.concurrent.Tasks
+                        import kotlin.collections.listOf
+                        import kotlin.collections.map
+                        import kotlin.collections.filter
+                        interface Position { val x: Double; fun shifted(amount: Double): Vec3 }
+                        value class Vec3(override val x: Double, val y: Double, val z: Double) : Position {
+                            override fun shifted(amount: Double): Vec3 = Vec3(x + amount, y + amount, z + amount)
+                        }
+                        value class Packet(val point: Vec3, val tag: String, val count: Long, val enabled: Boolean)
+                        class Holder(var value: Packet)
+                        value class PairValue<T>(val first: T, val second: T)
+                        fun <T> identity(value: T): T = value
+                        fun relay(point: Vec3): Vec3 = point.shifted(1.0)
+                        fun main() {
+                            var point = relay(Vec3(1.0, 2.0, 3.0))
+                            check(point.x == 2.0 && point.y == 3.0 && point.z == 4.0)
+                            point = if (point.x > 0.0) point.shifted(2.0) else Vec3(0.0, 0.0, 0.0)
+                            val packet = Packet(point, "tag", 42L, true)
+                            check(packet.point.z == 6.0 && packet.tag == "tag" && packet.count == 42L && packet.enabled)
+                            val boxed: Any = packet
+                            check(boxed is Packet)
+                            val restored = boxed as Packet
+                            check(restored.point.x == 4.0 && restored.tag == "tag")
+                            val absent: Packet? = null
+                            check(absent == null)
+                            val optional: Packet? = packet
+                            check(optional!!.point.y == 5.0)
+                            check(packet == Packet(point, "tag", 42L, true))
+                            check(packet.hashCode() == Packet(point, "tag", 42L, true).hashCode())
+                            check(packet.toString() == "Packet(point=Vec3(x=4.0, y=5.0, z=6.0), tag=tag, count=42, enabled=true)")
+                            check(identity(packet).count == 42L)
+                            val pair = PairValue(packet, packet)
+                            check(pair.first.point.x == 4.0 && pair.second.count == 42L)
+                            val holder = Holder(packet)
+                            check(holder.value.point.y == 5.0)
+                            holder.value = Packet(Vec3(8.0, 9.0, 10.0), "next", 43L, false)
+                            check(holder.value.count == 43L)
+                            val capture: () -> Packet = { packet }
+                            check(capture().point.z == 6.0)
+                            var captured = packet
+                            val update: () -> Unit = { captured = holder.value }
+                            update()
+                            check(captured.tag == "next")
+                            val values = arrayOf(packet, holder.value)
+                            check(values[0].count == 42L)
+                            values[0] = holder.value
+                            check(values[0].count == 43L)
+                            val listed = listOf(packet, holder.value).filter { it.enabled }.map { it.point }
+                            check(listed[0].x == 4.0)
+                            val position: Position = point
+                            check(position.x == 4.0 && position.shifted(1.0).z == 7.0)
+                            val first = Tasks.launch { check(packet.tag == "tag" && packet.point.y == 5.0) }
+                            val second = Tasks.launch { captured = packet; check(captured.point.z == 6.0) }
+                            first.join()
+                            second.join()
+                            check(captured.count == 42L)
+                            val nanPoint = Vec3(Double.NaN, -0.0, 2.0)
+                            check(nanPoint == Vec3(Double.NaN, -0.0, 2.0))
+                            check(nanPoint != Vec3(Double.NaN, 0.0, 2.0))
+                            var order = 0
+                            val ordered = Vec3(z = run { order = order * 10 + 1; 3.0 },
+                                x = run { order = order * 10 + 2; 1.0 }, y = run { order = order * 10 + 3; 2.0 })
+                            check(order == 123 && ordered.z == 3.0)
+                        }
+                        """.trimIndent(),
+                    ),
+                )
+            val bytes = assertNotNull(result.artifact, result.diagnostics.joinToString()).toByteArray()
+            val artifact = ArtifactReader.read(bytes)
+            assertTrue(artifact.modules.any { module -> module.types.any { it is NominalType.InlineValue } })
+            System.getProperty("compukter.vm.mfvcArtifact")?.let { output ->
+                Path.of(output).also { it.parent.createDirectories() }.writeBytes(bytes)
             }
         }
 

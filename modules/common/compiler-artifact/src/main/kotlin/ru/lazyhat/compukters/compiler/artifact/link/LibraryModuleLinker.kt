@@ -246,8 +246,13 @@ object LibraryModuleLinker {
         val maximumBlockCost =
             modules
                 .asSequence()
-                .flatMap { module -> module.blocks.asSequence() }
-                .maxOfOrNull { block -> block.instructions.sumOf { instruction -> instructionFixedCost(instruction).toLong() } }
+                .flatMap { module ->
+                    module.blocks.asSequence().map { block ->
+                        block.instructions.sumOf { instruction ->
+                            instructionFixedCost(instruction, module.functions[block.owner.value.toInt()].values).toLong()
+                        }
+                    }
+                }.maxOrNull()
                 ?.toUInt()
                 ?: 0u
         val manifest =
