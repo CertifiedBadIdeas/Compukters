@@ -18,7 +18,10 @@
 
 package ru.lazyhat.compukters.compiler.k2.engine
 
+import org.jetbrains.kotlin.descriptors.MultiFieldValueClassRepresentation
+import org.jetbrains.kotlin.ir.declarations.IrClass
 import org.jetbrains.kotlin.ir.declarations.IrSimpleFunction
+import org.jetbrains.kotlin.ir.symbols.IrClassSymbol
 import org.jetbrains.kotlin.ir.symbols.UnsafeDuringIrConstructionAPI
 import org.jetbrains.kotlin.ir.util.fqNameWhenAvailable
 import ru.lazyhat.compukters.compiler.artifact.model.Instruction
@@ -39,6 +42,7 @@ import ru.lazyhat.compukters.platform.k2.build.PlatformLibraryDeclarationKind
 import ru.lazyhat.compukters.worker.value.ImmutableBytes
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
@@ -48,114 +52,7 @@ class CompuktersFir2IrPipelineTest {
     @Test
     fun `common pipeline converts resolved Compukters FIR with bodies`() {
         CompuktersFirBuildEnvironment.create().use { environment ->
-            val builtins =
-                environment.compile(
-                    PlatformModuleId("kotlin", "builtins"),
-                    listOf(
-                        source(
-                            "Builtins.kt",
-                            """
-                            package kotlin
-                            open class Any
-                            open class Number
-                            class Nothing private constructor()
-                            object Unit
-                            class Boolean private constructor() { external operator fun not(): Boolean }
-                            class Char private constructor()
-                            class Byte private constructor() : Number()
-                            class Short private constructor() : Number()
-                            class Int private constructor() : Number() {
-                                external operator fun plus(other: Int): Int
-                                external operator fun times(other: Int): Int
-                                external infix fun xor(other: Int): Int
-                                external infix fun and(other: Int): Int
-                            }
-                            class Long private constructor() : Number()
-                            class UByte private constructor()
-                            class UShort private constructor()
-                            class UInt private constructor()
-                            class ULong private constructor()
-                            class Float private constructor() : Number()
-                            class Double private constructor() : Number()
-                            interface CharSequence
-                            class String : CharSequence
-                            open class Throwable
-                            class Array<T>
-                            class BooleanArray
-                            class CharArray
-                            class ByteArray
-                            class ShortArray
-                            class IntArray
-                            class LongArray
-                            class FloatArray
-                            class DoubleArray
-                            class UByteArray
-                            class UShortArray
-                            class UIntArray
-                            class ULongArray
-                            interface Comparable<in T>
-                            abstract class Enum<E : Enum<E>>
-                            interface Annotation
-                            interface Function<out R>
-                            interface Function0<out R> : Function<R>
-                            annotation class ExtensionFunctionType
-                            annotation class NoInfer
-                            annotation class Deprecated(val message: String)
-                            enum class DeprecationLevel { WARNING, ERROR, HIDDEN }
-                            external fun <T> arrayOf(vararg elements: T): Array<T>
-                            external fun <T> arrayOfNulls(size: Int): Array<T?>
-                            """.trimIndent(),
-                        ),
-                        source(
-                            "Collections.kt",
-                            """
-                            package kotlin.collections
-                            import kotlin.*
-                            interface Iterable<out T>
-                            interface Iterator<out T>
-                            interface Collection<out T> : Iterable<T>
-                            interface List<out T> : Collection<T>
-                            interface Set<out T> : Collection<T>
-                            interface Map<K, out V> { interface Entry<out K, out V> }
-                            interface ListIterator<out T> : Iterator<T>
-                            interface MutableIterable<out T> : Iterable<T>
-                            interface MutableIterator<out T> : Iterator<T>
-                            interface MutableCollection<T> : Collection<T>, MutableIterable<T>
-                            interface MutableList<T> : List<T>, MutableCollection<T>
-                            interface MutableSet<T> : Set<T>, MutableCollection<T>
-                            interface MutableMap<K, V> : Map<K, V> { interface MutableEntry<K, V> : Map.Entry<K, V> }
-                            interface MutableListIterator<T> : ListIterator<T>, MutableIterator<T>
-                            abstract class BooleanIterator : Iterator<Boolean>
-                            abstract class ByteIterator : Iterator<Byte>
-                            abstract class CharIterator : Iterator<Char>
-                            abstract class ShortIterator : Iterator<Short>
-                            abstract class IntIterator : Iterator<Int>
-                            abstract class LongIterator : Iterator<Long>
-                            abstract class FloatIterator : Iterator<Float>
-                            abstract class DoubleIterator : Iterator<Double>
-                            """.trimIndent(),
-                        ),
-                        source(
-                            "Reflection.kt",
-                            """
-                            package kotlin.reflect
-                            import kotlin.*
-                            interface KCallable<out R>
-                            interface KProperty<out R> : KCallable<R>
-                            interface KProperty0<out R> : KProperty<R>
-                            interface KProperty1<in T, out R> : KProperty<R>
-                            interface KProperty2<in D, in E, out R> : KProperty<R>
-                            interface KMutableProperty0<R> : KProperty0<R>
-                            interface KMutableProperty1<T, R> : KProperty1<T, R>
-                            interface KMutableProperty2<D, E, R> : KProperty2<D, E, R>
-                            interface KClass<out T : Any> : KCallable<T>
-                            interface KType
-                            interface KFunction<out R> : KCallable<R>, Function<R>
-                            """.trimIndent(),
-                        ),
-                    ),
-                    emptyList(),
-                )
+            val builtins = compileBuiltins(environment)
             val valueOnly =
                 environment.compile(
                     PlatformModuleId("sample", "value-types"),
@@ -417,6 +314,199 @@ class CompuktersFir2IrPipelineTest {
             )
         }
     }
+
+    @Test
+    fun `multi field value classes resolve on Guest platform and retain their IR representation`() {
+        CompuktersFirBuildEnvironment.create().use { environment ->
+            val builtins = compileBuiltins(environment)
+            val mfvc =
+                environment.compile(
+                    PlatformModuleId("sample", "mfvc-probe"),
+                    listOf(
+                        source(
+                            "Mfvc.kt",
+                            """
+                            package sample.mfvc
+                            interface Position { fun coordinate(): Double }
+                            value class Vec3(val x: Double, val y: Double, val z: Double) : Position {
+                                override fun coordinate(): Double = x
+                            }
+                            value class Mixed(val count: Int, val wide: Long, val flag: Boolean)
+                            value class Nested(val vector: Vec3, val label: Int)
+                            fun make(): Vec3 = Vec3(1.0, 2.0, 3.0)
+                            fun read(value: Vec3): Double = value.y
+                            fun boxed(value: Vec3): Any = value
+                            fun nullable(value: Vec3): Vec3? = value
+                            fun iface(value: Vec3): Position = value
+                            """.trimIndent(),
+                        ),
+                    ),
+                    listOf(builtins),
+                )
+            assertFalse(mfvc.diagnostics.hasErrors, mfvc.diagnostics.diagnostics.joinToString { it.factoryName })
+            val ir = CompuktersFir2IrPipeline.convert(listOf(builtins, mfvc))
+            val classes =
+                ir.irModuleFragment.files
+                    .flatMap { it.declarations }
+                    .filterIsInstance<IrClass>()
+                    .filter { it.fqNameWhenAvailable?.asString()?.startsWith("sample.mfvc.") == true && it.isValue }
+            assertEquals(3, classes.size)
+            classes.forEach { klass ->
+                val representation = klass.valueClassRepresentation
+                assertTrue(representation is MultiFieldValueClassRepresentation<*>)
+                val fields = representation.underlyingPropertyNamesToTypes.map { it.first.asString() }
+                val fieldTypes =
+                    representation.underlyingPropertyNamesToTypes.map { (_, type) ->
+                        (type.classifier as IrClassSymbol).owner.fqNameWhenAvailable?.asString()
+                    }
+                assertEquals(
+                    when (klass.name.asString()) {
+                        "Vec3" -> listOf("kotlin.Double", "kotlin.Double", "kotlin.Double")
+                        "Mixed" -> listOf("kotlin.Int", "kotlin.Long", "kotlin.Boolean")
+                        "Nested" -> listOf("sample.mfvc.Vec3", "kotlin.Int")
+                        else -> error("unexpected MFVC")
+                    },
+                    fieldTypes,
+                )
+                assertEquals(
+                    when (klass.name.asString()) {
+                        "Vec3" -> listOf("x", "y", "z")
+                        "Mixed" -> listOf("count", "wide", "flag")
+                        "Nested" -> listOf("vector", "label")
+                        else -> error("unexpected MFVC")
+                    },
+                    fields,
+                )
+            }
+            val rejected =
+                assertFailsWith<IllegalArgumentException> {
+                    PlatformLibraryCompiler().compile(
+                        PlatformModuleId("sample", "mfvc-probe"),
+                        emptyList(),
+                        ir.irModuleFragment,
+                        ir.pluginContext,
+                        setOf("Mfvc.kt"),
+                        mapOf(
+                            "Builtins.kt" to PlatformModuleId("kotlin", "builtins"),
+                            "Collections.kt" to PlatformModuleId("kotlin", "builtins"),
+                            "Reflection.kt" to PlatformModuleId("kotlin", "builtins"),
+                            "Mfvc.kt" to PlatformModuleId("sample", "mfvc-probe"),
+                        ),
+                        CanonicalTrustedIntrinsics.registry,
+                    )
+                }
+            assertTrue(rejected.message.orEmpty().contains("value class must have one underlying property"))
+        }
+    }
+
+    private fun compileBuiltins(environment: CompuktersFirBuildEnvironment) =
+        environment.compile(
+            PlatformModuleId("kotlin", "builtins"),
+            listOf(
+                source(
+                    "Builtins.kt",
+                    """
+                    package kotlin
+                    open class Any
+                    open class Number
+                    class Nothing private constructor()
+                    object Unit
+                    class Boolean private constructor() { external operator fun not(): Boolean }
+                    class Char private constructor()
+                    class Byte private constructor() : Number()
+                    class Short private constructor() : Number()
+                    class Int private constructor() : Number() {
+                        external operator fun plus(other: Int): Int
+                        external operator fun times(other: Int): Int
+                        external infix fun xor(other: Int): Int
+                        external infix fun and(other: Int): Int
+                    }
+                    class Long private constructor() : Number()
+                    class UByte private constructor()
+                    class UShort private constructor()
+                    class UInt private constructor()
+                    class ULong private constructor()
+                    class Float private constructor() : Number()
+                    class Double private constructor() : Number()
+                    interface CharSequence
+                    class String : CharSequence
+                    open class Throwable
+                    class Array<T>
+                    class BooleanArray
+                    class CharArray
+                    class ByteArray
+                    class ShortArray
+                    class IntArray
+                    class LongArray
+                    class FloatArray
+                    class DoubleArray
+                    class UByteArray
+                    class UShortArray
+                    class UIntArray
+                    class ULongArray
+                    interface Comparable<in T>
+                    abstract class Enum<E : Enum<E>>
+                    interface Annotation
+                    interface Function<out R>
+                    interface Function0<out R> : Function<R>
+                    annotation class ExtensionFunctionType
+                    annotation class NoInfer
+                    annotation class Deprecated(val message: String)
+                    enum class DeprecationLevel { WARNING, ERROR, HIDDEN }
+                    external fun <T> arrayOf(vararg elements: T): Array<T>
+                    external fun <T> arrayOfNulls(size: Int): Array<T?>
+                    """.trimIndent(),
+                ),
+                source(
+                    "Collections.kt",
+                    """
+                    package kotlin.collections
+                    import kotlin.*
+                    interface Iterable<out T>
+                    interface Iterator<out T>
+                    interface Collection<out T> : Iterable<T>
+                    interface List<out T> : Collection<T>
+                    interface Set<out T> : Collection<T>
+                    interface Map<K, out V> { interface Entry<out K, out V> }
+                    interface ListIterator<out T> : Iterator<T>
+                    interface MutableIterable<out T> : Iterable<T>
+                    interface MutableIterator<out T> : Iterator<T>
+                    interface MutableCollection<T> : Collection<T>, MutableIterable<T>
+                    interface MutableList<T> : List<T>, MutableCollection<T>
+                    interface MutableSet<T> : Set<T>, MutableCollection<T>
+                    interface MutableMap<K, V> : Map<K, V> { interface MutableEntry<K, V> : Map.Entry<K, V> }
+                    interface MutableListIterator<T> : ListIterator<T>, MutableIterator<T>
+                    abstract class BooleanIterator : Iterator<Boolean>
+                    abstract class ByteIterator : Iterator<Byte>
+                    abstract class CharIterator : Iterator<Char>
+                    abstract class ShortIterator : Iterator<Short>
+                    abstract class IntIterator : Iterator<Int>
+                    abstract class LongIterator : Iterator<Long>
+                    abstract class FloatIterator : Iterator<Float>
+                    abstract class DoubleIterator : Iterator<Double>
+                    """.trimIndent(),
+                ),
+                source(
+                    "Reflection.kt",
+                    """
+                    package kotlin.reflect
+                    import kotlin.*
+                    interface KCallable<out R>
+                    interface KProperty<out R> : KCallable<R>
+                    interface KProperty0<out R> : KProperty<R>
+                    interface KProperty1<in T, out R> : KProperty<R>
+                    interface KProperty2<in D, in E, out R> : KProperty<R>
+                    interface KMutableProperty0<R> : KProperty0<R>
+                    interface KMutableProperty1<T, R> : KProperty1<T, R>
+                    interface KMutableProperty2<D, E, R> : KProperty2<D, E, R>
+                    interface KClass<out T : Any> : KCallable<T>
+                    interface KType
+                    interface KFunction<out R> : KCallable<R>, Function<R>
+                    """.trimIndent(),
+                ),
+            ),
+            emptyList(),
+        )
 
     private fun compactFrameBytes(function: ru.lazyhat.compukters.compiler.artifact.model.Function): ULong {
         var offset = 0uL

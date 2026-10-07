@@ -639,7 +639,13 @@ supported.
   implementations of methods and properties; inherited default methods dispatch through that wrapper.
   Interface assignments, casts, nullable receivers and collections preserve nominal type and payload,
   including when the value class and its interface come from a precompiled addon.
-  Generic declarations, reference-backed and multi-property forms remain rejected. Evidence:
+  Generic declarations, reference-backed and multi-property forms remain rejected by Guest lowering.
+  The native Compukters FIR-to-IR pipeline already accepts multi-field declarations without an additional
+  language flag and preserves `MultiFieldValueClassRepresentation`, including mixed primitive fields and
+  nested value classes. This is frontend evidence only; multi-field execution remains unsupported.
+  Evidence: `CompuktersFir2IrPipelineTest`, test
+  `multi field value classes resolve on Guest platform and retain their IR representation`.
+  Scalar execution evidence:
   [`MinimalScriptLoweringTest`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/compiler-k2/src/test/kotlin/ru/lazyhat/compukters/compiler/worker/k2/MinimalScriptLoweringTest.kt),
   test `typed redstone side API lowers deterministically to scalar capability operations`,
   and
