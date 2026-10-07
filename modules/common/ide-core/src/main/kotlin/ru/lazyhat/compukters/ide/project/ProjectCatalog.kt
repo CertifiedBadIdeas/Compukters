@@ -57,6 +57,11 @@ class ProjectCatalog private constructor(
                     SecureProjectFiles.validateFilename(name)
                     val directoryName = name.toString()
                     if (directoryName.startsWith(STAGING_PREFIX)) return@forEach
+                    if (directoryName.startsWith(REGISTRATION_PREFIX)) {
+                        val registeredPath = SecureProjectFiles.readText(root, directoryName, limits.pathUtf8Bytes)
+                        add(describe(directoryName, Path.of(registeredPath)))
+                        return@forEach
+                    }
                     validateDirectoryName(directoryName)
                     val attributes = SecureProjectFiles.attributes(root, name)
                     if (attributes.isSymbolicLink || !attributes.isDirectory) {
@@ -82,6 +87,33 @@ class ProjectCatalog private constructor(
                 }
             }.sortedWith { left, right -> TomlSupport.utf8Comparator.compare(left.directoryName, right.directoryName) }
         }
+
+    /** Registers an existing root in place. Reopening the catalog preserves this project identity. */
+    fun register(projectRoot: Path): ProjectDescriptor {
+        val identity = SecureProjectFiles.identity(projectRoot)
+        projects().firstOrNull { it.handle.identity.canonicalPath == identity.canonicalPath }?.let { return it }
+        val id = "$REGISTRATION_PREFIX${UUID.randomUUID()}"
+        val descriptor = describe(id, identity.canonicalPath)
+        val content = TomlSupport.strictUtf8(identity.canonicalPath.toString())
+        require(content.size <= limits.pathUtf8Bytes) { "registered project path exceeds byte limit" }
+        catalogOperation("register project") { root ->
+            check(descriptor.handle.isValid()) { "project changed during registration" }
+            writeNew(root, id, content)
+        }
+        return descriptor
+    }
+
+    private fun describe(
+        id: String,
+        projectRoot: Path,
+    ): ProjectDescriptor {
+        val identity = SecureProjectFiles.identity(projectRoot)
+        val manifest =
+            SecureProjectFiles.withValidProject(identity) { root ->
+                ProjectManifestCodec.decode(SecureProjectFiles.readText(root, MANIFEST_FILENAME, limits.manifestBytes), limits)
+            }
+        return ProjectDescriptor(id, manifest, ProjectHandle(id, identity))
+    }
 
     fun create(name: String): ProjectDescriptor {
         validateDirectoryName(name)
@@ -116,6 +148,7 @@ class ProjectCatalog private constructor(
 
     private fun validateDirectoryName(name: String) {
         ProjectManifest.validateName(name, limits)
+        require(!name.startsWith(STAGING_PREFIX) && !name.startsWith(REGISTRATION_PREFIX)) { "project name is reserved" }
     }
 
     private fun cleanupStaging(stagingName: String) {
@@ -182,6 +215,7 @@ class ProjectCatalog private constructor(
         private const val MAIN_FILENAME = "main.kt"
         private const val DEFAULT_MAIN = "fun main() {\n}\n"
         private const val STAGING_PREFIX = ".creating-"
+        private const val REGISTRATION_PREFIX = ".registered-"
         private val WRITE_OPTIONS: Set<OpenOption> =
             setOf(StandardOpenOption.WRITE, StandardOpenOption.CREATE_NEW, LinkOption.NOFOLLOW_LINKS)
     }

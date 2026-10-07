@@ -170,7 +170,7 @@ class ProjectTreeStore(
                     SecureProjectFiles.validateFilename(name)
                     add(name.toString())
                 }
-            }.filterNot { ignoreImportArtifacts && SecureProjectFiles.isImportArtifactName(it) }
+            }.filterNot { it.equals(".git", ignoreCase = true) || (ignoreImportArtifacts && SecureProjectFiles.isImportArtifactName(it)) }
                 .sortedWith(TomlSupport.utf8Comparator)
 
         names.forEach { name ->
