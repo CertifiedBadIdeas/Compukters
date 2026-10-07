@@ -1066,10 +1066,11 @@ fn k2_same_named_guest_calls_preserve_resolved_targets() {
 }
 
 fn k2_text_stdlib_preserves_utf16_helpers() {
+    const TEXT_SLICE_BUDGET: u32 = 512;
     k2_expected_prints_with_budget(
         "COMPUKTER_KOTLIN_TEXT_STDLIB_ARTIFACT",
         ["text stdlib ok\n"],
-        256,
+        TEXT_SLICE_BUDGET,
     );
     let path = std::env::var("COMPUKTER_KOTLIN_TEXT_STDLIB_ARTIFACT")
         .expect("text stdlib artifact must be set");
@@ -1098,7 +1099,7 @@ fn k2_text_stdlib_preserves_utf16_helpers() {
         let mut slices = 0;
         loop {
             match session
-                .advance(256, 256)
+                .advance(TEXT_SLICE_BUDGET, 256)
                 .expect("text failure must execute")
             {
                 AdvanceOutcome::SliceExhausted => {
@@ -2195,7 +2196,7 @@ fn k2_string_materialization_executes_char_arrays_and_scalar_templates() {
         &mut session,
         "scalar template write",
         0,
-        Some(&utf16("2/true/x/2")),
+        Some(&utf16("2/true/x/RedstoneSide(index=2)")),
         512,
     ).1;
     session

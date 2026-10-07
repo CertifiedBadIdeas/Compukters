@@ -235,7 +235,9 @@ representation`. IDE evidence: `DiagnosticQueryTest`, test `native MFVC analysis
 nominal types and members`, with and without attached library sources; checks diagnostics, nominal expression
 types and member completion. Scalar regression evidence: `testKotlinValueClassBoxesVmConformance` executes
 `value class boxes preserve nominal types nullable collections and iteration` and `value class boxes share
-canonical identity across precompiled addon functions`. Existing Guest boundaries still apply: secondary
+canonical identity across precompiled addon functions`. `testKotlinSubsetVmConformance` also verifies that
+string interpolation of `Redstone.left` renders the nominal `RedstoneSide(index=2)` value rather than its
+underlying scalar. Existing Guest boundaries still apply: secondary
 constructors, runtime generic instantiation and methods declaring their own type parameters are outside the
 subset. `@JvmInline` is deliberately rejected as JVM syntax.
 
