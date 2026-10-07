@@ -1350,11 +1350,65 @@ class IdeRendererStateTest {
                 prompt = IdePromptState(IdePromptKind.CreateProject, "demo", "Example error"),
             )
 
-        assertTrue(model.text.any { it.kind == IdeTextKind.Dialog && it.value == "demo_" })
+        assertTrue(model.text.any { it.kind == IdeTextKind.Dialog && it.value == "demo" })
+        assertTrue(model.text.any { it.kind == IdeTextKind.Dialog && it.value == "Directory name:" })
         assertTrue(model.text.any { it.kind == IdeTextKind.Dialog && it.value == "Example error" })
         assertTrue(model.hitTargets.any { it.action == IdeHitAction.Confirm && it.enabled })
         assertTrue(model.hitTargets.any { it.action == IdeHitAction.Dismiss && it.enabled })
         assertTrue(model.hitTargets.filter { it.focusGroup == IdeFocusGroup.Page }.all { !it.enabled })
+    }
+
+    @Test
+    fun `prompt field stays visible when empty and keeps long input caret inside its border`() {
+        val state = IdeViewState.startPage(emptyList())
+        val kinds =
+            listOf(
+                IdePromptKind.CreateProject,
+                IdePromptKind.OpenExisting,
+                IdePromptKind.CloneRemote,
+                IdePromptKind.CloneName("https://example.com/demo.git"),
+                IdePromptKind.GitRemoteUrl,
+                IdePromptKind.GitBranch,
+                IdePromptKind.GitCommitMessage,
+                IdePromptKind.GitCommitName("message"),
+                IdePromptKind.GitCommitEmail("message", "author"),
+                IdePromptKind.GitUsername,
+                IdePromptKind.GitToken("player"),
+                IdePromptKind.CreateText,
+                IdePromptKind.CreateDirectory,
+                IdePromptKind.Rename(ProjectPath.file("src/main.kt")),
+                IdePromptKind.RenameSymbol,
+            )
+        val small = IdeRenderGeometry.compute(300, 200, 96, 64, true, true, IdeCodeFontProfile.DEFAULT)
+        for (kind in kinds) {
+            for (value in listOf("", "long😀value".repeat(60))) {
+                val prompt = IdePromptState(kind, value)
+                val model = IdeRenderer.extract(state, small, prompt = prompt)
+                val border = model.fills.single { it.kind == IdeFillKind.Border && it.color == IdeColors.ACCENT }
+                val inside = model.fills.single { it.kind == IdeFillKind.Background && border.bounds.contains(it.bounds) }
+                val caret = model.fills.single { it.kind == IdeFillKind.Caret && it.zIndex > border.zIndex }
+                val input = model.text.single { it.kind == IdeTextKind.Dialog && it.clip == inside.bounds }
+                assertTrue(prompt.fieldLabel.isNotBlank())
+                assertTrue(model.text.any { it.value == prompt.fieldLabel + ":" })
+                assertTrue(inside.bounds.contains(caret.bounds))
+                assertTrue(input.x >= inside.bounds.left && input.y >= inside.bounds.top)
+                assertTrue(
+                    model.panels
+                        .single { it.kind == IdePanelKind.Dialog }
+                        .bounds
+                        .contains(border.bounds),
+                )
+                if (value.isEmpty()) {
+                    assertEquals("", input.value)
+                } else if (kind is IdePromptKind.GitToken) {
+                    assertFalse(model.text.any { it.value.contains("long") })
+                } else {
+                    assertTrue(input.value.endsWith("value"))
+                    assertTrue(input.value.length < value.length)
+                    assertFalse(input.value.first().isLowSurrogate())
+                }
+            }
+        }
     }
 
     @Test
