@@ -43,6 +43,7 @@ caffeine-kotlin = "3.3.0"
 intellij-coroutines = "1.8.0-intellij-13"
 intellij-platform = "251.27812.49"
 xz = "1.12"
+jgit = "7.8.0.202609011348-r"
 
 # 26.1
 minecraft-v261 = "26.1.2"
@@ -55,6 +56,8 @@ flywheel-v1211 = "1.0.6"
 registrate-v1211 = "MC1.21-1.3.0+67"
 
 [libraries]
+
+jgit = { module = "org.eclipse.jgit:org.eclipse.jgit", version.ref = "jgit" }
 
 kotlin-logging = { module = "io.github.oshai:kotlin-logging-jvm", version.ref = "kotlin-logging" }
 slf4j-api = { module = "org.slf4j:slf4j-api", version.ref = "slf4j" }
