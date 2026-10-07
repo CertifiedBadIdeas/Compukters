@@ -29,6 +29,16 @@ filesystem generation, payload lengths and SHA-256 cover the execution and host 
 Rust exposes contextual capture/restore and bounded atomic store methods through C ABI 21, JNI and FFM. In-game lifecycle integration remains under development.
 The native reference is `host/compukter-vm/docs/architecture/computer-checkpoints.md`.
 
+The core host descriptor uses little-endian version 1 (`CPTH`, u32 version), a checked input-wait flag,
+cumulative granted Guest/maintenance counters and saturation flag, confirmed redstone output, live process
+IDs (root 0, at most 32), and at most 256 timers. Each timer carries task/request identity, process ID,
+original duration and remaining ticks. A length-prefixed addon resource payload is bounded to 1 MiB.
+Decode rejects invalid flags/counts, duplicate timer identities, unknown process scopes, invalid durations,
+truncation and trailing bytes. These bytes share the native envelope integrity check; they never mirror VM state.
+Restore parks execution until resource rebinding and durable consumption finish, then recreates timer deadlines
+relative to the activation tick. Cumulative diagnostics survive, while per-tick CPU grants and old compiler
+epochs do not. Actor and Minecraft lifecycle use of this host contract is still under development.
+
 ## Native Runtime bundles
 
 Native Runtime platform bundles use manifest schema 2 and contain the FFI and JNI native libraries for one
