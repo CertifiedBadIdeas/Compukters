@@ -432,7 +432,6 @@ class MinimalScriptLoweringTest {
         withAdapter { adapter ->
             listOf(
                 "fun main() { val operation: (() -> Unit)? = null }",
-                "fun main() { val text: String? = null; val value = text!! }",
             ).forEach { source ->
                 val result = adapter.compile(request(source))
                 val errors = result.diagnostics.filter { it.severity.name == "ERROR" }
@@ -2412,12 +2411,17 @@ class MinimalScriptLoweringTest {
                 data class Failed(val reason: Reason, val diagnostic: String) : Result
                 enum class Reason { NOT_FOUND, TRAPPED }
 
+                fun exitCode(value: Result?): Int = (value as? Exited)?.code ?: 0
+
                 fun classify(value: Result): Int = when (value) {
                     is Exited -> value.code
                     is Failed -> if (value.reason == Reason.NOT_FOUND) value.diagnostic.length else -1
                 }
 
                 fun main() {
+                    check(exitCode(Exited(7)) == 7)
+                    check(exitCode(Failed(Reason.TRAPPED, "ignored")) == 0)
+                    check(exitCode(null) == 0)
                     println(classify(Exited(7)))
                     println(classify(Failed(Reason.NOT_FOUND, "missing")))
                     println(classify(Failed(Reason.TRAPPED, "ignored")))
@@ -4143,6 +4147,15 @@ class MinimalScriptLoweringTest {
                     require((length ?: 0) == 5)
                     val noText: String? = null
                     require(noText?.length == null)
+                    require(text!! == "seven")
+                    var nullAssertionFailed = false
+                    try {
+                        val value = noText!!
+                        require(value == "unreachable")
+                    } catch (expected: NullPointerException) {
+                        nullAssertionFailed = true
+                    }
+                    require(nullAssertionFailed)
                     var changing: Int? = null
                     changing = 7
                     require(changing == first)
@@ -4391,7 +4404,7 @@ class MinimalScriptLoweringTest {
         }
 
     @Test
-    fun `guest object subset rejects generic secondary uninitialized stateful and explicit cast shapes`() =
+    fun `guest object subset rejects generic secondary uninitialized and stateful shapes`() =
         withAdapter { adapter ->
             val unsupported =
                 listOf(
@@ -4399,7 +4412,6 @@ class MinimalScriptLoweringTest {
                     "class Secondary(val value: Int) { constructor() : this(0) }\nfun main() { Secondary() }",
                     "class Uninitialized { lateinit var value: String }\nfun main() { Uninitialized() }",
                     "enum class Stateful(val code: Int) { ONE(1) }\nfun main() { Stateful.ONE }",
-                    "sealed interface Value\ndata class NumberValue(val value: Int) : Value\nfun read(value: Value): Int = (value as? NumberValue)?.value ?: 0\nfun main() { read(NumberValue(1)) }",
                 )
 
             unsupported.forEach { source ->

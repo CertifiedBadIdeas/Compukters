@@ -54,7 +54,8 @@ Nullable references can be compared with `null`, selected with `?:`, and accesse
 a supported reference type. Both operators evaluate the left side once and skip the unused branch. Safe calls
 with an Int result, such as `text?.length`, produce a boxed `Int?`. Nullable primitive results use their
 distinct nominal scalar wrappers; non-null assertions (`!!`) on nullable value classes recover the direct
-layout and are exercised by `testKotlinMfvcVmConformance`. Statically-null and nullable-function shapes are
+layout and are exercised by `testKotlinMfvcVmConformance`. Non-null assertions on references preserve values and throw `NullPointerException` for null, including
+statically-null references, in `testKotlinNullableCollectionsVmConformance`. Nullable-function shapes are
 still rejected by the focused negative fixture. Int-result safe-call evidence:
 `testKotlinNullableCollectionsVmConformance`. Reference-result evidence:
 [`MinimalScriptLoweringTest`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/compiler-k2/src/test/kotlin/ru/lazyhat/compukters/compiler/worker/k2/MinimalScriptLoweringTest.kt),

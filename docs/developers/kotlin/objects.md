@@ -167,7 +167,7 @@ These shapes are rejected before artifact publication.
 
 **Evidence:**
 [`MinimalScriptLoweringTest`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/compiler-k2/src/test/kotlin/ru/lazyhat/compukters/compiler/worker/k2/MinimalScriptLoweringTest.kt),
-test `guest object subset rejects generic secondary uninitialized stateful and explicit cast shapes`.
+test `guest object subset rejects generic secondary uninitialized and stateful shapes`.
 
 **Related work:** not scheduled
 
@@ -178,7 +178,9 @@ test `guest object subset rejects generic secondary uninitialized stateful and e
 `is` checks and compiler-generated smart casts over admitted references lower to VM type checks and checked
 casts. Boxed `Int` values support `is Int`, `is Int?`, and explicit checked `as Int` / `as Int?`. Checked
 casts between admitted reference types are supported. Safe casts (`as?`) are exercised for imported value
-classes by `testKotlinMfvcVmConformance`; this does not establish every reference-cast shape. Nullable type
+classes by `testKotlinMfvcVmConformance`. The sealed-reference fixture in
+`testKotlinObjectModelVmConformance` checks successful, incompatible and null casts followed by safe calls;
+this does not establish every reference-cast shape. Nullable type
 tests admit null. Reference `===`/`!==` compare identity directly, including null, without artificial `Any`
 casts. Supported arrays preserve identity across aliases and differ from fresh copies, including comparisons
 between arrays with nullable and non-null element types. Operands evaluate left-to-right once. Heterogeneous
