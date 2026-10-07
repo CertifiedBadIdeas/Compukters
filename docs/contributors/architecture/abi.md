@@ -21,6 +21,14 @@ This reference groups versioned representation boundaries by the version that in
 | Kotlin metadata carrier | Private format 6 | `platform-k2` |
 | IDE analysis | Protocol 15 | `ide-analysis-client` and `ide-analysis-k2` |
 
+## Execution checkpoint development
+
+The VM has an internal logical computer checkpoint envelope (format 1), owned by
+`host/compukter-vm/src/checkpoint/envelope.rs`. Its version, native runtime/schema identity, computer ID,
+filesystem generation, payload lengths and SHA-256 cover the execution and host descriptor bytes together.
+It currently has no public transport or world-store publication API; it does not yet provide in-game hibernation.
+The native reference is `host/compukter-vm/docs/architecture/computer-checkpoints.md`.
+
 ## Native Runtime bundles
 
 Native Runtime platform bundles use manifest schema 2 and contain the FFI and JNI native libraries for one
