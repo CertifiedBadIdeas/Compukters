@@ -25,6 +25,7 @@ import ru.lazyhat.compukters.compiler.artifact.analysis.runtimeExceptionKinds
 import ru.lazyhat.compukters.compiler.artifact.analysis.successors
 import ru.lazyhat.compukters.compiler.artifact.analysis.writtenRegisters
 import ru.lazyhat.compukters.compiler.artifact.model.AbiVersion
+import ru.lazyhat.compukters.compiler.artifact.model.ArrayStorage
 import ru.lazyhat.compukters.compiler.artifact.model.Artifact
 import ru.lazyhat.compukters.compiler.artifact.model.BlockId
 import ru.lazyhat.compukters.compiler.artifact.model.Destination
@@ -166,12 +167,13 @@ internal fun validateArtifact(
                                     val sourceType = artifact.modules[sourceIdentity.module].types[sourceIdentity.type]
                                     val destinationType = artifact.modules[destinationIdentity.module].types[destinationIdentity.type]
                                     if (sourceType is NominalType.Array && destinationType is NominalType.Array) {
-                                        valueAssignable(
-                                            sourceIdentity.module,
-                                            sourceType.element,
-                                            destinationIdentity.module,
-                                            destinationType.element,
-                                        ) &&
+                                        sourceType.storage == destinationType.storage &&
+                                            valueAssignable(
+                                                sourceIdentity.module,
+                                                sourceType.element,
+                                                destinationIdentity.module,
+                                                destinationType.element,
+                                            ) &&
                                             valueAssignable(
                                                 destinationIdentity.module,
                                                 destinationType.element,
@@ -210,7 +212,8 @@ internal fun validateArtifact(
                     val leftType = artifact.modules[leftIdentity.module].types[leftIdentity.type]
                     val rightType = artifact.modules[rightIdentity.module].types[rightIdentity.type]
                     if (leftType is NominalType.Array && rightType is NominalType.Array) {
-                        valueTypesMatch(leftIdentity.module, leftType.element, rightIdentity.module, rightType.element)
+                        leftType.storage == rightType.storage &&
+                            valueTypesMatch(leftIdentity.module, leftType.element, rightIdentity.module, rightType.element)
                     } else {
                         leftIdentity == rightIdentity
                     }
@@ -669,6 +672,15 @@ internal fun validateArtifact(
             }
         }
         module.types.forEachIndexed { typeIndex, nominal ->
+            if (nominal is NominalType.Array && nominal.storage != ArrayStorage.NATURAL) {
+                val location = ArtifactWriteLocation(moduleLocation, "TYPES", typeIndex.toUInt())
+                if (artifact.minimumRuntimeAbi < AbiVersion(1u, 14u)) {
+                    add(ArtifactWriteErrorCode.INCOMPATIBLE_FEATURE_SET, "explicit array storage requires Runtime ABI 1.14", location)
+                }
+                if (nominal.element != nominal.storage.requiredElement) {
+                    add(ArtifactWriteErrorCode.BAD_REFERENCE, "array storage does not match element scalar kind", location)
+                }
+            }
             if (nominal is NominalType.Array && nominal.superType != null) {
                 val location = ArtifactWriteLocation(moduleLocation, "TYPES", typeIndex.toUInt())
                 val identity = resolveType(moduleIndex, nominal.superType)
@@ -1647,8 +1659,16 @@ internal fun validateArtifact(
                             val destinationElement = arrayElement(destination, "array copy destination")
                             val sourceModule = (source as? ValueType.Ref)?.let { resolveType(moduleIndex, it.type)?.module }
                             val destinationModule = (destination as? ValueType.Ref)?.let { resolveType(moduleIndex, it.type)?.module }
+
+                            fun storage(value: ValueType?): ArrayStorage? =
+                                (value as? ValueType.Ref)?.let { resolveType(moduleIndex, it.type) }?.let {
+                                    (artifact.modules[it.module].types[it.type] as? NominalType.Array)?.storage
+                                }
                             if (sourceElement != null && destinationElement != null && sourceModule != null && destinationModule != null &&
-                                !valueAssignable(sourceModule, sourceElement, destinationModule, destinationElement)
+                                (
+                                    storage(source) != storage(destination) ||
+                                        !valueAssignable(sourceModule, sourceElement, destinationModule, destinationElement)
+                                )
                             ) {
                                 add(ArtifactWriteErrorCode.INVALID_RANGE, "array copy elements are incompatible", location)
                             }

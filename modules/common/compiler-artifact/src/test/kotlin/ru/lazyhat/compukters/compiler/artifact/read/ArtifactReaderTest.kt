@@ -21,6 +21,7 @@ package ru.lazyhat.compukters.compiler.artifact.read
 import ru.lazyhat.compukters.compiler.artifact.analysis.ReferenceLiveness
 import ru.lazyhat.compukters.compiler.artifact.analysis.runtimeExceptionKinds
 import ru.lazyhat.compukters.compiler.artifact.model.AbiVersion
+import ru.lazyhat.compukters.compiler.artifact.model.ArrayStorage
 import ru.lazyhat.compukters.compiler.artifact.model.Block
 import ru.lazyhat.compukters.compiler.artifact.model.BlockId
 import ru.lazyhat.compukters.compiler.artifact.model.DebugEntry
@@ -55,6 +56,38 @@ import kotlin.test.assertFailsWith
 import kotlin.test.assertIs
 
 class ArtifactReaderTest {
+    @Test
+    fun `explicit array storage round trips and rejects legacy ABI or mismatched scalar kinds`() {
+        for (storage in ArrayStorage.entries.filter { it != ArrayStorage.NATURAL }) {
+            val original = languageRuntimeArtifact()
+            val array = NominalType.Array(StringId.of(0u), requireNotNull(storage.requiredElement), storage = storage)
+            val module = original.modules.single()
+            val source =
+                original.copy(
+                    minimumRuntimeAbi = AbiVersion(1u, 14u),
+                    modules = listOf(module.copy(types = module.types + array)),
+                )
+            val bytes = assertIs<ArtifactWriteResult.Success>(ArtifactWriter.write(source)).bytes
+            assertEquals(
+                array,
+                ArtifactReader
+                    .read(bytes)
+                    .modules
+                    .single()
+                    .types
+                    .last(),
+            )
+            assertIs<ArtifactWriteResult.Failure>(ArtifactWriter.write(source.copy(minimumRuntimeAbi = AbiVersion(1u, 13u))))
+            assertIs<ArtifactWriteResult.Failure>(
+                ArtifactWriter.write(
+                    source.copy(
+                        modules = listOf(module.copy(types = module.types + array.copy(element = ValueType.Bool))),
+                    ),
+                ),
+            )
+        }
+    }
+
     @Test
     fun `integer division requires its factory role and rebuild ABI but floating division does not`() {
         val source = languageRuntimeArtifact()

@@ -258,8 +258,13 @@ private fun decodeType(bytes: ByteArray): NominalType {
             }
 
             2u -> {
-                require(flags and 1u.inv() == 0u && arity == 0.toUShort())
-                NominalType.Array(name, c.valueType(), if (flags and 1u == 0u) null else c.u32().typeRef())
+                require(flags and 15u.inv() == 0u && arity == 0.toUShort())
+                NominalType.Array(
+                    name,
+                    c.valueType(),
+                    if (flags and 1u == 0u) null else c.u32().typeRef(),
+                    ArrayStorage.entries.single { it.artifactTag == flags shr 1 },
+                )
             }
 
             3u -> {

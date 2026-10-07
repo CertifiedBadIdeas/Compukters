@@ -393,7 +393,8 @@ internal class ReachabilityGraph(
                 val leftType = artifact.modules[leftIdentity.first].types[leftIdentity.second]
                 val rightType = artifact.modules[rightIdentity.first].types[rightIdentity.second]
                 if (leftType is NominalType.Array && rightType is NominalType.Array) {
-                    valueTypesMatch(leftIdentity.first, leftType.element, rightIdentity.first, rightType.element)
+                    leftType.storage == rightType.storage &&
+                        valueTypesMatch(leftIdentity.first, leftType.element, rightIdentity.first, rightType.element)
                 } else {
                     leftIdentity == rightIdentity
                 }

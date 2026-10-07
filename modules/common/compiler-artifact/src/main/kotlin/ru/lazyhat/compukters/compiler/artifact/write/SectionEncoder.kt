@@ -201,7 +201,7 @@ private fun encodeType(
 
                 is NominalType.Array -> {
                     writeU8(2u)
-                    writeU8(if (type.superType == null) 0u else 1u)
+                    writeU8((if (type.superType == null) 0u else 1u) or (type.storage.artifactTag shl 1))
                     writeU16(0u)
                     writeU32(type.name.value)
                     writeValueType(type.element)
