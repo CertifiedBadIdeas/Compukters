@@ -79,6 +79,10 @@ object CanonicalTrustedIntrinsics {
             primitive("kotlin", "builtins", "kotlin", "Function2.invoke", "fun(P1,P2):R")
             primitive("stdlib", "core", "kotlin.collections", "listOf", "fun(T):List<T>")
             primitive("stdlib", "core", "kotlin.collections", "emptyList", "fun():List<T>")
+            primitive("stdlib", "core", "kotlin.collections", "mapOf", "fun(Pair<K,V>):Map<K,V>")
+            primitive("stdlib", "core", "kotlin.collections", "mutableMapOf", "fun(Pair<K,V>):MutableMap<K,V>")
+            primitive("stdlib", "core", "kotlin.collections", "setOf", "fun(T):Set<T>")
+            primitive("stdlib", "core", "kotlin.collections", "mutableSetOf", "fun(T):MutableSet<T>")
             primitive("stdlib", "core", "kotlin.collections", "mutableListStorage", "fun(Int):MutableListStorage<T>")
             GuestPrimitive.entries.filter { it.numeric }.forEach { owner ->
                 GuestPrimitive.entries.filter { it.numeric && it.unsigned == owner.unsigned }.forEach { operand ->

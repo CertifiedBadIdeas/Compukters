@@ -268,3 +268,18 @@ public operator fun <K, V> Map.Entry<K, V>.component2(): V = value
 
 /** Creates a fresh empty map with a read-only view. */
 public fun <K, V> emptyMap(): Map<K, V> = HashMap<K, V>(0)
+
+/** Creates a fresh read-only map view; later equal keys replace earlier values. */
+public external fun <K, V> mapOf(vararg pairs: Pair<K, V>): Map<K, V>
+
+/** Creates a fresh mutable map; later equal keys replace earlier values. */
+public external fun <K, V> mutableMapOf(vararg pairs: Pair<K, V>): MutableMap<K, V>
+
+/** Returns a non-null stored value, or computes and stores a default for an absent or null value. */
+public inline fun <K, V> MutableMap<K, V>.getOrPut(key: K, defaultValue: () -> V): V {
+    val value = get(key)
+    if (value != null) return value
+    val answer = defaultValue()
+    put(key, answer)
+    return answer
+}

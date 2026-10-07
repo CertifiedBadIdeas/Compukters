@@ -24,7 +24,7 @@ This reference groups versioned representation boundaries by the version that in
 ## Guest hash collection module identities
 
 Guest hash collections introduce public Set/Map contracts in `kotlin:builtins` 1.9.0 and ordinary source
-implementations in `stdlib:core` 1.10.0. Their module content identities change; bundle format 9, module
+implementations, Pair and populated factories in `stdlib:core` 1.11.0. Their module content identities change; bundle format 9, module
 format 5, platform ABI 3, Runtime ABI 1.15 and native C ABI 20 remain unchanged. Programs and dependent
 platform/addon inputs must resolve the matching module identities. Hashing, generic equality, managed
 objects and specialization reuse existing instructions and representation rules.

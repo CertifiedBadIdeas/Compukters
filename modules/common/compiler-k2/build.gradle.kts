@@ -1193,6 +1193,10 @@ val generateHashCollectionsConformanceArtifact = tasks.register<Test>("generateH
     filter.includeTestsMatching("*hash collections preserve nominal value class keys*")
     filter.includeTestsMatching("*hash collections preserve primitive and nullable storage*")
     filter.includeTestsMatching("*hash collections support all twelve primitive families*")
+    filter.includeTestsMatching("*hash collection Pair API executes without collection construction*")
+    filter.includeTestsMatching("*hash collection spread factories report a target diagnostic*")
+    filter.includeTestsMatching("*hash collection factories preserve arguments pairs and defaults*")
+    filter.includeTestsMatching("*hash collection factories preserve value classes and generic forwarding*")
     filter.includeTestsMatching("*mutable hash collections remain invariant*")
     filter.includeTestsMatching("*hash collections retain ordinary heap quota failures*")
     filter.includeTestsMatching("*hash collection unsupported widening reports a target diagnostic*")
@@ -1202,6 +1206,9 @@ val generateHashCollectionsConformanceArtifact = tasks.register<Test>("generateH
     outputs.file(artifact.map { it.asFile.resolveSibling("${it.asFile.name}.values.cpkt") })
     outputs.file(artifact.map { it.asFile.resolveSibling("${it.asFile.name}.primitives.cpkt") })
     outputs.file(artifact.map { it.asFile.resolveSibling("${it.asFile.name}.failure.cpkt") })
+    outputs.file(artifact.map { it.asFile.resolveSibling("${it.asFile.name}.factories.cpkt") })
+    outputs.file(artifact.map { it.asFile.resolveSibling("${it.asFile.name}.factory-values.cpkt") })
+    outputs.file(artifact.map { it.asFile.resolveSibling("${it.asFile.name}.pair.cpkt") })
     (0..5).forEach { batch -> outputs.file(artifact.map { it.asFile.resolveSibling("hash-scalars-$batch.cpkt") }) }
     doFirst {
         systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)

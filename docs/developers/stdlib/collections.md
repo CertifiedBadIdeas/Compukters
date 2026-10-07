@@ -252,6 +252,25 @@ element returns false. `emptyMap<K, V>()` and `emptySet<T>()` create fresh empty
 views. Read-only views are aliases rather than immutable snapshots. Map views do not expose collection
 mutation operations.
 
+`mapOf<K, V>(vararg pairs: Pair<K, V>)`, `mutableMapOf`, `setOf<T>(vararg elements: T)` and `mutableSetOf`
+accept direct arguments, including empty forms with explicit types. They create fresh hash collections;
+read-only results remain aliases of mutable objects. Every argument runs once in source order before any
+hashing/equality callbacks from population. The last equal map key wins; equal set elements coalesce.
+Spread arguments remain unsupported and produce a target diagnostic.
+
+`Pair<A, B>(first, second)` and infix `first to second` preserve concrete component types, including nullable
+primitives, Guest references and nominal value classes. Pairs support `first`, `second`, destructuring,
+`copy(first, second)` with both arguments explicit, component-wise equality/hash and text `(first, second)`. Pair type parameters are invariant in the
+current Guest generic-class subset; implicit component-type widening remains unsupported. `PairComponents` is its sealed read-only
+component view; reads through this universal view use the existing scalar/value-class boxes.
+
+Inline `MutableMap<K, V>.getOrPut(key, defaultValue)` returns an existing non-null value without invoking the
+callback. For absent keys or stored nulls it invokes the callback once and stores its result, including null.
+A null default is recomputed on the next call. Exceptions and non-local returns skip the implicit insertion;
+explicit mutations inside the callback retain their normal effects. If the callback inserts the same key,
+its returned default replaces that value. The operation is not an atomic synchronization primitive.
+These APIs are available in `stdlib:core` 1.11.0 without a VM ABI change.
+
 All twelve primitive families and supported reference types can be keys, values and elements. Null keys
 and elements hash to zero. Equality and hashing use the existing generic Kotlin semantics: floating NaNs
 coalesce, while positive and negative zero remain distinct. User `equals` and `hashCode` overrides retain
@@ -272,8 +291,7 @@ removal requires one preceding `next` and preserves that iterator's traversal. I
 `IllegalStateException`; exhaustion throws `NoSuchElementException`. Negative capacities or capacities above
 1,073,741,824 throw `IllegalArgumentException`; actual allocation remains subject to the much smaller VM heap.
 
-The first subset does not implement populated `mapOf`/`setOf` factories, `Pair`/`to` syntax, bulk operations,
-mutable key/value/entry views, structural collection or entry equality/hashing/text, linked/sorted collections,
+The current subset does not implement spread factories, bulk operations, mutable key/value/entry views, structural collection or entry equality/hashing/text, linked/sorted collections,
 or collection type-argument widening. Retain exact key/value/element types in read-only views; for example,
 `HashSet<Int>` to `Set<Int>` works, while `Set<Int>` to `Set<Any>` and `Map<String, Int>` to `Map<String, Any>`
 produce a target diagnostic. Mutable contracts remain invariant.
@@ -286,7 +304,12 @@ ordinary heap quota failures`, executed by `testKotlinHashCollectionsVmConforman
 diagnostic`. IDE analysis is covered by `DiagnosticQueryTest`, test `hash collection analysis admits typed
 and value class keys`, with and without attached platform sources.
 
-**Related work:** [#705](https://github.com/CertifiedBadIdeas/Compukters/issues/705).
+Factory/default evidence: `hash collection factories preserve arguments pairs and defaults` and
+`hash collections support all twelve primitive families`, executed by `testKotlinHashCollectionsVmConformance`.
+The IDE diagnostic test above also covers factories, Pair and getOrPut with and without attached sources.
+
+**Related work:** [#705](https://github.com/CertifiedBadIdeas/Compukters/issues/705),
+[#707](https://github.com/CertifiedBadIdeas/Compukters/issues/707).
 
 ### Other standard collections and functional helpers
 

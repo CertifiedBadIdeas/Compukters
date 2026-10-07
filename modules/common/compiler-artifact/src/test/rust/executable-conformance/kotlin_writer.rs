@@ -69,6 +69,9 @@ fn main() {
         "list-any" => k2_int_list_covariance_boxes_universal_reads(),
         "mutable-list" => k2_mutable_list_preserves_growth_mutation_and_views(),
         "hash-collections" => {
+            k2_expected_prints_with_budget("COMPUKTER_KOTLIN_HASH_PAIR_ARTIFACT", ["pair ok\n"], 256);
+            k2_expected_prints_with_budget("COMPUKTER_KOTLIN_HASH_FACTORY_VALUES_ARTIFACT", ["hash factory values ok\n"], 256);
+            k2_expected_prints_with_budget("COMPUKTER_KOTLIN_HASH_FACTORIES_ARTIFACT", ["hash factories ok\n"], 256);
             k2_expected_prints_with_budget("COMPUKTER_KOTLIN_HASH_COLLECTIONS_ARTIFACT", ["hash collections ok\n"], 128);
             k2_expected_prints_with_budget("COMPUKTER_KOTLIN_HASH_VALUES_ARTIFACT", ["hash value classes ok\n"], 64);
             k2_expected_prints_with_budget("COMPUKTER_KOTLIN_HASH_PRIMITIVES_ARTIFACT", ["hash primitive storage ok\n"], 64);
