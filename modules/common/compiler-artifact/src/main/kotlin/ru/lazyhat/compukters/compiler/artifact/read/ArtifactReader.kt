@@ -27,7 +27,13 @@ import java.security.MessageDigest
 
 /** Strict inverse of the canonical CPKT v3 writer. */
 object ArtifactReader {
-    fun read(bytes: ByteArray): Artifact {
+    fun read(bytes: ByteArray): Artifact = read(bytes, 16 * 1024 * 1024)
+
+    fun read(
+        bytes: ByteArray,
+        maximumExpandedRootBytes: Int,
+    ): Artifact {
+        require(maximumExpandedRootBytes >= 0) { "root expansion budget must be nonnegative" }
         require(bytes.size >= 96) { "artifact is truncated" }
         val header = Cursor(bytes, 0, 64)
         require(header.bytes(4).contentEquals(MAGIC)) { "invalid artifact magic" }
@@ -72,7 +78,7 @@ object ArtifactReader {
                 require(
                     flags ==
                         when {
-                            kind == DEBUG_PATHS -> 1u
+                            kind == DEBUG_PATHS || kind == SAFEPOINT_ROOT_RANGES -> 1u
                             kind == DEBUG || kind >= 0x8000 -> 0u
                             else -> 3u
                         },
@@ -83,8 +89,22 @@ object ArtifactReader {
         require(sections.map { it.scope to it.kind }.toSet().size == sections.size) { "duplicate artifact section" }
         val manifest = decodeManifest(sections.singleSection(MANIFEST, 0).payload)
         val moduleRecords = indexed(sections.singleSection(MODULES, 0)).map(::decodeModuleRecord)
-        require(sections.filter { it.kind == DEBUG_SOURCE_POSITIONS || it.kind == DEBUG_PATHS }.all { it.scope in 1..moduleRecords.size }) {
+        require(
+            sections.filter { it.kind == DEBUG_SOURCE_POSITIONS || it.kind == DEBUG_PATHS || it.kind == SAFEPOINT_ROOT_RANGES }.all {
+                it.scope in
+                    1..moduleRecords.size
+            },
+        ) {
             "debug source positions must have module scope"
+        }
+        if (sections.any { it.kind == SAFEPOINT_ROOT_RANGES }) {
+            val expandedBytes =
+                sections.filter { it.kind == SAFEPOINT_ROOTS }.sumOf { roots ->
+                    sections.singleOrNull { it.kind == SAFEPOINT_ROOT_RANGES && it.scope == roots.scope }?.let {
+                        decodeRootRangeMarker(it).second
+                    } ?: roots.payload.size.toLong()
+                }
+            require(expandedBytes <= maximumExpandedRootBytes) { "expanded safepoint roots exceed byte limit" }
         }
         val capabilities = indexed(sections.singleSection(CAPABILITIES, 0)).map(::decodeCapability)
         val modules = moduleRecords.indices.map { index -> decodeModule(moduleRecords[index], sections, index + 1) }
@@ -176,7 +196,16 @@ private fun decodeModule(
     val blockRecords = records(BLOCKS)
     require(blockRecords.size == code.size) { "BLOCKS and CODE counts differ" }
     val decodedFunctions = records(FUNCTIONS).map(::decodeFunction)
-    val rootsByFunction = records(SAFEPOINT_ROOTS).map(::decodeSafepointRoots).groupBy { it.function }
+    val rootRows = records(SAFEPOINT_ROOTS)
+    val marker = sections.singleOrNull { it.kind == SAFEPOINT_ROOT_RANGES && it.scope == scope }
+    val rootsByFunction =
+        (
+            if (marker == null) {
+                rootRows.map(::decodeSafepointRoots)
+            } else {
+                decodeRootRanges(rootRows, marker, blockRecords, code, decodedFunctions.size)
+            }
+        ).groupBy { it.function }
     require(rootsByFunction.keys.all { it.value.toInt() in decodedFunctions.indices }) { "root map owner is outside function table" }
     val paths =
         sections.singleOrNull { it.kind == DEBUG_PATHS && it.scope == scope }?.let(::indexed)?.map {
@@ -428,6 +457,73 @@ private fun decodeFunction(bytes: ByteArray): ru.lazyhat.compukters.compiler.art
             exceptionCount,
         )
     require(c.done())
+    return result
+}
+
+private fun decodeRootRangeMarker(section: Section): Pair<Int, Long> {
+    val c = Cursor(section.payload)
+    require(section.count == 1 && c.u32() == 1u) { "unsupported safepoint range encoding" }
+    val count = c.u32().checkedInt("expanded root count")
+    val length = c.u64()
+    require(c.done() && count in 1..1_000_000 && length in 24uL..Int.MAX_VALUE.toULong()) { "invalid root range marker" }
+    return count to length.toLong()
+}
+
+private fun decodeRootRanges(
+    rows: List<ByteArray>,
+    marker: Section,
+    blocks: List<ByteArray>,
+    code: List<List<Instruction>>,
+    functionCount: Int,
+): List<FunctionRoots> {
+    val (count, length) = decodeRootRangeMarker(marker)
+    val result = mutableListOf<FunctionRoots>()
+    var recordBytes = 0L
+    var previous: FunctionRoots? = null
+    rows.forEach { bytes ->
+        val c = Cursor(bytes)
+        val function = FunctionId.of(c.u32())
+        val block = BlockId.of(c.u32())
+        val first = c.u32()
+        val run = c.u32()
+        val references = c.u16().toInt()
+        require(
+            c.u16() == 0u && function.value < functionCount.toUInt() && block.value.toInt() in code.indices,
+        ) { "invalid root range owner" }
+        require(Cursor(blocks[block.value.toInt()]).u32() == function.value) { "root range block owner mismatch" }
+        require(
+            run > 0u && first.toULong() + run <= code[block.value.toInt()].size.toULong() &&
+                result.size.toLong() + run.toLong() <= count,
+        ) { "invalid or over-limit root range" }
+        val roots = List(references) { ValueComponent(RegisterId.of(c.u16()), c.u16().toUShort()) }
+        require(c.done()) { "invalid root range width" }
+        require(
+            roots.zipWithNext().all { (left, right) ->
+                compareValuesBy(left, right, { it.value.value }, { it.component }) < 0
+            },
+        ) { "unordered root components" }
+        val prior = previous
+        if (prior != null) {
+            require(
+                compareValuesBy(
+                    prior,
+                    FunctionRoots(function, SafepointRoots(block, first, roots)),
+                    { it.function.value },
+                    { it.roots.block.value },
+                    { it.roots.instructionBoundary },
+                ) < 0,
+            ) { "overlapping root ranges" }
+            require(
+                prior.function != function || prior.roots.block != block ||
+                    prior.roots.instructionBoundary.toULong() + 1u != first.toULong() || prior.roots.references != roots,
+            ) { "unmerged root ranges" }
+        }
+        recordBytes += run.toLong() * (16L + 4L * references)
+        require(((16L + 4L * (count + 1L) + 7L) and -8L) + recordBytes <= length) { "expanded root byte limit exceeded" }
+        repeat(run.toInt()) { offset -> result += FunctionRoots(function, SafepointRoots(block, first + offset.toUInt(), roots)) }
+        previous = result.last()
+    }
+    require(result.size == count && ((16L + 4L * (count + 1L) + 7L) and -8L) + recordBytes == length) { "expanded root counts disagree" }
     return result
 }
 
@@ -1130,6 +1226,7 @@ private const val CODE = 0x0108
 private const val EXCEPTIONS = 0x0109
 private const val UTF16_LITERALS = 0x010a
 private const val SAFEPOINT_ROOTS = 0x010b
+private const val SAFEPOINT_ROOT_RANGES = 0x0112
 private const val DEBUG = 0x0110
 
 private fun canonicalSourcePath(path: String): Boolean =

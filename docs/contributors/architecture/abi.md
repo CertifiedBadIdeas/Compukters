@@ -75,6 +75,36 @@ unknown versions/tags, invalid widths/Boolean values, over-limit strings and tra
 pending request. Existing scalar resume exports remain available. The SDK can now generate Long, Double and Char
 completion handlers, and both JNI and FFM dispatch those responses through this encoding.
 
+## Compact safepoint root ranges
+
+Source builds after [#706](https://github.com/CertifiedBadIdeas/Compukters/issues/706) may emit module section
+`SAFEPOINT_ROOT_RANGES` (`0x0112`, flags `CRITICAL = 1`, `SEMANTIC = 0`, element count 1). Its raw 16-byte payload is
+encoding version (`u32`, currently 1), expanded root record count (`u32`) and canonical expanded indexed payload
+length (`u64`), all little-endian. It requires the module's SAFEPOINT_ROOTS section.
+
+With this marker, each indexed SAFEPOINT_ROOTS record contains function, block, first instruction boundary and
+positive run count (`u32` each), reference count and zero reserved (`u16` each), followed by sorted, unique
+(value ID, physical component ID) `u16` pairs. A range spans consecutive boundaries within one block. Ranges
+are ordered and cannot overlap; adjacent ranges with identical references in the same function/block must be merged.
+Without the marker, retain the existing 16-byte root header and per-boundary records. The writer selects ranges
+only when their aligned payload plus the marker and directory entry is smaller.
+
+Readers reconstruct every original boundary before ordinary verification and execution-image admission. Owners,
+block endpoints, arithmetic, reference counts, expanded row counts, per-function safepoint limits and cumulative
+expanded bytes are checked before expanding ranges. The expanded canonical root payloads across all modules,
+including legacy modules, count against the artifact-byte policy. Kotlin's `ArtifactReader.read(bytes)` defaults
+to a 16 MiB cumulative expansion budget; `read(bytes, maximumExpandedRootBytes)` allows a caller-selected budget.
+The expanded marker count is capped at one million in Kotlin and `records_per_section` in Rust. Rust uses fallible
+allocation and checks reference ordering before expansion. Ranges do not remove GC checkpoints or change root semantics.
+
+Module semantic identity remains the canonical **expanded legacy** encoding: for range-encoded SAFEPOINT_ROOTS,
+the native verifier streams the original indexed envelope, offsets, padding and per-boundary records into the
+existing module hash. Other semantic sections retain raw-payload hashing; the range marker is excluded. Imports,
+precompiled module identities and source diagnostics therefore keep their hashes. Container 3.0, semantic
+Runtime ABI 1.15 and native C ABI 20 remain unchanged. Readers predating the marker reject it as unknown critical.
+Updated source-built natives are required; published Runtime 0.20.0 bundles and their pins do not contain this capability.
+
+
 ## Runtime ABI 1.3
 
 Runtime ABI 1.3 adds exact decimal materialization for the existing `I64` scalar form; artifacts require it only when

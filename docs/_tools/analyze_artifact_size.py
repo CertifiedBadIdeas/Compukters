@@ -17,7 +17,7 @@ NAMES = {
     0x101: 'TYPES', 0x102: 'CONSTANTS', 0x103: 'IMPORTS', 0x104: 'EXPORTS',
     0x105: 'FIELDS', 0x106: 'FUNCTIONS', 0x107: 'BLOCKS', 0x108: 'CODE',
     0x109: 'EXCEPTIONS', 0x10a: 'UTF16_LITERALS', 0x10b: 'SAFEPOINT_ROOTS',
-    0x110: 'DEBUG', 0x111: 'DEBUG_PATHS', 0x8001: 'DEBUG_SOURCE_POSITIONS',
+    0x110: 'DEBUG', 0x111: 'DEBUG_PATHS', 0x112: 'SAFEPOINT_ROOT_RANGES', 0x8001: 'DEBUG_SOURCE_POSITIONS',
 }
 
 
@@ -52,7 +52,7 @@ def analyze(path):
     require(directory == 64 and payload_end + 32 == len(data), 'container length mismatch')
     require(64 + 32 * count <= payload_end, 'directory out of bounds')
     require(hashlib.sha256(data[:payload_end]).digest() == data[payload_end:], 'digest mismatch')
-    sections, tables = [], {}
+    sections, tables, root_markers = [], {}, {}
     previous_end = align8(64 + 32 * count)
     for i in range(count):
         kind, flags, scope, offset, length, elements, reserved = struct.unpack_from('<HHIQQII', data, 64 + i * 32)
@@ -61,6 +61,11 @@ def analyze(path):
         previous_end = offset + length
         name = NAMES.get(kind, hex(kind))
         sections.append(dict(kind=name, scope=scope, flags=flags, bytes=length, records=elements))
+        if kind == 0x112:
+            require(length == 16 and elements == 1 and flags == 1, 'invalid root range marker')
+            version, expanded_count, expanded_length = struct.unpack_from('<IIQ', data, offset)
+            require(version == 1 and expanded_count > 0, 'unsupported root range version')
+            root_markers[scope] = (expanded_count, expanded_length)
         if kind in {0x110, 0x111, 0x8001, 0x10b}:
             tables[(scope, kind)] = indexed(data[offset:offset + length], elements)
     sizes, records = Counter(), Counter()
@@ -118,13 +123,20 @@ def analyze(path):
         previous = None
         for row in tables.get((scope, 0x10b), []):
             require(len(row) >= 16, 'invalid root record')
-            function, block, instruction, refs, reserved = struct.unpack_from('<IIIHH', row)
-            require(reserved == 0 and len(row) == 16 + 4 * refs, 'invalid root components')
-            values = tuple(struct.unpack_from('<HH', row, 16 + 4 * i) for i in range(refs))
-            root_empty += refs == 0
+            if scope in root_markers:
+                require(len(row) >= 20, 'invalid root range record')
+                function, block, instruction, run, refs, reserved = struct.unpack_from('<4I2H', row)
+                prefix = 20
+                require(run > 0, 'empty root range')
+            else:
+                function, block, instruction, refs, reserved = struct.unpack_from('<IIIHH', row)
+                run, prefix = 1, 16
+            require(reserved == 0 and len(row) == prefix + 4 * refs, 'invalid root components')
+            values = tuple(struct.unpack_from('<HH', row, prefix + 4 * i) for i in range(refs))
+            root_empty += run if refs == 0 else 0
             root_sets.add((scope, values))
             signature = (function, block, values)
-            root_duplicate_count += signature == previous
+            root_duplicate_count += (run - 1) + (signature == previous)
             previous = signature
     overhead = len(data) - sum(sizes.values())
     require(overhead >= 64 + 32 * count + 32, 'invalid byte accounting')
