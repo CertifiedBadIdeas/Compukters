@@ -93,6 +93,7 @@ sealed interface GitOperation {
     data class Diff(
         val path: ProjectPath,
         val staged: Boolean = false,
+        val againstHead: Boolean = false,
     ) : GitOperation
 
     data class Stage(
@@ -104,6 +105,13 @@ sealed interface GitOperation {
     ) : GitOperation
 
     data class Commit(
+        val message: String,
+        val name: String,
+        val email: String,
+    ) : GitOperation
+
+    data class CommitSelected(
+        val paths: List<ProjectPath>,
         val message: String,
         val name: String,
         val email: String,

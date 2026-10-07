@@ -36,6 +36,74 @@ class JGitBackendTest {
     private val backend = JGitBackend(GitLimits()) { }
 
     @Test
+    fun `selected commits use saved working files and preserve unrelated staged contents`() {
+        val project = ProjectCatalog.open(createTempDirectory("compukters-git-selected-")).create("demo")
+        val root = project.handle.canonicalPath
+        val main = ProjectPath.file("src/main.kt")
+        val manifest = ProjectPath.file("compukter.toml")
+        run(project, GitOperation.Init)
+        run(project, GitOperation.Stage(manifest))
+        run(project, GitOperation.CommitSelected(listOf(main), "Initial source", "Tester", "test@example.invalid"))
+        Git.open(root.toFile()).use { git ->
+            assertTrue(
+                git
+                    .status()
+                    .call()
+                    .added
+                    .contains(manifest.value),
+            )
+            assertEquals(null, git.repository.resolve("HEAD:${manifest.value}"))
+            assertTrue(git.repository.resolve("HEAD:${main.value}") != null)
+        }
+        run(project, commit("Manifest"))
+        root.resolve(main.value).writeText("fun main() { println(\"staged\") }\n")
+        run(project, GitOperation.Stage(main))
+        root.resolve(main.value).writeText("fun main() { println(\"working\") }\n")
+        val extra = ProjectPath.file("src/extra.kt")
+        root.resolve(extra.value).writeText("fun extra() = 1\n")
+        run(project, GitOperation.Stage(extra))
+        val preview = run(project, GitOperation.Diff(main, againstHead = true)).diff!!
+        assertTrue(preview.contains("+fun main() { println(\"working\") }"))
+        assertFalse(preview.contains("staged"))
+        run(project, GitOperation.CommitSelected(listOf(main), "Current source", "Tester", "test@example.invalid"))
+        Git.open(root.toFile()).use { git ->
+            assertTrue(
+                git
+                    .status()
+                    .call()
+                    .added
+                    .contains(extra.value),
+            )
+            assertEquals(null, git.repository.resolve("HEAD:${extra.value}"))
+            val blob = git.repository.resolve("HEAD:${main.value}")
+            assertTrue(String(git.repository.open(blob).bytes).contains("working"))
+        }
+        Files.delete(root.resolve(main.value))
+        val new = ProjectPath.file("src/new.kt")
+        root.resolve(new.value).writeText("fun main() {}\n")
+        val before = Files.readAllBytes(root.resolve(".git/index"))
+        assertFailsWith<IllegalArgumentException> {
+            run(
+                project,
+                GitOperation.CommitSelected(listOf(new, ProjectPath.file("src/missing.kt")), "Invalid", "Tester", "test@example.invalid"),
+            )
+        }
+        kotlin.test.assertContentEquals(before, Files.readAllBytes(root.resolve(".git/index")))
+        run(project, GitOperation.CommitSelected(listOf(main, new), "Move entry", "Tester", "test@example.invalid"))
+        Git.open(root.toFile()).use { git ->
+            assertEquals(null, git.repository.resolve("HEAD:${main.value}"))
+            assertTrue(git.repository.resolve("HEAD:${new.value}") != null)
+            assertTrue(
+                git
+                    .status()
+                    .call()
+                    .added
+                    .contains(extra.value),
+            )
+        }
+    }
+
+    @Test
     fun `repository metadata has independent size entry and symlink limits`() {
         val project = ProjectCatalog.open(createTempDirectory("compukters-git-limits-")).create("demo")
         run(project, GitOperation.Init)
