@@ -170,6 +170,10 @@ private fun successorEdges(
 
 internal fun Instruction.readRegisters(): List<RegisterId> =
     when (this) {
+        is Instruction.InlineConstruct -> components
+
+        is Instruction.InlineComponent -> listOf(source)
+
         is Instruction.Const,
         is Instruction.Null,
         is Instruction.NewObject,
@@ -288,6 +292,10 @@ internal fun Instruction.readRegisters(): List<RegisterId> =
 
 internal fun Instruction.writtenRegisters(): List<RegisterId> =
     when (this) {
+        is Instruction.InlineConstruct -> listOf(destination)
+
+        is Instruction.InlineComponent -> listOf(destination)
+
         is Instruction.Move -> listOf(destination)
 
         is Instruction.Const -> listOf(destination)

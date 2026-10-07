@@ -275,6 +275,13 @@ private fun decodeType(bytes: ByteArray): NominalType {
                 NominalType.Function(name, suspending, resultType, List(count) { c.valueType() })
             }
 
+            4u -> {
+                require(flags == 0u && arity == 0.toUShort())
+                val count = c.u16().toInt()
+                require(c.u16() == 0u)
+                NominalType.InlineValue(name, List(count) { c.valueType() })
+            }
+
             else -> {
                 error("invalid nominal type tag")
             }
@@ -495,6 +502,21 @@ private fun decodeCode(bytes: ByteArray): List<Instruction> {
 
                 0x03u -> {
                     Instruction.Null(r())
+                }
+
+                0x05u -> {
+                    require(form == 0u)
+                    val destination = r()
+                    Instruction.InlineConstruct(destination, List(frame.uleb().checkedInt("inline component count")) { r() })
+                }
+
+                0x06u -> {
+                    require(form == 0u)
+                    val destination = r()
+                    val source = r()
+                    val component = frame.uleb()
+                    require(component <= UShort.MAX_VALUE.toUInt())
+                    Instruction.InlineComponent(destination, source, component.toUShort())
                 }
 
                 0x04u -> {
@@ -942,6 +964,11 @@ private class Cursor(
 
             7u -> {
                 ValueType.Ref(nullable == 1u, reference.typeRef())
+            }
+
+            8u -> {
+                require(nullable == 0u)
+                ValueType.Inline(reference.typeRef())
             }
 
             else -> {

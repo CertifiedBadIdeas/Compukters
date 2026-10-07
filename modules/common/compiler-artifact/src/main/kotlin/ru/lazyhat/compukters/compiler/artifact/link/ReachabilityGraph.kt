@@ -212,6 +212,10 @@ internal class ReachabilityGraph(
             }
         }
         when (type) {
+            is NominalType.InlineValue -> {
+                type.components.forEach { markValueType(module, it) }
+            }
+
             is NominalType.Array -> {
                 markValueType(module, type.element)
                 type.superType?.let { markType(module, it) }
@@ -457,7 +461,11 @@ internal class ReachabilityGraph(
         module: Int,
         type: ValueType,
     ) {
-        if (type is ValueType.Ref) markType(module, type.type)
+        when (type) {
+            is ValueType.Ref -> markType(module, type.type)
+            is ValueType.Inline -> markType(module, type.type)
+            else -> Unit
+        }
     }
 
     private fun markFunction(

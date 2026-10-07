@@ -250,6 +250,8 @@ private fun Module.canonicalType(type: ValueType): String =
             "kotlin.Char"
         }
 
+        is ValueType.Inline -> canonicalType(ValueType.Ref(false, type.type))
+
         is ValueType.Ref -> {
             val name =
                 when (val reference = type.type) {

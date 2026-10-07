@@ -31,6 +31,7 @@ tasks.test {
     val rustFixtures = rootProject.layout.projectDirectory.dir("host/compukter-vm/tests/fixtures")
     inputs.dir(rustFixtures)
     outputs.file(executableConformanceArtifact)
+    outputs.file(layout.buildDirectory.file("generated/conformance/executable-instructions.cpkt.inline.cpkt"))
     systemProperty("compukter.vm.fixtures", rustFixtures.asFile.absolutePath)
     systemProperty("compukter.vm.executableArtifact", executableConformanceArtifact.get().asFile.absolutePath)
 }

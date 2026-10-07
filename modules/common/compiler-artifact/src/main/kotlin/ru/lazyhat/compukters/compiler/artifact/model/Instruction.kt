@@ -21,6 +21,17 @@ package ru.lazyhat.compukters.compiler.artifact.model
 import java.util.Collections
 
 sealed interface Instruction {
+    data class InlineConstruct(
+        val destination: RegisterId,
+        val components: List<RegisterId>,
+    ) : Instruction
+
+    data class InlineComponent(
+        val destination: RegisterId,
+        val source: RegisterId,
+        val component: UShort,
+    ) : Instruction
+
     data class Move(
         val destination: RegisterId,
         val source: RegisterId,

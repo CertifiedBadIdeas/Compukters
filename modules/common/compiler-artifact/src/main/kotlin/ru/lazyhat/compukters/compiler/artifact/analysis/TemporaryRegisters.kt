@@ -116,6 +116,14 @@ private fun Destination.remap(register: (RegisterId) -> RegisterId): Destination
 
 private fun Instruction.remapRegisters(register: (RegisterId) -> RegisterId): Instruction =
     when (this) {
+        is Instruction.InlineConstruct -> {
+            copy(destination = register(destination), components = components.map(register))
+        }
+
+        is Instruction.InlineComponent -> {
+            copy(destination = register(destination), source = register(source))
+        }
+
         is Instruction.Move -> {
             copy(destination = register(destination), source = register(source))
         }

@@ -1735,12 +1735,13 @@ fn k2_double_array_executes_storage_and_lifecycle() {
 fn pinned_vm_verifies_kotlin_executable_instruction_artifact() {
     let path = std::env::var("COMPUKTER_KOTLIN_EXECUTABLE_ARTIFACT")
         .expect("COMPUKTER_KOTLIN_EXECUTABLE_ARTIFACT must be set for this conformance test");
-    let bytes = fs::read(path).expect("Kotlin writer output must exist");
+    let bytes = fs::read(&path).expect("Kotlin writer output must exist");
 
     let verified = verify_artifact(Arc::from(bytes), ArtifactLimits::default())
         .expect("pinned VM must decode and verify Kotlin writer output");
 
     assert_eq!(verified.module_count(), 2);
+    execute_primitive_program(std::path::Path::new(&format!("{path}.inline.cpkt")));
 }
 
 fn entry_argument_limits() -> EntryArgumentLimits {

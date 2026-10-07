@@ -522,6 +522,21 @@ standard library conversion through F64. Verifiers reject
 wrong operand kinds, unknown masks and legacy ABI claims. Zero divisors use the existing managed
 arithmetic exception.
 
+Runtime ABI 1.15 introduces nominal inline value layouts. Type record tag 4 has zero flags/arity,
+a name u32, component count u16, reserved zero u16 and flattened primitive/reference value-type records.
+Semantic value kind 8 carries a nominal type reference and zero flags. Inline layouts are nonempty,
+cannot contain Unit or another inline layout, and are distinct from managed reference types. Function
+physical shapes must exactly match their nominal leaves. Heap fields and array elements use managed
+boxes rather than inline layouts.
+
+`inline_construct` (0x05, form 0) encodes destination u16, component count ULEB and source u16 registers;
+`inline_component` (0x06, form 0) encodes destination/source u16 and component index ULEB (at most u16).
+Costs are 2 + component count and 2 respectively. Move, call arguments, task-spawn arguments and returns
+charge one extra unit per additional inline component copied. Copies stay in compact frame storage;
+REF32 leaves participate in exact component safepoint maps. Nominal identity, initialization, leaf
+types, physical shapes, ABI gates and declared costs are checked by both Kotlin and Rust. Artifact
+container format 3 and exported C ABI 20 are unchanged; host entry/results retain their scalar contract.
+
 Runtime ABI 1.12 extends `string_value_of` (`0x68`) and `value_hash` (`0x69`) with
 form 4 for F64. Both the writer and Rust admission reject these forms below ABI 1.12;
 linking infers the requirement from retained instructions. Double hashing canonicalizes
