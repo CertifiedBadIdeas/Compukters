@@ -23,7 +23,7 @@ This reference groups versioned representation boundaries by the version that in
 
 ## Execution checkpoint development
 
-The VM has an internal logical computer checkpoint envelope (format 1), owned by
+The VM has an internal logical computer checkpoint envelope (format 2), owned by
 `host/compukter-vm/src/checkpoint/envelope.rs`. Its version, native runtime/schema identity, computer ID,
 filesystem generation, payload lengths and SHA-256 cover the execution and host descriptor bytes together.
 It currently has no public transport API; internal store methods provide atomic publication and consumption, but it does not yet provide in-game hibernation.
