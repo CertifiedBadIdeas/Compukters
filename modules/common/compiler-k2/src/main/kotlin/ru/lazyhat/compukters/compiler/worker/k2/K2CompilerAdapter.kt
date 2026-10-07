@@ -69,6 +69,8 @@ class K2CompilerAdapter(
     private val inputs: K2CompilerInputs,
     private val platform: PlatformBundle = loadPackagedPlatform(),
 ) {
+    private val platformLibraryCache = PreparedPlatformLibraryCache()
+
     init {
         require(Files.isRegularFile(inputs.workerJar)) { "validated worker jar is missing" }
         require(platform.identity.languageVersion == inputs.expectedIdentity.languageVersion) { "worker/platform language mismatch" }
@@ -116,7 +118,8 @@ class K2CompilerAdapter(
         if (diagnostics.isNotEmpty()) return failure(diagnostics, reachedIr = false, request.limits)
         val selection = selectModules(request)
         val selected = selection.modules
-        val libraries = loadPlatformLibraries(selected)
+        // Selection validates module and addon content identities before any cached data can be reused.
+        val libraries = platformLibraryCache.get(request.platformModules) { loadPlatformLibraries(selected) }
         val budget = TemporaryBudget(inputs.temporaryRoot, request.limits)
         budget.requireCapacity(sourceFootprint(request))
         return budget.useRequestDirectory { requestRoot ->
