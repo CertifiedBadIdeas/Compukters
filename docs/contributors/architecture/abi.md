@@ -23,10 +23,10 @@ This reference groups versioned representation boundaries by the version that in
 
 ## Execution checkpoint development
 
-The VM has an internal logical computer checkpoint envelope (format 2), owned by
+The VM has a logical computer checkpoint envelope (format 2), owned by
 `host/compukter-vm/src/checkpoint/envelope.rs`. Its version, native runtime/schema identity, computer ID,
 filesystem generation, payload lengths and SHA-256 cover the execution and host descriptor bytes together.
-It currently has no public transport API; internal store methods provide atomic publication and consumption, but it does not yet provide in-game hibernation.
+Rust exposes contextual capture/restore and bounded atomic store methods. It currently has no C ABI or JVM transport API, and it does not yet provide in-game hibernation.
 The native reference is `host/compukter-vm/docs/architecture/computer-checkpoints.md`.
 
 ## Native Runtime bundles
