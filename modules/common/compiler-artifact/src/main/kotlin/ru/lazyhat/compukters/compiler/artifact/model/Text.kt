@@ -26,6 +26,9 @@ import java.nio.charset.StandardCharsets
 class MetadataText private constructor(
     private val bytes: ByteArray,
 ) : Comparable<MetadataText> {
+    internal val utf8ByteSize: Int
+        get() = bytes.size
+
     fun toByteArray(): ByteArray = bytes.copyOf()
 
     override fun compareTo(other: MetadataText): Int = compareUnsigned(bytes, other.bytes)
