@@ -103,15 +103,15 @@ object CreativeVectorThrusterGameTests {
         scenario.prepare(
             sequence,
             """
-                import compukter.redstone.Redstone
-                import propulsion.thrusters.CreativeVectorThruster
-                fun main() {
-                    val engine = CreativeVectorThruster.named("t1")
-                    engine.setThrustKn(5.0)
-                    engine.setThrottle(0.0)
-                    println("top-level=" + Redstone.top.get())
-                    readln()
-                }
+            import compukter.redstone.Redstone
+            import propulsion.thrusters.CreativeVectorThruster
+            fun main() {
+                val engine = CreativeVectorThruster.named("t1")
+                engine.setThrustKn(5.0)
+                engine.setThrottle(0.0)
+                println("top-level=" + Redstone.top.get())
+                readln()
+            }
             """.trimIndent(),
         )
         sequence.thenExecute {
@@ -190,7 +190,8 @@ object CreativeVectorThrusterGameTests {
     }
 
     @JvmStatic
-    @GameTest(batch = "propulsion_vector", template = "bastion/mobs/empty", templateNamespace = "minecraft", timeoutTicks = 100_000)
+    // Two sequential cold compilations share this deadline while the GameTest server ticks without pacing.
+    @GameTest(batch = "propulsion_vector", template = "bastion/mobs/empty", templateNamespace = "minecraft", timeoutTicks = 200_000)
     fun guestVectorControlLifetime(helper: GameTestHelper) {
         val first = BlockPos(2, 2, 3)
         val second = BlockPos(4, 2, 5)
