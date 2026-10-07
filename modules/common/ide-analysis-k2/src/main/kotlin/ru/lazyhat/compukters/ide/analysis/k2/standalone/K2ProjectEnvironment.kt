@@ -36,6 +36,7 @@ import org.jetbrains.kotlin.psi.KtFile
 import ru.lazyhat.compukters.platform.bundle.PlatformBundle
 import ru.lazyhat.compukters.platform.bundle.PlatformModuleId
 import ru.lazyhat.compukters.platform.k2.CompuktersLLFirSessionConfigurator
+import ru.lazyhat.compukters.platform.k2.CompuktersLanguageVersionSettings
 import ru.lazyhat.compukters.platform.k2.CompuktersPlatforms
 import java.nio.file.Path
 
@@ -98,6 +99,7 @@ internal class K2ProjectEnvironment private constructor(
                                 buildKtSourceModule {
                                     this.platform = platform
                                     moduleName = "compukters-snapshot"
+                                    languageVersionSettings = CompuktersLanguageVersionSettings
                                     addSourceRoot(sourceRoot)
                                     if (selectedModules.isNotEmpty()) {
                                         addRegularDependency(

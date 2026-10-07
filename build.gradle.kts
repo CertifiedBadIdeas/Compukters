@@ -717,6 +717,8 @@ registerKotlinVmConformance(
     cargoTargetDirectory = ".toolchain/build/cargo/compiler-k2-mfvc-conformance",
     artifactEnvironmentVariable = "COMPUKTER_KOTLIN_MFVC_ARTIFACT",
     conformanceScenario = "mfvc",
+    additionalArtifacts = mapOf("COMPUKTER_KOTLIN_MFVC_ADDON_ARTIFACT" to
+        project(":compiler-k2").layout.buildDirectory.file("generated/conformance/kotlin-mfvc.cpkt.addon.cpkt")),
 )
 registerKotlinVmConformance(
     taskName = "testKotlinValueClassBoxesVmConformance",

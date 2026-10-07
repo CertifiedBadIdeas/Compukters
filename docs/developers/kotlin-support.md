@@ -371,8 +371,12 @@ supported.
   Imported interfaces remain in the nominal parent list, so upcasts and type tests retain their contract.
   Generic classes extending a class other than `Any` remain rejected. Evidence:
   `canonical peripheral companion specializes shared typed queries`, executed by `testKotlinPeripheralQueriesVmConformance`.
-  Contravariance, reified parameters, generic
-  value classes and generic methods declaring their own type parameters remain outside the subset. Direct `Any` values use the supported scalar boxes described above. Expansion is
+  Concrete generic value-class fields and member methods specialize through the same bounded model;
+  generic interface bridges and precompiled producer/consumer layouts retain their nominal identity.
+  Evidence: `multi field value classes preserve direct layouts nested calls and managed boundaries` and
+  `multi field value classes share canonical layouts across precompiled addon boundaries`, executed by
+  `testKotlinMfvcVmConformance`. Contravariance, reified parameters and generic methods declaring
+  their own type parameters remain outside the subset. Direct `Any` values use the supported scalar boxes described above. Expansion is
   bounded to 256 function and 256 class variants per compilation. Binary
   generic library templates and runtime instantiation are absent. Evidence:
   [`MinimalScriptLoweringTest`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/compiler-k2/src/test/kotlin/ru/lazyhat/compukters/compiler/worker/k2/MinimalScriptLoweringTest.kt),
@@ -624,51 +628,39 @@ supported.
   Tracking: [#681](https://github.com/CertifiedBadIdeas/Compukters/issues/681).
   Remaining type-test/cast support: not scheduled.
 
-- [ ] **Primitive `value class` declarations — Partial** — a value class with
-  exactly one `Int`, `Boolean`, or `Char` property erases to that scalar for
-  constructors, properties, methods, operators, constants, and trusted ABI
-  calls. `@JvmInline` is deliberately rejected because it belongs to the JVM
-  platform, not Guest Kotlin. Nullable values and `Any` use nominal managed wrappers: checked casts and
-  type tests preserve the value-class type, equality compares type and payload, hashCode uses the payload,
-  and toString preserves the class/property form or a source override. Lists and generic reference arrays
-  store these wrappers, including null; indexed reads and iteration recover the typed scalar for methods
-  and addon calls. Precompiled platform/addon libraries export one canonical wrapper type and payload
-  field so boxing in a library and in its consumer shares identity. Direct scalar calls remain unboxed.
-  These value classes can implement marker and method-bearing interfaces, including concrete generic
-  interface specializations. Interface receivers use the canonical wrapper, with bridges to scalar
-  implementations of methods and properties; inherited default methods dispatch through that wrapper.
-  Interface assignments, casts, nullable receivers and collections preserve nominal type and payload,
-  including when the value class and its interface come from a precompiled addon.
-  Multi-field and reference-backed declarations now retain a nominal inline layout across direct locals,
-  fields reads, methods, parameters, returns, branches and generic function specializations. All primitive
-  leaves, references and nested value classes flatten into compact frame components. Concrete generic
-  value-class fields specialize to their source arguments. `Any`, nullable values, interfaces, object
-  fields, reference arrays, lists and lambda captures use nominal managed boxes; reads recover the direct
-  layout. Interface bridges, child-task captures, structural equality/hash/text and named-argument order
-  are exercised by `MinimalScriptLoweringTest`, test
-  `multi field value classes preserve direct layouts nested calls and managed boundaries`, executed by
-  `testKotlinMfvcVmConformance`. Float/Double structural equality preserves NaN and signed zero.
-  Multi-field precompiled producer/consumer identity and matching IDE coverage are still being completed
-  under [#701](https://github.com/CertifiedBadIdeas/Compukters/issues/701).
-  The native FIR-to-IR pipeline accepts these declarations without an additional language flag and
-  preserves `MultiFieldValueClassRepresentation`; evidence: `CompuktersFir2IrPipelineTest`, test
+- [x] **Value-class layouts and existing Guest use sites** — one or multiple immutable constructor
+  properties can contain all twelve primitive types, supported references including nullable references,
+  nested value classes and concrete generic substitutions. Direct locals, assignment, control flow,
+  operators, methods, parameters, returns and typed callbacks preserve the nominal inline layout in
+  compact frames. Generic member methods, interface bridges, destructuring, bound/unbound method and
+  constructor references use the same layouts. Constructor arguments evaluate once in source order;
+  constructor references also execute initializers and their checks. Cyclic inline layouts and mutable
+  payloads produce diagnostics.
+  `Any`, nullable values, interfaces, ordinary fields, reference arrays, `List`, `MutableList`, `ArrayList`,
+  lambda captures and child-task captures use nominal managed boxes. Reads recover the direct layout.
+  Equality/hash/text are structural and nominal, including NaN and signed-zero behavior, unsigned
+  formatting, nullable fields, nested values and source `toString` overrides. Precompiled platform/addon
+  libraries export a canonical direct layout, wrapper and all payload fields; a consumer shares these
+  identities, including concrete generic value classes. Single `Int`/`Boolean`/`Char` peripheral handles
+  retain their established scalar ABI fast path. New inline layouts require Runtime ABI 1.15.
+  The Guest frontend and native IDE share K2's multi-field language setting and retain
+  `MultiFieldValueClassRepresentation`; no JVM annotations are needed.
+  Execution evidence: `MinimalScriptLoweringTest`, tests
+  `multi field value classes preserve direct layouts nested calls and managed boundaries` and
+  `multi field value classes share canonical layouts across precompiled addon boundaries`, both executed
+  by `testKotlinMfvcVmConformance`. Rejection evidence:
+  `multi field value classes reject cyclic layouts and mutable payloads`.
+  Frontend/library evidence: `CompuktersFir2IrPipelineTest`, test
   `multi field value classes resolve on Guest platform and retain their IR representation`.
-  Scalar execution evidence:
-  [`MinimalScriptLoweringTest`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/compiler-k2/src/test/kotlin/ru/lazyhat/compukters/compiler/worker/k2/MinimalScriptLoweringTest.kt),
-  test `typed redstone side API lowers deterministically to scalar capability operations`,
-  and
-  [`CanonicalPlatformSourceTest`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/guest-platform/src/test/kotlin/ru/lazyhat/compukters/platform/source/CanonicalPlatformSourceTest.kt),
-  which rejects JVM-only value-class syntax from native platform sources.
-  Additional evidence: tests `value class boxes preserve nominal types nullable collections and iteration`,
-  `value class boxes share canonical identity across precompiled addon functions`, and
-  `addon scalar handles support typed lists and forEach`. `testKotlinValueClassBoxesVmConformance`
-  executes the source and precompiled-library boxing scenarios.
-  The dev-stand GameTest `guestVectorHandleList` controls four real Creative Vector Thrusters through
-  `listOf(...).forEach` and verifies that all control leases are released when the Guest program finishes.
-  Tracking: [#692](https://github.com/CertifiedBadIdeas/Compukters/issues/692),
-  [#699](https://github.com/CertifiedBadIdeas/Compukters/issues/699).
-
-## Nullability and exceptions
+  IDE evidence: `DiagnosticQueryTest`, test
+  `native MFVC analysis preserves source and addon nominal types and members`, with and without
+  attached library sources; checks diagnostics, nominal expression types and member completion.
+  Scalar regression evidence: `testKotlinValueClassBoxesVmConformance` executes
+  `value class boxes preserve nominal types nullable collections and iteration` and
+  `value class boxes share canonical identity across precompiled addon functions`.
+  Existing Guest boundaries still apply: secondary constructors, runtime generic instantiation and
+  methods declaring their own type parameters are outside the subset. `@JvmInline` is deliberately
+  rejected as JVM syntax. Tracking: [#701](https://github.com/CertifiedBadIdeas/Compukters/issues/701).
 
 - [x] **Nullable user references** — `String?` and supported Guest class references
   can be local values, top-level immutable properties, class fields, function

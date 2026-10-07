@@ -26,7 +26,6 @@ import org.jetbrains.kotlin.cli.jvm.compiler.EnvironmentConfigFiles
 import org.jetbrains.kotlin.cli.jvm.compiler.KotlinCoreEnvironment
 import org.jetbrains.kotlin.config.CommonConfigurationKeys
 import org.jetbrains.kotlin.config.CompilerConfiguration
-import org.jetbrains.kotlin.config.LanguageVersionSettingsImpl
 import org.jetbrains.kotlin.fir.pipeline.Fir2KlibMetadataSerializer
 import org.jetbrains.kotlin.lexer.KtTokens
 import org.jetbrains.kotlin.psi.KtCallExpression
@@ -59,6 +58,7 @@ import ru.lazyhat.compukters.platform.bundle.PlatformScalarRepresentation
 import ru.lazyhat.compukters.platform.bundle.PlatformScalarType
 import ru.lazyhat.compukters.platform.bundle.PlatformScalarValue
 import ru.lazyhat.compukters.platform.bundle.PlatformSource
+import ru.lazyhat.compukters.platform.k2.CompuktersLanguageVersionSettings
 import ru.lazyhat.compukters.worker.value.ImmutableBytes
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
@@ -205,7 +205,7 @@ class PlatformMetadataCompiler {
         val decoded = PlatformMetadataCodec.decode(parsed.metadata)
         val configuration =
             CompilerConfiguration().apply {
-                put(CommonConfigurationKeys.LANGUAGE_VERSION_SETTINGS, LanguageVersionSettingsImpl.DEFAULT)
+                put(CommonConfigurationKeys.LANGUAGE_VERSION_SETTINGS, CompuktersLanguageVersionSettings)
             }
         val serializer = Fir2KlibMetadataSerializer(configuration, listOf(output.frontendOutput), null, false)
         val fragments = mutableListOf<PlatformMetadataFragment>()
@@ -223,7 +223,7 @@ class PlatformMetadataCompiler {
             decoded.copy(
                 moduleHeader =
                     serializeKlibHeader(
-                        LanguageVersionSettingsImpl.DEFAULT,
+                        CompuktersLanguageVersionSettings,
                         decoded.module.toString(),
                         packageNames,
                         emptyList(),
@@ -379,7 +379,7 @@ class PlatformMetadataCompiler {
         val symbol = (listOf(packageName).filter(String::isNotEmpty) + owners + name).joinToString(".")
         val parameter =
             klass.primaryConstructorParameters.singleOrNull()
-                ?: throw IllegalArgumentException("platform scalar type $symbol must have one constructor property")
+                ?: return null
         require(parameter.hasValOrVar() && parameter.valOrVarKeyword?.node?.elementType == KtTokens.VAL_KEYWORD) {
             "platform scalar type $symbol must have one immutable property"
         }
@@ -388,7 +388,7 @@ class PlatformMetadataCompiler {
                 "Int", "kotlin.Int" -> PlatformScalarRepresentation.INT
                 "Boolean", "kotlin.Boolean" -> PlatformScalarRepresentation.BOOLEAN
                 "Char", "kotlin.Char" -> PlatformScalarRepresentation.CHAR
-                else -> throw IllegalArgumentException("platform scalar type $symbol must use Int, Boolean, or Char")
+                else -> return null
             }
         val initializers = klass.declarations.filterIsInstance<KtClassInitializer>()
         val intRange =
@@ -577,15 +577,17 @@ class PlatformMetadataCompiler {
             )
         val getter =
             (declaration as? KtProperty)
-                ?.takeIf { property -> property.getter?.hasBody() == true }
-                ?.let { property ->
+                ?.takeIf { property ->
+                    property.getter?.hasBody() == true || property.hasModifier(KtTokens.ABSTRACT_KEYWORD) ||
+                        (property.parent.parent as? KtClass)?.isInterface() == true
+                }?.let { property ->
                     ParsedDeclaration(
                         platformDeclaration.copy(
                             symbol = (listOf(packageName).filter(String::isNotEmpty) + owners + "<get-$name>").joinToString("."),
                             signature = "fun():${property.typeReference?.text?.canonicalType() ?: "?"}",
                         ),
                         private,
-                        hasBody = true,
+                        hasBody = property.getter?.hasBody() == true,
                         libraryKind = PlatformLibraryDeclarationKind.FUNCTION,
                         requiresSource = requiresSource,
                     )

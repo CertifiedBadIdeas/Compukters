@@ -43,6 +43,7 @@ import ru.lazyhat.compukters.compiler.project.ProjectSource
 import ru.lazyhat.compukters.compiler.worker.protocol.BinaryValue
 import ru.lazyhat.compukters.compiler.worker.protocol.CompileRequest
 import ru.lazyhat.compukters.compiler.worker.protocol.DiagnosticCategory
+import ru.lazyhat.compukters.compiler.worker.protocol.DiagnosticSeverity
 import ru.lazyhat.compukters.compiler.worker.protocol.Hash256
 import ru.lazyhat.compukters.compiler.worker.protocol.RequestId
 import ru.lazyhat.compukters.compiler.worker.protocol.TargetSettings
@@ -1780,16 +1781,37 @@ class MinimalScriptLoweringTest {
                     request(
                         """
                         import compukter.concurrent.Tasks
+                        import kotlin.collections.ArrayList
+                        import kotlin.collections.MutableList
                         import kotlin.collections.listOf
                         import kotlin.collections.map
                         import kotlin.collections.filter
                         interface Position { val x: Double; fun shifted(amount: Double): Vec3 }
                         value class Vec3(override val x: Double, val y: Double, val z: Double) : Position {
                             override fun shifted(amount: Double): Vec3 = Vec3(x + amount, y + amount, z + amount)
+                            operator fun plus(other: Vec3): Vec3 = Vec3(x + other.x, y + other.y, z + other.z)
                         }
                         value class Packet(val point: Vec3, val tag: String, val count: Long, val enabled: Boolean)
                         class Holder(var value: Packet)
-                        value class PairValue<T>(val first: T, val second: T)
+                        interface PairSource<T> { fun head(): T; fun reverse(): PairValue<T> }
+                        value class PairValue<T>(val first: T, val second: T) : PairSource<T> {
+                            fun swapped(): PairValue<T> = PairValue(second, first)
+                            operator fun component1(): T = first
+                            operator fun component2(): T = second
+                            override fun head(): T = first
+                            override fun reverse(): PairValue<T> = swapped()
+                            override fun toString(): String = "PairValue[${'$'}first, ${'$'}second]"
+                        }
+                        value class PrimitiveFields(val byte: Byte, val short: Short, val int: Int, val long: Long,
+                            val float: Float, val double: Double, val char: Char, val boolean: Boolean,
+                            val ubyte: UByte, val ushort: UShort, val uint: UInt, val ulong: ULong)
+                        value class NullableFields(val text: String?, val point: Vec3?, val marker: Int) {
+                            companion object { val Empty = NullableFields(null, null, 0) }
+                        }
+                        object InitState { var count = 0 }
+                        value class Checked(val point: Vec3, val text: String) {
+                            init { check(point.x > 0.0); InitState.count = InitState.count + text.length }
+                        }
                         fun <T> identity(value: T): T = value
                         fun relay(point: Vec3): Vec3 = point.shifted(1.0)
                         fun main() {
@@ -1812,6 +1834,9 @@ class MinimalScriptLoweringTest {
                             check(identity(packet).count == 42L)
                             val pair = PairValue(packet, packet)
                             check(pair.first.point.x == 4.0 && pair.second.count == 42L)
+                            check(pair.swapped().first.count == 42L)
+                            val swap: () -> PairValue<Packet> = pair::swapped
+                            check(swap().first.count == 42L)
                             val holder = Holder(packet)
                             check(holder.value.point.y == 5.0)
                             holder.value = Packet(Vec3(8.0, 9.0, 10.0), "next", 43L, false)
@@ -1828,6 +1853,14 @@ class MinimalScriptLoweringTest {
                             check(values[0].count == 43L)
                             val listed = listOf(packet, holder.value).filter { it.enabled }.map { it.point }
                             check(listed[0].x == 4.0)
+                            val mutable: MutableList<Packet> = ArrayList<Packet>()
+                            mutable.add(packet)
+                            mutable.add(holder.value)
+                            mutable[0] = holder.value
+                            check(mutable.removeAt(1).count == 43L && mutable[0].tag == "next")
+                            check((point + Vec3(1.0, 2.0, 3.0)).y == 7.0)
+                            val (left, right) = PairValue(packet, holder.value)
+                            check(left.count == 42L && right.count == 43L)
                             val position: Position = point
                             check(position.x == 4.0 && position.shifted(1.0).z == 7.0)
                             val first = Tasks.launch { check(packet.tag == "tag" && packet.point.y == 5.0) }
@@ -1842,6 +1875,44 @@ class MinimalScriptLoweringTest {
                             val ordered = Vec3(z = run { order = order * 10 + 1; 3.0 },
                                 x = run { order = order * 10 + 2; 1.0 }, y = run { order = order * 10 + 3; 2.0 })
                             check(order == 123 && ordered.z == 3.0)
+                            val primitives = PrimitiveFields((-128).toByte(), (-32000).toShort(), -123, -1234567890123L,
+                                1.25f, -2.5, 'Z', true, 255.toUByte(), 65535.toUShort(), UInt.MAX_VALUE, ULong.MAX_VALUE)
+                            val primitiveBox: Any = primitives
+                            check(primitiveBox == primitives && (primitiveBox as PrimitiveFields).byte == (-128).toByte())
+                            check(primitives.short == (-32000).toShort() && primitives.int == -123 && primitives.long == -1234567890123L)
+                            check(primitives.float == 1.25f && primitives.double == -2.5 && primitives.char == 'Z' && primitives.boolean)
+                            check(primitives.ubyte == 255.toUByte() && primitives.ushort == 65535.toUShort())
+                            check(primitives.uint == UInt.MAX_VALUE && primitives.ulong == ULong.MAX_VALUE)
+                            check(primitives.hashCode() == (primitiveBox as PrimitiveFields).hashCode())
+                            check(primitives.toString() == "PrimitiveFields(byte=-128, short=-32000, int=-123, long=-1234567890123, float=1.25, double=-2.5, char=Z, boolean=true, ubyte=255, ushort=65535, uint=4294967295, ulong=18446744073709551615)")
+                            check(NullableFields.Empty == NullableFields(null, null, 0))
+                            check(NullableFields.Empty.toString() == "NullableFields(text=null, point=null, marker=0)")
+                            check(NullableFields("yes", point, 1).point!!.z == 6.0)
+                            val source: PairSource<Packet> = pair
+                            check(source.head().count == 42L && source.reverse().second.tag == "tag")
+                            check(pair.toString() == "PairValue[${'$'}packet, ${'$'}packet]")
+                            check(Checked(point, "abc").point.x == 4.0 && InitState.count == 3)
+                            try { Checked(Vec3(-1.0, 0.0, 0.0), "bad"); check(false) }
+                            catch (failure: IllegalStateException) { check(InitState.count == 3) }
+                            val transform: (Vec3) -> Vec3 = { it.shifted(3.0) }
+                            check(transform(point).z == 9.0)
+                            val bound: (Double) -> Vec3 = point::shifted
+                            check(bound(2.0).y == 7.0)
+                            val unbound: (Vec3, Double) -> Vec3 = Vec3::shifted
+                            check(unbound(point, 4.0).y == 9.0)
+                            val pairFactory: (Packet, Packet) -> PairValue<Packet> = ::PairValue
+                            check(pairFactory(packet, holder.value).second.count == 43L)
+                            val make: (Double, Double, Double) -> Vec3 = ::Vec3
+                            check(make(7.0, 8.0, 9.0).y == 8.0)
+                            val checkedFactory: (Vec3, String) -> Checked = ::Checked
+                            check(checkedFactory(point, "ok").text == "ok" && InitState.count == 5)
+                            val fallback = absent ?: packet
+                            check(fallback.count == 42L && optional?.point == point && absent?.point == null)
+                            var loop = point
+                            repeat(3) { loop = loop.shifted(1.0) }
+                            check(loop.z == 9.0)
+                            val selected = when (packet.count) { 42L -> packet; else -> holder.value }
+                            check(selected.point.y == 5.0)
                         }
                         """.trimIndent(),
                     ),
@@ -1851,6 +1922,73 @@ class MinimalScriptLoweringTest {
             assertTrue(artifact.modules.any { module -> module.types.any { it is NominalType.InlineValue } })
             System.getProperty("compukter.vm.mfvcArtifact")?.let { output ->
                 Path.of(output).also { it.parent.createDirectories() }.writeBytes(bytes)
+            }
+        }
+
+    @Test
+    fun `multi field value classes reject cyclic layouts and mutable payloads`() =
+        withAdapter { adapter ->
+            for (source in listOf(
+                "value class Invalid(var code: Int, val label: String); fun main() { Invalid(1, \"x\") }",
+                "value class First(val second: Second, val code: Int); value class Second(val first: First, val label: String); fun relay(value: First): First = value; fun main() {}",
+            )) {
+                val result = adapter.compile(request(source))
+                assertNull(result.artifact)
+                assertTrue(result.diagnostics.any { it.severity == DiagnosticSeverity.ERROR }, result.diagnostics.toString())
+            }
+        }
+
+    @Test
+    fun `multi field value classes share canonical layouts across precompiled addon boundaries`() =
+        withAdapter { adapter ->
+            val result =
+                adapter.compile(
+                    request(
+                        """
+                        import fixture.kinetics.Geometry
+                        import fixture.kinetics.Vec2
+                        import fixture.kinetics.Envelope
+                        import fixture.kinetics.ReferenceValue
+                        import fixture.kinetics.Duo
+                        import kotlin.collections.listOf
+                        fun main() {
+                            val point = Geometry.point()
+                            check(point.x == 1.0 && point.y == 2.0)
+                            val moved = Geometry.relay(Vec2(4.0, 5.0))
+                            check(moved.x == 5.0 && moved.y == 6.0)
+                            val shift: (Double) -> Vec2 = point::moved
+                            check(shift(3.0).y == 5.0)
+                            val factory: (Double, Double) -> Vec2 = ::Vec2
+                            check(factory(8.0, 9.0).x == 8.0)
+                            val position = Geometry.position(point)
+                            check(position.x == 1.0 && position.moved(2.0).y == 4.0)
+                            val envelope = Geometry.envelope(point, "consumer")
+                            check(envelope.point.y == 2.0 && envelope.label == "consumer")
+                            val local: Any = Envelope(Vec2(3.0, 4.0), "library", true)
+                            val imported = Geometry.boxedEnvelope()
+                            check(imported is Envelope && Geometry.isEnvelope(local))
+                            check(imported == local)
+                            check((imported as Envelope) == Envelope(Vec2(3.0, 4.0), "library", true))
+                            check(Geometry.unpack(local).point.x == 3.0)
+                            check(Geometry.optional(1) == null)
+                            check(Geometry.optional(local)!!.label == "library")
+                            check(Geometry.boxedPoint() == (Vec2(1.0, 2.0) as Any))
+                            check(listOf(point, moved)[1].y == 6.0)
+                            val duo = Geometry.duo()
+                            check(duo.swapped().first.y == 4.0)
+                            val localDuo: Any = Duo(Vec2(1.0, 2.0), Vec2(3.0, 4.0))
+                            check(Geometry.boxedDuo() == localDuo && (Geometry.boxedDuo() as Duo<Vec2>).second.x == 3.0)
+                            val reference = Geometry.reference()
+                            check(reference.text == "reference" && reference == ReferenceValue("reference"))
+                            check(reference.toString() == "ReferenceValue(text=reference)")
+                        }
+                        """.trimIndent(),
+                        includeAddonFixture = true,
+                    ),
+                )
+            val bytes = assertNotNull(result.artifact, result.diagnostics.joinToString()).toByteArray()
+            System.getProperty("compukter.vm.mfvcArtifact")?.let { output ->
+                Path.of("$output.addon.cpkt").also { it.parent.createDirectories() }.writeBytes(bytes)
             }
         }
 
