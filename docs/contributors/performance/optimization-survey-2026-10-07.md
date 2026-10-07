@@ -13,6 +13,8 @@ Parent revision: `d85f8096a1574443dff43b88951c157bc752390b`; VM: `18103f01963874
 
 Follow-up: [implemented path pooling and measured before/after results]({{ '/VM-DEBUG-PATHS-2026-10-07/' | relative_url }}).
 The estimates and baseline evidence below remain the original pre-change investigation.
+Runtime follow-up: [CPU timing and rejected interpreter experiments]({{ '/VM-CPU-TRIALS-2026-10-07/' | relative_url }}).
+
 
 ## Builtin program sizes
 
