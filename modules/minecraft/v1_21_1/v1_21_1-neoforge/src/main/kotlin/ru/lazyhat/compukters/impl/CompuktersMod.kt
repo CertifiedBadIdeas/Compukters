@@ -84,8 +84,8 @@ class CompuktersMod(
             NeoForgeVmActorServices::afterServerTick,
         )
         NeoForge.EVENT_BUS.addListener(VmBenchmarkCommands::onServerStopping)
-        NeoForge.EVENT_BUS.addListener(NeoForgeVmActorServices::onServerStopping)
         NeoForge.EVENT_BUS.addListener(NeoForgeWorldFileSystemStores::onServerStopping)
+        NeoForge.EVENT_BUS.addListener(NeoForgeVmActorServices::onServerStopping)
         NeoForge.EVENT_BUS.addListener(NeoForgeCompilerServices::onServerStopping)
         modContainer.registerConfig(ModConfig.Type.CLIENT, CompuktersClientConfig.SPEC)
         modContainer.registerConfig(ModConfig.Type.SERVER, CompuktersServerConfig.SPEC)

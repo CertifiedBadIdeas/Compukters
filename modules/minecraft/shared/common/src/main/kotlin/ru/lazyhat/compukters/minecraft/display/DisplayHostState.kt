@@ -21,6 +21,7 @@ import ru.lazyhat.compukters.minecraft.peripheral.ComputerPeripheralRuntime
 
 internal interface DisplayEndpoint {
     val identity: Any
+    val checkpointIdentity: String? get() = null
     val buffer: DisplayBuffer
 
     fun valid(): Boolean
@@ -48,6 +49,7 @@ internal class DisplayHostState(
     private val handles = linkedMapOf<Int, DisplayEndpoint>()
     private var nextHandle = 1
     private val accessed = linkedMapOf<Any, DisplayEndpoint>()
+    private val accessedHandles = linkedMapOf<Int, DisplayEndpoint>()
 
     override fun dispatch(request: ProgramAddonRequest): ProgramAddonDispatch {
         val response =
@@ -87,6 +89,66 @@ internal class DisplayHostState(
         return ProgramAddonDispatch.Completed(response)
     }
 
+    override fun checkpoint(): ByteArray {
+        check(handles.isEmpty()) { "Legacy display handles have no portable location" }
+        val writer =
+            ru.lazyhat.compukters.api.addon
+                .ResourceCheckpointWriter()
+        writer.int(2)
+        writer.int(nextHandle)
+        val owned =
+            accessedHandles.entries
+                .sortedByDescending { it.key }
+                .distinctBy { it.value.identity }
+                .mapNotNull { (handle, endpoint) ->
+                    endpoint.buffer
+                        .ownedSnapshot(owner)
+                        ?.let { handle to it }
+                }
+        writer.int(owned.size)
+        owned.forEach { (handle, rows) ->
+            writer.int(handle)
+            rows.forEach { writer.text(it, DisplayBuffer.MAXIMUM_WRITE_BYTES) }
+        }
+        return writer.finish()
+    }
+
+    override fun restoreCheckpoint(state: ByteArray) {
+        val reader =
+            ru.lazyhat.compukters.api.addon
+                .ResourceCheckpointReader(state)
+        require(reader.int() == 2)
+        val handleCursor = reader.int()
+        require(handleCursor > 0)
+        val owned = linkedMapOf<Int, List<String>>()
+        repeat(reader.count(1024)) {
+            val handle = reader.int()
+            require(handle > 0 && handle !in owned)
+            val rows = List(DisplayBuffer.HEIGHT) { reader.text(DisplayBuffer.MAXIMUM_WRITE_BYTES) }
+            require(DisplayBuffer().applySnapshot(rows)) { "invalid saved display rows" }
+            owned[handle] = rows
+        }
+        reader.finish()
+        reset()
+        nextHandle = handleCursor
+        val runtime = peripherals
+        require(owned.isEmpty() || runtime != null) { "Display resources have no peripheral context" }
+        owned.forEach { (handle, rows) ->
+            val endpoint =
+                try {
+                    requireNotNull(runtime).endpoint(DisplayPeripheralIntegration.contract, handle)
+                } catch (
+                    _: PeripheralFailure,
+                ) {
+                    return@forEach
+                }
+            if (endpoint.buffer.restoreWriter(owner, endpoint::valid, rows) == DisplayWriteResult.SUCCESS) {
+                accessed[endpoint.identity] = endpoint
+                accessedHandles[handle] = endpoint
+            }
+        }
+    }
+
     override fun reset() {
         (handles.values + accessed.values)
             .map(DisplayEndpoint::buffer)
@@ -94,6 +156,7 @@ internal class DisplayHostState(
             .forEach { it.release(owner) }
         handles.clear()
         accessed.clear()
+        accessedHandles.clear()
         nextHandle = 1
     }
 
@@ -167,6 +230,7 @@ internal class DisplayHostState(
             return try {
                 val endpoint = runtime.endpoint(DisplayPeripheralIntegration.contract, handle)
                 accessed[endpoint.identity] = endpoint
+                accessedHandles[handle] = endpoint
                 action(endpoint)
             } catch (failure: PeripheralFailure) {
                 accessed.entries.removeIf { (_, endpoint) ->

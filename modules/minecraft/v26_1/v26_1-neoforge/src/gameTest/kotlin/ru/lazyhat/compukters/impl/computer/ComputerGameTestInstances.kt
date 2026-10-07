@@ -86,3 +86,13 @@ internal class VmActorServiceGameTest(
 
     override fun typeDescription(): MutableComponent = Component.literal("Compukters server VM actor service")
 }
+
+internal class ComputerHibernationGameTest(
+    testData: TestData<Holder<TestEnvironmentDefinition<*>>>,
+) : GameTestInstance(testData) {
+    override fun run(helper: GameTestHelper) = ComputerHibernationGameTestScenario.run(helper)
+
+    override fun codec(): MapCodec<out GameTestInstance> = MapCodec.unit(this)
+
+    override fun typeDescription(): MutableComponent = Component.literal("Compukters computer hibernation")
+}
