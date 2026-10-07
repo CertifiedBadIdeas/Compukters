@@ -16,7 +16,7 @@ This reference groups versioned representation boundaries by the version that in
 | Boundary | Current representation | Owner |
 | --- | --- | --- |
 | Executable container | Format 3; nominal inline layouts require Runtime ABI 1.15 | `modules/common/compiler-artifact` and `host/compukter-vm/src/artifact/format.rs` |
-| Native session transport | C ABI 20, checked by both FFM and JNI | `host/compukter-vm/ffi/src/lib.rs` and `modules/common/native-runtime` |
+| Native session transport | C ABI 21, checked by both FFM and JNI | `host/compukter-vm/ffi/src/lib.rs` and `modules/common/native-runtime` |
 | Base platform | Bundle format 9, standalone module format 5, platform ABI 3 | `PlatformBundleCodec` in `modules/common/platform-bundle` |
 | Kotlin metadata carrier | Private format 6 | `platform-k2` |
 | IDE analysis | Protocol 15 | `ide-analysis-client` and `ide-analysis-k2` |
@@ -26,7 +26,7 @@ This reference groups versioned representation boundaries by the version that in
 The VM has a logical computer checkpoint envelope (format 2), owned by
 `host/compukter-vm/src/checkpoint/envelope.rs`. Its version, native runtime/schema identity, computer ID,
 filesystem generation, payload lengths and SHA-256 cover the execution and host descriptor bytes together.
-Rust exposes contextual capture/restore and bounded atomic store methods. It currently has no C ABI or JVM transport API, and it does not yet provide in-game hibernation.
+Rust exposes contextual capture/restore and bounded atomic store methods through C ABI 21, JNI and FFM. In-game lifecycle integration remains under development.
 The native reference is `host/compukter-vm/docs/architecture/computer-checkpoints.md`.
 
 ## Native Runtime bundles
@@ -52,7 +52,7 @@ offset when present, otherwise function and bytecode coordinates. Runtime format
 
 Native C ABI 17 appends a length-prefixed, bounded UTF-8 trace to terminal outcome tags 2 (OOM), 5 (Guest trap), and
 6 (VM fault), after their existing scalar payload. Empty text means unavailable diagnostic text. FFM and JNI validate
-ABI 20 before decoding; both retain typed failures and carry the trace through the runtime host. Other wire tags and
+ABI 21 before decoding; both retain typed failures and carry the trace through the runtime host. Other wire tags and
 guest capability schemas are unchanged.
 Native C ABI 19 adds `compukter_resume_value(handle, taskId, requestId, payload, payloadLength)`.
 The caller owns the byte buffer; native code validates and copies its contents before returning and retains no caller
