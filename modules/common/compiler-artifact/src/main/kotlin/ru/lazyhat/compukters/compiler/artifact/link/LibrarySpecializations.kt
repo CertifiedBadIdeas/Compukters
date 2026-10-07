@@ -38,8 +38,6 @@ import ru.lazyhat.compukters.compiler.artifact.model.SymbolKind
 import ru.lazyhat.compukters.compiler.artifact.model.TypeId
 import ru.lazyhat.compukters.compiler.artifact.model.TypeRef
 import ru.lazyhat.compukters.compiler.artifact.model.ValueType
-import ru.lazyhat.compukters.compiler.artifact.write.ArtifactWriter
-import java.util.IdentityHashMap
 
 /**
  * Tooling-only concrete-template symbols carried by ordinary artifact exports.
@@ -122,20 +120,28 @@ object LibrarySpecializations {
         libraries: List<Artifact>,
         names: Set<String>,
         definitionModule: Int = 0,
+    ): Artifact = reuse(application, libraries, names, definitionModule, ModuleSemanticHashes())
+
+    internal fun reuse(
+        application: Artifact,
+        libraries: List<Artifact>,
+        names: Set<String>,
+        definitionModule: Int,
+        hashes: ModuleSemanticHashes,
     ): Artifact {
         if (names.isEmpty()) return application
         val modules =
             (
                 application.modules.filterIndexed { index, module -> index != definitionModule && module.kind == ModuleKind.LIBRARY } +
                     libraries.flatMap { it.modules.filter { m -> m.kind == ModuleKind.LIBRARY } }
-            ).distinctBy { ArtifactWriter.moduleSemanticHash(it).hex() }
+            ).distinctBy { hashes[it].hex() }
         // Only an artifact's defining library owns its complete exported variants. Embedded dependencies
         // may be pruned copies with different semantic hashes; they cannot compete with a direct owner.
         val definingModules =
             libraries
                 .mapNotNull { artifact ->
                     artifact.modules.firstOrNull { it.kind == ModuleKind.LIBRARY }
-                }.distinctBy { ArtifactWriter.moduleSemanticHash(it).hex() }
+                }.distinctBy { hashes[it].hex() }
         val source = application.modules[definitionModule]
         val owners = linkedMapOf<Int, Module>()
         source.types.forEachIndexed { index, type ->
@@ -149,7 +155,7 @@ object LibrarySpecializations {
             require(candidates.size <= 1) {
                 "ambiguous specialization owner for $name: " +
                     candidates.joinToString { module ->
-                        "${module.text(module.name)}@${ArtifactWriter.moduleSemanticHash(module).hex()}"
+                        "${module.text(module.name)}@${hashes[module].hex()}"
                     }
             }
             candidates.singleOrNull()?.let { owners[index] = it }
@@ -160,7 +166,6 @@ object LibrarySpecializations {
         val typeImports = linkedMapOf<Int, TypeRef.Imported>()
         val functionImports = linkedMapOf<Int, FunctionRef.Imported>()
         val fieldImports = linkedMapOf<Int, FieldRef.Imported>()
-        val moduleHashes = IdentityHashMap<Module, ByteArray>()
 
         fun addImport(
             module: Module,
@@ -184,7 +189,7 @@ object LibrarySpecializations {
                     ModuleId.of(0u),
                     StringId.of(index.toUInt()),
                     signature ?: TypeRef.Imported(id),
-                    moduleHashes.getOrPut(module) { ArtifactWriter.moduleSemanticHash(module) }.copyOf(),
+                    hashes[module],
                 )
             return id
         }

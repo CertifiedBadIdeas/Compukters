@@ -18,6 +18,11 @@
 
 package ru.lazyhat.compukters.compiler.artifact.write
 
+import ru.lazyhat.compukters.compiler.artifact.analysis.ReferenceLiveness
+import ru.lazyhat.compukters.compiler.artifact.model.BlockId
+import ru.lazyhat.compukters.compiler.artifact.model.DebugEntry
+import ru.lazyhat.compukters.compiler.artifact.model.FunctionId
+import ru.lazyhat.compukters.compiler.artifact.model.MetadataText
 import java.security.MessageDigest
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
@@ -47,5 +52,40 @@ class SectionEncoderTest {
             ArtifactWriter.moduleSemanticHash(minimalArtifact().modules.single()).toHex(),
         )
         assertEquals(32, MessageDigest.getInstance("SHA-256").digest().size)
+    }
+
+    @Test
+    fun `hash only encoding preserves full encoder hashes and debug failures`() {
+        val base = minimalArtifact().modules.single()
+        val entry = DebugEntry(FunctionId.of(0u), BlockId.of(0u), 0u, 1u, 2u, null, MetadataText.of("src/программа.kt"), 2u, 4u)
+        val debugCases =
+            listOf(
+                emptyList(),
+                List(3) { entry },
+                listOf(entry.copy(sourcePath = MetadataText.of("x".repeat(300)))),
+                listOf(entry.copy(sourceLine = null, sourceColumn = null)),
+                listOf(entry.copy(sourceLine = null)),
+                listOf(entry.copy(sourceColumn = null)),
+                listOf(entry.copy(sourceLine = 0u)),
+                listOf(entry.copy(sourceColumn = 0u)),
+            )
+        for (debug in debugCases) {
+            val module = base.copy(debug = debug)
+            val prepared = ReferenceLiveness.derive(module)
+            for (maximum in 0..256) {
+                val limits = ArtifactWriteLimits(artifactBytes = maximum)
+                val full = runCatching { encodeModuleSections(prepared, limits).semanticHash }
+                val hash = runCatching { ArtifactWriter.moduleSemanticHash(module, limits) }
+                if (full.isSuccess) {
+                    assertContentEquals(full.getOrThrow(), hash.getOrThrow())
+                } else {
+                    val expected = full.exceptionOrNull()!!
+                    val actual = hash.exceptionOrNull()!!
+                    assertEquals(expected::class, actual::class)
+                    assertEquals(expected.message, actual.message)
+                    if (expected is ArtifactEncodingException) assertEquals(expected.code, (actual as ArtifactEncodingException).code)
+                }
+            }
+        }
     }
 }

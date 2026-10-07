@@ -30,7 +30,7 @@ object ArtifactWriter {
     fun moduleSemanticHash(
         module: Module,
         limits: ArtifactWriteLimits = ArtifactWriteLimits(),
-    ): ByteArray = encodeModuleSections(ReferenceLiveness.derive(module), limits).semanticHash.copyOf()
+    ): ByteArray = encodeModuleSemanticHash(ReferenceLiveness.derive(module), limits)
 
     fun write(
         artifact: Artifact,

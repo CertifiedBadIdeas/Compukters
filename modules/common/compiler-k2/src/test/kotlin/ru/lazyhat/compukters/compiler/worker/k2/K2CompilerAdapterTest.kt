@@ -53,6 +53,7 @@ import kotlin.io.path.createTempDirectory
 import kotlin.io.path.readText
 import kotlin.io.path.writeText
 import kotlin.test.Test
+import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
@@ -375,6 +376,54 @@ class K2CompilerAdapterTest {
     }
 
     @Test
+    fun `prepared libraries preserve artifacts across reordered and changed selections`() {
+        val packaged = K2CompilerAdapter.loadPackagedPlatform()
+        val selected =
+            packaged.modules.map { module ->
+                TrustedBundleIdentity.of(module.id.toString(), Hash256.of(PlatformBundleCodec.moduleContentHash(module).toByteArray()))
+            }
+        withAdapter(packaged) { adapter, _ ->
+            val source = "fun main() { println(42) }"
+            val first = adapter.compile(request(source, platformModules = selected))
+            val repeated = adapter.compile(request(source, platformModules = selected.reversed()))
+            assertContentEquals(assertNotNull(first.artifact).toByteArray(), assertNotNull(repeated.artifact).toByteArray())
+
+            val unselected = adapter.compile(request(source))
+            assertNull(unselected.artifact)
+            assertTrue(unselected.hasErrors, unselected.diagnostics.toString())
+
+            val restored = adapter.compile(request(source, platformModules = selected))
+            assertContentEquals(assertNotNull(first.artifact).toByteArray(), assertNotNull(restored.artifact).toByteArray())
+        }
+    }
+
+    @Test
+    fun `prepared libraries still enforce each requests artifact and temporary limits`() {
+        val packaged = K2CompilerAdapter.loadPackagedPlatform()
+        val selected =
+            packaged.modules.map { module ->
+                TrustedBundleIdentity.of(module.id.toString(), Hash256.of(PlatformBundleCodec.moduleContentHash(module).toByteArray()))
+            }
+        withAdapter(packaged) { adapter, root ->
+            val source = "fun main() { val answer: Int = 42 }"
+            val first = adapter.compile(request(source, platformModules = selected))
+            assertNotNull(first.artifact, first.diagnostics.toString())
+
+            val limited = adapter.compile(request(source, WorkerLimits(artifactBytes = 1), selected))
+            assertNull(limited.artifact)
+            assertTrue(limited.hasErrors)
+            assertTrue(limited.diagnostics.any { it.code?.startsWith("ARTIFACT_WRITE_") == true }, limited.diagnostics.toString())
+            assertFailsWith<TemporaryBudgetException> {
+                adapter.compile(request(source, WorkerLimits(temporaryBytes = 0), selected))
+            }
+            Files.list(root).use { assertEquals(0, it.count()) }
+
+            val restored = adapter.compile(request(source, platformModules = selected))
+            assertContentEquals(first.artifact.toByteArray(), assertNotNull(restored.artifact).toByteArray())
+        }
+    }
+
+    @Test
     fun `valid Kotlin source reaches IR and request files are removed`() =
         withAdapter { adapter, root ->
             val result = adapter.compile(request("fun main() { val answer: Int = 42 }"))
@@ -482,6 +531,24 @@ class K2CompilerAdapterTest {
                     ),
                 )
             val artifact = ArtifactReader.read(assertNotNull(admitted.artifact, admitted.diagnostics.joinToString()).toByteArray())
+            val repeated =
+                adapter.compile(
+                    request(
+                        "import fixture.kinetics.Kinetics\nfun main() { val speed = Kinetics.front.speedometer().speed() }",
+                        platformModules = selected,
+                        addonBundles = listOf(payload),
+                    ),
+                )
+            assertContentEquals(admitted.artifact.toByteArray(), assertNotNull(repeated.artifact).toByteArray())
+            assertFailsWith<IllegalArgumentException> {
+                adapter.compile(
+                    request(
+                        "fun main() {}",
+                        platformModules = selected,
+                        addonBundles = listOf(TrustedBundlePayload(payload.identity, BinaryValue.of(byteArrayOf()))),
+                    ),
+                )
+            }
             assertTrue(
                 artifact.capabilities.any { capability ->
                     val strings = artifact.modules.first().strings

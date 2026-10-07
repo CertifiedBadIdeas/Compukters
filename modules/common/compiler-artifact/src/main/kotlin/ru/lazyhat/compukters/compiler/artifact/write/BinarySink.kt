@@ -23,7 +23,8 @@ import java.io.ByteArrayOutputStream
 internal class BinarySink(
     private val maximumBytes: Int,
 ) {
-    private val output = ByteArrayOutputStream(minOf(maximumBytes, 4_096))
+    // Most sinks encode a single short record or instruction; grow larger sections on demand.
+    private val output = ByteArrayOutputStream(minOf(maximumBytes, 32))
 
     val size: Int
         get() = output.size()
@@ -111,4 +112,22 @@ internal fun checkedAlign8(value: Int): Int {
         throw ArtifactEncodingException(ArtifactWriteErrorCode.OVERFLOW, "alignment exceeds Int range")
     }
     return aligned.toInt()
+}
+
+internal fun checkIndexedSize(
+    recordCount: Int,
+    recordBytes: Long,
+    maximumBytes: Int,
+) {
+    if (recordBytes > UInt.MAX_VALUE.toLong()) {
+        throw ArtifactEncodingException(ArtifactWriteErrorCode.OVERFLOW, "indexed record bytes exceed u32")
+    }
+    val directoryBytes = 16L + (recordCount.toLong() + 1L) * 4L
+    if (directoryBytes > maximumBytes) {
+        throw ArtifactEncodingException(ArtifactWriteErrorCode.LIMIT_EXCEEDED, "encoded output exceeds $maximumBytes bytes")
+    }
+    val payloadStart = checkedAlign8(directoryBytes.toInt())
+    if (payloadStart.toLong() + recordBytes > maximumBytes) {
+        throw ArtifactEncodingException(ArtifactWriteErrorCode.LIMIT_EXCEEDED, "encoded output exceeds $maximumBytes bytes")
+    }
 }
