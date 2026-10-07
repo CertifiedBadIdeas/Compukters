@@ -21,6 +21,7 @@ package ru.lazyhat.compukters.compiler.k2.engine.intrinsic
 import org.jetbrains.kotlin.name.CallableId
 import org.jetbrains.kotlin.name.FqName
 import org.jetbrains.kotlin.name.Name
+import ru.lazyhat.compukters.compiler.k2.engine.GuestPrimitive
 import ru.lazyhat.compukters.platform.bundle.PlatformModuleId
 
 object CanonicalTrustedIntrinsics {
@@ -81,115 +82,60 @@ object CanonicalTrustedIntrinsics {
             primitive("stdlib", "core", "kotlin.collections", "listOf", "fun(T):List<T>")
             primitive("stdlib", "core", "kotlin.collections", "emptyList", "fun():List<T>")
             primitive("stdlib", "core", "kotlin.collections", "mutableListStorage", "fun(Int):MutableListStorage<T>")
-            listOf(
-                "and" to "fun(Int):Int",
-                "compareTo" to "fun(Int):Int",
-                "div" to "fun(Int):Int",
-                "inv" to "fun():Int",
-                "minus" to "fun(Int):Int",
-                "or" to "fun(Int):Int",
-                "plus" to "fun(Int):Int",
-                "rem" to "fun(Int):Int",
-                "shl" to "fun(Int):Int",
-                "shr" to "fun(Int):Int",
-                "times" to "fun(Int):Int",
-                "toChar" to "fun():Char",
-                "unaryMinus" to "fun():Int",
-                "ushr" to "fun(Int):Int",
-                "xor" to "fun(Int):Int",
-            ).forEach { (name, signature) -> primitive("kotlin", "builtins", "kotlin", "Int.$name", signature) }
-            listOf(
-                "compareTo" to "fun(Long):Int",
-                "div" to "fun(Long):Long",
-                "minus" to "fun(Long):Long",
-                "plus" to "fun(Long):Long",
-                "rem" to "fun(Long):Long",
-                "times" to "fun(Long):Long",
-                "toLong" to "fun():Long",
-            ).forEach { (name, signature) -> primitive("kotlin", "builtins", "kotlin", "Int.$name", signature) }
-            listOf(
-                "compareTo" to "fun(Float):Int",
-                "div" to "fun(Float):Float",
-                "minus" to "fun(Float):Float",
-                "plus" to "fun(Float):Float",
-                "rem" to "fun(Float):Float",
-                "times" to "fun(Float):Float",
-                "toFloat" to "fun():Float",
-            ).forEach { (name, signature) -> primitive("kotlin", "builtins", "kotlin", "Int.$name", signature) }
-            listOf(
-                "and" to "fun(Long):Long",
-                "compareTo" to "fun(Int):Int",
-                "compareTo" to "fun(Long):Int",
-                "div" to "fun(Int):Long",
-                "div" to "fun(Long):Long",
-                "inv" to "fun():Long",
-                "minus" to "fun(Int):Long",
-                "minus" to "fun(Long):Long",
-                "or" to "fun(Long):Long",
-                "plus" to "fun(Int):Long",
-                "plus" to "fun(Long):Long",
-                "rem" to "fun(Int):Long",
-                "rem" to "fun(Long):Long",
-                "shl" to "fun(Int):Long",
-                "shr" to "fun(Int):Long",
-                "times" to "fun(Int):Long",
-                "times" to "fun(Long):Long",
-                "toInt" to "fun():Int",
-                "unaryMinus" to "fun():Long",
-                "ushr" to "fun(Int):Long",
-                "xor" to "fun(Long):Long",
-            ).forEach { (name, signature) -> primitive("kotlin", "builtins", "kotlin", "Long.$name", signature) }
-            listOf(
-                "compareTo" to "fun(Float):Int",
-                "div" to "fun(Float):Float",
-                "minus" to "fun(Float):Float",
-                "plus" to "fun(Float):Float",
-                "rem" to "fun(Float):Float",
-                "times" to "fun(Float):Float",
-                "toFloat" to "fun():Float",
-            ).forEach { (name, signature) -> primitive("kotlin", "builtins", "kotlin", "Long.$name", signature) }
-            listOf(
-                "compareTo" to "fun(Float):Int",
-                "compareTo" to "fun(Int):Int",
-                "compareTo" to "fun(Long):Int",
-                "div" to "fun(Float):Float",
-                "div" to "fun(Int):Float",
-                "div" to "fun(Long):Float",
-                "minus" to "fun(Float):Float",
-                "minus" to "fun(Int):Float",
-                "minus" to "fun(Long):Float",
-                "plus" to "fun(Float):Float",
-                "plus" to "fun(Int):Float",
-                "plus" to "fun(Long):Float",
-                "rem" to "fun(Float):Float",
-                "rem" to "fun(Int):Float",
-                "rem" to "fun(Long):Float",
-                "times" to "fun(Float):Float",
-                "times" to "fun(Int):Float",
-                "times" to "fun(Long):Float",
-                "toInt" to "fun():Int",
-                "toLong" to "fun():Long",
-                "unaryMinus" to "fun():Float",
-            ).forEach { (name, signature) -> primitive("kotlin", "builtins", "kotlin", "Float.$name", signature) }
-            primitive("kotlin", "builtins", "kotlin", "Float.Companion.POSITIVE_INFINITY", "val():Float")
-            primitive("kotlin", "builtins", "kotlin", "Float.Companion.NEGATIVE_INFINITY", "val():Float")
-            primitive("kotlin", "builtins", "kotlin", "Float.Companion.NaN", "val():Float")
-            listOf("Int", "Long", "Float", "Double").forEach { owner ->
-                val operands = if (owner == "Double") listOf("Int", "Long", "Float", "Double") else listOf("Double")
-                operands.forEach { operand ->
-                    primitive("kotlin", "builtins", "kotlin", "$owner.compareTo", "fun($operand):Int")
+            GuestPrimitive.entries.filter { it.numeric }.forEach { owner ->
+                GuestPrimitive.entries.filter { it.numeric && it.unsigned == owner.unsigned }.forEach { operand ->
+                    primitive("kotlin", "builtins", "kotlin", "${owner.sourceName}.compareTo", "fun(${operand.sourceName}):Int")
+                    val result = GuestPrimitive.promote(listOf(owner, operand)).sourceName
                     listOf("plus", "minus", "times", "div", "rem").forEach { operation ->
-                        primitive("kotlin", "builtins", "kotlin", "$owner.$operation", "fun($operand):Double")
+                        primitive("kotlin", "builtins", "kotlin", "${owner.sourceName}.$operation", "fun(${operand.sourceName}):$result")
                     }
                 }
-                if (owner != "Double") primitive("kotlin", "builtins", "kotlin", "$owner.toDouble", "fun():Double")
+                if (!owner.unsigned) {
+                    val result = GuestPrimitive.promote(listOf(owner)).sourceName
+                    listOf("unaryPlus", "unaryMinus").forEach { operation ->
+                        primitive("kotlin", "builtins", "kotlin", "${owner.sourceName}.$operation", "fun():$result")
+                    }
+                }
+                listOf("inc", "dec").forEach { operation ->
+                    primitive("kotlin", "builtins", "kotlin", "${owner.sourceName}.$operation", "fun():${owner.sourceName}")
+                }
+                if (owner in setOf(GuestPrimitive.INT, GuestPrimitive.LONG) || owner.unsigned) {
+                    listOf("and", "or", "xor").forEach { operation ->
+                        primitive(
+                            "kotlin",
+                            "builtins",
+                            "kotlin",
+                            "${owner.sourceName}.$operation",
+                            "fun(${owner.sourceName}):${owner.sourceName}",
+                        )
+                    }
+                    primitive("kotlin", "builtins", "kotlin", "${owner.sourceName}.inv", "fun():${owner.sourceName}")
+                }
+                if (owner in setOf(GuestPrimitive.INT, GuestPrimitive.LONG, GuestPrimitive.UINT, GuestPrimitive.ULONG)) {
+                    (listOf("shl", "shr") + if (owner.unsigned) emptyList() else listOf("ushr")).forEach { operation ->
+                        primitive("kotlin", "builtins", "kotlin", "${owner.sourceName}.$operation", "fun(Int):${owner.sourceName}")
+                    }
+                }
+                val conversions =
+                    GuestPrimitive.entries.filter {
+                        it != GuestPrimitive.BOOLEAN && !(owner.unsigned && it == GuestPrimitive.CHAR)
+                    }
+                conversions.forEach { target ->
+                    primitive("kotlin", "builtins", "kotlin", "${owner.sourceName}.to${target.sourceName}", "fun():${target.sourceName}")
+                }
             }
-            listOf("Int", "Long", "Float").forEach { target ->
-                primitive("kotlin", "builtins", "kotlin", "Double.to$target", "fun():$target")
+            listOf("and", "or", "xor").forEach { operation ->
+                primitive("kotlin", "builtins", "kotlin", "Boolean.$operation", "fun(Boolean):Boolean")
             }
-            primitive("kotlin", "builtins", "kotlin", "Double.unaryMinus", "fun():Double")
-            listOf("POSITIVE_INFINITY", "NEGATIVE_INFINITY", "NaN").forEach { name ->
-                primitive("kotlin", "builtins", "kotlin", "Double.Companion.$name", "val():Double")
+            primitive("kotlin", "builtins", "kotlin", "Char.code", "val():Int")
+            primitive("kotlin", "builtins", "kotlin", "Char.plus", "fun(Int):Char")
+            primitive("kotlin", "builtins", "kotlin", "Char.minus", "fun(Int):Char")
+            primitive("kotlin", "builtins", "kotlin", "Char.minus", "fun(Char):Int")
+            listOf("inc", "dec").forEach { operation -> primitive("kotlin", "builtins", "kotlin", "Char.$operation", "fun():Char") }
+            listOf("Float", "Double").forEach { owner ->
+                listOf("POSITIVE_INFINITY", "NEGATIVE_INFINITY", "NaN").forEach { name ->
+                    primitive("kotlin", "builtins", "kotlin", "$owner.Companion.$name", "val():$owner")
+                }
             }
             primitive("kotlin", "builtins", "kotlin", "String.<init>", "constructor()")
             primitive("kotlin", "builtins", "kotlin", "String.<init>", "constructor(CharArray)")

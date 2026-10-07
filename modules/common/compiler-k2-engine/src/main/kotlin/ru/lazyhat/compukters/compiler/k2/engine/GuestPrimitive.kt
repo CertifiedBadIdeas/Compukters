@@ -24,6 +24,9 @@ import org.jetbrains.kotlin.ir.types.IrSimpleType
 import org.jetbrains.kotlin.ir.types.IrType
 import org.jetbrains.kotlin.ir.util.fqNameWhenAvailable
 import ru.lazyhat.compukters.compiler.artifact.model.ArrayStorage
+import ru.lazyhat.compukters.compiler.artifact.model.OrderedScalarValueType
+import ru.lazyhat.compukters.compiler.artifact.model.ScalarValueType
+import ru.lazyhat.compukters.compiler.artifact.model.StringValueType
 import ru.lazyhat.compukters.compiler.artifact.model.ValueType
 
 /** Canonical primitive identity shared by scalar, box, array and collection lowering. */
@@ -54,7 +57,7 @@ internal enum class GuestPrimitive(
     val arrayFactory: String get() = "kotlin.${sourceName.lowercase()}ArrayOf"
     val boxFieldName: String get() = "$qualifiedName.<boxed-value>"
     val boxFieldImport: UInt get() = RUNTIME_TYPE_COUNT + boxField + if (boxField >= 9u) 3u else 0u
-    val unsigned: Boolean get() = this in setOf(UBYTE, USHORT, UINT, ULONG)
+    val unsigned: Boolean get() = this == UBYTE || this == USHORT || this == UINT || this == ULONG
     val numeric: Boolean get() = this != BOOLEAN && this != CHAR
     val narrowBits: Int? get() =
         when (this) {
@@ -63,10 +66,37 @@ internal enum class GuestPrimitive(
             else -> null
         }
 
+    val scalarForm: ScalarValueType get() =
+        when (scalar) {
+            ValueType.I32 -> if (unsigned) ScalarValueType.U32 else ScalarValueType.I32
+            ValueType.I64 -> if (unsigned) ScalarValueType.U64 else ScalarValueType.I64
+            ValueType.F32 -> ScalarValueType.F32
+            ValueType.F64 -> ScalarValueType.F64
+            ValueType.Bool -> ScalarValueType.BOOL
+            ValueType.Char -> ScalarValueType.CHAR
+            else -> error("unsupported primitive scalar")
+        }
+    val orderedForm: OrderedScalarValueType get() =
+        OrderedScalarValueType
+            .valueOf(scalarForm.name)
+    val stringForm: StringValueType get() =
+        StringValueType
+            .valueOf(scalarForm.name)
+
     companion object {
         const val RUNTIME_TYPE_COUNT: UInt = 39u
         private val scalars = entries.associateBy { it.qualifiedName }
         private val arrays = entries.associateBy { it.arrayName }
+
+        fun promote(primitives: List<GuestPrimitive>): GuestPrimitive =
+            when {
+                DOUBLE in primitives -> DOUBLE
+                FLOAT in primitives -> FLOAT
+                ULONG in primitives -> ULONG
+                LONG in primitives -> LONG
+                primitives.any { it.unsigned } -> UINT
+                else -> INT
+            }
 
         @OptIn(UnsafeDuringIrConstructionAPI::class)
         fun scalar(type: IrType): GuestPrimitive? = scalars[qualifiedName(type)]

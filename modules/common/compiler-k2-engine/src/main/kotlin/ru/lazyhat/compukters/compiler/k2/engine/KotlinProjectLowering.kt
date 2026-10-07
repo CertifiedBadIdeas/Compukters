@@ -1580,12 +1580,7 @@ internal object KotlinProjectLowering {
                 .sorted()
         val metadataIds = metadataValues.withIndex().associate { (index, value) -> value.toString() to StringId.of(index.toUInt()) }
         val literalCollector =
-            LiteralCollector(
-                pluginContext.irBuiltIns.unitType,
-                pluginContext.irBuiltIns.longType,
-                pluginContext.irBuiltIns.floatType,
-                pluginContext.irBuiltIns.doubleType,
-            ).also { collector ->
+            LiteralCollector(pluginContext.irBuiltIns.unitType).also { collector ->
                 userFunctions.forEach { function -> function.accept(collector, null) }
                 constructorClasses.forEach { declaration -> declaration.accept(collector, null) }
                 constructorInstances.forEach { it.declaration.accept(collector, null) }
@@ -1596,57 +1591,6 @@ internal object KotlinProjectLowering {
                         ?.accept(collector, null)
                 }
             }
-        var needsAllBitsI32 = false
-        var needsIntegerCompareToResult = false
-        var needsFloatCompareToResult = false
-        var needsBooleanCompareToResult = false
-        var needsStringCompareToStep = false
-        var needsZeroI64 = false
-        var needsAllBitsI64 = false
-        (userFunctions + constructorClasses).forEach { function ->
-            function.accept(
-                object : IrVisitorVoid() {
-                    override fun visitElement(element: IrElement) {
-                        element.acceptChildren(this, null)
-                    }
-
-                    override fun visitCall(expression: IrCall) {
-                        val callee =
-                            expression.symbol.owner.fqNameWhenAvailable
-                                ?.asString()
-                        if (callee == "kotlin.Int.inv") needsAllBitsI32 = true
-                        if (callee == "kotlin.Long.unaryMinus") needsZeroI64 = true
-                        if (callee == "kotlin.Long.inv") needsAllBitsI64 = true
-                        if (callee == "kotlin.String.compareTo") needsStringCompareToStep = true
-                        if (callee == "kotlin.Boolean.compareTo") needsBooleanCompareToResult = true
-                        if (
-                            callee == "kotlin.Int.compareTo" ||
-                            callee == "kotlin.Long.compareTo" ||
-                            callee == "kotlin.Float.compareTo" || callee == "kotlin.Double.compareTo"
-                        ) {
-                            val operands = expression.arguments.filterNotNull()
-                            if (operands.size == 2) {
-                                val types = operands.map { it.type }
-                                if (types.all { it == pluginContext.irBuiltIns.intType || it == pluginContext.irBuiltIns.longType }) {
-                                    needsIntegerCompareToResult = true
-                                } else if (
-                                    types.any { it == pluginContext.irBuiltIns.floatType || it == pluginContext.irBuiltIns.doubleType } &&
-                                    types.all {
-                                        it == pluginContext.irBuiltIns.intType ||
-                                            it == pluginContext.irBuiltIns.longType ||
-                                            it == pluginContext.irBuiltIns.floatType || it == pluginContext.irBuiltIns.doubleType
-                                    }
-                                ) {
-                                    needsFloatCompareToResult = true
-                                }
-                            }
-                        }
-                        super.visitCall(expression)
-                    }
-                },
-                null,
-            )
-        }
         val literals =
             (literalCollector.strings + guestTypes.valueClassBoxes.values.flatMap { listOf(it.stringPrefix, ")") })
                 .distinct()
@@ -1669,26 +1613,13 @@ internal object KotlinProjectLowering {
                     platformScalars.constantValues() +
                     linkedSymbols.defaultIntValues
             ).map { value -> value.toArtifactConstant(literalIds) } +
-                Constant.I32(31) + Constant.I32(0) + Constant.I32(1) +
-                listOfNotNull(
-                    Constant.I32(-1).takeIf {
-                        needsAllBitsI32 || needsIntegerCompareToResult || needsFloatCompareToResult || needsBooleanCompareToResult ||
-                            literalCollector.usesDouble
-                    },
-                ) +
-                listOfNotNull(
-                    Constant.I32(1).takeIf {
-                        needsIntegerCompareToResult || needsFloatCompareToResult || needsBooleanCompareToResult || needsStringCompareToStep
-                    },
-                ) +
-                listOfNotNull(Constant.I64(0).takeIf { literalCollector.usesLong || needsZeroI64 }) +
-                listOfNotNull(Constant.I64(-1).takeIf { needsAllBitsI64 }) +
-                listOfNotNull(Constant.F32(0u).takeIf { literalCollector.usesFloat }) +
-                listOfNotNull(Constant.F32((-1.0f).toBits().toUInt()).takeIf { literalCollector.usesFloat }) +
-                Constant.F32(1.0f.toBits().toUInt()) +
-                listOfNotNull(Constant.F64(0uL).takeIf { literalCollector.usesDouble }) +
-                listOfNotNull(Constant.F64((-1.0).toBits().toULong()).takeIf { literalCollector.usesDouble }) +
-                Constant.F64(1.0.toBits().toULong()) +
+                listOf(-1, 0, 1, 31).map(Constant::I32) +
+                GuestPrimitive.entries.mapNotNull { it.narrowBits }.distinct().flatMap { bits ->
+                    listOf(Constant.I32(32 - bits), Constant.I32((1 shl bits) - 1))
+                } +
+                listOf(-1L, 0L, 1L).map(Constant::I64) +
+                listOf(-1.0f, 0.0f, 1.0f).map { Constant.F32(it.toBits().toUInt()) } +
+                listOf(-1.0, 0.0, 1.0).map { Constant.F64(it.toBits().toULong()) } +
                 Constant.Bool(false) + Constant.Bool(true)
         ).forEach(constantPool::intern)
         val constants = constantPool.freeze().records
@@ -3610,7 +3541,9 @@ internal object KotlinProjectLowering {
                 TopLevelInitializer.Null
             } else {
                 val value = (expression as? IrConst)?.value
-                if (value !is Int && value !is Long && value !is Float && value !is Double && value !is Boolean && value !is Char &&
+                if (value !is Byte && value !is Short && value !is Int && value !is Long && value !is Float && value !is Double &&
+                    value !is Boolean &&
+                    value !is Char &&
                     value !is String
                 ) {
                     throw UnsupportedKotlinIr(
@@ -3977,7 +3910,7 @@ internal object KotlinProjectLowering {
                             block(
                                 listOf(
                                     Instruction.Equal(ScalarValueType.F64, result, left, left),
-                                    Instruction.Const(RegisterId.of(8u), ConstantId.of(1u)),
+                                    Instruction.Const(RegisterId.of(8u), ConstantId.of(0u)),
                                     Instruction.Equal(ScalarValueType.BOOL, result, result, RegisterId.of(8u)),
                                     branch(4u, 5u),
                                 ),
@@ -4090,7 +4023,7 @@ internal object KotlinProjectLowering {
 
                             UNIT_RUNTIME_TYPE -> {
                                 listOf(
-                                    Instruction.Const(destination, ConstantId.of(0u)),
+                                    Instruction.Const(destination, ConstantId.of(1u)),
                                     Instruction.Return(Destination.Register(destination)),
                                 )
                             }
@@ -4109,11 +4042,7 @@ internal object KotlinProjectLowering {
                                 listOf(
                                     Instruction.FieldGet(scalar, receiver, FieldRef.Local(FieldId.of(field))),
                                     Instruction.StringValueOf(
-                                        if (box.primitive.unsigned) {
-                                            if (box.valueType == ValueType.I64) StringValueType.U64 else StringValueType.U32
-                                        } else {
-                                            scalarStringForm(box.valueType)
-                                        },
+                                        box.primitive.stringForm,
                                         destination,
                                         scalar,
                                     ),
@@ -4203,7 +4132,7 @@ internal object KotlinProjectLowering {
         return Module(
             name = requireNotNull(ids["kotlin.Any"]),
             utf16Literals = listOf(Utf16Literal.of(*"kotlin.Unit".map { it.code }.toIntArray())),
-            constants = listOf(Constant.StringLiteral(Utf16LiteralId.of(0u)), Constant.Bool(false)),
+            constants = listOf(Constant.Bool(false), Constant.StringLiteral(Utf16LiteralId.of(0u))),
             functions = functions,
             blocks = blocks,
             kind = ModuleKind.LIBRARY,
@@ -5808,15 +5737,10 @@ private class FunctionCompiler(
         return boxValue(value, expression.type, ValueType.Ref(false, box.type))
     }
 
-    private fun boxInt(
-        source: RegisterId,
-        target: ValueType.Ref,
-    ): RegisterId = boxScalar(source, target)
-
     private fun boxScalar(
         source: RegisterId,
         target: ValueType.Ref,
-        primitive: GuestPrimitive = scalarBoxes.first { it.valueType == registerValueType(source) }.primitive,
+        primitive: GuestPrimitive,
     ): RegisterId {
         val layout = ScalarBox(primitive)
         val boxType = TypeRef.Imported(ImportId.of(layout.type))
@@ -5829,12 +5753,10 @@ private class FunctionCompiler(
         }
     }
 
-    private fun unboxInt(source: RegisterId): RegisterId = unboxScalar(source, ValueType.I32)
-
     private fun unboxScalar(
         source: RegisterId,
         type: ValueType,
-        primitive: GuestPrimitive = scalarBoxes.first { it.valueType == type }.primitive,
+        primitive: GuestPrimitive,
     ): RegisterId {
         val layout = ScalarBox(primitive)
         val boxType = TypeRef.Imported(ImportId.of(layout.type))
@@ -5899,7 +5821,7 @@ private class FunctionCompiler(
             if (expression !is IrGetObjectValue) compileStatement(expression)
             return convertToString(loadUnitReference())
         }
-        return convertToString(compileStringValue(expression))
+        return convertToString(compileStringValue(expression), primitive = GuestPrimitive.scalar(resolvedType(expression.type)))
     }
 
     private fun compileStringValue(expression: IrExpression): RegisterId {
@@ -6054,13 +5976,14 @@ private class FunctionCompiler(
     private fun convertToString(
         source: RegisterId,
         direct: Boolean = false,
+        primitive: GuestPrimitive? = null,
     ): RegisterId {
         val type = registerValueType(source)
         if (type == stringType) return source
         val destination = allocate(stringType)
         if (isTerminated()) return destination
         if (type !is ValueType.Ref) {
-            val conversion = scalarStringForm(type)
+            val conversion = primitive?.stringForm ?: scalarStringForm(type)
             prepareAllocationBlock()
             emit(Instruction.StringValueOf(conversion, destination, source))
             return destination
@@ -6358,7 +6281,11 @@ private class FunctionCompiler(
                 if (argument !is IrGetObjectValue) compileStatement(argument)
                 return convertToString(loadUnitReference())
             }
-            return convertToString(compileStringValue(argument), direct = call.superQualifierSymbol != null)
+            return convertToString(
+                compileStringValue(argument),
+                direct = call.superQualifierSymbol != null,
+                primitive = GuestPrimitive.scalar(resolvedType(argument.type)),
+            )
         }
         if (target.fqNameWhenAvailable?.asString() == "kotlin.String.plus" && call.arguments.filterNotNull().size == 2) {
             val parts = call.arguments.filterNotNull()
@@ -6974,17 +6901,6 @@ private class FunctionCompiler(
         return allocate(ValueType.F32).also { emit(Instruction.Const(it, id)) }
     }
 
-    private fun widenToI64(
-        value: RegisterId,
-        sourceType: IrType,
-        element: IrElement,
-    ): RegisterId =
-        when (sourceType) {
-            longType -> value
-            intType -> allocate(ValueType.I64).also { emit(Instruction.Convert(it, value)) }
-            else -> throw UnsupportedKotlinIr(element, "only Int can be widened to Long")
-        }
-
     private fun emitF64Constant(
         value: Double,
         element: IrElement,
@@ -6999,23 +6915,13 @@ private class FunctionCompiler(
         value: RegisterId,
         type: IrType,
         element: IrElement,
-    ): RegisterId =
-        when (type) {
-            doubleType -> value
-            intType, longType, floatType -> allocate(ValueType.F64).also { emit(Instruction.Convert(it, value)) }
-            else -> throw UnsupportedKotlinIr(element, "only Int, Long or Float can be widened to Double")
-        }
+    ): RegisterId = primitiveConvert(value, requireNotNull(GuestPrimitive.scalar(resolvedType(type))), GuestPrimitive.DOUBLE, element)
 
     private fun widenToF32(
         value: RegisterId,
         sourceType: IrType,
         element: IrElement,
-    ): RegisterId =
-        when (sourceType) {
-            floatType -> value
-            intType, longType -> allocate(ValueType.F32).also { emit(Instruction.Convert(it, value)) }
-            else -> throw UnsupportedKotlinIr(element, "only Int or Long can be widened to Float")
-        }
+    ): RegisterId = primitiveConvert(value, requireNotNull(GuestPrimitive.scalar(resolvedType(sourceType))), GuestPrimitive.FLOAT, element)
 
     private fun emitIntRangePrecondition(
         value: RegisterId,
@@ -7091,29 +6997,23 @@ private class FunctionCompiler(
                 )
             }
         }
-        val numeric = operands.all { it.type == intType || it.type == longType || it.type == floatType || it.type == doubleType }
-        val mixedDouble = numeric && operands.any { it.type == doubleType }
-        val mixedFloat = !mixedDouble && numeric && operands.any { it.type == floatType }
-        val mixedLong =
-            !mixedFloat && operands.all { it.type == intType || it.type == longType } &&
-                operands.any { it.type == longType }
-        val type =
-            when {
-                mixedDouble -> OrderedScalarValueType.F64
-                mixedFloat -> OrderedScalarValueType.F32
-                mixedLong -> OrderedScalarValueType.I64
-                else -> orderedType(operands[0].type, call)
+        val primitiveOperands = operands.map { GuestPrimitive.scalar(resolvedType(it.type)) }
+        val promoted = promotePrimitives(primitiveOperands)
+        if (promoted != null) {
+            left = primitiveConvert(left, requireNotNull(primitiveOperands[0]), promoted, call)
+            right = primitiveConvert(right, requireNotNull(primitiveOperands[1]), promoted, call)
+            return allocate(ValueType.Bool).also { destination ->
+                emit(
+                    when (predicateName) {
+                        "less" -> Instruction.Less(promoted.orderedForm, destination, left, right)
+                        "lessOrEqual" -> Instruction.LessOrEqual(promoted.orderedForm, destination, left, right)
+                        "greater" -> Instruction.Greater(promoted.orderedForm, destination, left, right)
+                        else -> Instruction.GreaterOrEqual(promoted.orderedForm, destination, left, right)
+                    },
+                )
             }
-        if (mixedDouble) {
-            left = widenToF64(left, operands[0].type, call)
-            right = widenToF64(right, operands[1].type, call)
-        } else if (mixedFloat) {
-            left = widenToF32(left, operands[0].type, call)
-            right = widenToF32(right, operands[1].type, call)
-        } else if (mixedLong) {
-            left = widenToI64(left, operands[0].type, call)
-            right = widenToI64(right, operands[1].type, call)
         }
+        val type = orderedType(operands[0].type, call)
         return allocate(ValueType.Bool).also { destination ->
             emit(
                 when (predicateName) {
@@ -7126,6 +7026,255 @@ private class FunctionCompiler(
         }
     }
 
+    private fun promotePrimitives(primitives: List<GuestPrimitive?>): GuestPrimitive? {
+        if (primitives.any { it == null || !it.numeric }) return null
+        return GuestPrimitive.promote(primitives.filterNotNull())
+    }
+
+    private fun primitiveConvert(
+        value: RegisterId,
+        source: GuestPrimitive,
+        destination: GuestPrimitive,
+        element: IrElement,
+    ): RegisterId {
+        val target = destination.scalar
+        val converted =
+            if (registerValueType(value) == target) {
+                value
+            } else if (source == GuestPrimitive.CHAR || destination == GuestPrimitive.CHAR) {
+                val integer =
+                    if (registerValueType(value) == ValueType.I32) {
+                        value
+                    } else {
+                        allocate(ValueType.I32).also { emit(Instruction.Convert(it, value, unsignedSource = source.unsigned)) }
+                    }
+                if (target == ValueType.I32) {
+                    integer
+                } else {
+                    allocate(target).also {
+                        emit(Instruction.Convert(it, integer, unsignedDestination = destination.unsigned))
+                    }
+                }
+            } else {
+                allocate(target).also {
+                    emit(Instruction.Convert(it, value, unsignedSource = source.unsigned, unsignedDestination = destination.unsigned))
+                }
+            }
+        return normalizePrimitive(converted, destination, element)
+    }
+
+    private fun normalizePrimitive(
+        value: RegisterId,
+        primitive: GuestPrimitive,
+        element: IrElement,
+    ): RegisterId {
+        val bits = primitive.narrowBits ?: return value
+        if (primitive.unsigned) {
+            val mask = emitI32Constant((1 shl bits) - 1, element)
+            return allocate(ValueType.I32).also { emit(Instruction.BitAnd(it, value, mask)) }
+        }
+        val count = emitI32Constant(32 - bits, element)
+        val shifted = allocate(ValueType.I32).also { emit(Instruction.ShiftLeft(it, value, count)) }
+        return allocate(ValueType.I32).also { emit(Instruction.ShiftRight(it, shifted, count)) }
+    }
+
+    private fun compilePrimitiveBuiltinCall(
+        call: IrCall,
+        target: IrSimpleFunction,
+        expressions: List<IrExpression>,
+        arguments: List<RegisterId>,
+    ): RegisterId? {
+        val owner = (target.parent as? IrClass)?.fqNameWhenAvailable?.asString() ?: return null
+        val primitive = GuestPrimitive.entries.singleOrNull { it.qualifiedName == owner } ?: return null
+        val name = target.name.asString()
+        val source = expressions.firstOrNull()?.let { GuestPrimitive.scalar(resolvedType(it.type)) } ?: return null
+        // Nullable receivers and Any.equals are handled by the reference dispatch path.
+        if (arguments.isEmpty() || registerValueType(arguments[0]) is ValueType.Ref) return null
+        val output = GuestPrimitive.scalar(resolvedType(call.type)) ?: return null
+
+        fun result(
+            type: ValueType = output.scalar,
+            instruction: (RegisterId) -> Instruction,
+        ): RegisterId = allocate(type).also { emit(instruction(it)) }
+
+        fun scalarOne(): RegisterId =
+            when (output.scalar) {
+                ValueType.I64 -> emitI64Constant(1, call)
+                ValueType.F32 -> emitF32Constant(1.0f, call)
+                ValueType.F64 -> emitF64Constant(1.0, call)
+                else -> emitI32Constant(1, call)
+            }
+        if (source == GuestPrimitive.BOOLEAN) {
+            if (name == "not" && arguments.size == 1) {
+                val falseValue =
+                    allocate(
+                        ValueType.Bool,
+                    ).also { emit(Instruction.Const(it, requireNotNull(constantIds[Constant.Bool(false)]))) }
+                return result { Instruction.Equal(ScalarValueType.BOOL, it, arguments[0], falseValue) }
+            }
+            if (name in setOf("and", "or", "xor") && arguments.size == 2) {
+                val destination = allocate(ValueType.Bool)
+                if (name == "xor") {
+                    val same = result { Instruction.Equal(ScalarValueType.BOOL, it, arguments[0], arguments[1]) }
+                    val falseValue =
+                        allocate(
+                            ValueType.Bool,
+                        ).also { emit(Instruction.Const(it, requireNotNull(constantIds[Constant.Bool(false)]))) }
+                    emit(Instruction.Equal(ScalarValueType.BOOL, destination, same, falseValue))
+                } else {
+                    val yes = createBlock()
+                    val no = createBlock()
+                    val join = createBlock()
+                    emit(Instruction.Branch(arguments[0], blockId(yes), blockId(no)))
+                    currentBlock = yes
+                    emit(Instruction.Move(destination, if (name == "and") arguments[1] else arguments[0]))
+                    jumpTo(join)
+                    currentBlock = no
+                    emit(Instruction.Move(destination, if (name == "or") arguments[1] else arguments[0]))
+                    jumpTo(join)
+                    currentBlock = join
+                }
+                return destination
+            }
+            return null
+        }
+        if (name.startsWith("to") && name == "to${output.sourceName}" && arguments.size == 1) {
+            return primitiveConvert(arguments[0], source, output, call)
+        }
+        if (source == GuestPrimitive.CHAR) {
+            if (name == "<get-code>") return primitiveConvert(arguments[0], source, GuestPrimitive.INT, call)
+            if (name in setOf("plus", "minus", "inc", "dec")) {
+                val left = primitiveConvert(arguments[0], source, GuestPrimitive.INT, call)
+                val right =
+                    if (arguments.size == 1) {
+                        emitI32Constant(1, call)
+                    } else {
+                        primitiveConvert(
+                            arguments[1],
+                            requireNotNull(GuestPrimitive.scalar(resolvedType(expressions[1].type))),
+                            GuestPrimitive.INT,
+                            call,
+                        )
+                    }
+                val integer =
+                    result(ValueType.I32) {
+                        if (name == "plus" || name == "inc") Instruction.Add(it, left, right) else Instruction.Subtract(it, left, right)
+                    }
+                return primitiveConvert(integer, GuestPrimitive.INT, output, call)
+            }
+            return null
+        }
+        if (!primitive.numeric) return null
+        if (name == "compareTo" && arguments.size == 2) {
+            val descriptors = expressions.map { requireNotNull(GuestPrimitive.scalar(resolvedType(it.type))) }
+            if (descriptors.any { it == GuestPrimitive.FLOAT || it == GuestPrimitive.DOUBLE }) {
+                return compileFloatingCompareTo(call, expressions.map { resolvedType(it.type) }, arguments)
+            }
+            val wide =
+                if (descriptors.any { it.scalar == ValueType.I64 }) {
+                    if (source.unsigned) GuestPrimitive.ULONG else GuestPrimitive.LONG
+                } else {
+                    if (source.unsigned) GuestPrimitive.UINT else GuestPrimitive.INT
+                }
+            val operands = arguments.mapIndexed { index, value -> primitiveConvert(value, descriptors[index], wide, call) }
+            val less = result(ValueType.Bool) { Instruction.Less(wide.orderedForm, it, operands[0], operands[1]) }
+            val equal = result(ValueType.Bool) { Instruction.Equal(wide.scalarForm, it, operands[0], operands[1]) }
+            val negative = emitI32Constant(-1, call)
+            val zero = emitI32Constant(0, call)
+            val positive = emitI32Constant(1, call)
+            val destination = allocate(ValueType.I32)
+            val smaller = createBlock()
+            val other = createBlock()
+            val same = createBlock()
+            val greater = createBlock()
+            val join = createBlock()
+            emit(Instruction.Branch(less, blockId(smaller), blockId(other)))
+            currentBlock = smaller
+            emit(Instruction.Move(destination, negative))
+            jumpTo(join)
+            currentBlock = other
+            emit(Instruction.Branch(equal, blockId(same), blockId(greater)))
+            currentBlock = same
+            emit(Instruction.Move(destination, zero))
+            jumpTo(join)
+            currentBlock = greater
+            emit(Instruction.Move(destination, positive))
+            jumpTo(join)
+            currentBlock = join
+            return destination
+        }
+        if (name in setOf("plus", "minus", "times", "div", "rem") && arguments.size == 2) {
+            val operands =
+                arguments.mapIndexed { index, value ->
+                    primitiveConvert(value, requireNotNull(GuestPrimitive.scalar(resolvedType(expressions[index].type))), output, call)
+                }
+            return result { destination ->
+                when (name) {
+                    "plus" -> Instruction.Add(output.scalarForm, destination, operands[0], operands[1])
+                    "minus" -> Instruction.Subtract(output.scalarForm, destination, operands[0], operands[1])
+                    "times" -> Instruction.Multiply(output.scalarForm, destination, operands[0], operands[1])
+                    "div" -> Instruction.Divide(output.scalarForm, destination, operands[0], operands[1])
+                    else -> Instruction.Remainder(output.scalarForm, destination, operands[0], operands[1])
+                }
+            }
+        }
+        if (name == "unaryPlus" && arguments.size == 1) return arguments[0]
+        if (name == "unaryMinus" && arguments.size == 1) {
+            val zero =
+                when (output.scalar) {
+                    ValueType.I32 -> emitI32Constant(0, call)
+                    ValueType.I64 -> emitI64Constant(0, call)
+                    ValueType.F32 -> emitF32Constant(-1.0f, call)
+                    else -> emitF64Constant(-1.0, call)
+                }
+            return result {
+                if (output.scalar == ValueType.F32 || output.scalar == ValueType.F64) {
+                    Instruction.Multiply(output.scalarForm, it, arguments[0], zero)
+                } else {
+                    Instruction.Subtract(output.scalarForm, it, zero, arguments[0])
+                }
+            }
+        }
+        if (name in setOf("inc", "dec") && arguments.size == 1) {
+            val one = scalarOne()
+            val value =
+                result {
+                    if (name == "inc") {
+                        Instruction.Add(output.scalarForm, it, arguments[0], one)
+                    } else {
+                        Instruction.Subtract(output.scalarForm, it, arguments[0], one)
+                    }
+                }
+            return normalizePrimitive(value, output, call)
+        }
+        val bitForm = if (output.scalar == ValueType.I64) ScalarValueType.I64 else ScalarValueType.I32
+        if (name in setOf("and", "or", "xor") && arguments.size == 2) {
+            val value =
+                result {
+                    when (name) {
+                        "and" -> Instruction.BitAnd(bitForm, it, arguments[0], arguments[1])
+                        "or" -> Instruction.BitOr(bitForm, it, arguments[0], arguments[1])
+                        else -> Instruction.BitXor(bitForm, it, arguments[0], arguments[1])
+                    }
+                }
+            return normalizePrimitive(value, output, call)
+        }
+        if (name == "inv" && arguments.size == 1) {
+            val mask = if (output.scalar == ValueType.I64) emitI64Constant(-1, call) else emitI32Constant(-1, call)
+            return normalizePrimitive(result { Instruction.BitXor(bitForm, it, arguments[0], mask) }, output, call)
+        }
+        if (name in setOf("shl", "shr", "ushr") && arguments.size == 2) {
+            return result {
+                when {
+                    name == "shl" -> Instruction.ShiftLeft(bitForm, it, arguments[0], arguments[1])
+                    name == "ushr" || source.unsigned -> Instruction.ShiftUnsigned(bitForm, it, arguments[0], arguments[1])
+                    else -> Instruction.ShiftRight(bitForm, it, arguments[0], arguments[1])
+                }
+            }
+        }
+        return null
+    }
+
     @OptIn(UnsafeDuringIrConstructionAPI::class)
     private fun compileBuiltinCall(
         call: IrCall,
@@ -7135,28 +7284,12 @@ private class FunctionCompiler(
     ): RegisterId? {
         val fqName = target.fqNameWhenAvailable?.asString().orEmpty()
         val name = target.name.asString()
+        compilePrimitiveBuiltinCall(call, target, argumentExpressions, arguments)?.let { return it }
 
         fun result(
             type: ValueType,
             instruction: (RegisterId) -> Instruction,
         ): RegisterId = allocate(type).also { emit(instruction(it)) }
-        if (
-            fqName in setOf("kotlin.Int.compareTo", "kotlin.Long.compareTo") &&
-            arguments.size == 2 &&
-            argumentExpressions.all { it.type == intType || it.type == longType } &&
-            call.type == intType
-        ) {
-            return compileIntegerCompareTo(call, argumentExpressions, arguments)
-        }
-        if (
-            fqName in setOf("kotlin.Int.compareTo", "kotlin.Long.compareTo", "kotlin.Float.compareTo", "kotlin.Double.compareTo") &&
-            arguments.size == 2 &&
-            argumentExpressions.any { it.type == floatType || it.type == doubleType } &&
-            argumentExpressions.all { it.type == intType || it.type == longType || it.type == floatType || it.type == doubleType } &&
-            call.type == intType
-        ) {
-            return compileFloatingCompareTo(call, argumentExpressions.map { it.type }, arguments)
-        }
         if (
             fqName == "kotlin.String.compareTo" &&
             arguments.size == 2 &&
@@ -7184,129 +7317,6 @@ private class FunctionCompiler(
             call.type == intType
         ) {
             return compileBooleanCompareTo(call, arguments)
-        }
-        if (arguments.size == 2 &&
-            argumentExpressions.all { it.type == intType || it.type == longType || it.type == floatType || it.type == doubleType }
-        ) {
-            if (name in setOf("plus", "minus", "times", "div", "rem")) {
-                val type =
-                    when (call.type) {
-                        floatType -> ScalarValueType.F32
-                        doubleType -> ScalarValueType.F64
-                        longType -> ScalarValueType.I64
-                        else -> ScalarValueType.I32
-                    }
-                val valueType =
-                    when (type) {
-                        ScalarValueType.F32 -> ValueType.F32
-                        ScalarValueType.F64 -> ValueType.F64
-                        ScalarValueType.I64 -> ValueType.I64
-                        else -> ValueType.I32
-                    }
-                val left =
-                    when (type) {
-                        ScalarValueType.F32 -> widenToF32(arguments[0], argumentExpressions[0].type, call)
-                        ScalarValueType.F64 -> widenToF64(arguments[0], argumentExpressions[0].type, call)
-                        ScalarValueType.I64 -> widenToI64(arguments[0], argumentExpressions[0].type, call)
-                        else -> arguments[0]
-                    }
-                val right =
-                    when (type) {
-                        ScalarValueType.F32 -> widenToF32(arguments[1], argumentExpressions[1].type, call)
-                        ScalarValueType.F64 -> widenToF64(arguments[1], argumentExpressions[1].type, call)
-                        ScalarValueType.I64 -> widenToI64(arguments[1], argumentExpressions[1].type, call)
-                        else -> arguments[1]
-                    }
-                return result(valueType) { destination ->
-                    when (name) {
-                        "plus" -> Instruction.Add(type, destination, left, right)
-                        "minus" -> Instruction.Subtract(type, destination, left, right)
-                        "times" -> Instruction.Multiply(type, destination, left, right)
-                        "div" -> Instruction.Divide(type, destination, left, right)
-                        else -> Instruction.Remainder(type, destination, left, right)
-                    }
-                }
-            }
-            if (argumentExpressions[0].type == argumentExpressions[1].type && name in setOf("and", "or", "xor")) {
-                val type = if (call.type == longType) ScalarValueType.I64 else ScalarValueType.I32
-                val valueType = if (type == ScalarValueType.I64) ValueType.I64 else ValueType.I32
-                return result(valueType) { destination ->
-                    when (name) {
-                        "and" -> Instruction.BitAnd(type, destination, arguments[0], arguments[1])
-                        "or" -> Instruction.BitOr(type, destination, arguments[0], arguments[1])
-                        else -> Instruction.BitXor(type, destination, arguments[0], arguments[1])
-                    }
-                }
-            }
-            if (argumentExpressions[1].type == intType && name in setOf("shl", "shr", "ushr")) {
-                val type = if (argumentExpressions[0].type == longType) ScalarValueType.I64 else ScalarValueType.I32
-                val valueType = if (type == ScalarValueType.I64) ValueType.I64 else ValueType.I32
-                return result(valueType) { destination ->
-                    when (name) {
-                        "shl" -> Instruction.ShiftLeft(type, destination, arguments[0], arguments[1])
-                        "shr" -> Instruction.ShiftRight(type, destination, arguments[0], arguments[1])
-                        else -> Instruction.ShiftUnsigned(type, destination, arguments[0], arguments[1])
-                    }
-                }
-            }
-        }
-        if (arguments.size == 1 && argumentExpressions[0].type == booleanType && name == "not") {
-            val falseRegister = allocate(ValueType.Bool)
-            emit(Instruction.Const(falseRegister, requireNotNull(constantIds[Constant.Bool(false)])))
-            return result(ValueType.Bool) { Instruction.Equal(ScalarValueType.BOOL, it, arguments[0], falseRegister) }
-        }
-        if (arguments.size == 1 && argumentExpressions[0].type == intType && name == "unaryMinus") {
-            val zero = emitI32Constant(0, call)
-            return result(ValueType.I32) { Instruction.Subtract(it, zero, arguments[0]) }
-        }
-        if (arguments.size == 1 && argumentExpressions[0].type == longType && name == "unaryMinus") {
-            val zero = emitI64Constant(0, call)
-            return result(ValueType.I64) { Instruction.Subtract(ScalarValueType.I64, it, zero, arguments[0]) }
-        }
-        if (arguments.size == 1 && argumentExpressions[0].type == floatType && name == "unaryMinus") {
-            val negativeOne = emitF32Constant(-1.0f, call)
-            return result(ValueType.F32) { Instruction.Multiply(ScalarValueType.F32, it, arguments[0], negativeOne) }
-        }
-        if (arguments.size == 1 && argumentExpressions[0].type == doubleType && name == "unaryMinus") {
-            val negativeOne = emitF64Constant(-1.0, call)
-            return result(ValueType.F64) { Instruction.Multiply(ScalarValueType.F64, it, arguments[0], negativeOne) }
-        }
-        if (arguments.size == 1 && argumentExpressions[0].type in setOf(intType, longType, floatType, doubleType) &&
-            name in setOf("toInt", "toLong", "toFloat", "toDouble")
-        ) {
-            val resultType = valueType(call.type, call)
-            if (resultType == registerValueType(arguments[0])) return arguments[0]
-            return result(resultType) { Instruction.Convert(it, arguments[0]) }
-        }
-        if (arguments.size == 1 && argumentExpressions[0].type == intType && name == "inv") {
-            val allBits = emitI32Constant(-1, call)
-            return result(ValueType.I32) { Instruction.BitXor(it, arguments[0], allBits) }
-        }
-        if (arguments.size == 1 && argumentExpressions[0].type == longType && name == "inv") {
-            val allBits = emitI64Constant(-1, call)
-            return result(ValueType.I64) { Instruction.BitXor(ScalarValueType.I64, it, arguments[0], allBits) }
-        }
-        if (arguments.size == 1 && argumentExpressions[0].type == intType && call.type == charType && name == "toChar") {
-            return result(ValueType.Char) { Instruction.Convert(it, arguments[0]) }
-        }
-        if (arguments.size == 1 && argumentExpressions[0].type == intType && call.type == longType && name == "toLong") {
-            return result(ValueType.I64) { Instruction.Convert(it, arguments[0]) }
-        }
-        if (arguments.size == 1 && argumentExpressions[0].type == longType && call.type == intType && name == "toInt") {
-            return result(ValueType.I32) { Instruction.Convert(it, arguments[0]) }
-        }
-        if (arguments.size == 1 &&
-            argumentExpressions[0].type in setOf(intType, longType) &&
-            call.type == floatType &&
-            name == "toFloat"
-        ) {
-            return result(ValueType.F32) { Instruction.Convert(it, arguments[0]) }
-        }
-        if (arguments.size == 1 && argumentExpressions[0].type == floatType && call.type == intType && name == "toInt") {
-            return result(ValueType.I32) { Instruction.Convert(it, arguments[0]) }
-        }
-        if (arguments.size == 1 && argumentExpressions[0].type == floatType && call.type == longType && name == "toLong") {
-            return result(ValueType.I64) { Instruction.Convert(it, arguments[0]) }
         }
         comparison(call, name, argumentExpressions, arguments)?.let { return it }
         if (arguments.size == 1 && argumentExpressions[0].type == kotlinStringType && name == "<get-length>") {
@@ -7428,50 +7438,6 @@ private class FunctionCompiler(
             return result(stringType) { Instruction.StringFromCharArray(it, arguments[0], arguments[1], end) }
         }
         throw UnsupportedKotlinIr(call, "call target ${fqName.ifEmpty { name }} is outside the project subset")
-    }
-
-    private fun compileIntegerCompareTo(
-        call: IrCall,
-        expressions: List<IrExpression>,
-        arguments: List<RegisterId>,
-    ): RegisterId {
-        val mixedLong = expressions.any { it.type == longType }
-        val type = if (mixedLong) OrderedScalarValueType.I64 else OrderedScalarValueType.I32
-        val left = if (mixedLong) widenToI64(arguments[0], expressions[0].type, call) else arguments[0]
-        val right = if (mixedLong) widenToI64(arguments[1], expressions[1].type, call) else arguments[1]
-        val negative = emitI32Constant(-1, call)
-        val zero = emitI32Constant(0, call)
-        val positive = emitI32Constant(1, call)
-        val destination = allocate(ValueType.I32)
-        val less = allocate(ValueType.Bool)
-        emit(Instruction.Less(type, less, left, right))
-        val lessBlock = createBlock()
-        val notLessBlock = createBlock()
-        emit(Instruction.Branch(less, blockId(lessBlock), blockId(notLessBlock)))
-
-        currentBlock = lessBlock
-        emit(Instruction.Move(destination, negative))
-
-        currentBlock = notLessBlock
-        val greater = allocate(ValueType.Bool)
-        emit(Instruction.Greater(type, greater, left, right))
-        val greaterBlock = createBlock()
-        val equalBlock = createBlock()
-        emit(Instruction.Branch(greater, blockId(greaterBlock), blockId(equalBlock)))
-
-        currentBlock = greaterBlock
-        emit(Instruction.Move(destination, positive))
-
-        currentBlock = equalBlock
-        emit(Instruction.Move(destination, zero))
-
-        val join = createBlock()
-        listOf(lessBlock, greaterBlock, equalBlock).forEach { exit ->
-            currentBlock = exit
-            jumpTo(join)
-        }
-        currentBlock = join
-        return destination
     }
 
     private fun compileStringCompareTo(
@@ -7794,33 +7760,24 @@ private class FunctionCompiler(
         if (arguments.size != 2) return null
         val leftType = resolvedType(expressions[0].type)
         val rightType = resolvedType(expressions[1].type)
+        val floatingPrimitive = GuestPrimitive.scalar(leftType.makeNotNull())
         if (name.equals("ieee754Equals", ignoreCase = true) &&
-            listOf(leftType, rightType).all { it.makeNotNull() == doubleType } &&
+            floatingPrimitive in setOf(GuestPrimitive.FLOAT, GuestPrimitive.DOUBLE) &&
+            GuestPrimitive.scalar(rightType.makeNotNull()) == floatingPrimitive &&
             listOf(leftType, rightType).any { it.isNullable() }
         ) {
-            return compileNullableDoubleEquality(arguments)
+            return compileNullableFloatingEquality(arguments, requireNotNull(floatingPrimitive))
         }
-        val numeric = listOf(leftType, rightType).all { it == intType || it == longType || it == floatType || it == doubleType }
-        val mixedDouble = numeric && (leftType == doubleType || rightType == doubleType)
-        val mixedFloat = !mixedDouble && numeric && (leftType == floatType || rightType == floatType)
-        val mixedLong =
-            !mixedFloat && listOf(leftType, rightType).all { it == intType || it == longType } &&
-                (leftType == longType || rightType == longType)
+        val sourcePrimitives = listOf(leftType, rightType).map(GuestPrimitive::scalar)
+        val promoted = if (arguments.all { registerValueType(it) !is ValueType.Ref }) promotePrimitives(sourcePrimitives) else null
+        val numeric = promoted != null
         val operands =
-            if (mixedDouble) {
-                listOf(widenToF64(arguments[0], leftType, call), widenToF64(arguments[1], rightType, call))
-            } else if (mixedFloat) {
-                listOf(
-                    widenToF32(arguments[0], leftType, call),
-                    widenToF32(arguments[1], rightType, call),
-                )
-            } else if (mixedLong) {
-                listOf(
-                    widenToI64(arguments[0], leftType, call),
-                    widenToI64(arguments[1], rightType, call),
-                )
-            } else {
+            if (promoted == null) {
                 arguments
+            } else {
+                arguments.mapIndexed { index, value ->
+                    primitiveConvert(value, requireNotNull(sourcePrimitives[index]), promoted, call)
+                }
             }
         val floatIeeeEquality =
             name.equals("ieee754Equals", ignoreCase = true) &&
@@ -7842,13 +7799,7 @@ private class FunctionCompiler(
                 ) {
                     emit(Instruction.RefEqual(destination, operands[0], operands[1]))
                 } else {
-                    val type =
-                        when {
-                            mixedDouble -> ScalarValueType.F64
-                            mixedFloat -> ScalarValueType.F32
-                            mixedLong -> ScalarValueType.I64
-                            else -> scalarType(leftType, call)
-                        }
+                    val type = promoted?.scalarForm ?: scalarType(leftType, call)
                     emit(Instruction.Equal(type, destination, operands[0], operands[1]))
                 }
             }
@@ -7861,20 +7812,17 @@ private class FunctionCompiler(
                 "greaterOrEqual" -> { type, destination -> Instruction.GreaterOrEqual(type, destination, operands[0], operands[1]) }
                 else -> return null
             }
-        val orderedType =
-            when {
-                mixedDouble -> OrderedScalarValueType.F64
-                mixedFloat -> OrderedScalarValueType.F32
-                mixedLong -> OrderedScalarValueType.I64
-                else -> orderedType(leftType, call)
-            }
+        val orderedType = promoted?.orderedForm ?: orderedType(leftType, call)
         return allocate(ValueType.Bool).also { destination ->
             val instruction = instructionFactory(orderedType, destination)
             emit(instruction)
         }
     }
 
-    private fun compileNullableDoubleEquality(arguments: List<RegisterId>): RegisterId {
+    private fun compileNullableFloatingEquality(
+        arguments: List<RegisterId>,
+        primitive: GuestPrimitive,
+    ): RegisterId {
         val result = allocate(ValueType.Bool)
         val left = arguments[0]
         val right = arguments[1]
@@ -7909,8 +7857,9 @@ private class FunctionCompiler(
             currentBlock = present
         }
 
-        fun unbox(value: RegisterId) = if (registerValueType(value) is ValueType.Ref) unboxScalar(value, ValueType.F64) else value
-        emit(Instruction.Equal(ScalarValueType.F64, result, unbox(left), unbox(right)))
+        fun unbox(value: RegisterId) =
+            if (registerValueType(value) is ValueType.Ref) unboxScalar(value, primitive.scalar, primitive) else value
+        emit(Instruction.Equal(primitive.scalarForm, result, unbox(left), unbox(right)))
         jumpTo(join)
         currentBlock = join
         return result
@@ -7922,7 +7871,7 @@ private class FunctionCompiler(
     ): RegisterId {
         val anyType = ValueType.Ref(nullable, TypeRef.Imported(ImportId.of(ANY_RUNTIME_TYPE)))
         val sourceType = registerValueType(source)
-        if (sourceType !is ValueType.Ref) return boxScalar(source, anyType)
+        check(sourceType is ValueType.Ref) { "Any reference coercion requires nominal boxing at the source expression" }
         if (sourceType == anyType) return source
         // Interface views need an explicit Any cast; their nominal type has no class-supertype edge.
         return allocate(anyType).also { emit(Instruction.CheckedCast(it, source, anyType.type)) }
@@ -8669,28 +8618,30 @@ private class FunctionCompiler(
         type: IrType,
         element: IrElement,
     ): ScalarValueType =
-        when (valueType(type, element)) {
-            ValueType.I32 -> ScalarValueType.I32
-            ValueType.I64 -> ScalarValueType.I64
-            ValueType.F32 -> ScalarValueType.F32
-            ValueType.F64 -> ScalarValueType.F64
-            ValueType.Bool -> ScalarValueType.BOOL
-            ValueType.Char -> ScalarValueType.CHAR
-            else -> throw UnsupportedKotlinIr(element, "unsupported equality operand")
-        }
+        GuestPrimitive.scalar(resolvedType(type))?.scalarForm
+            ?: when (valueType(type, element)) {
+                ValueType.I32 -> ScalarValueType.I32
+                ValueType.I64 -> ScalarValueType.I64
+                ValueType.F32 -> ScalarValueType.F32
+                ValueType.F64 -> ScalarValueType.F64
+                ValueType.Bool -> ScalarValueType.BOOL
+                ValueType.Char -> ScalarValueType.CHAR
+                else -> throw UnsupportedKotlinIr(element, "unsupported equality operand")
+            }
 
     private fun orderedType(
         type: IrType,
         element: IrElement,
     ): OrderedScalarValueType =
-        when (valueType(type, element)) {
-            ValueType.I32 -> OrderedScalarValueType.I32
-            ValueType.I64 -> OrderedScalarValueType.I64
-            ValueType.F32 -> OrderedScalarValueType.F32
-            ValueType.F64 -> OrderedScalarValueType.F64
-            ValueType.Char -> OrderedScalarValueType.CHAR
-            else -> throw UnsupportedKotlinIr(element, "unsupported ordered-comparison operand")
-        }
+        GuestPrimitive.scalar(resolvedType(type))?.orderedForm
+            ?: when (valueType(type, element)) {
+                ValueType.I32 -> OrderedScalarValueType.I32
+                ValueType.I64 -> OrderedScalarValueType.I64
+                ValueType.F32 -> OrderedScalarValueType.F32
+                ValueType.F64 -> OrderedScalarValueType.F64
+                ValueType.Char -> OrderedScalarValueType.CHAR
+                else -> throw UnsupportedKotlinIr(element, "unsupported ordered-comparison operand")
+            }
 
     private fun allocate(type: ValueType): RegisterId =
         RegisterId
@@ -9184,31 +9135,21 @@ internal fun IrSimpleFunction.canonicalPlatformSignature(): String {
 @OptIn(UnsafeDuringIrConstructionAPI::class)
 private class LiteralCollector(
     private val unitType: IrType,
-    private val longType: IrType,
-    private val floatType: IrType,
-    private val doubleType: IrType,
 ) : IrVisitorVoid() {
     val values = mutableListOf<Any>()
-    var usesLong: Boolean = false
-        private set
-    var usesFloat: Boolean = false
-        private set
-    var usesDouble: Boolean = false
-        private set
     val strings: List<String>
         get() = values.filterIsInstance<String>()
 
     override fun visitElement(element: IrElement) {
-        if (element is IrExpression && element.type == longType) usesLong = true
-        if (element is IrExpression && element.type == floatType) usesFloat = true
-        if (element is IrExpression && element.type == doubleType) usesDouble = true
         element.acceptChildren(this, null)
     }
 
     override fun visitConst(expression: IrConst) {
         expression.value
-            ?.takeIf { it is String || it is Int || it is Long || it is Float || it is Double || it is Boolean || it is Char }
-            ?.let(values::add)
+            ?.takeIf {
+                it is String || it is Byte || it is Short || it is Int || it is Long || it is Float || it is Double || it is Boolean ||
+                    it is Char
+            }?.let(values::add)
         super.visitConst(expression)
     }
 
@@ -9506,6 +9447,8 @@ private fun capabilityShape(
 private fun Any.toArtifactConstant(literalIds: Map<Utf16Literal, Utf16LiteralId>): Constant =
     when (this) {
         is String -> Constant.StringLiteral(requireNotNull(literalIds[Utf16Literal.fromString(this)]))
+        is Byte -> Constant.I32(toInt())
+        is Short -> Constant.I32(toInt())
         is Int -> Constant.I32(this)
         is Long -> Constant.I64(this)
         is Float -> Constant.F32(toBits().toUInt())
@@ -9518,6 +9461,8 @@ private fun Any.toArtifactConstant(literalIds: Map<Utf16Literal, Utf16LiteralId>
 private fun IrConst.toArtifactConstant(literalIds: Map<Utf16Literal, Utf16LiteralId>): Constant =
     when (val literal = value) {
         is String -> Constant.StringLiteral(requireNotNull(literalIds[Utf16Literal.fromString(literal)]))
+        is Byte -> Constant.I32(literal.toInt())
+        is Short -> Constant.I32(literal.toInt())
         is Int -> Constant.I32(literal)
         is Long -> Constant.I64(literal)
         is Float -> Constant.F32(literal.toBits().toUInt())

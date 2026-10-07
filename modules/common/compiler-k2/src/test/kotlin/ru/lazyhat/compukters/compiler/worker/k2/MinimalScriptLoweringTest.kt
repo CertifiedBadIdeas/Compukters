@@ -61,6 +61,7 @@ import kotlin.io.path.writeText
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -429,9 +430,6 @@ class MinimalScriptLoweringTest {
     fun `unsupported nullable forms do not publish artifacts`() =
         withAdapter { adapter ->
             listOf(
-                "fun main() { val value: Long? = null }",
-                "class Node(val value: Boolean)\nfun main() { val node: Node? = null; val value = node?.value }",
-                "fun main() { val array: CharArray? = null }",
                 "fun main() { val operation: (() -> Unit)? = null }",
                 "fun main() { val text: String? = null; val value = text!! }",
             ).forEach { source ->
@@ -4012,12 +4010,10 @@ class MinimalScriptLoweringTest {
         }
 
     @Test
-    fun `unsupported list element and spread forms report diagnostics`() =
+    fun `spread list factory arguments report diagnostics`() =
         withAdapter { adapter ->
             val unsupported =
                 listOf(
-                    "import kotlin.collections.listOf\nfun main() { listOf<Long?>(null) }",
-                    "import kotlin.collections.listOf\nfun main() { listOf(true) }",
                     "import kotlin.collections.listOf\nfun main() { val array = arrayOf(\"a\"); listOf(*array) }",
                 )
             unsupported.forEach { source ->
@@ -4035,7 +4031,7 @@ class MinimalScriptLoweringTest {
                     "inline fun <reified T> keep(value: T): T = value\nfun main() { keep(1) }",
                     "interface Writer<in T> { fun write(value: T) }\nfun main() {}",
                     "class Box<out T>(val value: T)\nfun main() { Box(1) }",
-                    "class Box<T>(val value: T)\nfun main() { Box<Long?>(null) }",
+                    "class Box<T>(val value: T)\nfun main() { Box<(() -> Unit)?>(null) }",
                     "fun <T> erase(value: T): Any = value\nfun main() { erase(1) }",
                 )
             unsupported.forEach { source ->
@@ -4383,7 +4379,6 @@ class MinimalScriptLoweringTest {
         withAdapter { adapter ->
             listOf(
                 "fun main() { arrayOf(1, 2) }",
-                "fun main() { arrayOf<Long?>(null) }",
             ).forEach { source ->
                 val result = adapter.compile(request(source))
                 assertNull(result.artifact, result.diagnostics.joinToString())
@@ -6604,20 +6599,34 @@ class MinimalScriptLoweringTest {
         }
 
     @Test
-    fun `unsupported unsigned Byte and Short source produces a stable diagnostic and no artifact`() =
+    fun `all primitive scalar types and nullable signatures compile through the canonical platform`() =
         withAdapter { adapter ->
-            listOf(
-                "fun main() { val answer: UInt = 42u }",
-                "fun main() { val answer: Byte = 42 }",
-                "fun main() { val answer: Short = 42 }",
-            ).forEach { source ->
+            val values =
+                mapOf(
+                    "Byte" to "42",
+                    "Short" to "42",
+                    "Int" to "42",
+                    "Long" to "42L",
+                    "Float" to "42F",
+                    "Double" to "42.0",
+                    "Boolean" to "true",
+                    "Char" to "'x'",
+                    "UByte" to "42u",
+                    "UShort" to "42u",
+                    "UInt" to "42u",
+                    "ULong" to "42uL",
+                )
+            for ((type, value) in values) {
+                val source =
+                    """
+                    class Box<T>(val value: T)
+                    fun echo(value: $type?): Any? = Box(value).value
+                    fun main() { val answer: $type = $value; val boxed = echo(answer); val restored = boxed as $type }
+                    """.trimIndent()
                 val result = adapter.compile(request(source))
-                val errors = result.diagnostics.filter { it.severity.name == "ERROR" }
-
-                assertNull(result.artifact, source)
-                assertEquals(1, errors.size, source)
-                assertTrue(errors.single().category in setOf(DiagnosticCategory.TYPE, DiagnosticCategory.TARGET), source)
-                assertTrue(result.hasErrors, source)
+                val bytes = assertNotNull(result.artifact, "$type: ${result.diagnostics}").toByteArray()
+                assertFalse(result.hasErrors, "$type: ${result.diagnostics}")
+                ArtifactReader.read(bytes)
             }
         }
 

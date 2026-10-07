@@ -67,6 +67,126 @@ import kotlin.test.assertTrue
 @OptIn(UnsafeDuringIrConstructionAPI::class, CompilerConfiguration.Internals::class)
 class GuestInlineIntegrationTest {
     @Test
+    fun `all primitive operators preserve narrow signed unsigned and nominal semantics`() {
+        probe(
+            """
+            fun check(value: Boolean) { if (!value) { val failed = IntArray(-1) } }
+            fun <T> identity(value: T): T = value
+            fun uintValue(): UInt = 4294967295u
+            fun ulongValue(): ULong = 18446744073709551615uL
+            class Counter(var effects: Int)
+            fun effect(counter: Counter, value: Boolean): Boolean { counter.effects++; return value }
+            fun signedNarrow() {
+                var byte: Byte = 127
+                byte++
+                check(byte == (-128).toByte())
+                byte--
+                check(byte == 127.toByte())
+            }
+            fun shortArithmetic() {
+                val byte: Byte = 127
+                var short: Short = 32767
+                short++
+                check(short == (-32768).toShort())
+                check(+byte == 127 && -short == 32768)
+                check((byte + short).toLong() == -32641L)
+            }
+            fun conversions() {
+                check(255.toUByte().toInt() == 255)
+                check((-1).toUShort().toInt() == 65535)
+                check(65536.toShort().toInt() == 0)
+                check(uintValue().toLong() == 4294967295L)
+                check((-1).toULong() == ulongValue())
+            }
+            fun unsignedArithmetic() {
+                check(uintValue() / 2u == 2147483647u)
+                check(ulongValue() / 2uL == 9223372036854775807uL)
+            }
+            fun unsignedOrdering() {
+                check(uintValue() > 0u)
+                check(ulongValue() > uintValue())
+                check(uintValue().compareTo(ulongValue()) == -1)
+                check((uintValue() shr 31) == 1u)
+                check((ulongValue() shr 63) == 1uL)
+            }
+            fun characterAndBoolean() {
+                check(0u.toUByte().inv() == 255u.toUByte())
+                var narrow = 255u.toUByte()
+                narrow++
+                check(narrow == 0u.toUByte())
+                var char = 'a'
+                check(char.code == 97)
+                check(char + 2 == 'c' && char - 1 == '`' && 'c' - char == 2)
+                char++
+                check(char == 'b')
+                val counter = Counter(0)
+                check((effect(counter, false) and effect(counter, true)) == false)
+                check(counter.effects == 2)
+                check((true or false) && (true xor false) && !(true xor true))
+            }
+            fun nominalAndText() {
+                val boxedByte: Any = identity(127.toByte())
+                val boxedUInt: Any = identity(uintValue())
+                check(boxedByte is Byte && (boxedByte is Int) == false)
+                check(boxedUInt is UInt && (boxedUInt is Int) == false)
+                check((boxedUInt as UInt).toLong() == 4294967295L)
+                check("${'$'}{uintValue()}" == "4294967295")
+                check("${'$'}{ulongValue()}" == "18446744073709551615")
+            }
+            fun nullableFloating() {
+                val float: Float? = Float.NaN
+                val double: Double? = Double.NaN
+                check((float == float) == false)
+                check((double == double) == false)
+                val boxedFloat: Any = Float.NaN
+                val boxedDouble: Any = Double.NaN
+                check(boxedFloat.equals(Float.NaN))
+                check(boxedDouble.equals(Double.NaN))
+            }
+            fun main() {
+                nullableFloating()
+                signedNarrow()
+                shortArithmetic()
+                conversions()
+                unsignedArithmetic()
+                unsignedOrdering()
+                characterAndBoolean()
+                nominalAndText()
+            }
+            """.trimIndent(),
+        ) { _, _, diagnostics, artifact ->
+            assertTrue(diagnostics.isEmpty(), diagnostics.toString())
+            val admitted = assertNotNull(artifact)
+            val instructions = admitted.modules.flatMap { it.blocks }.flatMap { it.instructions }
+            assertTrue(
+                instructions.any {
+                    it is Instruction.Divide &&
+                        it.type == ru.lazyhat.compukters.compiler.artifact.model.ScalarValueType.U32
+                },
+            )
+            assertTrue(
+                instructions.any {
+                    it is Instruction.Divide &&
+                        it.type == ru.lazyhat.compukters.compiler.artifact.model.ScalarValueType.U64
+                },
+            )
+            assertTrue(
+                instructions.any {
+                    it is Instruction.StringValueOf &&
+                        it.type == ru.lazyhat.compukters.compiler.artifact.model.StringValueType.U64
+                },
+            )
+            val linked = LibraryModuleLinker.link(admitted, emptyMap<String, Module>())
+            val encoded = ArtifactWriter.write(linked)
+            assertTrue(encoded is ArtifactWriteResult.Success, encoded.toString())
+            System.getProperty("compukter.vm.primitivesArtifact")?.let { output ->
+                val bytes = encoded.bytes
+                Path.of(output).also { Files.createDirectories(it.parent) }.let { Files.write(it, bytes) }
+            }
+        }
+    }
+
+    @Test
     fun `primitive nullable signatures preserve nominal boxes for every scalar register kind`() {
         probe(
             """
@@ -802,7 +922,7 @@ class GuestInlineIntegrationTest {
             }
             val artifact = MinimalScriptLowering.lower(converted.irModuleFragment, converted.pluginContext, session)
             val facts = collectFacts()
-            assertTrue(diagnostics.all { it.code == "UNSUPPORTED_IR" && it.path != null })
+            assertTrue(diagnostics.all { it.code == "UNSUPPORTED_IR" && it.path != null }, diagnostics.toString())
             check(main, facts, diagnostics, artifact)
             println(
                 "inline probe: original nodes=${before.nodes}, executable expanded nodes=${facts.nodes}, " +

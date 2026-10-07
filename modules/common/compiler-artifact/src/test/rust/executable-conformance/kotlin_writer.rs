@@ -96,6 +96,7 @@ fn main() {
         "class-initialization" => k2_class_initialization_preserves_source_and_super_order(),
         "constructor-defaults" => k2_constructor_defaults_preserve_kotlin_argument_order(),
         "adapted-constructors" => k2_adapted_constructor_references_preserve_defaults_and_identity(),
+        "primitives" => k2_primitives_preserve_numeric_boundaries_and_nominal_types(),
         "inline-blocks" => k2_inline_blocks_preserve_returns_results_and_effects(),
         "function-values" => k2_function_values_preserve_distinct_captures_and_dispatch(),
         "transparent-call" => k2_ordinary_project_call_resumes_across_async_capability(),
@@ -2666,4 +2667,21 @@ fn k2_peripheral_queries() {
     assert!(printed);
     assert!(opens >= 9);
     assert!(snapshot.is_none());
+}
+
+fn k2_primitives_preserve_numeric_boundaries_and_nominal_types() {
+    let path = std::env::var("COMPUKTER_KOTLIN_PRIMITIVES_ARTIFACT").expect("primitive artifact must be configured");
+    let verified = verify_artifact(Arc::from(fs::read(path).expect("primitive artifact must exist")), ArtifactLimits::default())
+        .expect("primitive artifact must verify");
+    let mut session = Session::admit(verified.clone(), list_no_io_profile(), &[]).expect("primitive program must admit");
+    session.start(&[]).expect("primitive program must start");
+    for _ in 0..10_000 {
+        match session.advance(64, 16).expect("primitive program must advance") {
+            AdvanceOutcome::SliceExhausted => {},
+            AdvanceOutcome::Halted(None) => return,
+            AdvanceOutcome::UncaughtException => panic!("primitive assertion failed: {}", session.uncaught_exception_diagnostic(&verified).unwrap()),
+            outcome => panic!("unexpected primitive program outcome: {outcome:?}"),
+        }
+    }
+    panic!("primitive program failed to finish within bounded slices");
 }
