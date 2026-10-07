@@ -142,6 +142,7 @@ sealed interface IdeProjectRequest {
 }
 
 enum class IdeBusyOperation {
+    Clone,
     Git,
     Catalog,
     Project,
