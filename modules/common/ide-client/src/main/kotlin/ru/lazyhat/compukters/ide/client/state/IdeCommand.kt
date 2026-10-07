@@ -45,6 +45,35 @@ sealed interface IdeCommand {
         val visible: Boolean,
     ) : IdeCommand
 
+    data class GitTab(
+        val tab: IdeGitTab,
+    ) : IdeCommand
+
+    data class GitMenu(
+        val menu: IdeGitMenu?,
+    ) : IdeCommand
+
+    data class GitCheck(
+        val path: ProjectPath?,
+    ) : IdeCommand
+
+    data class GitPreview(
+        val path: ProjectPath,
+        val showDiff: Boolean = false,
+    ) : IdeCommand
+
+    data class GitFocusField(
+        val field: ru.lazyhat.compukters.ide.client.git.IdeGitField?,
+    ) : IdeCommand
+
+    data class EditGitDraft(
+        val input: IdeEditorInput,
+    ) : IdeCommand
+
+    data class GitCommitDraft(
+        val push: Boolean = false,
+    ) : IdeCommand
+
     data class ScrollGit(
         val lines: Int,
         val maximum: Int = 1_000_000,

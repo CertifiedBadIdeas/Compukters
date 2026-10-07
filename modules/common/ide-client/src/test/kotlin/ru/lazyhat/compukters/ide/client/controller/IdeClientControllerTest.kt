@@ -98,6 +98,111 @@ import kotlin.test.assertTrue
 
 class IdeClientControllerTest {
     @Test
+    fun `checkbox commit preserves draft on failure and pushes only after successful selected commit`() {
+        val fixture = ControllerFixture(preferences = preferences("demo", "src/main.kt"), additionalProject = true)
+        fixture.startAndTick()
+        val main = ProjectPath.file("src/main.kt")
+        val other = ProjectPath.file("src/other.kt")
+        val status =
+            GitStatus(
+                true,
+                branch = "main",
+                changes =
+                    listOf(
+                        ru.lazyhat.compukters.ide.git
+                            .GitChange(main, null, "modified"),
+                        ru.lazyhat.compukters.ide.git
+                            .GitChange(other, "added", null),
+                    ),
+            )
+        fixture.controller.dispatch(IdeCommand.GitVisible(true))
+        fixture.workspace.completeGit(GitResult(status))
+        fixture.controller.tick()
+        fixture.controller.dispatch(IdeCommand.GitCheck(main))
+        val fields =
+            listOf(
+                ru.lazyhat.compukters.ide.client.git.IdeGitField.Message to "Keep draft😀",
+                ru.lazyhat.compukters.ide.client.git.IdeGitField.AuthorName to "Tester",
+                ru.lazyhat.compukters.ide.client.git.IdeGitField.AuthorEmail to "test@example.invalid",
+            )
+        fields.forEach { (field, value) ->
+            fixture.controller.dispatch(IdeCommand.GitFocusField(field))
+            fixture.controller.dispatch(IdeCommand.EditGitDraft(IdeEditorInput.Type(value)))
+        }
+        fixture.controller.dispatch(IdeCommand.GitCommitDraft(push = true))
+        assertEquals(
+            listOf(main),
+            (
+                fixture.workspace.gitRequests
+                    .last()
+                    .second as GitOperation.CommitSelected
+            ).paths,
+        )
+        fixture.workspace.failGit("Failed commit")
+        fixture.controller.tick()
+        assertEquals(
+            GitOperation.Status,
+            fixture.workspace.gitRequests
+                .last()
+                .second,
+        )
+        assertEquals(
+            "Keep draft😀",
+            fixture
+                .workspaceView()
+                .git.draft.message.text,
+        )
+        fixture.workspace.completeGit(GitResult(status))
+        fixture.controller.tick()
+        fixture.controller.dispatch(IdeCommand.GitCommitDraft(push = true))
+        fixture.workspace.completeGit(GitResult(status.copy(changes = status.changes.filter { it.path == other })))
+        fixture.controller.tick()
+        assertEquals(
+            GitOperation.Push,
+            fixture.workspace.gitRequests
+                .last()
+                .second,
+        )
+        assertEquals(
+            "",
+            fixture
+                .workspaceView()
+                .git.draft.message.text,
+        )
+        assertEquals(
+            "Tester",
+            fixture
+                .workspaceView()
+                .git.draft.authorName.text,
+        )
+        assertTrue(
+            fixture
+                .workspaceView()
+                .git.checkedPaths
+                .isEmpty(),
+        )
+        fixture.workspace.completeGit(GitResult(status.copy(changes = emptyList())))
+        fixture.controller.tick()
+        fixture.controller.dispatch(IdeCommand.GitFocusField(ru.lazyhat.compukters.ide.client.git.IdeGitField.Message))
+        fixture.controller.dispatch(IdeCommand.EditGitDraft(IdeEditorInput.Type("other draft")))
+        fixture.controller.dispatch(IdeCommand.OpenProject("second"))
+        fixture.controller.tick()
+        assertEquals(
+            "",
+            fixture
+                .workspaceView()
+                .git.draft.message.text,
+        )
+        assertTrue(
+            fixture
+                .workspaceView()
+                .git.checkedPaths
+                .isEmpty(),
+        )
+        fixture.controller.close()
+    }
+
+    @Test
     fun `failed Git operation refreshes actual status without retrying a failed status forever`() {
         val fixture = ControllerFixture(preferences = preferences("demo", "src/main.kt"))
         fixture.startAndTick()

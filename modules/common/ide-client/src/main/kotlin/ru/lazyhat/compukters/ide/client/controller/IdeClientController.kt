@@ -190,6 +190,10 @@ class IdeClientController(
     private var pendingProjectCreation: IdeProjectRequest? = null
     private var gitView =
         IdeGitView()
+    private val gitDraft =
+        ru.lazyhat.compukters.ide.client.git
+            .IdeGitDraftSession()
+    private var pushAfterCommit = false
     private var pendingGit: GitOperation? = null
     private var latestGitOperation = 0L
     private var gitCancellation: GitCancellation? = null
@@ -273,6 +277,100 @@ class IdeClientController(
 
             is IdeCommand.Git -> {
                 requestGit(command.operation)
+            }
+
+            is IdeCommand.GitTab -> {
+                gitDraft.focus(null)
+                gitView = gitView.copy(tab = command.tab, scroll = 0, menu = null)
+                publishWorkspace()
+                when (command.tab) {
+                    ru.lazyhat.compukters.ide.client.state.IdeGitTab.Log -> {
+                        requestGit(GitOperation.History)
+                    }
+
+                    ru.lazyhat.compukters.ide.client.state.IdeGitTab.Changes -> {
+                        requestGit(GitOperation.Status)
+                    }
+
+                    ru.lazyhat.compukters.ide.client.state.IdeGitTab.Diff -> {
+                        gitView.previewPath?.let {
+                            requestGit(
+                                GitOperation.Diff(it, againstHead = true),
+                            )
+                        }
+                    }
+                }
+            }
+
+            is IdeCommand.GitMenu -> {
+                gitDraft.focus(null)
+                gitView = gitView.copy(menu = command.menu, scroll = 0)
+                publishWorkspace()
+            }
+
+            is IdeCommand.GitCheck -> {
+                val available =
+                    gitView.result
+                        ?.status
+                        ?.changes
+                        ?.mapTo(linkedSetOf()) { it.path } ?: emptySet()
+                val checked = gitView.checkedPaths.toMutableSet()
+                if (command.path == null) {
+                    if (checked.containsAll(available)) checked.clear() else checked.addAll(available)
+                } else if (command.path in available) {
+                    if (!checked.add(command.path)) checked.remove(command.path)
+                }
+                gitView = gitView.copy(checkedPaths = java.util.Collections.unmodifiableSet(checked))
+                publishWorkspace()
+            }
+
+            is IdeCommand.GitPreview -> {
+                if (gitView.result
+                        ?.status
+                        ?.changes
+                        ?.any { it.path == command.path } == true
+                ) {
+                    gitDraft.focus(null)
+                    gitView =
+                        gitView.copy(
+                            previewPath = command.path,
+                            menu = null,
+                            tab = if (command.showDiff) ru.lazyhat.compukters.ide.client.state.IdeGitTab.Diff else gitView.tab,
+                        )
+                    publishWorkspace()
+                    requestGit(GitOperation.Diff(command.path, againstHead = true))
+                }
+            }
+
+            is IdeCommand.GitFocusField -> {
+                gitDraft.focus(command.field)
+                publishWorkspace()
+            }
+
+            is IdeCommand.EditGitDraft -> {
+                gitDraft.edit(command.input)
+                publishWorkspace()
+            }
+
+            is IdeCommand.GitCommitDraft -> {
+                val draft = gitDraft.view()
+                val email = draft.authorEmail.text.trim()
+                if (!draft.canCommit || '@' !in email || email.any { it.isWhitespace() || it == '<' || it == '>' } ||
+                    gitView.checkedPaths.isEmpty()
+                ) {
+                    publishStatus("Select files and enter a commit message, author name and email", IdeProblemSeverity.Warning)
+                } else {
+                    pushAfterCommit = command.push
+                    gitView = gitView.copy(menu = null)
+                    requestGit(
+                        GitOperation.CommitSelected(
+                            gitView.checkedPaths.sortedBy { it.value },
+                            draft.message.text,
+                            draft.authorName.text.trim(),
+                            email,
+                        ),
+                    )
+                }
             }
 
             is IdeCommand.GitVisible -> {
@@ -678,6 +776,7 @@ class IdeClientController(
         gitCancellation?.cancel()
         gitCredentials?.close()
         gitCredentials = null
+        gitDraft.close()
         find.close()
         selectionOccurrences.clear()
         acceptsTooling.set(false)
@@ -718,6 +817,8 @@ class IdeClientController(
             publishProblem("Project '$directoryName' is unavailable")
             return
         }
+        gitDraft.clearMessage()
+        pushAfterCommit = false
         generation = Math.incrementExact(generation)
         navigationHistory.clear()
         cancelComputerTransfer()
@@ -1484,6 +1585,23 @@ class IdeClientController(
         gitCancellation = null
         state = state.copy(busy = state.busy - IdeBusyOperation.Git)
         gitView = gitView.copy(result = event.result ?: gitView.result, scroll = 0)
+        event.result?.status?.let { status ->
+            val available = status.changes.mapTo(mutableSetOf()) { it.path }
+            gitView =
+                gitView.copy(
+                    checkedPaths = java.util.Collections.unmodifiableSet(gitView.checkedPaths.intersect(available)),
+                    previewPath = gitView.previewPath?.takeIf { it in available },
+                )
+        }
+        val commit = event.operation as? GitOperation.CommitSelected
+        val push = commit != null && event.failure == null && pushAfterCommit
+        if (commit != null) {
+            pushAfterCommit = false
+            if (event.failure == null) {
+                gitDraft.clearMessage()
+                gitView = gitView.copy(checkedPaths = gitView.checkedPaths - commit.paths.toSet(), previewPath = null)
+            }
+        }
         val changesFiles =
             event.operation == GitOperation.Pull ||
                 event.operation is GitOperation.SwitchBranch ||
@@ -1502,6 +1620,7 @@ class IdeClientController(
         }
         requestPoll()
         if (event.failure != null && event.operation != GitOperation.Status) requestGit(GitOperation.Status)
+        if (push) requestGit(GitOperation.Push)
     }
 
     private fun requestPoll() {
@@ -1867,6 +1986,8 @@ class IdeClientController(
             creatingProject = false
         }
         gitView = IdeGitView(authenticated = gitCredentials != null)
+        gitDraft.clearMessage()
+        pushAfterCommit = false
         gitCancellation = null
         refreshAnalysisAfterGit = false
         project = event.project
@@ -2483,7 +2604,7 @@ class IdeClientController(
                             catalog.take(limits.projectRows).map(::summary),
                             usages,
                             currentDiagnostics(),
-                            gitView,
+                            gitView.copy(draft = gitDraft.view()),
                         ),
                     ),
             )
