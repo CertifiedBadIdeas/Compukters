@@ -34,6 +34,34 @@ import kotlin.test.assertTrue
 
 class ProjectCatalogTest {
     @Test
+    fun `imports publish validated projects and clean failed partial repositories`() {
+        val root = createTempDirectory("compukters-project-import-")
+        val catalog = ProjectCatalog.open(root)
+        assertFailsWith<Exception> {
+            catalog.importProject("broken") { destination ->
+                destination
+                    .resolve(".git")
+                    .createDirectory()
+                    .resolve("config")
+                    .writeText("partial")
+            }
+        }
+        assertTrue(root.listDirectoryEntries().isEmpty())
+        val imported =
+            catalog.importProject("clone") { destination ->
+                destination.resolve("compukter.toml").writeText(ProjectManifestCodec.encode(ProjectManifest.of("imported", emptySet())))
+                destination
+                    .resolve("src")
+                    .createDirectory()
+                    .resolve("main.kt")
+                    .writeText("fun main() {}")
+            }
+        assertEquals("imported", imported.manifest.name)
+        assertEquals(root.resolve("clone"), imported.handle.canonicalPath)
+        assertEquals(listOf("clone"), root.listDirectoryEntries().map { it.fileName.toString() })
+    }
+
+    @Test
     fun `existing projects register in place persist and deduplicate without copying`() {
         val root = createTempDirectory("compukters-catalog-")
         val external = ProjectCatalog.open(createTempDirectory("compukters-external-")).create("existing")
@@ -53,6 +81,7 @@ class ProjectCatalogTest {
         )
         external.handle.canonicalPath.moveTo(external.handle.canonicalPath.resolveSibling("moved"))
         assertFalse(registered.handle.isValid())
+        assertTrue(ProjectCatalog.open(root).projects().isEmpty())
     }
 
     @Test

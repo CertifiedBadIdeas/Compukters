@@ -19,6 +19,10 @@
 package ru.lazyhat.compukters.ide.client.workspace
 
 import ru.lazyhat.compukters.compiler.project.ProjectSnapshot
+import ru.lazyhat.compukters.ide.git.GitCancellation
+import ru.lazyhat.compukters.ide.git.GitCredentials
+import ru.lazyhat.compukters.ide.git.GitOperation
+import ru.lazyhat.compukters.ide.git.GitResult
 import ru.lazyhat.compukters.ide.project.ProjectDescriptor
 import ru.lazyhat.compukters.ide.project.ProjectHandle
 import ru.lazyhat.compukters.ide.project.document.DocumentSaveResult
@@ -35,6 +39,23 @@ interface IdeWorkspace : AutoCloseable {
     fun projects(): CompletableFuture<List<ProjectDescriptor>>
 
     fun createProject(name: String): CompletableFuture<ProjectDescriptor>
+
+    fun importProject(root: String): CompletableFuture<ProjectDescriptor> =
+        CompletableFuture.failedFuture(UnsupportedOperationException("opening existing projects is unavailable"))
+
+    fun cloneProject(
+        name: String,
+        remote: String,
+        credentials: GitCredentials?,
+        cancellation: GitCancellation,
+    ): CompletableFuture<ProjectDescriptor> = CompletableFuture.failedFuture(UnsupportedOperationException("Git clone is unavailable"))
+
+    fun git(
+        project: ProjectHandle,
+        operation: GitOperation,
+        credentials: GitCredentials?,
+        cancellation: GitCancellation,
+    ): CompletableFuture<GitResult> = CompletableFuture.failedFuture(UnsupportedOperationException("Git is unavailable"))
 
     fun tree(project: ProjectHandle): CompletableFuture<ProjectTree>
 

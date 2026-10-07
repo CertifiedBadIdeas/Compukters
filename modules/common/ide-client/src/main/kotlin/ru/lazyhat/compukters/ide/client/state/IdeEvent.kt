@@ -29,6 +29,8 @@ import ru.lazyhat.compukters.ide.client.workspace.IdeBuildInput
 import ru.lazyhat.compukters.ide.client.workspace.IdeMutationRequest
 import ru.lazyhat.compukters.ide.client.workspace.IdeSaveResult
 import ru.lazyhat.compukters.ide.client.workspace.ProjectFileOpenResult
+import ru.lazyhat.compukters.ide.git.GitOperation
+import ru.lazyhat.compukters.ide.git.GitResult
 import ru.lazyhat.compukters.ide.project.ProjectDependencyRollback
 import ru.lazyhat.compukters.ide.project.ProjectDependencyUpdate
 import ru.lazyhat.compukters.ide.project.ProjectDescriptor
@@ -103,6 +105,14 @@ sealed interface IdeEvent {
         val operationId: Long,
         val clearBusy: Boolean,
         val result: ProjectDependencyRollback,
+    ) : IdeEvent
+
+    data class GitFinished(
+        val generation: Long,
+        val operationId: Long,
+        val operation: GitOperation,
+        val result: GitResult?,
+        val failure: String?,
     ) : IdeEvent
 
     data class ProjectCatalogLoaded(
@@ -239,6 +249,7 @@ internal fun IdeEvent.copyForQueue(): IdeEvent =
         is IdeEvent.FormatCompleted,
         is IdeEvent.DeleteAdmitted,
         is IdeEvent.MutationCompleted,
+        is IdeEvent.GitFinished,
         is IdeEvent.ComputerImportCompleted,
         is IdeEvent.ComputerImportFailed,
         is IdeEvent.PollCompleted,

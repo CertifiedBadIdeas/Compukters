@@ -21,6 +21,10 @@ package ru.lazyhat.compukters.ide.client.workspace
 import ru.lazyhat.compukters.compiler.project.ProjectSnapshotLoader
 import ru.lazyhat.compukters.compiler.worker.protocol.WorkerLimits
 import ru.lazyhat.compukters.ide.client.IdeClientLimits
+import ru.lazyhat.compukters.ide.git.GitBackend
+import ru.lazyhat.compukters.ide.git.GitCancellation
+import ru.lazyhat.compukters.ide.git.GitCredentials
+import ru.lazyhat.compukters.ide.git.GitOperation
 import ru.lazyhat.compukters.ide.project.ProjectCatalog
 import ru.lazyhat.compukters.ide.project.ProjectHandle
 import ru.lazyhat.compukters.ide.project.ProjectLimits
@@ -48,6 +52,7 @@ class DefaultIdeWorkspace internal constructor(
     private val workerLimits: WorkerLimits,
     clientLimits: IdeClientLimits,
     private val operationObserver: (String) -> Unit,
+    private val gitBackend: GitBackend? = null,
 ) : IdeWorkspace {
     private val closed = AtomicBoolean()
     private val executor =
@@ -66,11 +71,38 @@ class DefaultIdeWorkspace internal constructor(
         projectLimits: ProjectLimits = ProjectLimits(),
         workerLimits: WorkerLimits = WorkerLimits(),
         clientLimits: IdeClientLimits = IdeClientLimits(),
-    ) : this(ProjectCatalog.open(projectsRoot.createDirectories(), projectLimits), projectLimits, workerLimits, clientLimits, {})
+        gitBackend: GitBackend? = null,
+    ) : this(
+        ProjectCatalog.open(projectsRoot.createDirectories(), projectLimits),
+        projectLimits,
+        workerLimits,
+        clientLimits,
+        {},
+        gitBackend,
+    )
 
     override fun projects() = submit("projects", catalog::projects)
 
     override fun createProject(name: String) = submit("createProject") { catalog.create(name) }
+
+    override fun importProject(root: String) = submit("importProject") { catalog.register(Path.of(root)) }
+
+    override fun cloneProject(
+        name: String,
+        remote: String,
+        credentials: GitCredentials?,
+        cancellation: GitCancellation,
+    ) = submit("cloneProject") {
+        val backend = checkNotNull(gitBackend) { "Git is unavailable" }
+        catalog.importProject(name) { destination -> backend.clone(remote, destination, credentials, cancellation) }
+    }
+
+    override fun git(
+        project: ProjectHandle,
+        operation: GitOperation,
+        credentials: GitCredentials?,
+        cancellation: GitCancellation,
+    ) = submit("git") { checkNotNull(gitBackend) { "Git is unavailable" }.execute(project, operation, credentials, cancellation) }
 
     override fun tree(project: ProjectHandle) = submit("tree") { ProjectTreeStore(project, projectLimits).scan() }
 

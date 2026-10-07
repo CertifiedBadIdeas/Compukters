@@ -38,6 +38,25 @@ import kotlin.test.assertTrue
 
 class ProjectSnapshotTest {
     @Test
+    fun `git metadata is excluded from project and source-set compiler snapshots`() {
+        val root = createTempDirectory("compukters-source-git-")
+        root.resolve("src").createDirectories()
+        root.resolve("src/main.kt").writeText("fun main() {}")
+        root
+            .resolve(".git")
+            .createDirectories()
+            .resolve("unrelated.kt")
+            .writeText("invalid Kotlin")
+        root
+            .resolve("src/.git")
+            .createDirectories()
+            .resolve("nested.kt")
+            .writeText("invalid Kotlin")
+        assertEquals(listOf("src/main.kt"), ProjectSnapshotLoader.load(root, WorkerLimits()).sources.map { it.path.value })
+        assertEquals(listOf("src/main.kt"), ProjectSnapshotLoader.loadSourceSet(root, WorkerLimits()).sources.map { it.path.value })
+    }
+
+    @Test
     fun `source-set loader includes only canonical Kotlin files below src`() {
         val root = createTempDirectory("compukter-source-set-")
         root.resolve("src/nested").createDirectories()
