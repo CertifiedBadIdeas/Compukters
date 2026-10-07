@@ -11,6 +11,9 @@
         - title: Getting started
           url: /GETTING-STARTED/
           description: Installation, your first computer, and your first program.
+        - title: IDE projects and Git
+          url: /IDE/
+          description: Create, open, clone and version client projects.
         - title: Changelog
           url: /CHANGELOG/
           description: Released features and the current development version.

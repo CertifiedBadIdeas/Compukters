@@ -35,6 +35,7 @@ existing Gradle project paths and artifact names remain flat and stable.
 | `ide-core` | Minecraft-independent project, editor, profile resolution, client compilation, and analysis models |
 | `ide-analysis-client` | K2-free analysis protocol, controller, scheduling, cancellation, and worker lifetime |
 | `ide-analysis-k2` | Isolated K2 Analysis API worker and incremental project workspace |
+| `ide-git` | Private JGit implementation of client-local repository operations; core contracts stay in `ide-core` |
 | `ide-client` | Minecraft-independent IDE workspace, controller, analysis coordination, target, and file-transfer logic |
 | `playground` | Standalone compile-and-run entry point with stdin and stdout |
 | `core` | Loader-independent server behavior and `ProgramRuntimeHost` |
@@ -57,7 +58,7 @@ Ownership rules:
 - Version modules must consume neutral `modules/minecraft/shared` roots rather than another version module's source tree.
 - Compatibility declarations must remain in the Compukters namespace and must not emit classes beneath `net.minecraft.*`.
 - Kotlin modules must not implement another interpreter or mutable guest machine model.
-- `worker-client`, `ide-core`, `ide-analysis-client`, and `ide-client` must not acquire K2 implementation dependencies.
+- `worker-client`, `ide-core`, `ide-git`, `ide-analysis-client`, and `ide-client` must not acquire K2 implementation dependencies.
 - K2 compiler internals belong to `compiler-k2-engine` and `compiler-k2`; K2 Analysis API internals belong to
   `ide-analysis-k2`.
 - Minecraft protocol, UI, and assets require deliberate feature designs and live next to their owning feature.

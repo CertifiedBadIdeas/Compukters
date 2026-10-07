@@ -29,6 +29,22 @@ physical paths are bounded`.
 
 ## IDE and tooling
 
+### Local projects and Git
+
+**Status:** Implemented; in-client visual observation pending for [#703](https://github.com/CertifiedBadIdeas/Compukters/issues/703).
+
+Create, clone HTTPS repositories, open existing project directories in place and switch projects. The Git panel
+provides status, staged/working diff, stage/unstage, commit/history, local branches, fetch, fast-forward-only pull and
+push. Private repository credentials are masked and session-only. Save barriers and generation checks protect open
+buffers; tree/analysis refresh follows working-tree updates. File/folder rename rebases open descendant paths.
+`.git` is excluded from project content and compiler snapshots. SSH, merge, submodules, LFS and linked worktrees are deferred.
+
+**Evidence:** `JGitBackendTest`, `GitWorkspaceIntegrationTest`, `ProjectCatalogTest`, `ProjectSnapshotTest`,
+`IdeClientControllerTest`, `IdePromptTest`, `IdeInputAdapterTest`, `IdeRendererStateTest`, and both production archive
+gates for relocated Git classes/resources. Automated Git transport tests use controlled local remotes; real HTTPS
+hosting/authentication and visible interaction remain part of the manual scenario. See the
+[player guide]({{ '/IDE/' | relative_url }}) and [owning contracts](../contributors/architecture/tooling.md#client-local-projects-and-git).
+
 ### Incremental lexical highlighting
 
 **Status:** Supported.
