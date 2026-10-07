@@ -31,6 +31,7 @@ import org.eclipse.jgit.transport.RemoteRefUpdate
 import org.eclipse.jgit.transport.UsernamePasswordCredentialsProvider
 import org.eclipse.jgit.treewalk.CanonicalTreeParser
 import org.eclipse.jgit.treewalk.EmptyTreeIterator
+import org.eclipse.jgit.treewalk.FileTreeIterator
 import org.eclipse.jgit.treewalk.filter.PathFilter
 import ru.lazyhat.compukters.ide.project.ProjectHandle
 import ru.lazyhat.compukters.ide.project.fs.ProjectPath
@@ -190,6 +191,40 @@ class JGitBackend internal constructor(
                                 .setSign(false)
                                 .call()
                                 .name
+                        }
+                }
+
+                is GitOperation.CommitSelected -> {
+                    require(
+                        operation.message.isNotBlank() && operation.message.length <= 8192,
+                    ) { "Commit message must be nonempty and bounded" }
+                    require(operation.name.isNotBlank() && operation.email.isNotBlank()) { "Commit author name and email are required" }
+                    require(operation.paths.isNotEmpty() && operation.paths.size <= limits.files) { "Select changed files to commit" }
+                    require(operation.paths.distinct().size == operation.paths.size) { "Commit selection contains duplicate paths" }
+                    check(git.repository.repositoryState == RepositoryState.SAFE) { "Finish the external Git operation before committing" }
+                    ProjectTreeStore(project).scan()
+                    val changed = status(git).changes.mapTo(mutableSetOf()) { it.path }
+                    require(
+                        operation.paths.all { it in changed },
+                    ) { "Commit selection contains a missing or unchanged file; refresh changes" }
+                    val untracked = git.status().call().untracked
+                    // --only commits working files and preserves every unrelated index entry.
+                    // New files must first be admitted to the index to be recognized by JGit.
+                    operation.paths.filter { it.value in untracked }.forEach { path ->
+                        git.add().addFilepattern(path.value).call()
+                    }
+                    message =
+                        withoutHooks(git) {
+                            val command =
+                                git
+                                    .commit()
+                                    .setMessage(operation.message)
+                                    .setAuthor(operation.name, operation.email)
+                                    .setCommitter(operation.name, operation.email)
+                                    .setNoVerify(true)
+                                    .setSign(false)
+                            operation.paths.forEach { command.setOnly(it.value) }
+                            command.call().name
                         }
                 }
 
@@ -416,7 +451,7 @@ class JGitBackend internal constructor(
                 .setCached(operation.staged)
                 .setPathFilter(PathFilter.create(operation.path.value))
                 .setOutputStream(output)
-        if (operation.staged) {
+        if (operation.staged || operation.againstHead) {
             val head = git.repository.resolve(Constants.HEAD)
             val tree =
                 if (head == null) {
@@ -429,6 +464,7 @@ class JGitBackend internal constructor(
                     }
                 }
             command.setOldTree(tree)
+            if (operation.againstHead && !operation.staged) command.setNewTree(FileTreeIterator(git.repository))
         }
         command.call()
         return output.toString(Charsets.UTF_8)
