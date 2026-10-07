@@ -79,6 +79,11 @@ Ordinary computer creation and target-profile requests require an already prepar
 worker resources on the server tick. Worker compilation remains asynchronous; this changes the preparation phase,
 not the compilation scheduler or wire formats.
 
+Each pinned compiler adapter retains prepared library artifacts and symbol links for its most recent validated
+module selection, keyed by module names and content hashes. A different selection replaces that one entry;
+failed preparation is not retained. Module closure and addon payload identities are still checked on every request
+before reuse. FIR/IR sessions, source snapshots and request limits remain specific to each compilation.
+
 The packaged tooling payload is validated and published beneath `<world>/compukters/compiler-worker`; temporary
 worker state is kept separately beneath `<world>/compukters/compiler-temp`. Successful server artifacts are stored
 beneath `<world>/compukters/compiler-cache/v1`, shared by every computer and dimension in that server world, and reused
