@@ -611,7 +611,7 @@ internal fun validateArtifact(
 
     val semanticHashes =
         artifact.modules.map { module ->
-            runCatching { encodeModuleSections(module, limits).semanticHash }.getOrNull()
+            runCatching { encodeModuleSemanticHash(module, limits) }.getOrNull()
         }
 
     val throwableRoots =

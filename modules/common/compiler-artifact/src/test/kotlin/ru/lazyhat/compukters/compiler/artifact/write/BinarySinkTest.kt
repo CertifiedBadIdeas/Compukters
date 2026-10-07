@@ -90,6 +90,19 @@ class BinarySinkTest {
     }
 
     @Test
+    fun `sink preserves bytes through growth and rejects writes beyond its exact bound`() {
+        val expected = ByteArray(8_192) { (it % 251).toByte() }
+        val sink = BinarySink(expected.size)
+        expected.asList().chunked(137).forEach { chunk -> sink.writeBytes(chunk.toByteArray()) }
+
+        assertEquals(expected.size, sink.size)
+        assertContentEquals(expected, sink.toByteArray())
+        val failure = assertFailsWith<ArtifactEncodingException> { sink.writeU8(0u) }
+        assertEquals(ArtifactWriteErrorCode.LIMIT_EXCEEDED, failure.code)
+        assertContentEquals(expected, sink.toByteArray())
+    }
+
+    @Test
     fun `sink rejects growth before exceeding its bound`() {
         val sink = BinarySink(3)
         sink.writeU16(1u)

@@ -69,104 +69,14 @@ internal fun encodeModuleSections(
     limits: ArtifactWriteLimits,
 ): EncodedModuleSections {
     val maximum = limits.artifactBytes
-    val codeRecords =
-        module.blocks.map { block ->
-            val sink = BinarySink(limits.codeBytes)
-            block.instructions.forEach { sink.writeBytes(encodeInstruction(it, limits.codeBytes).bytes) }
-            sink.toByteArray()
-        }
-    val semantic =
-        listOf(
-            EncodedSection(STRINGS, encodeIndexed(module.strings.map { it.toByteArray() }, maximum), module.strings.size.toUInt()),
-            EncodedSection(TYPES, encodeIndexed(module.types.map { encodeType(it, maximum) }, maximum), module.types.size.toUInt()),
-            EncodedSection(
-                CONSTANTS,
-                encodeIndexed(module.constants.map { encodeConstant(it, maximum) }, maximum),
-                module.constants.size.toUInt(),
-            ),
-            EncodedSection(IMPORTS, encodeIndexed(module.imports.map { encodeImport(it, maximum) }, maximum), module.imports.size.toUInt()),
-            EncodedSection(EXPORTS, encodeIndexed(module.exports.map { encodeExport(it, maximum) }, maximum), module.exports.size.toUInt()),
-            EncodedSection(FIELDS, encodeIndexed(module.fields.map { encodeField(it, maximum) }, maximum), module.fields.size.toUInt()),
-            EncodedSection(
-                FUNCTIONS,
-                encodeIndexed(module.functions.map { encodeFunction(it, maximum) }, maximum),
-                module.functions.size.toUInt(),
-            ),
-            EncodedSection(
-                BLOCKS,
-                encodeIndexed(
-                    module.blocks.mapIndexed { index, block ->
-                        val cost =
-                            block.instructions
-                                .sumOf {
-                                    instructionFixedCost(
-                                        it,
-                                        module.functions
-                                            .getOrNull(block.owner.value.toInt())
-                                            ?.values
-                                            .orEmpty(),
-                                    ).toLong()
-                                }.toUInt()
-                        val sink = BinarySink(maximum)
-                        sink.writeU32(block.owner.value)
-                        sink.writeU32(index.toUInt())
-                        sink.writeU32(block.instructions.size.toUInt())
-                        sink.writeU32(cost)
-                        sink.writeU32(if (block.loopHeaderSafepoint) 1u else 0u)
-                        sink.writeU32(0u)
-                        sink.toByteArray()
-                    },
-                    maximum,
-                ),
-                module.blocks.size.toUInt(),
-            ),
-            EncodedSection(CODE, encodeIndexed(codeRecords, maximum), codeRecords.size.toUInt()),
-            EncodedSection(
-                EXCEPTIONS,
-                encodeIndexed(
-                    module.exceptions.map { exception ->
-                        BinarySink(maximum)
-                            .apply {
-                                writeU32(exception.owner.value)
-                                writeU32(exception.firstProtectedBlock.value)
-                                writeU32(exception.protectedBlockCount)
-                                writeU32(exception.catchType?.let(::encodeTypeRef) ?: UInt.MAX_VALUE)
-                                writeU32(exception.handlerBlock.value)
-                                writeU16(exception.exceptionRegister.value.toUInt())
-                                writeU16(0u)
-                            }.toByteArray()
-                    },
-                    maximum,
-                ),
-                module.exceptions.size.toUInt(),
-            ),
-            EncodedSection(
-                UTF16_LITERALS,
-                encodeIndexed(module.utf16Literals.map { it.toLittleEndianByteArray() }, maximum),
-                module.utf16Literals.size.toUInt(),
-            ),
-            EncodedSection(
-                SAFEPOINT_ROOTS,
-                encodeIndexed(
-                    module.functions.flatMapIndexed { functionIndex, function ->
-                        function.safepointRoots.map { roots ->
-                            encodeSafepointRoots(FunctionId.of(functionIndex.toUInt()), roots, maximum)
-                        }
-                    },
-                    maximum,
-                ),
-                module.functions.sumOf { it.safepointRoots.size }.toUInt(),
-            ),
-        )
+    val semantic = encodeSemanticSections(module, limits)
     val debug =
         module.debug.takeIf(List<DebugEntry>::isNotEmpty)?.let { records ->
             EncodedSection(DEBUG, encodeIndexed(records.map { encodeDebug(it, maximum) }, maximum), records.size.toUInt())
         }
     val positions =
         module.debug.mapIndexedNotNull { index, entry ->
-            require((entry.sourceLine == null) == (entry.sourceColumn == null)) { "source line and column must be paired" }
-            entry.sourceLine?.let { line ->
-                require(line > 0u && requireNotNull(entry.sourceColumn) > 0u) { "source positions must be one-based" }
+            validatedSourceLine(entry)?.let { line ->
                 BinarySink(maximum)
                     .apply {
                         writeU32(index.toUInt())
@@ -180,6 +90,145 @@ internal fun encodeModuleSections(
             EncodedSection(DEBUG_SOURCE_POSITIONS, encodeIndexed(it, maximum), it.size.toUInt())
         }
     return EncodedModuleSections(semantic, debug, debugPositions, semanticHash(semantic))
+}
+
+internal fun encodeModuleSemanticHash(
+    module: Module,
+    limits: ArtifactWriteLimits,
+): ByteArray {
+    val semantic = encodeSemanticSections(module, limits)
+    validateDebugEncoding(module, limits.artifactBytes)
+    return semanticHash(semantic)
+}
+
+private fun encodeSemanticSections(
+    module: Module,
+    limits: ArtifactWriteLimits,
+): List<EncodedSection> {
+    val maximum = limits.artifactBytes
+    val codeRecords =
+        module.blocks.map { block ->
+            val sink = BinarySink(limits.codeBytes)
+            block.instructions.forEach { sink.writeBytes(encodeInstruction(it, limits.codeBytes).bytes) }
+            sink.toByteArray()
+        }
+    return listOf(
+        EncodedSection(STRINGS, encodeIndexed(module.strings.map { it.toByteArray() }, maximum), module.strings.size.toUInt()),
+        EncodedSection(TYPES, encodeIndexed(module.types.map { encodeType(it, maximum) }, maximum), module.types.size.toUInt()),
+        EncodedSection(
+            CONSTANTS,
+            encodeIndexed(module.constants.map { encodeConstant(it, maximum) }, maximum),
+            module.constants.size.toUInt(),
+        ),
+        EncodedSection(IMPORTS, encodeIndexed(module.imports.map { encodeImport(it, maximum) }, maximum), module.imports.size.toUInt()),
+        EncodedSection(EXPORTS, encodeIndexed(module.exports.map { encodeExport(it, maximum) }, maximum), module.exports.size.toUInt()),
+        EncodedSection(FIELDS, encodeIndexed(module.fields.map { encodeField(it, maximum) }, maximum), module.fields.size.toUInt()),
+        EncodedSection(
+            FUNCTIONS,
+            encodeIndexed(module.functions.map { encodeFunction(it, maximum) }, maximum),
+            module.functions.size.toUInt(),
+        ),
+        EncodedSection(
+            BLOCKS,
+            encodeIndexed(
+                module.blocks.mapIndexed { index, block ->
+                    val cost =
+                        block.instructions
+                            .sumOf {
+                                instructionFixedCost(
+                                    it,
+                                    module.functions
+                                        .getOrNull(block.owner.value.toInt())
+                                        ?.values
+                                        .orEmpty(),
+                                ).toLong()
+                            }.toUInt()
+                    val sink = BinarySink(maximum)
+                    sink.writeU32(block.owner.value)
+                    sink.writeU32(index.toUInt())
+                    sink.writeU32(block.instructions.size.toUInt())
+                    sink.writeU32(cost)
+                    sink.writeU32(if (block.loopHeaderSafepoint) 1u else 0u)
+                    sink.writeU32(0u)
+                    sink.toByteArray()
+                },
+                maximum,
+            ),
+            module.blocks.size.toUInt(),
+        ),
+        EncodedSection(CODE, encodeIndexed(codeRecords, maximum), codeRecords.size.toUInt()),
+        EncodedSection(
+            EXCEPTIONS,
+            encodeIndexed(
+                module.exceptions.map { exception ->
+                    BinarySink(maximum)
+                        .apply {
+                            writeU32(exception.owner.value)
+                            writeU32(exception.firstProtectedBlock.value)
+                            writeU32(exception.protectedBlockCount)
+                            writeU32(exception.catchType?.let(::encodeTypeRef) ?: UInt.MAX_VALUE)
+                            writeU32(exception.handlerBlock.value)
+                            writeU16(exception.exceptionRegister.value.toUInt())
+                            writeU16(0u)
+                        }.toByteArray()
+                },
+                maximum,
+            ),
+            module.exceptions.size.toUInt(),
+        ),
+        EncodedSection(
+            UTF16_LITERALS,
+            encodeIndexed(module.utf16Literals.map { it.toLittleEndianByteArray() }, maximum),
+            module.utf16Literals.size.toUInt(),
+        ),
+        EncodedSection(
+            SAFEPOINT_ROOTS,
+            encodeIndexed(
+                module.functions.flatMapIndexed { functionIndex, function ->
+                    function.safepointRoots.map { roots ->
+                        encodeSafepointRoots(FunctionId.of(functionIndex.toUInt()), roots, maximum)
+                    }
+                },
+                maximum,
+            ),
+            module.functions.sumOf { it.safepointRoots.size }.toUInt(),
+        ),
+    )
+}
+
+// Preserve the hash API's encoding checks without materializing non-semantic sections.
+private fun validateDebugEncoding(
+    module: Module,
+    maximum: Int,
+) {
+    if (module.debug.isEmpty()) return
+    var debugBytes = 0L
+    module.debug.forEach { entry ->
+        val recordBytes = 28L + entry.sourcePath.utf8ByteSize
+        if (recordBytes > maximum) {
+            throw ArtifactEncodingException(ArtifactWriteErrorCode.LIMIT_EXCEEDED, "encoded output exceeds $maximum bytes")
+        }
+        debugBytes = Math.addExact(debugBytes, recordBytes)
+    }
+    checkIndexedSize(module.debug.size, debugBytes, maximum)
+    var positionCount = 0
+    module.debug.forEach { entry ->
+        validatedSourceLine(entry)?.let {
+            if (12 > maximum) {
+                throw ArtifactEncodingException(ArtifactWriteErrorCode.LIMIT_EXCEEDED, "encoded output exceeds $maximum bytes")
+            }
+            positionCount++
+        }
+    }
+    if (positionCount > 0) checkIndexedSize(positionCount, positionCount * 12L, maximum)
+}
+
+private fun validatedSourceLine(entry: DebugEntry): UInt? {
+    require((entry.sourceLine == null) == (entry.sourceColumn == null)) { "source line and column must be paired" }
+    entry.sourceLine?.let { line ->
+        require(line > 0u && requireNotNull(entry.sourceColumn) > 0u) { "source positions must be one-based" }
+    }
+    return entry.sourceLine
 }
 
 private fun encodeType(
