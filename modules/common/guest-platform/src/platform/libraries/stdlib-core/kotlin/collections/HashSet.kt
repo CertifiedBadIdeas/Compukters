@@ -21,3 +21,9 @@ public class HashSet<T>(initialCapacity: Int = 16) : MutableSet<T> {
 
 /** Creates a fresh empty set with a read-only view. */
 public fun <T> emptySet(): Set<T> = HashSet<T>(0)
+
+/** Creates a fresh set with a read-only view, coalescing equal elements. */
+public external fun <T> setOf(vararg elements: T): Set<T>
+
+/** Creates a fresh mutable set, coalescing equal elements. */
+public external fun <T> mutableSetOf(vararg elements: T): MutableSet<T>

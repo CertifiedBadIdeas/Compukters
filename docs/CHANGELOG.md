@@ -21,8 +21,9 @@ listed in [Kotlin support](developers/kotlin-support.md) and [standard library s
 
 - Guest `HashMap` and `HashSet` support typed and nullable keys/elements, lookup, mutation, growth and
   iteration under ordinary VM heap and instruction budgets. Maps expose live key/value/entry views;
-  value-class keys retain nominal value equality, including multi-field layouts. Populated factories,
-  structural collection equality and type-argument widening remain outside this first subset.
+  value-class keys retain nominal value equality, including multi-field layouts. `Pair`/`to`, direct
+  `mapOf`/`mutableMapOf`/`setOf`/`mutableSetOf` factories and inline `getOrPut` simplify construction and
+  defaults. Structural collection equality and type-argument widening remain outside this subset.
 
 - All twelve primitive types are supported: `Boolean`, `Char`, `Byte`, `Short`, `Int`, `Long`, `Float`, `Double`,
   `UByte`, `UShort`, `UInt` and `ULong`. Applicable arithmetic, comparisons, conversions, increment/decrement,
@@ -217,7 +218,7 @@ listed in [Kotlin support](developers/kotlin-support.md) and [standard library s
 - Rebuild Guest programs and compiled platform/addon libraries for the updated platform. MFVC inline layouts
   require Runtime ABI 1.15; unsigned operations and compact primitive storage require 1.14, and structured host
   results require 1.13. Native Runtime 0.20.0 supplies C ABI 20 for both transports. Base bundles/modules use formats 9/5 and platform ABI 3.
-- The built-in libraries are `kotlin:builtins` 1.9.0, `stdlib:core` 1.10.0 and `compukter:core` 2.0.0.
+- The built-in libraries are `kotlin:builtins` 1.9.0, `stdlib:core` 1.11.0 and `compukter:core` 2.0.0.
   Addons depending on removed split-module IDs must rebuild against the consolidated owners.
 - Legacy display/Create/Propulsion acquisition helpers and separate side types are removed. Use typed device
   providers and `compukter.peripheral.Side`. Create and Propulsion use addon API line 2.0; the typed-contract
