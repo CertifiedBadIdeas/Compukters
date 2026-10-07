@@ -24,12 +24,14 @@ import ru.lazyhat.compukters.api.addon.ProgramAddonDispatch
 import ru.lazyhat.compukters.api.addon.ProgramAddonHost
 import ru.lazyhat.compukters.api.addon.ProgramAddonRequest
 import ru.lazyhat.compukters.core.device.computer.ActorProgramComputer
+import ru.lazyhat.compukters.core.device.runtime.program.GrantedResourceBudgetSnapshot
 import ru.lazyhat.compukters.core.device.runtime.program.ProgramDeploymentCandidate
 import ru.lazyhat.compukters.core.device.runtime.program.ProgramHostCheckpoint
 import ru.lazyhat.compukters.core.device.runtime.program.ProgramResourceSnapshot
 import ru.lazyhat.compukters.core.device.runtime.program.ProgramRuntimeHost
 import ru.lazyhat.compukters.core.device.runtime.program.ProgramRuntimeState
 import ru.lazyhat.compukters.core.device.runtime.program.ProgramStartResult
+import ru.lazyhat.compukters.core.device.runtime.program.ProgramVmRestoration
 import ru.lazyhat.compukters.core.device.runtime.program.ProgramVmSession
 import ru.lazyhat.compukters.core.device.runtime.program.ProgramVmSessionFactory
 import ru.lazyhat.compukters.core.device.runtime.program.RedstoneCommitResult
@@ -79,6 +81,160 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class ProgramRuntimeActorProcessorTest {
+    @Test
+    fun `restored actor rebinds resources on owner thread before consuming and advancing`() {
+        val session = RecordingSession()
+        val saved =
+            ProgramHostCheckpoint(
+                false,
+                GrantedResourceBudgetSnapshot(20, 10, false),
+                0,
+                listOf(0),
+                emptyList(),
+                byteArrayOf(3, 4),
+            ).encode()
+        val owner = Thread.currentThread()
+        var rebound = false
+        var consumed = false
+        val host =
+            ProgramRuntimeHost(
+                object : ProgramVmSessionFactory {
+                    override fun open(artifact: ByteArray): ProgramVmSession = error("cold boot")
+
+                    override fun restoreBoot() = ProgramVmRestoration(session, saved)
+
+                    override fun discardCheckpoint() {
+                        check(rebound)
+                        consumed = true
+                    }
+                },
+            )
+        val addon =
+            object : ProgramAddonHost {
+                override val capabilitySchemas = emptyList<HostCapabilitySchema>()
+
+                override fun dispatch(request: ProgramAddonRequest): ProgramAddonDispatch = error("unexpected dispatch")
+
+                override fun restoreCheckpoint(state: ByteArray) {
+                    assertEquals(owner, Thread.currentThread())
+                    assertContentEquals(byteArrayOf(3, 4), state)
+                    assertFalse(consumed)
+                    rebound = true
+                }
+
+                override fun reset() = Unit
+            }
+        val endpoint = VmActorEndpoint(ComputerId.fromLongs(175, 176), 1)
+        ProgramRuntimeActorService(schedulerConfig()).use { service ->
+            val carrier =
+                ActorProgramComputer(
+                    service,
+                    requireNotNull(service.attach(endpoint, host)),
+                    { RedstoneCommitResult.Committed },
+                    addon = addon,
+                )
+            val restored = carrier.turnOn(requiredCheckpoint = true)
+            awaitQueuedResult(service)
+            assertFalse(rebound)
+            assertFalse(consumed)
+            service.pump(1)
+            assertTrue(rebound)
+            assertTrue(session.calls.none { it.startsWith("advance:") })
+            awaitQueuedResult(service)
+            assertTrue(consumed)
+            service.pump(1)
+            assertEquals(ProgramStartResult.Started, assertIs<ProgramRuntimeActorValue.Start>(restored.getNow(null).value).result)
+            assertEquals(ProgramRuntimeState.Running, carrier.state)
+            carrier.closeAsync().get(TIMEOUT_SECONDS, TimeUnit.SECONDS)
+        }
+    }
+
+    @Test
+    fun `failed resource rebinding releases partial leases and retains the checkpoint without guest progress`() {
+        val session = RecordingSession()
+        val saved =
+            ProgramHostCheckpoint(
+                false,
+                GrantedResourceBudgetSnapshot(20, 10, false),
+                0,
+                listOf(0),
+                emptyList(),
+                byteArrayOf(3),
+            ).encode()
+        var retained = false
+        var consumed = false
+        val host =
+            ProgramRuntimeHost(
+                object : ProgramVmSessionFactory {
+                    override fun open(artifact: ByteArray): ProgramVmSession = error("cold boot")
+
+                    override fun restoreBoot() = ProgramVmRestoration(session, saved)
+
+                    override fun discardCheckpoint() {
+                        consumed = true
+                    }
+                },
+            )
+        val addon =
+            object : ProgramAddonHost {
+                override val capabilitySchemas = emptyList<HostCapabilitySchema>()
+
+                override fun dispatch(request: ProgramAddonRequest): ProgramAddonDispatch = error("unexpected dispatch")
+
+                override fun restoreCheckpoint(state: ByteArray) {
+                    retained = true
+                    error("second resource is incompatible")
+                }
+
+                override fun reset() {
+                    retained = false
+                }
+            }
+        val endpoint = VmActorEndpoint(ComputerId.fromLongs(177, 178), 1)
+        ProgramRuntimeActorService(schedulerConfig()).use { service ->
+            val carrier =
+                ActorProgramComputer(
+                    service,
+                    requireNotNull(service.attach(endpoint, host)),
+                    { RedstoneCommitResult.Committed },
+                    addon = addon,
+                )
+            val restored = carrier.turnOn(requiredCheckpoint = true)
+            awaitQueuedResult(service)
+            service.pump(1)
+            assertFalse(retained)
+            awaitQueuedResult(service)
+            service.pump(1)
+            assertIs<ProgramStartResult.Rejected>(assertIs<ProgramRuntimeActorValue.Start>(restored.getNow(null).value).result)
+            assertIs<ProgramRuntimeState.Failed>(carrier.state)
+            assertFalse(consumed)
+            assertTrue(session.calls.none { it.startsWith("advance:") })
+            carrier.closeAsync().get(TIMEOUT_SECONDS, TimeUnit.SECONDS)
+        }
+    }
+
+    @Test
+    fun `required missing checkpoint rejects startup without calling boot`() {
+        var booted = false
+        val host =
+            ProgramRuntimeHost(
+                object : ProgramVmSessionFactory {
+                    override fun open(artifact: ByteArray): ProgramVmSession = error("cold boot")
+
+                    override fun boot(): ProgramVmSession {
+                        booted = true
+                        return RecordingSession()
+                    }
+                },
+            )
+        ProgramRuntimeActorProcessor(host).use { processor ->
+            val reply = processor.process(ProgramRuntimeActorCommand.RestoreOrBoot(request(1), 0, required = true))
+            assertIs<ProgramStartResult.Rejected>(assertIs<ProgramRuntimeActorValue.Start>(reply.value).result)
+            assertIs<ProgramRuntimeState.Failed>(reply.state)
+            assertFalse(booted)
+        }
+    }
+
     @Test
     fun `hibernation drains acknowledged output without pumping and never replays it`() {
         val session = RecordingSession().apply { retiredPerAdvance = 1 }
@@ -1237,7 +1393,7 @@ class ProgramRuntimeActorProcessorTest {
     }
 
     private class RecordingSession : ProgramVmSession {
-        val calls = mutableListOf<String>()
+        val calls = java.util.concurrent.CopyOnWriteArrayList<String>()
         val responses = mutableListOf<HostResponse>()
         val redstoneInputs = mutableListOf<Int>()
         var candidate = RecordingCandidate(calls)

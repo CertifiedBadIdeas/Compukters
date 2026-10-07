@@ -130,6 +130,13 @@ class ProgramRuntimeHost internal constructor(
 
     fun startBoot(): ProgramStartResult = startSession(sessionFactory::boot)
 
+    internal fun discardCheckpoint() = sessionFactory.discardCheckpoint()
+
+    internal fun abortRestoration(detail: String): ProgramStartResult {
+        releaseSession()
+        return rejectStart(ProgramFailure.Bridge(detail.take(1024)))
+    }
+
     /** Accepted completions have drained; remaining requests have no acknowledged world result. */
     internal fun settleExternalRequestsForHibernation() {
         val active = session ?: return
@@ -152,7 +159,7 @@ class ProgramRuntimeHost internal constructor(
         addonState: ByteArray,
     ): Boolean {
         require(worldTick >= 0)
-        check(preparedRestoration == null) { "cannot capture an unfinished restoration" }
+        if (preparedRestoration != null) return false // Keep the unconsumed durable snapshot.
         check(pendingRedstoneCommit == null && pendingSoundCommit == null && pendingAddonRequests.isEmpty()) {
             "external requests must be settled before hibernation"
         }

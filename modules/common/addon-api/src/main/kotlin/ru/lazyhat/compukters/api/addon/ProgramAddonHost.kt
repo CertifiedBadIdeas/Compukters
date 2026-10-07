@@ -41,6 +41,22 @@ interface ProgramAddonHost : AutoCloseable {
     /** Default cleanup for a host without independently retained parent scopes. */
     fun programStopped(programId: Long) = reset()
 
+    /** Server-thread resource descriptions; pending operations are cancelled when the host closes. */
+    fun checkpoint(): ByteArray = throw UnsupportedOperationException("Addon host does not support hibernation")
+
+    /** Rebind exact resources before restored Guest execution is enabled. */
+    fun restoreCheckpoint(state: ByteArray) {
+        require(state.isEmpty()) { "Addon host checkpoint is unsupported" }
+    }
+
+    fun restoreCheckpoint(
+        state: ByteArray,
+        programScopes: List<Long>,
+    ) {
+        require(programScopes == listOf(0L)) { "Addon host does not support saved process scopes" }
+        restoreCheckpoint(state)
+    }
+
     fun reset()
 
     override fun close() = reset()

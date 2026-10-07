@@ -18,10 +18,13 @@
 
 package ru.lazyhat.compukters.core.device.runtime.program
 
+import ru.lazyhat.compukters.api.addon.AddonCheckpointCodec
 import ru.lazyhat.compukters.api.addon.ProgramAddonCompletion
 import ru.lazyhat.compukters.api.addon.ProgramAddonDispatch
 import ru.lazyhat.compukters.api.addon.ProgramAddonHost
 import ru.lazyhat.compukters.api.addon.ProgramAddonRequest
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
 
 /** One host instance per live process, created lazily; suspended parents keep their resources. */
 fun programScopedAddonHostOf(factory: () -> ProgramAddonHost): ProgramAddonHost = ScopedProgramAddonHost(factory)
@@ -76,6 +79,73 @@ private class ScopedProgramAddonHost(
             result += polled
         }
         return result
+    }
+
+    override fun checkpoint(): ByteArray {
+        val metadata =
+            ByteBuffer
+                .allocate(8)
+                .order(ByteOrder.LITTLE_ENDIAN)
+                .putLong(lastProgramId)
+                .array()
+        val parts =
+            hosts.toSortedMap().map { (id, host) ->
+                val payload = host?.checkpoint() ?: byteArrayOf()
+                require(payload.size <= 1024 * 1024 - 9)
+                ByteBuffer
+                    .allocate(9 + payload.size)
+                    .order(ByteOrder.LITTLE_ENDIAN)
+                    .putLong(id)
+                    .put(if (host == null) 0.toByte() else 1.toByte())
+                    .put(payload)
+                    .array()
+            }
+        return AddonCheckpointCodec.encode(listOf(metadata) + parts)
+    }
+
+    override fun restoreCheckpoint(
+        state: ByteArray,
+        programScopes: List<Long>,
+    ) {
+        require(programScopes.size in 1..32 && programScopes.first() == 0L)
+        require(programScopes.zipWithNext().all { (parent, child) -> child > parent })
+        require(state.size in 8..1024 * 1024)
+        val count = ByteBuffer.wrap(state).order(ByteOrder.LITTLE_ENDIAN).getInt(4)
+        require(count in 2..33)
+        val parts = AddonCheckpointCodec.decode(state, count)
+        require(parts.first().size == 8)
+        val highWater = ByteBuffer.wrap(parts.first()).order(ByteOrder.LITTLE_ENDIAN).long
+        require(highWater >= 0)
+        val saved = linkedMapOf<Long, ByteArray?>()
+        parts.drop(1).forEach { part ->
+            require(part.size >= 9)
+            val bytes = ByteBuffer.wrap(part).order(ByteOrder.LITTLE_ENDIAN)
+            val id = bytes.long
+            require(id >= 0 && id <= highWater && id !in saved)
+            val present = bytes.get().toInt()
+            require(present in 0..1 && (present == 1 || !bytes.hasRemaining()))
+            saved[id] = if (present == 0) null else ByteArray(bytes.remaining()).also(bytes::get)
+        }
+        require(0L in saved)
+        reset()
+        lastProgramId = maxOf(highWater, programScopes.last())
+        programScopes.forEach { id ->
+            val payload = saved[id]
+            hosts[id] =
+                if (payload == null) {
+                    null
+                } else {
+                    factory().also { host ->
+                        try {
+                            require(host.capabilitySchemas == capabilitySchemas)
+                            host.restoreCheckpoint(payload)
+                        } catch (failure: Throwable) {
+                            runCatching(host::close).onFailure(failure::addSuppressed)
+                            throw failure
+                        }
+                    }
+                }
+        }
     }
 
     override fun reset() {

@@ -61,6 +61,7 @@ fun renderAddonHostContract(
         appendLine("import ru.lazyhat.compukters.addon.api.AddonGuestApiBundle")
         appendLine("import ru.lazyhat.compukters.addon.api.AddonGuestApiBundleCodec")
         appendLine("import ru.lazyhat.compukters.api.addon.AddonCallResult")
+        appendLine("import ru.lazyhat.compukters.api.addon.AddonCheckpointCodec")
         appendLine("import ru.lazyhat.compukters.api.addon.AddonHostHandler")
         appendLine("import ru.lazyhat.compukters.api.addon.AddonPollResult")
         appendLine("import ru.lazyhat.compukters.api.addon.ProgramAddonCompletion")
@@ -194,6 +195,20 @@ fun renderAddonHostContract(
         appendLine("            completions += ProgramAddonCompletion(identity, response)")
         appendLine("        }")
         appendLine("        return completions")
+        appendLine("    }")
+        appendLine()
+        appendLine("    override fun checkpoint(): ByteArray = AddonCheckpointCodec.encode(listOf(")
+        handlers.keys.forEach { capability -> appendLine("        ${capability.name}Handler.checkpoint(),") }
+        appendLine("    ))")
+        appendLine()
+        appendLine("    override fun restoreCheckpoint(state: ByteArray) {")
+        appendLine("        val parts = AddonCheckpointCodec.decode(state, ${handlers.size})")
+        handlers.keys.forEachIndexed {
+            index,
+            capability,
+            ->
+            appendLine("        ${capability.name}Handler.restoreCheckpoint(parts[$index])")
+        }
         appendLine("    }")
         appendLine()
         appendLine("    override fun reset() {")
