@@ -19,12 +19,41 @@
 package ru.lazyhat.compukters.ide.client.state
 
 import ru.lazyhat.compukters.ide.client.target.IdeTargetVirtualPath
+import ru.lazyhat.compukters.ide.git.GitCredentials
+import ru.lazyhat.compukters.ide.git.GitOperation
 import ru.lazyhat.compukters.ide.project.fs.ProjectPath
 
 sealed interface IdeCommand {
     data class CreateProject(
         val name: String,
     ) : IdeCommand
+
+    data class ImportProject(
+        val root: String,
+    ) : IdeCommand
+
+    data class CloneProject(
+        val name: String,
+        val remote: String,
+    ) : IdeCommand
+
+    data class Git(
+        val operation: GitOperation,
+    ) : IdeCommand
+
+    data class GitVisible(
+        val visible: Boolean,
+    ) : IdeCommand
+
+    data class ScrollGit(
+        val lines: Int,
+    ) : IdeCommand
+
+    data class SetGitCredentials(
+        val credentials: GitCredentials?,
+    ) : IdeCommand
+
+    data object CancelGit : IdeCommand
 
     data class OpenProject(
         val directoryName: String,

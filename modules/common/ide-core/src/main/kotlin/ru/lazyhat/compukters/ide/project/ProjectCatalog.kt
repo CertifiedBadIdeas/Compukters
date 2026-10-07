@@ -26,6 +26,7 @@ import java.nio.channels.FileChannel
 import java.nio.file.FileAlreadyExistsException
 import java.nio.file.Files
 import java.nio.file.LinkOption
+import java.nio.file.NoSuchFileException
 import java.nio.file.OpenOption
 import java.nio.file.Path
 import java.nio.file.SecureDirectoryStream
@@ -59,7 +60,11 @@ class ProjectCatalog private constructor(
                     if (directoryName.startsWith(STAGING_PREFIX)) return@forEach
                     if (directoryName.startsWith(REGISTRATION_PREFIX)) {
                         val registeredPath = SecureProjectFiles.readText(root, directoryName, limits.pathUtf8Bytes)
-                        add(describe(directoryName, Path.of(registeredPath)))
+                        try {
+                            add(describe(directoryName, Path.of(registeredPath)))
+                        } catch (_: NoSuchFileException) {
+                            // A temporarily unavailable external root does not hide the other projects.
+                        }
                         return@forEach
                     }
                     validateDirectoryName(directoryName)
@@ -101,6 +106,58 @@ class ProjectCatalog private constructor(
             writeNew(root, id, content)
         }
         return descriptor
+    }
+
+    /** Materializes a project into an owned staging directory and publishes only admitted content. */
+    fun importProject(
+        name: String,
+        materialize: (Path) -> Unit,
+    ): ProjectDescriptor {
+        validateDirectoryName(name)
+        val stagingName = "$STAGING_PREFIX${UUID.randomUUID()}"
+        val stagingPath = rootIdentity.canonicalPath.resolve(stagingName)
+        catalogOperation("admit import") { root ->
+            if (SecureProjectFiles.attributesOrNull(root, Path.of(name)) != null) throw FileAlreadyExistsException(name)
+            Files.createDirectory(stagingPath)
+        }
+        try {
+            materialize(stagingPath)
+            val staged = describe(stagingName, stagingPath)
+            ru.lazyhat.compukters.ide.project.tree
+                .ProjectTreeStore(staged.handle, limits)
+                .scan()
+            catalogOperation("publish import") { root ->
+                check(staged.handle.isValid()) { "staged project changed before publication" }
+                if (SecureProjectFiles.attributesOrNull(root, Path.of(name)) != null) throw FileAlreadyExistsException(name)
+                root.move(Path.of(stagingName), root, Path.of(name))
+            }
+        } finally {
+            cleanupImportedStaging(stagingName)
+        }
+        return projects().single { it.directoryName == name }
+    }
+
+    private fun cleanupImportedStaging(name: String) {
+        if (!SecureProjectFiles.isValid(rootIdentity)) return
+        runCatching {
+            catalogOperation("cleanup import") { root ->
+                fun remove(
+                    directory: SecureDirectoryStream<Path>,
+                    entry: Path,
+                ) {
+                    val attributes = SecureProjectFiles.attributesOrNull(directory, entry) ?: return
+                    if (attributes.isDirectory && !attributes.isSymbolicLink) {
+                        directory.newDirectoryStream(entry, LinkOption.NOFOLLOW_LINKS).use { child ->
+                            child.map { it.fileName }.forEach { remove(child, it) }
+                        }
+                        directory.deleteDirectory(entry)
+                    } else {
+                        directory.deleteFile(entry)
+                    }
+                }
+                remove(root, Path.of(name))
+            }
+        }
     }
 
     private fun describe(

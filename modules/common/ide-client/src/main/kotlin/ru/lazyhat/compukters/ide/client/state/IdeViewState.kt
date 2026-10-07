@@ -24,6 +24,7 @@ import ru.lazyhat.compukters.ide.client.files.IdeComputerTreeState
 import ru.lazyhat.compukters.ide.client.target.IdeDeploymentPath
 import ru.lazyhat.compukters.ide.client.target.IdeExecutableRevision
 import ru.lazyhat.compukters.ide.client.target.IdeTargetState
+import ru.lazyhat.compukters.ide.git.GitResult
 import ru.lazyhat.compukters.ide.project.fs.ProjectPath
 import ru.lazyhat.compukters.ide.project.tree.ProjectTree
 import java.util.Collections
@@ -72,6 +73,7 @@ data class IdeWorkspaceView(
     val projects: List<IdeProjectSummary> = emptyList(),
     val usages: ru.lazyhat.compukters.ide.client.analysis.IdeUsages? = null,
     val diagnostics: IdeDiagnostics = IdeDiagnostics.unlocated(editor, build),
+    val git: IdeGitView = IdeGitView(),
 )
 
 sealed interface IdePageState {
@@ -117,7 +119,30 @@ sealed interface IdeDialogState {
     ) : IdeDialogState
 }
 
+data class IdeGitView(
+    val visible: Boolean = false,
+    val result: GitResult? = null,
+    val scroll: Int = 0,
+    val authenticated: Boolean = false,
+)
+
+sealed interface IdeProjectRequest {
+    data class Create(
+        val name: String,
+    ) : IdeProjectRequest
+
+    data class Existing(
+        val root: String,
+    ) : IdeProjectRequest
+
+    data class Clone(
+        val name: String,
+        val remote: String,
+    ) : IdeProjectRequest
+}
+
 enum class IdeBusyOperation {
+    Git,
     Catalog,
     Project,
     Save,
