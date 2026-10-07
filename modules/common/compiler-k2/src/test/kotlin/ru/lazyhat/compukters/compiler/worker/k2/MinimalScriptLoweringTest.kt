@@ -960,77 +960,23 @@ class MinimalScriptLoweringTest {
         }
 
     @Test
-    fun `top level IntChannel lowers to VM owned bounded handoff`() =
+    fun `removed IntChannel is unavailable in the Guest platform`() =
         withAdapter { adapter ->
-            val source =
-                """
-                import compukter.concurrent.IntChannel
-                import compukter.concurrent.Tasks
-
-                val changes = IntChannel(1)
-                val level = 13
-
-                fun producer() {
-                    changes.send(level)
-                }
-
-                fun main() {
-                    val task = Tasks.launch(::producer)
-                    println(changes.receive())
-                    task.join()
-                }
-                """.trimIndent()
-            val first = adapter.compile(request(source))
-            val second = adapter.compile(request(source))
-            val bytes = assertNotNull(first.artifact, first.diagnostics.joinToString()).toByteArray()
-            val artifact = ArtifactReader.read(bytes)
-            val opcodes = applicationCodeOpcodes(bytes)
-
-            assertContentEquals(bytes, assertNotNull(second.artifact).toByteArray())
-            assertTrue(first.diagnostics.none { it.severity.name == "ERROR" }, first.diagnostics.toString())
-            assertTrue(0x52 in opcodes, "top-level initializer must create a VM channel: $opcodes")
-            assertTrue(0xea in opcodes, "send must stay inside the VM: $opcodes")
-            assertTrue(0xeb in opcodes, "receive must stay inside the VM: $opcodes")
-            assertTrue(0x37 in opcodes && 0x38 in opcodes, "top-level state must use static storage: $opcodes")
-            // Printing the received Int retains stdoutInt's arithmetic exception factory.
-            assertEquals(AbiVersion(1u, 11u), artifact.minimumRuntimeAbi)
-            assertEquals(1u, artifact.manifest.maximumChannels)
-            assertEquals(1u, artifact.manifest.maximumChannelValues)
-            assertTrue(SemanticFeature.CHANNELS in artifact.semanticFeatures)
-            System.getProperty("compukter.vm.channelArtifact")?.let { output ->
-                Path.of(output).also { it.parent.createDirectories() }.writeBytes(bytes)
-            }
-        }
-
-    @Test
-    fun `IntChannel construction rejects unsupported ownership and capacity`() =
-        withAdapter { adapter ->
-            val sources =
-                listOf(
-                    """
-                    import compukter.concurrent.IntChannel
-                    fun main() { val channel = IntChannel(1); channel.receive() }
-                    """.trimIndent() to "IntChannel must be initialized directly in a top-level val",
-                    """
-                    import compukter.concurrent.IntChannel
-                    var channel = IntChannel(1)
-                    fun main() { channel.receive() }
-                    """.trimIndent() to "top-level state must be an immutable property with a default getter",
-                    """
-                    import compukter.concurrent.IntChannel
-                    val channel = IntChannel(0)
-                    fun main() { channel.receive() }
-                    """.trimIndent() to "IntChannel capacity must be a positive Int constant",
+            val result =
+                adapter.compile(
+                    request(
+                        """
+                        import compukter.concurrent.IntChannel
+                        val changes = IntChannel(1)
+                        fun main() { changes.receive() }
+                        """.trimIndent(),
+                    ),
                 )
-            sources.forEach { (source, message) ->
-                val result = adapter.compile(request(source))
-
-                assertNull(result.artifact, source)
-                assertTrue(
-                    result.diagnostics.any { it.severity.name == "ERROR" && message in it.message },
-                    result.diagnostics.toString(),
-                )
-            }
+            assertNull(result.artifact)
+            assertTrue(
+                result.diagnostics.any { it.severity.name == "ERROR" && "IntChannel" in it.message },
+                result.diagnostics.toString(),
+            )
         }
 
     @Test
@@ -1043,12 +989,14 @@ class MinimalScriptLoweringTest {
                         import compukter.concurrent.Tasks
                         import compukter.redstone.Redstone
 
+                        val level = 13
+
                         fun reader() {
                             readln()
                         }
 
                         fun writer() {
-                            Redstone.right.set(13)
+                            Redstone.right.set(level)
                         }
 
                         fun main() {
@@ -1068,6 +1016,9 @@ class MinimalScriptLoweringTest {
             assertTrue(0xe8 in opcodes, "task join must lower to task.join: $opcodes")
             // Tasks.launch retains IllegalArgumentException's verified factory role through require.
             assertEquals(AbiVersion(1u, 11u), artifact.minimumRuntimeAbi)
+            assertEquals(0u, artifact.manifest.maximumChannels)
+            assertEquals(0u, artifact.manifest.maximumChannelValues)
+            assertFalse(SemanticFeature.CHANNELS in artifact.semanticFeatures)
             assertEquals(64u, artifact.manifest.maximumCoroutines)
             assertTrue(SemanticFeature.COROUTINES in artifact.semanticFeatures)
             assertTrue(result.diagnostics.none { it.severity.name == "ERROR" }, result.diagnostics.toString())
@@ -1512,31 +1463,6 @@ class MinimalScriptLoweringTest {
             System.getProperty("compukter.vm.adaptedConstructorsArtifact")?.let { output ->
                 Path.of(output).also { it.parent.createDirectories() }.writeBytes(bytes)
             }
-        }
-
-    @Test
-    fun `unsupported constructor reference is rejected before artifact publication`() =
-        withAdapter { adapter ->
-            val result =
-                adapter.compile(
-                    request(
-                        """
-                        import compukter.concurrent.IntChannel
-                        fun main() {
-                            val make: (Int) -> IntChannel = ::IntChannel
-                            make(2)
-                        }
-                        """.trimIndent(),
-                    ),
-                )
-            assertNull(result.artifact)
-            assertTrue(
-                result.diagnostics.any {
-                    it.severity.name == "ERROR" &&
-                        "constructor reference target is outside the supported Guest project subset" in it.message
-                },
-                result.diagnostics.toString(),
-            )
         }
 
     @Test

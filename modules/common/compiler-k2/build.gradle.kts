@@ -302,7 +302,6 @@ val namedCallsConformanceArtifact = layout.buildDirectory.file("generated/confor
 val blockingCallConformanceArtifact = layout.buildDirectory.file("generated/conformance/blocking-call.cpkt")
 val transparentCallConformanceArtifact = layout.buildDirectory.file("generated/conformance/transparent-call.cpkt")
 val tasksConformanceArtifact = layout.buildDirectory.file("generated/conformance/tasks.cpkt")
-val channelConformanceArtifact = layout.buildDirectory.file("generated/conformance/channel.cpkt")
 val timerConformanceArtifact = layout.buildDirectory.file("generated/conformance/timer.cpkt")
 val whenConformanceArtifact = layout.buildDirectory.file("generated/conformance/when.cpkt")
 val exceptionsConformanceArtifact = layout.buildDirectory.file("generated/conformance/exceptions.cpkt")
@@ -597,22 +596,6 @@ val generateTasksConformanceArtifact = tasks.register<Test>("generateTasksConfor
     doFirst {
         systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
         systemProperty("compukter.vm.tasksArtifact", tasksConformanceArtifact.get().asFile.absolutePath)
-    }
-}
-
-val generateChannelConformanceArtifact = tasks.register<Test>("generateChannelConformanceArtifact") {
-    description = "Compiles VM-owned Guest channel handoff for pinned VM conformance."
-    group = "verification"
-    dependsOn(tasks.jar)
-    useJUnitPlatform()
-    testClassesDirs = sourceSets.test.get().output.classesDirs
-    classpath = sourceSets.test.get().runtimeClasspath
-    filter.includeTestsMatching("*top level IntChannel lowers to VM owned bounded handoff*")
-    inputs.file(workerJar)
-    outputs.file(channelConformanceArtifact)
-    doFirst {
-        systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
-        systemProperty("compukter.vm.channelArtifact", channelConformanceArtifact.get().asFile.absolutePath)
     }
 }
 

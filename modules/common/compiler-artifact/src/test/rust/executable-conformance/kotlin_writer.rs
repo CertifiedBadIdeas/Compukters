@@ -107,7 +107,6 @@ fn main() {
         "function-values" => k2_function_values_preserve_distinct_captures_and_dispatch(),
         "transparent-call" => k2_ordinary_project_call_resumes_across_async_capability(),
         "tasks" => k2_tasks_keep_independent_host_requests_in_flight(),
-        "channel" => k2_channel_handoff_stays_inside_the_vm(),
         "timer" => k2_timer_sleep_publishes_one_bounded_request(),
         "when" => k2_bounded_when_selects_matched_and_fallback_branches(),
         _ => panic!("unknown Kotlin-to-VM conformance scenario: {scenario}"),
@@ -974,53 +973,6 @@ fn k2_tasks_keep_independent_host_requests_in_flight() {
             AdvanceOutcome::Halted(None) => break,
             AdvanceOutcome::SliceExhausted => {}
             outcome => panic!("unexpected K2 cooperative tasks outcome: {outcome:?}"),
-        }
-    }
-}
-
-fn k2_channel_handoff_stays_inside_the_vm() {
-    let path = std::env::var("COMPUKTER_KOTLIN_CHANNEL_ARTIFACT")
-        .expect("COMPUKTER_KOTLIN_CHANNEL_ARTIFACT must be set for this conformance test");
-    let bytes = fs::read(path).expect("K2 channel output must exist");
-    let verified = verify_artifact(Arc::from(bytes), ArtifactLimits::default())
-        .expect("pinned VM must verify K2 channel output");
-    let string_argument = [HostValueType::String];
-    let operations = [
-        OperationSchema::asynchronous(&[], HostValueType::String),
-        OperationSchema::synchronous(&string_argument, HostValueType::Unit),
-        OperationSchema::synchronous(&string_argument, HostValueType::Unit),
-    ];
-    let stdio = CapabilityBinding::new("compukter", "stdio", 1, 0, &operations);
-    let profile = ExecutionProfile {
-        heap_bytes: 1024 * 1024,
-        frame_storage_bytes: 1024 * 1024,
-        maximum_call_depth: 64,
-        maximum_coroutines: 64,
-        maximum_channels: 1,
-        maximum_channel_values: 1,
-        maximum_host_requests: 64,
-        maximum_events: 0,
-        maximum_slice_budget: u32::MAX,
-        compiler_abi: [0; 32],
-        platform_abi: [0; 32],
-        maximum_host_arguments: 16,
-        maximum_outbound_utf16_code_units: 4096,
-        maximum_inbound_utf16_code_units: 4096,
-        maximum_accepted_responses: 64,
-        entry_argument_limits: entry_argument_limits(),
-    };
-    let mut session = Session::admit(verified, profile, &[stdio]).expect("K2 channel must admit");
-    session.start(&[]).expect("K2 channel must start");
-
-    let write = next_host_request(&mut session, "println", 1, Some(&utf16("13\n")));
-    session
-        .resume(write, HostResponse::Success(HostValueInput::Unit))
-        .expect("println must resume the receiving task");
-    loop {
-        match session.advance(64, 64).expect("K2 channel must finish") {
-            AdvanceOutcome::SliceExhausted => {}
-            AdvanceOutcome::Halted(None) => break,
-            outcome => panic!("unexpected K2 channel outcome: {outcome:?}"),
         }
     }
 }
