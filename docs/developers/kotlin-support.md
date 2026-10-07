@@ -876,7 +876,7 @@ supported.
   while allocation exhaustion remains noncatchable across quota slices. A direct `for` snapshots
   the source array once and reads its current elements by index, without an
   iterator allocation; empty arrays, reassignment, mutation, nested loops,
-  `break`, and `continue` retain Kotlin behavior. Initializer lambdas,
+  `break`, and `continue` retain Kotlin behavior.
   `Array<Int>`, stored iterators, `indices`, spread arguments, covariance,
   reflection, and collection helpers remain outside the admitted subset.
   Evidence:
@@ -888,9 +888,18 @@ supported.
   [`kotlin_writer.rs`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/compiler-artifact/src/test/rust/executable-conformance/kotlin_writer.rs),
   test `k2_int_array_executes_specialized_storage_and_traps`.
 
-- [ ] **Other primitive arrays — Unsupported** — primitive arrays other than
-  `CharArray` and `IntArray` have no source-level Guest representation even
-  though the VM can store every primitive array width. Tracking: not scheduled
+- [x] **All twelve primitive array families** — `BooleanArray`, `ByteArray`, `ShortArray`, `CharArray`,
+  `IntArray`, `LongArray`, `FloatArray`, `DoubleArray`, `UByteArray`, `UShortArray`, `UIntArray`, and `ULongArray`
+  support size constructors, `(Int) -> T` initializers, their `*ArrayOf` factories, `size`, indexed reads and writes,
+  direct `for` loops, `copyOf`, and overlapping `copyInto`, including its receiver-size default.
+  Initializers receive ascending indexes exactly once, and are never invoked for a negative size. New slots use
+  the primitive zero value. Byte and short families use compact one- and two-byte storage; unsigned families
+  preserve their nominal identity and full magnitude. Bounds and negative sizes raise managed exceptions.
+  Stored iterators, `indices`, and spread factory arguments remain outside the admitted subset.
+  Evidence: `all primitive operators preserve narrow signed unsigned and nominal semantics` in `GuestInlineIntegrationTest`,
+  executed by `testKotlinPrimitivesVmConformance`; `specialized IntArray lowers deterministically for vm conformance`
+  exercises copies and exceptions for every family via `testKotlinIntArrayVmConformance`; platform bundle test
+  `receiver array size defaults round trip and reject incompatible declarations`.
 
 - [x] **`Iterable<T>` search and predicate operations** — `contains` / `in`, `indexOf`, and `lastIndexOf` traverse
   any iterable, including a user-defined one. `any`, `all`, and `none` use `iterator()` and stop when the result is

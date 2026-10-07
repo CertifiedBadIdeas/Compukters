@@ -631,7 +631,21 @@ class PlatformMetadataCompiler {
                         ) { "null default requires a nullable parameter" }
                         PlatformDefaultArgument.NullValue
                     } else if (reference == "size" && !ownerHasDispatchReceiver && function?.receiverTypeReference?.text?.let {
-                            it == "IntArray" || it == "DoubleArray" || it == "CharArray" || it.startsWith("Array<")
+                            it in
+                                setOf(
+                                    "BooleanArray",
+                                    "ByteArray",
+                                    "ShortArray",
+                                    "CharArray",
+                                    "IntArray",
+                                    "LongArray",
+                                    "FloatArray",
+                                    "DoubleArray",
+                                    "UByteArray",
+                                    "UShortArray",
+                                    "UIntArray",
+                                    "ULongArray",
+                                ) || it.startsWith("Array<")
                         } == true
                     ) {
                         PlatformDefaultArgument.ReceiverArraySize

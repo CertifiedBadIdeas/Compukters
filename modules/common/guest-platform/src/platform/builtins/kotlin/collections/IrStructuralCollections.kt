@@ -74,13 +74,29 @@ internal interface MutableMap<K, V> : Map<K, V> {
 
 internal interface MutableListIterator<T> : ListIterator<T>, MutableIterator<T>
 
-internal abstract class BooleanIterator : Iterator<Boolean>
+public abstract class BooleanIterator : Iterator<Boolean> {
+    public abstract override operator fun next(): Boolean
 
-internal abstract class ByteIterator : Iterator<Byte>
+    public abstract fun nextBoolean(): Boolean
+}
 
-internal abstract class CharIterator : Iterator<Char>
+public abstract class ByteIterator : Iterator<Byte> {
+    public abstract override operator fun next(): Byte
 
-internal abstract class ShortIterator : Iterator<Short>
+    public abstract fun nextByte(): Byte
+}
+
+public abstract class CharIterator : Iterator<Char> {
+    public abstract override operator fun next(): Char
+
+    public abstract fun nextChar(): Char
+}
+
+public abstract class ShortIterator : Iterator<Short> {
+    public abstract override operator fun next(): Short
+
+    public abstract fun nextShort(): Short
+}
 
 public abstract class IntIterator : Iterator<Int> {
     public abstract override operator fun next(): Int
@@ -88,9 +104,17 @@ public abstract class IntIterator : Iterator<Int> {
     public abstract fun nextInt(): Int
 }
 
-internal abstract class LongIterator : Iterator<Long>
+public abstract class LongIterator : Iterator<Long> {
+    public abstract override operator fun next(): Long
 
-internal abstract class FloatIterator : Iterator<Float>
+    public abstract fun nextLong(): Long
+}
+
+public abstract class FloatIterator : Iterator<Float> {
+    public abstract override operator fun next(): Float
+
+    public abstract fun nextFloat(): Float
+}
 
 public abstract class DoubleIterator : Iterator<Double> {
     public abstract override operator fun next(): Double

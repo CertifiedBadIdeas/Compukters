@@ -4618,12 +4618,10 @@ class MinimalScriptLoweringTest {
     fun `unsupported IntArray forms publish no artifact`() =
         withAdapter { adapter ->
             listOf(
-                "fun main() { IntArray(2) { it } }",
                 "fun main() { arrayOf(1, 2) }",
                 "fun main() { val values = intArrayOf(1); values.iterator() }",
                 "fun main() { val values = intArrayOf(1); values.indices }",
                 "fun main() { val values = intArrayOf(1); intArrayOf(*values) }",
-                "fun main() { LongArray(1) }",
             ).forEach { source ->
                 val result = adapter.compile(request(source))
 
@@ -4658,6 +4656,210 @@ class MinimalScriptLoweringTest {
                 """
                 import compukter.terminal.Terminal
 
+                fun booleanArrayCopies() {
+                    val original = BooleanArray(3) { true }
+                    val grown = original.copyOf(5)
+                    require(grown[2] == true && grown[3] == false)
+                    require(original.copyOf()[0] == true && original.copyOf(0).size == 0)
+                    grown[1] = false
+                    val returned = grown.copyInto(grown, 1, 0, 3)
+                    require(returned === grown && grown[1] == true && grown[2] == false && grown[3] == true)
+                    val destination = BooleanArray(4)
+                    original.copyInto(destination)
+                    require(destination[2] == true && destination[3] == false)
+                    var calls = 0
+                    try { BooleanArray(-1) { calls++; true }; require(false) } catch (failure: NegativeArraySizeException) {}
+                    require(calls == 0)
+                    try { original[3]; require(false) } catch (failure: IndexOutOfBoundsException) {}
+                    try { original[-1] = false; require(false) } catch (failure: IndexOutOfBoundsException) {}
+                }
+                fun byteArrayCopies() {
+                    val original = ByteArray(3) { (-1).toByte() }
+                    val grown = original.copyOf(5)
+                    require(grown[2] == (-1).toByte() && grown[3] == 0.toByte())
+                    require(original.copyOf()[0] == (-1).toByte() && original.copyOf(0).size == 0)
+                    grown[1] = 0.toByte()
+                    val returned = grown.copyInto(grown, 1, 0, 3)
+                    require(returned === grown && grown[1] == (-1).toByte() && grown[2] == 0.toByte() && grown[3] == (-1).toByte())
+                    val destination = ByteArray(4)
+                    original.copyInto(destination)
+                    require(destination[2] == (-1).toByte() && destination[3] == 0.toByte())
+                    var calls = 0
+                    try { ByteArray(-1) { calls++; (-1).toByte() }; require(false) } catch (failure: NegativeArraySizeException) {}
+                    require(calls == 0)
+                    try { original[3]; require(false) } catch (failure: IndexOutOfBoundsException) {}
+                    try { original[-1] = 0.toByte(); require(false) } catch (failure: IndexOutOfBoundsException) {}
+                }
+                fun shortArrayCopies() {
+                    val original = ShortArray(3) { (-1).toShort() }
+                    val grown = original.copyOf(5)
+                    require(grown[2] == (-1).toShort() && grown[3] == 0.toShort())
+                    require(original.copyOf()[0] == (-1).toShort() && original.copyOf(0).size == 0)
+                    grown[1] = 0.toShort()
+                    val returned = grown.copyInto(grown, 1, 0, 3)
+                    require(returned === grown && grown[1] == (-1).toShort() && grown[2] == 0.toShort() && grown[3] == (-1).toShort())
+                    val destination = ShortArray(4)
+                    original.copyInto(destination)
+                    require(destination[2] == (-1).toShort() && destination[3] == 0.toShort())
+                    var calls = 0
+                    try { ShortArray(-1) { calls++; (-1).toShort() }; require(false) } catch (failure: NegativeArraySizeException) {}
+                    require(calls == 0)
+                    try { original[3]; require(false) } catch (failure: IndexOutOfBoundsException) {}
+                    try { original[-1] = 0.toShort(); require(false) } catch (failure: IndexOutOfBoundsException) {}
+                }
+                fun charArrayCopies() {
+                    val original = CharArray(3) { 'x' }
+                    val grown = original.copyOf(5)
+                    require(grown[2] == 'x' && grown[3] == '\u0000')
+                    require(original.copyOf()[0] == 'x' && original.copyOf(0).size == 0)
+                    grown[1] = '\u0000'
+                    val returned = grown.copyInto(grown, 1, 0, 3)
+                    require(returned === grown && grown[1] == 'x' && grown[2] == '\u0000' && grown[3] == 'x')
+                    val destination = CharArray(4)
+                    original.copyInto(destination)
+                    require(destination[2] == 'x' && destination[3] == '\u0000')
+                    var calls = 0
+                    try { CharArray(-1) { calls++; 'x' }; require(false) } catch (failure: NegativeArraySizeException) {}
+                    require(calls == 0)
+                    try { original[3]; require(false) } catch (failure: IndexOutOfBoundsException) {}
+                    try { original[-1] = '\u0000'; require(false) } catch (failure: IndexOutOfBoundsException) {}
+                }
+                fun intArrayCopies() {
+                    val original = IntArray(3) { -1 }
+                    val grown = original.copyOf(5)
+                    require(grown[2] == -1 && grown[3] == 0)
+                    require(original.copyOf()[0] == -1 && original.copyOf(0).size == 0)
+                    grown[1] = 0
+                    val returned = grown.copyInto(grown, 1, 0, 3)
+                    require(returned === grown && grown[1] == -1 && grown[2] == 0 && grown[3] == -1)
+                    val destination = IntArray(4)
+                    original.copyInto(destination)
+                    require(destination[2] == -1 && destination[3] == 0)
+                    var calls = 0
+                    try { IntArray(-1) { calls++; -1 }; require(false) } catch (failure: NegativeArraySizeException) {}
+                    require(calls == 0)
+                    try { original[3]; require(false) } catch (failure: IndexOutOfBoundsException) {}
+                    try { original[-1] = 0; require(false) } catch (failure: IndexOutOfBoundsException) {}
+                }
+                fun longArrayCopies() {
+                    val original = LongArray(3) { -1L }
+                    val grown = original.copyOf(5)
+                    require(grown[2] == -1L && grown[3] == 0L)
+                    require(original.copyOf()[0] == -1L && original.copyOf(0).size == 0)
+                    grown[1] = 0L
+                    val returned = grown.copyInto(grown, 1, 0, 3)
+                    require(returned === grown && grown[1] == -1L && grown[2] == 0L && grown[3] == -1L)
+                    val destination = LongArray(4)
+                    original.copyInto(destination)
+                    require(destination[2] == -1L && destination[3] == 0L)
+                    var calls = 0
+                    try { LongArray(-1) { calls++; -1L }; require(false) } catch (failure: NegativeArraySizeException) {}
+                    require(calls == 0)
+                    try { original[3]; require(false) } catch (failure: IndexOutOfBoundsException) {}
+                    try { original[-1] = 0L; require(false) } catch (failure: IndexOutOfBoundsException) {}
+                }
+                fun floatArrayCopies() {
+                    val original = FloatArray(3) { -1.0f }
+                    val grown = original.copyOf(5)
+                    require(grown[2] == -1.0f && grown[3] == 0.0f)
+                    require(original.copyOf()[0] == -1.0f && original.copyOf(0).size == 0)
+                    grown[1] = 0.0f
+                    val returned = grown.copyInto(grown, 1, 0, 3)
+                    require(returned === grown && grown[1] == -1.0f && grown[2] == 0.0f && grown[3] == -1.0f)
+                    val destination = FloatArray(4)
+                    original.copyInto(destination)
+                    require(destination[2] == -1.0f && destination[3] == 0.0f)
+                    var calls = 0
+                    try { FloatArray(-1) { calls++; -1.0f }; require(false) } catch (failure: NegativeArraySizeException) {}
+                    require(calls == 0)
+                    try { original[3]; require(false) } catch (failure: IndexOutOfBoundsException) {}
+                    try { original[-1] = 0.0f; require(false) } catch (failure: IndexOutOfBoundsException) {}
+                }
+                fun doubleArrayCopies() {
+                    val original = DoubleArray(3) { -1.0 }
+                    val grown = original.copyOf(5)
+                    require(grown[2] == -1.0 && grown[3] == 0.0)
+                    require(original.copyOf()[0] == -1.0 && original.copyOf(0).size == 0)
+                    grown[1] = 0.0
+                    val returned = grown.copyInto(grown, 1, 0, 3)
+                    require(returned === grown && grown[1] == -1.0 && grown[2] == 0.0 && grown[3] == -1.0)
+                    val destination = DoubleArray(4)
+                    original.copyInto(destination)
+                    require(destination[2] == -1.0 && destination[3] == 0.0)
+                    var calls = 0
+                    try { DoubleArray(-1) { calls++; -1.0 }; require(false) } catch (failure: NegativeArraySizeException) {}
+                    require(calls == 0)
+                    try { original[3]; require(false) } catch (failure: IndexOutOfBoundsException) {}
+                    try { original[-1] = 0.0; require(false) } catch (failure: IndexOutOfBoundsException) {}
+                }
+                fun ubyteArrayCopies() {
+                    val original = UByteArray(3) { 255u.toUByte() }
+                    val grown = original.copyOf(5)
+                    require(grown[2] == 255u.toUByte() && grown[3] == 0u.toUByte())
+                    require(original.copyOf()[0] == 255u.toUByte() && original.copyOf(0).size == 0)
+                    grown[1] = 0u.toUByte()
+                    val returned = grown.copyInto(grown, 1, 0, 3)
+                    require(returned === grown && grown[1] == 255u.toUByte() && grown[2] == 0u.toUByte() && grown[3] == 255u.toUByte())
+                    val destination = UByteArray(4)
+                    original.copyInto(destination)
+                    require(destination[2] == 255u.toUByte() && destination[3] == 0u.toUByte())
+                    var calls = 0
+                    try { UByteArray(-1) { calls++; 255u.toUByte() }; require(false) } catch (failure: NegativeArraySizeException) {}
+                    require(calls == 0)
+                    try { original[3]; require(false) } catch (failure: IndexOutOfBoundsException) {}
+                    try { original[-1] = 0u.toUByte(); require(false) } catch (failure: IndexOutOfBoundsException) {}
+                }
+                fun ushortArrayCopies() {
+                    val original = UShortArray(3) { 65535u.toUShort() }
+                    val grown = original.copyOf(5)
+                    require(grown[2] == 65535u.toUShort() && grown[3] == 0u.toUShort())
+                    require(original.copyOf()[0] == 65535u.toUShort() && original.copyOf(0).size == 0)
+                    grown[1] = 0u.toUShort()
+                    val returned = grown.copyInto(grown, 1, 0, 3)
+                    require(returned === grown && grown[1] == 65535u.toUShort() && grown[2] == 0u.toUShort() && grown[3] == 65535u.toUShort())
+                    val destination = UShortArray(4)
+                    original.copyInto(destination)
+                    require(destination[2] == 65535u.toUShort() && destination[3] == 0u.toUShort())
+                    var calls = 0
+                    try { UShortArray(-1) { calls++; 65535u.toUShort() }; require(false) } catch (failure: NegativeArraySizeException) {}
+                    require(calls == 0)
+                    try { original[3]; require(false) } catch (failure: IndexOutOfBoundsException) {}
+                    try { original[-1] = 0u.toUShort(); require(false) } catch (failure: IndexOutOfBoundsException) {}
+                }
+                fun uintArrayCopies() {
+                    val original = UIntArray(3) { 4294967295u }
+                    val grown = original.copyOf(5)
+                    require(grown[2] == 4294967295u && grown[3] == 0u)
+                    require(original.copyOf()[0] == 4294967295u && original.copyOf(0).size == 0)
+                    grown[1] = 0u
+                    val returned = grown.copyInto(grown, 1, 0, 3)
+                    require(returned === grown && grown[1] == 4294967295u && grown[2] == 0u && grown[3] == 4294967295u)
+                    val destination = UIntArray(4)
+                    original.copyInto(destination)
+                    require(destination[2] == 4294967295u && destination[3] == 0u)
+                    var calls = 0
+                    try { UIntArray(-1) { calls++; 4294967295u }; require(false) } catch (failure: NegativeArraySizeException) {}
+                    require(calls == 0)
+                    try { original[3]; require(false) } catch (failure: IndexOutOfBoundsException) {}
+                    try { original[-1] = 0u; require(false) } catch (failure: IndexOutOfBoundsException) {}
+                }
+                fun ulongArrayCopies() {
+                    val original = ULongArray(3) { 18446744073709551615uL }
+                    val grown = original.copyOf(5)
+                    require(grown[2] == 18446744073709551615uL && grown[3] == 0uL)
+                    require(original.copyOf()[0] == 18446744073709551615uL && original.copyOf(0).size == 0)
+                    grown[1] = 0uL
+                    val returned = grown.copyInto(grown, 1, 0, 3)
+                    require(returned === grown && grown[1] == 18446744073709551615uL && grown[2] == 0uL && grown[3] == 18446744073709551615uL)
+                    val destination = ULongArray(4)
+                    original.copyInto(destination)
+                    require(destination[2] == 18446744073709551615uL && destination[3] == 0uL)
+                    var calls = 0
+                    try { ULongArray(-1) { calls++; 18446744073709551615uL }; require(false) } catch (failure: NegativeArraySizeException) {}
+                    require(calls == 0)
+                    try { original[3]; require(false) } catch (failure: IndexOutOfBoundsException) {}
+                    try { original[-1] = 0uL; require(false) } catch (failure: IndexOutOfBoundsException) {}
+                }
                 class CopyItem(val value: Int)
                 class AnyHolder(val value: Any)
                 fun eraseArray(value: Any): Any = value
@@ -4777,6 +4979,19 @@ class MinimalScriptLoweringTest {
                 fun main() {
                     val mode = Terminal.eventKey()
                     if (mode == 0) {
+                        booleanArrayCopies()
+                        byteArrayCopies()
+                        shortArrayCopies()
+                        charArrayCopies()
+                        intArrayCopies()
+                        longArrayCopies()
+                        floatArrayCopies()
+                        doubleArrayCopies()
+                        ubyteArrayCopies()
+                        ushortArrayCopies()
+                        uintArrayCopies()
+                        ulongArrayCopies()
+
                         verifyBulkCopy()
                         val empty = IntArray(0)
                         val emptyLiteral = intArrayOf()
@@ -4850,7 +5065,7 @@ class MinimalScriptLoweringTest {
             assertTrue(first.diagnostics.none { it.severity.name == "ERROR" }, first.diagnostics.toString())
             val decoded = ArtifactReader.read(artifact)
             // Output formatting retains the native arithmetic exception factory.
-            assertEquals(AbiVersion(1u, 11u), decoded.minimumRuntimeAbi)
+            assertEquals(AbiVersion(1u, 14u), decoded.minimumRuntimeAbi)
             assertTrue(SemanticFeature.ARRAY_COPY in decoded.semanticFeatures)
             System.getProperty("compukter.vm.intArrayArtifact")?.let { output ->
                 Path.of(output).also { it.parent.createDirectories() }.writeBytes(artifact)
