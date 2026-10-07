@@ -93,6 +93,44 @@ import kotlin.test.assertTrue
 
 class IdeRendererStateTest {
     @Test
+    fun `Git panel exposes fast forward and file operations without underlying editor source`() {
+        val initial = workspaceState(semanticEditor("hidden source") { _, _ -> IdeSemanticInteraction.None }, IdeBuildState.Idle)
+        val page = initial.page as IdePageState.Workspace
+        val git =
+            ru.lazyhat.compukters.ide.client.state.IdeGitView(
+                visible = true,
+                result =
+                    ru.lazyhat.compukters.ide.git.GitResult(
+                        ru.lazyhat.compukters.ide.git.GitStatus(
+                            true,
+                            branch = "main",
+                            branches = listOf("main", "feature"),
+                            changes =
+                                listOf(
+                                    ru.lazyhat.compukters.ide.git
+                                        .GitChange(ProjectPath.file("src/main.kt"), "modified", "modified"),
+                                ),
+                        ),
+                    ),
+            )
+        val state = initial.copy(page = IdePageState.Workspace(page.value.copy(git = git)))
+        val model = IdeRenderer.extract(state, geometry())
+        assertTrue(model.hitTargets.any { it.gitOperation == ru.lazyhat.compukters.ide.git.GitOperation.Pull && it.enabled })
+        assertTrue(model.hitTargets.any { it.gitOperation is ru.lazyhat.compukters.ide.git.GitOperation.Stage })
+        assertTrue(model.hitTargets.any { it.gitOperation is ru.lazyhat.compukters.ide.git.GitOperation.Unstage })
+        assertFalse(model.text.any { it.value.contains("hidden source") })
+        val small = IdeRenderer.extract(state, IdeRenderGeometry.compute(600, 420, 180, 120, true, true, IdeCodeFontProfile.DEFAULT))
+        assertTrue(small.hitTargets.filter { it.gitOperation != null }.all { it.bounds.right <= 600 })
+        val tinyGeometry = IdeRenderGeometry.compute(300, 200, 96, 64, true, true, IdeCodeFontProfile.DEFAULT)
+        val tiny = IdeRenderer.extract(state, tinyGeometry)
+        assertNotNull(tiny.gitScrollMaximum)
+        assertTrue(tiny.hitTargets.filter { it.gitOperation != null }.all { tinyGeometry.editor.contains(it.bounds) })
+        val prompt = IdePromptState(IdePromptKind.GitToken("player"), "secret-token")
+        val masked = IdeRenderer.extract(state, geometry(), prompt = prompt)
+        assertFalse(masked.text.any { it.value.contains("secret-token") })
+    }
+
+    @Test
     fun `completion highlights exact name fragments and preserves unicode positions and result alignment`() {
         val source = "tf"
         val proposals =
@@ -528,8 +566,14 @@ class IdeRendererStateTest {
 
         assertEquals(listOf("Alpha", "Beta"), model.text.filter { it.kind == IdeTextKind.StartProject }.map { it.value })
         assertTrue(model.hitTargets.any { it.action == IdeHitAction.CreateProject && it.enabled })
-        assertTrue(model.hitTargets.any { it.action == IdeHitAction.OpenProject && it.enabled })
-        assertEquals(listOf("Create project", "Open project"), model.text.filter { it.kind == IdeTextKind.Toolbar }.map { it.value })
+        assertTrue(model.hitTargets.any { it.action == IdeHitAction.OpenExisting && it.enabled })
+        assertEquals(
+            listOf("Create", "Open directory", "Clone HTTPS", "HTTPS token"),
+            model.text
+                .filter {
+                    it.kind == IdeTextKind.Toolbar
+                }.map { it.value },
+        )
         assertTrue(
             model.text.filter { it.kind == IdeTextKind.Toolbar }.minOf { it.zIndex } >
                 model.panels.filter { it.kind == IdePanelKind.Control }.maxOf { it.zIndex },

@@ -1013,6 +1013,7 @@ val portableJava21Projects =
         ":ide-analysis-client",
         ":ide-analysis-k2",
         ":ide-client",
+        ":ide-git",
         ":core",
     )
 

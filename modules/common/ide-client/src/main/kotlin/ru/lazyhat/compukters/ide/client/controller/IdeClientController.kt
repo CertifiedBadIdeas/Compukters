@@ -282,7 +282,15 @@ class IdeClientController(
             }
 
             is IdeCommand.ScrollGit -> {
-                gitView = gitView.copy(scroll = (gitView.scroll.toLong() + command.lines).coerceIn(0, 100_000).toInt())
+                gitView =
+                    gitView.copy(
+                        scroll =
+                            (gitView.scroll.toLong() + command.lines)
+                                .coerceIn(
+                                    0,
+                                    command.maximum.coerceIn(0, 1_000_000).toLong(),
+                                ).toInt(),
+                    )
                 publishWorkspace()
             }
 

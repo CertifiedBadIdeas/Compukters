@@ -90,6 +90,9 @@ fun Project.addCompuktersNeoForgeDevelopmentRuntime() {
             "kotlinx-coroutines-core",
             "xz",
             "tomlj",
+            "jgit",
+            "javaewah",
+            "commons-codec",
         ).forEach { alias ->
             addNonTransitive(
                 configuration = "forgeRuntimeLibrary",
@@ -176,6 +179,46 @@ fun verifyRelocatedProjectMetadataRuntime(archive: File) {
         val parsed = toml.getMethod("parse", String::class.java).invoke(null, "project = \"compukters\"")
         val project = parseResult.getMethod("getString", String::class.java).invoke(parsed, "project")
         check(project == "compukters") { "relocated Tomlj runtime failed in ${archive.name}" }
+    }
+}
+
+fun validateRelocatedGitLibraries(entries: List<String>, archiveName: String) {
+    listOf(
+        "ru/lazyhat/compukters/ide/git/JGitBackend.class",
+        "ru/lazyhat/compukters/internal/vendor/jgit/api/Git.class",
+        "ru/lazyhat/compukters/internal/vendor/jgit/internal/JGitText.properties",
+        "ru/lazyhat/compukters/internal/vendor/javaewah/EWAHCompressedBitmap.class",
+        "ru/lazyhat/compukters/internal/vendor/codec/binary/Base64.class",
+    ).forEach { required ->
+        check(entries.count { it == required } == 1) { "$required is missing or duplicated in $archiveName" }
+    }
+    val forbiddenPrefixes = listOf("org/eclipse/jgit/", "com/googlecode/javaewah/", "org/apache/commons/codec/", "org/slf4j/")
+    check(entries.none { entry -> forbiddenPrefixes.any(entry::startsWith) }) {
+        "Git dependencies or duplicate logging API leaked into $archiveName"
+    }
+}
+
+/** Exercises relocated classes and resource lookup from the actual production archive. */
+fun verifyRelocatedGitRuntime(archive: File) {
+    val root = java.nio.file.Files.createTempDirectory("compukters-packaged-git-").toFile()
+    try {
+        URLClassLoader(arrayOf(archive.toURI().toURL()), org.slf4j.LoggerFactory::class.java.classLoader).use { loader ->
+            val git = loader.loadClass("ru.lazyhat.compukters.internal.vendor.jgit.api.Git")
+            val init = git.getMethod("init").invoke(null)
+            init.javaClass.getMethod("setDirectory", File::class.java).invoke(init, root)
+            val repository = init.javaClass.getMethod("call").invoke(init) as AutoCloseable
+            repository.use {
+                val status = git.getMethod("status").invoke(repository)
+                val result = status.javaClass.getMethod("call").invoke(status)
+                check(result.javaClass.getMethod("isClean").invoke(result) == true) { "relocated Git status failed" }
+            }
+            val codec = loader.loadClass("ru.lazyhat.compukters.internal.vendor.codec.binary.Base64")
+            val decoded = codec.getMethod("decodeBase64", String::class.java).invoke(null, "Z2l0") as ByteArray
+            check(decoded.decodeToString() == "git") { "relocated Commons Codec failed" }
+            loader.loadClass("ru.lazyhat.compukters.internal.vendor.javaewah.EWAHCompressedBitmap").getConstructor().newInstance()
+        }
+    } finally {
+        root.deleteRecursively()
     }
 }
 

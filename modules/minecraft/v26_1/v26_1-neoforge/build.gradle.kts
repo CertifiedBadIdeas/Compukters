@@ -129,6 +129,17 @@ val verifyPackagedCompukterFfi =
                 }
             validateRelocatedProjectMetadataLibraries(entries, archive.name)
             verifyRelocatedProjectMetadataRuntime(archive)
+            listOf(
+                "META-INF/licenses/jvm/jgit-${libs.versions.jgit.get()}-EDL-1.0.html",
+                "META-INF/licenses/jvm/javaewah-${libs.versions.javaewah.get()}-Apache-2.0.txt",
+                "META-INF/licenses/jvm/javaewah-${libs.versions.javaewah.get()}-PROVENANCE.txt",
+                "META-INF/licenses/jvm/commons-codec-${libs.versions.commons.codec.get()}-Apache-2.0.txt",
+                "META-INF/licenses/jvm/commons-codec-${libs.versions.commons.codec.get()}-NOTICE.txt",
+            ).forEach { required ->
+                check(entries.count { it == required } == 1) { "$required is missing or duplicated in ${archive.name}" }
+            }
+            validateRelocatedGitLibraries(entries, archive.name)
+            verifyRelocatedGitRuntime(archive)
             val nativeEntries = entries.filter { it.startsWith("META-INF/natives/") }
             validateNativeResources(nativeEntries, expectedPackagedNativeResources)
             check(entries.count { it == "META-INF/neoforge.mods.toml" } == 1) {

@@ -1,0 +1,7 @@
+JavaEWAH 1.2.3
+Upstream: https://github.com/lemire/javaewah
+Source archive: https://repo.maven.apache.org/maven2/com/googlecode/javaewah/JavaEWAH/1.2.3/JavaEWAH-1.2.3-sources.jar
+EWAHCompressedBitmap.java declares:
+Copyright 2009-2016, Daniel Lemire, Cliff Moon, David McIntosh, Robert Becho, Google Inc., Veronika Zenz, Owen Kaser, Gregory Ssi-Yan-Kai, Rory Graves
+Licensed under the Apache License, Version 2.0.
+The complete unmodified Apache-2.0 text accompanies this notice.

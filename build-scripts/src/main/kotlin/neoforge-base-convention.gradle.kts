@@ -69,6 +69,7 @@ dependencies {
         ":ide-core",
         ":ide-analysis-client",
         ":ide-client",
+        ":ide-git",
     ).forEach { projectPath ->
         implementation(project(projectPath))
         shadowBundle(project(projectPath)) { isTransitive = false }
@@ -79,7 +80,9 @@ dependencies {
         "kotlinx-coroutines-core",
         "xz",
     ).forEach { alias -> neoForgeImplementation(libs.findLibrary(alias).get()) }
-    neoForgeRelocatedImplementation(libs.findLibrary("tomlj").get())
+    listOf("tomlj", "jgit", "javaewah", "commons-codec").forEach { alias ->
+        neoForgeRelocatedImplementation(libs.findLibrary(alias).get())
+    }
 }
 
 tasks.named<Jar>("jar") {
@@ -91,6 +94,13 @@ fun com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar.mergeCompuktersRu
     duplicatesStrategy = DuplicatesStrategy.FAIL
     exclude("META-INF/*.SF", "META-INF/*.RSA", "META-INF/*.DSA")
     relocate("org.tomlj", "ru.lazyhat.compukters.internal.vendor.tomlj")
+    // Dependency module descriptors cannot describe the merged private namespace.
+    exclude("META-INF/versions/**/module-info.class", "module-info.class")
+    filesMatching("META-INF/NOTICE.txt") { duplicatesStrategy = DuplicatesStrategy.INCLUDE }
+    append("META-INF/NOTICE.txt")
+    relocate("org.eclipse.jgit", "ru.lazyhat.compukters.internal.vendor.jgit")
+    relocate("com.googlecode.javaewah", "ru.lazyhat.compukters.internal.vendor.javaewah")
+    relocate("org.apache.commons.codec", "ru.lazyhat.compukters.internal.vendor.codec")
 }
 
 val productionJar = tasks.named<com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar>("shadowJar") {

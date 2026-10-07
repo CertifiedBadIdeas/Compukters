@@ -49,6 +49,34 @@ import kotlin.test.assertTrue
 
 class IdeInputAdapterTest {
     @Test
+    fun `Git view consumes typing and routes scroll keys and operation buttons`() {
+        val fixture = fixture()
+        val focus = IdeFocusState.Editor.copy(gitVisible = true)
+        assertTrue(fixture.adapter.charTyped(IdeCharacterInput("x"), focus))
+        fixture.adapter.keyPressed(key(IdeKeyCode.DOWN), focus)
+        assertEquals(listOf<IdeCommand>(IdeCommand.ScrollGit(1)), fixture.commands)
+        val geometry = IdeRenderGeometry.compute(1000, 700, 180, 120, true, true, IdeCodeFontProfile.DEFAULT)
+        val bounds = IdeRect(geometry.editor.left + 5, geometry.editor.top + 5, geometry.editor.left + 65, geometry.editor.top + 25)
+        val target =
+            IdeHitTarget(
+                IdeHitAction.GitOperation,
+                bounds,
+                true,
+                null,
+                IdeFocusGroup.Page,
+                10,
+                gitOperation = ru.lazyhat.compukters.ide.git.GitOperation.Pull,
+            )
+        fixture.adapter.pointerClicked(
+            bounds.left + 1.0,
+            bounds.top + 1.0,
+            0,
+            IdePointerContext(geometry, hitTargets = listOf(target), gitVisible = true),
+        )
+        assertEquals(IdeCommand.Git(ru.lazyhat.compukters.ide.git.GitOperation.Pull), fixture.commands.last())
+    }
+
+    @Test
     fun `Ctrl slash toggles line comments only in editor focus`() {
         val fixture = fixture()
         assertTrue(fixture.adapter.keyPressed(key(IdeKeyCode.SLASH, IdeModifier.CONTROL), IdeFocusState.Editor))
