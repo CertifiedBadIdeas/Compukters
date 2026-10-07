@@ -21,6 +21,7 @@ package ru.lazyhat.compukters.ide.client.state
 import ru.lazyhat.compukters.ide.client.build.IdeBuildState
 import ru.lazyhat.compukters.ide.client.files.IdeComputerTransferState
 import ru.lazyhat.compukters.ide.client.files.IdeComputerTreeState
+import ru.lazyhat.compukters.ide.client.git.IdeGitDraftView
 import ru.lazyhat.compukters.ide.client.target.IdeDeploymentPath
 import ru.lazyhat.compukters.ide.client.target.IdeExecutableRevision
 import ru.lazyhat.compukters.ide.client.target.IdeTargetState
@@ -119,11 +120,20 @@ sealed interface IdeDialogState {
     ) : IdeDialogState
 }
 
+enum class IdeGitTab { Changes, Diff, Log }
+
+enum class IdeGitMenu { Branches, Repository }
+
 data class IdeGitView(
     val visible: Boolean = false,
     val result: GitResult? = null,
     val scroll: Int = 0,
     val authenticated: Boolean = false,
+    val tab: IdeGitTab = IdeGitTab.Changes,
+    val checkedPaths: Set<ProjectPath> = emptySet(),
+    val previewPath: ProjectPath? = null,
+    val menu: IdeGitMenu? = null,
+    val draft: IdeGitDraftView = IdeGitDraftView(),
 )
 
 sealed interface IdeProjectRequest {
