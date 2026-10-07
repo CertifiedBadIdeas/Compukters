@@ -49,6 +49,16 @@ import kotlin.test.assertTrue
 
 class IdeInputAdapterTest {
     @Test
+    fun `bottom history scrolling does not scroll editor or Commit`() {
+        val fixture = fixture()
+        val geometry = IdeRenderGeometry.compute(960, 540, 180, 120, true, true, IdeCodeFontProfile.DEFAULT)
+        val context =
+            IdePointerContext(geometry, bottomTab = ru.lazyhat.compukters.ide.client.state.IdeBottomTab.GitLog, bottomScrollMaximum = 7)
+        assertTrue(fixture.adapter.scroll(geometry.diagnostics!!.left + 10.0, geometry.diagnostics!!.top + 30.0, 0.0, -1.0, context))
+        assertEquals(listOf<IdeCommand>(IdeCommand.ScrollBottom(3, 7)), fixture.commands)
+    }
+
+    @Test
     fun `Git draft routes typing editing clipboard cursor clicks and commit shortcuts separately from source`() {
         val fixture = fixture()
         val message = ru.lazyhat.compukters.ide.client.git.IdeGitField.Message

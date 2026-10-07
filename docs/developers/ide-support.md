@@ -35,7 +35,8 @@ physical paths are bounded`.
 
 Create, clone HTTPS repositories, open existing project directories in place and switch projects. The Git panel
 provides status, colored HEAD-to-working preview, checkbox-selected commits and editable commit/author fields,
-Changes/Log tabs, branch/repository menus, fetch, fast-forward-only pull and push. Private repository credentials are
+Changes/Diff tabs, a bottom Git Log window switching with Problems, branch/repository menus, fetch,
+fast-forward-only pull and push. A left icon stripe groups tool windows; all IDE text uses bundled JetBrains Mono. Private repository credentials are
 masked and session-only. Save barriers and generation checks protect open
 buffers; tree/analysis refresh follows working-tree updates. File/folder rename rebases open descendant paths.
 `.git` is excluded from project content and compiler snapshots. SSH, merge, submodules, LFS and linked worktrees are deferred.

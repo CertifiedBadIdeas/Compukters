@@ -37,13 +37,20 @@ This also supports moving entries. **Shift+F6** is a separate Kotlin symbol refa
 
 ## Git changes and commits
 
-Open **Git** on the right-hand tool stripe. For a project without a repository, use **Create Git repository**.
+Open **Commit** using its icon on the left-hand tool stripe. For a project without a repository, use **Create Git repository**.
 The **Changes** tab lists modified, new and deleted files with checkboxes. Click the checkbox beside a file to include
 its current saved content in the next commit; the heading selects or clears all changed files.
 
 Click a file name to preview its difference from **HEAD**. Added lines are green and deleted lines are red. On a wide
 window, the preview appears beside the list; on a narrow window, it opens the **Diff** tab. The list and the wide
-preview scroll independently. **Log** shows recent commit messages and authors.
+preview scroll independently.
+
+The left-hand stripe contains **Project**, **Commit**, **Terminal** and **Problems** icons; hover for their labels.
+**Git Log** is the bottom icon. It opens recent commits in the lower tool window while returning to the editor;
+the commit draft is retained. Switch between **Problems** and **Git Log** using the lower window's tabs.
+The log shows commit hashes, messages and authors, with its own scrolling and **Refresh** action.
+Use the close button or the selected tool icon to hide the lower window. The Project icon hides or reveals the tree.
+All IDE text, including menus, dialogs and tooltips, uses the bundled JetBrains Mono font.
 
 Enter the commit message, author name and email directly in the labeled fields below Changes. The message supports
 multiple lines, cursor movement, selection, paste and undo/redo. Tab and Shift+Tab move between fields. **Commit**

@@ -76,7 +76,7 @@ internal class IdeTerminalOverlayTest {
 
         assertTrue(overlay.supported)
         assertEquals(geometry.content.right, overlay.panel.right)
-        assertEquals(geometry.toolStripe.left, overlay.panel.right)
+        assertTrue(overlay.panel.left >= geometry.toolStripe.right)
         assertEquals(51 * font.cellWidth, overlay.grid?.width)
         assertEquals(19 * font.cellHeight, overlay.grid?.height)
         assertTrue(overlay.panel.top > geometry.content.top)

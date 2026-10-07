@@ -122,7 +122,8 @@ The IDE code editor, completion list and hover information use the same bundled 
 with 6x12 editor cells (size 10 and line spacing 1.2); terminal/display cells remain 6x13.
 Editor and terminal drawing use the same font resource ID directly, without a reference alias: Minecraft 1.21
 warms font IDs in parallel and its FreeType provider does not synchronize access to a shared native face.
-The editor metrics drive glyph placement, caret and selection geometry, and hit testing. The IDE chrome retains Minecraft's UI font.
+The editor metrics drive glyph placement, caret and selection geometry, and hit testing. IDE chrome, dialogs,
+menus and tooltips use the same face and six-pixel advances, with the matching glyph baseline offset.
 The Minecraft 1.21.1 adapter opts these explicit JetBrains Mono draws into linear texture filtering. A bounded
 render-type wrapper delegates vanilla shader, blend, depth and geometry state, applies filtering after vanilla's
 nearest-filter setup, and restores the previous texture filters, binding and active unit after drawing. Other fonts
@@ -187,3 +188,12 @@ but never implicitly commit unrelated staged content. Preview compares HEAD with
 HEAD. The draft survives a commit failure and its message clears only on success. Author fields remain in the IDE session;
 project changes clear message/selection. Commit & Push submits push only after the matching successful commit reply.
 Draft editing reuses `EditorDocument`, and controller ownership/save barriers/generation checks remain authoritative.
+
+
+The left tool stripe uses shared vector icons for Project, Commit, Terminal and Problems, with Git Log anchored at
+its bottom. `IdeBottomPanelView` owns the active Problems/GitLog tab (or a hidden window) and bounded history scroll.
+History is cached separately from the Commit result/preview and resets per project. Opening Git Log returns to the
+editor without clearing its commit draft; history replies cannot replace the saved-working-file preview. The bottom
+window reuses the diagnostics splitter/height and shows Problems/Find Usages or commit history in its content area.
+Both target screens derive bottom visibility from controller state; the splitter owns height only. Geometry fallback
+may collapse this window when there is insufficient room for the source editor.

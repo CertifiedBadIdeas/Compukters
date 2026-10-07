@@ -387,7 +387,7 @@ internal class IdeScreen(
         val viewport = viewport()
         viewport.withTransform(graphics.pose()) {
             if (!viewport.supported) {
-                graphics.text(font, UNSUPPORTED_MESSAGE, 4, 4, TERMINAL_TEXT, false)
+                JetBrainsMonoRendering.drawString(graphics, font, UNSUPPORTED_MESSAGE, 4, 4, TERMINAL_TEXT)
                 return@withTransform
             }
             extractSupportedRenderState(graphics, mouseX, mouseY, partialTick, viewport)
@@ -457,24 +457,20 @@ internal class IdeScreen(
                         val transformed = draw.rotation != IdeTextRotation.None
                         val textX = if (transformed) 0 else draw.x
                         val textY = if (transformed) 0 else draw.y
-                        val codeFont = draw.codeFont
-                        if (codeFont == null) {
-                            graphics.text(font, Component.literal(draw.value), textX, textY, draw.color, false)
-                        } else {
-                            IdeCodeGlyphLayout.layout(draw.value, textX, codeFont).forEach { glyph ->
-                                val value =
-                                    Component
-                                        .literal(glyph.value)
-                                        .withStyle { style -> style.withFont(codeFont.fontDescription) }
-                                JetBrainsMonoRendering.drawString(
-                                    graphics,
-                                    font,
-                                    value,
-                                    glyph.x,
-                                    textY,
-                                    draw.color,
-                                )
-                            }
+                        val codeFont = draw.codeFont ?: IdeCodeFontProfile.DEFAULT
+                        IdeCodeGlyphLayout.layout(draw.value, textX, codeFont).forEach { glyph ->
+                            val value =
+                                Component
+                                    .literal(glyph.value)
+                                    .withStyle { style -> style.withFont(codeFont.fontDescription) }
+                            JetBrainsMonoRendering.drawString(
+                                graphics,
+                                font,
+                                value,
+                                glyph.x,
+                                textY,
+                                draw.color,
+                            )
                         }
                     }
                     if (draw.clip != null) graphics.disableScissor()
@@ -495,6 +491,8 @@ internal class IdeScreen(
 
     override fun isPauseScreen(): Boolean = false
 
+    private var projectTreeVisible = true
+
     private fun geometry(viewport: CompuktersUiViewport = viewport()): IdeRenderGeometry {
         val layout = splitters.layout
         return IdeRenderGeometry.compute(
@@ -502,8 +500,8 @@ internal class IdeScreen(
             viewport.height,
             layout.treeWidth,
             layout.diagnosticsHeight,
-            layout.diagnosticsExpanded || (application.controller.viewState().page as? IdePageState.Workspace)?.value?.usages != null,
-            treeVisible = true,
+            (application.controller.viewState().page as? IdePageState.Workspace)?.value?.bottom?.tab != null,
+            treeVisible = projectTreeVisible,
             IdeCodeFontProfile.DEFAULT,
             findVisible =
                 ((application.controller.viewState().page as? IdePageState.Workspace)?.value?.editor as? IdeEditorView.Text)?.find != null,
@@ -535,7 +533,10 @@ internal class IdeScreen(
             gitDraft = (state.page as? IdePageState.Workspace)?.value?.git?.draft,
             gitMenu = (state.page as? IdePageState.Workspace)?.value?.git?.menu,
             findVisible = editor?.find != null,
-            usagesFocused = (state.page as? IdePageState.Workspace)?.value?.usages?.focused == true,
+            usagesFocused =
+                (state.page as? IdePageState.Workspace)?.value?.let {
+                    it.bottom.tab == ru.lazyhat.compukters.ide.client.state.IdeBottomTab.Problems && it.usages?.focused == true
+                } == true,
             findFocused = editor?.find?.focused == true,
             findSelectedText = editor?.find?.let { find -> find.querySelection?.let { find.query.substring(it.startUtf16, it.endUtf16) } },
         )
@@ -575,8 +576,14 @@ internal class IdeScreen(
                     gitDraft = page.value.git.draft,
                     gitPreviewScrollMaximum = model.gitPreviewScrollMaximum ?: 0,
                     gitPreviewBounds = model.gitPreviewBounds,
+                    bottomTab = page.value.bottom.tab,
+                    bottomScrollMaximum = model.bottomScrollMaximum,
                     gitFieldFocusScroll = model.gitFieldFocusScroll,
-                    usages = page.value.usages,
+                    usages =
+                        page.value.usages.takeIf {
+                            page.value.bottom.tab ==
+                                ru.lazyhat.compukters.ide.client.state.IdeBottomTab.Problems
+                        },
                     projects = page.value.projects,
                     tree = page.value.tree.flatten(),
                     explorer = page.value.explorerRows(),
@@ -612,6 +619,11 @@ internal class IdeScreen(
             IdeHitAction.CloneProject -> {
                 projectSwitcherOpen = false
                 prompt.open(IdePromptKind.CloneRemote)
+            }
+
+            IdeHitAction.ProjectTool -> {
+                projectTreeVisible = !projectTreeVisible
+                focusArea = if (projectTreeVisible) IdeFocusArea.Tree else IdeFocusArea.Editor
             }
 
             IdeHitAction.GitToggle -> {
@@ -704,25 +716,28 @@ internal class IdeScreen(
                 overlay.messageBounds.right,
                 overlay.messageBounds.bottom,
             )
-            graphics.text(
+            JetBrainsMonoRendering.drawString(
+                graphics,
                 font,
-                Component.literal(overlay.unsupportedMessage),
+                Component.literal(overlay.unsupportedMessage).withStyle { it.withFont(IdeCodeFontProfile.DEFAULT.fontDescription) },
                 overlay.messageBounds.left,
                 overlay.messageBounds.top,
                 TERMINAL_ERROR,
-                false,
             )
             graphics.disableScissor()
             return
         }
         graphics.enableScissor(overlay.title.left, overlay.title.top, overlay.title.right, overlay.title.bottom)
-        graphics.text(
+        JetBrainsMonoRendering.drawString(
+            graphics,
             font,
-            Component.literal(terminalOverlayTitle(terminalOverlay.state())),
+            Component
+                .literal(
+                    terminalOverlayTitle(terminalOverlay.state()),
+                ).withStyle { it.withFont(IdeCodeFontProfile.DEFAULT.fontDescription) },
             overlay.title.left + 5,
             overlay.title.top + 5,
             if (terminalOverlay.focused) TERMINAL_ACCENT else TERMINAL_TEXT,
-            false,
         )
         graphics.disableScissor()
         val session =
@@ -840,7 +855,10 @@ internal class IdeScreen(
         val TERMINAL_TEXT = 0xFFF2F4F8.toInt()
         val TERMINAL_ACCENT = 0xFF38D6B4.toInt()
         val TERMINAL_ERROR = 0xFFFF6B6B.toInt()
-        val UNSUPPORTED_MESSAGE = Component.literal("Compukters UI requires at least 640x360 pixels")
+        val UNSUPPORTED_MESSAGE =
+            Component.literal("Compukters UI requires at least 640x360 pixels").withStyle {
+                it.withFont(IdeCodeFontProfile.DEFAULT.fontDescription)
+            }
     }
 }
 

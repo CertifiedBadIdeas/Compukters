@@ -135,7 +135,8 @@ listed in [Kotlin support](developers/kotlin-support.md) and [standard library s
   SSH are deferred. Git operations save modified buffers first and refresh working files and analysis afterward.
   Git metadata stays outside compiler/deployment inputs; folder renames update open descendant buffers. Changes uses
   file checkboxes, an editable commit message and author fields, with a colored HEAD-to-working preview beside the list
-  or on its own tab. Branches and repository/account actions use menus; Log separates commit history. Unrelated staged
+  or on its own tab. Branches and repository/account actions use menus. A left icon stripe opens tool windows, with
+  Git Log at the bottom; history opens below the editor and switches with Problems. All IDE text uses JetBrains Mono. Unrelated staged
   changes remain preserved. Commit & Push pushes only after a successful commit, and failed commits keep their drafts.
 - Text-entry dialogs show a labeled input field with a contrasting background, focus border and visible caret.
   Long values scroll to keep the end of the input visible; authentication tokens remain masked.
