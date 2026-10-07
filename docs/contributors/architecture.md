@@ -49,7 +49,16 @@ nominal type and payload, hashing uses the payload, and virtual toString dispatc
 Wrappers carry the value class's interface parents. Concrete interface implementations get virtual bridges that
 read the scalar receiver and call its static implementation; an underlying-property getter returns that payload
 directly. Inherited interface defaults use existing interface dispatch, including concrete generic specializations.
-This uses existing artifact instructions and ABI versions; there is no separate VM boxing representation.
+Scalar boxing uses ordinary managed classes and the established ABI. Multi-field and other non-scalar
+value layouts use ABI 1.15's nominal inline types and compact frame components for direct calls and locals.
+Reference contexts box flattened payloads through ordinary managed fields; nested source properties retain
+source grouping for hashing/text. Libraries export the direct inline type separately from its managed class
+and export every payload field. Consumers import both identities, including concrete generic layouts; linker
+signature matching resolves nominal inline identities across modules. Bound method references store the
+boxed receiver in their closure environment and reconstruct its direct layout before static invocation.
+Constructor references reuse constructor lowering, including argument layout and initializer execution.
+Compiler and IDE sessions share `CompuktersLanguageVersionSettings` so native multi-field declarations
+receive consistent frontend analysis.
 
 Nullable `String` and supported Guest class source references use the artifact's existing nullable reference types and
 `Null` instruction. K2's safe-call and Elvis branches lower through ordinary verified control flow, with reference

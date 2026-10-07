@@ -17,7 +17,9 @@ This release expands the Kotlin available to computer programs and introduces su
 addon mods, with optional Create, Sable and Propulsion integrations for Minecraft 1.21.1.
 
 - Guest Kotlin value classes can carry multiple primitive, reference and nested fields, with concrete
-  generic field substitutions. Direct locals and calls keep the payload in compact frames; `Any`, nullable
+  generic fields, member methods and interface bridges. Precompiled addons share these layouts with their
+  consumers; the IDE resolves their types and members. Method and constructor references preserve payloads
+  and execute constructor initializers. Direct locals and calls keep the payload in compact frames; `Any`, nullable
   values, interfaces, collections, ordinary fields and lambda/task captures preserve nominal managed
   identity. Structural equality, hashing and text preserve Kotlin floating semantics. These layouts require
   Runtime ABI 1.15; existing scalar peripheral handles retain their direct ABI.

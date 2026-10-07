@@ -99,7 +99,8 @@ class K2CompilerAdapterTest {
                     fun describeSize(size: Int): String = label(size)
                     internal fun internalLabel(size: Int): String = label(size)
 
-                    fun <T> bad(value: T): T { val nullable: T? = value; return nullable!! }
+                    fun <T> nullableIdentity(value: T): T { val nullable: T? = value; return nullable!! }
+                    fun <T> bad(value: T): T { lateinit var delayed: Any; delayed = value as Any; return value }
                     """.trimIndent(),
                 )
             }
@@ -211,6 +212,7 @@ class K2CompilerAdapterTest {
                     import sample.describeSize
                     import sample.identity
                     import sample.transform
+                    import sample.nullableIdentity
 
                     class InheritedMessage: LibraryMessage()
                     class OverrideMessage: LibraryMessage() {
@@ -237,6 +239,7 @@ class K2CompilerAdapterTest {
                         require(describeSize(7) == "length=7")
                         require(sample.one.collision(1) == 2)
                         require(sample.two.collision(1) == 3)
+                        require(nullableIdentity(1) == 1 && nullableIdentity("text") == "text")
                         require(transform(3) { it + 2 } == 5)
                         require(transform("abc") { it.length } == 3)
                         println(identity(42))

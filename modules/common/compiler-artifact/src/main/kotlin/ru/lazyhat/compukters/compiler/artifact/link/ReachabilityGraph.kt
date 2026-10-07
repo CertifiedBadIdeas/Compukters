@@ -388,7 +388,11 @@ internal class ReachabilityGraph(
         rightModule: Int,
         right: ValueType,
     ): Boolean =
-        if (left is ValueType.Ref && right is ValueType.Ref) {
+        if (left is ValueType.Inline && right is ValueType.Inline) {
+            val leftIdentity = resolveType(leftModule, left.type) ?: return false
+            val rightIdentity = resolveType(rightModule, right.type) ?: return false
+            leftIdentity == rightIdentity
+        } else if (left is ValueType.Ref && right is ValueType.Ref) {
             if (left.nullable != right.nullable) {
                 false
             } else {
@@ -404,7 +408,8 @@ internal class ReachabilityGraph(
                 }
             }
         } else {
-            left !is ValueType.Ref && right !is ValueType.Ref && left == right
+            left !is ValueType.Ref && right !is ValueType.Ref &&
+                left !is ValueType.Inline && right !is ValueType.Inline && left == right
         }
 
     private fun resolveType(

@@ -31,6 +31,57 @@ import kotlin.test.assertTrue
 
 class DiagnosticQueryTest {
     @Test
+    fun `native MFVC analysis preserves source and addon nominal types and members`() {
+        for (attachedSources in listOf(false, true)) {
+            val source =
+                """
+                import fixture.kinetics.Geometry
+                value class Packet(val code: Int, val label: String)
+                value class PairValue<T>(val first: T, val second: T)
+                value class OptionalFields(val text: String?, val packet: Packet?, val count: Int)
+                fun main() {
+                    val packet = Packet(42, "text")
+                    val pair = PairValue(packet, packet)
+                    val boxed: Any = pair
+                    check(boxed is PairValue<*>)
+                    val point = Geometry.point()
+                    check(point.x == 1.0 && packet.code == 42)
+                }
+                """.trimIndent()
+            K2QueryFixture.sourceWithGuestApi(attachedSources, "main.kt" to source).use { fixture ->
+                val result = fixture.execute(fixture.presentation()) as AnalysisResult.Presentation
+                val active = result.value.accept(fixture.identity) as SnapshotPresentationAcceptance.Active
+                assertTrue(active.diagnostics.none { it.severity == EditorDiagnosticSeverity.Error }, active.diagnostics.toString())
+                val offset = source.lastIndexOf("point.x") + 1
+                val expression =
+                    fixture.execute(
+                        AnalysisQuery.ExpressionInfo(
+                            fixture.identity,
+                            ru.lazyhat.compukters.compiler.worker.protocol.VirtualSourcePath
+                                .kotlin("main.kt"),
+                            offset,
+                        ),
+                    ) as AnalysisResult.ExpressionInfo
+                assertTrue(requireNotNull(expression.value).renderedType.endsWith("Vec2"), expression.toString())
+                val completion =
+                    fixture.execute(
+                        AnalysisQuery.Completion(
+                            fixture.identity,
+                            ru.lazyhat.compukters.compiler.worker.protocol.VirtualSourcePath
+                                .kotlin("main.kt"),
+                            source.lastIndexOf("point.x") + "point.".length,
+                            ru.lazyhat.compukters.ide.analysis.CompletionTrigger.Manual,
+                        ),
+                    ) as AnalysisResult.Completion
+                val items = completion.items
+                assertTrue(items.any { it.insertText == "x" }, items.toString())
+                assertTrue(items.any { it.insertText == "y" }, items.toString())
+                assertTrue(items.any { it.insertText == "moved" }, items.toString())
+            }
+        }
+    }
+
+    @Test
     fun `semantic-only presentation omits diagnostics and retains symbol highlighting`() {
         K2QueryFixture.source("main.kt" to "fun main() { val value = 1; unknownCall(value) }").use { fixture ->
             val query = fixture.presentation()

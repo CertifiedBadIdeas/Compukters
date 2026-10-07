@@ -21,6 +21,7 @@ fn main() {
             let mut profile = list_no_io_profile();
             profile.maximum_coroutines = 64;
             execute_primitive_program_with_profile(std::env::var("COMPUKTER_KOTLIN_MFVC_ARTIFACT").expect("MFVC artifact must be set"), profile);
+            execute_primitive_program(std::env::var("COMPUKTER_KOTLIN_MFVC_ADDON_ARTIFACT").expect("MFVC addon artifact must be set"));
         },
         "executable" => pinned_vm_verifies_kotlin_executable_instruction_artifact(),
         "exceptions" => k2_explicit_exception_unwinds_across_guest_calls(),

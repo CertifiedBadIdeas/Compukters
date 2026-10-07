@@ -69,7 +69,12 @@ fun loadPlatformLibraries(modules: List<PlatformModule>): LoadedPlatformLibrarie
                 .filter { declaration ->
                     !declaration.trustedExternal && declaration.signature.startsWith("constructor(") &&
                         declaration.identity !in platformModule.sourceDeclarations && declaration.symbol in exportedDeclarations &&
-                        platformModule.scalarTypes.none { it.symbol == declaration.symbol.removeSuffix(".<init>") }
+                        platformModule.scalarTypes.none { it.symbol == declaration.symbol.removeSuffix(".<init>") } &&
+                        library.exports.none { export ->
+                            export.kind == SymbolKind.TYPE &&
+                                library.strings[export.name.value.toInt()].toString() ==
+                                "${declaration.symbol.removeSuffix(".<init>")}.<inline-value>"
+                        }
                 }.map { declaration ->
                     val owner = declaration.symbol.removeSuffix(".<init>")
                     val exportName = "<init:$owner>"
@@ -250,7 +255,9 @@ private fun Module.canonicalType(type: ValueType): String =
             "kotlin.Char"
         }
 
-        is ValueType.Inline -> canonicalType(ValueType.Ref(false, type.type))
+        is ValueType.Inline -> {
+            canonicalType(ValueType.Ref(false, type.type)).removeSuffix(".<inline-value>")
+        }
 
         is ValueType.Ref -> {
             val name =

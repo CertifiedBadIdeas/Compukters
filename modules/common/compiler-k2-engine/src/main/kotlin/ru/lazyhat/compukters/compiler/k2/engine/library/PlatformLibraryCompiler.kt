@@ -116,7 +116,11 @@ class PlatformLibraryCompiler {
             declarations.filter { it.kind == PlatformLibraryDeclarationKind.FUNCTION }.mapTo(mutableSetOf()) { it.symbol }
         val ordinaryFunctions =
             collected.functions.filter { function ->
-                function.fqNameWhenAvailable?.asString() in ordinarySymbols && function.typeParameters.isEmpty() && !function.isInline
+                (
+                    function.fqNameWhenAvailable?.asString() in ordinarySymbols ||
+                        ((function.parent as? IrClass)?.isValue == true && function.origin == IrDeclarationOrigin.DEFINED)
+                ) &&
+                    function.typeParameters.isEmpty() && !function.isInline
             }
         // The entry sorts first in lowering. A managed member there would split its owner's method range.
         val entry =

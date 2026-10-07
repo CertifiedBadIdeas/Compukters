@@ -614,7 +614,14 @@ private class InlineValueClassRegistry private constructor(
                     declaration.kind == ClassKind.OBJECT &&
                         declaration.name.asString() == "Companion" &&
                         !declaration.isManagedPlatformObject() &&
-                        layoutsByClass.containsKey((declaration.parent as? IrClass)?.symbol)
+                        layoutsByClass[(declaration.parent as? IrClass)?.symbol]?.let { layout ->
+                            layout.properties.size == 1 && layout.underlyingType in
+                                listOf(
+                                    pluginContext.irBuiltIns.intType,
+                                    pluginContext.irBuiltIns.booleanType,
+                                    pluginContext.irBuiltIns.charType,
+                                )
+                        } == true
                 }
             val constants =
                 companions
@@ -716,10 +723,14 @@ private class InlineValueClassRegistry private constructor(
                 }
             val initializers = declaration.declarations.filterIsInstance<IrAnonymousInitializer>()
             val intRange =
-                when (initializers.size) {
-                    0 -> null
-                    1 -> parseIntRange(initializers.single(), requireNotNull(properties.single().getter).symbol)
-                    else -> throw UnsupportedKotlinIr(declaration, "value class supports at most one scalar precondition")
+                if (parameters.size == 1 && parameters.single().type == pluginContext.irBuiltIns.intType) {
+                    when (initializers.size) {
+                        0 -> null
+                        1 -> parseIntRange(initializers.single(), requireNotNull(properties.single().getter).symbol)
+                        else -> throw UnsupportedKotlinIr(declaration, "scalar value class supports at most one precondition")
+                    }
+                } else {
+                    null
                 }
             val unsupportedParent =
                 declaration.superTypes
@@ -908,6 +919,9 @@ private fun mapGuestValueType(
             resolveUnderlyingType = resolveUnderlyingType,
         )
     }
+    if (type.isNullable() && (type as? IrSimpleType)?.classifier == pluginContext.irBuiltIns.nothingClass) {
+        return ValueType.Ref(true, TypeRef.Imported(ImportId.of(ANY_RUNTIME_TYPE)))
+    }
     GuestPrimitive.scalar(type)?.let { primitive ->
         return if (type.isNullable()) {
             ValueType.Ref(true, TypeRef.Imported(ImportId.of(primitive.boxType)))
@@ -928,7 +942,10 @@ private fun mapGuestValueType(
         if (guestTypes.valueClassBox(type) == null && !type.isKotlinAny() && guestClass != stringClass &&
             guestClass !in classTypeIds && guestClass !in externalClassTypes && guestInstance !in classInstanceTypeIds
         ) {
-            throw UnsupportedKotlinIr(element, "nullable type is outside the supported reference subset")
+            throw UnsupportedKotlinIr(
+                element,
+                "nullable type ${type.specializationTypeIdentity()} is outside the supported reference subset",
+            )
         }
     }
     return when (type) {
@@ -1275,8 +1292,10 @@ internal object KotlinProjectLowering {
                     declaration.constructors.any { it.isPrimary }
             }
         var functionInstances = collectGuestFunctionInstances(userFunctions, constructorClasses)
-        var classInstances =
-            collectGuestClassInstances(userClasses, functionInstances, topLevelProperties, pluginContext.irBuiltIns.anyType)
+        val specializationClasses = (userClasses + sourceClasses.filter { inlineValueClasses.contains(it.symbol) }).distinctBy { it.symbol }
+        var allClassInstances =
+            collectGuestClassInstances(specializationClasses, functionInstances, topLevelProperties, pluginContext.irBuiltIns.anyType)
+        var classInstances = allClassInstances.filterNot { inlineValueClasses.contains(it.declaration.symbol) }
         // Generic member bodies can call helpers whose signatures/body introduce further class instances.
         // Discover functions and classes together until their dependencies stop adding specializations.
         while (true) {
@@ -1284,7 +1303,7 @@ internal object KotlinProjectLowering {
                 collectGuestFunctionInstances(
                     userFunctions,
                     constructorClasses,
-                    classInstances.flatMap { classInstance ->
+                    allClassInstances.flatMap { classInstance ->
                         if (classInstance.arguments.isEmpty()) {
                             emptyList()
                         } else {
@@ -1295,9 +1314,10 @@ internal object KotlinProjectLowering {
                     },
                 )
             val discoveredClasses =
-                collectGuestClassInstances(userClasses, functionInstances, topLevelProperties, pluginContext.irBuiltIns.anyType)
-            if (discoveredClasses.toSet() == classInstances.toSet()) break
-            classInstances = discoveredClasses
+                collectGuestClassInstances(specializationClasses, functionInstances, topLevelProperties, pluginContext.irBuiltIns.anyType)
+            if (discoveredClasses.toSet() == allClassInstances.toSet()) break
+            allClassInstances = discoveredClasses
+            classInstances = allClassInstances.filterNot { inlineValueClasses.contains(it.declaration.symbol) }
         }
         session.recordPlatformSpecializations(
             classInstances
@@ -1418,6 +1438,7 @@ internal object KotlinProjectLowering {
                     }
                 }
             val name = type.specializationTypeIdentity().removeSuffix("?")
+            if (name in guestTypes.valueClassBoxes) return
             guestTypes.valueClassBoxes.getOrPut(name) {
                 GuestValueClassBox(
                     name,
@@ -1480,7 +1501,12 @@ internal object KotlinProjectLowering {
                     ?.let(::discoverValueClass)
             }
         }
-        if (includeTrustedPlatformBodies) classes.filter { it.isValue }.forEach { discoverValueClass(it.defaultType) }
+        if (includeTrustedPlatformBodies) {
+            classes
+                .filter {
+                    it.isValue && it.typeParameters.isEmpty()
+                }.forEach { discoverValueClass(it.defaultType) }
+        }
         topLevelProperties.forEach {
             it.declaration.backingField
                 ?.type
@@ -1534,6 +1560,20 @@ internal object KotlinProjectLowering {
             } else {
                 emptyMap()
             }
+        val discoveringLeaves = mutableSetOf<String>()
+
+        fun componentSources(box: GuestValueClassBox): List<IrType> {
+            if (box.componentSourceTypes.isNotEmpty()) return box.componentSourceTypes
+            if (!discoveringLeaves.add(box.name)) throw UnsupportedKotlinIr(box.symbol.owner, "recursive value-class layout")
+            box.componentSourceTypes =
+                box.propertyTypes.flatMap { source ->
+                    val nested = guestTypes.valueClassBox(source)
+                    if (nested != null && nested != box && !source.isNullable()) componentSources(nested) else listOf(source)
+                }
+            discoveringLeaves.remove(box.name)
+            return box.componentSourceTypes
+        }
+        guestTypes.valueClassBoxes.values.forEach(::componentSources)
         val metadataValues =
             (
                 listOf("app") +
@@ -1541,7 +1581,8 @@ internal object KotlinProjectLowering {
                     runtimeMemberNames +
                     listOfNotNull("kotlin.Array".takeIf { usesStringArray }) +
                     referenceArrays.keys +
-                    guestTypes.valueClassBoxes.keys + guestTypes.valueClassBoxes.keys.map { "$it.<boxed-value>" } +
+                    guestTypes.valueClassBoxes.keys +
+                    guestTypes.valueClassBoxes.values.flatMap { box -> box.componentSourceTypes.indices.map(box::payloadExportName) } +
                     guestTypes.valueClassBoxes.keys.map { "$it.<inline-value>" } +
                     listOf("<boxed-value>", "toString", "hashCode", "equals") +
                     guestTypes.valueClassBoxes.values.flatMap { box ->
@@ -1739,13 +1780,46 @@ internal object KotlinProjectLowering {
                 .mapIndexed { index, (symbol, target) ->
                     symbol to target.copy(importId = ImportId.of((RUNTIME_IMPORT_COUNT + index).toUInt()))
                 }.toMap()
+        val externalBoxTypeImports =
+            guestTypes.valueClassBoxes.values
+                .filter { it.symbol !in externalTypeImports }
+                .mapNotNull { box ->
+                    val link = session.platformTypes.singleOrNull { it.symbol == box.name } ?: return@mapNotNull null
+                    box to ExternalTypeTarget(link.exportName, link.moduleHash.copyOf())
+                }.sortedBy { (_, target) -> target.sortKey }
+                .mapIndexed { index, (box, target) ->
+                    box to target.copy(importId = ImportId.of((RUNTIME_IMPORT_COUNT + externalTypeImports.size + index).toUInt()))
+                }.toMap()
+        val externalInlineImports =
+            guestTypes.valueClassBoxes.values
+                .mapNotNull { box ->
+                    val link = session.platformTypes.singleOrNull { it.symbol == "${box.name}.<inline-value>" } ?: return@mapNotNull null
+                    box to ExternalTypeTarget(link.exportName, link.moduleHash.copyOf())
+                }.sortedBy { (_, target) -> target.sortKey }
+                .mapIndexed { index, (box, target) ->
+                    box to
+                        target.copy(
+                            importId =
+                                ImportId.of(
+                                    (
+                                        RUNTIME_IMPORT_COUNT + externalTypeImports.size + externalBoxTypeImports.size +
+                                            index
+                                    ).toUInt(),
+                                ),
+                        )
+                }.toMap()
+        val externalTypeImportCount = externalTypeImports.size + externalBoxTypeImports.size + externalInlineImports.size
         val externalClassTypes = externalTypeImports.mapValues { (_, target) -> TypeRef.Imported(target.importId) }
+        val externalBoxTypes = externalBoxTypeImports.mapValues { (_, target) -> TypeRef.Imported(target.importId) }
         val externalBoxFields =
-            guestTypes.valueClassBoxes.values.map { it.symbol }.distinct().filter { it in externalClassTypes }.mapNotNull { symbol ->
-                val name = symbol.owner.fqNameWhenAvailable?.asString() ?: return@mapNotNull null
-                if (session.platformScalarTypes.none { it.symbol == name }) return@mapNotNull null
-                val link = session.platformFields.singleOrNull { it.symbol == "$name.<boxed-value>" } ?: return@mapNotNull null
-                ExternalFieldTarget(link.exportName, symbol, link.moduleHash.copyOf(), false)
+            guestTypes.valueClassBoxes.values.filter { it.symbol in externalClassTypes || it in externalBoxTypes }.flatMap { box ->
+                box.componentSourceTypes.indices.map { index ->
+                    val name = box.payloadExportName(index)
+                    val link =
+                        session.platformFields.singleOrNull { it.symbol == name }
+                            ?: throw UnsupportedKotlinIr(box.symbol.owner, "precompiled value class payload field $name is missing")
+                    ExternalFieldTarget(link.exportName, box.symbol, link.moduleHash.copyOf(), false)
+                }
             }
         val externalFieldImports =
             (
@@ -1755,7 +1829,7 @@ internal object KotlinProjectLowering {
             ).distinctBy(ExternalFieldTarget::sortKey)
                 .sortedBy(ExternalFieldTarget::sortKey)
                 .mapIndexed { index, target ->
-                    target.copy(importId = ImportId.of((RUNTIME_IMPORT_COUNT + externalTypeImports.size + index).toUInt()))
+                    target.copy(importId = ImportId.of((RUNTIME_IMPORT_COUNT + externalTypeImportCount + index).toUInt()))
                 }
         val externalFieldsBySortKey = externalFieldImports.associateBy(ExternalFieldTarget::sortKey)
         val externalGetterFieldImports =
@@ -1776,7 +1850,7 @@ internal object KotlinProjectLowering {
                         target.copy(
                             importId =
                                 ImportId.of(
-                                    (RUNTIME_IMPORT_COUNT + externalTypeImports.size + externalFieldImportCount + index).toUInt(),
+                                    (RUNTIME_IMPORT_COUNT + externalTypeImportCount + externalFieldImportCount + index).toUInt(),
                                 ),
                         )
                 }.toMap()
@@ -1802,28 +1876,32 @@ internal object KotlinProjectLowering {
             }
         var localBoxTypeCount = 0
         guestTypes.valueClassBoxes.toSortedMap().values.forEach { box ->
-            val imported = externalClassTypes[box.symbol]
+            val imported = externalBoxTypes[box] ?: externalClassTypes[box.symbol]
             if (imported == null) {
                 box.type =
                     TypeRef.Local(TypeId.of((externalFunctionTypeBase + externalFunctionImports.size + 3 + localBoxTypeCount).toUInt()))
                 localBoxTypeCount += 4 + valueClassInterfaceMethods(box.symbol).size
             } else {
                 box.type = imported
-                val target = externalBoxFields.single { it.ownerSymbol == box.symbol }
-                box.field = FieldRef.Imported(requireNotNull(externalFieldsBySortKey[target.sortKey]).importId)
+                box.payloadFields =
+                    box.componentSourceTypes.indices.map { index ->
+                        val target =
+                            externalBoxFields.single {
+                                it.ownerSymbol == box.symbol &&
+                                    it.exportName == box.payloadExportName(index)
+                            }
+                        FieldRef.Imported(requireNotNull(externalFieldsBySortKey[target.sortKey]).importId)
+                    }
+                box.field = box.payloadFields.first()
             }
-            box.toStringTarget =
-                box.symbol.owner.declarations
-                    .filterIsInstance<IrSimpleFunction>()
-                    .singleOrNull {
-                        it.name.asString() == "toString" && it.origin == IrDeclarationOrigin.DEFINED &&
-                            it.parameters.none { parameter -> parameter.kind != IrParameterKind.DispatchReceiver }
-                    }?.let { functionIds[it.symbol] }
-                    ?.let(FunctionRef::Local)
         }
         var nextInlineType = externalFunctionTypeBase + externalFunctionImports.size + 3 + localBoxTypeCount
         guestTypes.valueClassBoxes.toSortedMap().values.filter { it.scalar == ValueType.Unit }.forEach { box ->
-            box.inlineType = ValueType.Inline(TypeRef.Local(TypeId.of((nextInlineType++).toUInt())))
+            box.inlineType =
+                ValueType.Inline(
+                    externalInlineImports[box]?.let { TypeRef.Imported(it.importId) }
+                        ?: TypeRef.Local(TypeId.of((nextInlineType++).toUInt())),
+                )
             box.scalar = requireNotNull(box.inlineType)
         }
         val resolvingInline = mutableSetOf<String>()
@@ -2059,7 +2137,7 @@ internal object KotlinProjectLowering {
                                                 platformScalars,
                                                 receiver,
                                                 shapeInterfaceTypes,
-                                            ),
+                                            ).let { guestTypes.heapType(receiver.type, it) },
                                         cell = null,
                                     )
                                 },
@@ -2238,7 +2316,9 @@ internal object KotlinProjectLowering {
                 }
             val ownerClass = function.parent as? IrClass
             val memberOwner =
-                instance.ownerClass?.let { owner -> TypeRef.Local(requireNotNull(classInstanceTypeIds[owner])) }
+                instance.ownerClass?.takeUnless { inlineValueClasses.contains(it.declaration.symbol) }?.let { owner ->
+                    TypeRef.Local(requireNotNull(classInstanceTypeIds[owner]))
+                }
                     ?: ownerClass
                         ?.takeIf { it.symbol in classLayoutsBySymbol && !inlineValueClasses.contains(it.symbol) }
                         ?.let { TypeRef.Local(requireNotNull(classTypeIds[it.symbol])) }
@@ -2307,19 +2387,63 @@ internal object KotlinProjectLowering {
             val receiverType = ValueType.Ref(nullable = false, type = closureType)
             val firstBlock = blocks.size
             val compiled =
-                if (layout.referenceTarget != null || layout.constructorTarget != null) {
-                    val targetId =
-                        layout.referenceTarget?.let { functionIds[it.symbol] }
-                            ?: layout.constructorTarget?.let { constructor ->
-                                constructorFunctionIds[GuestClassInstance(constructor.owner.parentAsClass, emptyList())]
-                                    ?: throw UnsupportedKotlinIr(
-                                        layout.expression,
-                                        "constructor reference target is outside the supported Guest project subset",
+                if (layout.referenceTarget != null ||
+                    (layout.constructorTarget != null && inlineValueClasses.constructor(layout.constructorTarget) == null)
+                ) {
+                    val targetFunction =
+                        layout.referenceTarget?.let { method ->
+                            val owner = method.parent as? IrClass
+                            val receiver =
+                                layout.captures
+                                    .singleOrNull { it.initialValue != null }
+                                    ?.initialValue
+                                    ?.type
+                                    ?: layout.shape.parameters.firstOrNull()
+                            val instance =
+                                (receiver as? IrSimpleType)?.takeIf { it.classifier == owner?.symbol }?.let {
+                                    GuestClassInstance(
+                                        requireNotNull(owner),
+                                        it.arguments.filterIsInstance<IrTypeProjection>().map { argument ->
+                                            argument.type
+                                        },
                                     )
-                            }
-                            ?: throw UnsupportedKotlinIr(layout.expression, "function reference target is not in the Guest project")
+                                }
+                            (instance?.let { genericMemberFunctionIds[method.symbol to it] } ?: functionIds[method.symbol])?.let(
+                                FunctionRef::Local,
+                            )
+                                ?: externalFunctionImports[method.symbol]?.let { FunctionRef.Imported(it.importId) }
+                        } ?: layout.constructorTarget?.let { constructor ->
+                            constructorFunctionIds[
+                                GuestClassInstance(
+                                    constructor.owner.parentAsClass,
+                                    emptyList(),
+                                ),
+                            ]?.let(FunctionRef::Local)
+                        } ?: throw UnsupportedKotlinIr(layout.expression, "function reference target is not in the Guest project")
+                    val localTypes = mutableListOf<ValueType>()
+                    val prologue = mutableListOf<Instruction>()
+
+                    fun local(type: ValueType): RegisterId =
+                        RegisterId.of((layout.shape.arity + 1 + localTypes.size).toUInt()).also {
+                            localTypes +=
+                                type
+                        }
                     val boundCapture = layout.captures.singleOrNull { it.initialValue != null }
-                    val boundRegister = boundCapture?.let { RegisterId.of((layout.shape.arity + 1).toUInt()) }
+                    val boundRegister =
+                        boundCapture?.let { capture ->
+                            val stored = local(capture.type)
+                            prologue += Instruction.FieldGet(stored, RegisterId.of(0u), FieldRef.Local(capture.fieldId))
+                            val box = guestTypes.valueClassBox(requireNotNull(capture.initialValue).type)
+                            if (box?.inlineType != null) {
+                                val components =
+                                    box.componentTypes.mapIndexed { index, type ->
+                                        local(type).also { prologue += Instruction.FieldGet(it, stored, box.fieldAt(index)) }
+                                    }
+                                local(box.scalar).also { prologue += Instruction.InlineConstruct(it, components) }
+                            } else {
+                                stored
+                            }
+                        }
                     val resultType = shapeValueType(layout.shape.result)
                     val destination =
                         if (resultType ==
@@ -2327,7 +2451,7 @@ internal object KotlinProjectLowering {
                         ) {
                             Destination.Unit
                         } else {
-                            Destination.Register(RegisterId.of((layout.shape.arity + 1 + if (boundRegister == null) 0 else 1).toUInt()))
+                            Destination.Register(local(resultType))
                         }
                     val arguments = listOfNotNull(boundRegister) + (1..layout.shape.arity).map { RegisterId.of(it.toUInt()) }
                     val owner = layout.referenceTarget?.parent as? IrClass
@@ -2346,54 +2470,46 @@ internal object KotlinProjectLowering {
                             constructorType != null -> {
                                 Instruction.Call(
                                     Destination.Unit,
-                                    FunctionRef.Local(targetId),
+                                    targetFunction,
                                     listOf((destination as Destination.Register).id) + arguments,
                                 )
                             }
 
                             owner?.kind == ClassKind.INTERFACE -> {
-                                Instruction.CallInterface(destination, FunctionRef.Local(targetId), arguments)
+                                Instruction.CallInterface(destination, targetFunction, arguments)
                             }
 
-                            owner != null &&
+                            owner != null && !inlineValueClasses.contains(owner.symbol) &&
                                 (
                                     layout.referenceTarget.modality != Modality.FINAL ||
                                         layout.referenceTarget.overriddenSymbols.isNotEmpty()
                                 ) -> {
-                                Instruction.CallVirtual(destination, FunctionRef.Local(targetId), arguments)
+                                Instruction.CallVirtual(destination, targetFunction, arguments)
                             }
 
                             else -> {
-                                Instruction.Call(destination, FunctionRef.Local(targetId), arguments)
+                                Instruction.Call(destination, targetFunction, arguments)
                             }
                         }
                     CompiledFunction(
-                        localTypes =
-                            listOfNotNull(boundCapture?.type) + if (resultType == ValueType.Unit) emptyList() else listOf(resultType),
+                        localTypes = localTypes,
                         blocks =
                             listOf(
                                 Block(
                                     layout.invokeFunctionId,
                                     false,
-                                    listOfNotNull(
-                                        boundCapture?.let {
-                                            Instruction.FieldGet(
-                                                requireNotNull(boundRegister),
-                                                RegisterId.of(0u),
-                                                FieldRef.Local(it.fieldId),
-                                            )
-                                        },
-                                        constructorType?.let {
-                                            Instruction.NewObject((destination as Destination.Register).id, it)
-                                        },
-                                    ) + listOf(call, Instruction.Return(destination)),
+                                    prologue +
+                                        listOfNotNull(
+                                            constructorType?.let { Instruction.NewObject((destination as Destination.Register).id, it) },
+                                        ) +
+                                        listOf(call, Instruction.Return(destination)),
                                 ),
                             ),
                     )
                 } else {
                     FunctionCompiler(
                         pluginContext = pluginContext,
-                        function = requireNotNull(layout.function),
+                        function = layout.function ?: requireNotNull(layout.constructorTarget).owner,
                         functionId = layout.invokeFunctionId,
                         blockBase = firstBlock,
                         stringType = stringType,
@@ -2447,6 +2563,15 @@ internal object KotlinProjectLowering {
                         taskLaunchTrampolineFunctionId = taskLaunchTrampolineFunctionId,
                         closureLayouts = closureLayoutsByExpression,
                         captureCells = captureCellLayoutsBySymbol,
+                        currentClassInstance =
+                            layout.constructorTarget?.let { symbol ->
+                                val result = layout.shape.result as IrSimpleType
+                                GuestClassInstance(
+                                    symbol.owner.parentAsClass,
+                                    result.arguments.filterIsInstance<IrTypeProjection>().map { it.type },
+                                )
+                            },
+                        valueClassConstructorReference = layout.constructorTarget?.let(inlineValueClasses::constructor),
                         leadingParameterTypes = listOf(receiverType),
                         captureFields = layout.captures.mapNotNull { capture -> capture.symbol?.let { it to capture } }.toMap(),
                         closureReceiver = RegisterId.of(0u),
@@ -3105,8 +3230,23 @@ internal object KotlinProjectLowering {
                     )
                 }
         localValueClassBoxes.forEach { box ->
+            val source = box.sourceType as IrSimpleType
+            val ownerInstance = GuestClassInstance(box.symbol.owner, source.arguments.filterIsInstance<IrTypeProjection>().map { it.type })
+            box.toStringTarget =
+                box.symbol.owner.declarations
+                    .filterIsInstance<IrSimpleFunction>()
+                    .singleOrNull {
+                        it.name.asString() == "toString" && it.origin == IrDeclarationOrigin.DEFINED &&
+                            it.parameters.none { parameter -> parameter.kind != IrParameterKind.DispatchReceiver }
+                    }?.let { method ->
+                        val source = box.sourceType as IrSimpleType
+                        val instance =
+                            GuestClassInstance(box.symbol.owner, source.arguments.filterIsInstance<IrTypeProjection>().map { it.type })
+                        genericMemberFunctionIds[method.symbol to instance] ?: functionIds[method.symbol]
+                    }?.let(FunctionRef::Local)
             box.interfaces =
                 box.symbol.owner.superTypes
+                    .map(ownerInstance::substitute)
                     .mapNotNull { parent ->
                         val symbol = (parent as? IrSimpleType)?.classifier as? IrClassSymbol ?: return@mapNotNull null
                         if (symbol.owner.kind != ClassKind.INTERFACE) return@mapNotNull null
@@ -3126,7 +3266,7 @@ internal object KotlinProjectLowering {
                 valueClassInterfaceMethods(box.symbol).map { method ->
                     fun mapped(type: IrType) =
                         valueType(
-                            type,
+                            ownerInstance.substitute(type),
                             pluginContext,
                             guestTypes,
                             stringType,
@@ -3141,13 +3281,20 @@ internal object KotlinProjectLowering {
                             classInstanceTypeIds = classInstanceTypeIds,
                         )
                     val target =
-                        functionIds[method.symbol]?.let(FunctionRef::Local)
+                        (genericMemberFunctionIds[method.symbol to ownerInstance] ?: functionIds[method.symbol])?.let(FunctionRef::Local)
                             ?: externalFunctionImports[method.symbol]?.let { FunctionRef.Imported(it.importId) }
                     if (target == null && inlineValueClasses.getter(method.symbol) == null) {
                         throw UnsupportedKotlinIr(method, "value class interface implementation is not available")
                     }
                     GuestValueClassBridge(
-                        artifactFunctionName(method.overriddenSymbols.first().owner, pluginContext, inlineValueClasses, session),
+                        method.overriddenSymbols.first().owner.let { declaration ->
+                            val parent = declaration.parent as? IrClass
+                            if (parent != null && (parent.typeParameters.isNotEmpty() || parent.hasParameterizedSupertype())) {
+                                declaration.name.asString()
+                            } else {
+                                artifactFunctionName(declaration, pluginContext, inlineValueClasses, session)
+                            }
+                        },
                         target,
                         method.parameters.filter { it.kind != IrParameterKind.DispatchReceiver }.map { mapped(it.type) },
                         mapped(method.returnType),
@@ -3298,7 +3445,7 @@ internal object KotlinProjectLowering {
                                 ),
                         ) + valueClassBoxArtifacts.types +
                         guestTypes.valueClassBoxes.values
-                            .filter { it.inlineType != null }
+                            .filter { it.inlineType?.type is TypeRef.Local }
                             .sortedBy {
                                 ((requireNotNull(it.inlineType).type as TypeRef.Local).id.value)
                             }.map { NominalType.InlineValue(requireNotNull(metadataIds["${it.name}.<inline-value>"]), it.componentTypes) },
@@ -3381,13 +3528,43 @@ internal object KotlinProjectLowering {
                                     targetModuleHash = target.moduleHash,
                                 )
                             } +
+                        externalBoxTypeImports.entries.sortedBy { (_, target) -> target.sortKey }.mapIndexed { index, (_, target) ->
+                            Import(
+                                SymbolKind.TYPE,
+                                ModuleId.of((2 + externalTypeImports.size + index).toUInt()),
+                                requireNotNull(metadataIds[target.exportName]),
+                                TypeRef.Imported(target.importId),
+                                target.moduleHash,
+                            )
+                        } +
+                        externalInlineImports.entries.sortedBy { (_, target) -> target.sortKey }.mapIndexed { index, (_, target) ->
+                            Import(
+                                SymbolKind.TYPE,
+                                ModuleId.of((2 + externalTypeImports.size + externalBoxTypeImports.size + index).toUInt()),
+                                requireNotNull(metadataIds[target.exportName]),
+                                TypeRef.Imported(target.importId),
+                                target.moduleHash,
+                            )
+                        } +
                         externalFieldImports.mapIndexed { index, target ->
                             Import(
                                 kind = SymbolKind.FIELD,
-                                targetModule = ModuleId.of((2 + externalTypeImports.size + index).toUInt()),
+                                targetModule = ModuleId.of((2 + externalTypeImportCount + index).toUInt()),
                                 targetName = requireNotNull(metadataIds[target.exportName]),
                                 expectedSignature =
-                                    requireNotNull(externalClassTypes[target.ownerSymbol]) {
+                                    requireNotNull(
+                                        externalBoxFields.firstOrNull { it.sortKey == target.sortKey }?.let { field ->
+                                            guestTypes.valueClassBoxes.values
+                                                .singleOrNull { box ->
+                                                    box.symbol == field.ownerSymbol &&
+                                                        box.componentSourceTypes.indices.any {
+                                                            box.payloadExportName(
+                                                                it,
+                                                            ) == field.exportName
+                                                        }
+                                                }?.type
+                                        } ?: externalClassTypes[target.ownerSymbol],
+                                    ) {
                                         "platform field ${target.exportName} has no imported owner ${target.ownerSymbol.owner.fqNameWhenAvailable}"
                                     },
                                 targetModuleHash = target.moduleHash,
@@ -3398,7 +3575,7 @@ internal object KotlinProjectLowering {
                             .mapIndexed { index, (_, target) ->
                                 Import(
                                     kind = SymbolKind.FUNCTION,
-                                    targetModule = ModuleId.of((2 + externalTypeImports.size + externalFieldImportCount + index).toUInt()),
+                                    targetModule = ModuleId.of((2 + externalTypeImportCount + externalFieldImportCount + index).toUInt()),
                                     targetName = requireNotNull(metadataIds[target.exportName]),
                                     expectedSignature = TypeRef.Local(TypeId.of((externalFunctionTypeBase + index).toUInt())),
                                     targetModuleHash = target.moduleHash,
@@ -3420,14 +3597,27 @@ internal object KotlinProjectLowering {
                                         (box.type as TypeRef.Local).id.value,
                                         box.type,
                                     ),
-                                    Export(
-                                        SymbolKind.FIELD,
-                                        ExportVisibility.PUBLIC_LIBRARY,
-                                        requireNotNull(metadataIds["${box.name}.<boxed-value>"]),
-                                        (box.field as FieldRef.Local).id.value,
-                                        box.type,
-                                    ),
-                                )
+                                ) +
+                                    box.componentTypes.indices.map { index ->
+                                        Export(
+                                            SymbolKind.FIELD,
+                                            ExportVisibility.PUBLIC_LIBRARY,
+                                            requireNotNull(metadataIds[box.payloadExportName(index)]),
+                                            (box.fieldAt(index) as FieldRef.Local).id.value,
+                                            box.type,
+                                        )
+                                    } +
+                                    listOfNotNull(
+                                        box.inlineType?.let { inline ->
+                                            Export(
+                                                SymbolKind.TYPE,
+                                                ExportVisibility.PUBLIC_LIBRARY,
+                                                requireNotNull(metadataIds["${box.name}.<inline-value>"]),
+                                                (inline.type as TypeRef.Local).id.value,
+                                                inline.type,
+                                            )
+                                        },
+                                    )
                             }
                         } else {
                             emptyList()
@@ -4834,6 +5024,7 @@ private class FunctionCompiler(
     private val closureReceiver: RegisterId? = null,
     private val constructorOwner: GuestClassLayout? = null,
     private val constructorDeclaration: IrClass? = constructorOwner?.declaration,
+    private val valueClassConstructorReference: InlineValueClassLayout? = null,
 ) {
     private val localTypes = mutableListOf<ValueType>()
     private val values = mutableMapOf<IrValueSymbol, RegisterId>()
@@ -4859,7 +5050,22 @@ private class FunctionCompiler(
         constructorDeclaration?.thisReceiver?.let { receiver ->
             values[receiver.symbol] = RegisterId.of(0u)
         }
-        if ((function as? IrSimpleFunction)?.isGeneratedDataValueMethod() == true) {
+        if (valueClassConstructorReference != null) {
+            val layout = valueClassConstructorReference
+            val box = requireNotNull(guestTypes.valueClassBox(resolvedType(function.returnType)))
+            val arguments = sourceParameters.map { requireNotNull(values[it.symbol]) }
+            val result =
+                if (box.inlineType == null) {
+                    arguments.single()
+                } else {
+                    allocate(box.scalar).also {
+                        emit(Instruction.InlineConstruct(it, arguments.flatMap(::inlineComponents)))
+                    }
+                }
+            layout.intRange?.let { emitIntRangePrecondition(result, it, function) }
+            compileValueClassInitializers(layout, requireNotNull(currentClassInstance), result, arguments)
+            emit(Instruction.Return(Destination.Register(result)))
+        } else if ((function as? IrSimpleFunction)?.isGeneratedDataValueMethod() == true) {
             if (function.name.asString() == "hashCode") compileDataHash() else compileDataEquals()
         } else {
             val body = function.body as? IrBlockBody ?: throw UnsupportedKotlinIr(function, "function body is not a block")
@@ -5523,7 +5729,10 @@ private class FunctionCompiler(
                 return value
             }
             val components = argumentValues.flatMap(::inlineComponents)
-            return allocate(box.scalar).also { emit(Instruction.InlineConstruct(it, components)) }
+            return allocate(box.scalar).also {
+                emit(Instruction.InlineConstruct(it, components))
+                compileValueClassInitializers(layout, instance, it, argumentValues)
+            }
         }
         val exceptionImport =
             target.parentAsClass
@@ -5759,6 +5968,32 @@ private class FunctionCompiler(
                 destination
             }
 
+            IrTypeOperator.SAFE_CAST -> {
+                val resultType =
+                    valueType(expression.type, expression) as? ValueType.Ref
+                        ?: throw UnsupportedKotlinIr(expression, "safe cast result requires a nullable reference representation")
+                val reference =
+                    if (registerValueType(source) is ValueType.Ref) {
+                        source
+                    } else {
+                        boxValue(source, expression.argument.type, ValueType.Ref(false, TypeRef.Imported(ImportId.of(ANY_RUNTIME_TYPE))))
+                    }
+                val destination = allocate(resultType)
+                val matches = allocate(ValueType.Bool).also { emit(Instruction.IsType(it, reference, resultType.type)) }
+                val present = createBlock()
+                val absent = createBlock()
+                val join = createBlock()
+                emit(Instruction.Branch(matches, blockId(present), blockId(absent)))
+                currentBlock = present
+                emit(Instruction.CheckedCast(destination, reference, resultType.type))
+                jumpTo(join)
+                currentBlock = absent
+                emit(Instruction.Null(destination))
+                jumpTo(join)
+                currentBlock = join
+                destination
+            }
+
             IrTypeOperator.CAST -> {
                 if (target == ValueType.Unit) {
                     val unit = TypeRef.Imported(ImportId.of(UNIT_RUNTIME_TYPE))
@@ -5829,6 +6064,34 @@ private class FunctionCompiler(
         } else {
             value
         }
+
+    private var valueClassInitializerInstance: GuestClassInstance? = null
+
+    @OptIn(UnsafeDuringIrConstructionAPI::class)
+    private fun compileValueClassInitializers(
+        layout: InlineValueClassLayout,
+        instance: GuestClassInstance,
+        receiver: RegisterId,
+        arguments: List<RegisterId>,
+    ) {
+        val declarations = layout.declaration.declarations.filterIsInstance<IrAnonymousInitializer>()
+        if (declarations.isEmpty()) return
+        val bindings =
+            layout.constructor.owner.parameters
+                .filter { it.kind == IrParameterKind.Regular }
+                .map { it.symbol } +
+                requireNotNull(layout.declaration.thisReceiver).symbol
+        val previous = bindings.associateWith { values[it] }
+        val previousInstance = valueClassInitializerInstance
+        try {
+            bindings.zip(arguments + receiver).forEach { (symbol, value) -> values[symbol] = value }
+            valueClassInitializerInstance = instance
+            declarations.forEach { it.body.statements.forEach(::compileStatement) }
+        } finally {
+            valueClassInitializerInstance = previousInstance
+            previous.forEach { (symbol, value) -> if (value == null) values.remove(symbol) else values[symbol] = value }
+        }
+    }
 
     private fun inlineComponents(source: RegisterId): List<RegisterId> {
         val type = registerValueType(source)
@@ -8435,6 +8698,7 @@ private class FunctionCompiler(
                 ?: type
         return resolved.classInstance(
             classInstanceTypeIds.keys.associate { it.declaration.symbol to it.declaration } +
+                guestTypes.valueClassBoxes.values.associate { it.symbol to it.symbol.owner } +
                 externalClassTypes.keys.associateWith { it.owner },
         )
     }
@@ -8445,6 +8709,7 @@ private class FunctionCompiler(
     ): GuestClassInstance? {
         val classes =
             classInstanceTypeIds.keys.associate { it.declaration.symbol to it.declaration } +
+                guestTypes.valueClassBoxes.values.associate { it.symbol to it.symbol.owner } +
                 externalClassTypes.keys.associateWith { it.owner }
         val visited = mutableSetOf<GuestClassInstance>()
 
@@ -8714,7 +8979,7 @@ private class FunctionCompiler(
     private fun trustedIntrinsic(function: IrSimpleFunction): LoweredCapabilityOperation? = resolveTrustedIntrinsic(function, session)
 
     private fun resolvedType(type: IrType): IrType =
-        currentClassInstance?.substitute(currentInstance?.substitute(type) ?: type)
+        valueClassInitializerInstance?.substitute(type) ?: currentClassInstance?.substitute(currentInstance?.substitute(type) ?: type)
             ?: currentInstance?.substitute(type)
             ?: type
 
@@ -9058,16 +9323,25 @@ private fun collectGuestClosures(functions: List<IrElement>): List<GuestClosureS
             val boundReceiver = expression.boundReferenceReceiver(referenceTarget)
             val instanceMethod = referenceTarget.parent is IrClass
             val dispatchReceiver = referenceTarget.parameters.singleOrNull { it.kind == IrParameterKind.DispatchReceiver }
+            val receiverType = boundReceiver?.type ?: shape?.parameters?.firstOrNull()
+            val ownerInstance =
+                (receiverType as? IrSimpleType)?.let { receiver ->
+                    (referenceTarget.parent as? IrClass)?.takeIf { receiver.classifier == it.symbol }?.let { owner ->
+                        GuestClassInstance(owner, receiver.arguments.filterIsInstance<IrTypeProjection>().map { it.type })
+                    }
+                }
+
+            fun substituted(type: IrType): IrType = ownerInstance?.substitute(type) ?: type
             val sourceParameters =
-                listOfNotNull(dispatchReceiver?.type?.takeIf { instanceMethod && boundReceiver == null }) +
-                    referenceTarget.parameters.filter { it.kind == IrParameterKind.Regular }.map { it.type }
+                listOfNotNull(dispatchReceiver?.type?.takeIf { instanceMethod && boundReceiver == null }?.let(::substituted)) +
+                    referenceTarget.parameters.filter { it.kind == IrParameterKind.Regular }.map { substituted(it.type) }
             if (expression is IrRichFunctionReference &&
                 (expression.hasUnitConversion || expression.hasSuspendConversion || expression.hasVarargConversion)
             ) {
                 throw UnsupportedKotlinIr(expression, "adapted function references are not supported")
             }
             if (shape == null || referenceTarget.isSuspend ||
-                referenceTarget.returnType != shape.result ||
+                substituted(referenceTarget.returnType) != shape.result ||
                 sourceParameters != shape.parameters ||
                 (instanceMethod && dispatchReceiver == null) ||
                 referenceTarget.parameters.any {
@@ -9081,9 +9355,23 @@ private fun collectGuestClosures(functions: List<IrElement>): List<GuestClosureS
         expression.constructorReferenceTarget()?.let { constructorSymbol ->
             val constructor = constructorSymbol.owner
             val shape = expression.type.guestFunctionShape()
-            val parameters = constructor.parameters.filter { it.kind == IrParameterKind.Regular }.map { it.type }
+            val resultType = shape?.result as? IrSimpleType
+            val instance =
+                resultType?.let {
+                    GuestClassInstance(
+                        constructor.parentAsClass,
+                        it.arguments.filterIsInstance<IrTypeProjection>().map { argument ->
+                            argument.type
+                        },
+                    )
+                }
+            val parameters =
+                constructor.parameters.filter { it.kind == IrParameterKind.Regular }.map {
+                    instance?.substitute(it.type)
+                        ?: it.type
+                }
             if (shape == null || !constructor.isPrimary ||
-                constructor.returnType != shape.result ||
+                (instance?.substitute(constructor.returnType) ?: constructor.returnType) != shape.result ||
                 constructor.parameters.any { it.kind != IrParameterKind.Regular } ||
                 (
                     expression is IrRichFunctionReference &&

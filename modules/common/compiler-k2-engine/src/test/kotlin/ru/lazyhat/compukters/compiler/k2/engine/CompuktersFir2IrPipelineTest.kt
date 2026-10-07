@@ -378,8 +378,8 @@ class CompuktersFir2IrPipelineTest {
                     fields,
                 )
             }
-            val rejected =
-                assertFailsWith<IllegalArgumentException> {
+            val compiled =
+                assertNotNull(
                     PlatformLibraryCompiler().compile(
                         PlatformModuleId("sample", "mfvc-probe"),
                         emptyList(),
@@ -393,9 +393,10 @@ class CompuktersFir2IrPipelineTest {
                             "Mfvc.kt" to PlatformModuleId("sample", "mfvc-probe"),
                         ),
                         CanonicalTrustedIntrinsics.registry,
-                    )
-                }
-            assertTrue(rejected.message.orEmpty().contains("value class must have one underlying property"))
+                    ),
+                )
+            val artifact = ArtifactReader.read(PlatformLibraryFragmentCodec.decode(compiled).artifact.toByteArray())
+            assertEquals(3, artifact.modules.sumOf { module -> module.types.count { it is NominalType.InlineValue } })
         }
     }
 

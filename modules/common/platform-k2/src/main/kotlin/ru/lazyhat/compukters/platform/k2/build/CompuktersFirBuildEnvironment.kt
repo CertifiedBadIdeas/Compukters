@@ -30,7 +30,6 @@ import org.jetbrains.kotlin.compiler.plugin.CompilerPluginRegistrar
 import org.jetbrains.kotlin.compiler.plugin.ExperimentalCompilerApi
 import org.jetbrains.kotlin.config.CommonConfigurationKeys
 import org.jetbrains.kotlin.config.CompilerConfiguration
-import org.jetbrains.kotlin.config.LanguageVersionSettingsImpl
 import org.jetbrains.kotlin.diagnostics.KtRegisteredDiagnosticFactoriesStorage
 import org.jetbrains.kotlin.diagnostics.impl.DiagnosticsCollectorImpl
 import org.jetbrains.kotlin.fir.FirBinaryDependenciesModuleData
@@ -55,6 +54,7 @@ import ru.lazyhat.compukters.platform.bundle.PlatformModule
 import ru.lazyhat.compukters.platform.bundle.PlatformModuleId
 import ru.lazyhat.compukters.platform.bundle.PlatformSource
 import ru.lazyhat.compukters.platform.k2.CompuktersFirSessionFactory
+import ru.lazyhat.compukters.platform.k2.CompuktersLanguageVersionSettings
 import ru.lazyhat.compukters.platform.k2.CompuktersMetadataSymbolProvider
 import ru.lazyhat.compukters.platform.k2.CompuktersPlatforms
 
@@ -81,7 +81,7 @@ class CompuktersFirBuildEnvironment private constructor(
     private val sharedLibrarySession =
         factory.createSharedLibrarySession(
             Name.special("<compukters-platform>"),
-            LanguageVersionSettingsImpl.DEFAULT,
+            CompuktersLanguageVersionSettings,
             emptyList(),
             context,
         )
@@ -95,7 +95,7 @@ class CompuktersFirBuildEnvironment private constructor(
             emptyList(),
             null,
             emptyList(),
-            LanguageVersionSettingsImpl.DEFAULT,
+            CompuktersLanguageVersionSettings,
             context,
         ) { _, _, _, _ -> emptyList() }
 
@@ -146,7 +146,7 @@ class CompuktersFirBuildEnvironment private constructor(
                     emptyList(),
                     null,
                     emptyList(),
-                    LanguageVersionSettingsImpl.DEFAULT,
+                    CompuktersLanguageVersionSettings,
                     context,
                 ) { session, moduleDataProvider, scopeProvider, _ ->
                     listOf(
@@ -196,7 +196,7 @@ class CompuktersFirBuildEnvironment private constructor(
         CompilerConfiguration().apply {
             put(CommonConfigurationKeys.MODULE_NAME, module.toString())
             put(CommonConfigurationKeys.MESSAGE_COLLECTOR_KEY, MessageCollector.NONE)
-            put(CommonConfigurationKeys.LANGUAGE_VERSION_SETTINGS, LanguageVersionSettingsImpl.DEFAULT)
+            put(CommonConfigurationKeys.LANGUAGE_VERSION_SETTINGS, CompuktersLanguageVersionSettings)
             put(CommonConfigurationKeys.TARGET_PLATFORM, CompuktersPlatforms.default)
             put(FrontendConfigurationKeys.DIAGNOSTIC_FACTORIES_STORAGE, KtRegisteredDiagnosticFactoriesStorage())
             put(FrontendConfigurationKeys.EXTENSIONS_STORAGE, CompilerPluginRegistrar.ExtensionStorage())

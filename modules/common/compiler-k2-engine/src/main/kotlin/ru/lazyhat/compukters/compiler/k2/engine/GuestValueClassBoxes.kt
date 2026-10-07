@@ -103,9 +103,21 @@ internal class GuestValueClassBox(
     var propertyNames: List<String> = listOf(propertyName)
     var inlineType: ValueType.Inline? = null
     var componentTypes: List<ValueType> = emptyList()
+    var componentSourceTypes: List<IrType> = emptyList()
+    var payloadFields: List<FieldRef> = emptyList()
+
+    fun payloadExportName(index: Int): String = if (index == 0) "$name.<boxed-value>" else "$name.<boxed-value-$index>"
 
     fun fieldAt(index: Int): FieldRef =
-        if (index == 0) field else FieldRef.Local(FieldId.of((field as FieldRef.Local).id.value + index.toUInt()))
+        if (payloadFields.isNotEmpty()) {
+            payloadFields[index]
+        } else if (index ==
+            0
+        ) {
+            field
+        } else {
+            FieldRef.Local(FieldId.of((field as FieldRef.Local).id.value + index.toUInt()))
+        }
 
     lateinit var type: TypeRef
     lateinit var field: FieldRef

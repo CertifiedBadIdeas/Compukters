@@ -1025,10 +1025,12 @@ val generateMfvcConformanceArtifact = tasks.register<Test>("generateMfvcConforma
     testClassesDirs = sourceSets.test.get().output.classesDirs
     classpath = sourceSets.test.get().runtimeClasspath
     filter.includeTestsMatching("*multi field value classes preserve direct layouts nested calls and managed boundaries*")
+    filter.includeTestsMatching("*multi field value classes share canonical layouts across precompiled addon boundaries*")
     inputs.files(addonGuestApiFixtureBundle)
     inputs.file(workerJar)
     val artifact = layout.buildDirectory.file("generated/conformance/kotlin-mfvc.cpkt")
     outputs.file(artifact)
+    outputs.file(artifact.map { File(it.asFile.absolutePath + ".addon.cpkt") })
     doFirst {
         systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
         systemProperty("compukters.addonGuestApiFixture", addonGuestApiFixtureBundle.singleFile.absolutePath)
