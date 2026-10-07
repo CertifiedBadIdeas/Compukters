@@ -1,0 +1,14 @@
+{
+  "parent_start": "0c73ef4c",
+  "vm": "bac6789",
+  "candidate_engine_sha256": "fa5bfa644b4233f10128be7ec17cafa86eb1d2226093bae9fb131a60a6e41fcb",
+  "changes": "Final-class call selection in imported/local lowering and method-reference bridges; method flags unchanged. No native VM change.",
+  "baseline_generator_log": "gradle-20261007T210413Z-398039.log",
+  "candidate_generator_log": "gradle-20261007T210608Z-416275.log",
+  "artifact_sizes_unchanged": true,
+  "sources_and_manifests_identical": true,
+  "input_encoding": "compact debug paths and safepoint root ranges",
+  "timing": "same frozen guest-benchmark binary for both compiler artifact variants; thread CPU and wall time; untraced hot execution; our Gradle checks finished before trials",
+  "hardware": "AMD Ryzen 9 9950X3D; logical CPU 6; governor powersave and boost enabled as in previous survey; concurrent desktop/other agent load uncontrolled",
+  "work": "All seven non-fixed counters equal across variants; fixed units deliberately lower after virtual-to-direct call substitution. Traced controls, checksums and termination verified by harness on every invocation."
+}

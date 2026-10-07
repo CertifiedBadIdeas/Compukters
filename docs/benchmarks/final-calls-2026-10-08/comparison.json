@@ -1,0 +1,368 @@
+[
+  {
+    "id": "fold-256-300",
+    "work": {
+      "before": {
+        "hot_fixed_units": 9488680,
+        "hot_dynamic_units": 310,
+        "hot_maintenance_units": 0,
+        "hot_blocks": 1311151,
+        "hot_executed_instructions": 4937332,
+        "hot_retired_instructions": 4937332,
+        "hot_requests": 1,
+        "hot_responses": 1
+      },
+      "after": {
+        "hot_fixed_units": 9257724,
+        "hot_dynamic_units": 310,
+        "hot_maintenance_units": 0,
+        "hot_blocks": 1311151,
+        "hot_executed_instructions": 4937332,
+        "hot_retired_instructions": 4937332,
+        "hot_requests": 1,
+        "hot_responses": 1
+      }
+    },
+    "wall": {
+      "before_median_ns": 74157973,
+      "after_median_ns": 70454004,
+      "time_change_percent": -4.994700974364552,
+      "before_min_max_ns": [
+        73480433,
+        79565206
+      ],
+      "after_min_max_ns": [
+        69232612,
+        123878175
+      ],
+      "round_time_change_percent": [
+        -7.697723159871361,
+        11.944127468491406,
+        -5.227011521975722
+      ]
+    },
+    "cpu": {
+      "before_median_ns": 73961023,
+      "after_median_ns": 70272655,
+      "time_change_percent": -4.986907766270354,
+      "before_min_max_ns": [
+        73299472,
+        79279089
+      ],
+      "after_min_max_ns": [
+        69079237,
+        123354118
+      ],
+      "round_time_change_percent": [
+        -7.655591696255293,
+        11.885372776285319,
+        -5.21217506774605
+      ]
+    }
+  },
+  {
+    "id": "for-list-256-300",
+    "work": {
+      "before": {
+        "hot_fixed_units": 9025480,
+        "hot_dynamic_units": 310,
+        "hot_maintenance_units": 0,
+        "hot_blocks": 1234051,
+        "hot_executed_instructions": 4474432,
+        "hot_retired_instructions": 4474432,
+        "hot_requests": 1,
+        "hot_responses": 1
+      },
+      "after": {
+        "hot_fixed_units": 8794524,
+        "hot_dynamic_units": 310,
+        "hot_maintenance_units": 0,
+        "hot_blocks": 1234051,
+        "hot_executed_instructions": 4474432,
+        "hot_retired_instructions": 4474432,
+        "hot_requests": 1,
+        "hot_responses": 1
+      }
+    },
+    "wall": {
+      "before_median_ns": 71185443,
+      "after_median_ns": 67226063,
+      "time_change_percent": -5.5620641428051565,
+      "before_min_max_ns": [
+        70297562,
+        78789507
+      ],
+      "after_min_max_ns": [
+        66217442,
+        115987812
+      ],
+      "round_time_change_percent": [
+        -7.601722776228403,
+        43.58192180605827,
+        -5.781617359255453
+      ]
+    },
+    "cpu": {
+      "before_median_ns": 70963463,
+      "after_median_ns": 67037012,
+      "time_change_percent": -5.5330600199147595,
+      "before_min_max_ns": [
+        70112796,
+        78517833
+      ],
+      "after_min_max_ns": [
+        66072017,
+        115523981
+      ],
+      "round_time_change_percent": [
+        -7.517585732037057,
+        43.15082102558312,
+        -5.76136221636726
+      ]
+    }
+  },
+  {
+    "id": "map-not-null-1024-100-fresh",
+    "work": {
+      "before": {
+        "hot_fixed_units": 30676186,
+        "hot_dynamic_units": 234512,
+        "hot_maintenance_units": 82617,
+        "hot_blocks": 4387012,
+        "hot_executed_instructions": 15372745,
+        "hot_retired_instructions": 15372745,
+        "hot_requests": 1,
+        "hot_responses": 1
+      },
+      "after": {
+        "hot_fixed_units": 29800462,
+        "hot_dynamic_units": 234512,
+        "hot_maintenance_units": 82617,
+        "hot_blocks": 4387012,
+        "hot_executed_instructions": 15372745,
+        "hot_retired_instructions": 15372745,
+        "hot_requests": 1,
+        "hot_responses": 1
+      }
+    },
+    "wall": {
+      "before_median_ns": 248243063,
+      "after_median_ns": 232519038,
+      "time_change_percent": -6.3341246317122675,
+      "before_min_max_ns": [
+        246176104,
+        271512576
+      ],
+      "after_min_max_ns": [
+        230722858,
+        239222647
+      ],
+      "round_time_change_percent": [
+        -6.91172736629968,
+        -5.346072185014572,
+        -6.666790523769839
+      ]
+    },
+    "cpu": {
+      "before_median_ns": 247669030,
+      "after_median_ns": 231903408,
+      "time_change_percent": -6.365600898909318,
+      "before_min_max_ns": [
+        245552811,
+        270545621
+      ],
+      "after_min_max_ns": [
+        230044263,
+        238594440
+      ],
+      "round_time_change_percent": [
+        -6.905021010492229,
+        -5.34135140646489,
+        -6.702273594724383
+      ]
+    }
+  },
+  {
+    "id": "map-not-null-1024-100-reuse-list",
+    "work": {
+      "before": {
+        "hot_fixed_units": 32079913,
+        "hot_dynamic_units": 51312,
+        "hot_maintenance_units": 55913,
+        "hot_blocks": 4577464,
+        "hot_executed_instructions": 16090765,
+        "hot_retired_instructions": 16090765,
+        "hot_requests": 1,
+        "hot_responses": 1
+      },
+      "after": {
+        "hot_fixed_units": 31050500,
+        "hot_dynamic_units": 51312,
+        "hot_maintenance_units": 55913,
+        "hot_blocks": 4577464,
+        "hot_executed_instructions": 16090765,
+        "hot_retired_instructions": 16090765,
+        "hot_requests": 1,
+        "hot_responses": 1
+      }
+    },
+    "wall": {
+      "before_median_ns": 258745917,
+      "after_median_ns": 239892975,
+      "time_change_percent": -7.286276134745728,
+      "before_min_max_ns": [
+        257271365,
+        364182955
+      ],
+      "after_min_max_ns": [
+        237833174,
+        253127410
+      ],
+      "round_time_change_percent": [
+        -9.0463821439005,
+        -7.398586321278888,
+        -7.362948774086286
+      ]
+    },
+    "cpu": {
+      "before_median_ns": 258107348,
+      "after_median_ns": 239285288,
+      "time_change_percent": -7.292337915153036,
+      "before_min_max_ns": [
+        256640467,
+        362797927
+      ],
+      "after_min_max_ns": [
+        237225824,
+        252446820
+      ],
+      "round_time_change_percent": [
+        -9.045082769929035,
+        -7.372091019124893,
+        -7.357509944125495
+      ]
+    }
+  },
+  {
+    "id": "map-not-null-1024-100-reuse-objects",
+    "work": {
+      "before": {
+        "hot_fixed_units": 34179532,
+        "hot_dynamic_units": 112,
+        "hot_maintenance_units": 0,
+        "hot_blocks": 4884701,
+        "hot_executed_instructions": 17268672,
+        "hot_retired_instructions": 17268672,
+        "hot_requests": 1,
+        "hot_responses": 1
+      },
+      "after": {
+        "hot_fixed_units": 33047711,
+        "hot_dynamic_units": 112,
+        "hot_maintenance_units": 0,
+        "hot_blocks": 4884701,
+        "hot_executed_instructions": 17268672,
+        "hot_retired_instructions": 17268672,
+        "hot_requests": 1,
+        "hot_responses": 1
+      }
+    },
+    "wall": {
+      "before_median_ns": 270922146,
+      "after_median_ns": 249950191,
+      "time_change_percent": -7.740952635152976,
+      "before_min_max_ns": [
+        268563746,
+        354799933
+      ],
+      "after_min_max_ns": [
+        247207661,
+        253399010
+      ],
+      "round_time_change_percent": [
+        -10.122570583138646,
+        -7.255695735543199,
+        -8.239203154695218
+      ]
+    },
+    "cpu": {
+      "before_median_ns": 270278858,
+      "after_median_ns": 249322873,
+      "time_change_percent": -7.753468086652937,
+      "before_min_max_ns": [
+        267890003,
+        353398730
+      ],
+      "after_min_max_ns": [
+        246530222,
+        252713488
+      ],
+      "round_time_change_percent": [
+        -10.100424261037633,
+        -7.2451237109487305,
+        -8.26138276786711
+      ]
+    }
+  },
+  {
+    "id": "while-indexed-256-300",
+    "work": {
+      "before": {
+        "hot_fixed_units": 5479180,
+        "hot_dynamic_units": 10,
+        "hot_maintenance_units": 0,
+        "hot_blocks": 849151,
+        "hot_executed_instructions": 2779732,
+        "hot_retired_instructions": 2779732,
+        "hot_requests": 1,
+        "hot_responses": 1
+      },
+      "after": {
+        "hot_fixed_units": 5402124,
+        "hot_dynamic_units": 10,
+        "hot_maintenance_units": 0,
+        "hot_blocks": 849151,
+        "hot_executed_instructions": 2779732,
+        "hot_retired_instructions": 2779732,
+        "hot_requests": 1,
+        "hot_responses": 1
+      }
+    },
+    "wall": {
+      "before_median_ns": 42164689,
+      "after_median_ns": 41250808,
+      "time_change_percent": -2.167408373390345,
+      "before_min_max_ns": [
+        41514867,
+        44594900
+      ],
+      "after_min_max_ns": [
+        40532787,
+        69214433
+      ],
+      "round_time_change_percent": [
+        -3.0439377906234633,
+        16.57788950371808,
+        -1.8865208048877147
+      ]
+    },
+    "cpu": {
+      "before_median_ns": 42057742,
+      "after_median_ns": 41141370,
+      "time_change_percent": -2.1788426016784213,
+      "before_min_max_ns": [
+        41412952,
+        44451186
+      ],
+      "after_min_max_ns": [
+        40440224,
+        68913672
+      ],
+      "round_time_change_percent": [
+        -2.9652822847746396,
+        16.391859155094977,
+        -1.8277430319947885
+      ]
+    }
+  }
+]

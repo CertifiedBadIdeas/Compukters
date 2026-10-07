@@ -12,6 +12,8 @@ retaining their virtual declarations. Method pruning has useful size potential f
 programs, but little absolute benefit for the builtins measured here. These are static inventories and models;
 no compiler/runtime behavior or artifact bytes changed, and no speedup or achieved size reduction is claimed.
 
+Follow-up: [direct final-class calls and matched CPU results]({{ '/VM-FINAL-CALLS-2026-10-08/' | relative_url }}).
+
 Parent revision: `d2afe97e`; VM: `bac6789`. The eight compact builtin/conformance artifacts are the outputs measured
 in the [root ranges report]({{ '/VM-ROOT-RANGES-2026-10-07/' | relative_url }}). Four frozen benchmark inputs come from
 the [October 7 baseline]({{ '/VM-PERFORMANCE-2026-10-07/' | relative_url }}); their legacy debug/root encoding makes
