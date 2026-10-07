@@ -2474,10 +2474,7 @@ internal object KotlinProjectLowering {
                             }
 
                             owner != null && !inlineValueClasses.contains(owner.symbol) &&
-                                (
-                                    layout.referenceTarget.modality != Modality.FINAL ||
-                                        layout.referenceTarget.overriddenSymbols.isNotEmpty()
-                                ) -> {
+                                layout.referenceTarget.requiresVirtualDispatch() -> {
                                 Instruction.CallVirtual(destination, targetFunction, arguments)
                             }
 
@@ -6728,7 +6725,7 @@ private class FunctionCompiler(
                             Instruction.CallInterface(destination, function, arguments)
                         }
 
-                        owner != null && (target.modality != Modality.FINAL || target.overriddenSymbols.isNotEmpty()) -> {
+                        owner != null && target.requiresVirtualDispatch() -> {
                             Instruction.CallVirtual(destination, function, arguments)
                         }
 
@@ -6823,7 +6820,7 @@ private class FunctionCompiler(
                     }
 
                     owner != null && !inlineValueClasses.contains(owner.symbol) &&
-                        (target.modality != Modality.FINAL || target.overriddenSymbols.isNotEmpty()) -> {
+                        target.requiresVirtualDispatch() -> {
                         Instruction.CallVirtual(destination, FunctionRef.Local(targetId), arguments)
                     }
 
@@ -9153,6 +9150,19 @@ private fun IrExpression.constructorReferenceTarget(): IrConstructorSymbol? =
         is IrFunctionReference -> ((reflectionTarget?.owner ?: symbol.owner) as? IrConstructor)?.symbol
         else -> null
     }
+
+private fun IrSimpleFunction.requiresVirtualDispatch(): Boolean {
+    val owner = parent as? IrClass
+    // Keep inherited fake overrides on their established resolution path.
+    // A concrete declaration in a final class has one runtime implementation;
+    // its VIRTUAL flag still serves calls through parent declarations.
+    if (owner?.modality == Modality.FINAL && owner.kind != ClassKind.INTERFACE &&
+        modality != Modality.ABSTRACT && origin != IrDeclarationOrigin.FAKE_OVERRIDE
+    ) {
+        return false
+    }
+    return modality != Modality.FINAL || overriddenSymbols.isNotEmpty()
+}
 
 private fun IrSimpleFunction.isDirectFieldAccessor(): Boolean =
     origin == IrDeclarationOrigin.DEFAULT_PROPERTY_ACCESSOR && modality == Modality.FINAL && overriddenSymbols.isEmpty()

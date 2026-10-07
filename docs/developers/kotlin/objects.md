@@ -60,6 +60,10 @@ remain outside this support claim.
 
 Supported Guest classes may declare ordinary non-suspending methods, override class methods, and implement
 abstract interface methods. Calls through class and interface references select the runtime implementation.
+A concrete method declared in a final class uses a direct call when the target is statically known, including
+bound and unbound method references. Its virtual declaration remains available to calls through parent classes
+and interfaces. Inherited fake overrides retain their existing dispatch path. Nullable receiver checks and
+exceptions from reading an uninitialized non-null field still precede method execution.
 Generic or suspending methods, member extensions remain unsupported. Interface methods may have supported
 non-suspending bodies; an inherited default uses the most specific interface declaration unless a class
 overrides it. An override may call a concrete interface body with `super<Interface>`, including one inherited
