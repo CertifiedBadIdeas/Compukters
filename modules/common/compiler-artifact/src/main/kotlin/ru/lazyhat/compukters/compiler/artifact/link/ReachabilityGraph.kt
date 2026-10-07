@@ -29,7 +29,6 @@ import ru.lazyhat.compukters.compiler.artifact.model.NominalType
 import ru.lazyhat.compukters.compiler.artifact.model.SymbolKind
 import ru.lazyhat.compukters.compiler.artifact.model.TypeRef
 import ru.lazyhat.compukters.compiler.artifact.model.ValueType
-import ru.lazyhat.compukters.compiler.artifact.write.ArtifactWriter
 import java.util.ArrayDeque
 
 internal data class ModuleReachability(
@@ -58,6 +57,7 @@ internal class ReachabilityGraph(
         List(artifact.modules.size) {
             artifact.capabilities.indices.associateWith { index -> index }
         },
+    hashes: ModuleSemanticHashes = ModuleSemanticHashes(),
 ) {
     private sealed interface Node {
         val module: Int
@@ -108,7 +108,7 @@ internal class ReachabilityGraph(
     private val capabilities = sortedSetOf<Int>()
     private val queue = ArrayDeque<Node>()
     private val importTargets = mutableMapOf<Pair<Int, Int>, Int>()
-    private val moduleHashes = artifact.modules.map(ArtifactWriter::moduleSemanticHash)
+    private val moduleHashes = artifact.modules.map { hashes[it] }
 
     fun analyze(preserveLibraryExports: Boolean = false): ReachabilityResult {
         require(

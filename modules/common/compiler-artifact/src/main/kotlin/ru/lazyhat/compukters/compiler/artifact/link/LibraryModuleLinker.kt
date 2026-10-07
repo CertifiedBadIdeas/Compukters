@@ -85,12 +85,14 @@ object LibraryModuleLinker {
         specializationNames: Set<String> = emptySet(),
         inferMinimumRuntimeAbi: Boolean = false,
     ): Artifact {
+        val hashes = ModuleSemanticHashes()
         val canonical =
             LibrarySpecializations.reuse(
                 application,
                 libraryArtifacts,
                 specializationNames,
                 definitionModule = if (preserveLibraryExports) application.modules.indexOfFirst { it.kind == ModuleKind.LIBRARY } else 0,
+                hashes = hashes,
             )
         val applicationModule = canonical.modules.single { it.kind == ModuleKind.APPLICATION }
         val applicationCapabilities =
@@ -99,7 +101,7 @@ object LibraryModuleLinker {
                 .withIndex()
                 .associate { (index, identity) -> identity to index }
         require(applicationCapabilities.size == application.capabilities.size) { "application contains duplicate capability descriptors" }
-        val seen = canonical.modules.mapTo(mutableSetOf()) { ArtifactWriter.moduleSemanticHash(it).hex() }
+        val seen = canonical.modules.mapTo(mutableSetOf()) { hashes[it].hex() }
         val libraries = linkedMapOf<String, LibraryInput>()
         libraryArtifacts.forEach { artifact ->
             val descriptorModule = artifact.modules.single { it.kind == ModuleKind.APPLICATION }
@@ -110,11 +112,11 @@ object LibraryModuleLinker {
                         applicationCapabilities[identity]?.let { applicationId -> index to applicationId }
                     }.toMap()
             artifact.modules.filter { it.kind == ModuleKind.LIBRARY }.forEach { module ->
-                val hash = ArtifactWriter.moduleSemanticHash(module).hex()
+                val hash = hashes[module].hex()
                 if (seen.add(hash)) libraries[hash] = LibraryInput(module, capabilityIds)
             }
         }
-        return linkInputs(canonical, libraries, preserveLibraryExports, inferMinimumRuntimeAbi)
+        return linkInputs(canonical, libraries, preserveLibraryExports, inferMinimumRuntimeAbi, hashes)
     }
 
     private fun linkInputs(
@@ -122,6 +124,7 @@ object LibraryModuleLinker {
         libraries: Map<String, LibraryInput>,
         preserveLibraryExports: Boolean = false,
         inferMinimumRuntimeAbi: Boolean = false,
+        hashes: ModuleSemanticHashes = ModuleSemanticHashes(),
     ): Artifact {
         require(application.modules.count { it.kind == ModuleKind.APPLICATION } == 1) {
             "link input must contain exactly one application module"
@@ -132,7 +135,7 @@ object LibraryModuleLinker {
                 .sortedWith(
                     compareBy<Map.Entry<String, LibraryInput>>(
                         { moduleName(it.value.module) },
-                        { ArtifactWriter.moduleSemanticHash(it.value.module).hex() },
+                        { hashes[it.value.module].hex() },
                     ),
                 ).map(Map.Entry<String, LibraryInput>::value)
         val combined = application.copy(modules = application.modules + external.map(LibraryInput::module))
@@ -142,13 +145,13 @@ object LibraryModuleLinker {
             } + external.map(LibraryInput::capabilityIds)
         require(
             combined.modules
-                .map(ArtifactWriter::moduleSemanticHash)
+                .map { hashes[it] }
                 .distinctBy(ByteArray::hex)
                 .size == combined.modules.size,
         ) {
             "link input contains duplicate module semantic identities"
         }
-        val reachability = ReachabilityGraph(combined, capabilityIds).analyze(preserveLibraryExports)
+        val reachability = ReachabilityGraph(combined, capabilityIds, hashes).analyze(preserveLibraryExports)
         val selected =
             combined.modules.indices.filter { index ->
                 val module = combined.modules[index]
@@ -167,7 +170,7 @@ object LibraryModuleLinker {
                         compareBy(
                             { if (preserveLibraryExports && it == 1) 0 else 1 },
                             { moduleName(combined.modules[it]) },
-                            { ArtifactWriter.moduleSemanticHash(combined.modules[it]).hex() },
+                            { hashes[combined.modules[it]].hex() },
                         ),
                     )
         val moduleIds = ordered.withIndex().associate { (new, old) -> old to new }
@@ -213,7 +216,7 @@ object LibraryModuleLinker {
                 relocation.imports.oldIndices.mapIndexed { newIndex, oldImport ->
                     val target =
                         requireNotNull(reachability.importTargets[old to oldImport]) { "reachable import $old:$oldImport has no target" }
-                    source.imports[newIndex].copy(targetModuleHash = ArtifactWriter.moduleSemanticHash(complete(target)))
+                    source.imports[newIndex].copy(targetModuleHash = hashes[complete(target)])
                 }
             active.remove(old)
             return source.copy(imports = imports).also { completed[old] = it }
