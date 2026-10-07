@@ -120,6 +120,7 @@ object ProjectSnapshotLoader {
         directory.forEach { entry ->
             val name = entry.fileName
             validateFilename(name)
+            if (name.toString().equals(".git", ignoreCase = true)) return@forEach
             val relative = relativeDirectory.resolve(name)
             val attrs = attributes(directory, name)
             when {

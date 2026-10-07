@@ -71,6 +71,9 @@ import ru.lazyhat.compukters.ide.client.workspace.IdeSaveResult
 import ru.lazyhat.compukters.ide.client.workspace.IdeWorkspace
 import ru.lazyhat.compukters.ide.client.workspace.ProjectFileOpenResult
 import ru.lazyhat.compukters.ide.editor.EditorRange
+import ru.lazyhat.compukters.ide.git.GitOperation
+import ru.lazyhat.compukters.ide.git.GitResult
+import ru.lazyhat.compukters.ide.git.GitStatus
 import ru.lazyhat.compukters.ide.project.ProjectCatalog
 import ru.lazyhat.compukters.ide.project.ProjectDescriptor
 import ru.lazyhat.compukters.ide.project.ProjectHandle
@@ -94,6 +97,109 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class IdeClientControllerTest {
+    @Test
+    fun `failed Git operation refreshes actual status without retrying a failed status forever`() {
+        val fixture = ControllerFixture(preferences = preferences("demo", "src/main.kt"))
+        fixture.startAndTick()
+        fixture.controller.dispatch(IdeCommand.Git(GitOperation.Pull))
+        fixture.workspace.failGit("Branches diverged")
+        fixture.controller.tick()
+        assertEquals(listOf(GitOperation.Pull, GitOperation.Status), fixture.workspace.gitRequests.map { it.second })
+        fixture.workspace.failGit("Repository unavailable")
+        fixture.controller.tick()
+        assertEquals(2, fixture.workspace.gitRequests.size)
+        assertEquals("Repository unavailable", ((fixture.controller.viewState().page as IdePageState.Workspace).value.status?.message))
+        fixture.controller.close()
+    }
+
+    @Test
+    fun `Git waits for dirty buffers and blocks edits while the operation owns the working tree`() {
+        val fixture = ControllerFixture(preferences = preferences("demo", "src/main.kt"))
+        fixture.startAndTick()
+        fixture.controller.dispatch(IdeCommand.Edit(IdeEditorInput.Type("x")))
+        fixture.controller.dispatch(IdeCommand.GitVisible(true))
+        assertEquals(0, fixture.workspace.gitRequests.size)
+        assertEquals(1, fixture.workspace.saveRequests.size)
+        fixture.workspace.completeSave()
+        fixture.controller.tick()
+        assertEquals(listOf(GitOperation.Status), fixture.workspace.gitRequests.map { it.second })
+        val text = fixture.textEditor().visibleLines
+        fixture.controller.dispatch(IdeCommand.Edit(IdeEditorInput.Type("should-not-enter")))
+        assertEquals(text, fixture.textEditor().visibleLines)
+        fixture.workspace.completeGit(GitResult(GitStatus(true, branch = "main")))
+        fixture.controller.tick()
+        assertEquals(
+            "main",
+            fixture
+                .workspaceView()
+                .git.result
+                ?.status
+                ?.branch,
+        )
+    }
+
+    @Test
+    fun `late Git result from a cancelled project never appears in another project`() {
+        val fixture = ControllerFixture(preferences = preferences("demo", "src/main.kt"), additionalProject = true)
+        fixture.startAndTick()
+        fixture.controller.dispatch(IdeCommand.Git(GitOperation.History))
+        fixture.controller.dispatch(IdeCommand.OpenProject("second"))
+        fixture.controller.tick()
+        fixture.workspace.completeGit(GitResult(GitStatus(true, branch = "old-project")))
+        fixture.controller.tick()
+        assertEquals("second", fixture.workspaceView().project.displayName)
+        assertEquals(null, fixture.workspaceView().git.result)
+        assertEquals(
+            fixture.workspace.descriptor.handle,
+            fixture.workspace.gitRequests
+                .single()
+                .first,
+        )
+    }
+
+    @Test
+    fun `pull refreshes clean editor buffers and failed clone keeps the current project`() {
+        val fixture = ControllerFixture(preferences = preferences("demo", "src/main.kt"))
+        fixture.startAndTick()
+        fixture.controller.dispatch(IdeCommand.Git(GitOperation.Pull))
+        fixture.workspace.replaceMainExternally("fun main() { println(42) }")
+        fixture.workspace.completeGit(GitResult(GitStatus(true, branch = "main")))
+        repeat(4) { fixture.controller.tick() }
+        assertEquals(listOf("fun main() { println(42) }"), fixture.textEditor().visibleLines)
+        fixture.controller.dispatch(IdeCommand.CloneProject("broken", "https://example.invalid/broken.git"))
+        fixture.controller.tick()
+        assertEquals("demo", fixture.workspaceView().project.displayName)
+        assertEquals(listOf("fun main() { println(42) }"), fixture.textEditor().visibleLines)
+        fixture.controller.dispatch(IdeCommand.Edit(IdeEditorInput.Type("x")))
+        assertTrue(fixture.textEditor().dirty)
+    }
+
+    @Test
+    fun `folder rename rebases active and cached descendant tabs`() {
+        val fixture = ControllerFixture(preferences = preferences("demo", "src/main.kt"))
+        fixture.startAndTick()
+        java.nio.file.Files
+            .createDirectories(
+                fixture.workspace.descriptor.handle.canonicalPath
+                    .resolve("src/nested"),
+            )
+        val first = ProjectPath.file("src/nested/a.kt")
+        val second = ProjectPath.file("src/nested/b.kt")
+        fixture.workspace.replaceSourceExternally(first, "val a = 1")
+        fixture.workspace.replaceSourceExternally(second, "val b = 2")
+        fixture.controller.dispatch(IdeCommand.OpenFile(first))
+        fixture.controller.tick()
+        fixture.controller.dispatch(IdeCommand.OpenFile(second))
+        fixture.controller.tick()
+        fixture.controller.dispatch(IdeCommand.Rename(ProjectPath.file("src/nested"), ProjectPath.file("src/moved")))
+        fixture.controller.tick()
+        assertEquals(ProjectPath.file("src/moved/b.kt"), fixture.workspaceView().activeFile)
+        val opens = fixture.workspace.openRequests.size
+        fixture.controller.dispatch(IdeCommand.OpenFile(ProjectPath.file("src/moved/a.kt")))
+        assertEquals(listOf("val a = 1"), fixture.textEditor().visibleLines)
+        assertEquals(opens, fixture.workspace.openRequests.size)
+    }
+
     @Test
     fun `comment command edits Kotlin as one undoable document change`() {
         val fixture = ControllerFixture(preferences = preferences("demo", "src/main.kt"))
@@ -1052,7 +1158,10 @@ class IdeClientControllerTest {
         requests.publishFailure("completion exploded")
         fixture.controller.tick()
 
-        assertEquals("Analysis unavailable: completion exploded", fixture.workspaceView().status?.message)
+        assertEquals(
+            "Analysis unavailable: completion exploded",
+            ((fixture.controller.viewState().page as IdePageState.Workspace).value.status?.message),
+        )
         assertEquals(
             listOf(IdeAnalysisFailure(VirtualSourcePath.kotlin("src/main.kt"), 0, "completion exploded")),
             failures,
@@ -1394,6 +1503,27 @@ internal class ControlledWorkspace(
     private val other = ProjectPath.file("src/other.kt")
     val openResults = mutableMapOf<ProjectPath, ProjectFileOpenResult>()
     val saveRequests = mutableListOf<IdeSaveRequest>()
+    val gitRequests = mutableListOf<Pair<ProjectHandle, GitOperation>>()
+    private val pendingGitResults = ArrayDeque<CompletableFuture<GitResult>>()
+
+    override fun git(
+        project: ProjectHandle,
+        operation: GitOperation,
+        credentials: ru.lazyhat.compukters.ide.git.GitCredentials?,
+        cancellation: ru.lazyhat.compukters.ide.git.GitCancellation,
+    ): CompletableFuture<GitResult> {
+        gitRequests += project to operation
+        return CompletableFuture<GitResult>().also(pendingGitResults::addLast)
+    }
+
+    fun failGit(message: String) {
+        pendingGitResults.removeFirst().completeExceptionally(IllegalStateException(message))
+    }
+
+    fun completeGit(result: GitResult) {
+        pendingGitResults.removeFirst().complete(result)
+    }
+
     val openRequests = mutableListOf<ProjectPath>()
     var buildInputRequests = 0
     var includeAllSources = false
