@@ -21,6 +21,14 @@ This reference groups versioned representation boundaries by the version that in
 | Kotlin metadata carrier | Private format 6 | `platform-k2` |
 | IDE analysis | Protocol 15 | `ide-analysis-client` and `ide-analysis-k2` |
 
+## Guest hash collection module identities
+
+Guest hash collections introduce public Set/Map contracts in `kotlin:builtins` 1.9.0 and ordinary source
+implementations in `stdlib:core` 1.10.0. Their module content identities change; bundle format 9, module
+format 5, platform ABI 3, Runtime ABI 1.15 and native C ABI 20 remain unchanged. Programs and dependent
+platform/addon inputs must resolve the matching module identities. Hashing, generic equality, managed
+objects and specialization reuse existing instructions and representation rules.
+
 ## Native Runtime bundles
 
 Native Runtime platform bundles use manifest schema 2 and contain the FFI and JNI native libraries for one
