@@ -57,6 +57,10 @@ object ComputerBlockGameTest {
             ComputerLifecycleGameTest(testData("computer_lifecycle")),
         )
         event.registerTest(
+            Identifier.fromNamespaceAndPath(MOD_ID, "computer_hibernation"),
+            ComputerHibernationGameTest(testData("computer_hibernation")),
+        )
+        event.registerTest(
             Identifier.fromNamespaceAndPath(MOD_ID, "computer_redstone"),
             ComputerRedstoneGameTest(testData("computer_redstone")),
         )

@@ -88,3 +88,18 @@ The shared [addon versioning policy]({{ '/ADDON-DEVELOPMENT/' | relative_url }}#
 addon's API line independent of the Compukters target line. Each standalone `check` validates the remapped production
 filename, loader version and bounded Compukters dependency through `verifyAddonVersioning`. The workspace SDK and
 platform bundle are rebuilt from the same checkout through included-build dependencies.
+
+## Checkpoint ownership
+
+`ProgramAddonHost` and generated `AddonHostHandler` bindings expose bounded `checkpoint()` and
+`restoreCheckpoint(state)` methods. Capture must explicitly opt in; stateless handlers return an empty byte array.
+A stateful handler serializes logical tokens and resource descriptions, without world objects, callbacks, native
+pointers or current machine epochs. Generated bindings frame each handler through `AddonCheckpointCodec` within
+1 MiB. `ResourceCheckpointWriter`/`ResourceCheckpointReader` provide bounded scalar, byte and UTF-8 fields.
+
+Capture runs on the server owner during unload, after the computer may already have disappeared from the world's
+block-entity table. Preserve identities of previously issued resources rather than invalidating them solely because
+that owner detached. Restoration must resolve and validate the current device instance, reachability and exclusivity
+before reacquiring anything. Failed rebinding releases partial resources, keeps execution parked and retains the
+checkpoint for explicit recovery. Core process-scoped hosts recreate independent live program scopes before activation.
+The Sable observation handler is stateless; Create and Propulsion stateful hosts still need resource codecs.

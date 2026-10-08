@@ -14,7 +14,12 @@ import kotlin.test.assertNotEquals
 import kotlin.test.assertSame
 
 class PeripheralSessionTest {
-    private class Device {
+    private class Device(
+        val stamp: String =
+            java.util.UUID
+                .randomUUID()
+                .toString(),
+    ) {
         var valid = true
     }
 
@@ -24,7 +29,7 @@ class PeripheralSessionTest {
         val speed =
             PeripheralContract<Int, Device>("test:speed", "test", "speed") { identity ->
                 devices[identity.location]?.let { device ->
-                    PeripheralEndpoint(device, device) {
+                    PeripheralEndpoint(device, device, device.stamp) {
                         connected && device.valid &&
                             devices[identity.location] === device
                     }
@@ -50,7 +55,90 @@ class PeripheralSessionTest {
             maximumHandles = handles,
             maximumSnapshots = 1,
             maximumSnapshotEntries = entries,
+            encodeLocation = {
+                java.nio.ByteBuffer
+                    .allocate(4)
+                    .putInt(it)
+                    .array()
+            },
+            decodeLocation = {
+                require(it.size == 4)
+                java.nio.ByteBuffer
+                    .wrap(it)
+                    .int
+            },
         )
+    }
+
+    @Test
+    fun `checkpoint restores exact handles discovery order and token high water marks`() {
+        val world = World()
+        val original = world.session()
+        val snapshot = original.openSnapshot(world.speed.id)
+        val handle = original.snapshotGet(snapshot, 0)
+        val restored = world.session()
+        restored.restoreCheckpoint(original.checkpoint())
+        assertSame(world.devices[3], restored.endpoint(world.speed, handle))
+        assertEquals(2, restored.snapshotSize(snapshot))
+        assertEquals(handle, restored.snapshotGet(snapshot, 0))
+        restored.close(world.speed, handle)
+        assertNotEquals(handle, restored.at(world.speed.id, 0))
+        restored.closeSnapshot(snapshot)
+        assertNotEquals(snapshot, restored.openSnapshot(world.speed.id))
+    }
+
+    @Test
+    fun `capture during owner detachment retains identity but never revives an observed stale endpoint`() {
+        val world = World()
+        val session = world.session()
+        val snapshot = session.openSnapshot(world.speed.id)
+        val handle = session.snapshotGet(snapshot, 0)
+        world.connected = false
+        val saved = session.checkpoint()
+        world.connected = true
+        val restored = world.session()
+        restored.restoreCheckpoint(saved)
+        assertSame(world.devices[3], restored.endpoint(world.speed, handle))
+        world.connected = false
+        assertFailsWith<PeripheralFailure> { session.endpoint(world.speed, handle) }
+        val observedStale = session.checkpoint()
+        world.connected = true
+        val rejected = world.session()
+        rejected.restoreCheckpoint(observedStale)
+        assertFailsWith<PeripheralFailure> { rejected.snapshotGet(snapshot, 0) }
+    }
+
+    @Test
+    fun `portable identity binds a freshly loaded instance but never a replacement at its address`() {
+        val world = World()
+        val original = world.session()
+        val snapshot = original.openSnapshot(world.speed.id)
+        val handle = original.snapshotGet(snapshot, 0)
+        val bytes = original.checkpoint()
+        val loaded = Device(requireNotNull(world.devices[3]).stamp)
+        world.devices[3] = loaded
+        val restored = world.session()
+        restored.restoreCheckpoint(bytes)
+        assertSame(loaded, restored.endpoint(world.speed, handle))
+        world.devices[3] = Device()
+        val replaced = world.session()
+        replaced.restoreCheckpoint(bytes)
+        assertEquals(HostFailureKind.INPUT_OUTPUT, assertFailsWith<PeripheralFailure> { replaced.endpoint(world.speed, handle) }.kind)
+        assertFailsWith<PeripheralFailure> { replaced.snapshotGet(snapshot, 0) }
+        assertNotEquals(handle, replaced.at(world.speed.id, 0))
+    }
+
+    @Test
+    fun `truncated peripheral state is rejected before replacing live tables`() {
+        val world = World()
+        val session = world.session()
+        val handle = session.at(world.speed.id, 0)
+        val bytes = session.checkpoint()
+        for (length in bytes.indices) {
+            assertFailsWith<IllegalArgumentException> { session.restoreCheckpoint(bytes.copyOf(length)) }
+            assertSame(world.devices[3], session.endpoint(world.speed, handle))
+        }
+        assertFailsWith<IllegalArgumentException> { session.restoreCheckpoint(bytes + byteArrayOf(0)) }
     }
 
     @Test

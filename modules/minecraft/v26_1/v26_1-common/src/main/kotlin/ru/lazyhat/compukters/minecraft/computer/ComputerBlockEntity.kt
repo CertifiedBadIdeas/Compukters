@@ -80,6 +80,11 @@ open class ComputerBlockEntity internal constructor(
     )
 
     private var carrier: ComputerCarrier? = null
+    private var resumeExpected = false
+    private var powerOffReason: String? = null
+
+    internal fun peripheralResourcesAvailable(): Boolean = runtimeState.isPoweredOn() || carrier?.restoring == true
+
     private var filesystemLease: ComputerFileSystemLease? = null
     private var committedRedstoneOutput = 0
     private var sampledRedstoneInputs = IntArray(RedstoneWire.SIDE_COUNT)
@@ -102,8 +107,9 @@ open class ComputerBlockEntity internal constructor(
         carrier?.terminalFullStateAsync() ?: CompletableFuture.completedFuture(null)
 
     fun prepareTerminalAsync(): CompletableFuture<TerminalState?> {
+        if (powerOffReason != null) return CompletableFuture.completedFuture(null)
         val current = carrier ?: attachCarrier() ?: return CompletableFuture.completedFuture(null)
-        if (current.state == neverStarted()) runtimeState = current.turnOn()
+        if (current.state == neverStarted()) runtimeState = current.restore(resumeExpected)
         return current.terminalFullStateAsync()
     }
 
@@ -185,13 +191,14 @@ open class ComputerBlockEntity internal constructor(
     }
 
     internal fun serverTick() {
+        if (powerOffReason != null) return
         if (carrier == null && carrierRetryTicks > 0) {
             carrierRetryTicks--
             return
         }
         val current = carrier ?: attachCarrier() ?: return
         if (current.state == neverStarted()) {
-            runtimeState = current.turnOn()
+            runtimeState = current.restore(resumeExpected)
         }
         val serverLevel = level as? ServerLevel
         val redstoneInput =
@@ -222,10 +229,20 @@ open class ComputerBlockEntity internal constructor(
         super.setRemoved()
     }
 
+    /** Discards execution state while retaining the computer identity and /home files. */
+    fun reboot(): ProgramComputerState {
+        powerOffReason = null
+        resumeExpected = false
+        setChanged()
+        val current = carrier ?: attachCarrier() ?: return runtimeState
+        runtimeState = current.reboot()
+        return runtimeState
+    }
+
     internal fun destroyFileSystem() {
         val serverLevel = level as? ServerLevel ?: return
         val source = filesystemContextSource ?: return
-        closeCarrier()
+        closeCarrier(hibernate = false)
         source.tombstone(serverLevel, identity.id())
     }
 
@@ -238,10 +255,17 @@ open class ComputerBlockEntity internal constructor(
             payload?.getInt(REDSTONE_OUTPUT_KEY)?.orElse(0)?.let { packed ->
                 runCatching { RedstoneWire.requireOutputRegister(packed) }.getOrDefault(0)
             } ?: 0
+        resumeExpected = payload?.getBooleanOr(RESUME_EXPECTED_KEY, false) ?: false
+        powerOffReason = payload?.getStringOr(POWER_OFF_KEY, "")?.takeIf { it == "halted" || it == "shutdown" }
         sampledRedstoneInputs = IntArray(RedstoneWire.SIDE_COUNT)
         pendingInitialRedstoneInput = null
         dirtyRedstoneInputs = RedstoneWire.ALL_SIDES_MASK
-        runtimeState = neverStarted()
+        runtimeState =
+            when (powerOffReason) {
+                "halted" -> ProgramComputerState.PoweredOff(ProgramComputerStopReason.Halted(null))
+                "shutdown" -> ProgramComputerState.PoweredOff(ProgramComputerStopReason.Shutdown)
+                else -> neverStarted()
+            }
     }
 
     override fun saveAdditional(output: ValueOutput) {
@@ -249,6 +273,8 @@ open class ComputerBlockEntity internal constructor(
         val payload = output.child(ROOT_KEY)
         identity.save(payload)
         payload.putInt(REDSTONE_OUTPUT_KEY, committedRedstoneOutput)
+        payload.putBoolean(RESUME_EXPECTED_KEY, resumeExpected)
+        powerOffReason?.let { payload.putString(POWER_OFF_KEY, it) }
     }
 
     private fun createCarrier(): ComputerCarrier? {
@@ -262,7 +288,20 @@ open class ComputerBlockEntity internal constructor(
             carrierFactory.create(
                 deviceId = deviceId,
                 machineEpoch = machineId,
-                stateSink = { _, state -> runtimeState = state },
+                stateSink = { _, state ->
+                    runtimeState = state
+                    if (state.isPoweredOn()) {
+                        powerOffReason = null
+                        resumeExpected = true
+                        setChanged()
+                    } else if (state is ProgramComputerState.PoweredOff &&
+                        (state.reason is ProgramComputerStopReason.Halted || state.reason == ProgramComputerStopReason.Shutdown)
+                    ) {
+                        powerOffReason = if (state.reason == ProgramComputerStopReason.Shutdown) "shutdown" else "halted"
+                        resumeExpected = false
+                        setChanged()
+                    }
+                },
                 filesystem = filesystem,
                 redstoneHostPort = redstoneHostPort,
                 soundHostPort = soundHostPort,
@@ -290,7 +329,9 @@ open class ComputerBlockEntity internal constructor(
     }
 
     private fun scheduleCarrierRetry() {
-        carrierRetryTicks = CARRIER_RETRY_INTERVAL_TICKS - 1
+        // A moving/reloading carrier may briefly wait for its predecessor's close barrier.
+        // Retry saved execution next tick rather than adding a full second at ordinary 20 TPS.
+        carrierRetryTicks = if (resumeExpected) 0 else CARRIER_RETRY_INTERVAL_TICKS - 1
     }
 
     private fun filesystemAvailable(): Boolean =
@@ -337,23 +378,37 @@ open class ComputerBlockEntity internal constructor(
         return SoundCommitResult.Completed(admissions)
     }
 
-    private fun closeCarrier() {
-        val current = carrier
+    private fun closeCarrier(hibernate: Boolean = true) {
+        val closed = closeRuntime(carrier, hibernate)
         carrier = null
         carrierRetryTicks = 0
         terminalMachineId = null
-        val closed = current?.closeAsync() ?: CompletableFuture.completedFuture<Long?>(null)
         filesystemLease?.release(closed)?.whenComplete { _, _ -> }
         filesystemLease = null
     }
 
     private fun drainCarrier(): CompletableFuture<Long?> {
-        val current = carrier
+        val closed = closeRuntime(carrier, hibernate = true)
         carrier = null
         carrierRetryTicks = 0
         terminalMachineId = null
         filesystemLease = null
-        return current?.closeAsync() ?: CompletableFuture.completedFuture(null)
+        return closed
+    }
+
+    private fun closeRuntime(
+        current: ComputerCarrier?,
+        hibernate: Boolean,
+    ): CompletableFuture<Long?> {
+        if (current == null) return CompletableFuture.completedFuture(null)
+        return try {
+            if (hibernate) current.hibernateAsync((level as? ServerLevel)?.server?.tickCount?.toLong() ?: 0L) else current.closeAsync()
+        } catch (failure: Exception) {
+            current.closeAsync().handle { _, closing ->
+                if (closing != null) failure.addSuppressed(closing)
+                throw java.util.concurrent.CompletionException(failure)
+            }
+        }
     }
 
     private fun ProgramComputerState.isPoweredOn(): Boolean =
@@ -363,6 +418,8 @@ open class ComputerBlockEntity internal constructor(
 
     private companion object {
         const val ROOT_KEY = "compukters"
+        const val POWER_OFF_KEY = "powerOffReason"
+        const val RESUME_EXPECTED_KEY = "resumeExpected"
         const val REDSTONE_OUTPUT_KEY = "redstoneOutput"
         const val CARRIER_RETRY_INTERVAL_TICKS = 20
         const val SOUND_COOLDOWN_TICKS = 4

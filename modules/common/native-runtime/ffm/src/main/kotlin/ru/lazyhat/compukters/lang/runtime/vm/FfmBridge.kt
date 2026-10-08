@@ -44,6 +44,11 @@ internal class FfmBridge private constructor(
     private val createHandle: MethodHandle,
     private val createInStoreHandle: MethodHandle,
     private val createBootInStoreHandle: MethodHandle,
+    private val checkpointSaveHandle: MethodHandle,
+    private val checkpointRestoreHandle: MethodHandle,
+    private val checkpointDiscardHandle: MethodHandle,
+    private val checkpointHostSizeHandle: MethodHandle,
+    private val checkpointHostCopyHandle: MethodHandle,
     private val filesystemGenerationHandle: MethodHandle,
     private val resourceSnapshotHandle: MethodHandle,
     private val filesystemStatHandle: MethodHandle,
@@ -253,6 +258,97 @@ internal class FfmBridge private constructor(
                 ) as Int
             requireSuccess("boot in filesystem store", status)
             copyResult("boot in filesystem store", output, written, maximum)
+        }
+    }
+
+    override fun checkpointSave(
+        handle: Long,
+        storeHandle: Long,
+        id: ByteArray,
+        hostState: ByteArray,
+    ) {
+        requireComputerId(id)
+        Arena.ofConfined().use { callArena ->
+            requireCheckpointSuccess(
+                "checkpoint save",
+                checkpointSaveHandle.invokeExact(
+                    handle,
+                    storeHandle,
+                    callArena.nativeBytes(id),
+                    callArena.nativeBytes(hostState),
+                    hostState.size.toLong(),
+                ) as Int,
+            )
+        }
+    }
+
+    override fun checkpointRestore(
+        storeHandle: Long,
+        boot: Boolean,
+        id: ByteArray,
+        rom: ByteArray,
+        capabilitySchemas: ByteArray,
+    ): ByteArray? {
+        requireComputerId(id)
+        return Arena.ofConfined().use { callArena ->
+            val maximum = maximumCreateBytes()
+            val output = callArena.allocate(maximum.toLong())
+            val written = callArena.allocate(ValueLayout.JAVA_LONG)
+            val status =
+                checkpointRestoreHandle.invokeExact(
+                    storeHandle,
+                    if (boot) 1 else 0,
+                    callArena.nativeBytes(id),
+                    callArena.nativeBytes(rom),
+                    rom.size.toLong(),
+                    callArena.nativeBytes(capabilitySchemas),
+                    capabilitySchemas.size.toLong(),
+                    output,
+                    maximum.toLong(),
+                    written,
+                ) as Int
+            if (status == 43) return@use null
+            requireCheckpointSuccess("checkpoint restore", status)
+            copyResult("checkpoint restore", output, written, maximum)
+        }
+    }
+
+    override fun checkpointDiscard(
+        storeHandle: Long,
+        id: ByteArray,
+    ) {
+        requireComputerId(id)
+        Arena.ofConfined().use { callArena ->
+            requireCheckpointSuccess(
+                "checkpoint discard",
+                checkpointDiscardHandle.invokeExact(storeHandle, callArena.nativeBytes(id)) as Int,
+            )
+        }
+    }
+
+    override fun checkpointHostState(handle: Long): ByteArray =
+        Arena.ofConfined().use { callArena ->
+            val size = callArena.allocate(ValueLayout.JAVA_LONG)
+            requireCheckpointSuccess("checkpoint host size", checkpointHostSizeHandle.invokeExact(handle, size) as Int)
+            val length = size.get(ValueLayout.JAVA_LONG, 0)
+            require(length in 0..4L * 1024 * 1024) { "invalid checkpoint host size" }
+            val output = callArena.allocate(length.coerceAtLeast(1))
+            val written = callArena.allocate(ValueLayout.JAVA_LONG)
+            requireCheckpointSuccess("checkpoint host copy", checkpointHostCopyHandle.invokeExact(handle, output, length, written) as Int)
+            require(written.get(ValueLayout.JAVA_LONG, 0) == length) { "checkpoint host size changed during copy" }
+            output.asSlice(0, length).toArray(ValueLayout.JAVA_BYTE)
+        }
+
+    private fun requireCheckpointSuccess(
+        operation: String,
+        status: Int,
+    ) {
+        when (status) {
+            0 -> Unit
+            44 -> throw VmCheckpointException(VmCheckpointFailure.INCOMPATIBLE)
+            45 -> throw VmCheckpointException(VmCheckpointFailure.CORRUPT)
+            46 -> throw VmCheckpointException(VmCheckpointFailure.LIMIT)
+            else -> requireSuccess(operation, status)
         }
     }
 
@@ -948,6 +1044,11 @@ internal class FfmBridge private constructor(
                         downcall(FfmAbiFunction.CREATE_IN_STORE),
                     createBootInStoreHandle =
                         downcall(FfmAbiFunction.CREATE_BOOT_IN_STORE),
+                    checkpointSaveHandle = downcall(FfmAbiFunction.CHECKPOINT_SAVE),
+                    checkpointRestoreHandle = downcall(FfmAbiFunction.CHECKPOINT_RESTORE),
+                    checkpointDiscardHandle = downcall(FfmAbiFunction.CHECKPOINT_DISCARD),
+                    checkpointHostSizeHandle = downcall(FfmAbiFunction.CHECKPOINT_HOST_SIZE),
+                    checkpointHostCopyHandle = downcall(FfmAbiFunction.CHECKPOINT_HOST_COPY),
                     filesystemGenerationHandle =
                         downcall(FfmAbiFunction.FILESYSTEM_GENERATION),
                     resourceSnapshotHandle =
@@ -1008,7 +1109,7 @@ internal class FfmBridge private constructor(
                     terminalTextHandle =
                         downcall(FfmAbiFunction.TERMINAL_TEXT),
                 ).also { bridge ->
-                    if (bridge.abiVersion() != 20) throw VmBridgeException("unsupported Compukter FFM ABI")
+                    if (bridge.abiVersion() != 21) throw VmBridgeException("unsupported Compukter FFM ABI")
                 }
             } catch (error: Throwable) {
                 arena.close()

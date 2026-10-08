@@ -78,6 +78,28 @@ interface LowLevelVmBridge {
         capabilitySchemas: ByteArray,
     ): ByteArray = error("persistent VM boot is unavailable")
 
+    fun checkpointSave(
+        handle: Long,
+        storeHandle: Long,
+        id: ByteArray,
+        hostState: ByteArray,
+    ): Unit = error("checkpoint saving is unavailable")
+
+    fun checkpointRestore(
+        storeHandle: Long,
+        boot: Boolean,
+        id: ByteArray,
+        rom: ByteArray,
+        capabilitySchemas: ByteArray,
+    ): ByteArray? = error("checkpoint restoration is unavailable")
+
+    fun checkpointDiscard(
+        storeHandle: Long,
+        id: ByteArray,
+    ): Unit = error("checkpoint consumption is unavailable")
+
+    fun checkpointHostState(handle: Long): ByteArray = error("checkpoint host state is unavailable")
+
     fun filesystemGeneration(handle: Long): ByteArray = error("filesystem generation is unavailable")
 
     fun resourceSnapshot(handle: Long): ByteArray = error("resource snapshot is unavailable")

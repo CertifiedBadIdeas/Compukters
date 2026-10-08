@@ -9,7 +9,9 @@ package ru.lazyhat.compukters.impl.computer
 import net.minecraft.core.BlockPos
 import net.minecraft.core.Direction
 import net.minecraft.gametest.framework.GameTestHelper
+import net.minecraft.nbt.CompoundTag
 import net.minecraft.world.level.block.Blocks
+import net.minecraft.world.level.block.entity.BlockEntity
 import ru.lazyhat.compukters.core.device.computer.ProgramComputerState
 import ru.lazyhat.compukters.impl.registry.CompuktersRegistry
 import ru.lazyhat.compukters.lang.runtime.vm.TerminalKey
@@ -42,7 +44,10 @@ internal object TextDisplayGameTestScenario {
             checkNotNull(helper.level.getBlockEntity(helper.absolutePos(displayPosition)) as? DisplayBlockEntity) {
                 "display block entity was not registered"
             }
-        val computer = helper.compuktersComputerBlockEntity(computerPosition)
+        var computer = helper.compuktersComputerBlockEntity(computerPosition)
+        val computerId = computer.computerId()
+        var saved: CompoundTag? = null
+        var oldEpoch: Long? = null
         ComputerPeripheralNames.setName(
             helper.level,
             ComputerPeripheralIdentity("compukters-display", helper.absolutePos(displayPosition), "text"),
@@ -91,6 +96,28 @@ internal object TextDisplayGameTestScenario {
                 setup!!.getNow(null)
             }.thenWaitUntil {
                 helper.assertTrue(display.displayRows()[0].startsWith("Ready"), "Guest program did not write on display")
+            }.thenExecute {
+                oldEpoch = computer.terminalMachineId
+                saved = computer.saveWithFullMetadata(helper.level.registryAccess())
+                helper.level.removeBlockEntity(helper.absolutePos(computerPosition))
+                helper.assertTrue(computer.isRemoved, "display writer computer did not unload")
+            }.thenWaitUntil {
+                helper.assertTrue(display.displayRows()[0].isBlank(), "unloaded writer did not release its screen")
+            }.thenExecute {
+                val position = helper.absolutePos(computerPosition)
+                computer =
+                    BlockEntity.loadStatic(
+                        position,
+                        helper.level.getBlockState(position),
+                        requireNotNull(saved),
+                        helper.level.registryAccess(),
+                    ) as NeoForgeComputerBlockEntity
+                helper.level.setBlockEntity(computer)
+                helper.assertTrue(computer.computerId() == computerId, "display writer identity changed")
+            }.thenWaitUntil {
+                // The Guest writes Ready only once, then sleeps forever. A fresh shell cannot satisfy this.
+                helper.assertTrue(display.displayRows()[0].startsWith("Ready"), "hibernation did not restore display rows and lease")
+                helper.assertTrue(computer.terminalMachineId != oldEpoch, "restored display writer retained its old epoch")
             }.thenExecute {
                 helper.setBlock(junction, Blocks.AIR)
             }.thenWaitUntil {

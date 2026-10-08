@@ -40,6 +40,20 @@ class ComputerPeripheralRuntime internal constructor(
             ::discover,
             ::at,
             ::named,
+            encodeLocation = { position ->
+                java.nio.ByteBuffer
+                    .allocate(8)
+                    .putLong(position.asLong())
+                    .array()
+            },
+            decodeLocation = { bytes ->
+                require(bytes.size == 8)
+                BlockPos.of(
+                    java.nio.ByteBuffer
+                        .wrap(bytes)
+                        .long,
+                )
+            },
         )
 
     fun <T : Any> endpoint(
@@ -89,7 +103,7 @@ class ComputerPeripheralRuntime internal constructor(
             requireServerThread()
             val location = ComputerPeripheralIdentity(identity.providerId, identity.location, identity.deviceKey)
             descriptor.resolve(level, computer, location)?.let { endpoint ->
-                PeripheralEndpoint(endpoint.value, endpoint.identity) {
+                PeripheralEndpoint(endpoint.value, endpoint.identity, endpoint.persistentIdentity) {
                     endpoint.valid() && ComputerPeripheralLookup.isReachable(level, computer, location)
                 }
             }

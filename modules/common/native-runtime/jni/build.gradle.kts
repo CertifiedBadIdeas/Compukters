@@ -132,6 +132,7 @@ val nativeIntegrationTest =
         testClassesDirs = sourceSets.test.get().output.classesDirs
         classpath = sourceSets.test.get().runtimeClasspath
         filter.includeTestsMatching("ru.lazyhat.compukters.lang.runtime.integration.JniBridgeIntegrationTest")
+        filter.includeTestsMatching("ru.lazyhat.compukters.lang.runtime.integration.JniCheckpointIntegrationTest")
         filter.includeTestsMatching("ru.lazyhat.compukters.lang.runtime.vm.JniNativeEntryPointIntegrationTest")
         inputs.file(compukterJniLibrary)
         inputs.file(shellArtifact)

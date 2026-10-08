@@ -74,6 +74,120 @@ import kotlin.test.assertTrue
 
 class ProgramRuntimeHostTest {
     @Test
+    fun `capture publishes before closing and retains the session on write failure`() {
+        val request = timer(51, 20)
+        val session = ScriptedSession(listOf(VmOutcome.HostRequestBatch(listOf(request))), defaultOutcome = VmOutcome.WaitingForHostQuota)
+        val host = ProgramRuntimeHost(ProgramVmSessionFactory { session })
+        host.start(byteArrayOf(1))
+        host.serverTick(10)
+        session.checkpointError = VmBridgeException("write failed")
+        assertFailsWith<VmBridgeException> { host.hibernate(11, byteArrayOf(4)) }
+        assertEquals(0, session.closeCalls)
+        assertEquals(ProgramRuntimeState.Running, host.state)
+        session.checkpointError = null
+        assertTrue(host.hibernate(11, byteArrayOf(4)))
+        val saved = ProgramHostCheckpoint.decode(requireNotNull(session.capturedCheckpoint))
+        assertEquals(19L, saved.timers.single().remainingTicks)
+        assertEquals(request.identity, saved.timers.single().identity)
+        assertEquals(1, session.closeCalls)
+        assertEquals(ProgramRuntimeState.Closed, host.state)
+    }
+
+    @Test
+    fun `unsettled addon mutation prevents publication`() {
+        val request = VmHostRequest(1, TEST_ADDON_CAPABILITY, 1, listOf(VmValue.I32(3)))
+        val session = ScriptedSession(listOf(VmOutcome.HostRequestBatch(listOf(request))), defaultOutcome = VmOutcome.WaitingForHostQuota)
+        val host =
+            ProgramRuntimeHost(
+                ProgramVmSessionFactory { session },
+                addonCapabilitySchemas = listOf(TEST_ADDON_SCHEMA),
+                addonRequestPort = { true },
+            )
+        host.start(byteArrayOf(1))
+        host.serverTick(10)
+        assertFailsWith<IllegalStateException> { host.hibernate(10, byteArrayOf()) }
+        assertNull(session.capturedCheckpoint)
+        assertTrue(host.completeAddon(ProgramAddonCompletion(request.identity, HostResponse.IntSuccess(3))))
+        assertTrue(host.hibernate(10, byteArrayOf()))
+    }
+
+    @Test
+    fun `restoration parks execution until durable consumption and preserves timer remaining time`() {
+        val request = VmHostRequest(51, CapabilityIdentity("compukter", "timer", 1, 0), 0, listOf(VmValue.I32(20)))
+        val saved =
+            ProgramHostCheckpoint(
+                false,
+                GrantedResourceBudgetSnapshot(701, 81, false),
+                0,
+                listOf(0),
+                listOf(ProgramTimerCheckpoint(request.identity, 0, 20, 9)),
+                byteArrayOf(1, 2),
+            ).encode()
+        val restored = ScriptedSession(listOf(VmOutcome.WaitingForHostQuota), defaultOutcome = VmOutcome.WaitingForHostQuota)
+        var discarded = false
+        val host =
+            ProgramRuntimeHost(
+                object : ProgramVmSessionFactory {
+                    override fun open(artifact: ByteArray): ProgramVmSession = error("cold boot must not run")
+
+                    override fun restoreBoot() = ProgramVmRestoration(restored, saved)
+
+                    override fun discardCheckpoint() {
+                        discarded = true
+                    }
+                },
+            )
+        val checkpoint = requireNotNull(host.prepareRestoreBoot(1000))
+        assertEquals(listOf(0L), checkpoint.programScopes)
+        assertEquals(ProgramRuntimeState.Idle, host.serverTick(1000))
+        assertTrue(restored.advances.isEmpty())
+        assertFalse(discarded)
+        host.completeRestoration(1005)
+        assertTrue(discarded)
+        val resources =
+            assertIs<ru.lazyhat.compukters.core.device.runtime.program.ProgramResourceSnapshot.Available>(host.resourceSnapshot())
+        assertEquals(701L, resources.grantedGuestUnits)
+        host.serverTick(1013)
+        assertTrue(restored.responses.isEmpty())
+        host.serverTick(1014)
+        assertEquals(listOf(response(request.taskId, request.id, HostResponse.UnitSuccess)), restored.responses)
+    }
+
+    @Test
+    fun `failed consumption leaves restored execution parked and allows retry`() {
+        val saved =
+            ProgramHostCheckpoint(
+                false,
+                GrantedResourceBudgetSnapshot(0, 0, false),
+                0,
+                listOf(0),
+                emptyList(),
+                byteArrayOf(),
+            ).encode()
+        val restored = ScriptedSession(emptyList())
+        var fail = true
+        val host =
+            ProgramRuntimeHost(
+                object : ProgramVmSessionFactory {
+                    override fun open(artifact: ByteArray): ProgramVmSession = error("cold boot must not run")
+
+                    override fun restoreBoot() = ProgramVmRestoration(restored, saved)
+
+                    override fun discardCheckpoint() {
+                        if (fail) throw VmBridgeException("disk failure")
+                    }
+                },
+            )
+        host.prepareRestoreBoot(1000)
+        assertFailsWith<VmBridgeException> { host.completeRestoration(1000) }
+        assertEquals(ProgramRuntimeState.Idle, host.serverTick(1000))
+        assertTrue(restored.advances.isEmpty())
+        fail = false
+        host.completeRestoration(1001)
+        assertEquals(ProgramRuntimeState.Running, host.state)
+    }
+
+    @Test
     fun `repeated parked addon batch is charged once and yields without burning advance slots`() {
         val request = VmHostRequest(1, TEST_ADDON_CAPABILITY, 1, listOf(VmValue.I32(3)))
         val session =
@@ -816,7 +930,7 @@ class ProgramRuntimeHostTest {
         assertEquals(listOf("cancel", "close"), events)
         assertEquals(oldAddress.computerId, newAddress.computerId)
         assertEquals(oldAddress.token, newAddress.token)
-        assertEquals(oldAddress.vmEpoch + 1, newAddress.vmEpoch)
+        assertTrue(newAddress.vmEpoch > oldAddress.vmEpoch)
     }
 
     @Test
@@ -1304,6 +1418,15 @@ class ProgramRuntimeHostTest {
         val retirementLimits = mutableListOf<Int>()
         val responses = mutableListOf<Pair<VmHostRequestIdentity, HostResponse>>()
         var closeCalls = 0
+        var checkpointError: VmBridgeException? = null
+        var capturedCheckpoint: ByteArray? = null
+
+        override fun checkpoint(hostState: ByteArray) {
+            checkpointError?.let { throw it }
+            check(closeCalls == 0)
+            capturedCheckpoint = hostState.copyOf()
+        }
+
         var terminalCommits = 0
         val terminalKeys = mutableListOf<Triple<TerminalKey, TerminalKeyAction, Set<TerminalModifier>>>()
         val terminalTexts = mutableListOf<String>()

@@ -84,7 +84,9 @@ platform; exact bundle versions and hashes still govern compiled artifacts.
 
 A handle refers to the device you acquired, not whichever block later occupies its position. Removing, replacing,
 unloading or disconnecting a device can invalidate it. Reconnect and acquire a new handle instead of assuming an old
-one will retarget. An expired typed handle fails with `compukter.io.IOException`; it never revives after reconnection. Control-release behavior depends on the device API.
+one will retarget. An expired typed handle fails with `compukter.io.IOException`; it never revives after reconnection. Control-release behavior depends on the device API. Hibernation can rebind a retained handle when the
+provider supplies a persistent instance identity and the same device is reachable on wake. Previously observed
+stale handles remain stale; an address alone never identifies a replacement device.
 
 | Device | Guide |
 | --- | --- |

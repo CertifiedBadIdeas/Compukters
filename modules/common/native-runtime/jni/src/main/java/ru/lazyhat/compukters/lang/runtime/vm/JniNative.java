@@ -41,6 +41,16 @@ final class JniNative {
 
     static native int storeRecover(long handle, byte[] id);
 
+    static native int checkpointSave(long handle, long storeHandle, byte[] id, byte[] hostState);
+
+    static native int checkpointRestore(long storeHandle, int boot, byte[] id, byte[] rom, byte[] schemas, byte[] output, long[] written);
+
+    static native int checkpointDiscard(long storeHandle, byte[] id);
+
+    static native int checkpointHostSize(long handle, long[] size);
+
+    static native int checkpointHostCopy(long handle, byte[] output, long[] written);
+
     static native int storeClose(long handle);
 
     static native int create(

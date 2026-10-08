@@ -72,6 +72,10 @@ class PeripheralProgramHost(
         return ProgramAddonDispatch.Completed(response)
     }
 
+    override fun checkpoint(): ByteArray = session.checkpoint()
+
+    override fun restoreCheckpoint(state: ByteArray) = session.restoreCheckpoint(state)
+
     override fun reset() = session.reset()
 
     private fun count(

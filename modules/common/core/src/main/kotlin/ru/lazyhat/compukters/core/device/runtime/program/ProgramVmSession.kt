@@ -117,6 +117,8 @@ internal interface ProgramVmSession : AutoCloseable {
     fun submitRedstoneInput(packet: Int)
 
     fun confirmRedstoneOutput(packed: Int)
+
+    fun checkpoint(hostState: ByteArray): Unit = error("checkpoint capture is unavailable")
 }
 
 interface ProgramDeploymentCandidate : AutoCloseable
@@ -131,7 +133,16 @@ internal fun interface ProgramVmSessionFactory {
     fun open(artifact: ByteArray): ProgramVmSession
 
     fun boot(): ProgramVmSession = throw VmBridgeException("ROM boot is not configured")
+
+    fun restoreBoot(): ProgramVmRestoration? = null
+
+    fun discardCheckpoint() = Unit
 }
+
+internal data class ProgramVmRestoration(
+    val session: ProgramVmSession,
+    val hostState: ByteArray,
+)
 
 internal class ProgramFileSystemLaunchContext(
     val store: WorldFileSystemStore,
@@ -145,6 +156,16 @@ internal class ProgramFileSystemLaunchContext(
         capabilitySchemas: List<HostCapabilitySchema>,
     ): VmSession = VmSession.openInStore(artifact, store, computerId, romImage.copyOf(), capabilitySchemas)
 
+    fun restoreBoot(capabilitySchemas: List<HostCapabilitySchema>) =
+        VmSession.restoreInStore(store, computerId, romImage.copyOf(), capabilitySchemas, boot = true)
+
+    fun checkpoint(
+        session: VmSession,
+        hostState: ByteArray,
+    ) = session.checkpoint(store, computerId, hostState)
+
+    fun discardCheckpoint() = store.discardCheckpoint(computerId)
+
     fun boot(capabilitySchemas: List<HostCapabilitySchema>): VmSession =
         VmSession.bootInStore(store, computerId, romImage.copyOf(), capabilitySchemas)
 }
@@ -156,17 +177,30 @@ internal class NativeProgramVmSessionFactory(
     private val capabilitySchemas = capabilitySchemas.toList()
 
     override fun open(artifact: ByteArray): ProgramVmSession =
-        NativeProgramVmSession(filesystem?.open(artifact, capabilitySchemas) ?: VmSession.open(artifact, capabilitySchemas))
+        NativeProgramVmSession(filesystem?.open(artifact, capabilitySchemas) ?: VmSession.open(artifact, capabilitySchemas), filesystem)
 
     override fun boot(): ProgramVmSession {
         val context = filesystem ?: throw VmBridgeException("ROM boot requires a persistent filesystem")
-        return NativeProgramVmSession(context.boot(capabilitySchemas))
+        return NativeProgramVmSession(context.boot(capabilitySchemas), context)
+    }
+
+    override fun restoreBoot(): ProgramVmRestoration? {
+        val context = filesystem ?: return null
+        val restored = context.restoreBoot(capabilitySchemas) ?: return null
+        return ProgramVmRestoration(NativeProgramVmSession(restored.session, context), restored.hostStateBytes())
+    }
+
+    override fun discardCheckpoint() {
+        filesystem?.discardCheckpoint()
     }
 }
 
 private class NativeProgramVmSession(
     private val session: VmSession,
+    private val filesystem: ProgramFileSystemLaunchContext?,
 ) : ProgramVmSession {
+    override fun checkpoint(hostState: ByteArray) = requireNotNull(filesystem).checkpoint(session, hostState)
+
     override fun advance(
         guestBudget: Int,
         maintenanceBudget: Int,

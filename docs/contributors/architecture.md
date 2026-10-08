@@ -62,7 +62,10 @@ See [runtime ownership and scheduling](architecture/runtime.md) for admission, c
 
 Minecraft persists a stable `ComputerId`; Rust persists `/home` beneath the world filesystem store. `/rom` is immutable packaged content. Guest paths and bytes do not enter block-entity NBT or a JVM mirror.
 
-Currently chunk unload closes the machine and preserves its filesystem. Guest heap, stacks, tasks and terminal state do **not** survive machine recreation or a server restart. Hibernation/resume is planned work, not an implemented persistence guarantee. A filesystem identity is not a durable Guest object identity.
+Running computers hibernate on carrier unload and orderly server shutdown, preserving Guest heap, stacks, tasks,
+terminal state and host resource descriptions. Restore validates the saved execution and rebinds supported resources
+before continuing. Corrupt, incompatible or unsupported checkpoints remain blocked; explicit reboot starts fresh
+execution while retaining `/home`. Live object identities survive within that saved execution, not as general durable IDs.
 
 Close barriers drain accepted work before flushing the final generation. An identity remains unavailable until persistence completes, preventing a rapidly reloaded block from opening a second live machine. Player destruction additionally creates a recoverable tombstone. See [filesystem ownership and shutdown](architecture/persistence.md).
 

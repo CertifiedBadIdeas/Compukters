@@ -43,6 +43,8 @@ internal object SableGuestIntegration {
 private class SableHost(
     private val computer: CompuktersComputerContext,
 ) : SableCapabilityHandler {
+    override fun checkpoint(): ByteArray = byteArrayOf()
+
     override fun snapshot(): AddonCallResult<GuestSnapshot> {
         val snapshot =
             SablePhysicsSnapshots.read(computer)

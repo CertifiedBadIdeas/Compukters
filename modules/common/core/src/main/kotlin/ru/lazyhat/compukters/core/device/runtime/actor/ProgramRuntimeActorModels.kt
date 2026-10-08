@@ -73,6 +73,22 @@ sealed interface ProgramRuntimeActorCommand : ProgramRuntimeActorMessage {
         internal fun artifactBytes(): ByteArray = artifact.copyOf()
     }
 
+    data class RestoreOrBoot(
+        override val requestId: ProgramRuntimeRequestId,
+        val worldTick: Long,
+        val required: Boolean = false,
+    ) : ProgramRuntimeActorCommand
+
+    data class CompleteRestoration(
+        override val requestId: ProgramRuntimeRequestId,
+        val worldTick: Long,
+    ) : ProgramRuntimeActorCommand
+
+    data class AbortRestoration(
+        override val requestId: ProgramRuntimeRequestId,
+        val detail: String,
+    ) : ProgramRuntimeActorCommand
+
     data class StartBoot(
         override val requestId: ProgramRuntimeRequestId,
     ) : ProgramRuntimeActorCommand
@@ -258,6 +274,17 @@ sealed interface ProgramRuntimeActorValue {
     data class Start(
         val result: ProgramStartResult,
     ) : ProgramRuntimeActorValue
+
+    class RestorationPrepared(
+        programScopes: List<Long>,
+        addonState: ByteArray,
+        val confirmedRedstoneOutput: Int,
+    ) : ProgramRuntimeActorValue {
+        val programScopes = programScopes.toList()
+        private val addonState = addonState.copyOf()
+
+        fun addonStateBytes(): ByteArray = addonState.copyOf()
+    }
 
     data class Accepted(
         val accepted: Boolean,
