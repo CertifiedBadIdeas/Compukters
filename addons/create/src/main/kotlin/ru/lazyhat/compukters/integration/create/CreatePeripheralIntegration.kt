@@ -244,6 +244,7 @@ internal class CreateHostState(
     private var accessFailure: CompuktersPeripheralAccessException? = null
     private var nextHandle = 1
     private var nextSnapshotHandle = 1
+    private var resourcesUsed = false
 
     override fun acquireSpeedometer(argument0: Int): AddonCallResult<Int> = acquire(argument0, PeripheralKind.SPEEDOMETER)
 
@@ -397,7 +398,18 @@ internal class CreateHostState(
             }
         }
 
+    override fun checkpoint(): ByteArray {
+        check(!resourcesUsed && handles.isEmpty() && snapshots.isEmpty()) { "Active Create resources do not support hibernation" }
+        return byteArrayOf()
+    }
+
+    override fun restoreCheckpoint(state: ByteArray) {
+        require(state.isEmpty()) { "Create resources do not support restoration" }
+        reset()
+    }
+
     override fun reset() {
+        resourcesUsed = false
         handles.clear()
         handlesByEndpoint.clear()
         snapshots.clear()
@@ -438,7 +450,12 @@ internal class CreateHostState(
     private inline fun acquireShared(acquire: () -> Int): AddonCallResult<Int> =
         try {
             val handle = acquire()
-            if (handle == 0) endpointFailure() else addonCompleted(handle)
+            if (handle == 0) {
+                endpointFailure()
+            } else {
+                resourcesUsed = true
+                addonCompleted(handle)
+            }
         } catch (failure: CompuktersPeripheralAccessException) {
             addonFailed(failure.kind, failure.message)
         }
@@ -469,6 +486,7 @@ internal class CreateHostState(
 
     private inline fun <reified T : CreateDeviceEndpoint> endpoint(handle: Int): T? {
         accessFailure = null
+        resourcesUsed = true
         val resolve = resolveHandle ?: return handles[handle] as? T
         val kind =
             when (T::class) {
