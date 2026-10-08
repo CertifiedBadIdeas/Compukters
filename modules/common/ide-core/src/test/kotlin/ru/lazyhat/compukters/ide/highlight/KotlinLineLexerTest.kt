@@ -26,6 +26,20 @@ import kotlin.test.assertTrue
 
 class KotlinLineLexerTest {
     @Test
+    fun `highlights value class modifier while preserving identifier and literal boundaries`() {
+        val source = "value class Id(val raw: Int); values; `value`; \"value\"; /* value */ // value"
+        val tokens = scan(source).spans.map { source.substring(it.startUtf16, it.endUtf16) to it.kind }
+
+        assertEquals("value" to KotlinLexicalKind.Keyword, tokens.first())
+        assertTrue("class" to KotlinLexicalKind.Keyword in tokens)
+        assertTrue("values" to KotlinLexicalKind.Identifier in tokens)
+        assertTrue("`value`" to KotlinLexicalKind.Identifier in tokens)
+        assertTrue("\"value\"" to KotlinLexicalKind.String in tokens)
+        assertTrue("/* value */" to KotlinLexicalKind.BlockComment in tokens)
+        assertTrue("// value" to KotlinLexicalKind.LineComment in tokens)
+    }
+
+    @Test
     fun `numeric ranges member calls annotations and Unicode escapes have distinct spans`() {
         val source = "@file:pkg.Annotation val x = 1..10; 0xFFuL; 0b101L; 1.5e-2f; 1.toString(); foo (x); \"\\u0041\""
         val tokens = scan(source).spans.map { source.substring(it.startUtf16, it.endUtf16) to it.kind }
@@ -39,7 +53,7 @@ class KotlinLineLexerTest {
 
     @Test
     fun `classifies the immediate lexical surface with non-overlapping spans`() {
-        val source = "@Ann fun Main(value: Int) = 1.5e+2f + \"a\\nb\" + 'x' // tail"
+        val source = "@Ann fun Main(argument: Int) = 1.5e+2f + \"a\\nb\" + 'x' // tail"
         val line = scan(source)
 
         assertEquals(

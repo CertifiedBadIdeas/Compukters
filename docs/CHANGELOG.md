@@ -160,8 +160,8 @@ listed in [Kotlin support](developers/kotlin-support.md) and [standard library s
 - File switches preserve caret, viewport and undo history in a bounded document cache. The editor highlights the
   current line and uses contrasting panels, draggable dividers and popup shadows; automatic IDE scaling leaves
   more room for code without changing terminal scaling.
-- Kotlin lexical highlighting colors function calls, qualified/use-site annotations and Unicode escapes;
-  numeric literals remain separate from range operators and member access while semantic colors take precedence.
+- Kotlin lexical highlighting colors the `value` modifier, function calls, qualified/use-site annotations and Unicode
+  escapes; numeric literals remain separate from range operators and member access while semantic colors take precedence.
 - `Alt+F7` opens semantic Find Usages with navigable context. Clickable problems, gutter markers, status counts
   and `F2` / `Shift+F2` navigation use matching source text and reject stale locations. Method declarations show
   non-zero project usage counts that distinguish overloads and remain stable during unrelated edits.
