@@ -46,6 +46,7 @@ internal class ProgramActorHibernation(
     val worldTick: Long,
     addonState: ByteArray,
     effects: List<ProgramRuntimeActorEffect>,
+    val saveExecution: Boolean = true,
 ) {
     val addonState = addonState.copyOf()
     val effects = effects.toList()

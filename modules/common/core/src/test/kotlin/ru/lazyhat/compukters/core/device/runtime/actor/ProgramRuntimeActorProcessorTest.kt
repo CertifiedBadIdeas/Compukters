@@ -62,6 +62,8 @@ import ru.lazyhat.compukters.lang.runtime.vm.TerminalUpdate
 import ru.lazyhat.compukters.lang.runtime.vm.VmAdvanceResult
 import ru.lazyhat.compukters.lang.runtime.vm.VmCanonicalLineException
 import ru.lazyhat.compukters.lang.runtime.vm.VmCanonicalLineFailure
+import ru.lazyhat.compukters.lang.runtime.vm.VmCheckpointException
+import ru.lazyhat.compukters.lang.runtime.vm.VmCheckpointFailure
 import ru.lazyhat.compukters.lang.runtime.vm.VmExecutableRevision
 import ru.lazyhat.compukters.lang.runtime.vm.VmHostRequest
 import ru.lazyhat.compukters.lang.runtime.vm.VmHostRequestIdentity
@@ -150,8 +152,9 @@ class ProgramRuntimeActorProcessorTest {
     }
 
     @Test
-    fun `failed resource rebinding releases partial leases and retains the checkpoint without guest progress`() {
+    fun `failed resource rebinding releases partial leases and boots a usable terminal`() {
         val session = RecordingSession()
+        val fresh = RecordingSession()
         val saved =
             ProgramHostCheckpoint(
                 false,
@@ -166,7 +169,9 @@ class ProgramRuntimeActorProcessorTest {
         val host =
             ProgramRuntimeHost(
                 object : ProgramVmSessionFactory {
-                    override fun open(artifact: ByteArray): ProgramVmSession = error("cold boot")
+                    override fun open(artifact: ByteArray): ProgramVmSession = fresh
+
+                    override fun boot(): ProgramVmSession = fresh
 
                     override fun restoreBoot() = ProgramVmRestoration(session, saved)
 
@@ -205,16 +210,18 @@ class ProgramRuntimeActorProcessorTest {
             assertFalse(retained)
             awaitQueuedResult(service)
             service.pump(1)
-            assertIs<ProgramStartResult.Rejected>(assertIs<ProgramRuntimeActorValue.Start>(restored.getNow(null).value).result)
-            assertIs<ProgramRuntimeState.Failed>(carrier.state)
-            assertFalse(consumed)
+            assertEquals(ProgramStartResult.Started, assertIs<ProgramRuntimeActorValue.Start>(restored.getNow(null).value).result)
+            assertEquals(ProgramRuntimeState.Running, carrier.state)
+            assertTrue(consumed)
             assertTrue(session.calls.none { it.startsWith("advance:") })
+            assertEquals(1, session.closeCalls)
+            assertEquals(fresh.terminal, host.terminalFullState())
             carrier.closeAsync().get(TIMEOUT_SECONDS, TimeUnit.SECONDS)
         }
     }
 
     @Test
-    fun `required missing checkpoint rejects startup without calling boot`() {
+    fun `required missing checkpoint cold boots with an accessible terminal`() {
         var booted = false
         val host =
             ProgramRuntimeHost(
@@ -229,10 +236,246 @@ class ProgramRuntimeActorProcessorTest {
             )
         ProgramRuntimeActorProcessor(host).use { processor ->
             val reply = processor.process(ProgramRuntimeActorCommand.RestoreOrBoot(request(1), 0, required = true))
-            assertIs<ProgramStartResult.Rejected>(assertIs<ProgramRuntimeActorValue.Start>(reply.value).result)
-            assertIs<ProgramRuntimeState.Failed>(reply.state)
-            assertFalse(booted)
+            assertEquals(ProgramStartResult.Started, assertIs<ProgramRuntimeActorValue.Start>(reply.value).result)
+            assertEquals(ProgramRuntimeState.Running, reply.state)
+            assertTrue(booted)
+            assertTrue(host.terminalFullState() != null)
         }
+    }
+
+    @Test
+    fun `rejected checkpoints are discarded before cold boot without touching home files`() {
+        VmCheckpointFailure.entries.forEach { failure ->
+            val session = RecordingSession()
+            var discarded = false
+            val host =
+                ProgramRuntimeHost(
+                    object : ProgramVmSessionFactory {
+                        override fun open(artifact: ByteArray): ProgramVmSession = session
+
+                        override fun boot(): ProgramVmSession {
+                            assertTrue(discarded)
+                            return session
+                        }
+
+                        override fun restoreBoot(): ProgramVmRestoration? = throw VmCheckpointException(failure)
+
+                        override fun discardCheckpoint() {
+                            discarded = true
+                        }
+                    },
+                )
+            ProgramRuntimeActorProcessor(host).use { processor ->
+                val reply = processor.process(ProgramRuntimeActorCommand.RestoreOrBoot(request(1), 0, required = true))
+                assertEquals(ProgramStartResult.Started, assertIs<ProgramRuntimeActorValue.Start>(reply.value).result)
+                assertEquals(session.terminal, host.terminalFullState())
+                assertContentEquals(byteArrayOf(9, 8), host.fileRead(VmVirtualPath.of("/home/demo"), 0, 32, 7)?.bytes)
+            }
+        }
+    }
+
+    @Test
+    fun `unsupported addon capture still closes native execution and discards stale checkpoints`() {
+        val session = RecordingSession()
+        var discarded = false
+        var released = false
+        val host =
+            ProgramRuntimeHost(
+                object : ProgramVmSessionFactory {
+                    override fun open(artifact: ByteArray): ProgramVmSession = session
+
+                    override fun boot(): ProgramVmSession = session
+
+                    override fun discardCheckpoint() {
+                        discarded = true
+                    }
+                },
+            )
+        val addon =
+            object : ProgramAddonHost {
+                override val capabilitySchemas = emptyList<HostCapabilitySchema>()
+
+                override fun dispatch(request: ProgramAddonRequest): ProgramAddonDispatch = error("unexpected dispatch")
+
+                override fun checkpoint(): ByteArray = throw UnsupportedOperationException("capture unsupported")
+
+                override fun reset() {
+                    released = true
+                }
+            }
+        host.startBoot()
+        val endpoint = VmActorEndpoint(ComputerId.fromLongs(179, 180), 1)
+        ProgramRuntimeActorService(schedulerConfig()).use { service ->
+            val carrier =
+                ActorProgramComputer(
+                    service,
+                    requireNotNull(service.attach(endpoint, host)),
+                    { RedstoneCommitResult.Committed },
+                    addon = addon,
+                )
+            assertEquals(7L, carrier.hibernateAsync(1).get(TIMEOUT_SECONDS, TimeUnit.SECONDS))
+            assertTrue(discarded)
+            assertTrue(released)
+            assertEquals(1, session.closeCalls)
+            assertNull(session.capturedCheckpoint)
+        }
+    }
+
+    @Test
+    fun `addon cleanup failure cannot strand native execution or prevent close completion`() {
+        val session = RecordingSession()
+        val host =
+            ProgramRuntimeHost(
+                object : ProgramVmSessionFactory {
+                    override fun open(artifact: ByteArray): ProgramVmSession = error("unexpected open")
+
+                    override fun boot(): ProgramVmSession = session
+                },
+            )
+        val addon =
+            object : ProgramAddonHost {
+                override val capabilitySchemas = emptyList<HostCapabilitySchema>()
+
+                override fun dispatch(request: ProgramAddonRequest): ProgramAddonDispatch = error("unexpected dispatch")
+
+                override fun checkpoint(): ByteArray = byteArrayOf()
+
+                override fun reset(): Unit = error("addon close failed")
+            }
+        host.startBoot()
+        val endpoint = VmActorEndpoint(ComputerId.fromLongs(181, 182), 1)
+        ProgramRuntimeActorService(schedulerConfig()).use { service ->
+            val carrier =
+                ActorProgramComputer(
+                    service,
+                    requireNotNull(service.attach(endpoint, host)),
+                    { RedstoneCommitResult.Committed },
+                    addon = addon,
+                )
+            assertEquals(7L, carrier.hibernateAsync(1).get(TIMEOUT_SECONDS, TimeUnit.SECONDS))
+            assertEquals(ProgramRuntimeState.Closed, carrier.state)
+            assertEquals(1, session.closeCalls)
+            assertTrue(session.capturedCheckpoint != null)
+        }
+    }
+
+    @Test
+    fun `native checkpoint failure closes and flushes the filesystem instead of failing the close barrier`() {
+        val session = RecordingSession().apply { checkpointFailure = VmCheckpointException(VmCheckpointFailure.CORRUPT) }
+        var discarded = false
+        val host =
+            ProgramRuntimeHost(
+                object : ProgramVmSessionFactory {
+                    override fun open(artifact: ByteArray): ProgramVmSession = session
+
+                    override fun boot(): ProgramVmSession = session
+
+                    override fun discardCheckpoint() {
+                        discarded = true
+                    }
+                },
+            )
+        val processor = ProgramRuntimeActorProcessor(host)
+        host.startBoot()
+        processor.prepareHibernation(ProgramActorHibernation(1, byteArrayOf(), emptyList()))
+        processor.close()
+        assertEquals(7L, processor.closed.get(TIMEOUT_SECONDS, TimeUnit.SECONDS))
+        assertTrue(discarded)
+        assertEquals(1, session.closeCalls)
+    }
+
+    @Test
+    fun `checkpoint consumption failure closes restored execution and boots a fresh terminal`() {
+        val restored = RecordingSession()
+        val fresh = RecordingSession()
+        val saved =
+            ProgramHostCheckpoint(
+                false,
+                GrantedResourceBudgetSnapshot(20, 10, false),
+                0,
+                listOf(0),
+                emptyList(),
+                byteArrayOf(),
+            ).encode()
+        var discards = 0
+        var retained = false
+        val owner = Thread.currentThread()
+        val host =
+            ProgramRuntimeHost(
+                object : ProgramVmSessionFactory {
+                    override fun open(artifact: ByteArray): ProgramVmSession = error("unexpected open")
+
+                    override fun boot(): ProgramVmSession {
+                        assertFalse(retained)
+                        return fresh
+                    }
+
+                    override fun restoreBoot() = ProgramVmRestoration(restored, saved)
+
+                    override fun discardCheckpoint() {
+                        if (++discards == 1) throw IllegalStateException("consume failed")
+                    }
+                },
+            )
+        val addon =
+            object : ProgramAddonHost {
+                override val capabilitySchemas = emptyList<HostCapabilitySchema>()
+
+                override fun dispatch(request: ProgramAddonRequest): ProgramAddonDispatch = error("unexpected dispatch")
+
+                override fun restoreCheckpoint(state: ByteArray) {
+                    retained = true
+                }
+
+                override fun reset() {
+                    assertEquals(owner, Thread.currentThread())
+                    retained = false
+                }
+            }
+        val endpoint = VmActorEndpoint(ComputerId.fromLongs(183, 184), 1)
+        ProgramRuntimeActorService(schedulerConfig()).use { service ->
+            val carrier =
+                ActorProgramComputer(
+                    service,
+                    requireNotNull(service.attach(endpoint, host)),
+                    { RedstoneCommitResult.Committed },
+                    addon = addon,
+                )
+            val opening = carrier.turnOn(requiredCheckpoint = true)
+            awaitQueuedResult(service)
+            service.pump(1)
+            assertTrue(retained)
+            awaitQueuedResult(service)
+            service.pump(1)
+            assertFalse(retained)
+            awaitQueuedResult(service)
+            service.pump(1)
+            val reply = opening.getNow(null)
+            assertEquals(ProgramStartResult.Started, assertIs<ProgramRuntimeActorValue.Start>(reply.value).result)
+            assertEquals(2, discards)
+            assertEquals(1, restored.closeCalls)
+            assertEquals(fresh.terminal, host.terminalFullState())
+            carrier.closeAsync().get(TIMEOUT_SECONDS, TimeUnit.SECONDS)
+        }
+    }
+
+    @Test
+    fun `failed native close is still reported instead of pretending home files were persisted`() {
+        val session = RecordingSession().apply { closeFailure = IllegalStateException("native close failed") }
+        val host =
+            ProgramRuntimeHost(
+                object : ProgramVmSessionFactory {
+                    override fun open(artifact: ByteArray): ProgramVmSession = error("unexpected open")
+
+                    override fun boot(): ProgramVmSession = session
+                },
+            )
+        val processor = ProgramRuntimeActorProcessor(host)
+        host.startBoot()
+        processor.prepareHibernation(ProgramActorHibernation(1, byteArrayOf(), emptyList(), saveExecution = false))
+        assertFailsWith<IllegalStateException> { processor.close() }
+        assertTrue(processor.closed.isCompletedExceptionally)
+        assertEquals(1, session.closeCalls)
     }
 
     @Test
@@ -1410,10 +1653,13 @@ class ProgramRuntimeActorProcessorTest {
         var canonicalLine: String? = null
         var closeCalls = 0
         var capturedCheckpoint: ByteArray? = null
+        var checkpointFailure: Exception? = null
+        var closeFailure: Exception? = null
 
         override fun checkpoint(hostState: ByteArray) =
             record("checkpoint") {
                 check(closeCalls == 0)
+                checkpointFailure?.let { throw it }
                 capturedCheckpoint = hostState.copyOf()
             }
 
@@ -1543,6 +1789,7 @@ class ProgramRuntimeActorProcessorTest {
         override fun close() =
             record("close") {
                 closeCalls++
+                closeFailure?.let { throw it }
                 Unit
             }
 

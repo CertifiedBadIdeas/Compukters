@@ -50,12 +50,15 @@ Accepted world completions drain before capture. Undelivered redstone, sound and
 unavailable failures; restoration never repeats their physical effects. Pending compilation retains its original
 source bytes and may be resubmitted without applying a stale worker response.
 
-A missing required checkpoint, corruption, incompatible runtime/artifacts/capabilities or filesystem generation blocks
-restoration. It never silently restarts `main`. Explicit `/compukters reboot x y z` discards execution state and boots
-from ROM while retaining ComputerId and `/home`. Clean halt/shutdown stays powered off across block-entity reload.
+A missing required checkpoint, corruption, incompatible runtime/artifacts/capabilities, filesystem generation mismatch,
+or failed addon resource rebinding abandons saved execution, logs the failure and cold boots from ROM while retaining
+ComputerId and `/home`. Partial restored resources are released before fresh execution starts. Explicit
+`/compukters reboot x y z` requests the same fresh boot without attempting restoration. Clean halt/shutdown stays
+powered off across block-entity reload.
 Addon hosts must implement checkpoint capture and restoration, including mutable tokens and resource leases;
-unsupported capture fails the close barrier rather than silently losing addon state. Sable's observation host is
-stateless and opts in. Stateful Create and Propulsion hosts do not yet implement this contract.
+unsupported or failed capture logs the failure, discards any stale execution checkpoint and closes native execution
+normally so the filesystem can flush. The next load cold boots; unsaved execution and addon state are lost.
+Sable's observation host is stateless and opts in. Stateful Create and Propulsion hosts do not yet implement this contract.
 
 ## Close barriers and persistence work
 

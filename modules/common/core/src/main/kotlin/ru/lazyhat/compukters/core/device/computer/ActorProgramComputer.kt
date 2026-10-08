@@ -22,6 +22,7 @@ import ru.lazyhat.compukters.api.addon.ProgramAddonAction
 import ru.lazyhat.compukters.api.addon.ProgramAddonCompletion
 import ru.lazyhat.compukters.api.addon.ProgramAddonDispatch
 import ru.lazyhat.compukters.api.addon.ProgramAddonHost
+import ru.lazyhat.compukters.core.LOGGER
 import ru.lazyhat.compukters.core.device.runtime.actor.ProgramActorHibernation
 import ru.lazyhat.compukters.core.device.runtime.actor.ProgramRuntimeActorCommand
 import ru.lazyhat.compukters.core.device.runtime.actor.ProgramRuntimeActorEffect
@@ -35,6 +36,7 @@ import ru.lazyhat.compukters.core.device.runtime.actor.VmActorSubmission
 import ru.lazyhat.compukters.core.device.runtime.program.EmptyProgramAddonHost
 import ru.lazyhat.compukters.core.device.runtime.program.ProgramFailure
 import ru.lazyhat.compukters.core.device.runtime.program.ProgramRuntimeState
+import ru.lazyhat.compukters.core.device.runtime.program.ProgramStartResult
 import ru.lazyhat.compukters.core.device.runtime.program.RedstoneCommitResult
 import ru.lazyhat.compukters.core.device.runtime.program.RedstoneHostPort
 import ru.lazyhat.compukters.core.device.runtime.program.SoundCommitResult
@@ -110,24 +112,43 @@ class ActorProgramComputer(
                 try {
                     addon.restoreCheckpoint(checkpoint.addonStateBytes(), checkpoint.programScopes)
                 } catch (failure: Exception) {
-                    runCatching(addon::reset).onFailure(failure::addSuppressed)
-                    return@thenCompose observe(
-                        service.request(lease.endpoint) { id ->
-                            ProgramRuntimeActorCommand.AbortRestoration(id, failure.message ?: "Addon resource restoration failed")
-                        },
-                        version,
-                    )
+                    LOGGER.warn(failure) { "Computer addon restoration failed; releasing restored resources before fresh boot" }
+                    return@thenCompose coldBootAfterAddonRestorationFailure(failure.message ?: "Addon resource restoration failed", version)
                 }
                 observe(
                     service.request(lease.endpoint) { id ->
                         ProgramRuntimeActorCommand.CompleteRestoration(id, maxOf(0, lastObservedServerTick))
                     },
                     version,
-                )
+                ).thenCompose { completed ->
+                    checkOwner()
+                    val result = (completed.value as? ProgramRuntimeActorValue.Start)?.result
+                    if (result is ProgramStartResult.Rejected) {
+                        coldBootAfterAddonRestorationFailure("Checkpoint consumption failed: ${result.failure}", version)
+                    } else {
+                        CompletableFuture.completedFuture(completed)
+                    }
+                }
             }
         restored.whenComplete { _, _ -> if (version == lifecycle) restoring = false }
         bootRequest = restored
         return restored.copy()
+    }
+
+    private fun coldBootAfterAddonRestorationFailure(
+        detail: String,
+        version: Long,
+    ): CompletableFuture<ProgramRuntimeActorReply> {
+        checkOwner()
+        if (version != lifecycle || closeResult != null) {
+            return CompletableFuture.failedFuture(IllegalStateException("restoration was cancelled"))
+        }
+        try {
+            addon.reset()
+        } catch (failure: Exception) {
+            LOGGER.warn(failure) { "Computer restored addon cleanup failed before fresh boot" }
+        }
+        return observe(service.request(lease.endpoint) { id -> ProgramRuntimeActorCommand.AbortRestoration(id, detail) }, version)
     }
 
     fun reboot(): CompletableFuture<ProgramRuntimeActorReply> =
@@ -246,8 +267,15 @@ class ActorProgramComputer(
     fun hibernateAsync(worldTick: Long): CompletableFuture<Long?> {
         checkOwner()
         closeResult?.let { return it.copy() }
-        collectAddonCompletions()
-        val resources = addon.checkpoint()
+        require(worldTick >= 0)
+        val resources =
+            try {
+                collectAddonCompletions()
+                addon.checkpoint().also { require(it.size <= 1024 * 1024) { "addon checkpoint is too large" } }
+            } catch (failure: Exception) {
+                LOGGER.warn(failure) { "Computer addon hibernation failed; execution will cold boot on reload" }
+                return hibernateAsync(worldTick, byteArrayOf(), saveExecution = false)
+            }
         return hibernateAsync(worldTick, resources)
     }
 
@@ -255,6 +283,7 @@ class ActorProgramComputer(
     internal fun hibernateAsync(
         worldTick: Long,
         addonState: ByteArray,
+        saveExecution: Boolean = true,
     ): CompletableFuture<Long?> {
         checkOwner()
         require(worldTick >= 0)
@@ -265,7 +294,7 @@ class ActorProgramComputer(
                 pendingSound?.let { add(ProgramRuntimeActorEffect.CompleteSound(it.requestId, it.result)) }
                 if (pendingAddonCompletions.isNotEmpty()) add(ProgramRuntimeActorEffect.CompleteAddons(pendingAddonCompletions.toList()))
             }
-        val request = ProgramActorHibernation(worldTick, addonState, effects)
+        val request = ProgramActorHibernation(worldTick, addonState, effects, saveExecution)
         lifecycle++
         restoring = false
         pendingOutput = null
@@ -276,7 +305,11 @@ class ActorProgramComputer(
         hostCompletionTick = null
         val result = lease.hibernateAsync(request)
         closeResult = result
-        addon.close()
+        try {
+            addon.close()
+        } catch (failure: Exception) {
+            LOGGER.warn(failure) { "Computer addon cleanup failed after native close was scheduled" }
+        }
         publish(ProgramRuntimeState.Closed)
         return result.copy()
     }
