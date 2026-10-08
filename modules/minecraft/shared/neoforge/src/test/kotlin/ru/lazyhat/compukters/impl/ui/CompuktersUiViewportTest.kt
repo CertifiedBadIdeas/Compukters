@@ -25,29 +25,41 @@ import kotlin.test.assertTrue
 
 class CompuktersUiViewportTest {
     @Test
-    fun `IDE scale is one step smaller with minimum two and exact pointer transform`() {
+    fun `IDE scale stays fixed at three and exact pointer transform`() {
         for ((width, height) in listOf(640 to 360, 1280 to 720, 1920 to 1080, 2560 to 1440, 3840 to 2160)) {
-            val original = CompuktersUiViewport.admit(width, height, 4)
-            val ide = CompuktersUiViewport.admit(width, height, 4, scaleReduction = 1, minimumScale = 2)
-            assertEquals((original.physicalScale - 1).coerceAtLeast(2), ide.physicalScale)
+            val ide = CompuktersUiViewport.admit(width, height, 4, fixedScale = 3)
+            assertEquals(3, ide.physicalScale)
             assertEquals(width / ide.physicalScale, ide.width)
             assertEquals(height / ide.physicalScale, ide.height)
             assertEquals(120.0, ide.toMinecraftX(ide.toVirtualX(120.0)), 0.0001)
-            assertEquals(width >= 1280 && height >= 720, ide.supported)
+            assertEquals(width >= 1920 && height >= 1080, ide.supported)
         }
     }
 
     @Test
-    fun `IDE rejects undersized windows without reducing scale below two`() {
-        for ((width, height) in listOf(1279 to 720, 1280 to 719, 0 to -1)) {
-            val ide = CompuktersUiViewport.admit(width, height, 4, scaleReduction = 1, minimumScale = 2)
-            assertEquals(2, ide.physicalScale)
+    fun `IDE rejects undersized windows without reducing scale below three`() {
+        for ((width, height) in listOf(1280 to 720, 1919 to 1080, 1920 to 1079, 0 to -1)) {
+            val ide = CompuktersUiViewport.admit(width, height, 4, fixedScale = 3)
+            assertEquals(3, ide.physicalScale)
             assertFalse(ide.supported)
         }
-        val ide = CompuktersUiViewport.admit(1280, 720, 4, scaleReduction = 1, minimumScale = 2)
+        val ide = CompuktersUiViewport.admit(1920, 1080, 4, fixedScale = 3)
         assertEquals(640, ide.width)
         assertEquals(360, ide.height)
         assertTrue(ide.supported)
+    }
+
+    @Test
+    fun `fixed IDE scale is independent from Minecraft GUI scale`() {
+        for (minecraftScale in listOf(1, 2, 3, 4, 6)) {
+            val ide = CompuktersUiViewport.admit(3840, 2160, minecraftScale, fixedScale = 3)
+            assertEquals(3, ide.physicalScale)
+            assertEquals(1280, ide.width)
+            assertEquals(720, ide.height)
+            assertEquals(120.0, ide.toMinecraftX(ide.toVirtualX(120.0)), 0.0001)
+            assertEquals(90.0, ide.toMinecraftY(ide.toVirtualY(90.0)), 0.0001)
+            assertTrue(ide.supported)
+        }
     }
 
     @Test
