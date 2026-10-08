@@ -69,6 +69,12 @@ rebinds an old handle to a replacement. Display identities live in block-entity 
 format 2 restores owned rows and writer leases only after peripheral admission and without overwriting
 another active writer.
 
+The Minecraft addon SDK optionally accepts `CompuktersPersistentPeripheralEndpoint`, extending the existing
+endpoint interface with a persisted exact-device stamp (at most 128 UTF-8 bytes). The base adapter forwards
+this stamp to peripheral resource format 2. Existing endpoint implementations remain unchanged and restore
+as stale when they provide no persistent identity. The extension adds no Guest operation, native ABI or
+checkpoint framing version.
+
 ## Native Runtime bundles
 
 Native Runtime platform bundles use manifest schema 2 and contain the FFI and JNI native libraries for one

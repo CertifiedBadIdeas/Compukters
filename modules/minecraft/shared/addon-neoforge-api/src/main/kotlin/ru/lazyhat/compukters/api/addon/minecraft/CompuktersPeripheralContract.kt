@@ -21,6 +21,12 @@ interface CompuktersPeripheralEndpoint {
     fun valid(): Boolean
 }
 
+/** Optional hibernation contract; existing endpoint implementations remain binary compatible. */
+interface CompuktersPersistentPeripheralEndpoint : CompuktersPeripheralEndpoint {
+    /** Stable, persisted exact-device stamp, bounded to 128 UTF-8 bytes. */
+    val persistentIdentity: String
+}
+
 /** The logical device anchor selected by discovery, with a validity check that latches disconnection. */
 class CompuktersPeripheralLocation internal constructor(
     val level: ServerLevel,
@@ -53,7 +59,11 @@ class CompuktersPeripheralContract<T : CompuktersPeripheralEndpoint>(
     internal fun bind(providerId: String): ComputerPeripheralContract<T> =
         ComputerPeripheralContract(id, providerId, deviceKey) { level, computer, identity ->
             resolve(CompuktersPeripheralLocation(level, identity.anchor, identity.deviceKey, computer, providerId))?.let { endpoint ->
-                PeripheralEndpoint(endpoint, endpoint.identity) { endpoint.valid() }
+                PeripheralEndpoint(
+                    endpoint,
+                    endpoint.identity,
+                    (endpoint as? CompuktersPersistentPeripheralEndpoint)?.persistentIdentity,
+                ) { endpoint.valid() }
             }
         }
 }
