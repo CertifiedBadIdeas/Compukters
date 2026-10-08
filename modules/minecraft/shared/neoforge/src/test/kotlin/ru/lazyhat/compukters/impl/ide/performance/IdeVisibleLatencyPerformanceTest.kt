@@ -36,6 +36,7 @@ import ru.lazyhat.compukters.ide.client.workspace.DefaultIdeWorkspace
 import ru.lazyhat.compukters.ide.client.workspace.IdeMutationRequest
 import ru.lazyhat.compukters.ide.client.workspace.IdeSaveRequest
 import ru.lazyhat.compukters.ide.client.workspace.ProjectFileOpenResult
+import ru.lazyhat.compukters.ide.compiler.ClientCompilerBackendLifetime
 import ru.lazyhat.compukters.ide.compiler.profile.COMPUKTER_ARTIFACT_ABI
 import ru.lazyhat.compukters.ide.compiler.profile.PlatformCatalog
 import ru.lazyhat.compukters.ide.project.ProjectLockService
@@ -92,6 +93,10 @@ internal class IdeVisibleLatencyPerformanceTest {
         val gameRoot = createTempDirectory("compukters-visible-latency-").toAbsolutePath().normalize()
         val paths = IdeClientPaths.at(gameRoot)
         val prepared = ProductionIdeApplicationFactory.prepare(paths)
+        val compilerBackend =
+            ClientCompilerBackendLifetime(TimeUnit.SECONDS.toNanos(120)) {
+                ProductionIdeApplicationFactory.createCompilerBackend(paths, prepared)
+            }
         seedProject(paths, fixture, prepared)
         val trace = BoundedIdeVisibleLatencyCollector(IdeVisibleLatencyClock.System, maximumSamples = 128)
         val processFactory = CountingWorkerProcessFactory()
@@ -104,6 +109,7 @@ internal class IdeVisibleLatencyPerformanceTest {
                             paths = paths,
                             workspace = workspace,
                             prepared = prepared,
+                            compilerBackend = compilerBackend.openSession(),
                             visibleLatency = trace,
                             analysisProcessFactory = processFactory,
                         ),
@@ -146,6 +152,7 @@ internal class IdeVisibleLatencyPerformanceTest {
             )
         } finally {
             application?.close()
+            compilerBackend.close()
             gameRoot.toFile().deleteRecursively()
         }
     }

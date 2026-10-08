@@ -64,6 +64,8 @@ import ru.lazyhat.compukters.ide.client.state.BoundedIdeEventQueue
 import ru.lazyhat.compukters.ide.client.target.IdeTargetCoordinator
 import ru.lazyhat.compukters.ide.client.workspace.DefaultIdeWorkspace
 import ru.lazyhat.compukters.ide.compiler.ClientCompilationCache
+import ru.lazyhat.compukters.ide.compiler.ClientCompilerBackend
+import ru.lazyhat.compukters.ide.compiler.ClientCompilerBackendLifetime
 import ru.lazyhat.compukters.ide.compiler.ControllerClientCompilerBackend
 import ru.lazyhat.compukters.ide.compiler.DefaultClientCompilationService
 import ru.lazyhat.compukters.ide.compiler.profile.COMPUKTER_ARTIFACT_ABI
@@ -167,8 +169,11 @@ internal class IdeClientServices<A : AutoCloseable>(
                 closed = true
                 active.also { active = null }
             }
-        session?.application?.close()
-        lifetime?.close()
+        try {
+            session?.application?.close()
+        } finally {
+            lifetime?.close()
+        }
     }
 }
 
@@ -232,16 +237,27 @@ private class ProductionIdeRuntime(
             Thread(task, "compukters-ide-tooling").apply { isDaemon = true }
         }
     private val prepared = CompletableFuture.supplyAsync({ ProductionIdeApplicationFactory.prepare(paths) }, executor)
+    private val compilerBackend =
+        ClientCompilerBackendLifetime(TimeUnit.SECONDS.toNanos(120)) {
+            ProductionIdeApplicationFactory.createCompilerBackend(paths, prepared.join())
+        }
+    private val closed = AtomicBoolean()
 
     fun open(paths: IdeClientPaths): IdeClientApplication =
         ProductionIdeApplicationFactory.open(paths, targetTransport, layout) { workspace ->
             prepared.thenApplyAsync({ prepared ->
-                ProductionIdeApplicationFactory.createTooling(paths, workspace, prepared)
+                ProductionIdeApplicationFactory.createTooling(paths, workspace, prepared, compilerBackend.openSession())
             }, executor)
         }
 
     override fun close() {
-        executor.shutdownNow()
+        if (!closed.compareAndSet(false, true)) return
+        try {
+            compilerBackend.close()
+        } finally {
+            prepared.cancel(true)
+            executor.shutdownNow()
+        }
     }
 }
 
@@ -313,22 +329,15 @@ internal object ProductionIdeApplicationFactory {
         paths: IdeClientPaths,
         workspace: DefaultIdeWorkspace,
         prepared: PreparedWorkers,
+        compilerBackend: ClientCompilerBackend,
         visibleLatency: IdeVisibleLatencyTrace = IdeVisibleLatencyTrace.None,
         analysisProcessFactory: WorkerProcessFactory = JdkWorkerProcessFactory(),
     ): IdeClientTooling {
         val compilerPayload = prepared.compilerPayload
         val analysisPayload = prepared.analysisPayload
-        val java = prepared.java
         val workerLimits = prepared.workerLimits
         val analysisLimits = prepared.analysisLimits
         val compilerIdentity = compilerPayload.manifest.identity
-        val compilerController =
-            CompilerWorkerController(
-                compilerPayload,
-                compilerLaunch(paths, prepared),
-                workerLimits,
-                CompilerProcessFactory(),
-            )
         val compilation =
             try {
                 DefaultClientCompilationService(
@@ -336,10 +345,10 @@ internal object ProductionIdeApplicationFactory {
                         paths.compilerCache,
                         verifier = ArtifactVerifier(VmArtifactVerifier::verify),
                     ),
-                    ControllerClientCompilerBackend(compilerController),
+                    compilerBackend,
                 )
             } catch (error: Throwable) {
-                compilerController.close()
+                compilerBackend.close()
                 throw error
             }
         val analysisIdentity =
@@ -380,6 +389,19 @@ internal object ProductionIdeApplicationFactory {
             throw error
         }
     }
+
+    internal fun createCompilerBackend(
+        paths: IdeClientPaths,
+        prepared: PreparedWorkers,
+    ): ClientCompilerBackend =
+        ControllerClientCompilerBackend(
+            CompilerWorkerController(
+                prepared.compilerPayload,
+                compilerLaunch(paths, prepared),
+                prepared.workerLimits,
+                CompilerProcessFactory(),
+            ),
+        )
 
     internal fun compilerLaunch(
         paths: IdeClientPaths,
