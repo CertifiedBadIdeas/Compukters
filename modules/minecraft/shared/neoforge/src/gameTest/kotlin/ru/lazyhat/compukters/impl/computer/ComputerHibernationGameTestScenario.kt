@@ -21,6 +21,8 @@ package ru.lazyhat.compukters.impl.computer
 import com.mojang.logging.LogUtils
 import net.minecraft.core.BlockPos
 import net.minecraft.gametest.framework.GameTestHelper
+import net.minecraft.nbt.NbtAccounter
+import net.minecraft.nbt.NbtIo
 import net.minecraft.world.level.block.entity.BlockEntity
 import net.neoforged.neoforge.event.server.ServerStoppingEvent
 import ru.lazyhat.compukters.core.device.computer.ProgramComputerState
@@ -30,6 +32,8 @@ import ru.lazyhat.compukters.lang.runtime.vm.TerminalKey
 import ru.lazyhat.compukters.lang.runtime.vm.TerminalKeyAction
 import ru.lazyhat.compukters.lang.runtime.vm.TerminalModifier
 import ru.lazyhat.compukters.lang.runtime.vm.TerminalState
+import java.nio.file.Files
+import java.nio.file.Path
 import java.util.concurrent.CompletableFuture
 
 /** The unsaved Guest editor buffer, child process and open file must survive two carrier replacements. */
@@ -37,6 +41,28 @@ internal object ComputerHibernationGameTestScenario {
     fun run(helper: GameTestHelper) {
         val position = BlockPos.ZERO
         helper.setBlock(position, CompuktersRegistry.COMPUTER.get())
+        val restartPhase = System.getenv("COMPUKTERS_HIBERNATION_RESTART_PHASE")
+        require(restartPhase == null || restartPhase == "produce" || restartPhase == "resume")
+        val restartPayload =
+            restartPhase?.let {
+                Path.of(requireNotNull(System.getenv("COMPUKTERS_HIBERNATION_RESTART_PAYLOAD")))
+            }
+        if (restartPhase == "resume") {
+            val absolutePosition = helper.absolutePos(position)
+            val payload =
+                Files.newInputStream(requireNotNull(restartPayload)).use {
+                    NbtIo.readCompressed(it, NbtAccounter.unlimitedHeap())
+                }
+            helper.level.removeBlockEntity(absolutePosition)
+            helper.level.setBlockEntity(
+                BlockEntity.loadStatic(
+                    absolutePosition,
+                    helper.level.getBlockState(absolutePosition),
+                    payload,
+                    helper.level.registryAccess(),
+                ) as NeoForgeComputerBlockEntity,
+            )
+        }
         var computer = helper.compuktersComputerBlockEntity(position)
         val identity = computer.computerId()
         var operation: CompletableFuture<Boolean>? = null
@@ -98,6 +124,36 @@ internal object ComputerHibernationGameTestScenario {
             }
         }
         sequence.thenExecute { computer.prepareTerminalAsync() }
+        if (restartPhase == "resume") {
+            awaitText("unsaved-before-between")
+            input { computer.submitTerminalTextAsync("-fresh-process") }
+            awaitText("unsaved-before-between-fresh-process")
+            input { computer.submitTerminalKeyAsync(TerminalKey.S, TerminalKeyAction.PRESS, setOf(TerminalModifier.CONTROL)) }
+            input { computer.submitTerminalKeyAsync(TerminalKey.X, TerminalKeyAction.PRESS, setOf(TerminalModifier.CONTROL)) }
+            awaitText(">\n")
+            input {
+                computer.submitTerminalTextAsync("clear").thenCompose {
+                    check(it)
+                    computer.submitTerminalKeyAsync(TerminalKey.ENTER, TerminalKeyAction.PRESS)
+                }
+            }
+            awaitText(">\n", exact = true)
+            input {
+                computer.submitTerminalTextAsync("edit hibernation.txt").thenCompose {
+                    check(it)
+                    computer.submitTerminalKeyAsync(TerminalKey.ENTER, TerminalKeyAction.PRESS)
+                }
+            }
+            awaitText("unsaved-before-between-fresh-process")
+            sequence
+                .thenExecute {
+                    LogUtils.getLogger().info(
+                        "Hibernation independent Minecraft process resumed unsaved editor and saved file: {}",
+                        identity,
+                    )
+                }.thenSucceed()
+            return
+        }
         awaitText(">\n", exact = true)
         input {
             computer.submitTerminalTextAsync("edit hibernation.txt").thenCompose {
@@ -112,6 +168,15 @@ internal object ComputerHibernationGameTestScenario {
         awaitText("unsaved-before")
         input { computer.submitTerminalTextAsync("-between") }
         awaitText("unsaved-before-between")
+        if (restartPhase == "produce") {
+            sequence
+                .thenExecute {
+                    val payload = computer.saveWithFullMetadata(helper.level.registryAccess())
+                    Files.newOutputStream(requireNotNull(restartPayload)).use { NbtIo.writeCompressed(payload, it) }
+                    LogUtils.getLogger().info("Hibernation independent Minecraft process prepared unsaved editor: {}", identity)
+                }.thenSucceed()
+            return
+        }
         reload(stopStore = true)
         awaitText("unsaved-before-between")
         input { computer.submitTerminalTextAsync("-after") }
