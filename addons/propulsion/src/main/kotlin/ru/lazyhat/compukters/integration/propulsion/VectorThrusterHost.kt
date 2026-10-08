@@ -32,7 +32,7 @@ import ru.lazyhat.compukters.api.addon.addonFailed
 import ru.lazyhat.compukters.api.addon.minecraft.CompuktersComputerContext
 import ru.lazyhat.compukters.api.addon.minecraft.CompuktersPeripheralAccessException
 import ru.lazyhat.compukters.api.addon.minecraft.CompuktersPeripheralContract
-import ru.lazyhat.compukters.api.addon.minecraft.CompuktersPeripheralEndpoint
+import ru.lazyhat.compukters.api.addon.minecraft.CompuktersPersistentPeripheralEndpoint
 import ru.lazyhat.compukters.lang.runtime.vm.HostFailureKind
 
 internal class VectorThrusterHost(
@@ -42,8 +42,9 @@ internal class VectorThrusterHost(
     internal class BoundThruster(
         val entity: CreativeVectorThrusterBlockEntity,
         private val reachable: () -> Boolean,
-    ) : CompuktersPeripheralEndpoint {
+    ) : CompuktersPersistentPeripheralEndpoint {
         override val identity: Any get() = entity
+        override val persistentIdentity: String get() = (entity as TransientThrusterControl).`compukters$persistentIdentity`()
 
         private var stale = false
 
@@ -150,10 +151,76 @@ internal class VectorThrusterHost(
             addonCompleted(Unit)
         }
 
+    fun checkpoint(): List<ThrusterCommand> {
+        checkThread()
+        return handles.entries.sortedBy { it.key }.distinctBy { it.value.entity }.mapNotNull { (handle, bound) ->
+            if (!leases.ownedBy(bound.entity, this)) return@mapNotNull null
+            val entity = bound.entity
+            val power = entity as TransientThrusterControl
+            val vector = (entity as VectorThrusterControl).`compukters$hasVectorOverride`()
+            ThrusterCommand(
+                handle,
+                power.`compukters$peripheralMode`(),
+                power.`compukters$digitalInput`(),
+                vectorX = if (vector) entity.targetVectorX else null,
+                vectorY = if (vector) entity.targetVectorY else null,
+                thrustOutput =
+                    if (entity.hasPeripheralThrustOverride()) {
+                        (entity as CreativeVectorThrustAccess)
+                            .`compukters$peripheralThrustOutput`()
+                    } else {
+                        null
+                    },
+            )
+        }
+    }
+
+    fun restoreCheckpoint(commands: List<ThrusterCommand>) {
+        checkThread()
+        commands.forEach { command ->
+            val bound =
+                try {
+                    computer.peripheral(contract, command.handle)
+                } catch (failure: CompuktersPeripheralAccessException) {
+                    if (failure.kind != HostFailureKind.INPUT_OUTPUT) throw failure
+                    return@forEach
+                }
+            val entity = bound.entity
+            require(entity.computerBehaviour?.hasAttachedComputer() != true) { "Vector thruster controlled by ComputerCraft" }
+            require(
+                command.thrustOutput == null ||
+                    command.thrustOutput <= (maxThrustKn() * PropulsionConfig.getThrustUnitsPerKnOrDefault()).toFloat(),
+            ) {
+                "Restored thrust exceeds configured limit"
+            }
+            require(
+                leases.claim(entity, this, bound::valid) { restoreRedstone(entity) },
+            ) { "Vector thruster controlled by another program" }
+            handles[command.handle] = bound
+            entity.setDigitalInput(command.digitalInput)
+            entity.setControlMode(if (command.peripheralMode) ControlMode.PERIPHERAL else ControlMode.NORMAL)
+            if (command.vectorX != null) {
+                (entity as VectorThrusterControl).`compukters$setVector`(command.vectorX, requireNotNull(command.vectorY))
+            } else {
+                (entity as VectorThrusterControl).`compukters$clearVector`()
+            }
+            // Power and steering must be restored before this setter publishes physical thrust.
+            if (command.thrustOutput != null) {
+                entity.setThrustOutput(command.thrustOutput)
+            } else {
+                entity.clearPeripheralThrustOutput()
+            }
+            entity.setChanged()
+        }
+    }
+
     fun reset() {
         checkThread()
-        leases.releaseOwner(this)
-        handles.clear()
+        try {
+            leases.releaseOwner(this)
+        } finally {
+            handles.clear()
+        }
     }
 
     private fun mutate(

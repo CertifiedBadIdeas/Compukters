@@ -86,6 +86,16 @@ object CreativeThrusterGameTests {
             helper.assertTrue(saved.getBoolean("compukters_propulsion:transient_control"), "Owned throttle was not marked transient")
             val copy = CreativeThrusterBlockEntity(helper.absolutePos(engine), thruster.blockState)
             copy.loadWithComponents(saved, helper.level.registryAccess())
+            val identity = (thruster as TransientThrusterControl).`compukters$persistentIdentity`()
+            helper.assertTrue(
+                (copy as TransientThrusterControl).`compukters$persistentIdentity`() == identity,
+                "NBT reload changed engine identity",
+            )
+            val replacement = CreativeThrusterBlockEntity(helper.absolutePos(engine), thruster.blockState)
+            helper.assertTrue(
+                (replacement as TransientThrusterControl).`compukters$persistentIdentity`() != identity,
+                "Replacement reused engine identity",
+            )
             helper.assertTrue(copy.thrustConfig == 49, "NBT copy lost the engine setting")
             helper.assertTrue(copy.throttle != 0.375f, "NBT copy retained an unowned digital throttle")
             copy.setControlMode(dev.propulsionteam.propulsionsimulated.content.thruster.AbstractThrusterBlockEntity.ControlMode.PERIPHERAL)
@@ -312,5 +322,6 @@ object PropulsionGameTestRegistration {
         event.register(CreativeThrusterGameTests::class.java)
         event.register(CreativeVectorThrusterGameTests::class.java)
         event.register(CreativeVectorThrusterLatencyGameTests::class.java)
+        event.register(PropulsionHibernationGameTests::class.java)
     }
 }
