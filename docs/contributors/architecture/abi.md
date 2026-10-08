@@ -28,6 +28,13 @@ implementations, Pair and populated factories in `stdlib:core` 1.11.0. Their mod
 format 5, platform ABI 3 and Runtime ABI 1.15 remain unchanged by hash collections. The current native C ABI is 21 for checkpoint transport. Programs and dependent
 platform/addon inputs must resolve the matching module identities. Hashing, generic equality, managed
 objects and specialization reuse existing instructions and representation rules.
+## Guest math module identity
+
+`stdlib:core` 1.12.0 adds the portable `kotlin.math` surface. Floating primitives require Runtime ABI 1.16;
+integer and derived wrappers use ordinary Guest code. Canonical source getters retain extension-receiver
+identity, including the distinct Int and Long `sign` getters with the same Int result. Platform bundle 9,
+standalone module 5 and private metadata carrier 6 remain unchanged; rebuild dependent module inputs.
+
 ## Execution checkpoint development
 
 The VM has a logical computer checkpoint envelope (format 2), owned by

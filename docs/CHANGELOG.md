@@ -76,6 +76,10 @@ listed in [Kotlin support](developers/kotlin-support.md) and [standard library s
 
 ### Standard library
 
+- `kotlin.math` provides portable Float/Double mathematics: trigonometry, roots, logarithms, powers,
+  rounding and adjacent IEEE values, plus `PI`, `E` and Int/Long helpers. NaN, infinity and signed zero
+  retain defined semantics; integer rounding saturates and raises a catchable exception for NaN.
+
 - `List`, `MutableList` and `ArrayList` support all twelve primitive element types, nullable elements, references
   and value classes. Non-null primitive storage remains unboxed; nullable and universal views use nominal boxes
   without copying the list. Floating collection equality equates NaNs and distinguishes signed zeros.

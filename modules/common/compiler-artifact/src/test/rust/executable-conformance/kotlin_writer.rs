@@ -17,6 +17,10 @@ fn main() {
     );
 
     match scenario.as_str() {
+        "math" => {
+            let mut session = k2_stdio_session_with_heap("COMPUKTER_KOTLIN_MATH_ARTIFACT", 1, 256 * 1024);
+            k2_assert_prints(&mut session, ["math ok\n"], 1024);
+        },
         "mfvc" => {
             let mut profile = list_no_io_profile();
             profile.maximum_coroutines = 64;

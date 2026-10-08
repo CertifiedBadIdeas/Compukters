@@ -127,6 +127,8 @@ import ru.lazyhat.compukters.compiler.artifact.model.Import
 import ru.lazyhat.compukters.compiler.artifact.model.ImportId
 import ru.lazyhat.compukters.compiler.artifact.model.Instruction
 import ru.lazyhat.compukters.compiler.artifact.model.Manifest
+import ru.lazyhat.compukters.compiler.artifact.model.MathBinaryOperation
+import ru.lazyhat.compukters.compiler.artifact.model.MathUnaryOperation
 import ru.lazyhat.compukters.compiler.artifact.model.MetadataText
 import ru.lazyhat.compukters.compiler.artifact.model.Module
 import ru.lazyhat.compukters.compiler.artifact.model.ModuleId
@@ -3663,6 +3665,12 @@ internal object KotlinProjectLowering {
         return Artifact(
             minimumRuntimeAbi =
                 when {
+                    modules.any { module ->
+                        module.blocks.any { block ->
+                            block.instructions.any { it is Instruction.MathUnary || it is Instruction.MathBinary }
+                        }
+                    } -> AbiVersion(1u, 16u)
+
                     modules.any { module -> module.types.any { it is NominalType.InlineValue } } -> AbiVersion(1u, 15u)
 
                     modules.any { module ->
@@ -7756,6 +7764,48 @@ private class FunctionCompiler(
         return null
     }
 
+    private fun compileMathBuiltinCall(
+        call: IrCall,
+        target: IrSimpleFunction,
+        expressions: List<IrExpression>,
+        arguments: List<RegisterId>,
+    ): RegisterId? {
+        val fqName = target.fqNameWhenAvailable?.asString() ?: return null
+        if (!fqName.startsWith("kotlin.math.")) return null
+        val primitive = GuestPrimitive.scalar(resolvedType(call.type)) ?: return null
+        if (primitive !in setOf(GuestPrimitive.FLOAT, GuestPrimitive.DOUBLE) ||
+            expressions.any { GuestPrimitive.scalar(resolvedType(it.type)) != primitive }
+        ) {
+            return null
+        }
+        val name = target.name.asString().removeSuffix("Primitive")
+        val unary =
+            when (name) {
+                "nextUp" -> MathUnaryOperation.NEXT_UP
+                "nextDown" -> MathUnaryOperation.NEXT_DOWN
+                "ulp" -> MathUnaryOperation.ULP
+                else -> MathUnaryOperation.entries.singleOrNull { it.name.lowercase() == name }
+            }
+        if (unary != null && arguments.size == 1) {
+            return allocate(primitive.scalar).also {
+                emit(Instruction.MathUnary(primitive.scalarForm, unary, it, arguments[0]))
+            }
+        }
+        val binary =
+            when (name) {
+                "IEEErem" -> MathBinaryOperation.IEEE_REM
+                "withSign" -> MathBinaryOperation.COPY_SIGN
+                "nextTowards" -> MathBinaryOperation.NEXT_TOWARDS
+                else -> MathBinaryOperation.entries.singleOrNull { it.name.lowercase() == name }
+            }
+        if (binary != null && arguments.size == 2) {
+            return allocate(primitive.scalar).also {
+                emit(Instruction.MathBinary(primitive.scalarForm, binary, it, arguments[0], arguments[1]))
+            }
+        }
+        return null
+    }
+
     @OptIn(UnsafeDuringIrConstructionAPI::class)
     private fun compileBuiltinCall(
         call: IrCall,
@@ -7766,6 +7816,7 @@ private class FunctionCompiler(
         val fqName = target.fqNameWhenAvailable?.asString().orEmpty()
         val name = target.name.asString()
         compilePrimitiveBuiltinCall(call, target, argumentExpressions, arguments)?.let { return it }
+        compileMathBuiltinCall(call, target, argumentExpressions, arguments)?.let { return it }
 
         fun result(
             type: ValueType,

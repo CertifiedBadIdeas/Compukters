@@ -31,6 +31,32 @@ import kotlin.test.assertTrue
 
 class DiagnosticQueryTest {
     @Test
+    fun `math analysis admits typed overloads extensions and callable references`() {
+        val source =
+            """
+            import kotlin.math.*
+            fun main() {
+                val d: Double = sin(PI / 2.0) + E + log(8.0, 2.0)
+                val f: Float = sqrt(9.0f) + atan2(1.0f, 1.0f)
+                val qualified: Double = kotlin.math.cos(0.0) + kotlin.math.E
+                val wave: (Double) -> Double = ::sin
+                val next: Double = d.nextTowards(d + 1.0) + d.ulp + d.absoluteValue + d.sign
+                val power: Float = f.pow(3).withSign(-1) + f.IEEErem(2.0f)
+                val integer: Int = f.roundToInt() + (-7L).sign + abs(-3)
+                val wide: Long = d.roundToLong() + max(1L, 2L)
+                check(wave(0.0) == 0.0)
+            }
+            """.trimIndent()
+        for (attachedSources in listOf(false, true)) {
+            K2QueryFixture.sourceWithGuestApi(attachedSources, "main.kt" to source).use { fixture ->
+                val result = fixture.execute(fixture.presentation()) as AnalysisResult.Presentation
+                val active = result.value.accept(fixture.identity) as SnapshotPresentationAcceptance.Active
+                assertTrue(active.diagnostics.none { it.severity == EditorDiagnosticSeverity.Error }, active.diagnostics.toString())
+            }
+        }
+    }
+
+    @Test
     fun `hash collection analysis admits typed and value class keys`() {
         val source =
             """
