@@ -429,10 +429,15 @@ object IdeRenderer {
                 val heading = IdeRect(listLeft, bodyTop, listRight, bodyTop + 20)
                 if (bounds.contains(heading)) {
                     target(IdeHitAction.GitOperation, heading, idle, "Select or clear all files", gitCommand = IdeCommand.GitCheck(null))
+                    checkbox(
+                        IdeRect(heading.left, heading.top, heading.left + 22, heading.bottom),
+                        changes.isNotEmpty() && view.checkedPaths.size == changes.size,
+                        idle,
+                    )
                     ui(
                         IdeTextKind.Source,
-                        "${if (changes.isNotEmpty() && view.checkedPaths.size == changes.size) "☑" else "☐"} Changes (${view.checkedPaths.size}/${changes.size})",
-                        heading.left + 4,
+                        "Changes (${view.checkedPaths.size}/${changes.size})",
+                        heading.left + 26,
                         heading.top + 5,
                         clip = heading,
                     )
@@ -461,19 +466,7 @@ object IdeRenderer {
                             "Include ${change.path.value} in commit",
                             gitCommand = IdeCommand.GitCheck(change.path),
                         )
-                        ui(
-                            IdeTextKind.Source,
-                            if (change.path in
-                                view.checkedPaths
-                            ) {
-                                "☑"
-                            } else {
-                                "☐"
-                            },
-                            check.left + 4,
-                            check.top + 5,
-                            clip = check,
-                        )
+                        checkbox(check, change.path in view.checkedPaths, idle)
                         val color = IdeGitFileColors.color(change)
                         ui(IdeTextKind.Source, change.path.value, row.left + 26, row.top + 5, color, row)
                     }
@@ -871,7 +864,7 @@ object IdeRenderer {
         private fun tree(workspace: ru.lazyhat.compukters.ide.client.state.IdeWorkspaceView) {
             val bounds = geometry.tree ?: return
             scissors += IdeScissorDraw(IdeScissorKind.Tree, bounds, Z_CLIP)
-            val rows = bounds.height / UI_LINE_HEIGHT
+            val rows = (bounds.height - 4).coerceAtLeast(0) / UI_LINE_HEIGHT
             val fileColors = IdeGitFileColors(workspace.git.status ?: workspace.git.result?.status)
             workspace.explorerRows().drop(treeFirstRow).take(rows).forEachIndexed { index, row ->
                 val y = bounds.top + 4 + index * UI_LINE_HEIGHT
@@ -883,7 +876,7 @@ object IdeRenderer {
                     fills +=
                         IdeFillDraw(
                             IdeFillKind.DropTarget,
-                            IdeRect(bounds.left, y - 2, bounds.right, y + UI_LINE_HEIGHT - 1),
+                            IdeRect(bounds.left, y, bounds.right, y + UI_LINE_HEIGHT),
                             IdeColors.DROP_TARGET,
                             Z_SELECTION,
                         )
@@ -902,7 +895,7 @@ object IdeRenderer {
                                 fills +=
                                     IdeFillDraw(
                                         IdeFillKind.Selection,
-                                        IdeRect(bounds.left, y - 3, bounds.right, minOf(bounds.bottom, y + UI_LINE_HEIGHT - 3)),
+                                        IdeRect(bounds.left, y, bounds.right, y + UI_LINE_HEIGHT),
                                         IdeColors.SELECTION,
                                         Z_SELECTION,
                                     )
@@ -938,7 +931,7 @@ object IdeRenderer {
                     bounds,
                 )
                 if (row is IdeExplorerRow.ComputerRoot && row.state !is IdeComputerTreeState.NoTarget) {
-                    val refresh = IdeRect(bounds.right - 48, y - 2, bounds.right - 4, y + UI_LINE_HEIGHT - 1)
+                    val refresh = IdeRect(bounds.right - 48, y, bounds.right - 4, y + UI_LINE_HEIGHT)
                     target(IdeHitAction.RefreshComputer, refresh, row.state !is IdeComputerTreeState.Loading, "Refresh target filesystem")
                     ui(IdeTextKind.TreeRow, "Refresh", refresh.left + 3, y, IdeColors.MUTED, bounds)
                 }
@@ -2164,6 +2157,30 @@ object IdeRenderer {
             target(IdeHitAction.Dismiss, dismiss, true, focusGroup = IdeFocusGroup.Dialog, z = Z_DIALOG_TARGET)
             ui(IdeTextKind.Dialog, "Confirm", confirm.left + 9, confirm.top + 5, z = Z_DIALOG_TEXT)
             ui(IdeTextKind.Dialog, "Cancel", dismiss.left + 12, dismiss.top + 5, z = Z_DIALOG_TEXT)
+        }
+
+        private fun checkbox(
+            bounds: IdeRect,
+            checked: Boolean,
+            enabled: Boolean,
+        ) {
+            val size = 10
+            val left = bounds.left + (bounds.width - size) / 2
+            val top = bounds.top + (bounds.height - size) / 2
+            val color = if (enabled && checked) IdeColors.ACCENT else IdeColors.MUTED
+            val edges =
+                listOf(
+                    IdeRect(left, top, left + size, top + 1),
+                    IdeRect(left, top + size - 1, left + size, top + size),
+                    IdeRect(left, top + 1, left + 1, top + size - 1),
+                    IdeRect(left + size - 1, top + 1, left + size, top + size - 1),
+                )
+            edges.forEach { fills += IdeFillDraw(IdeFillKind.CheckboxBorder, it, color, Z_TEXT) }
+            if (checked) {
+                listOf(2 to 5, 3 to 6, 4 to 5, 5 to 4, 6 to 3).forEach { (x, y) ->
+                    fills += IdeFillDraw(IdeFillKind.CheckboxMark, IdeRect(left + x, top + y, left + x + 2, top + y + 2), color, Z_TEXT)
+                }
+            }
         }
 
         fun ui(

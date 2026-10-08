@@ -172,7 +172,13 @@ class IdeRendererStateTest {
         val fill = model.fills.single { it.kind == IdeFillKind.GitChange }
         assertEquals(IdeColors.GIT_MODIFIED, fill.color)
         assertTrue(geometry.editor.contains(fill.bounds))
-        assertTrue(model.fills.any { it.kind == IdeFillKind.Selection && geometry.tree!!.contains(it.bounds) })
+        val selectedRow = model.fills.single { it.kind == IdeFillKind.Selection && geometry.tree!!.contains(it.bounds) }
+        val selectedLabel = model.text.single { it.kind == IdeTextKind.TreeRow && it.value.trim() == "main.kt" }
+        assertEquals(selectedRow.bounds.top + IdeCodeFontProfile.DEFAULT.glyphDrawOffsetY, selectedLabel.y)
+        assertEquals(IdeCodeFontProfile.DEFAULT.cellHeight, selectedRow.bounds.height)
+        val scrolled = IdeRenderer.extract(state, geometry, treeFirstRow = 1, selectedTreePath = path)
+        val scrolledRow = scrolled.fills.single { it.kind == IdeFillKind.Selection && geometry.tree!!.contains(it.bounds) }
+        assertEquals(selectedRow.bounds.top - IdeCodeFontProfile.DEFAULT.cellHeight, scrolledRow.bounds.top)
         assertTrue(model.text.any { it.kind == IdeTextKind.Source && it.value == "val" && it.color == IdeColors.KEYWORD })
         val colors =
             IdeGitFileColors(
@@ -282,6 +288,19 @@ class IdeRendererStateTest {
             )
         val state = initial.copy(page = IdePageState.Workspace(page.value.copy(git = git)))
         val model = IdeRenderer.extract(state, geometry())
+        val checkboxTargets = model.hitTargets.filter { it.gitCommand is IdeCommand.GitCheck }
+        assertEquals(2, checkboxTargets.size)
+        checkboxTargets.forEach { target ->
+            assertTrue(model.fills.any { it.kind == IdeFillKind.CheckboxBorder && target.bounds.contains(it.bounds) })
+            assertTrue(model.fills.any { it.kind == IdeFillKind.CheckboxMark && target.bounds.contains(it.bounds) })
+        }
+        val unchecked =
+            IdeRenderer.extract(
+                initial.copy(page = IdePageState.Workspace(page.value.copy(git = git.copy(checkedPaths = emptySet())))),
+                geometry(),
+            )
+        assertTrue(unchecked.fills.any { it.kind == IdeFillKind.CheckboxBorder })
+        assertTrue(unchecked.fills.none { it.kind == IdeFillKind.CheckboxMark })
         assertTrue(model.hitTargets.any { it.gitOperation == ru.lazyhat.compukters.ide.git.GitOperation.Pull && it.enabled })
         assertTrue(
             model.hitTargets.any {
