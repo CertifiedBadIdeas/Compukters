@@ -390,6 +390,7 @@ object KotlinLineLexer {
             "sealed",
             "suspend",
             "tailrec",
+            "value",
             "vararg",
         )
 }
