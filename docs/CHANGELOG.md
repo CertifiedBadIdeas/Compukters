@@ -135,6 +135,8 @@ listed in [Kotlin support](developers/kotlin-support.md) and [standard library s
   and normal nozzle smoothing. One program owns writes; close, completion, disconnection or removal releases control
   and restores current redstone/link inputs. Saves and construction copies retain engine configuration without
   transferring program commands or leaving a residual throttle/steering envelope.
+- A runnable `pid-one-thruster` example combines Sable pose observations and Propulsion vector steering to
+  hold a world point with a lower upward-facing engine, using position PID and pitch/roll damping with configurable gains.
 - Addon resources belong to individual programs: an exiting child releases its hosts while suspended parents retain
   theirs. Computer shutdown closes every scope and rejects late responses. Generated handlers support Long,
   Double, Char and bounded immutable nested data-record results, preserving IEEE bits and UTF-16 code units;
