@@ -118,6 +118,20 @@ Aliases acquired by the same program for the same engine share one handle, so cl
 NaN, infinities, values outside 0..1, and percentages outside 1..100 throw IllegalArgumentException before a command.
 The computer admits at most 1,024 live typed peripheral handles across all integrations; handle IDs are not reused.
 
+## Hibernation
+
+Running programs preserve their variables, target position, PID state and engine handles across computer reload,
+construction unload/reload and orderly world shutdown. Owned ordinary/vector engines regain saved throttle,
+steering and custom thrust commands before the program continues. Engine UUIDs distinguish the same device from a
+replacement: a missing, disconnected or replaced engine leaves its old handle stale. Another program or an attached
+ComputerCraft controller is never overwritten; a control conflict abandons saved execution and cold boots the
+computer with `/home` retained.
+
+Thrust can lapse while the computer is unloaded or restoring. Aeronautics/Sable physics continues; this is not an
+uninterrupted-flight guarantee. Nozzle smoothing and startup remain Propulsion-owned. The installed Create addon
+allows hibernation when unused; active unsupported Create resources still cause a fresh boot. Moving/splitting a
+construction does not automatically relocate old peripheral handles.
+
 ## State and units
 
 `state()` returns an immutable `CreativeThrusterState` from one server-thread request. It includes world `gameTick`,

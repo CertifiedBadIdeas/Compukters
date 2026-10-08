@@ -24,11 +24,14 @@ import net.minecraft.core.HolderLookup;
 import net.minecraft.nbt.CompoundTag;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
+import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import ru.lazyhat.compukters.integration.propulsion.PropulsionGuestIntegration;
 import ru.lazyhat.compukters.integration.propulsion.TransientThrusterControl;
+
+import java.util.UUID;
 
 /** Never deserialize a program lease: chunk saves and Sable copies retain engine settings only. */
 @Mixin(value = AbstractThrusterBlockEntity.class, remap = false)
@@ -37,6 +40,20 @@ public abstract class TransientThrusterControlMixin implements TransientThruster
 
     @Shadow protected float digitalInput;
     @Shadow private float fadePower;
+    @Shadow protected ControlMode controlMode;
+    @Unique private UUID compukters$identity = UUID.randomUUID();
+
+    @Override
+    public String compukters$persistentIdentity() {
+        ((AbstractThrusterBlockEntity) (Object) this).setChanged();
+        return compukters$identity.toString();
+    }
+
+    @Override
+    public float compukters$digitalInput() { return digitalInput; }
+
+    @Override
+    public boolean compukters$peripheralMode() { return controlMode == ControlMode.PERIPHERAL; }
 
     @Override
     public void compukters$clearProgramPower() {
@@ -50,6 +67,7 @@ public abstract class TransientThrusterControlMixin implements TransientThruster
     @Inject(method = "write", at = @At("TAIL"))
     private void compukters$markTransientControl(CompoundTag tag, HolderLookup.Provider registries,
                                                 boolean clientPacket, CallbackInfo callback) {
+        if (!clientPacket) tag.putUUID("compukters_propulsion:identity", compukters$identity);
         if (!clientPacket && PropulsionGuestIntegration.isControlled(this)) {
             tag.putBoolean(COMPUKTERS_CONTROL, true);
         }
@@ -58,6 +76,8 @@ public abstract class TransientThrusterControlMixin implements TransientThruster
     @Inject(method = "read", at = @At("TAIL"))
     private void compukters$restoreUnownedControl(CompoundTag tag, HolderLookup.Provider registries,
                                                  boolean clientPacket, CallbackInfo callback) {
+        if (!clientPacket && tag.hasUUID("compukters_propulsion:identity"))
+            compukters$identity = tag.getUUID("compukters_propulsion:identity");
         if (!clientPacket && tag.getBoolean(COMPUKTERS_CONTROL)) {
             AbstractThrusterBlockEntity entity = (AbstractThrusterBlockEntity) (Object) this;
             compukters$clearProgramPower();

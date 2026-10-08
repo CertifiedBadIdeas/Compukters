@@ -22,6 +22,7 @@ import dev.propulsionteam.propulsionsimulated.content.thruster.vector_thruster.c
 import net.minecraft.core.HolderLookup;
 import net.minecraft.nbt.CompoundTag;
 import org.spongepowered.asm.mixin.Mixin;
+import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.gen.Invoker;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
@@ -31,6 +32,10 @@ import ru.lazyhat.compukters.integration.propulsion.PropulsionGuestIntegration;
 
 @Mixin(value = CreativeVectorThrusterBlockEntity.class, remap = false)
 public abstract class CreativeVectorThrustMixin implements CreativeVectorThrustAccess {
+    @Shadow private float peripheralThrustOutput;
+
+    @Override
+    public float compukters$peripheralThrustOutput() { return peripheralThrustOutput; }
     @Override
     @Invoker("getBaseThrust")
     public abstract double compukters$baseThrustKn();

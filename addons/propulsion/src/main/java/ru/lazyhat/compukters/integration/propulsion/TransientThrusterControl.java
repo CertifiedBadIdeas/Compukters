@@ -21,4 +21,7 @@ package ru.lazyhat.compukters.integration.propulsion;
 /** Clears a released program's input and shutdown envelope without changing engine settings. */
 public interface TransientThrusterControl {
     void compukters$clearProgramPower();
+    String compukters$persistentIdentity();
+    float compukters$digitalInput();
+    boolean compukters$peripheralMode();
 }

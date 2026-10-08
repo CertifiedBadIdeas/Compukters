@@ -20,10 +20,47 @@ package ru.lazyhat.compukters.integration.propulsion
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class ThrusterControlLeasesTest {
+    @Test fun failingReleaseStillClearsEveryOwnedLease() {
+        val leases = ThrusterControlLeases<Any>()
+        val owner = Any()
+        val first = Any()
+        val second = Any()
+        var releases = 0
+        leases.claim(first, owner, { true }) {
+            releases++
+            error("first cleanup failed")
+        }
+        leases.claim(second, owner, { true }) {
+            releases++
+            error("second cleanup failed")
+        }
+        assertFailsWith<IllegalStateException> { leases.releaseOwner(owner) }
+        assertEquals(2, releases)
+        assertFalse(leases.contains(first))
+        assertFalse(leases.contains(second))
+    }
+
+    @Test fun captureOwnershipDoesNotInvalidateDetachedEntities() {
+        val leases = ThrusterControlLeases<Any>()
+        val entity = Any()
+        val owner = Any()
+        var connected = true
+        var released = false
+        leases.claim(entity, owner, { connected }) { released = true }
+        connected = false
+        assertTrue(leases.ownedBy(entity, owner))
+        assertFalse(leases.ownedBy(entity, Any()))
+        assertFalse(released)
+        leases.reap()
+        assertFalse(leases.ownedBy(entity, owner))
+        assertTrue(released)
+    }
+
     @Test fun exclusiveOwnershipAndRelease() {
         val leases = ThrusterControlLeases<Any>()
         val engine = Any()

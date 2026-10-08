@@ -22,4 +22,5 @@ package ru.lazyhat.compukters.integration.propulsion;
 public interface VectorThrusterControl {
     void compukters$setVector(float x, float y);
     void compukters$clearVector();
+    boolean compukters$hasVectorOverride();
 }

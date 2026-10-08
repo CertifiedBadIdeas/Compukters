@@ -40,6 +40,9 @@ public abstract class VectorThrusterControlMixin implements VectorThrusterContro
     @Shadow protected abstract void updateMappedTargets();
 
     @Override
+    public boolean compukters$hasVectorOverride() { return compukters$vectorOverride; }
+
+    @Override
     public void compukters$setVector(float x, float y) {
         compukters$vectorX = x;
         compukters$vectorY = y;

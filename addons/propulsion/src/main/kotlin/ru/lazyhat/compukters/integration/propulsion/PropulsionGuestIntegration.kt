@@ -40,8 +40,8 @@ import ru.lazyhat.compukters.api.addon.minecraft.CompuktersComputerContext
 import ru.lazyhat.compukters.api.addon.minecraft.CompuktersPeripheralAccessException
 import ru.lazyhat.compukters.api.addon.minecraft.CompuktersPeripheralContract
 import ru.lazyhat.compukters.api.addon.minecraft.CompuktersPeripheralDevice
-import ru.lazyhat.compukters.api.addon.minecraft.CompuktersPeripheralEndpoint
 import ru.lazyhat.compukters.api.addon.minecraft.CompuktersPeripheralProvider
+import ru.lazyhat.compukters.api.addon.minecraft.CompuktersPersistentPeripheralEndpoint
 import ru.lazyhat.compukters.lang.runtime.vm.HostFailureKind
 
 internal object PropulsionGuestIntegration {
@@ -109,8 +109,9 @@ internal object PropulsionGuestIntegration {
         internal class BoundThruster(
             val entity: CreativeThrusterBlockEntity,
             private val reachable: () -> Boolean,
-        ) : CompuktersPeripheralEndpoint {
+        ) : CompuktersPersistentPeripheralEndpoint {
             override val identity: Any get() = entity
+            override val persistentIdentity: String get() = (entity as TransientThrusterControl).`compukters$persistentIdentity`()
 
             private var stale = false
 
@@ -208,11 +209,63 @@ internal object PropulsionGuestIntegration {
                 addonCompleted(Unit)
             }
 
+        override fun checkpoint(): ByteArray {
+            checkThread()
+            val ordinary =
+                handles.entries.sortedBy { it.key }.distinctBy { it.value.entity }.mapNotNull { (handle, bound) ->
+                    if (!leases.ownedBy(bound.entity, this)) return@mapNotNull null
+                    val control = bound.entity as TransientThrusterControl
+                    ThrusterCommand(
+                        handle,
+                        control.`compukters$peripheralMode`(),
+                        control.`compukters$digitalInput`(),
+                        bound.entity.thrustConfig + 1,
+                    )
+                }
+            return PropulsionCheckpoint(ordinary, vectorHost.checkpoint()).encode()
+        }
+
+        override fun restoreCheckpoint(state: ByteArray) {
+            checkThread()
+            val saved = PropulsionCheckpoint.decode(state)
+            reset()
+            try {
+                saved.ordinary.forEach { command ->
+                    val bound =
+                        try {
+                            computer.peripheral(contract, command.handle)
+                        } catch (failure: CompuktersPeripheralAccessException) {
+                            if (failure.kind != HostFailureKind.INPUT_OUTPUT) throw failure
+                            return@forEach // The shared session preserves a stale handle for a missing/replaced engine.
+                        }
+                    require(bound.entity.computerBehaviour?.hasAttachedComputer() != true) { "Thruster controlled by ComputerCraft" }
+                    require(leases.claim(bound.entity, this, bound::valid) { restoreRedstone(bound.entity) }) {
+                        "Thruster controlled by another program"
+                    }
+                    handles[command.handle] = bound
+                    bound.entity.setDigitalInput(command.digitalInput)
+                    bound.entity.setControlMode(if (command.peripheralMode) ControlMode.PERIPHERAL else ControlMode.NORMAL)
+                    bound.entity.setThrustConfig(command.thrustPercent - 1)
+                    bound.entity.setChanged()
+                }
+                vectorHost.restoreCheckpoint(saved.vector)
+            } catch (failure: Exception) {
+                runCatching(::reset).onFailure(failure::addSuppressed)
+                throw failure
+            }
+        }
+
         override fun reset() {
             checkThread()
-            leases.releaseOwner(this)
-            vectorHost.reset()
-            handles.clear()
+            try {
+                leases.releaseOwner(this)
+            } finally {
+                try {
+                    vectorHost.reset()
+                } finally {
+                    handles.clear()
+                }
+            }
         }
 
         private fun mutate(

@@ -61,7 +61,7 @@ internal class ThrusterControlLeases<K : Any> {
         leases.entries
             .filter { it.value.owner === owner }
             .map { it.key }
-            .forEach { release(it, owner) }
+            .let { keys -> releaseKeys(keys) }
     }
 
     fun reap() {
@@ -70,11 +70,28 @@ internal class ThrusterControlLeases<K : Any> {
         }
     }
 
+    /** Capture may run after world detachment; do not revalidate or release here. */
+    fun ownedBy(
+        key: K,
+        owner: Any,
+    ): Boolean = leases[key]?.owner === owner
+
     fun contains(key: K): Boolean = leases.containsKey(key)
 
+    private fun releaseKeys(keys: List<K>) {
+        var failure: Throwable? = null
+        keys.forEach { key ->
+            val lease = leases.remove(key) ?: return@forEach
+            try {
+                lease.release()
+            } catch (caught: Throwable) {
+                if (failure == null) failure = caught else failure?.addSuppressed(caught)
+            }
+        }
+        failure?.let { throw it }
+    }
+
     fun releaseAll() {
-        val previous = leases.values.toList()
-        leases.clear()
-        previous.forEach { it.release() }
+        releaseKeys(leases.keys.toList())
     }
 }

@@ -20,4 +20,5 @@ package ru.lazyhat.compukters.integration.propulsion;
 
 public interface CreativeVectorThrustAccess {
     double compukters$baseThrustKn();
+    float compukters$peripheralThrustOutput();
 }

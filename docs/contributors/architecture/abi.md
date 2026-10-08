@@ -75,6 +75,17 @@ this stamp to peripheral resource format 2. Existing endpoint implementations re
 as stale when they provide no persistent identity. The extension adds no Guest operation, native ABI or
 checkpoint framing version.
 
+Propulsion resource format 1 uses little-endian u32 version 1 followed by ordinary and vector command lists.
+Each list has a u32 count; the combined maximum is 1024 unique positive peripheral handles. Each entry stores
+handle, checked 0/1 peripheral-mode flag, IEEE Float digital-input bits and ordinary thrust percentage (1..100,
+zero for vector engines), a checked steering flag with optional Float X/Y bits, and a checked thrust flag with
+optional Float raw upstream output bits. Digital input is finite 0..1, steering is finite -1..1 and thrust is
+finite nonnegative; ordinary entries cannot carry vector overrides. Decode rejects duplicate handles, invalid
+versions/flags/counts/ranges, truncation and trailing bytes before applying world effects. Restore also checks
+current configured thrust limits. UUIDs live in engine full NBT as `compukters_propulsion:identity`; resource
+commands live only in the computer checkpoint. Unused Create handlers encode empty state and reject nonempty
+restoration. Native and peripheral formats are unchanged.
+
 ## Native Runtime bundles
 
 Native Runtime platform bundles use manifest schema 2 and contain the FFI and JNI native libraries for one

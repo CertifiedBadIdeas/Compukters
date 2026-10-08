@@ -231,6 +231,16 @@ object CreativeVectorThrusterGameTests {
             helper.assertTrue(saved.getBoolean("compukters_propulsion:transient_control"), "Vector save lacks transient marker")
             val copy = CreativeVectorThrusterBlockEntity(helper.absolutePos(engine), thruster.blockState)
             copy.loadWithComponents(saved, helper.level.registryAccess())
+            val identity = (thruster as TransientThrusterControl).`compukters$persistentIdentity`()
+            helper.assertTrue(
+                (copy as TransientThrusterControl).`compukters$persistentIdentity`() == identity,
+                "NBT reload changed engine identity",
+            )
+            val replacement = CreativeVectorThrusterBlockEntity(helper.absolutePos(engine), thruster.blockState)
+            helper.assertTrue(
+                (replacement as TransientThrusterControl).`compukters$persistentIdentity`() != identity,
+                "Replacement reused engine identity",
+            )
             helper.assertTrue(!copy.hasPeripheralThrustOverride(), "NBT copy retained custom thrust")
             helper.assertTrue(
                 copy.targetVectorX == -0.4f && copy.targetVectorY == 0.6f,

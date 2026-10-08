@@ -58,7 +58,13 @@ powered off across block-entity reload.
 Addon hosts must implement checkpoint capture and restoration, including mutable tokens and resource leases;
 unsupported or failed capture logs the failure, discards any stale execution checkpoint and closes native execution
 normally so the filesystem can flush. The next load cold boots; unsaved execution and addon state are lost.
-Sable's observation host is stateless and opts in. Stateful Create and Propulsion hosts do not yet implement this contract.
+Sable's observation host is stateless and opts in. Propulsion captures ordinary/vector engine command state and
+program ownership descriptors, using persistent engine UUIDs through the shared peripheral session. Resource
+rebinding restores power, steering and thrust overrides before Guest execution continues; missing/replaced engines
+remain stale, and ownership conflicts abort restoration and release partially acquired leases. Engine startup,
+nozzle interpolation and construction physics remain upstream-owned. Thrust may lapse while the computer is unloaded
+or restoring; physics is not paused. An unused Create host opts in with empty state, while active unsupported Create
+resources still reject capture and select cold boot.
 
 ## Close barriers and persistence work
 
