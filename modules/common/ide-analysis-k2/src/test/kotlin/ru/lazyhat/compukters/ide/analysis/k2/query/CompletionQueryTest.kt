@@ -41,6 +41,36 @@ import kotlin.test.assertTrue
 
 class CompletionQueryTest {
     @Test
+    fun `math completion resolves overloads constants and typed extensions`() {
+        for (attachedSources in listOf(false, true)) {
+            val source = "import kotlin.math.*\nfun main() { val value: Double = 1.0; value. }"
+            K2QueryFixture.sourceWithGuestApi(attachedSources, "main.kt" to source).use { fixture ->
+                val items = fixture.complete("main.kt", source.indexOf("value.") + 6).items
+                for (name in listOf("ulp", "sign", "absoluteValue", "nextUp", "nextDown", "nextTowards", "pow", "withSign", "IEEErem")) {
+                    val matching = items.filter { it.insertText == name }
+                    assertTrue(matching.isNotEmpty(), name)
+                    assertTrue(
+                        matching.all {
+                            it.callablePresentation?.returnType == "Double" ||
+                                (it.kind == CompletionKind.Property && it.detail?.contains(": kotlin.Double") == true)
+                        },
+                        matching.toString(),
+                    )
+                }
+                assertEquals("Int", items.single { it.insertText == "roundToInt" }.callablePresentation?.returnType)
+                assertEquals("Long", items.single { it.insertText == "roundToLong" }.callablePresentation?.returnType)
+            }
+            val topLevel = "import kotlin.math.*\nfun main() { sq }"
+            K2QueryFixture.sourceWithGuestApi(attachedSources, "main.kt" to topLevel).use { fixture ->
+                val all = fixture.complete("main.kt", topLevel.indexOf("sq") + 2).items
+                assertTrue(all.none { it.insertText.endsWith("Primitive") }, all.toString())
+                val items = all.filter { it.insertText == "sqrt" }
+                assertEquals(setOf("Double", "Float"), items.map { it.callablePresentation?.returnType }.toSet())
+            }
+        }
+    }
+
+    @Test
     fun `hash collections complete with specialized nullable results`() {
         for (attachedSources in listOf(false, true)) {
             val source = "import kotlin.collections.*\nfun main() { val map = mutableMapOf(\"a\" to 1); map. }"

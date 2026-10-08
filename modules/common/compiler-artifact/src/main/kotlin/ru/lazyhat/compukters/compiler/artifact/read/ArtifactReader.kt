@@ -658,6 +658,20 @@ private fun decodeCode(bytes: ByteArray): List<Instruction> {
                     Instruction.Convert(r(), r(), unsignedSource = form and 1u != 0u, unsignedDestination = form and 2u != 0u)
                 }
 
+                0x1cu -> {
+                    require(form == 3u || form == 4u)
+                    val selector = frame.uleb()
+                    val operation = MathUnaryOperation.entries.single { it.selector == selector }
+                    Instruction.MathUnary(scalar(form), operation, r(), r())
+                }
+
+                0x1du -> {
+                    require(form == 3u || form == 4u)
+                    val selector = frame.uleb()
+                    val operation = MathBinaryOperation.entries.single { it.selector == selector }
+                    Instruction.MathBinary(scalar(form), operation, r(), r(), r())
+                }
+
                 0x10u -> {
                     tri {
                         a,

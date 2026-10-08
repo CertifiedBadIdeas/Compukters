@@ -80,6 +80,21 @@ internal fun encodeInstruction(
             operands.writeRegister(instruction.source)
         }
 
+        is Instruction.MathUnary -> {
+            opcode = 0x1cu
+            form = instruction.type.artifactForm
+            operands.writeUleb128(instruction.operation.selector)
+            operands.writeRegister(instruction.destination)
+            operands.writeRegister(instruction.source)
+        }
+
+        is Instruction.MathBinary -> {
+            opcode = 0x1du
+            form = instruction.type.artifactForm
+            operands.writeUleb128(instruction.operation.selector)
+            operands.writeBinaryRegisters(instruction.destination, instruction.left, instruction.right)
+        }
+
         is Instruction.Add -> {
             opcode = 0x10u
             form = instruction.type.artifactForm
@@ -491,6 +506,10 @@ internal fun instructionFixedCost(instruction: Instruction): UInt =
         is Instruction.InlineConstruct -> variableCost(2u, instruction.components.size)
 
         is Instruction.InlineComponent -> 2u
+
+        is Instruction.MathUnary -> instruction.operation.fixedCost
+
+        is Instruction.MathBinary -> instruction.operation.fixedCost
 
         is Instruction.Move,
         is Instruction.Const,

@@ -70,6 +70,40 @@ import kotlin.test.assertTrue
 
 class MinimalScriptLoweringTest {
     @Test
+    fun `portable math compiles both widths library bodies and callable references`() =
+        withAdapter { adapter ->
+            val source = repositoryFile("modules/common/compiler-k2/src/test/resources/kotlin/math/main.kt").readText()
+            val result = adapter.compile(request(source))
+            val bytes = assertNotNull(result.artifact, result.diagnostics.toString()).toByteArray()
+            val artifact = ArtifactReader.read(bytes)
+            assertEquals(AbiVersion(1u, 16u), artifact.minimumRuntimeAbi)
+            val instructions = artifact.modules.flatMap { it.blocks }.flatMap { it.instructions }
+            for (type in listOf(ScalarValueType.F32, ScalarValueType.F64)) {
+                assertEquals(
+                    ru.lazyhat.compukters.compiler.artifact.model.MathUnaryOperation.entries
+                        .toSet(),
+                    instructions
+                        .filterIsInstance<Instruction.MathUnary>()
+                        .filter { it.type == type }
+                        .map { it.operation }
+                        .toSet(),
+                )
+                assertEquals(
+                    ru.lazyhat.compukters.compiler.artifact.model.MathBinaryOperation.entries
+                        .toSet(),
+                    instructions
+                        .filterIsInstance<Instruction.MathBinary>()
+                        .filter { it.type == type }
+                        .map { it.operation }
+                        .toSet(),
+                )
+            }
+            System.getProperty("compukter.vm.mathArtifact")?.let { output ->
+                Path.of(output).also { it.parent.createDirectories() }.writeBytes(bytes)
+            }
+        }
+
+    @Test
     fun `text stdlib preserves UTF16 cleanup search extraction and transformations`() =
         withAdapter { adapter ->
             val source =
