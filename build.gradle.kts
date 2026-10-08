@@ -308,6 +308,16 @@ fun registerKotlinVmConformance(
 }
 
 registerKotlinVmConformance(
+    taskName = "testKotlinMathVmConformance",
+    taskDescription = "Executes portable Guest math, numerical edge cases and callable references.",
+    artifactTask = ":compiler-k2:generateMathConformanceArtifact",
+    artifact = project(":compiler-k2").layout.buildDirectory.file("generated/conformance/kotlin-math.cpkt"),
+    cargoTargetDirectory = ".toolchain/build/cargo/compiler-k2-math-conformance",
+    artifactEnvironmentVariable = "COMPUKTER_KOTLIN_MATH_ARTIFACT",
+    conformanceScenario = "math",
+)
+
+registerKotlinVmConformance(
     taskName = "testKotlinEqualsVmConformance",
     taskDescription = "Executes uniform virtual equals and generated data-class equality.",
     artifactTask = ":compiler-k2:generateEqualsConformanceArtifact",

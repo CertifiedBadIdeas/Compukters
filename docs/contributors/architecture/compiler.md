@@ -128,7 +128,7 @@ Private Kotlin metadata format 6 carries the same defaults, including primary-co
 Ordinary public library constructors are linked as static functions receiving the already allocated object;
 direct construction and superclass calls share argument/default evaluation. Their Kotlin bodies are compiled in
 the owning library, not regenerated or bypassed by the consumer.
-The standard library has one owner, `stdlib:core`: core helpers, inline scope functions, `repeat`, ranges and collections.
+The standard library has one owner, `stdlib:core`: core helpers, inline scope functions, `repeat`, ranges, collections and portable `kotlin.math`.
 Its generic and inline source bodies coexist with ordinary precompiled implementations.
 
 Ordinary library implementations may materialize concrete generic classes and structural collection interfaces,
@@ -146,6 +146,12 @@ User-defined concrete type arguments retain their qualified identity, with a sep
 Kotlin metadata's short display names. User classes named `String` therefore cannot reuse a built-in String variant.
 
 ## Built-in module graph
+
+Math public functions and extension getters are ordinary canonical library bodies; their internal
+floating primitives resolve through exact trusted signatures and emit ABI 1.16 math instructions.
+This keeps callable references on the existing precompiled library path. Integer helpers, arbitrary-base
+logarithms and integer rounding compose ordinary Guest instructions. The owning numerical contract and
+evidence are in [portable mathematics](../../developers/stdlib/math.md).
 
 The complete built-in graph is `kotlin:builtins` → `stdlib:core` → `compukter:core`. Compukter core owns environment
 and VM-runtime APIs: compiler, child processes, redstone, sound, text displays, terminal, filesystem, and cooperative
