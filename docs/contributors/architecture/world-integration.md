@@ -17,7 +17,7 @@ permalink: /ARCHITECTURE/world-integration/
 The Minecraft carrier owns exactly one actor endpoint and submits ordinary advancement once per server tick. Eligible host continuations may reuse the remaining frame credit, deadline and cumulative quotas described in [runtime ownership](runtime.md). Rust starts
 `/rom/boot`, compiled from `system/programs/boot.kt`; boot delegates to `/rom/shell`, compiled from
 `system/programs/shell.kt`. A foreground child suspends its parent until it exits or fails. There is one active
-foreground lane today, while the runtime contract leaves room for later parallel execution. Reboot replaces the
+foreground lane today, while the runtime contract leaves room for later parallel execution. Hibernation preserves the machine stack and terminal across unload/reload; reboot replaces the
 complete machine stack and clears the terminal. Minecraft sends full state to a new viewer and ordered deltas
 thereafter. Terminal viewers submit bounded asynchronous key, text, state, resync, and resource-snapshot operations,
 which merge in server-arrival order without client-side echo or a terminal input lease. A valid standalone-terminal
@@ -79,7 +79,10 @@ contacts. The existing 1024 logical-device limit applies after identity deduplic
 The base text display uses the same bounded world-request path with an internal `compukters:display` capability. Its
 20x10 buffer and exclusive writer lease belong to the display block entity on the server, outside the VM terminal.
 The block tick checks its writer and cable reachability even while Guest code is idle. Stopping or disconnecting that
-writer clears the screen, and no display text is saved in world NBT. Clients receive at most one full-grid block-entity
+writer clears the screen, and no display text is saved in world NBT. During hibernation the computer checkpoint
+retains its owned rows and writer handle. A persisted display UUID distinguishes the same device from a replacement;
+restoration reacquires a reachable matching display without overwriting another writer. Missing or replaced devices
+leave the old handle stale. Clients receive at most one full-grid block-entity
 update per changed server tick and render text on the oriented front face.
 
 ## Foreground termination
@@ -173,3 +176,13 @@ Vector capability operations append IDs 5..12, preserving ordinary
 operations 0..4 at capability version 1, Runtime ABI 1.13 and C ABI 20. The independent `addons/dev` run build composes
 all three
 addon archives and their GameTests with the upstream Aeronautics/Propulsion runtime.
+
+## Sable construction lifetime
+
+The Compukters Sable addon supports assembly, full construction unload/reload and return to the ordinary world through
+the same carrier checkpoint path. Physics keeps running during computer restoration; no activation barrier or upstream
+Sable/Rapier patch is installed. The live-physics GameTests continue suspended Guest programs and query the same
+construction after reload. On the development machine, activation to continued Guest physics queries took 44 ms for
+one computer on a two-block construction and 71 ms for both computers on a 29-block construction, with the second
+computer eight blocks from the assembly anchor. Cold compilation precedes the measured interval. These results do
+not bound arbitrary heaps, construction sizes, disk latency or server load.
