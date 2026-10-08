@@ -40,6 +40,8 @@ import ru.lazyhat.compukters.lang.runtime.vm.TerminalUpdate
 import ru.lazyhat.compukters.lang.runtime.vm.VmAdmissionException
 import ru.lazyhat.compukters.lang.runtime.vm.VmBootException
 import ru.lazyhat.compukters.lang.runtime.vm.VmBridgeException
+import ru.lazyhat.compukters.lang.runtime.vm.VmCheckpointException
+import ru.lazyhat.compukters.lang.runtime.vm.VmCheckpointFailure
 import ru.lazyhat.compukters.lang.runtime.vm.VmCompilationRequest
 import ru.lazyhat.compukters.lang.runtime.vm.VmExecutableRevision
 import ru.lazyhat.compukters.lang.runtime.vm.VmHostRequest
@@ -93,7 +95,7 @@ class ProgramRuntimeHost internal constructor(
 
     private val programScopes = ArrayDeque<Long>().apply { addLast(0) }
     private var session: ProgramVmSession? = null
-    private var vmEpoch = 0L
+    private var preparedRestoration: ProgramHostCheckpoint? = null
     private var activeVmEpoch = 0L
     private var pendingCompilation: ComputerCompilationAddress? = null
     private var pendingRedstoneCommit: PendingRedstoneCommit? = null
@@ -128,12 +130,140 @@ class ProgramRuntimeHost internal constructor(
 
     fun startBoot(): ProgramStartResult = startSession(sessionFactory::boot)
 
+    internal fun discardCheckpoint() = sessionFactory.discardCheckpoint()
+
+    internal fun abortRestoration(detail: String): ProgramStartResult {
+        releaseSession()
+        return rejectStart(ProgramFailure.Bridge(detail.take(1024)))
+    }
+
+    /** Accepted completions have drained; remaining requests have no acknowledged world result. */
+    internal fun settleExternalRequestsForHibernation() {
+        val active = session ?: return
+        val detail = "Computer hibernated before the external request completed"
+        pendingRedstoneCommit?.let {
+            check(completeRedstoneOutput(it.packed, RedstoneCommitResult.Failed(HostFailureKind.UNAVAILABLE, detail)))
+        }
+        pendingSoundCommit?.let {
+            check(completeSound(SoundCommitResult.Failed(HostFailureKind.UNAVAILABLE, detail)))
+        }
+        pendingAddonRequests.keys.toList().forEach { identity ->
+            check(completeAddon(ProgramAddonCompletion(identity, HostResponse.Failure(HostFailureKind.UNAVAILABLE, detail))))
+        }
+        check(session === active) { "external settlement failed before checkpoint publication" }
+    }
+
+    /** The actor must stop advancement and settle all accepted world actions first. */
+    internal fun hibernate(
+        worldTick: Long,
+        addonState: ByteArray,
+    ): Boolean {
+        require(worldTick >= 0)
+        if (preparedRestoration != null) return false // Keep the unconsumed durable snapshot.
+        check(pendingRedstoneCommit == null && pendingSoundCommit == null && pendingAddonRequests.isEmpty()) {
+            "external requests must be settled before hibernation"
+        }
+        val active = session ?: return false
+        val checkpoint =
+            ProgramHostCheckpoint(
+                state == ProgramRuntimeState.WaitingForInput,
+                grantedBudgets.snapshot(),
+                confirmedRedstoneOutput,
+                programScopes.toList(),
+                pendingTimerRequests.values.map { timer ->
+                    val duration = (timer.request.arguments.single() as VmValue.I32).value
+                    ProgramTimerCheckpoint(
+                        timer.request.identity,
+                        timer.programId,
+                        duration,
+                        maxOf(
+                            0,
+                            timer.wakeTick - maxOf(worldTick, lastObservedTick),
+                        ),
+                    )
+                },
+                addonState.copyOf(),
+            )
+        active.checkpoint(checkpoint.encode())
+        releaseSession()
+        state = ProgramRuntimeState.Closed
+        return true
+    }
+
+    /** Native admission runs no Guest code. Resource rebinding must precede completeRestoration. */
+    internal fun prepareRestoreBoot(worldTick: Long): ProgramHostCheckpoint? {
+        require(worldTick >= 0)
+        check(session == null && state == ProgramRuntimeState.Idle && preparedRestoration == null)
+        val restored = sessionFactory.restoreBoot() ?: return null
+        try {
+            val checkpoint =
+                try {
+                    ProgramHostCheckpoint.decode(restored.hostState)
+                } catch (error: IllegalArgumentException) {
+                    throw VmCheckpointException(VmCheckpointFailure.CORRUPT).also { it.initCause(error) }
+                }
+            session = restored.session
+            activeVmEpoch = nextEpoch()
+            programScopes.clear()
+            programScopes.addAll(checkpoint.programScopes)
+            pendingTimerRequests.clear()
+            checkpoint.timers.forEach { timer ->
+                val request =
+                    VmHostRequest(
+                        timer.identity.requestId,
+                        TIMER_CAPABILITY,
+                        0,
+                        listOf(VmValue.I32(timer.durationTicks)),
+                        timer.identity.taskId,
+                    )
+                pendingTimerRequests[timer.identity] =
+                    PendingTimerRequest(
+                        restored.session,
+                        request,
+                        worldTick.saturatingAdd(timer.remainingTicks),
+                        timer.programId,
+                    )
+            }
+            grantedBudgets.restore(checkpoint.granted)
+            confirmedRedstoneOutput = checkpoint.confirmedRedstoneOutput
+            lastObservedTick = worldTick - 1
+            remainingAdvances = 0
+            remainingHostRequests = 0
+            chargedHostRequests.clear()
+            retiredInstructionsLastTick = 0
+            preparedRestoration = checkpoint
+            return checkpoint
+        } catch (error: Throwable) {
+            try {
+                restored.session.close()
+            } catch (closing: Throwable) {
+                error.addSuppressed(closing)
+            }
+            session = null
+            throw error
+        }
+    }
+
+    /** Consume durably before re-enabling Guest execution and world dispatch. */
+    internal fun completeRestoration(worldTick: Long) {
+        require(worldTick >= 0 && worldTick >= lastObservedTick)
+        val checkpoint = checkNotNull(preparedRestoration) { "no prepared restoration" }
+        sessionFactory.discardCheckpoint()
+        checkpoint.timers.forEach { timer ->
+            val pending = checkNotNull(pendingTimerRequests[timer.identity])
+            pendingTimerRequests[timer.identity] = pending.copy(wakeTick = worldTick.saturatingAdd(timer.remainingTicks))
+        }
+        lastObservedTick = worldTick - 1
+        preparedRestoration = null
+        state = if (checkpoint.waitingForInput) ProgramRuntimeState.WaitingForInput else ProgramRuntimeState.Running
+    }
+
     private fun startSession(open: () -> ProgramVmSession): ProgramStartResult {
         if (state == ProgramRuntimeState.Closed) return ProgramStartResult.Closed
+        check(preparedRestoration == null) { "restoration must be completed before starting" }
         releaseSession()
         state = ProgramRuntimeState.Idle
-        val openingEpoch = Math.incrementExact(vmEpoch)
-        vmEpoch = openingEpoch
+        val openingEpoch = nextEpoch()
         return try {
             session = open()
             grantedBudgets.reset()
@@ -477,6 +607,7 @@ class ProgramRuntimeHost internal constructor(
         if (accepted && key == TerminalKey.T && action == TerminalKeyAction.PRESS &&
             TerminalModifier.CONTROL in modifiers && programScopes.size > 1
         ) {
+            preparedRestoration = null
             pendingCompilation?.let { compilerRouter?.cancel(it) }
             pendingCompilation = null
             state = ProgramRuntimeState.Running
@@ -786,6 +917,7 @@ class ProgramRuntimeHost internal constructor(
     }
 
     private fun releaseSession() {
+        preparedRestoration = null
         pendingCompilation?.let { compilerRouter?.cancel(it) }
         pendingCompilation = null
         pendingRedstoneCommit = null
@@ -809,6 +941,12 @@ class ProgramRuntimeHost internal constructor(
     private fun VmBridgeException.bridgeDetail(): String = message ?: "native VM bridge failure"
 
     private companion object {
+        val epochs =
+            java.util.concurrent.atomic
+                .AtomicLong()
+
+        fun nextEpoch(): Long = epochs.updateAndGet { Math.incrementExact(it) }
+
         val REDSTONE_CAPABILITY = CapabilityIdentity("compukter", "redstone", 1, 0)
         val SOUND_CAPABILITY = CapabilityIdentity("compukter", "sound", 1, 0)
         val TIMER_CAPABILITY = CapabilityIdentity("compukter", "timer", 1, 0)
@@ -959,6 +1097,13 @@ internal class GrantedResourceBudgets(
         guestUnits = 0
         maintenanceUnits = 0
         saturated = false
+    }
+
+    fun restore(snapshot: GrantedResourceBudgetSnapshot) {
+        require(snapshot.guestUnits >= 0 && snapshot.maintenanceUnits >= 0)
+        guestUnits = snapshot.guestUnits
+        maintenanceUnits = snapshot.maintenanceUnits
+        saturated = snapshot.saturated
     }
 
     fun snapshot(): GrantedResourceBudgetSnapshot = GrantedResourceBudgetSnapshot(guestUnits, maintenanceUnits, saturated)

@@ -74,3 +74,11 @@ world-tick cadence and budget; snapshot requests add neither substep VM turns no
 
 For the API's exact signatures, see the [Sable reference]({{ '/guest-api/sable/' | relative_url }}). Build commands,
 integration ownership and test coverage live in [Maintain first-party addons]({{ '/ADDON-CONTRIBUTING/' | relative_url }}#sable).
+
+## Hibernation
+
+A computer keeps its execution when assembled, when its Sable construction unloads and reloads, and when moved back
+into the world. Retained `PhysicsSnapshot` values remain copies; each new `Physics.snapshot()` resolves the computer's
+current construction. Sable physics continues during restoration. In the live-physics GameTests, one computer on a two-block construction
+continued and queried the same construction in 35 ms; both computers on a 29-block construction continued in 68 ms.
+These unthrottled GameTest measurements exclude cold compilation; larger states and loaded servers may take longer.

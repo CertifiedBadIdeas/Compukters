@@ -149,7 +149,7 @@ class ProgramRuntimeActorService(
     ): ProgramRuntimeActorLease? {
         val processor = ProgramRuntimeActorProcessor(host, port, soundPort, addonPort)
         if (!scheduler.register(endpoint, processor)) return null
-        return ProgramRuntimeActorLease(endpoint, processor.closed) { unregister(endpoint) }
+        return ProgramRuntimeActorLease(endpoint, processor.closed, processor::prepareHibernation) { unregister(endpoint) }
     }
 
     fun request(

@@ -24,6 +24,11 @@ open class DisplayBlockEntity(
     blockState: BlockState,
 ) : BlockEntity(type, position, blockState) {
     internal val buffer = DisplayBuffer()
+    internal var checkpointIdentity: String =
+        java.util.UUID
+            .randomUUID()
+            .toString()
+        private set
     private var publishedRevision = 0L
 
     internal fun serverTick() {
@@ -50,12 +55,26 @@ open class DisplayBlockEntity(
         registries: HolderLookup.Provider,
     ) {
         super.loadAdditional(tag, registries)
+        runCatching {
+            java.util.UUID
+                .fromString(tag.getString(IDENTITY_KEY))
+                .toString()
+        }.getOrNull()?.let { checkpointIdentity = it }
         if (tag.getBoolean(SYNC_KEY)) {
             buffer.applySnapshot(List(DisplayBuffer.HEIGHT) { tag.getString("$ROW_KEY$it") })
         }
     }
 
+    override fun saveAdditional(
+        tag: CompoundTag,
+        registries: HolderLookup.Provider,
+    ) {
+        super.saveAdditional(tag, registries)
+        tag.putString(IDENTITY_KEY, checkpointIdentity)
+    }
+
     private companion object {
+        const val IDENTITY_KEY = "compukters_display_identity"
         const val SYNC_KEY = "display_sync"
         const val ROW_KEY = "display_row_"
     }

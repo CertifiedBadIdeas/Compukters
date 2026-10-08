@@ -46,6 +46,13 @@ internal class ProgramRuntimeActorProcessor(
     private var pendingSoundRequest: ProgramRuntimeRequestId? = null
     val closed = CompletableFuture<Long?>()
     private var lastFileSystemGeneration: Long? = null
+    private val hibernation =
+        java.util.concurrent.atomic
+            .AtomicReference<ProgramActorHibernation?>()
+
+    fun prepareHibernation(request: ProgramActorHibernation) {
+        check(hibernation.compareAndSet(null, request)) { "hibernation already requested" }
+    }
 
     override fun process(command: ProgramRuntimeActorMessage): ProgramRuntimeActorReply? =
         when (command) {
@@ -116,8 +123,8 @@ internal class ProgramRuntimeActorProcessor(
         )
     }
 
-    private fun execute(command: ProgramRuntimeActorCommand): ProgramRuntimeActorValue =
-        when (command) {
+    private fun execute(command: ProgramRuntimeActorCommand): ProgramRuntimeActorValue {
+        return when (command) {
             is ProgramRuntimeActorCommand.Start -> {
                 captureGeneration()
                 pendingRedstoneRequest = null
@@ -125,6 +132,41 @@ internal class ProgramRuntimeActorProcessor(
                 addonPort?.clear()
                 discardAllCandidates()
                 ProgramRuntimeActorValue.Start(host.start(command.artifactBytes()))
+            }
+
+            is ProgramRuntimeActorCommand.RestoreOrBoot -> {
+                val checkpoint =
+                    try {
+                        host.prepareRestoreBoot(command.worldTick)
+                    } catch (failure: ru.lazyhat.compukters.lang.runtime.vm.VmCheckpointException) {
+                        return ProgramRuntimeActorValue.Start(host.abortRestoration("Checkpoint restoration failed: ${failure.failure}"))
+                    } catch (failure: VmBridgeException) {
+                        return ProgramRuntimeActorValue.Start(host.abortRestoration(failure.message ?: "Checkpoint restoration failed"))
+                    }
+                if (checkpoint == null) {
+                    ProgramRuntimeActorValue.Start(
+                        if (command.required) host.abortRestoration("Required execution checkpoint is missing") else host.startBoot(),
+                    )
+                } else {
+                    ProgramRuntimeActorValue.RestorationPrepared(
+                        checkpoint.programScopes,
+                        checkpoint.addonState,
+                        checkpoint.confirmedRedstoneOutput,
+                    )
+                }
+            }
+
+            is ProgramRuntimeActorCommand.CompleteRestoration -> {
+                try {
+                    host.completeRestoration(command.worldTick)
+                    ProgramRuntimeActorValue.Start(ru.lazyhat.compukters.core.device.runtime.program.ProgramStartResult.Started)
+                } catch (failure: VmBridgeException) {
+                    ProgramRuntimeActorValue.Start(host.abortRestoration(failure.message ?: "Checkpoint consumption failed"))
+                }
+            }
+
+            is ProgramRuntimeActorCommand.AbortRestoration -> {
+                ProgramRuntimeActorValue.Start(host.abortRestoration(command.detail))
             }
 
             is ProgramRuntimeActorCommand.StartBoot -> {
@@ -202,6 +244,7 @@ internal class ProgramRuntimeActorProcessor(
                 addonPort?.clear()
                 discardAllCandidates()
                 host.shutdown()
+                host.discardCheckpoint()
                 ProgramRuntimeActorValue.None
             }
 
@@ -212,9 +255,11 @@ internal class ProgramRuntimeActorProcessor(
                 addonPort?.clear()
                 discardAllCandidates()
                 host.shutdown()
+                host.discardCheckpoint()
                 ProgramRuntimeActorValue.Start(host.startBoot())
             }
         }
+    }
 
     private fun execute(effect: ProgramRuntimeActorEffect) {
         when (effect) {
@@ -294,6 +339,31 @@ internal class ProgramRuntimeActorProcessor(
         try {
             val generation =
                 try {
+                    hibernation.get()?.let { request ->
+                        request.effects.forEach { effect ->
+                            when (effect) {
+                                is ProgramRuntimeActorEffect.CompleteAddons -> {
+                                    effect.completions.forEach { host.completeAddon(it) }
+                                }
+
+                                is ProgramRuntimeActorEffect.CompleteRedstoneOutput -> {
+                                    if (pendingRedstoneRequest == effect.outputRequestId) execute(effect)
+                                }
+
+                                is ProgramRuntimeActorEffect.CompleteSound -> {
+                                    if (pendingSoundRequest == effect.soundRequestId) execute(effect)
+                                }
+
+                                is ProgramRuntimeActorEffect.RedstoneInput -> {
+                                    error("invalid final world effect")
+                                }
+                            }
+                        }
+                        host.settleExternalRequestsForHibernation()
+                        addonPort?.clear()
+                        discardAllCandidates()
+                        host.hibernate(request.worldTick, request.addonState)
+                    }
                     captureGeneration()
                     lastFileSystemGeneration
                 } finally {

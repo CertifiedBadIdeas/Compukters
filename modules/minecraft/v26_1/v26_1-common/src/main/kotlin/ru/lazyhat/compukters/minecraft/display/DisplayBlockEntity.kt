@@ -18,6 +18,7 @@ import net.minecraft.world.level.block.entity.BlockEntity
 import net.minecraft.world.level.block.entity.BlockEntityType
 import net.minecraft.world.level.block.state.BlockState
 import net.minecraft.world.level.storage.ValueInput
+import net.minecraft.world.level.storage.ValueOutput
 
 open class DisplayBlockEntity(
     type: BlockEntityType<*>,
@@ -25,6 +26,11 @@ open class DisplayBlockEntity(
     blockState: BlockState,
 ) : BlockEntity(type, position, blockState) {
     internal val buffer = DisplayBuffer()
+    internal var checkpointIdentity: String =
+        java.util.UUID
+            .randomUUID()
+            .toString()
+        private set
     private var publishedRevision = 0L
 
     internal fun serverTick() {
@@ -48,12 +54,25 @@ open class DisplayBlockEntity(
 
     override fun loadAdditional(input: ValueInput) {
         super.loadAdditional(input)
+        input.getStringOr(IDENTITY_KEY, "").let { value ->
+            runCatching {
+                java.util.UUID
+                    .fromString(value)
+                    .toString()
+            }.getOrNull()?.let { checkpointIdentity = it }
+        }
         if (input.getBooleanOr(SYNC_KEY, false)) {
             buffer.applySnapshot(List(DisplayBuffer.HEIGHT) { input.getStringOr("$ROW_KEY$it", "") })
         }
     }
 
+    override fun saveAdditional(output: ValueOutput) {
+        super.saveAdditional(output)
+        output.putString(IDENTITY_KEY, checkpointIdentity)
+    }
+
     private companion object {
+        const val IDENTITY_KEY = "compukters_display_identity"
         const val SYNC_KEY = "display_sync"
         const val ROW_KEY = "display_row_"
     }

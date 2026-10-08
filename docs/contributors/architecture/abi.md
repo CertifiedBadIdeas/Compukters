@@ -16,7 +16,7 @@ This reference groups versioned representation boundaries by the version that in
 | Boundary | Current representation | Owner |
 | --- | --- | --- |
 | Executable container | Format 3; nominal inline layouts require Runtime ABI 1.15 | `modules/common/compiler-artifact` and `host/compukter-vm/src/artifact/format.rs` |
-| Native session transport | C ABI 20, checked by both FFM and JNI | `host/compukter-vm/ffi/src/lib.rs` and `modules/common/native-runtime` |
+| Native session transport | C ABI 21, checked by both FFM and JNI | `host/compukter-vm/ffi/src/lib.rs` and `modules/common/native-runtime` |
 | Base platform | Bundle format 9, standalone module format 5, platform ABI 3 | `PlatformBundleCodec` in `modules/common/platform-bundle` |
 | Kotlin metadata carrier | Private format 6 | `platform-k2` |
 | IDE analysis | Protocol 15 | `ide-analysis-client` and `ide-analysis-k2` |
@@ -25,9 +25,42 @@ This reference groups versioned representation boundaries by the version that in
 
 Guest hash collections introduce public Set/Map contracts in `kotlin:builtins` 1.9.0 and ordinary source
 implementations, Pair and populated factories in `stdlib:core` 1.11.0. Their module content identities change; bundle format 9, module
-format 5, platform ABI 3, Runtime ABI 1.15 and native C ABI 20 remain unchanged. Programs and dependent
+format 5, platform ABI 3 and Runtime ABI 1.15 remain unchanged by hash collections. The current native C ABI is 21 for checkpoint transport. Programs and dependent
 platform/addon inputs must resolve the matching module identities. Hashing, generic equality, managed
 objects and specialization reuse existing instructions and representation rules.
+## Execution checkpoint development
+
+The VM has a logical computer checkpoint envelope (format 2), owned by
+`host/compukter-vm/src/checkpoint/envelope.rs`. Its version, native runtime/schema identity, computer ID,
+filesystem generation, payload lengths and SHA-256 cover the execution and host descriptor bytes together.
+Rust exposes contextual capture/restore and bounded atomic store methods through C ABI 21, JNI and FFM. Minecraft carriers use this boundary for unload and orderly shutdown; incompatible restoration remains blocked until explicit recovery.
+The native reference is `host/compukter-vm/docs/architecture/computer-checkpoints.md`.
+
+The core host descriptor uses little-endian version 1 (`CPTH`, u32 version), a checked input-wait flag,
+cumulative granted Guest/maintenance counters and saturation flag, confirmed redstone output, live process
+IDs (root 0, at most 32), and at most 256 timers. Each timer carries task/request identity, process ID,
+original duration and remaining ticks. A length-prefixed addon resource payload is bounded to 1 MiB.
+Decode rejects invalid flags/counts, duplicate timer identities, unknown process scopes, invalid durations,
+truncation and trailing bytes. These bytes share the native envelope integrity check; they never mirror VM state.
+Restore parks execution until resource rebinding and durable consumption finish, then recreates timer deadlines
+relative to the activation tick. Cumulative diagnostics survive, while per-tick CPU grants and old compiler
+epochs do not. Actor close drains accepted completions before capture. Undelivered external requests receive a catchable
+unavailable result, so restoration never replays a world mutation. Minecraft adapters use the close barrier
+on chunk unload and before the actor/store shutdown sequence. Both Minecraft version families run a real
+GameTest that continues an unsaved Guest editor through carrier replacement.
+
+Addon resource checkpoint framing version 1 carries bounded length-prefixed parts (at most 128 parts and
+1 MiB total). Generated host bindings delegate capture and restore to each handler; a handler must explicitly
+implement capture, including a zero-byte payload for stateless handlers. Unsupported capture fails instead of
+assuming a stateful addon is stateless. Process-scoped hosts retain a high-water process ID and independently
+restore resource descriptions for live scopes; retired scopes are dropped and newly entered scopes remain lazy.
+
+Peripheral resource format 2 preserves handle and discovery token high-water marks, ordered discovery
+snapshots and contract/location/persistent-instance descriptors. Exact matching instances may rebind after
+loading; missing, replaced or unidentifiable instances produce stale handles. A physical address alone never
+rebinds an old handle to a replacement. Display identities live in block-entity persistence; display resource
+format 2 restores owned rows and writer leases only after peripheral admission and without overwriting
+another active writer.
 
 ## Native Runtime bundles
 
@@ -64,7 +97,7 @@ All three sections count toward debug limits and are excluded from semantic hash
 into admitted artifact bytes; it does not expand repeated paths. The writer uses the pool only when aligned
 payload and directory costs decrease the physical artifact size.
 
-Container format remains 3.0, semantic Runtime ABI remains 1.15, and native C ABI remains 20. New readers accept
+Compact debug paths retain container format 3.0 and semantic Runtime ABI 1.15; the current native C ABI is 21 for checkpoint transport. New readers accept
 legacy artifacts; readers without DEBUG_PATHS support reject its critical section. This is a reader capability
 requirement independent of semantic ABI. Published Runtime 0.20.0 bundles predate this support: compact output
 requires a Runtime rebuilt from the updated source, and a future published bundle/pin update before packaging
@@ -72,7 +105,7 @@ with released natives. This source change alone does not establish production-bu
 
 Native C ABI 17 appends a length-prefixed, bounded UTF-8 trace to terminal outcome tags 2 (OOM), 5 (Guest trap), and
 6 (VM fault), after their existing scalar payload. Empty text means unavailable diagnostic text. FFM and JNI validate
-ABI 20 before decoding; both retain typed failures and carry the trace through the runtime host. Other wire tags and
+ABI 21 before decoding; both retain typed failures and carry the trace through the runtime host. Other wire tags and
 guest capability schemas are unchanged.
 Native C ABI 19 adds `compukter_resume_value(handle, taskId, requestId, payload, payloadLength)`.
 The caller owns the byte buffer; native code validates and copies its contents before returning and retains no caller
@@ -109,7 +142,7 @@ Module semantic identity remains the canonical **expanded legacy** encoding: for
 the native verifier streams the original indexed envelope, offsets, padding and per-boundary records into the
 existing module hash. Other semantic sections retain raw-payload hashing; the range marker is excluded. Imports,
 precompiled module identities and source diagnostics therefore keep their hashes. Container 3.0, semantic
-Runtime ABI 1.15 and native C ABI 20 remain unchanged. Readers predating the marker reject it as unknown critical.
+Runtime ABI 1.15 remain unchanged by root ranges; the current native C ABI is 21 for checkpoint transport. Readers predating the marker reject it as unknown critical.
 Updated source-built natives are required; published Runtime 0.20.0 bundles and their pins do not contain this capability.
 
 

@@ -34,7 +34,7 @@ object DisplayPeripheralIntegration {
         ) { level, computerPosition, identity ->
             val computer = level.getBlockEntity(computerPosition) as? ComputerBlockEntity
             computer?.let { resolve(level, it, identity.anchor, null) }?.let { endpoint ->
-                PeripheralEndpoint(endpoint, endpoint.identity, endpoint::valid)
+                PeripheralEndpoint(endpoint, endpoint.identity, endpoint.checkpointIdentity, endpoint::valid)
             }
         }
 
@@ -134,6 +134,7 @@ object DisplayPeripheralIntegration {
         private val side: Int?,
     ) : DisplayEndpoint {
         override val identity: Any = display
+        override val checkpointIdentity: String get() = display.checkpointIdentity.also { display.setChanged() }
         override val buffer: DisplayBuffer = display.buffer
 
         override fun valid(): Boolean {
@@ -143,7 +144,7 @@ object DisplayPeripheralIntegration {
             if (!level.hasChunkAt(computerPosition) || !level.hasChunkAt(displayPosition)) return false
             if (computer.isRemoved || display.isRemoved) return false
             if (level.getBlockEntity(computerPosition) !== computer || level.getBlockEntity(displayPosition) !== display) return false
-            if (computer.terminalMachineId != machineEpoch || !computer.runtimeState.isPoweredOn()) return false
+            if (computer.terminalMachineId != machineEpoch || !computer.peripheralResourcesAvailable()) return false
             return if (side == null) {
                 ComputerPeripheralLookup.isReachable(
                     level,

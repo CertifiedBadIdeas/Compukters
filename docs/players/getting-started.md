@@ -53,6 +53,20 @@ take a **Compukter**, or run:
 Place the block and use it with an empty hand. Its terminal opens and the built-in shell displays a `>` prompt after the
 computer boots. Run `help` to see the currently available shell commands.
 
+## Unload, resume and restart
+
+Running computers hibernate when their carrier unloads and during orderly server shutdown. Loading them again continues
+the saved program, including unsaved editor text, terminal state and nested foreground programs. Timer waits retain their
+remaining ticks. A cleanly halted or shut-down computer stays off.
+
+Corrupt or incompatible execution snapshots stop restoration instead of starting the program again. An operator can
+request a fresh boot with `/compukters reboot x y z` for a loaded computer. This discards execution and unsaved edits,
+but retains the computer identity and `/home` files. Physics on Sable constructions keeps running while the computer
+restores. Restoration time depends on the saved execution, storage and server load.
+
+The base runtime and Sable observation addon support hibernation. Stateful Create and Propulsion hosts have not yet
+implemented resource checkpoints; worlds using those hosts cannot rely on transparent execution resume.
+
 ## Path 1: build and run a project in the IDE
 
 The IDE stores projects on the client under `<game directory>/compukters/ide/projects`. A project can contain multiple

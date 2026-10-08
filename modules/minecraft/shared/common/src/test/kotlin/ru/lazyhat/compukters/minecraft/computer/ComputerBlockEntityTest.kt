@@ -50,6 +50,35 @@ import kotlin.test.assertTrue
 
 class ComputerBlockEntityTest {
     @Test
+    fun `loaded running computer requires its checkpoint instead of silently cold booting`() {
+        val original = fixture()
+        original.entity.serverTick()
+        val saved = original.entity.saveForTest()
+        original.entity.setRemoved()
+        val loaded = fixture()
+        loaded.entity.loadForTest(saved)
+        loaded.entity.serverTick()
+        assertEquals(listOf(true), loaded.carriers.single().restoreRequirements)
+        assertEquals(original.entity.computerId(), loaded.entity.computerId())
+    }
+
+    @Test
+    fun `halted computer remains powered off after load and explicit reboot preserves identity`() {
+        val original = fixture()
+        original.entity.serverTick()
+        original.carriers.single().publishState(ProgramComputerState.PoweredOff(ProgramComputerStopReason.Halted(null)))
+        val saved = original.entity.saveForTest()
+        original.entity.setRemoved()
+        val loaded = fixture()
+        loaded.entity.loadForTest(saved)
+        loaded.entity.serverTick()
+        assertEquals(0, loaded.carriers.size)
+        assertEquals(ProgramComputerState.PoweredOff(ProgramComputerStopReason.Halted(null)), loaded.entity.runtimeState)
+        assertEquals(ProgramComputerState.Running, loaded.entity.reboot())
+        assertEquals(original.entity.computerId(), loaded.entity.computerId())
+    }
+
+    @Test
     fun `resource snapshot is requested only from an attached carrier`() {
         val fixture = fixture()
         assertNull(fixture.entity.resourceSnapshotAsync().getNow(null))
@@ -148,6 +177,35 @@ class ComputerBlockEntityTest {
         val carrier = fixture.carriers.single()
         assertEquals(1, carrier.turnOnCalls)
         assertEquals(2, carrier.serverTickCalls)
+    }
+
+    @Test
+    fun `saved execution retries carrier admission on the next tick`() {
+        val original = fixture()
+        original.entity.serverTick()
+        val saved = original.entity.saveForTest()
+        original.entity.setRemoved()
+        var attempts = 0
+        lateinit var accepted: FakeCarrier
+        val restored =
+            TestComputerBlockEntity(
+                ComputerCarrierFactory { deviceId, _, stateSink, _, redstoneHostPort, _, _, initialRedstoneOutput ->
+                    attempts++
+                    if (attempts == 1) {
+                        null
+                    } else {
+                        FakeCarrier(deviceId, stateSink, redstoneHostPort, initialRedstoneOutput).also { accepted = it }
+                    }
+                },
+            )
+        restored.loadForTest(saved)
+        restored.serverTick()
+        assertNull(restored.terminalMachineId)
+        restored.serverTick()
+        assertEquals(2, attempts)
+        assertEquals(listOf(true), accepted.restoreRequirements)
+        assertEquals(original.entity.computerId(), restored.computerId())
+        assertEquals(1, accepted.serverTickCalls)
     }
 
     @Test
@@ -338,6 +396,13 @@ class ComputerBlockEntityTest {
         override var state: ProgramComputerState = neverStarted()
             private set
         var turnOnCalls = 0
+        val restoreRequirements = mutableListOf<Boolean>()
+
+        override fun restore(required: Boolean): ProgramComputerState {
+            restoreRequirements += required
+            return turnOn()
+        }
+
         var serverTickCalls = 0
         var shutdownCalls = 0
         var closeCalls = 0
