@@ -159,6 +159,11 @@ listed in [Kotlin support](developers/kotlin-support.md) and [standard library s
 
 ### Computer runtime
 
+- Running base and Sable computers hibernate across carrier unload/reload and orderly server shutdown, preserving
+  execution, nested programs, unsaved editor buffers, terminal state, timers and filesystem handles. Restoration validates
+  compatibility and never silently restarts a failed snapshot. `/compukters reboot x y z` explicitly starts over while
+  retaining ComputerId and `/home`. Sable physics continues while computers restore; stateful Create/Propulsion hosts
+  still require resource checkpoint support.
 - `Ctrl+T` in a computer or IDE target terminal stops the foreground command and its nested processes/tasks,
   releases peripheral control and returns to the shell while retaining output and files. Repeats are ignored;
   an idle shell remains running.

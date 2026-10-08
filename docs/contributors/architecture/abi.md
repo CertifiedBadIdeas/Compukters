@@ -39,7 +39,8 @@ Restore parks execution until resource rebinding and durable consumption finish,
 relative to the activation tick. Cumulative diagnostics survive, while per-tick CPU grants and old compiler
 epochs do not. Actor close drains accepted completions before capture. Undelivered external requests receive a catchable
 unavailable result, so restoration never replays a world mutation. Minecraft adapters use the close barrier
-on chunk unload and before the actor/store shutdown sequence; in-game validation is in progress.
+on chunk unload and before the actor/store shutdown sequence. Both Minecraft version families run a real
+GameTest that continues an unsaved Guest editor through carrier replacement.
 
 Addon resource checkpoint framing version 1 carries bounded length-prefixed parts (at most 128 parts and
 1 MiB total). Generated host bindings delegate capture and restore to each handler; a handler must explicitly

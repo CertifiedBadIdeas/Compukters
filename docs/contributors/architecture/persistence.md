@@ -14,9 +14,9 @@ permalink: /ARCHITECTURE/persistence/
 
 Object identity is the bits of Ref32, not a separately assigned UUID. A managed Ref32 contains its object-header
 offset in the nonmoving VM heap; image/external references use their own domain payload. Identity stays stable while
-an object is live, but a freed slot may be reused and another VM may produce the same bits. The heap, stack and object
-identities are not persisted across machine close/recreation. Identity hashCode/default toString must not be used as
-durable IDs. The persistent ComputerId below identifies a computer's filesystem, not its Guest objects.
+an object is live, but a freed slot may be reused and another VM may produce the same bits. Logical hibernation preserves the heap, stack and live reference identities for that execution. Explicit reboot starts
+a fresh execution. Identity hashCode/default toString must not be used as durable IDs outside the saved execution.
+The persistent ComputerId below identifies a computer and its filesystem, not an individual Guest object.
 
 ## Persistent filesystem
 
@@ -27,8 +27,34 @@ I/O on its own worker, flushes active generations on world saves, and drains, fl
 completes. A permanent `lock` anchor carries a process-lifetime exclusive OS file lock: a live second server is
 rejected, while orderly close or process termination releases ownership without deleting the anchor. Removing a
 computer through the player destruction lifecycle closes its machine before creating a
-recoverable tombstone; ordinary block-entity removal during chunk unload only closes the current machine and preserves
+recoverable tombstone; ordinary block-entity removal during chunk unload captures execution before closing the current machine and preserves
 its filesystem.
+
+## Execution hibernation
+
+Unloading a running carrier and orderly server shutdown publish a bounded native logical checkpoint under
+`computers/<ComputerId>/execution` in the world filesystem store. Publication first flushes its exact filesystem
+generation, then writes a temporary file, syncs it, renames it atomically and syncs the containing directory. The
+versioned envelope binds ComputerId, runtime identity, execution schema and filesystem generation, with a whole-file
+integrity digest. It is separate from Guest executable artifacts and contains no native pointers or Minecraft objects.
+See [native ABI](abi.md) and the VM's `docs/architecture/computer-checkpoints.md` for the exact formats and bounds.
+
+Restoration runs on a VM actor worker and executes no Guest instructions during admission. It re-verifies pinned
+root and child executables and reconstructs execution, terminal, filesystem handles and process scopes. Server-thread
+addon hosts then rebind portable resource descriptors. Only after rebinding succeeds does the actor durably discard
+the stored checkpoint and resume execution. Timers retain remaining ticks; unload time and admission time do not count
+as sleep. Every carrier gets fresh machine/compiler epochs and per-tick instruction credit.
+
+Accepted world completions drain before capture. Undelivered redstone, sound and addon operations receive catchable
+unavailable failures; restoration never repeats their physical effects. Pending compilation retains its original
+source bytes and may be resubmitted without applying a stale worker response.
+
+A missing required checkpoint, corruption, incompatible runtime/artifacts/capabilities or filesystem generation blocks
+restoration. It never silently restarts `main`. Explicit `/compukters reboot x y z` discards execution state and boots
+from ROM while retaining ComputerId and `/home`. Clean halt/shutdown stays powered off across block-entity reload.
+Addon hosts must implement checkpoint capture and restoration, including mutable tokens and resource leases;
+unsupported capture fails the close barrier rather than silently losing addon state. Sable's observation host is
+stateless and opts in. Stateful Create and Propulsion hosts do not yet implement this contract.
 
 ## Close barriers and persistence work
 

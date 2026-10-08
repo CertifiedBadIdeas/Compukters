@@ -55,4 +55,6 @@ characters and line breaks are rejected. The display renders unsupported font gl
 The first computer to write or clear a display holds its output lease. Another computer cannot overwrite it until the
 writer stops or loses its connection. The display clears automatically when its writer shuts down, halts, reboots,
 disappears, or loses the cable path, including while the program is idle. Screen contents are not stored in world NBT;
-reloading the block starts with a blank screen. Changed text is sent to nearby clients at most once per server tick.
+reloading the block starts with a blank screen. A hibernating computer retains its owned rows in its execution
+checkpoint and restores them when the same reachable display is available and its lease is free. A replacement
+display or another active writer prevents that restoration. Changed text is sent to nearby clients at most once per server tick.
