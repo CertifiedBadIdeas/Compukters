@@ -182,7 +182,7 @@ addon archives and their GameTests with the upstream Aeronautics/Propulsion runt
 The Compukters Sable addon supports assembly, full construction unload/reload and return to the ordinary world through
 the same carrier checkpoint path. Physics keeps running during computer restoration; no activation barrier or upstream
 Sable/Rapier patch is installed. The live-physics GameTests continue suspended Guest programs and query the same
-construction after reload. On the development machine, activation to continued Guest physics queries took 44 ms for
-one computer on a two-block construction and 71 ms for both computers on a 29-block construction, with the second
+construction after reload. In unthrottled GameTests on the development machine, activation to continued Guest physics queries took 35 ms for
+one computer on a two-block construction and 68 ms for both computers on a 29-block construction, with the second
 computer eight blocks from the assembly anchor. Cold compilation precedes the measured interval. These results do
 not bound arbitrary heaps, construction sizes, disk latency or server load.

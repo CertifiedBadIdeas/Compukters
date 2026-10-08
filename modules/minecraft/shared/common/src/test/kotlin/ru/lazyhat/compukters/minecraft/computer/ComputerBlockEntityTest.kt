@@ -180,6 +180,35 @@ class ComputerBlockEntityTest {
     }
 
     @Test
+    fun `saved execution retries carrier admission on the next tick`() {
+        val original = fixture()
+        original.entity.serverTick()
+        val saved = original.entity.saveForTest()
+        original.entity.setRemoved()
+        var attempts = 0
+        lateinit var accepted: FakeCarrier
+        val restored =
+            TestComputerBlockEntity(
+                ComputerCarrierFactory { deviceId, _, stateSink, _, redstoneHostPort, _, _, initialRedstoneOutput ->
+                    attempts++
+                    if (attempts == 1) {
+                        null
+                    } else {
+                        FakeCarrier(deviceId, stateSink, redstoneHostPort, initialRedstoneOutput).also { accepted = it }
+                    }
+                },
+            )
+        restored.loadForTest(saved)
+        restored.serverTick()
+        assertNull(restored.terminalMachineId)
+        restored.serverTick()
+        assertEquals(2, attempts)
+        assertEquals(listOf(true), accepted.restoreRequirements)
+        assertEquals(original.entity.computerId(), restored.computerId())
+        assertEquals(1, accepted.serverTickCalls)
+    }
+
+    @Test
     fun `server tick retries a carrier rejected by capacity after a bounded delay`() {
         var attempts = 0
         lateinit var accepted: FakeCarrier
