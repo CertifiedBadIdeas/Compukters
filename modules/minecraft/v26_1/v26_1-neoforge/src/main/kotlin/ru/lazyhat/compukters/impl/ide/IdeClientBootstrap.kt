@@ -29,6 +29,7 @@ import net.neoforged.neoforge.client.event.ScreenEvent
 import net.neoforged.neoforge.client.settings.KeyConflictContext
 import net.neoforged.neoforge.client.settings.KeyModifier
 import net.neoforged.neoforge.common.NeoForge
+import net.neoforged.neoforge.event.GameShuttingDownEvent
 import org.lwjgl.glfw.GLFW
 import ru.lazyhat.compukters.core.MOD_ID
 import ru.lazyhat.compukters.ide.client.target.IdeTargetClaim
@@ -56,6 +57,7 @@ internal object IdeClientBootstrap {
         eventBus.addListener(::onRegisterKeys)
         NeoForge.EVENT_BUS.addListener(::onClientTick)
         NeoForge.EVENT_BUS.addListener(::onScreenKeyPressed)
+        NeoForge.EVENT_BUS.addListener(::onGameShuttingDown)
     }
 
     fun services(): IdeClientServices<IdeClientApplication> = checkNotNull(services) { "IDE client services are not initialized" }
@@ -71,6 +73,12 @@ internal object IdeClientBootstrap {
                     )
             }
         }
+    }
+
+    private fun onGameShuttingDown(event: GameShuttingDownEvent) {
+        val closing = services
+        services = null
+        closing?.close()
     }
 
     private fun onRegisterKeys(event: RegisterKeyMappingsEvent) {

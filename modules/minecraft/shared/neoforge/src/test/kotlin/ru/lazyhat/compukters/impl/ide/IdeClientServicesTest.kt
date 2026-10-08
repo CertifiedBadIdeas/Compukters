@@ -219,6 +219,22 @@ internal class IdeClientServicesTest {
     }
 
     @Test
+    fun `client shutdown releases its runtime even when the active application fails to close`() {
+        val gameRoot = createTempDirectory("compukters-ide-shutdown-").toAbsolutePath().normalize()
+        val lifetime = RecordingLifetime()
+        val services = IdeClientServices(gameRoot, lifetime) { AutoCloseable { error("fixture close failed") } }
+        try {
+            services.open()
+            assertFailsWith<IllegalStateException> { services.close() }
+            assertTrue(lifetime.closed)
+            assertFailsWith<IllegalStateException> { services.open() }
+            services.close()
+        } finally {
+            gameRoot.toFile().deleteRecursively()
+        }
+    }
+
+    @Test
     fun `uses distinct bounded client roots and opens only one session`() {
         val gameRoot = createTempDirectory("compukters-ide-services-").toAbsolutePath().normalize()
         val opened = mutableListOf<RecordingApplication>()

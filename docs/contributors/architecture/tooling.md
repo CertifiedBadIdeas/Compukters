@@ -44,6 +44,15 @@ Client IDE project
   -> optional canonical terminal submission to run the executable
 ```
 
+The physical client runtime owns a lazy compiler backend across IDE screen sessions. Each screen retains its own
+compilation service, cache handle and backend lease. Closing the screen cancels its outstanding requests and releases
+its lease, while a completed compiler worker remains available for reopening the IDE. The final lease release starts
+a 120-second idle timeout; reopening cancels it. Expiry and replacement acquisition are serialized so workers cannot
+overlap on the same temporary directory. Client game shutdown closes the owner and timer immediately, including
+late tooling preparation. Active-request cancellation retains the existing worker termination semantics; only
+completed-worker reuse avoids the next cold startup. Source snapshots, pinned identities, artifact admission and
+result-cache verification are unchanged.
+
 Both compilation services send ordered project sources, target settings, worker identity, platform-module identities,
 and limits through the same bounded compiler protocol. `compiler-k2-engine` owns the shared FIR-to-IR and Compukter
 lowering implementation; `compiler-k2` supplies the isolated compiler-worker entry point and payload.

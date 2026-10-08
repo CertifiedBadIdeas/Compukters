@@ -148,6 +148,10 @@ listed in [Kotlin support](developers/kotlin-support.md) and [standard library s
 
 ### In-game IDE
 
+- The compiler worker stays warm for two minutes after closing the IDE, reducing repeated compilation delays when
+  editing and testing programs between IDE visits. Closing an active build still cancels it; idle timeout and game
+  shutdown release the worker.
+
 - Local projects support HTTPS Git clone, opening existing directories in place, status/diff,
   selected-file commits, history, branches, fetch, fast-forward-only pull and push. Tokens are masked and session-only; merge and
   SSH are deferred. Git operations save modified buffers first and refresh working files and analysis afterward.
