@@ -40,6 +40,7 @@ pluginManagement {
 
 includeBuild("../..") {
     name = "Compukters"
+    name = "Compukters"
     dependencySubstitution {
         substitute(module("ru.lazyhat.compukters:compukters-addon-api"))
             .using(project(":addon-api"))
