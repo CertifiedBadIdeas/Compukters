@@ -534,6 +534,17 @@ internal fun validateArtifact(
                 block.instructions.any { it is Instruction.StringValueOf && it.type == StringValueType.F32 }
             }
         }
+    if (artifact.minimumRuntimeAbi < AbiVersion(1u, 16u) &&
+        artifact.modules.any { module ->
+            module.blocks.any { block ->
+                block.instructions.any {
+                    it is Instruction.MathUnary || it is Instruction.MathBinary
+                }
+            }
+        }
+    ) {
+        add(ArtifactWriteErrorCode.INVALID_RANGE, "floating math requires minimum runtime ABI 1.16")
+    }
     if (artifact.minimumRuntimeAbi < AbiVersion(1u, 14u) &&
         artifact.modules.any { module ->
             module.blocks.any { block -> block.instructions.any { it.usesUnsignedSemantics() } }
@@ -1347,6 +1358,25 @@ internal fun validateArtifact(
                                 !valueTypesMatch(moduleIndex, destinationType, moduleIndex, sourceType)
                             ) {
                                 add(ArtifactWriteErrorCode.INVALID_RANGE, "move source and destination types differ", location)
+                            }
+                        }
+
+                        is Instruction.MathUnary -> {
+                            if (instruction.type !in setOf(ScalarValueType.F32, ScalarValueType.F64) ||
+                                register(instruction.destination, "destination") != instruction.type.valueType ||
+                                register(instruction.source, "source") != instruction.type.valueType
+                            ) {
+                                add(ArtifactWriteErrorCode.INVALID_RANGE, "unary math requires matching F32/F64 registers", location)
+                            }
+                        }
+
+                        is Instruction.MathBinary -> {
+                            if (instruction.type !in setOf(ScalarValueType.F32, ScalarValueType.F64) ||
+                                register(instruction.destination, "destination") != instruction.type.valueType ||
+                                register(instruction.left, "left") != instruction.type.valueType ||
+                                register(instruction.right, "right") != instruction.type.valueType
+                            ) {
+                                add(ArtifactWriteErrorCode.INVALID_RANGE, "binary math requires matching F32/F64 registers", location)
                             }
                         }
 

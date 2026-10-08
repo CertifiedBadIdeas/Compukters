@@ -337,6 +337,10 @@ private fun minimumRuntimeAbi(
     }
     modules.asSequence().flatMap { module -> module.blocks.asSequence() }.flatMap { block -> block.instructions.asSequence() }.forEach {
         when (it) {
+            is Instruction.MathUnary, is Instruction.MathBinary -> {
+                required = maxOf(required, AbiVersion(1u, 16u))
+            }
+
             is Instruction.ArrayCopy -> {
                 required = maxOf(required, AbiVersion(1u, 5u))
             }

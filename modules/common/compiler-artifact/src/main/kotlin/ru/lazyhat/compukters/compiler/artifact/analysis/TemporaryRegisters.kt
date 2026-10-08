@@ -140,6 +140,14 @@ private fun Instruction.remapRegisters(register: (RegisterId) -> RegisterId): In
             copy(destination = register(destination), source = register(source))
         }
 
+        is Instruction.MathUnary -> {
+            copy(destination = register(destination), source = register(source))
+        }
+
+        is Instruction.MathBinary -> {
+            copy(destination = register(destination), left = register(left), right = register(right))
+        }
+
         is Instruction.Add -> {
             copy(destination = register(destination), left = register(left), right = register(right))
         }
