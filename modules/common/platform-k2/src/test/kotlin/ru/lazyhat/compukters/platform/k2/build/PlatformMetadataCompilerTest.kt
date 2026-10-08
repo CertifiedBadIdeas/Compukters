@@ -45,6 +45,27 @@ class PlatformMetadataCompilerTest {
     private val module = PlatformModuleId("test", "library")
 
     @Test
+    fun `extension property accessors retain receiver identity across equal result types`() {
+        val result =
+            compiler.compile(
+                module,
+                listOf(
+                    source(
+                        "sign.kt",
+                        """
+                        package sample
+                        val Int.sign: Int get() = 0
+                        val Long.sign: Int get() = 0
+                        """.trimIndent(),
+                    ),
+                ),
+            )
+        val getters = result.declarations.filter { it.symbol == "sample.<get-sign>" }
+        assertEquals(setOf("fun(Int.):Int", "fun(Long.):Int"), getters.map { it.signature }.toSet())
+        assertEquals(getters, PlatformMetadataCodec.decode(result.metadata).declarations.filter { it.symbol == "sample.<get-sign>" })
+    }
+
+    @Test
     fun `constructor null defaults round trip without a dispatch receiver slot`() {
         val result =
             compiler.compile(
