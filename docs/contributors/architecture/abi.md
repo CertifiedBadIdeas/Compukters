@@ -15,7 +15,7 @@ This reference groups versioned representation boundaries by the version that in
 
 | Boundary | Current representation | Owner |
 | --- | --- | --- |
-| Executable container | Format 3; nominal inline layouts require Runtime ABI 1.15 | `modules/common/compiler-artifact` and `host/compukter-vm/src/artifact/format.rs` |
+| Executable container | Format 3; floating math requires Runtime ABI 1.16 | `modules/common/compiler-artifact` and `host/compukter-vm/src/artifact/format.rs` |
 | Native session transport | C ABI 21, checked by both FFM and JNI | `host/compukter-vm/ffi/src/lib.rs` and `modules/common/native-runtime` |
 | Base platform | Bundle format 9, standalone module format 5, platform ABI 3 | `PlatformBundleCodec` in `modules/common/platform-bundle` |
 | Kotlin metadata carrier | Private format 6 | `platform-k2` |
@@ -336,3 +336,61 @@ charge one extra unit per additional inline component copied. Copies stay in com
 REF32 leaves participate in exact component safepoint maps. Nominal identity, initialization, leaf
 types, physical shapes, ABI gates and declared costs are checked by both Kotlin and Rust. Artifact
 container format 3 and exported C ABI 20 are unchanged; host entry/results retain their scalar contract.
+
+## Runtime ABI 1.16
+
+Runtime ABI 1.16 adds `math_unary` (`0x1c`) and `math_binary` (`0x1d`), with form 3 for F32
+and form 4 for F64. Operands are a closed ULEB operation selector, destination u16, then one
+source u16 or left/right u16. Both verifiers reject other forms, unknown selectors, uninitialized
+sources, mismatched floating widths and ABI claims below 1.16. Linking infers the minimum from
+retained math instructions. Container format 3, native C ABI 21 and checkpoint framing remain unchanged.
+
+Operations use pinned software `libm` 0.2.16, without system math calls, allocation or suspension.
+NaNs follow the VM's canonical representation; IEEE signed zero is retained. `round` uses ties to
+even; `min`/`max` propagate NaN and select negative/positive zero respectively. `pow` follows Kotlin's
+special cases, including NaN for a base of magnitude one with an infinite exponent. Integer and
+library-derived operations use ordinary Guest code. Fixed costs below apply to both widths and are
+included in block admission and execution budgets; they are budget units rather than timing guarantees.
+
+| Unary selector | Operation | Fixed cost |
+| --- | --- | --- |
+| 1 | `abs` | 2 |
+| 2 | `sign` | 2 |
+| 3 | `ceil` | 4 |
+| 4 | `floor` | 4 |
+| 5 | `truncate` | 4 |
+| 6 | `round` | 4 |
+| 7 | `sin` | 64 |
+| 8 | `cos` | 64 |
+| 9 | `tan` | 64 |
+| 10 | `asin` | 64 |
+| 11 | `acos` | 64 |
+| 12 | `atan` | 64 |
+| 13 | `sinh` | 64 |
+| 14 | `cosh` | 64 |
+| 15 | `tanh` | 64 |
+| 16 | `asinh` | 64 |
+| 17 | `acosh` | 64 |
+| 18 | `atanh` | 64 |
+| 19 | `sqrt` | 16 |
+| 20 | `cbrt` | 64 |
+| 21 | `exp` | 64 |
+| 22 | `expm1` | 64 |
+| 23 | `ln` | 64 |
+| 24 | `ln1p` | 64 |
+| 25 | `log10` | 64 |
+| 26 | `log2` | 64 |
+| 27 | `ulp` | 4 |
+| 28 | `next_up` | 4 |
+| 29 | `next_down` | 4 |
+
+| Binary selector | Operation | Fixed cost |
+| --- | --- | --- |
+| 1 | `min` | 2 |
+| 2 | `max` | 2 |
+| 3 | `atan2` | 64 |
+| 4 | `hypot` | 32 |
+| 5 | `pow` | 64 |
+| 6 | `ieee_rem` | 64 |
+| 7 | `copy_sign` | 2 |
+| 8 | `next_towards` | 4 |

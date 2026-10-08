@@ -53,6 +53,21 @@ sealed interface Instruction {
         val unsignedDestination: Boolean = false,
     ) : Instruction
 
+    data class MathUnary(
+        val type: ScalarValueType,
+        val operation: MathUnaryOperation,
+        val destination: RegisterId,
+        val source: RegisterId,
+    ) : Instruction
+
+    data class MathBinary(
+        val type: ScalarValueType,
+        val operation: MathBinaryOperation,
+        val destination: RegisterId,
+        val left: RegisterId,
+        val right: RegisterId,
+    ) : Instruction
+
     data class Add(
         val type: ScalarValueType,
         val destination: RegisterId,
