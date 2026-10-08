@@ -18,10 +18,13 @@
 
 package ru.lazyhat.compukters.impl.computer
 
+import com.mojang.logging.LogUtils
 import net.minecraft.core.BlockPos
 import net.minecraft.gametest.framework.GameTestHelper
 import net.minecraft.world.level.block.entity.BlockEntity
+import net.neoforged.neoforge.event.server.ServerStoppingEvent
 import ru.lazyhat.compukters.core.device.computer.ProgramComputerState
+import ru.lazyhat.compukters.impl.fs.NeoForgeWorldFileSystemStores
 import ru.lazyhat.compukters.impl.registry.CompuktersRegistry
 import ru.lazyhat.compukters.lang.runtime.vm.TerminalKey
 import ru.lazyhat.compukters.lang.runtime.vm.TerminalKeyAction
@@ -40,10 +43,17 @@ internal object ComputerHibernationGameTestScenario {
         var snapshot: CompletableFuture<TerminalState?>? = null
         val sequence = helper.startSequence()
 
-        fun awaitText(expected: String) {
+        fun awaitText(
+            expected: String,
+            exact: Boolean = false,
+        ) {
+            sequence.thenExecute { LogUtils.getLogger().info("Hibernation awaiting: {} exact={}", expected.trim(), exact) }
             sequence.thenWaitUntil {
                 if (snapshot == null) snapshot = computer.terminalFullStateAsync()
-                helper.assertTrue(snapshot!!.isDone, "hibernation terminal snapshot pending")
+                helper.assertTrue(
+                    snapshot!!.isDone,
+                    "hibernation terminal snapshot pending for $expected; state=${computer.runtimeState}; epoch=${computer.terminalMachineId}",
+                )
                 val state = snapshot!!.join()
                 snapshot = null
                 val text =
@@ -55,7 +65,8 @@ internal object ComputerHibernationGameTestScenario {
                         }
                     }
                 helper.assertTrue(
-                    computer.runtimeState == ProgramComputerState.WaitingForInput && text?.contains(expected) == true,
+                    computer.runtimeState == ProgramComputerState.WaitingForInput &&
+                        (if (exact) text?.trimEnd() == expected.trimEnd() else text?.contains(expected) == true),
                     "expected $expected after hibernation; state=${computer.runtimeState}; terminal=$text",
                 )
             }
@@ -69,13 +80,15 @@ internal object ComputerHibernationGameTestScenario {
             }
         }
 
-        fun reload() {
+        fun reload(stopStore: Boolean = false) {
             sequence.thenExecute {
                 val old = computer
                 val level = helper.level
                 val absolutePosition = helper.absolutePos(position)
                 val state = level.getBlockState(absolutePosition)
+                LogUtils.getLogger().info("Hibernation reload stopStore={} id={} epoch={}", stopStore, identity, old.terminalMachineId)
                 val payload = old.saveWithFullMetadata(level.registryAccess())
+                if (stopStore) NeoForgeWorldFileSystemStores.onServerStopping(ServerStoppingEvent(level.server))
                 level.removeBlockEntity(absolutePosition)
                 helper.assertTrue(old.isRemoved, "carrier was not removed")
                 helper.assertTrue(old.runtimeState == ProgramComputerState.Closed, "old carrier still runs")
@@ -85,7 +98,7 @@ internal object ComputerHibernationGameTestScenario {
             }
         }
         sequence.thenExecute { computer.prepareTerminalAsync() }
-        awaitText(">\n")
+        awaitText(">\n", exact = true)
         input {
             computer.submitTerminalTextAsync("edit hibernation.txt").thenCompose {
                 check(it)
@@ -99,19 +112,44 @@ internal object ComputerHibernationGameTestScenario {
         awaitText("unsaved-before")
         input { computer.submitTerminalTextAsync("-between") }
         awaitText("unsaved-before-between")
-        reload()
+        reload(stopStore = true)
         awaitText("unsaved-before-between")
         input { computer.submitTerminalTextAsync("-after") }
         input { computer.submitTerminalKeyAsync(TerminalKey.S, TerminalKeyAction.PRESS, setOf(TerminalModifier.CONTROL)) }
         input { computer.submitTerminalKeyAsync(TerminalKey.X, TerminalKeyAction.PRESS, setOf(TerminalModifier.CONTROL)) }
         awaitText(">\n")
         input {
-            computer.submitTerminalTextAsync("cat hibernation.txt").thenCompose {
+            computer.submitTerminalTextAsync("clear").thenCompose {
                 check(it)
                 computer.submitTerminalKeyAsync(TerminalKey.ENTER, TerminalKeyAction.PRESS)
             }
         }
+        awaitText(">\n", exact = true)
+        input {
+            computer.submitTerminalTextAsync("edit hibernation.txt").thenCompose {
+                check(it)
+                computer.submitTerminalKeyAsync(TerminalKey.ENTER, TerminalKeyAction.PRESS)
+            }
+        }
+        awaitText("Compukters edit")
         awaitText("unsaved-before-between-after")
+        sequence.thenExecute {
+            val absolutePosition = helper.absolutePos(position)
+            helper.level.server.commands.performPrefixedCommand(
+                helper.level.server.createCommandSourceStack(),
+                "compukters reboot ${absolutePosition.x} ${absolutePosition.y} ${absolutePosition.z}",
+            )
+        }
+        awaitText(">\n", exact = true)
+        input {
+            computer.submitTerminalTextAsync("edit hibernation.txt").thenCompose {
+                check(it)
+                computer.submitTerminalKeyAsync(TerminalKey.ENTER, TerminalKeyAction.PRESS)
+            }
+        }
+        awaitText("Compukters edit")
+        awaitText("unsaved-before-between-after")
+        sequence.thenExecute { helper.assertTrue(computer.computerId() == identity, "explicit reboot changed ComputerId") }
         sequence.thenSucceed()
     }
 }

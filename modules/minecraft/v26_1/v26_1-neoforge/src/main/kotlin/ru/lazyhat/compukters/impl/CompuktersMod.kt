@@ -31,6 +31,7 @@ import ru.lazyhat.compukters.core.LOGGER
 import ru.lazyhat.compukters.core.MOD_ID
 import ru.lazyhat.compukters.impl.benchmark.VmBenchmarkCommands
 import ru.lazyhat.compukters.impl.compiler.NeoForgeCompilerServices
+import ru.lazyhat.compukters.impl.computer.ComputerCommands
 import ru.lazyhat.compukters.impl.computer.NeoForgeVmActorServices
 import ru.lazyhat.compukters.impl.config.CompuktersClientConfig
 import ru.lazyhat.compukters.impl.config.CompuktersServerConfig
@@ -63,6 +64,7 @@ class CompuktersMod(
         }
         NeoForge.EVENT_BUS.addListener(NeoForgeWorldFileSystemStores::onLevelSave)
         NeoForge.EVENT_BUS.addListener(VmBenchmarkCommands::register)
+        NeoForge.EVENT_BUS.addListener(ComputerCommands::register)
         NeoForge.EVENT_BUS.addListener(NeoForgeVmActorServices::onServerStarting)
         NeoForge.EVENT_BUS.addListener(NeoForgeWorldFileSystemStores::onServerStarting)
         NeoForge.EVENT_BUS.addListener(NeoForgeCompilerServices::onServerStarting)
