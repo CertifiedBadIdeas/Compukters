@@ -323,7 +323,9 @@ open class ComputerBlockEntity internal constructor(
     }
 
     private fun scheduleCarrierRetry() {
-        carrierRetryTicks = CARRIER_RETRY_INTERVAL_TICKS - 1
+        // A moving/reloading carrier may briefly wait for its predecessor's close barrier.
+        // Retry saved execution next tick rather than adding a full second at ordinary 20 TPS.
+        carrierRetryTicks = if (resumeExpected) 0 else CARRIER_RETRY_INTERVAL_TICKS - 1
     }
 
     private fun filesystemAvailable(): Boolean =

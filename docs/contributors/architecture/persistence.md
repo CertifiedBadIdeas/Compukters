@@ -43,7 +43,8 @@ Restoration runs on a VM actor worker and executes no Guest instructions during 
 root and child executables and reconstructs execution, terminal, filesystem handles and process scopes. Server-thread
 addon hosts then rebind portable resource descriptors. Only after rebinding succeeds does the actor durably discard
 the stored checkpoint and resume execution. Timers retain remaining ticks; unload time and admission time do not count
-as sleep. Every carrier gets fresh machine/compiler epochs and per-tick instruction credit.
+as sleep. Every carrier gets fresh machine/compiler epochs and per-tick instruction credit. A restoring carrier retries admission
+once per tick while waiting for its predecessor to release the filesystem lease.
 
 Accepted world completions drain before capture. Undelivered redstone, sound and addon operations receive catchable
 unavailable failures; restoration never repeats their physical effects. Pending compilation retains its original
