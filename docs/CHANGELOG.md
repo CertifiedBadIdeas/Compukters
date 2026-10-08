@@ -152,6 +152,7 @@ listed in [Kotlin support](developers/kotlin-support.md) and [standard library s
   changes remain preserved. Commit & Push pushes only after a successful commit, and failed commits keep their drafts.
   Git status colors cover file names and folders; source gutters mark added, modified and deleted lines against
   HEAD, including unsaved edits, through read-only background inspection.
+  Project-tree highlights align with their clickable rows; Commit checkboxes render independently of font glyphs.
 - Text-entry dialogs show a labeled input field with a contrasting background, focus border and visible caret.
   Long values scroll to keep the end of the input visible; authentication tokens remain masked.
 - File switches preserve caret, viewport and undo history in a bounded document cache. The editor highlights the

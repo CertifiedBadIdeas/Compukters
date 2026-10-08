@@ -58,6 +58,8 @@ enum class IdeFillKind {
     CurrentLine,
     DiagnosticMarker,
     GitChange,
+    CheckboxBorder,
+    CheckboxMark,
     Background,
     Border,
     Shadow,
