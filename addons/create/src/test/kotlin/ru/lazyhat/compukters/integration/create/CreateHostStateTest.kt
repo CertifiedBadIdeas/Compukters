@@ -30,11 +30,38 @@ import ru.lazyhat.compukters.lang.runtime.vm.VmHostRequestIdentity
 import ru.lazyhat.compukters.lang.runtime.vm.VmValue
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertTrue
 
 class CreateHostStateTest {
+    @Test
+    fun `unused host hibernates but active resources remain explicitly unsupported`() {
+        val endpoint = FakeSpeedometer(16f)
+        val state = CreateHostState { _, _ -> endpoint }
+        assertTrue(state.checkpoint().isEmpty())
+        state.restoreCheckpoint(byteArrayOf())
+        assertFailsWith<IllegalArgumentException> { state.restoreCheckpoint(byteArrayOf(1)) }
+        state.acquireSpeedometer(0)
+        assertFailsWith<IllegalStateException> { state.checkpoint() }
+        state.reset()
+        assertTrue(state.checkpoint().isEmpty())
+    }
+
+    @Test
+    fun `shared peripheral reads prevent dropping active Create state`() {
+        val endpoint = FakeSpeedometer(16f)
+        val state =
+            CreateHostState(
+                resolveSide = { _, _ -> null },
+                resolveName = { _, _ -> CreateNamedResolution.Failed(HostFailureKind.UNAVAILABLE, "missing") },
+                resolveHandle = { _, _ -> endpoint },
+            )
+        state.speed(7)
+        assertFailsWith<IllegalStateException> { state.checkpoint() }
+    }
+
     @Test
     fun `named acquisition routes every kinetic type and shares handles with side acquisition`() {
         val speedometer = FakeSpeedometer(16f)
