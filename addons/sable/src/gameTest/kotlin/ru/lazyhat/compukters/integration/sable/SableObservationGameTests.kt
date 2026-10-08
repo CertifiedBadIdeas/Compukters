@@ -190,5 +190,6 @@ object SableGameTestRegistration {
     @SubscribeEvent
     fun register(event: RegisterGameTestsEvent) {
         event.register(SableObservationGameTests::class.java)
+        event.register(SableHibernationGameTests::class.java)
     }
 }
