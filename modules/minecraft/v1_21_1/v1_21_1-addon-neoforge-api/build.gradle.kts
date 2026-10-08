@@ -76,6 +76,7 @@ val verifyAddonNeoForgeApiJar =
                     "ru/lazyhat/compukters/api/addon/minecraft/CompuktersPeripheralLookupStatus.class",
                     "ru/lazyhat/compukters/api/addon/minecraft/CompuktersPeripheralProvider.class",
                     "ru/lazyhat/compukters/api/addon/minecraft/CompuktersPeripheralEndpoint.class",
+                    "ru/lazyhat/compukters/api/addon/minecraft/CompuktersPersistentPeripheralEndpoint.class",
                     "ru/lazyhat/compukters/api/addon/minecraft/CompuktersPeripheralLocation.class",
                     "ru/lazyhat/compukters/api/addon/minecraft/CompuktersPeripheralContract.class",
                     "ru/lazyhat/compukters/api/addon/minecraft/CompuktersPeripheralAccessException.class",
