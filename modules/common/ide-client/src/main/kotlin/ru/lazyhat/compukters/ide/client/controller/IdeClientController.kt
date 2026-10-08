@@ -249,6 +249,7 @@ class IdeClientController(
         started = true
         val remembered = runCatching(preferences::load).getOrNull()
         if (remembered != null) preferencesSnapshot = remembered
+        gitDraft.restoreAuthor(preferencesSnapshot.gitAuthorName, preferencesSnapshot.gitAuthorEmail)
         bottomPanel =
             bottomPanel.copy(
                 tab = if (preferencesSnapshot.diagnosticsExpanded) ru.lazyhat.compukters.ide.client.state.IdeBottomTab.Problems else null,
@@ -395,6 +396,7 @@ class IdeClientController(
                     publishStatus("Select files and enter a commit message, author name and email", IdeProblemSeverity.Warning)
                 } else {
                     pushAfterCommit = command.push
+                    persistGitAuthor()
                     gitView = gitView.copy(menu = null)
                     requestGit(
                         GitOperation.CommitSelected(
@@ -804,6 +806,7 @@ class IdeClientController(
     override fun close() {
         checkOwner()
         if (closed) return
+        persistGitAuthor()
         closed = true
         gitCancellation?.cancel()
         inspectionCancellation?.cancel()
@@ -3695,6 +3698,14 @@ class IdeClientController(
                 IdeAnalysisState.Idle
             }
         }
+    }
+
+    private fun persistGitAuthor() {
+        val draft = gitDraft.view()
+        val remembered = preferencesSnapshot.rememberGitAuthor(draft.authorName.text, draft.authorEmail.text)
+        if (remembered === preferencesSnapshot) return
+        preferencesSnapshot = remembered
+        runCatching { preferences.save(preferencesSnapshot) }
     }
 
     private fun persistPreferences(file: ProjectPath?) {

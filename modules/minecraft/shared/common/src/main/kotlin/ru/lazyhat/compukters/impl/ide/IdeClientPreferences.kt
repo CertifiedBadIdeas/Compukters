@@ -119,6 +119,7 @@ class IdeClientPreferences(
         return when (lines.firstOrNull()) {
             "format=1" -> decodeFormatOne(lines, currentLayout)
             "format=2" -> decodeFormatTwo(lines, currentLayout)
+            "format=3" -> decodeFormatThree(lines, currentLayout)
             else -> null
         }
     }
@@ -186,8 +187,24 @@ class IdeClientPreferences(
         return preferences
     }
 
+    private fun decodeFormatThree(
+        lines: List<String>,
+        currentLayout: IdeLayoutSettings,
+    ): IdePreferences? {
+        if (lines.size !in 4..(IdePreferences.MAX_PROJECT_STATES + 4)) return null
+        val name = decodeNullable(lines[2], "authorName") ?: return null
+        val email = decodeNullable(lines[3], "authorEmail") ?: return null
+        val preferences = decodeFormatTwo(listOf("format=2", lines[1]) + lines.drop(4), currentLayout) ?: return null
+        if (name.isEmpty() && email.isEmpty()) return preferences
+        val remembered = preferences.rememberGitAuthor(name, email)
+        if (remembered.gitAuthorName != name || remembered.gitAuthorEmail != email) return null
+        return remembered
+    }
+
     private fun encode(preferences: IdePreferences): String {
-        val header = "format=2\nactive=${encodeNullable(preferences.lastProjectDirectory)}\n"
+        val header =
+            "format=3\nactive=${encodeNullable(preferences.lastProjectDirectory)}\n" +
+                "authorName=${encodeValue(preferences.gitAuthorName)}\nauthorEmail=${encodeValue(preferences.gitAuthorEmail)}\n"
         val result = StringBuilder(header)
         val ordered =
             preferences.projectStates.entries.sortedByDescending {

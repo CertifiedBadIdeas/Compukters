@@ -51,11 +51,24 @@ data class IdeGitDraftView(
 
 /** Session-local draft with ordinary editor cursor, selection and undo semantics. */
 class IdeGitDraftSession : AutoCloseable {
-    private val fields = IdeGitField.entries.associateWith(::newDocument).toMutableMap()
+    private val fields = IdeGitField.entries.associateWith { newDocument(it) }.toMutableMap()
 
-    private fun newDocument(field: IdeGitField): EditorDocument {
+    private fun newDocument(
+        field: IdeGitField,
+        text: String = "",
+    ): EditorDocument {
         val maximum = if (field == IdeGitField.Message) 8192 else 256
-        return EditorDocument("", EditorLimits(maxCodeUnits = maximum, maxUtf8Bytes = maximum * 4))
+        return EditorDocument(text, EditorLimits(maxCodeUnits = maximum, maxUtf8Bytes = maximum * 4))
+    }
+
+    fun restoreAuthor(
+        name: String,
+        email: String,
+    ) {
+        for ((field, text) in listOf(IdeGitField.AuthorName to name, IdeGitField.AuthorEmail to email)) {
+            fields.getValue(field).close()
+            fields[field] = newDocument(field, text)
+        }
     }
 
     var focused: IdeGitField? = null
