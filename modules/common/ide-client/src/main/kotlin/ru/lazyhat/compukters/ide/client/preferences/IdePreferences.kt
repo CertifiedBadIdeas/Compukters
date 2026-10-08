@@ -50,6 +50,8 @@ class IdePreferences private constructor(
     val treeWidth: Int,
     val diagnosticsHeight: Int,
     val diagnosticsExpanded: Boolean,
+    val gitAuthorName: String,
+    val gitAuthorEmail: String,
 ) {
     val projectStates: Map<String, IdeProjectEditorState> = Collections.unmodifiableMap(LinkedHashMap(projectStates))
 
@@ -91,6 +93,27 @@ class IdePreferences private constructor(
             treeWidth = treeWidth,
             diagnosticsHeight = diagnosticsHeight,
             diagnosticsExpanded = diagnosticsExpanded,
+            gitAuthorName = gitAuthorName,
+            gitAuthorEmail = gitAuthorEmail,
+        )
+    }
+
+    fun rememberGitAuthor(
+        name: String,
+        email: String,
+    ): IdePreferences {
+        val normalizedName = name.trim()
+        val normalizedEmail = email.trim()
+        if (!validGitAuthor(normalizedName, normalizedEmail)) return this
+        if (normalizedName == gitAuthorName && normalizedEmail == gitAuthorEmail) return this
+        return admit(
+            lastProjectDirectory,
+            projectStates,
+            treeWidth,
+            diagnosticsHeight,
+            diagnosticsExpanded,
+            normalizedName,
+            normalizedEmail,
         )
     }
 
@@ -124,6 +147,8 @@ class IdePreferences private constructor(
             treeWidth: Int,
             diagnosticsHeight: Int,
             diagnosticsExpanded: Boolean,
+            gitAuthorName: String = "",
+            gitAuthorEmail: String = "",
         ): IdePreferences {
             val admitted = linkedMapOf<String, IdeProjectEditorState>()
             projectStates.forEach { (directoryName, state) ->
@@ -137,6 +162,8 @@ class IdePreferences private constructor(
                 treeWidth = treeWidth.coerceIn(MIN_PANEL_SIZE, MAX_PANEL_SIZE),
                 diagnosticsHeight = diagnosticsHeight.coerceIn(MIN_PANEL_SIZE, MAX_PANEL_SIZE),
                 diagnosticsExpanded = diagnosticsExpanded,
+                gitAuthorName = gitAuthorName.takeIf { validGitAuthor(gitAuthorName, gitAuthorEmail) }.orEmpty(),
+                gitAuthorEmail = gitAuthorEmail.takeIf { validGitAuthor(gitAuthorName, gitAuthorEmail) }.orEmpty(),
             )
         }
 
@@ -147,6 +174,13 @@ class IdePreferences private constructor(
         ): IdePreferences = admit(null, emptyMap(), treeWidth, diagnosticsHeight, diagnosticsExpanded)
 
         private fun isDirectCanonicalName(value: String): Boolean = '/' !in value && runCatching { ProjectPath.file(value) }.isSuccess
+
+        private fun validGitAuthor(
+            name: String,
+            email: String,
+        ): Boolean =
+            name.isNotBlank() && name.length <= 256 && name.none { it == '\r' || it == '\n' || it == '\u0000' } &&
+                email.length <= 256 && '@' in email && email.none { it.isWhitespace() || it == '<' || it == '>' || it == '\u0000' }
     }
 }
 

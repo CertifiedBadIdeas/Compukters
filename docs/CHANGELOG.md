@@ -148,8 +148,8 @@ listed in [Kotlin support](developers/kotlin-support.md) and [standard library s
   selected-file commits, history, branches, fetch, fast-forward-only pull and push. Tokens are masked and session-only; merge and
   SSH are deferred. Git operations save modified buffers first and refresh working files and analysis afterward.
   Git metadata stays outside compiler/deployment inputs; folder renames update open descendant buffers. Changes uses
-  file checkboxes, an editable commit message and author fields, with a colored HEAD-to-working preview beside the list
-  or on its own tab. Branches and repository/account actions use menus. A left icon stripe opens tool windows, with
+  file checkboxes, an editable commit message and author fields remembered across IDE and game restarts, with a colored
+  HEAD-to-working preview beside the list or on its own tab. Branches and repository/account actions use menus. A left icon stripe opens tool windows, with
   Git Log at the bottom; history opens below the editor and switches with Problems. All IDE text uses JetBrains Mono. Unrelated staged
   changes remain preserved. Commit & Push pushes only after a successful commit, and failed commits keep their drafts.
   Git status colors cover file names and folders; source gutters mark added, modified and deleted lines against

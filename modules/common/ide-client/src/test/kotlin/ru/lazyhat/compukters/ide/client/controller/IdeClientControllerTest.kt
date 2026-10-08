@@ -222,6 +222,62 @@ class IdeClientControllerTest {
     }
 
     @Test
+    fun `commit author is restored on reopening and explicit edits survive another session`() {
+        val fixture = ControllerFixture(preferences = preferences("demo", "src/main.kt"))
+        fixture.startAndTick()
+        val name = ru.lazyhat.compukters.ide.client.git.IdeGitField.AuthorName
+        val email = ru.lazyhat.compukters.ide.client.git.IdeGitField.AuthorEmail
+        for ((field, text) in listOf(name to "Player😀", email to "player@example.invalid")) {
+            fixture.controller.dispatch(IdeCommand.GitFocusField(field))
+            fixture.controller.dispatch(IdeCommand.EditGitDraft(IdeEditorInput.Type(text)))
+        }
+        fixture.controller.close()
+
+        val reopened = ControllerFixture(preferences = fixture.preferences.current())
+        reopened.startAndTick()
+        assertEquals(
+            "Player😀",
+            reopened
+                .workspaceView()
+                .git.draft.authorName.text,
+        )
+        assertEquals(
+            "player@example.invalid",
+            reopened
+                .workspaceView()
+                .git.draft.authorEmail.text,
+        )
+        assertEquals(
+            "",
+            reopened
+                .workspaceView()
+                .git.draft.message.text,
+        )
+        for ((field, text) in listOf(name to "Other", email to "other@example.invalid")) {
+            reopened.controller.dispatch(IdeCommand.GitFocusField(field))
+            reopened.controller.dispatch(IdeCommand.EditGitDraft(IdeEditorInput.SelectAll))
+            reopened.controller.dispatch(IdeCommand.EditGitDraft(IdeEditorInput.Type(text)))
+        }
+        reopened.controller.close()
+
+        val changed = ControllerFixture(preferences = reopened.preferences.current())
+        changed.startAndTick()
+        assertEquals(
+            "Other",
+            changed
+                .workspaceView()
+                .git.draft.authorName.text,
+        )
+        assertEquals(
+            "other@example.invalid",
+            changed
+                .workspaceView()
+                .git.draft.authorEmail.text,
+        )
+        changed.controller.close()
+    }
+
+    @Test
     fun `checkbox commit preserves draft on failure and pushes only after successful selected commit`() {
         val fixture = ControllerFixture(preferences = preferences("demo", "src/main.kt"), additionalProject = true)
         fixture.startAndTick()
@@ -254,6 +310,8 @@ class IdeClientControllerTest {
             fixture.controller.dispatch(IdeCommand.EditGitDraft(IdeEditorInput.Type(value)))
         }
         fixture.controller.dispatch(IdeCommand.GitCommitDraft(push = true))
+        assertEquals("Tester", fixture.preferences.current()?.gitAuthorName)
+        assertEquals("test@example.invalid", fixture.preferences.current()?.gitAuthorEmail)
         assertEquals(
             listOf(main),
             (

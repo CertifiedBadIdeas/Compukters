@@ -24,6 +24,23 @@ import kotlin.test.assertNull
 
 class IdePreferencesTest {
     @Test
+    fun `commit author survives project updates and invalid edits preserve remembered identity`() {
+        val preferences = IdePreferences.empty(240, 160, true).rememberGitAuthor(" Player😀 ", " player@example.invalid ")
+        val remembered = preferences.remember("demo", "src/main.kt", 1, 2, 3)
+        assertEquals("Player😀", remembered.gitAuthorName)
+        assertEquals("player@example.invalid", remembered.gitAuthorEmail)
+        for ((name, email) in listOf("" to "player@example.invalid", "Player" to "invalid", "x".repeat(257) to "x@y")) {
+            val invalid = remembered.rememberGitAuthor(name, email)
+            assertEquals("Player😀", invalid.gitAuthorName)
+            assertEquals("player@example.invalid", invalid.gitAuthorEmail)
+        }
+        val changed = remembered.rememberGitAuthor("Other", "other@example.invalid")
+        assertEquals("Other", changed.gitAuthorName)
+        assertEquals("other@example.invalid", changed.gitAuthorEmail)
+        assertEquals("src/main.kt", changed.lastFile?.value)
+    }
+
+    @Test
     fun `preferences retain only canonical remembered project and file`() {
         val valid = IdePreferences.admit("demo", "src/main.kt", 12, 4, 5, 999_999, -4, true)
         assertEquals("demo", valid.lastProjectDirectory)

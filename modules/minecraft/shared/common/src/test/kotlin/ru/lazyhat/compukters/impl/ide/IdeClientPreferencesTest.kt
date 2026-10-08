@@ -30,6 +30,37 @@ import kotlin.test.assertNull
 
 class IdeClientPreferencesTest {
     @Test
+    fun `commit author persists across stores and can be replaced while format two remains readable`() {
+        val root = createTempDirectory("compukters-ide-author-").toAbsolutePath().normalize()
+        try {
+            val file = root.resolve("session.preferences")
+            val layout = RecordingIdeLayoutStore(IdeLayoutSettings.defaults())
+            val store = IdeClientPreferences(file, layout)
+            val original = IdePreferences.admit("demo", "src/main.kt", 12, 4, 5, 240, 160, true)
+            store.save(original.rememberGitAuthor("Автор😀", "player@example.invalid"))
+            val reopened = IdeClientPreferences(file, layout)
+            val restored = reopened.load()!!
+            assertEquals("Автор😀", restored.gitAuthorName)
+            assertEquals("player@example.invalid", restored.gitAuthorEmail)
+            assertEquals("src/main.kt", restored.lastFile?.value)
+            reopened.save(restored.rememberGitAuthor("Other", "other@example.invalid"))
+            assertEquals("Other", store.load()!!.gitAuthorName)
+            assertEquals("other@example.invalid", store.load()!!.gitAuthorEmail)
+
+            file.writeText("format=2\nactive=ZGVtbw\nstate=ZGVtbw|c3JjL21haW4ua3Q|12|4|5\n")
+            val migrated = store.load()!!
+            assertEquals("demo", migrated.lastProjectDirectory)
+            assertEquals("src/main.kt", migrated.lastFile?.value)
+            assertEquals("", migrated.gitAuthorName)
+            assertEquals("", migrated.gitAuthorEmail)
+            store.save(migrated.rememberGitAuthor("Player", "player@example.invalid"))
+            assertEquals("Player", reopened.load()!!.gitAuthorName)
+        } finally {
+            root.toFile().deleteRecursively()
+        }
+    }
+
+    @Test
     fun `session state round trips separately from persistent layout`() {
         val root = createTempDirectory("compukters-ide-preferences-").toAbsolutePath().normalize()
         try {
