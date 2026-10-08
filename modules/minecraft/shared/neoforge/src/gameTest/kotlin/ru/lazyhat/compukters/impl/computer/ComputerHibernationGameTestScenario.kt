@@ -24,6 +24,7 @@ import net.minecraft.gametest.framework.GameTestHelper
 import net.minecraft.nbt.NbtAccounter
 import net.minecraft.nbt.NbtIo
 import net.minecraft.world.level.block.entity.BlockEntity
+import net.minecraft.world.level.storage.LevelResource
 import net.neoforged.neoforge.event.server.ServerStoppingEvent
 import ru.lazyhat.compukters.core.device.computer.ProgramComputerState
 import ru.lazyhat.compukters.impl.fs.NeoForgeWorldFileSystemStores
@@ -106,7 +107,10 @@ internal object ComputerHibernationGameTestScenario {
             }
         }
 
-        fun reload(stopStore: Boolean = false) {
+        fun reload(
+            stopStore: Boolean = false,
+            damageCheckpoint: ((Path) -> Unit)? = null,
+        ) {
             sequence.thenExecute {
                 val old = computer
                 val level = helper.level
@@ -118,6 +122,17 @@ internal object ComputerHibernationGameTestScenario {
                 level.removeBlockEntity(absolutePosition)
                 helper.assertTrue(old.isRemoved, "carrier was not removed")
                 helper.assertTrue(old.runtimeState == ProgramComputerState.Closed, "old carrier still runs")
+                damageCheckpoint?.let { damage ->
+                    check(stopStore) { "checkpoint edits require a completed store close barrier" }
+                    val checkpoint =
+                        level.server
+                            .getWorldPath(LevelResource.ROOT)
+                            .resolve("compukters/filesystems/computers")
+                            .resolve(identity.toByteArray().joinToString("") { "%02x".format(it) })
+                            .resolve("execution")
+                    helper.assertTrue(Files.isRegularFile(checkpoint), "running computer did not publish a checkpoint")
+                    damage(checkpoint)
+                }
                 computer = BlockEntity.loadStatic(absolutePosition, state, payload, level.registryAccess()) as NeoForgeComputerBlockEntity
                 level.setBlockEntity(computer)
                 helper.assertTrue(computer.computerId() == identity, "hibernation changed ComputerId")
@@ -215,6 +230,27 @@ internal object ComputerHibernationGameTestScenario {
         awaitText("Compukters edit")
         awaitText("unsaved-before-between-after")
         sequence.thenExecute { helper.assertTrue(computer.computerId() == identity, "explicit reboot changed ComputerId") }
+        // Admission failure must leave a fresh usable shell and preserve the persisted /home file.
+        listOf<(Path) -> Unit>(
+            { checkpoint ->
+                val corrupt = Files.readAllBytes(checkpoint)
+                corrupt[0] = (corrupt[0].toInt() xor 1).toByte()
+                Files.write(checkpoint, corrupt)
+            },
+            { checkpoint -> Files.delete(checkpoint) },
+        ).forEach { damage ->
+            reload(stopStore = true, damageCheckpoint = damage)
+            awaitText(">\n", exact = true)
+            input {
+                computer.submitTerminalTextAsync("edit hibernation.txt").thenCompose {
+                    check(it)
+                    computer.submitTerminalKeyAsync(TerminalKey.ENTER, TerminalKeyAction.PRESS)
+                }
+            }
+            awaitText("Compukters edit")
+            awaitText("unsaved-before-between-after")
+            sequence.thenExecute { helper.assertTrue(computer.computerId() == identity, "checkpoint recovery changed ComputerId") }
+        }
         sequence.thenSucceed()
     }
 }

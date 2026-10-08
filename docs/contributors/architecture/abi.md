@@ -40,7 +40,7 @@ standalone module 5 and private metadata carrier 6 remain unchanged; rebuild dep
 The VM has a logical computer checkpoint envelope (format 2), owned by
 `host/compukter-vm/src/checkpoint/envelope.rs`. Its version, native runtime/schema identity, computer ID,
 filesystem generation, payload lengths and SHA-256 cover the execution and host descriptor bytes together.
-Rust exposes contextual capture/restore and bounded atomic store methods through C ABI 21, JNI and FFM. Minecraft carriers use this boundary for unload and orderly shutdown; incompatible restoration remains blocked until explicit recovery.
+Rust exposes contextual capture/restore and bounded atomic store methods through C ABI 21, JNI and FFM. Minecraft carriers use this boundary for unload and orderly shutdown; failed restoration cold boots from ROM while retaining ComputerId and `/home`.
 The native reference is `host/compukter-vm/docs/architecture/computer-checkpoints.md`.
 
 The core host descriptor uses little-endian version 1 (`CPTH`, u32 version), a checked input-wait flag,

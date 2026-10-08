@@ -64,8 +64,9 @@ Minecraft persists a stable `ComputerId`; Rust persists `/home` beneath the worl
 
 Running computers hibernate on carrier unload and orderly server shutdown, preserving Guest heap, stacks, tasks,
 terminal state and host resource descriptions. Restore validates the saved execution and rebinds supported resources
-before continuing. Corrupt, incompatible or unsupported checkpoints remain blocked; explicit reboot starts fresh
-execution while retaining `/home`. Live object identities survive within that saved execution, not as general durable IDs.
+before continuing. Missing, corrupt, incompatible or unsupported checkpoints fall back to fresh ROM execution while
+retaining `/home` and logging the failed restoration; explicit reboot also starts fresh execution. Live object identities
+survive within that saved execution, not as general durable IDs.
 
 Close barriers drain accepted work before flushing the final generation. An identity remains unavailable until persistence completes, preventing a rapidly reloaded block from opening a second live machine. Player destruction additionally creates a recoverable tombstone. See [filesystem ownership and shutdown](architecture/persistence.md).
 
