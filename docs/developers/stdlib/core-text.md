@@ -103,8 +103,8 @@ tests `string_content_operations_use_kotlin_utf16_semantics`,
 **Related work:** #676
 
 Only the documented parsing helper `String.toIntOrNull()` is available. Additional numeric parsers,
-`kotlin.math`, regex, locale-sensitive conversion, Unicode category APIs and general formatting are outside
-this inventory. Primitive operators and conversions are listed under [numeric semantics]({{ '/KOTLIN-SUPPORT/primitives/' | relative_url }}).
+regex, locale-sensitive conversion, Unicode category APIs and general formatting are outside
+this inventory. [Mathematics](math.md) owns `kotlin.math`. Primitive operators and conversions are listed under [numeric semantics]({{ '/KOTLIN-SUPPORT/primitives/' | relative_url }}).
 
 ## Value text and hashing
 

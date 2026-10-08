@@ -133,7 +133,7 @@ FFI, Kotlin-to-VM conformance, runtime-host integration, and NeoForge GameTests.
 
 | Changed boundary | Development evidence | Before release |
 | --- | --- | --- |
-| Guest Kotlin declarations, platform metadata, K2 lowering, or IDE semantics | Focused tests and lint in affected `guest-platform`, `platform-bundle`, `platform-k2`, `compiler-k2-engine`, `compiler-k2`, or `ide-*` modules; the applicable Kotlin-to-VM conformance scenario for an execution claim | `verifyLocalFull` on the release candidate |
+| Guest Kotlin declarations, platform metadata, K2 lowering, or IDE semantics | Focused tests and lint in affected `guest-platform`, `platform-bundle`, `platform-k2`, `compiler-k2-engine`, `compiler-k2`, or `ide-*` modules; the applicable Kotlin-to-VM conformance scenario for an execution claim (portable math: `testKotlinMathVmConformance`) | `verifyLocalFull` on the release candidate |
 | `.cpkt` model, encoding, instruction, verifier, or admission contract | `:compiler-artifact:check`, affected compiler checks, focused VM tests, and the applicable conformance scenario; include malformed and version behavior | `verifyLocalFull` on the release candidate |
 | Worker protocol, payload, isolation, or tooling bundle | Owning client/server module `check`, forked-worker checks, payload/license verification, and wrong-version or malformed framing cases | `verifyLocalFull` on the release candidate |
 | Rust VM execution, managed memory, quotas, terminal, filesystem, or persistence | Focused `cargo test --manifest-path host/compukter-vm/Cargo.toml --locked --offline` target or test, plus the owning JVM adapter check when observable there | `verifyLocalFull` on the release candidate |

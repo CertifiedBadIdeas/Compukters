@@ -177,6 +177,49 @@ object CanonicalTrustedIntrinsics {
                 "fun(CharArray.Int,Int):String",
             )
             primitive("stdlib", "core", "kotlin", "emptyArray", "fun():Array<T>")
+            listOf("Float", "Double").forEach { type ->
+                listOf(
+                    "sin",
+                    "cos",
+                    "tan",
+                    "asin",
+                    "acos",
+                    "atan",
+                    "sinh",
+                    "cosh",
+                    "tanh",
+                    "asinh",
+                    "acosh",
+                    "atanh",
+                    "sqrt",
+                    "cbrt",
+                    "exp",
+                    "expm1",
+                    "ln",
+                    "log10",
+                    "log2",
+                    "ln1p",
+                    "ceil",
+                    "floor",
+                    "truncate",
+                    "round",
+                    "abs",
+                    "sign",
+                ).forEach { operation ->
+                    primitive("stdlib", "core", "kotlin.math", "${operation}Primitive", "fun($type):$type")
+                }
+                listOf("atan2", "hypot", "min", "max").forEach { operation ->
+                    primitive("stdlib", "core", "kotlin.math", "${operation}Primitive", "fun($type,$type):$type")
+                }
+                listOf("pow", "IEEErem", "withSign", "nextTowards").forEach { operation ->
+                    primitive("stdlib", "core", "kotlin.math", "${operation}Primitive", "fun($type,$type):$type")
+                }
+                listOf("nextUp", "nextDown").forEach { operation ->
+                    primitive("stdlib", "core", "kotlin.math", "${operation}Primitive", "fun($type):$type")
+                }
+                primitive("stdlib", "core", "kotlin.math", "ulpPrimitive", "fun($type):$type")
+            }
+
             primitive("compukter", "core", "compukter.concurrent", "Task.join", "fun():Unit")
             primitive(
                 "compukter",

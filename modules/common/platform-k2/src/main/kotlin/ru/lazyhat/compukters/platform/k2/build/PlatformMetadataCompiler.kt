@@ -581,10 +581,16 @@ class PlatformMetadataCompiler {
                     property.getter?.hasBody() == true || property.hasModifier(KtTokens.ABSTRACT_KEYWORD) ||
                         (property.parent.parent as? KtClass)?.isInterface() == true
                 }?.let { property ->
+                    val receiver =
+                        property.receiverTypeReference
+                            ?.text
+                            ?.canonicalType()
+                            ?.plus(".")
+                            .orEmpty()
                     ParsedDeclaration(
                         platformDeclaration.copy(
                             symbol = (listOf(packageName).filter(String::isNotEmpty) + owners + "<get-$name>").joinToString("."),
-                            signature = "fun():${property.typeReference?.text?.canonicalType() ?: "?"}",
+                            signature = "fun($receiver):${property.typeReference?.text?.canonicalType() ?: "?"}",
                         ),
                         private,
                         hasBody = property.getter?.hasBody() == true,

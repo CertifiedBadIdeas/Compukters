@@ -1739,3 +1739,21 @@ val generateEqualsConformanceArtifact = tasks.register<Test>("generateEqualsConf
         systemProperty("compukter.vm.equalsArtifact", equalsConformanceArtifact.get().asFile.absolutePath)
     }
 }
+
+val mathConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-math.cpkt")
+tasks.register<Test>("generateMathConformanceArtifact") {
+    description = "Compiles the portable Guest math surface for VM execution conformance."
+    group = "verification"
+    dependsOn(tasks.jar)
+    useJUnitPlatform()
+    testClassesDirs = sourceSets.test.get().output.classesDirs
+    classpath = sourceSets.test.get().runtimeClasspath
+    filter.includeTestsMatching("*portable math compiles both widths library bodies and callable references*")
+    inputs.file(workerJar)
+    inputs.file("src/test/resources/kotlin/math/main.kt")
+    outputs.file(mathConformanceArtifact)
+    doFirst {
+        systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
+        systemProperty("compukter.vm.mathArtifact", mathConformanceArtifact.get().asFile.absolutePath)
+    }
+}
