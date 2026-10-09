@@ -31,7 +31,8 @@ With no project open, the central **Projects** panel shows saved projects alongs
 With a project open, click **Projects** in the header to choose or manage projects and access the same actions.
 The start page and project menu show each folder path and distinguish IDE folders from **External** projects.
 Scroll the list to reach additional projects. An external path is remembered across IDE and Minecraft restarts, so
-you only need to enter it once.
+you only need to enter it once. Listing saved folders does not read their manifests; a missing or invalid
+`compukter.toml` is reported when that project is opened and does not hide other projects.
 Modified buffers are saved before a project transition. A failed create/open/clone keeps the current project available.
 
 ## UI scale

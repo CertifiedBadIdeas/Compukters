@@ -48,7 +48,6 @@ class ProjectHandle internal constructor(
 
 data class ProjectDescriptor(
     val directoryName: String,
-    val manifest: ProjectManifest,
     val handle: ProjectHandle,
 ) {
     val external: Boolean get() = directoryName.startsWith(REGISTERED_PROJECT_PREFIX)

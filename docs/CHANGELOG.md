@@ -184,7 +184,7 @@ listed in [Kotlin support](developers/kotlin-support.md) and [standard library s
 ### In-game IDE
 
 - With no project open, a central **Projects** panel groups saved folder paths with create, open and HTTPS clone
-  actions; the header menu provides the same project management while editing. Both lists scroll. IDE-owned folders support
+  actions; the header menu provides the same project management while editing. Both lists scroll, and a missing or invalid manifest is checked only when opening the selected project. IDE-owned folders support
   collision-safe rename and confirmed deletion; external directories remain registered across restarts and expose a
   distinct **Remove from list** action that preserves their files. Renaming retains the active file and editor position;
   unsaved buffers prevent folder management until saved.
