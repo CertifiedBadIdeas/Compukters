@@ -45,7 +45,11 @@ revisions do not participate in admission: `0.<abi>.<revision>` is one compatibi
 checkpoint restore in both directions, filesystem state, executable admission and native calls. Incompatible
 contract or codec changes require an ABI increment; a revision must preserve those contracts. The earlier
 unpublished development identity based on the full version is rejected without a fallback. CI exchanges a
-full-computer checkpoint between two real builds separated by `cargo xtask bump revision` in both directions.
+full-computer checkpoint between two real builds of adjacent revisions in both directions.
+Production version preparation queries the latest complete stable GitHub Release. Revision and ABI requests
+are idempotent within a release cycle; an ABI request updates the native constant and version together.
+After successful publication the workflow prepares the next revision on `main`. An explicit ABI request
+marks incompatible development; semantic breaking changes are not inferred from arbitrary source diffs.
 Rust exposes contextual capture/restore and bounded atomic store methods through C ABI 21, JNI and FFM. Minecraft carriers use this boundary for unload and orderly shutdown; failed restoration cold boots from ROM while retaining ComputerId and `/home`.
 The native reference is `host/compukter-vm/docs/architecture/computer-checkpoints.md`.
 
