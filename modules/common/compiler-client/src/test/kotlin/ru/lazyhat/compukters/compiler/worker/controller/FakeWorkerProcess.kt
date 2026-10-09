@@ -32,6 +32,7 @@ internal class FakeWorkerProcess : WorkerProcess {
     var terminationCount = 0
     val terminationGraces = mutableListOf<Long>()
     var stderr = ByteArray(0)
+    var afterTermination: (() -> Unit)? = null
     override var exitCode: Int? = null
     override var isAlive = true
 
@@ -81,6 +82,7 @@ internal class FakeWorkerProcess : WorkerProcess {
         terminationGraces += graceMillis
         isAlive = false
         reads.offer(Read.Eof)
+        afterTermination?.invoke()
     }
 
     override fun close() {

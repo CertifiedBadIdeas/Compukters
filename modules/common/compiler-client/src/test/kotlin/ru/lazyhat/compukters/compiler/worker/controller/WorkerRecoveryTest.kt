@@ -42,6 +42,24 @@ import kotlin.test.assertIs
 
 class WorkerRecoveryTest {
     @Test
+    fun `cancellation and close retain their result when worker exit completes during termination`() {
+        for (close in listOf(false, true)) {
+            withController(1) { controller, processes, identity, limits ->
+                val worker = processes.single()
+                worker.enqueue(handshake(identity, limits))
+                val cancelled = controller.compile(source("cancel"))
+                assertIs<CompileRequest>(worker.awaitWrite())
+                worker.afterTermination = {
+                    assertEquals(PlatformFailureClass.CANCELLED, assertIs<PlatformFailure>(cancelled.get(5, TimeUnit.SECONDS)).failureClass)
+                }
+
+                if (close) controller.close() else assertEquals(true, controller.cancel(cancelled))
+                assertEquals(PlatformFailureClass.CANCELLED, assertIs<PlatformFailure>(cancelled.get(5, TimeUnit.SECONDS)).failureClass)
+            }
+        }
+    }
+
+    @Test
     fun `startup and compilation timeouts are distinct and terminate after grace`() {
         withController(2) { controller, processes, identity, limits ->
             processes[0].enqueueTimeout()

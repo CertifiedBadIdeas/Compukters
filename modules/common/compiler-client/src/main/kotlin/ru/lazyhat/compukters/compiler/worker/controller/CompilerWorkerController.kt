@@ -138,33 +138,29 @@ class CompilerWorkerController(
             val queuedPending = queued
             pending =
                 when {
-                    activePending?.future === future -> {
-                        activePending.cancelled = true
-                        state = CompilerWorkerState.INVALID
-                        activePending
-                    }
-
-                    queuedPending?.future === future -> {
-                        queued = null
-                        queuedPending
-                    }
-
-                    else -> {
-                        return false
-                    }
+                    activePending?.future === future -> activePending
+                    queuedPending?.future === future -> queuedPending
+                    else -> return false
                 }
-            child = if (pending === activePending) process.also { process = null } else null
+            if (pending.terminalResult != null) return false
+            pending.terminalResult = PlatformFailure(pending.request.requestId, PlatformFailureClass.CANCELLED, "compilation cancelled")
             activeCancellation = pending === activePending
+            if (activeCancellation) {
+                pending.cancelled = true
+                state = CompilerWorkerState.INVALID
+            } else {
+                queued = null
+            }
+            child = if (pending === activePending) process.also { process = null } else null
         }
         child?.terminate(policy.terminationGraceMillis)
         if (activeCancellation) {
             synchronized(lock) {
-                if (!closed) state = CompilerWorkerState.STOPPED
+                if (!closed && process == null && (active === pending || active == null)) state = CompilerWorkerState.STOPPED
             }
         }
-        return pending.future.complete(
-            PlatformFailure(pending.request.requestId, PlatformFailureClass.CANCELLED, "compilation cancelled"),
-        )
+        pending.future.complete(requireNotNull(pending.terminalResult))
+        return true
     }
 
     override fun close() {
@@ -175,6 +171,11 @@ class CompilerWorkerController(
             closed = true
             state = CompilerWorkerState.INVALID
             pending = listOfNotNull(active, queued)
+            pending.forEach { item ->
+                if (item.terminalResult == null) {
+                    item.terminalResult = PlatformFailure(item.request.requestId, PlatformFailureClass.CANCELLED, "controller closed")
+                }
+            }
             active = null
             queued = null
             child = process
@@ -182,7 +183,7 @@ class CompilerWorkerController(
         }
         child?.terminate(policy.terminationGraceMillis)
         pending.forEach { item ->
-            item.future.complete(PlatformFailure(item.request.requestId, PlatformFailureClass.CANCELLED, "controller closed"))
+            item.future.complete(requireNotNull(item.terminalResult))
         }
         executor.shutdownNow()
     }
@@ -191,7 +192,11 @@ class CompilerWorkerController(
         while (true) {
             val pending = synchronized(lock) { active } ?: return
             val result = runRequest(pending)
-            pending.future.complete(result)
+            val terminalResult =
+                synchronized(lock) {
+                    pending.terminalResult ?: result.also { pending.terminalResult = it }
+                }
+            pending.future.complete(terminalResult)
             synchronized(lock) {
                 if (active === pending) {
                     active = queued
@@ -358,6 +363,7 @@ class CompilerWorkerController(
         val request: CompileRequest,
         val future: CompletableFuture<CompileResult>,
         @Volatile var cancelled: Boolean = false,
+        var terminalResult: CompileResult? = null,
     )
 
     private class ControllerFault(
