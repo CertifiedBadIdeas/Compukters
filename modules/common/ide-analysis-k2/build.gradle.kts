@@ -320,6 +320,7 @@ val verifyAnalysisWorkerLicenses = tasks.register("verifyAnalysisWorkerLicenses"
 }
 
 tasks.test {
+    maxHeapSize = "1g"
     val guestApiJar = project(":guest-platform").tasks.named<Jar>("jar")
     val platformBundle = project(":guest-platform").tasks.named("assemblePlatformBundle")
     dependsOn(guestApiJar, platformBundle, addonGuestApiFixtureBundle)
