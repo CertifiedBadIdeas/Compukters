@@ -25,6 +25,20 @@ plugins {
 
 organizeCompuktersTasks()
 
+tasks.register<Sync>("stageDistributionModJars") {
+    description = "Stages verified production mod JARs for the all-addon distribution build."
+    outputs.upToDateWhen { false }
+    into(layout.buildDirectory.dir("distribution"))
+    listOf("v1_21_1" to "1.21.1", "v26_1" to "26.1.2").forEach { (target, minecraft) ->
+        val modProject = project(":$target-neoforge")
+        dependsOn("${modProject.path}:buildProductionUniversalJar")
+        val archiveTask = if (target == "v1_21_1") "remapJar" else "shadowJar"
+        from(providers.provider {
+            modProject.tasks.named<AbstractArchiveTask>(archiveTask).get().archiveFile.get()
+        }) { into(minecraft) }
+    }
+}
+
 val compukterVmBuildJobs =
     providers
         .gradleProperty("compukterVmBuildJobs")
@@ -87,8 +101,9 @@ val cleanWorkspace =
         }
     }
 
-tasks.named("clean") {
+tasks.named<Delete>("clean") {
     dependsOn(cleanWorkspace)
+    delete(layout.projectDirectory.dir("dist"))
 }
 
 val testCompukterVmRust =

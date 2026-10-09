@@ -185,3 +185,19 @@ tasks.configureEach {
     if (name == "runClient" || name == "runServer" || name == "runGameTestServer") dependsOn(verifyPhysicsMods)
     if (name == "runGameTestServer") dependsOn(addonGameTestMods.values)
 }
+
+tasks.register<Sync>("collectDistributionJars") {
+    group = "compukters distribution"
+    description = "Builds and collects production mod and first-party addon JARs into workspace dist/."
+    duplicatesStrategy = DuplicatesStrategy.FAIL
+    outputs.upToDateWhen { false }
+    val mods = files(layout.projectDirectory.dir("../../build/distribution"))
+        .builtBy(gradle.includedBuild("Compukters").task(":stageDistributionModJars"))
+    from(mods)
+    listOf("create", "sable", "propulsion").forEach { addon ->
+        val archives = files(layout.projectDirectory.dir("../$addon/build/distribution"))
+            .builtBy(gradle.includedBuild("compukters-$addon").task(":stageDistributionJar"))
+        from(archives) { into("1.21.1") }
+    }
+    into(layout.projectDirectory.dir("../../dist"))
+}

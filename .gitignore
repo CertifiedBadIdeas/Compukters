@@ -23,6 +23,7 @@ build
 /host/compukter-jni/target/
 
 # other
+/dist/
 eclipse
 run
 runs
