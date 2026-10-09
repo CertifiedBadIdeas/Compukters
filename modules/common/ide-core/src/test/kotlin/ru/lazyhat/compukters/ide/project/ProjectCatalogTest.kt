@@ -143,6 +143,64 @@ class ProjectCatalogTest {
     }
 
     @Test
+    fun `creating a project does not reread a malformed sibling manifest`() {
+        val root = createTempDirectory("compukters-projects-sibling-")
+        val broken = root.resolve("p1").createDirectory()
+        broken.resolve("compukter.toml").writeText(
+            """
+            format = 1
+            name = "p1"
+
+            [modules]
+            compukter = { redstone = 2 }
+            std = { terminal = 1 }
+            """.trimIndent(),
+        )
+        val catalog = ProjectCatalog.open(root)
+
+        val created = catalog.create("p2")
+
+        assertEquals("p2", created.directoryName)
+        assertTrue(created.handle.isValid())
+        assertEquals(
+            "fun main() {\n}\n",
+            created.handle.canonicalPath
+                .resolve("src/main.kt")
+                .readText(),
+        )
+        val failure = assertFailsWith<ProjectCatalogException> { catalog.projects() }
+        assertTrue(failure.message.orEmpty().contains("p1: unknown manifest key: modules"))
+    }
+
+    @Test
+    fun `importing a project does not reread a malformed sibling manifest`() {
+        val root = createTempDirectory("compukters-import-sibling-")
+        val broken = root.resolve("p1").createDirectory()
+        broken.resolve("compukter.toml").writeText("format = 99\nname = \"p1\"\n")
+        val catalog = ProjectCatalog.open(root)
+
+        val imported =
+            catalog.importProject("cloned") { destination ->
+                destination.resolve("compukter.toml").writeText(ProjectManifestCodec.encode(ProjectManifest.of("cloned", emptySet())))
+                destination
+                    .resolve("src")
+                    .createDirectory()
+                    .resolve("main.kt")
+                    .writeText("fun main() {}")
+            }
+
+        assertEquals("cloned", imported.directoryName)
+        assertTrue(imported.handle.isValid())
+        assertEquals(
+            "fun main() {}",
+            imported.handle.canonicalPath
+                .resolve("src/main.kt")
+                .readText(),
+        )
+        assertFailsWith<ProjectCatalogException> { catalog.projects() }
+    }
+
+    @Test
     fun `catalog rejects malformed project manifests`() {
         val root = createTempDirectory("compukters-projects-malformed-")
         val broken = root.resolve("broken").createDirectory()

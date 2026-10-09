@@ -29,6 +29,20 @@ query or fragment. SSH transport is deferred.
 Click the project name in the header to switch projects, create a new one, open another directory or clone a repository.
 Modified buffers are saved before a project transition. A failed create/open/clone keeps the current project available.
 
+## Project manifest
+
+Current projects use `format = 3`. For a project using only built-in libraries:
+
+```toml
+format = 3
+name = "p1"
+addons = []
+```
+
+Old `format = 1` manifests with `[modules]` are rejected with a validation error. Replace that section with
+`addons`; redstone and terminal support are built in and do not need addon requirements. Keep any optional addon
+requirements in `addons`, such as `["sable", "propulsion"]`. Editing the manifest preserves your source files.
+
 ## Rename a file or folder
 
 Select the entry in the project tree, then click the **Rename** toolbar icon. Enter its destination path relative to the

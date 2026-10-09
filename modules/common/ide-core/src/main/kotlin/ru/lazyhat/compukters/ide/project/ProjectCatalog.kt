@@ -68,30 +68,38 @@ class ProjectCatalog private constructor(
                         return@forEach
                     }
                     validateDirectoryName(directoryName)
-                    val attributes = SecureProjectFiles.attributes(root, name)
-                    if (attributes.isSymbolicLink || !attributes.isDirectory) {
-                        throw ProjectCatalogException("project catalog contains an unsafe entry: $directoryName")
-                    }
-                    root.newDirectoryStream(name, LinkOption.NOFOLLOW_LINKS).use { project ->
-                        val manifestSource = SecureProjectFiles.readText(project, MANIFEST_FILENAME, limits.manifestBytes)
-                        val manifest =
-                            try {
-                                ProjectManifestCodec.decode(manifestSource, limits)
-                            } catch (exception: ManifestException) {
-                                throw ProjectCatalogException("invalid project manifest: $directoryName", exception)
-                            }
-                        val fileKey =
-                            attributes.fileKey() ?: throw ProjectCatalogException("filesystem does not expose stable project identity")
-                        val identity =
-                            ProjectRootIdentity(
-                                rootIdentity.canonicalPath.resolve(directoryName).toRealPath(LinkOption.NOFOLLOW_LINKS),
-                                fileKey,
-                            )
-                        add(ProjectDescriptor(directoryName, manifest, ProjectHandle(directoryName, identity)))
-                    }
+                    add(describeOwned(root, directoryName))
                 }
             }.sortedWith { left, right -> TomlSupport.utf8Comparator.compare(left.directoryName, right.directoryName) }
         }
+
+    private fun describeOwned(
+        root: SecureDirectoryStream<Path>,
+        directoryName: String,
+    ): ProjectDescriptor {
+        val name = Path.of(directoryName)
+        val attributes = SecureProjectFiles.attributes(root, name)
+        if (attributes.isSymbolicLink || !attributes.isDirectory) {
+            throw ProjectCatalogException("project catalog contains an unsafe entry: $directoryName")
+        }
+        return root.newDirectoryStream(name, LinkOption.NOFOLLOW_LINKS).use { project ->
+            val manifestSource = SecureProjectFiles.readText(project, MANIFEST_FILENAME, limits.manifestBytes)
+            val manifest =
+                try {
+                    ProjectManifestCodec.decode(manifestSource, limits)
+                } catch (exception: ManifestException) {
+                    throw ProjectCatalogException("invalid project manifest: $directoryName: ${exception.message}", exception)
+                }
+            val fileKey =
+                attributes.fileKey() ?: throw ProjectCatalogException("filesystem does not expose stable project identity")
+            val identity =
+                ProjectRootIdentity(
+                    rootIdentity.canonicalPath.resolve(directoryName).toRealPath(LinkOption.NOFOLLOW_LINKS),
+                    fileKey,
+                )
+            ProjectDescriptor(directoryName, manifest, ProjectHandle(directoryName, identity))
+        }
+    }
 
     /** Registers an existing root in place. Reopening the catalog preserves this project identity. */
     fun register(projectRoot: Path): ProjectDescriptor {
@@ -136,7 +144,9 @@ class ProjectCatalog private constructor(
         } finally {
             cleanupImportedStaging(stagingName)
         }
-        return projects().single { it.directoryName == name }
+        return catalogOperation("open published project") { root ->
+            describeOwned(root, name)
+        }
     }
 
     private fun cleanupImportedStaging(name: String) {
@@ -202,7 +212,9 @@ class ProjectCatalog private constructor(
             if (exception is IllegalArgumentException) throw exception
             throw ProjectCatalogException("failed to create project: $name", exception)
         }
-        return projects().single { it.directoryName == name }
+        return catalogOperation("open published project") { root ->
+            describeOwned(root, name)
+        }
     }
 
     private fun validateDirectoryName(name: String) {
