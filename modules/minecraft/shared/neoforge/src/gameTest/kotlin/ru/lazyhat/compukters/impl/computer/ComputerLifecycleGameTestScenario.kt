@@ -84,7 +84,22 @@ internal object ComputerLifecycleGameTestScenario {
         helper.assertBlockPresent(block, position)
         val entity = helper.compuktersComputerBlockEntity(position)
         var persistenceStep: PersistenceStep? = null
-        var initialTerminal: CompletableFuture<TerminalState?>? = null
+        // A pre-boot observation must not freeze the later readiness check.
+        var initialTerminal: CompletableFuture<TerminalState?>? =
+            CompletableFuture.completedFuture(
+                TerminalState(
+                    0,
+                    1,
+                    1,
+                    listOf(
+                        ru.lazyhat.compukters.lang.runtime.vm
+                            .TerminalCell(' '.code, 0, 0),
+                    ),
+                    ru.lazyhat.compukters.lang.runtime.vm
+                        .TerminalPosition(0, 0),
+                    false,
+                ),
+            )
         var initialResources: CompletableFuture<ProgramResourceSnapshot?>? = null
         helper.assertTrue(
             entity.type === CompuktersRegistry.COMPUTER_BLOCK_ENTITY.get(),
@@ -93,6 +108,19 @@ internal object ComputerLifecycleGameTestScenario {
         helper
             .startSequence()
             .thenWaitUntil {
+                initialTerminal?.takeIf { it.isDone }?.let { completed ->
+                    val observed = completed.getNow(null)
+                    if (observed == null || observed.revision <= 0 || observed.cells.none { it.codePoint != ' '.code }) {
+                        initialTerminal = null
+                        initialResources = null
+                    }
+                }
+                initialResources?.takeIf { it.isDone }?.let { completed ->
+                    if (completed.getNow(null) !is ProgramResourceSnapshot.Available) {
+                        initialTerminal = null
+                        initialResources = null
+                    }
+                }
                 if (entity.runtimeState != neverStarted() && initialTerminal == null) {
                     initialTerminal = entity.terminalFullStateAsync()
                     initialResources = entity.resourceSnapshotAsync()
