@@ -40,6 +40,11 @@ the transfer tool retains readers for inventories 1 and 2 when resuming their pu
 
 ## Prepare and validate a candidate
 
+Mainline mod releases advance the minor version. Patch versions are reserved for fixes
+to an already published release on its `fix/X.Y.x` branch. After successful publication,
+run `bumpAfterRelease` to start the next development minor; for example, `0.5.0` becomes
+`0.6.0`. Do not advance the development version before publication succeeds.
+
 1. Set the intended stable version in `gradle.properties`, date its cumulative
    section in `docs/CHANGELOG.md`, and commit the final candidate and pinned VM
    revision.
