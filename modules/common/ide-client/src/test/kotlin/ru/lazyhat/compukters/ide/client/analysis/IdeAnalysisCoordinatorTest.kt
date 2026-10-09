@@ -61,7 +61,6 @@ import ru.lazyhat.compukters.ide.project.ApiMajor
 import ru.lazyhat.compukters.ide.project.ModuleId
 import ru.lazyhat.compukters.ide.project.ProjectCatalog
 import ru.lazyhat.compukters.ide.project.ProjectHandle
-import ru.lazyhat.compukters.ide.project.ProjectManifestCodec
 import ru.lazyhat.compukters.ide.project.ResolvedModule
 import ru.lazyhat.compukters.ide.project.fs.ProjectPath
 import ru.lazyhat.compukters.platform.bundle.PlatformBundleCodec
@@ -71,6 +70,7 @@ import ru.lazyhat.compukters.platform.bundle.PlatformSource
 import ru.lazyhat.compukters.worker.value.ImmutableBytes
 import java.util.concurrent.CompletableFuture
 import kotlin.io.path.createTempDirectory
+import kotlin.io.path.readBytes
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
@@ -1281,7 +1281,9 @@ private class AnalysisFixture(
     private fun input(): IdeBuildInput =
         IdeBuildInput(
             project,
-            ProjectManifestCodec.encode(descriptor.manifest).encodeToByteArray(),
+            descriptor.handle.canonicalPath
+                .resolve("compukter.toml")
+                .readBytes(),
             null,
             ProjectSnapshot.of((source(text).sources + extraSources).sortedBy { it.path.value }, ANALYSIS_LIMITS),
         )

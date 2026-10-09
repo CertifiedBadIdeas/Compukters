@@ -117,7 +117,7 @@ class ProjectCatalogTest {
                     .resolve("main.kt")
                     .writeText("fun main() {}")
             }
-        assertEquals("imported", imported.manifest.name)
+        assertEquals("imported", catalog.readManifest(imported.handle).name)
         assertEquals(root.resolve("clone"), imported.handle.canonicalPath)
         assertEquals(listOf("clone"), root.listDirectoryEntries().map { it.fileName.toString() })
     }
@@ -129,7 +129,7 @@ class ProjectCatalogTest {
         val catalog = ProjectCatalog.open(root)
         val registered = catalog.register(external.handle.canonicalPath)
         assertEquals(external.handle.canonicalPath, registered.handle.canonicalPath)
-        assertEquals("existing", registered.manifest.name)
+        assertEquals("existing", catalog.readManifest(registered.handle).name)
         assertEquals(registered.directoryName, catalog.register(external.handle.canonicalPath).directoryName)
         assertEquals(listOf(registered), ProjectCatalog.open(root).projects().map { it.copy(handle = registered.handle) })
         assertEquals(1, root.listDirectoryEntries().size)
@@ -166,7 +166,7 @@ class ProjectCatalogTest {
         val alpha = catalog.create("alpha")
 
         assertEquals(listOf("alpha", "zeta"), catalog.projects().map { it.directoryName })
-        assertEquals("alpha", alpha.manifest.name)
+        assertEquals("alpha", catalog.readManifest(alpha.handle).name)
         assertEquals(
             "fun main() {\n}\n",
             alpha.handle.canonicalPath
@@ -229,7 +229,9 @@ class ProjectCatalogTest {
                 .resolve("src/main.kt")
                 .readText(),
         )
-        val failure = assertFailsWith<ProjectCatalogException> { catalog.projects() }
+        val projects = catalog.projects()
+        assertEquals(listOf("p1", "p2"), projects.map { it.directoryName })
+        val failure = assertFailsWith<ProjectCatalogException> { catalog.readManifest(projects.first().handle) }
         assertTrue(failure.message.orEmpty().contains("p1: unknown manifest key: modules"))
     }
 
@@ -258,16 +260,51 @@ class ProjectCatalogTest {
                 .resolve("src/main.kt")
                 .readText(),
         )
-        assertFailsWith<ProjectCatalogException> { catalog.projects() }
+        assertEquals(listOf("cloned", "p1"), catalog.projects().map { it.directoryName })
     }
 
     @Test
-    fun `catalog rejects malformed project manifests`() {
+    fun `catalog lists malformed projects but rejects their manifest when selected`() {
         val root = createTempDirectory("compukters-projects-malformed-")
         val broken = root.resolve("broken").createDirectory()
         broken.resolve("compukter.toml").writeText("format = 99\nname = \"broken\"\n")
 
-        assertFailsWith<ProjectCatalogException> { ProjectCatalog.open(root).projects() }
+        val catalog = ProjectCatalog.open(root)
+        val project = catalog.projects().single()
+        assertEquals("broken", project.directoryName)
+        assertFailsWith<ProjectCatalogException> { catalog.readManifest(project.handle) }
+        val renamed = catalog.rename(project, "renamed")
+        assertEquals("renamed", renamed.directoryName)
+        catalog.remove(renamed)
+        assertTrue(catalog.projects().isEmpty())
+    }
+
+    @Test
+    fun `missing owned manifest and changed external manifest do not block catalog management`() {
+        val root = createTempDirectory("compukters-projects-list-only-")
+        val catalog = ProjectCatalog.open(root)
+        val healthy = catalog.create("healthy")
+        val missing = root.resolve("missing").createDirectory()
+        val external = ProjectCatalog.open(createTempDirectory("compukters-external-manifest-")).create("outside")
+        val registered = catalog.register(external.handle.canonicalPath)
+        external.handle.canonicalPath
+            .resolve("compukter.toml")
+            .writeText("format = 99\nname = \"outside\"\n")
+
+        val projects = catalog.projects()
+        assertEquals(setOf("healthy", "missing", registered.directoryName), projects.map { it.directoryName }.toSet())
+        assertEquals("healthy", catalog.readManifest(healthy.handle).name)
+        assertFailsWith<Exception> { catalog.readManifest(projects.single { it.directoryName == "missing" }.handle) }
+        assertFailsWith<ProjectCatalogException> { catalog.readManifest(projects.single { it.external }.handle) }
+        catalog.remove(projects.single { it.external })
+        assertTrue(
+            external.handle.canonicalPath
+                .resolve("compukter.toml")
+                .exists(),
+        )
+        catalog.remove(projects.single { it.directoryName == "missing" })
+        assertFalse(missing.exists())
+        assertEquals(listOf("healthy"), catalog.projects().map { it.directoryName })
     }
 
     @Test

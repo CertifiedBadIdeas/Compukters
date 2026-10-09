@@ -82,14 +82,7 @@ class ProjectCatalog private constructor(
         if (attributes.isSymbolicLink || !attributes.isDirectory) {
             throw ProjectCatalogException("project catalog contains an unsafe entry: $directoryName")
         }
-        return root.newDirectoryStream(name, LinkOption.NOFOLLOW_LINKS).use { project ->
-            val manifestSource = SecureProjectFiles.readText(project, MANIFEST_FILENAME, limits.manifestBytes)
-            val manifest =
-                try {
-                    ProjectManifestCodec.decode(manifestSource, limits)
-                } catch (exception: ManifestException) {
-                    throw ProjectCatalogException("invalid project manifest: $directoryName: ${exception.message}", exception)
-                }
+        return root.newDirectoryStream(name, LinkOption.NOFOLLOW_LINKS).use {
             val fileKey =
                 attributes.fileKey() ?: throw ProjectCatalogException("filesystem does not expose stable project identity")
             val identity =
@@ -97,7 +90,7 @@ class ProjectCatalog private constructor(
                     rootIdentity.canonicalPath.resolve(directoryName).toRealPath(LinkOption.NOFOLLOW_LINKS),
                     fileKey,
                 )
-            ProjectDescriptor(directoryName, manifest, ProjectHandle(directoryName, identity))
+            ProjectDescriptor(directoryName, ProjectHandle(directoryName, identity))
         }
     }
 
@@ -171,9 +164,13 @@ class ProjectCatalog private constructor(
     /** Registers an existing root in place. Reopening the catalog preserves this project identity. */
     fun register(projectRoot: Path): ProjectDescriptor {
         val identity = SecureProjectFiles.identity(projectRoot)
-        projects().firstOrNull { it.handle.identity.canonicalPath == identity.canonicalPath }?.let { return it }
         val id = "$REGISTRATION_PREFIX${UUID.randomUUID()}"
-        val descriptor = describe(id, identity.canonicalPath)
+        val descriptor = ProjectDescriptor(id, ProjectHandle(id, identity))
+        readManifest(descriptor.handle)
+        projects().firstOrNull { it.handle.identity.canonicalPath == identity.canonicalPath }?.let {
+            check(it.handle.identity == identity) { "project changed during registration" }
+            return it
+        }
         val content = TomlSupport.strictUtf8(identity.canonicalPath.toString())
         require(content.size <= limits.pathUtf8Bytes) { "registered project path exceeds byte limit" }
         catalogOperation("register project") { root ->
@@ -199,6 +196,7 @@ class ProjectCatalog private constructor(
         try {
             materialize(stagingPath)
             val staged = describe(stagingName, stagingPath)
+            readManifest(staged.handle)
             ru.lazyhat.compukters.ide.project.tree
                 .ProjectTreeStore(staged.handle, limits)
                 .scan()
@@ -244,12 +242,21 @@ class ProjectCatalog private constructor(
         projectRoot: Path,
     ): ProjectDescriptor {
         val identity = SecureProjectFiles.identity(projectRoot)
-        val manifest =
-            SecureProjectFiles.withValidProject(identity) { root ->
-                ProjectManifestCodec.decode(SecureProjectFiles.readText(root, MANIFEST_FILENAME, limits.manifestBytes), limits)
-            }
-        return ProjectDescriptor(id, manifest, ProjectHandle(id, identity))
+        return ProjectDescriptor(id, ProjectHandle(id, identity))
     }
+
+    /** Validates the selected project's current manifest without caching it in catalog rows. */
+    fun readManifest(project: ProjectHandle): ProjectManifest =
+        SecureProjectFiles.withValidProject(project.identity) { root ->
+            try {
+                ProjectManifestCodec.decode(SecureProjectFiles.readText(root, MANIFEST_FILENAME, limits.manifestBytes), limits)
+            } catch (exception: ManifestException) {
+                throw ProjectCatalogException(
+                    "invalid project manifest: ${project.canonicalPath.fileName}: ${exception.message}",
+                    exception,
+                )
+            }
+        }
 
     fun create(name: String): ProjectDescriptor {
         validateDirectoryName(name)

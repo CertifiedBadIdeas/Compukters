@@ -32,6 +32,7 @@ import java.util.concurrent.TimeUnit
 import kotlin.io.path.createTempDirectory
 import kotlin.io.path.exists
 import kotlin.io.path.isDirectory
+import kotlin.io.path.writeText
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -55,6 +56,34 @@ class DefaultIdeWorkspaceTest {
             workspace.close()
             parent.toFile().deleteRecursively()
         }
+    }
+
+    @Test
+    fun `listing projects does not parse unopened manifests and opening validates only the selected project`() {
+        val root = createTempDirectory("compukters-workspace-manifest-")
+        val catalog = ProjectCatalog.open(root)
+        val healthy = catalog.create("healthy")
+        val broken = catalog.create("broken")
+        broken.handle.canonicalPath
+            .resolve("compukter.toml")
+            .writeText("format = 99\nname = \"broken\"\n")
+        DefaultIdeWorkspace(root).use { workspace ->
+            val projects = workspace.projects().get(5, TimeUnit.SECONDS)
+            assertEquals(listOf("broken", "healthy"), projects.map { it.directoryName })
+            val selectedHealthy = projects.single { it.directoryName == healthy.directoryName }
+            assertTrue(
+                workspace
+                    .tree(selectedHealthy.handle)
+                    .get(5, TimeUnit.SECONDS)
+                    .flatten()
+                    .isNotEmpty(),
+            )
+            val selectedBroken = projects.single { it.directoryName == broken.directoryName }
+            val failure = failure(workspace.tree(selectedBroken.handle))
+            assertTrue(failure.message.orEmpty().contains("invalid project manifest: broken"))
+            assertEquals(2, workspace.projects().get(5, TimeUnit.SECONDS).size)
+        }
+        root.toFile().deleteRecursively()
     }
 
     @Test

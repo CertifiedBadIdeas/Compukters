@@ -48,7 +48,6 @@ import ru.lazyhat.compukters.ide.project.ProjectDescriptor
 import ru.lazyhat.compukters.ide.project.ProjectLock
 import ru.lazyhat.compukters.ide.project.ProjectLockCodec
 import ru.lazyhat.compukters.ide.project.ProjectLockService
-import ru.lazyhat.compukters.ide.project.ProjectManifestCodec
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.LinkedBlockingQueue
 import java.util.concurrent.TimeUnit
@@ -284,7 +283,9 @@ private class BuildFixture {
     fun input(lock: ByteArray?): IdeBuildInput =
         IdeBuildInput(
             descriptor.handle,
-            ProjectManifestCodec.encode(descriptor.manifest).encodeToByteArray(),
+            descriptor.handle.canonicalPath
+                .resolve("compukter.toml")
+                .readBytes(),
             lock,
             ProjectSnapshot.of(
                 listOf(ProjectSource(VirtualSourcePath.kotlin("src/main.kt"), BinaryValue.of("fun main() {}".encodeToByteArray()))),
