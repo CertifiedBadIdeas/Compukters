@@ -143,7 +143,7 @@ enum class IdeHitAction {
     DiagnosticChoice,
 }
 
-enum class IdeFocusGroup { Page, Dialog }
+enum class IdeFocusGroup { Page, ProjectSwitcher, Dialog }
 
 sealed interface IdeTerminalStatus {
     data object Closed : IdeTerminalStatus
@@ -222,7 +222,9 @@ data class IdeHitTarget(
     val gitOperation: ru.lazyhat.compukters.ide.git.GitOperation? = null,
     val gitCommand: ru.lazyhat.compukters.ide.client.state.IdeCommand? = null,
     val gitTextRange: EditorRange? = null,
-)
+) {
+    val isProjectSwitcherControl: Boolean get() = focusGroup == IdeFocusGroup.ProjectSwitcher || action == IdeHitAction.ProjectSwitcher
+}
 
 data class IdeDrawModel(
     val panels: List<IdePanelDraw>,

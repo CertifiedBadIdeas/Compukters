@@ -147,25 +147,19 @@ internal class IdeScreen(
         }
         if (projectSwitcherOpen) {
             val switcherContext = pointerContext(geometry)
-            val switcherAction =
+            val switcherTarget =
                 switcherContext.hitTargets
                     .asReversed()
                     .firstOrNull { it.enabled && it.bounds.contains(uiX, uiY) }
-                    ?.action
-            val outsideSwitcher =
-                switcherAction != IdeHitAction.ProjectSwitcher &&
-                    switcherAction != IdeHitAction.ProjectChoice &&
-                    switcherAction != IdeHitAction.CreateProject &&
-                    switcherAction != IdeHitAction.OpenExisting &&
-                    switcherAction != IdeHitAction.CloneProject &&
-                    switcherAction != IdeHitAction.GitAuthenticate
-            if (outsideSwitcher) {
+            if (switcherTarget?.isProjectSwitcherControl != true) {
                 projectSwitcherOpen = false
                 input.pointerActivity()
                 return true
             }
             input.pointerClicked(uiX, uiY, modifiers, switcherContext, doubleClick)
-            if (switcherAction == IdeHitAction.ProjectChoice) projectSwitcherOpen = false
+            if (switcherTarget?.action == IdeHitAction.ProjectChoice || application.controller.viewState().dialog != null) {
+                projectSwitcherOpen = false
+            }
             focusArea = IdeFocusArea.Panel
             clearFocus()
             terminalOverlay.focusLost()
