@@ -20,8 +20,8 @@ listed in [Kotlin support](developers/kotlin-support.md) and [standard library s
 ### Release delivery
 
 - Runtime CI runs its Rust checks, native FFI/JNI builds and smoke tests, bundle packaging and inspection on both
-  Linux and Windows for ordinary pushes and pull requests. Shared scripts also verify the complete bundle set
-  and checksums before release publication.
+  Linux and Windows in one workflow for ordinary pushes, pull requests and release tags. It verifies the complete
+  bundle set and checksums before publication; manual runs perform all checks without publishing.
 - `collectDistributionJars` builds Rust locally; `collectReleaseDistributionJars` downloads pinned Linux/Windows
   Runtime bundles and applies both tagged release gates. Both verify the mod and first-party addons, collecting
   archives in `dist/` by Minecraft version and removing stale files on subsequent runs.
