@@ -24,6 +24,7 @@ import ru.lazyhat.compukters.compiler.runtime.CompilerServiceConfiguration
 import ru.lazyhat.compukters.compiler.runtime.ServerCompilerService
 import ru.lazyhat.compukters.compiler.runtime.WorkerCompilerBackend
 import ru.lazyhat.compukters.compiler.worker.controller.CompilerWorkerController
+import ru.lazyhat.compukters.compiler.worker.controller.CompilerWorkerPolicy
 import ru.lazyhat.compukters.compiler.worker.controller.JdkWorkerProcessFactory
 import ru.lazyhat.compukters.compiler.worker.controller.WorkerLaunch
 import ru.lazyhat.compukters.compiler.worker.controller.WorkerPayloadLoader
@@ -420,13 +421,25 @@ class ProgramRuntimeHostIntegrationTest {
         host: ProgramRuntimeHost,
         predicate: (ProgramRuntimeState) -> Boolean,
     ): ProgramRuntimeState {
-        repeat(MAXIMUM_TICKS) {
+        var remainingTicks = MAXIMUM_TICKS
+        var compilerWaitStarted: Long? = null
+        while (remainingTicks > 0) {
             val state = host.serverTick()
             if (predicate(state)) return state
             check(state == ProgramRuntimeState.Running || state == ProgramRuntimeState.WaitingForCompiler) {
                 "program terminated before expected state: $state"
             }
-            if (state == ProgramRuntimeState.WaitingForCompiler) Thread.sleep(1)
+            if (state == ProgramRuntimeState.WaitingForCompiler) {
+                // Polling an external worker is not VM execution. Allow its startup and request deadlines.
+                val started = compilerWaitStarted ?: System.nanoTime().also { compilerWaitStarted = it }
+                check(System.nanoTime() - started < COMPILER_WAIT_TIMEOUT_NANOS) {
+                    "compiler did not complete within its startup and compilation deadlines; last state was $state"
+                }
+                Thread.sleep(1)
+            } else {
+                remainingTicks--
+                compilerWaitStarted = null
+            }
         }
         error("program did not reach expected state within $MAXIMUM_TICKS ticks; last state was ${host.state}")
     }
@@ -590,5 +603,7 @@ class ProgramRuntimeHostIntegrationTest {
 
     private companion object {
         const val MAXIMUM_TICKS = 10_000
+        val COMPILER_WAIT_TIMEOUT_NANOS =
+            CompilerWorkerPolicy().let { it.startupTimeoutNanos + it.compilationTimeoutNanos + it.terminationGraceMillis * 1_000_000 }
     }
 }
