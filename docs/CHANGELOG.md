@@ -183,6 +183,9 @@ listed in [Kotlin support](developers/kotlin-support.md) and [standard library s
 
 ### In-game IDE
 
+- Creating or cloning a project opens the admitted project directly, independently of invalid sibling manifests;
+  catalog errors include the manifest validation detail.
+
 - Analysis cancellation remains acknowledged when a request finishes concurrently, keeping the K2 worker warm
   and subsequent edits incremental instead of waiting for a timeout and reopening the project.
 
