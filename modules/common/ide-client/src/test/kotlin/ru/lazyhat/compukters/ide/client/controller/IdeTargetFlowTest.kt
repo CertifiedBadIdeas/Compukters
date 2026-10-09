@@ -325,24 +325,29 @@ private class TargetFixture(
 
 private class TargetCompilation : ClientCompilationService {
     private val submitted = LinkedBlockingQueue<ClientBuildSnapshot>()
-    private val futures = ArrayDeque<CompletableFuture<ClientBuildResult>>()
+    private val futures = LinkedBlockingQueue<CompletableFuture<ClientBuildResult>>()
 
-    override fun build(input: ClientBuildSnapshot): CompletableFuture<ClientBuildResult> {
-        submitted.add(input)
-        return CompletableFuture<ClientBuildResult>().also(futures::addLast)
-    }
+    override fun build(input: ClientBuildSnapshot): CompletableFuture<ClientBuildResult> =
+        CompletableFuture<ClientBuildResult>().also { future ->
+            futures.add(future)
+            submitted.add(input)
+        }
 
     fun awaitInput(tick: () -> Unit): ClientBuildSnapshot {
         repeat(500) {
             tick()
-            submitted.poll()?.let { return it }
+            submitted.poll()?.let { input ->
+                // Observe the started-state event after the background build publishes its input.
+                tick()
+                return input
+            }
             Thread.sleep(5)
         }
         error("compilation input was not submitted")
     }
 
     fun complete(result: ClientBuildResult) {
-        futures.removeFirst().complete(result)
+        futures.remove().complete(result)
     }
 
     override fun cancel(future: CompletableFuture<ClientBuildResult>): Boolean = true
