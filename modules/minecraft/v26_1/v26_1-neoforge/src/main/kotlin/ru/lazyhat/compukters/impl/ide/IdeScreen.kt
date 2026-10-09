@@ -501,16 +501,17 @@ internal class IdeScreen(
 
     private fun geometry(viewport: CompuktersUiViewport = viewport()): IdeRenderGeometry {
         val layout = splitters.layout
+        val workspace = (application.controller.viewState().page as? IdePageState.Workspace)?.value
         return IdeRenderGeometry.compute(
             viewport.width,
             viewport.height,
             layout.treeWidth,
             layout.diagnosticsHeight,
-            (application.controller.viewState().page as? IdePageState.Workspace)?.value?.bottom?.tab != null,
-            treeVisible = projectTreeVisible,
+            workspace?.bottom?.tab != null,
+            treeVisible = workspace != null && projectTreeVisible,
             IdeCodeFontProfile.DEFAULT,
             findVisible =
-                ((application.controller.viewState().page as? IdePageState.Workspace)?.value?.editor as? IdeEditorView.Text)?.find != null,
+                (workspace?.editor as? IdeEditorView.Text)?.find != null,
         )
     }
 

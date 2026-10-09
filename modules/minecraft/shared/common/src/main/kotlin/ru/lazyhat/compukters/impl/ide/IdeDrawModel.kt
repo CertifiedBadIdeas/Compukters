@@ -22,7 +22,21 @@ import ru.lazyhat.compukters.ide.analysis.SemanticCategory
 import ru.lazyhat.compukters.ide.editor.EditorRange
 import ru.lazyhat.compukters.ide.highlight.KotlinLexicalKind
 
-enum class IdePanelKind { Main, Header, Toolbar, ToolStripe, Tree, Editor, Diagnostics, Status, Control, Dialog, ProjectSwitcher, Tooltip }
+enum class IdePanelKind {
+    Main,
+    Header,
+    Toolbar,
+    ToolStripe,
+    Tree,
+    Editor,
+    Diagnostics,
+    Status,
+    Control,
+    Dialog,
+    ProjectSelection,
+    ProjectSwitcher,
+    Tooltip,
+}
 
 enum class IdeTextKind {
     Header,

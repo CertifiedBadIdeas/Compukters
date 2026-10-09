@@ -26,7 +26,9 @@ Credentials remain in this IDE session and are forgotten on close. They are not 
 locks or remote URLs, and are not sent to the Minecraft server. Use an HTTPS URL without an embedded username/password,
 query or fragment. SSH transport is deferred.
 
-Click **Projects** in the header to choose a saved project, create a new one, open another directory or clone a repository.
+With no project open, the central **Projects** panel shows saved projects alongside **Create project**, **Open directory**,
+**Clone HTTPS** and **HTTPS token**. On smaller windows these actions appear beneath the list.
+With a project open, click **Projects** in the header to choose or manage projects and access the same actions.
 The start page and project menu show each folder path and distinguish IDE folders from **External** projects.
 Scroll the list to reach additional projects. An external path is remembered across IDE and Minecraft restarts, so
 you only need to enter it once.
