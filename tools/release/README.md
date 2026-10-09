@@ -53,3 +53,17 @@ create or resume a draft, verify the remote tag and every existing asset, upload
 missing files, and publish only the complete release. It never uses `--clobber`.
 
 Run tests with `python3 -m unittest discover -s tools/release -v`.
+
+## Unified CI evidence
+
+`ci.py` admits complete same-commit verification evidence for the branch/tag workflow.
+`resolve` selects only same-repository push runs with a successful full verification job and one
+nonexpired `mod-verified-<commit>` artifact. Runs are serialized by commit SHA, including simultaneous
+branch and tag pushes. `stage` records all five admitted universal archives and exact source/component
+identity in `verification.json`; `verify` checks both identity and the actual archives again.
+
+Untagged archives retain the normal `-S` product version. Their full checks can be reused by the tag,
+but stable archives are assembled anew through the unchanged tagged release gates. When the first
+build already saw the exact version tag, the evidence also contains a verified stable release inventory,
+which the tag reuses without recompilation. A publishing failure does not invalidate its successful
+verification job. Expired evidence requires full verification; API/provenance/content errors are explicit.
