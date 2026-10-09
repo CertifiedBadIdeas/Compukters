@@ -44,6 +44,7 @@ class ProjectTreeStoreTest {
     @Test
     fun `git metadata does not consume editable content limits and cannot be mutated`() =
         withProject { project ->
+            write(project, "src/main.kt", "fun main() {}".encodeToByteArray())
             write(project, ".git/objects/pack/large.pack", ByteArray(1024))
             write(project, ".gitignore", "*.tmp".encodeToByteArray())
             val tree = ProjectTreeStore(project.handle, ProjectLimits(projectFileBytes = 256)).scan()

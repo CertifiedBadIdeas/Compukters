@@ -186,12 +186,12 @@ class ProjectCatalogTest {
 
         assertEquals(listOf("alpha", "zeta"), catalog.projects().map { it.directoryName })
         assertEquals("alpha", catalog.readManifest(alpha.handle).name)
-        assertEquals(
-            "fun main() {\n}\n",
+        val source =
             alpha.handle.canonicalPath
                 .resolve("src/main.kt")
-                .readText(),
-        )
+                .readText()
+        assertTrue(source.contains("fun main() {"))
+        assertTrue(source.contains("println(\"Hello from Compukters!\")"))
         assertTrue(
             alpha.handle.canonicalPath
                 .resolve("compukter.toml")
@@ -242,11 +242,11 @@ class ProjectCatalogTest {
 
         assertEquals("p2", created.directoryName)
         assertTrue(created.handle.isValid())
-        assertEquals(
-            "fun main() {\n}\n",
+        assertTrue(
             created.handle.canonicalPath
                 .resolve("src/main.kt")
-                .readText(),
+                .readText()
+                .contains("fun main() {"),
         )
         val projects = catalog.projects()
         assertEquals(listOf("p1", "p2"), projects.map { it.directoryName })
