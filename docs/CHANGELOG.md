@@ -23,7 +23,10 @@ listed in [Kotlin support](developers/kotlin-support.md) and [standard library s
   identity uses the numeric ABI and logical schema; CI checks restoration across a real revision bump.
 - Runtime CI runs its Rust checks, native FFI/JNI builds and smoke tests, bundle packaging and inspection on both
   Linux and Windows in one workflow for ordinary pushes, pull requests and release tags. It verifies the complete
-  bundle set and checksums before publication; manual runs perform all checks without publishing.
+  bundle set and checksums before publication; manual runs validate without publishing.
+- Runtime workflow runs for one commit reuse its verified Linux/Windows archives across branch and tag pushes,
+  checking the exact source identity and original checksums before publication. Missing or expired archives
+  trigger a complete build; queued runs retain the release publication.
 - `collectDistributionJars` builds Rust locally; `collectReleaseDistributionJars` downloads pinned Linux/Windows
   Runtime bundles and applies both tagged release gates. Both verify the mod and first-party addons, collecting
   archives in `dist/` by Minecraft version and removing stale files on subsequent runs.
