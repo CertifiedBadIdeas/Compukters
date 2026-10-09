@@ -202,10 +202,14 @@ fun validateRelocatedGitLibraries(entries: List<String>, archiveName: String) {
 fun verifyRelocatedGitRuntime(archive: File) {
     val root = java.nio.file.Files.createTempDirectory("compukters-packaged-git-").toFile()
     try {
-        URLClassLoader(arrayOf(archive.toURI().toURL()), org.slf4j.LoggerFactory::class.java.classLoader).use { loader ->
+        // ResourceBundle can retain a cached JAR URL across builds in a Gradle daemon.
+        // Give each verification a unique archive URL so repackaging the production JAR
+        // cannot leave JGit reading messages from the previous archive.
+        val verificationArchive = archive.copyTo(root.resolve("verified.jar"))
+        URLClassLoader(arrayOf(verificationArchive.toURI().toURL()), org.slf4j.LoggerFactory::class.java.classLoader).use { loader ->
             val git = loader.loadClass("ru.lazyhat.compukters.internal.vendor.jgit.api.Git")
             val init = git.getMethod("init").invoke(null)
-            init.javaClass.getMethod("setDirectory", File::class.java).invoke(init, root)
+            init.javaClass.getMethod("setDirectory", File::class.java).invoke(init, root.resolve("repository"))
             val repository = init.javaClass.getMethod("call").invoke(init) as AutoCloseable
             repository.use {
                 val status = git.getMethod("status").invoke(repository)
