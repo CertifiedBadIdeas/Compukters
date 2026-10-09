@@ -32,6 +32,10 @@ import kotlin.test.assertIs
 import kotlin.test.assertTrue
 
 class NeoForgeCompilerServiceIntegrationTest {
+    init {
+        installCompilerServiceTestRuntime()
+    }
+
     @Test
     fun `packaged worker compiles and persisted world cache reopens`() {
         VmRuntime.requireLoaded()
