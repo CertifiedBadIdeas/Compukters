@@ -19,8 +19,11 @@ listed in [Kotlin support](developers/kotlin-support.md) and [standard library s
 
 ### Release delivery
 
+- Successful Runtime publication prepares the next development revision on `main`. Version preparation uses
+  the latest complete published release; incompatible changes explicitly raise the version and native ABI
+  together once, and further bump requests keep that candidate until publication.
 - Runtime revisions sharing one native ABI retain checkpoint compatibility in both directions. Checkpoint
-  identity uses the numeric ABI and logical schema; CI checks restoration across a real revision bump.
+  identity uses the numeric ABI and logical schema; CI checks restoration between builds of adjacent revisions.
 - Runtime CI runs its Rust checks, native FFI/JNI builds and smoke tests, bundle packaging and inspection on both
   Linux and Windows in one workflow for ordinary pushes, pull requests and release tags. It verifies the complete
   bundle set and checksums before publication; manual runs validate without publishing.
