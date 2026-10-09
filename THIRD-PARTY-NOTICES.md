@@ -130,7 +130,7 @@ used to read local IDE project manifests and lock files:
 
 ## Statically linked Rust crates
 
-The packaged native `compukter_ffi` library statically links the crates below.
+The packaged native `compukter_ffi` and `compukter_jni` libraries statically link the crates below.
 For crates offered under `MIT OR Apache-2.0`, this distribution selects
 Apache-2.0. Versions are pinned by the single VM workspace lock at
 `host/compukter-vm/Cargo.lock`.
@@ -146,6 +146,8 @@ Apache-2.0. Versions are pinned by the single VM workspace lock at
 - `version_check` 0.9.5 — Apache-2.0
 - `generic-array` 0.14.7 — MIT; complete text at
   `licenses/rust/generic-array-0.14.7-LICENSE.txt`
+- `libm` 0.2.16 — MIT; complete upstream license and copyright notices at
+  `licenses/rust/libm-0.2.16-LICENSE.txt`
 
 Crate sources and authorship metadata are available through
 <https://crates.io/> and the source URLs recorded in Cargo package metadata.
