@@ -5,6 +5,7 @@ import copy
 from email import policy
 from email.parser import BytesParser
 import io
+import hashlib
 import urllib.error
 from unittest.mock import patch
 import json
@@ -57,6 +58,41 @@ class PublicationFixture:
         result = self.entry(artifact)
         self.existing.append(result)
         return result
+
+
+class GitHubFixture:
+    def __init__(self, manifest, directory):
+        self.revision = manifest['revision']
+        self.existing = None
+        self.directory = directory
+        self.uploads = []
+        self.asset_bytes = {}
+        self.finished = 0
+        self.fail_after = None
+
+    def tag_revision(self, tag):
+        return self.revision
+
+    def get(self, tag):
+        return self.existing
+
+    def create(self, tag, title, notes):
+        self.existing = {'tag_name': tag, 'name': title, 'body': notes.read_text(),
+                         'draft': True, 'assets': []}
+
+    def asset_digest(self, asset):
+        return hashlib.sha256(self.asset_bytes[asset['name']]).hexdigest()
+
+    def upload(self, tag, path):
+        if self.fail_after is not None and len(self.uploads) >= self.fail_after:
+            raise ValueError('simulated GitHub failure')
+        self.uploads.append(path.name)
+        self.asset_bytes[path.name] = path.read_bytes()
+        self.existing['assets'].append({'name': path.name, 'size': path.stat().st_size})
+
+    def finish(self, tag):
+        self.finished += 1
+        self.existing['draft'] = False
 
 
 class ReleaseTest(unittest.TestCase):
@@ -165,6 +201,48 @@ class ReleaseTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'duplicate'):
             release.publish_modrinth(self.output, client)
         self.assertEqual(client.uploads, [])
+
+    def test_github_publication_and_retry_preserve_assets(self):
+        manifest, _ = self.prepared()
+        client = GitHubFixture(manifest, self.output)
+        release.publish_github(self.output, client)
+        release.publish_github(self.output, client)
+        self.assertEqual(len(client.uploads), 5)
+        self.assertEqual(client.finished, 1)
+        self.assertFalse(client.existing['draft'])
+
+    def test_github_partial_upload_keeps_draft_and_retry_completes(self):
+        manifest, _ = self.prepared()
+        client = GitHubFixture(manifest, self.output)
+        client.fail_after = 2
+        with self.assertRaisesRegex(ValueError, 'GitHub failure'):
+            release.publish_github(self.output, client)
+        self.assertTrue(client.existing['draft'])
+        self.assertEqual(client.finished, 0)
+        client.fail_after = None
+        release.publish_github(self.output, client)
+        self.assertEqual(len(client.uploads), 5)
+        self.assertEqual(client.finished, 1)
+
+    def test_github_conflicting_asset_prevents_missing_uploads(self):
+        manifest, _ = self.prepared()
+        client = GitHubFixture(manifest, self.output)
+        client.create(manifest['tag'], 'Compukters 0.5.0', self.output / 'release-notes.md')
+        path = self.output / manifest['artifacts'][0]['filename']
+        client.upload(manifest['tag'], path)
+        client.asset_bytes[path.name] = b'x' * path.stat().st_size
+        with self.assertRaisesRegex(ValueError, 'conflicting GitHub asset'):
+            release.publish_github(self.output, client)
+        self.assertEqual(len(client.uploads), 1)
+        self.assertTrue(client.existing['draft'])
+
+    def test_github_changed_remote_tag_is_rejected(self):
+        manifest, _ = self.prepared()
+        client = GitHubFixture(manifest, self.output)
+        client.revision = '0' * 40
+        with self.assertRaisesRegex(ValueError, 'remote tag differs'):
+            release.publish_github(self.output, client)
+        self.assertIsNone(client.existing)
 
     def test_changed_notes_are_rejected_before_publication(self):
         _, client = self.prepared()

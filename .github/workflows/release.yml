@@ -1,0 +1,125 @@
+name: Verified mod release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing release tag to verify without publishing
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mod-release-${{ github.event_name == 'push' && github.ref_name || inputs.tag }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Verify and assemble autonomous JARs
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    outputs:
+      release_artifact: verified-mod-release-${{ github.run_id }}-${{ github.run_attempt }}
+    env:
+      RELEASE_TAG: ${{ github.event_name == 'push' && github.ref_name || inputs.tag }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ env.RELEASE_TAG }}
+          fetch-depth: 0
+          submodules: recursive
+      - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4
+        with:
+          distribution: temurin
+          java-version: |
+            21
+            25
+      - name: Validate release tag and publication tooling
+        run: |
+          python3 -m unittest discover -s tools/release -v
+          python3 - <<'PY'
+          import os, re, subprocess
+          from pathlib import Path
+          import sys
+          sys.path.insert(0, 'tools/release')
+          from release import properties, changelog
+          version = properties(Path('gradle.properties'))['version']
+          tag = os.environ['RELEASE_TAG']
+          if not re.fullmatch(r'v(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)', tag) or tag != 'v' + version:
+              raise SystemExit('Tag must match the canonical stable project version')
+          tags = subprocess.check_output(['git', 'tag', '--points-at', 'HEAD'], text=True).splitlines()
+          if tag not in tags:
+              raise SystemExit('Checkout is not at the requested release tag')
+          changelog(Path.cwd(), version)
+          PY
+      - name: Prepare pinned Rust toolchain and locked dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          rust_version=$(python3 -c 'import tomllib; print(tomllib.load(open("host/compukter-vm/rust-toolchain.toml", "rb"))["toolchain"]["channel"])')
+          rustup toolchain install "$rust_version" --profile minimal --component clippy --component rustfmt
+          rustup default "$rust_version"
+          cargo fetch --locked --manifest-path host/compukter-vm/Cargo.toml
+          cargo fetch --locked --manifest-path modules/common/compiler-artifact/src/test/rust/executable-conformance/Cargo.toml
+      - name: Fetch exact published Runtime bundles
+        run: ./gradlew-sandbox-dev-parallel-summary downloadCompukterRuntimeBundles --max-workers=2
+      - name: Fully verify exact candidate
+        run: ./gradlew-sandbox-dev-parallel-summary verifyLocalFull --max-workers=2
+      - name: Verify clean tagged universal release archives
+        run: ./gradlew-sandbox-dev-parallel-summary buildReleaseUniversalJar --max-workers=2
+      - name: Stage release inventory and checksums
+        run: python3 tools/release/release.py prepare --tag "$RELEASE_TAG" --output build/release
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: verified-mod-release-${{ github.run_id }}-${{ github.run_attempt }}
+          path: build/release/
+          if-no-files-found: error
+          retention-days: 7
+      - name: Preserve verification logs
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: mod-release-verification-${{ github.run_id }}-${{ github.run_attempt }}
+          path: build/agent-logs/
+          if-no-files-found: ignore
+          retention-days: 7
+
+  publish:
+    name: Publish GitHub and Modrinth
+    if: github.event_name == 'push' && github.ref_type == 'tag'
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: mod-release
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.ref }}
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: ${{ needs.build.outputs.release_artifact }}
+          path: build/release
+      - name: Verify staged release and credentials
+        env:
+          MODRINTH_TOKEN: ${{ secrets.MODRINTH_TOKEN }}
+        run: |
+          python3 tools/release/release.py verify --directory build/release
+          python3 - <<'PY'
+          import os
+          if not os.environ.get('MODRINTH_TOKEN'):
+              raise SystemExit('Configure MODRINTH_TOKEN in the mod-release environment or repository secrets')
+          PY
+      - name: Publish immutable GitHub assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 tools/release/release.py github --directory build/release
+      - name: Publish matching Modrinth versions
+        env:
+          MODRINTH_TOKEN: ${{ secrets.MODRINTH_TOKEN }}
+        run: python3 tools/release/release.py modrinth --directory build/release

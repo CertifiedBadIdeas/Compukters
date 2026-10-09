@@ -34,4 +34,8 @@ current autonomous composition. A future downloaded composition must add an
 explicit contract for pinned component locations, lengths, hashes, and offline
 behavior instead of inferring delivery from absent JAR entries or using `latest`.
 
+`release.py github --directory build/release` uses the authenticated `gh` CLI to
+create or resume a draft, verify the remote tag and every existing asset, upload
+missing files, and publish only the complete release. It never uses `--clobber`.
+
 Run tests with `python3 -m unittest discover -s tools/release -v`.
