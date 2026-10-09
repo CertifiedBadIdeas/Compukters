@@ -24,6 +24,17 @@ installation:
 ./gradlew-sandbox-dev-parallel :v1_21_1-neoforge:buildProductionUniversalJar
 ```
 
+To collect the production mod JARs and first-party addons in one workspace folder, run:
+
+```bash
+./gradlew-sandbox-dev-parallel-summary -p addons/dev collectDistributionJars
+```
+
+The task builds and verifies the archives before synchronizing `dist/`: `1.21.1/` contains Compukters plus the
+Create, Sable and Propulsion addons; `26.1.2/` contains Compukters. Re-running removes stale distribution files.
+These are production archives for the configured local native platform; tagged multi-platform publication still
+requires the separate release gate below. Third-party mods required by addons must be installed separately.
+
 Minecraft-independent Gradle modules are grouped beneath `modules/common`, while
 all game-facing code is grouped beneath `modules/minecraft`. Minecraft and
 NeoForge code shared across supported versions has one canonical source tree

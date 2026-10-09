@@ -19,6 +19,8 @@ listed in [Kotlin support](developers/kotlin-support.md) and [standard library s
 
 ### Release delivery
 
+- `collectDistributionJars` builds and verifies the mod and first-party addon archives, collecting them in
+  `dist/` by Minecraft version and removing stale files on subsequent runs.
 - Verified autonomous NeoForge releases can be published to GitHub Releases and Modrinth from the same tagged
   artifacts, with component identities, checksums and resumable publication. Manual workflow runs validate the
   candidate without publishing.

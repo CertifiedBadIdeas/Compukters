@@ -78,3 +78,14 @@ val verifyAddonVersioning = tasks.register("verifyAddonVersioning") {
     }
 }
 tasks.named("check") { dependsOn(verifyAddonVersioning) }
+
+// A stable output directory is the artifact contract between independent composite builds.
+tasks.register<Sync>("stageDistributionJar") {
+    group = "build"
+    description = "Stages the verified production addon JAR for workspace distribution."
+    outputs.upToDateWhen { false }
+    dependsOn(verifyAddonVersioning)
+    dependsOn(tasks.matching { it.name == "verifyProductionJar" })
+    from(productionArchive.flatMap { it.archiveFile })
+    into(layout.buildDirectory.dir("distribution"))
+}
