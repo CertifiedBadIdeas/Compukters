@@ -73,6 +73,9 @@ tasks.processResources {
     from(rootProject.layout.projectDirectory.file("licenses/rust/generic-array-0.14.7-LICENSE.txt")) {
         into("META-INF/licenses/rust")
     }
+    from(rootProject.layout.projectDirectory.file("licenses/rust/libm-0.2.16-LICENSE.txt")) {
+        into("META-INF/licenses/rust")
+    }
     listOf(
         "antlr4-runtime-4.13.2-BSD-3-Clause.txt",
         "xz-java-$pinnedXzVersion-0BSD.txt",
