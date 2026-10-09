@@ -77,7 +77,7 @@ dependencies {
         parchment("org.parchmentmc.data:parchment-1.21.1:2024.11.17@zip")
     })
     neoForge("net.neoforged:neoforge:21.1.252")
-    modImplementation("maven.modrinth:sable:U678xqle")
+    modImplementation("maven.modrinth:sable:fg9dTRz9")
     compileOnly(sableCompanion)
     // Loom dev runs do not discover Sable's Jar-in-Jar runtime dependencies automatically.
     modRuntimeOnly(sableLibraries)

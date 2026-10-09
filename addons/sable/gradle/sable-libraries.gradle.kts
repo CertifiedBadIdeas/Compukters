@@ -65,7 +65,7 @@ abstract class SableEmbeddedLibraries : TransformAction<SableEmbeddedLibraries.P
             }
         }
         check(count == when (kind) { "companion" -> 1; "mods" -> 3; "libraries" -> 2; else -> error("unknown library kind") }) {
-            "unexpected embedded library layout in pinned Sable 2.0.5: $kind ($count)"
+            "unexpected embedded library layout in pinned Sable 2.0.6: $kind ($count)"
         }
     }
 }
@@ -83,5 +83,5 @@ mapOf("sableCompanion" to "companion", "sableNestedMods" to "mods", "sableRuntim
         isTransitive = false
         attributes.attribute(ArtifactTypeDefinition.ARTIFACT_TYPE_ATTRIBUTE, artifactType)
     }
-    dependencies.add(configuration.name, "maven.modrinth:sable:U678xqle")
+    dependencies.add(configuration.name, "maven.modrinth:sable:fg9dTRz9")
 }

@@ -92,7 +92,7 @@ dependencies {
     physicsMods("maven.modrinth:create-propulsion-simulated:H13U56dc")
     modRuntimeOnly(files(physicsMods))
     modRuntimeOnly(aeronauticsLibraries)
-    modImplementation("maven.modrinth:sable:U678xqle")
+    modImplementation("maven.modrinth:sable:fg9dTRz9")
     modImplementation(sableLibraries)
     forgeRuntimeLibrary(veilLibraries)
     modImplementation("com.simibubi.create:create-1.21.1:6.0.10-280:slim") { isTransitive = false }

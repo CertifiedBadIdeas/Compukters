@@ -19,7 +19,7 @@ Install Compukters: Sable alongside the base mod and upstream Sable on client an
 | --- | --- |
 | Minecraft | 1.21.1 |
 | NeoForge | 21.1.252 or newer |
-| Sable | 2.0.5 (Modrinth U678xqle) |
+| Sable | 2.0.6 (Modrinth fg9dTRz9) |
 
 The base mod works without Sable. This addon does not require Compukters: Create.
 

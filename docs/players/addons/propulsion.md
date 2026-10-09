@@ -25,7 +25,7 @@ Install Compukters: Propulsion, the base mod and its upstream runtime on client 
 | Minecraft | 1.21.1 |
 | NeoForge | 21.1.252 or newer |
 | Create | 6.0.10 through 6.0.x |
-| Sable | 2.0.5 |
+| Sable | 2.0.6 |
 | Propulsion: Simulated | 1.1.5 (Modrinth H13U56dc) |
 | Simulated | 1.3.1, supplied by the Aeronautics 1.3.1 bundle |
 

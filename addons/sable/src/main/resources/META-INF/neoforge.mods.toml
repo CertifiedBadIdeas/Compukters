@@ -33,6 +33,6 @@ side="BOTH"
 [[dependencies.compukters_sable]]
 modId="sable"
 type="required"
-versionRange="[2.0.5]"
+versionRange="[2.0.6]"
 ordering="AFTER"
 side="BOTH"

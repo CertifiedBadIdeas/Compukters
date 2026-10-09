@@ -85,7 +85,7 @@ dependencies {
         parchment("org.parchmentmc.data:parchment-1.21.1:2024.11.17@zip")
     })
     neoForge("net.neoforged:neoforge:21.1.252")
-    modImplementation("maven.modrinth:sable:U678xqle")
+    modImplementation("maven.modrinth:sable:fg9dTRz9")
     modImplementation("maven.modrinth:create-propulsion-simulated:H13U56dc") { isTransitive = false }
     modImplementation("com.simibubi.create:create-1.21.1:6.0.10-280:slim") { isTransitive = false }
     modImplementation("net.createmod.ponder:ponder-neoforge:1.0.82+mc1.21.1")
