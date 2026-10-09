@@ -33,6 +33,13 @@ Use the [in-world VM benchmark](https://certifiedbadideas.github.io/Compukters/V
 profiles of aggregate runnable-computer cost. Its results are environment-specific performance evidence, not a
 replacement for deterministic runtime and conformance checks.
 
+The strict IDE visible-latency SLO test runs as `:v1_21_1-neoforge:visibleIdeLatencyPerformanceTest`
+after `verifyLocalFunctional` completes in `verifyLocalFull`. It retains its median/p95, worker reuse,
+incremental-update and memory assertions, but does not compete with parallel compilation, archive transformation
+or GameTest servers. Ordinary module `check` does not run this machine-sensitive measurement;
+the complete verification gate still requires it. For a focused measurement, run the task directly on an idle host.
+Dedicated latency measurement tasks always execute rather than reusing cached results from another host or run.
+
 ## Addon control latency
 
 Run `./gradlew-sandbox-dev-parallel -p addons/dev runGameTestServer` to include

@@ -93,6 +93,27 @@ dependencies {
     shadowBundle(project(path = projects.platformBundle.path)) { isTransitive = false }
 }
 
+tasks.test {
+    filter.excludeTestsMatching("ru.lazyhat.compukters.impl.ide.performance.IdeVisibleLatencyPerformanceTest")
+}
+
+tasks.register<Test>("visibleIdeLatencyPerformanceTest") {
+    description = "Runs machine-sensitive first-visible-frame IDE latency SLO checks."
+    group = "verification"
+    useJUnitPlatform()
+    outputs.upToDateWhen { false }
+    outputs.cacheIf { false }
+    dependsOn(tasks.named(sourceSets.test.get().classesTaskName), ":v1_21_1-common:processResources")
+    testClassesDirs = sourceSets.test.get().output.classesDirs
+    classpath = sourceSets.test.get().runtimeClasspath
+    maxHeapSize = "512m"
+    filter {
+        includeTestsMatching("ru.lazyhat.compukters.impl.ide.performance.IdeVisibleLatencyPerformanceTest")
+        isFailOnNoMatchingTests = true
+    }
+    mustRunAfter(tasks.test, ":verifyLocalFunctional")
+}
+
 val productionJar = tasks.named<RemapJarTask>("remapJar")
 val expectedMetadata = readVersionedModProperties()
 val nativeOs =
