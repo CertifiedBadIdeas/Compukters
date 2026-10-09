@@ -2419,6 +2419,16 @@ class IdeClientController(
 
     private fun acceptPoll(event: IdeEvent.PollCompleted) {
         if (creatingProject || IdeBusyOperation.Git in state.busy) return
+        val previousConfiguration =
+            tree
+                ?.flatten()
+                ?.filter { it.path.value in setOf("compukter.toml", "compukter.lock") }
+                ?.map { it.path to it.revision }
+        val nextConfiguration =
+            event.tree
+                .flatten()
+                .filter { it.path.value in setOf("compukter.toml", "compukter.lock") }
+                .map { it.path to it.revision }
         val previousSources = tree?.flatten()?.filter { it.path.isKotlinSource }?.map { it.path to it.revision }
         val nextSources =
             event.tree
@@ -2456,7 +2466,10 @@ class IdeClientController(
             val shownBinary = binary
             if (shownBinary != null && event.tree.flatten().none { it.path == shownBinary.path }) binary = null
         }
-        if ((refreshAnalysisAfterGit || (previousSources != null && previousSources != nextSources)) && editor === activeBefore &&
+        if ((
+                refreshAnalysisAfterGit || (previousSources != null && previousSources != nextSources) ||
+                    (previousConfiguration != null && previousConfiguration != nextConfiguration)
+            ) && editor === activeBefore &&
             IdeBusyOperation.Project !in state.busy
         ) {
             invalidateUsages()
