@@ -45,6 +45,8 @@ listed in [Kotlin support](developers/kotlin-support.md) and [standard library s
   Tag publication reuses successful checks of the same commit, assembling stable JARs only when the
   earlier build carried `-S`. Simultaneous branch/tag pushes are queued; an already assembled stable
   inventory is reused without recompilation.
+  The full gate measures IDE latency after functional checks finish, retaining the existing SLO limits
+  without competition from compilation, archive transformation or GameTest servers.
 - Verified autonomous NeoForge releases can be published to GitHub Releases and Modrinth from the same tagged
   artifacts, with component identities, checksums and resumable publication. GitHub Releases also includes the
   Create, Sable and Propulsion addon archives. Manual workflow runs validate the

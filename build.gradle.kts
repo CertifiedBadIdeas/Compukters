@@ -1241,8 +1241,8 @@ val verifyAllModuleChecks =
         dependsOn(subprojects.map { "${it.path}:check" })
     }
 
-tasks.register("verifyLocalFull") {
-    description = "Fully verifies the current checkout and its locally packaged production artifact."
+val verifyLocalFunctional = tasks.register("verifyLocalFunctional") {
+    description = "Runs full functional, conformance, native and packaged checks before latency measurements."
     group = "verification"
     dependsOn("verifyLocalFast")
     dependsOn(verifyAllModuleChecks)
@@ -1260,6 +1260,12 @@ tasks.register("verifyLocalFull") {
     dependsOn("checkCompukterVmRelease")
     dependsOn(":v1_21_1-neoforge:runGameTestServer")
     dependsOn(":v26_1-neoforge:runGameTestServer")
+}
+
+tasks.register("verifyLocalFull") {
+    description = "Fully verifies the current checkout, production artifacts and isolated IDE latency targets."
+    group = "verification"
+    dependsOn(verifyLocalFunctional, ":v1_21_1-neoforge:visibleIdeLatencyPerformanceTest")
 }
 
 val collectionBenchmarkArtifacts = project(":compiler-k2").layout.buildDirectory.dir("generated/benchmarks/collections")

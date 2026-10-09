@@ -72,6 +72,8 @@ val visibleIdeLatencyPerformanceTest =
         description = "Runs machine-sensitive first-visible-frame IDE latency SLO checks."
         group = "verification"
         useJUnitPlatform()
+        outputs.upToDateWhen { false }
+        outputs.cacheIf { false }
         dependsOn(tasks.named(sourceSets.test.get().classesTaskName), ":v26_1-common:processResources")
         testClassesDirs = sourceSets.test.get().output.classesDirs
         classpath = sourceSets.test.get().runtimeClasspath
