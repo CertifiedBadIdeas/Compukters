@@ -40,6 +40,12 @@ standalone module 5 and private metadata carrier 6 remain unchanged; rebuild dep
 The VM has a logical computer checkpoint envelope (format 2), owned by
 `host/compukter-vm/src/checkpoint/envelope.rs`. Its version, native runtime/schema identity, computer ID,
 filesystem generation, payload lengths and SHA-256 cover the execution and host descriptor bytes together.
+Runtime identity hashes the logical schema, a zero byte and the little-endian u32 native C ABI. Runtime
+revisions do not participate in admission: `0.<abi>.<revision>` is one compatibility family, including
+checkpoint restore in both directions, filesystem state, executable admission and native calls. Incompatible
+contract or codec changes require an ABI increment; a revision must preserve those contracts. The earlier
+unpublished development identity based on the full version is rejected without a fallback. CI exchanges a
+full-computer checkpoint between two real builds separated by `cargo xtask bump revision` in both directions.
 Rust exposes contextual capture/restore and bounded atomic store methods through C ABI 21, JNI and FFM. Minecraft carriers use this boundary for unload and orderly shutdown; failed restoration cold boots from ROM while retaining ComputerId and `/home`.
 The native reference is `host/compukter-vm/docs/architecture/computer-checkpoints.md`.
 
