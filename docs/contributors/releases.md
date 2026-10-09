@@ -57,10 +57,12 @@ run `bumpAfterRelease` to start the next development minor; for example, `0.5.0`
    the five JARs into `dist/`. For local Rust builds use `collectDistributionJars` instead.
 4. After the candidate/tag is available remotely, a manual `Verified mod release`
    run with input `tag: vX.Y.Z` reruns verification and stores temporary release
-   files and complete Gradle logs for seven days. A manual run never publishes.
+   files and verification reports for seven days. Full Gradle output is available in
+   the job logs. A manual run never publishes.
 
 Local non-interactive commands use `./gradlew-sandbox-dev-parallel-summary` with
-JDK 25 selected. The CI runner installs JDK 21/25 and the VM's pinned Rust toolchain,
+JDK 25 selected. GitHub Actions uses the standard `./gradlew` with live output and
+`--no-daemon --max-workers=2`. The CI runner installs JDK 21/25 and the VM's pinned Rust toolchain,
 fetches locked Cargo dependencies, runs `verifyLocalFull`, then runs
 `collectReleaseDistributionJars`, including both `buildReleaseUniversalJar` gates.
 Existing Gradle checks own build and admission;

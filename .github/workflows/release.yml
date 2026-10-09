@@ -66,11 +66,11 @@ jobs:
           cargo fetch --locked --manifest-path host/compukter-vm/Cargo.toml
           cargo fetch --locked --manifest-path modules/common/compiler-artifact/src/test/rust/executable-conformance/Cargo.toml
       - name: Fetch exact published Runtime bundles
-        run: ./gradlew-sandbox-dev-parallel-summary downloadCompukterRuntimeBundles --max-workers=2
+        run: ./gradlew downloadCompukterRuntimeBundles --no-daemon --max-workers=2
       - name: Fully verify exact candidate
-        run: ./gradlew-sandbox-dev-parallel-summary verifyLocalFull --max-workers=2
+        run: ./gradlew verifyLocalFull --no-daemon --max-workers=2
       - name: Collect mod and addons with clean tagged universal release gates
-        run: ./gradlew-sandbox-dev-parallel-summary -p addons/dev collectReleaseDistributionJars --max-workers=2
+        run: ./gradlew -p addons/dev collectReleaseDistributionJars --no-daemon --max-workers=2
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: mod-and-addons-${{ github.run_id }}-${{ github.run_attempt }}
@@ -85,12 +85,15 @@ jobs:
           path: build/release/
           if-no-files-found: error
           retention-days: 7
-      - name: Preserve verification logs
+      - name: Preserve verification reports
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: mod-release-verification-${{ github.run_id }}-${{ github.run_attempt }}
-          path: build/agent-logs/
+          path: |
+            **/build/reports/tests/
+            **/build/test-results/
+            **/run/gameTestServer/logs/
           if-no-files-found: ignore
           retention-days: 7
 
