@@ -201,19 +201,21 @@ class IdeBuildFlowTest {
 private class FlowCompilationService : ClientCompilationService {
     val inputs = mutableListOf<ClientBuildSnapshot>()
     private val submitted = LinkedBlockingQueue<ClientBuildSnapshot>()
-    private val futures = ArrayDeque<CompletableFuture<ClientBuildResult>>()
+    private val futures = LinkedBlockingQueue<CompletableFuture<ClientBuildResult>>()
     var cancelCalls = 0
 
     override fun build(input: ClientBuildSnapshot): CompletableFuture<ClientBuildResult> {
         synchronized(inputs) { inputs += input }
+        val future = CompletableFuture<ClientBuildResult>()
+        futures.add(future)
         submitted.add(input)
-        return CompletableFuture<ClientBuildResult>().also(futures::addLast)
+        return future
     }
 
     fun awaitInput(): ClientBuildSnapshot = requireNotNull(submitted.poll(5, TimeUnit.SECONDS))
 
     fun complete(result: ClientBuildResult) {
-        futures.removeFirst().complete(result)
+        futures.remove().complete(result)
     }
 
     override fun cancel(future: CompletableFuture<ClientBuildResult>): Boolean {
