@@ -418,3 +418,12 @@ included in block admission and execution budgets; they are budget units rather 
 | 6 | `ieee_rem` | 64 |
 | 7 | `copy_sign` | 2 |
 | 8 | `next_towards` | 4 |
+
+## Release composition inventory
+
+Release transfer tooling emits `release.json` schema 1 after the existing release gates. It records the tagged
+parent and VM revisions, target artifact digests, explicit bundled distribution mode, and the shared tooling
+bundle/manifest/carrier identities. The transfer consumer admits only the autonomous composition in schema 1;
+an external component mode requires an explicit contract extension. This inventory does not change Runtime ABI,
+worker protocols or the packaged tooling manifest. See [release publication](../releases.md) and the
+[transfer contract](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/tools/release/README.md).

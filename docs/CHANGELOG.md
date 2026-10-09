@@ -17,6 +17,12 @@ This release expands Guest Kotlin, adds independently installed Create, Sable an
 Minecraft 1.21.1, and improves the in-game IDE and computer runtime. Exact language and library boundaries are
 listed in [Kotlin support](developers/kotlin-support.md) and [standard library support](developers/stdlib-support.md).
 
+### Release delivery
+
+- Verified autonomous NeoForge releases can be published to GitHub Releases and Modrinth from the same tagged
+  artifacts, with component identities, checksums and resumable publication. Manual workflow runs validate the
+  candidate without publishing.
+
 ### Guest Kotlin
 
 - Guest `HashMap` and `HashSet` support typed and nullable keys/elements, lookup, mutation, growth and

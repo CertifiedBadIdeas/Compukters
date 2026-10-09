@@ -11,6 +11,7 @@ from pathlib import Path
 import re
 import shutil
 import subprocess
+import tempfile
 import urllib.error
 import urllib.request
 import uuid
@@ -219,6 +220,96 @@ def publish_modrinth(directory, client):
         print(f'Published: {artifact["version_number"]} ({created["id"]})')
 
 
+class GitHub:
+    def cli(self, *args):
+        result = subprocess.run(['gh', *args], capture_output=True, text=True)
+        require(result.returncode == 0, 'GitHub command failed: ' + ' '.join(args[:3]))
+        return result.stdout
+
+    def tag_revision(self, tag):
+        reference = json.loads(self.cli('api', f'repos/{REPOSITORY}/git/ref/tags/{tag}'))['object']
+        for _ in range(8):
+            if reference['type'] == 'commit':
+                return reference['sha']
+            require(reference['type'] == 'tag', 'release tag does not point to a commit')
+            reference = json.loads(self.cli('api', f'repos/{REPOSITORY}/git/tags/{reference["sha"]}'))['object']
+        raise ValueError('release tag nesting exceeds limit')
+
+    def get(self, tag):
+        result = subprocess.run(['gh', 'api', f'repos/{REPOSITORY}/releases/tags/{tag}'],
+                                capture_output=True, text=True)
+        if result.returncode and 'HTTP 404' in result.stderr:
+            return None
+        require(result.returncode == 0, 'could not inspect GitHub release')
+        return json.loads(result.stdout)
+
+    def create(self, tag, title, notes):
+        self.cli('release', 'create', tag, '--repo', REPOSITORY, '--verify-tag', '--draft',
+                 '--title', title, '--notes-file', str(notes))
+
+    def asset_digest(self, asset):
+        # Older GitHub assets do not carry the server-calculated digest.
+        digest = asset.get('digest')
+        if digest and digest.startswith('sha256:'):
+            return digest.removeprefix('sha256:')
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / 'asset'
+            with path.open('wb') as output:
+                result = subprocess.run(['gh', 'api', '-H', 'Accept: application/octet-stream',
+                                         f'repos/{REPOSITORY}/releases/assets/{asset["id"]}'],
+                                        stdout=output, stderr=subprocess.PIPE)
+            require(result.returncode == 0, 'could not verify existing GitHub asset')
+            return digests(path)['sha256']
+
+    def upload(self, tag, path):
+        self.cli('release', 'upload', tag, str(path), '--repo', REPOSITORY)
+
+    def finish(self, tag):
+        self.cli('release', 'edit', tag, '--repo', REPOSITORY, '--draft=false', '--latest')
+
+
+def publish_github(directory, client):
+    manifest = load_release(directory)
+    tag = manifest['tag']
+    require(client.tag_revision(tag) == manifest['revision'], 'remote tag differs from verified release revision')
+    notes = (directory / 'release-notes.md').read_text()
+    title = f'Compukters {manifest["version"]}'
+    files = {name: directory / name for name in
+             ['release.json', 'release-notes.md', 'checksums.sha256']
+             + [artifact['filename'] for artifact in manifest['artifacts']]}
+    existing = client.get(tag)
+    if existing is None:
+        client.create(tag, title, directory / 'release-notes.md')
+        existing = client.get(tag)
+    require(existing is not None and existing['tag_name'] == tag
+            and existing['name'] == title and existing['body'] == notes,
+            'GitHub release metadata differs from staged release')
+    assets = existing['assets']
+    require(len({asset['name'] for asset in assets}) == len(assets), 'duplicate GitHub assets')
+    require(all(asset['name'] in files for asset in assets), 'unexpected existing GitHub release assets')
+    # Check every existing asset before appending anything.
+    for asset in assets:
+        path = files[asset['name']]
+        require(asset['size'] == path.stat().st_size
+                and client.asset_digest(asset) == digests(path)['sha256'],
+                f'conflicting GitHub asset: {path.name}')
+    present = {asset['name'] for asset in assets}
+    for name, path in files.items():
+        if name not in present:
+            client.upload(tag, path)
+    # Never expose an incomplete draft after a partial upload.
+    completed = client.get(tag)
+    require(completed is not None and {asset['name'] for asset in completed['assets']} == set(files),
+            'GitHub release asset set is incomplete')
+    for asset in completed['assets']:
+        path = files[asset['name']]
+        require(asset['size'] == path.stat().st_size and client.asset_digest(asset) == digests(path)['sha256'],
+                f'uploaded GitHub asset differs: {path.name}')
+    if completed['draft']:
+        client.finish(tag)
+    print(f'Published GitHub release: {tag}')
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest='command', required=True)
@@ -226,7 +317,7 @@ def main():
     prep.add_argument('--root', type=Path, default=Path.cwd())
     prep.add_argument('--output', type=Path, required=True)
     prep.add_argument('--tag', required=True)
-    for name in ['verify', 'modrinth']:
+    for name in ['verify', 'modrinth', 'github']:
         commands.add_parser(name).add_argument('--directory', type=Path, required=True)
     args = parser.parse_args()
     try:
@@ -235,6 +326,8 @@ def main():
         elif args.command == 'verify':
             manifest = load_release(args.directory)
             print(f'Verified staged release {manifest["tag"]}: {len(manifest["artifacts"])} autonomous JARs')
+        elif args.command == 'github':
+            publish_github(args.directory, GitHub())
         else:
             publish_modrinth(args.directory, Modrinth(os.environ.get('MODRINTH_TOKEN')))
     except (ValueError, OSError, KeyError, zipfile.BadZipFile) as error:

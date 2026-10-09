@@ -48,6 +48,9 @@ Linux and Windows Runtime bundles, then assembles and verifies both the 26.1.2
 FFM and 1.21.1 JNI artifacts. A successful local full verification does not by
 itself establish release readiness.
 
+See [Publish Compukters releases](releases.md) for the GitHub/Modrinth workflow,
+credentials, candidate validation, and publication recovery.
+
 ## Standalone playground
 
 The playground exercises the same isolated compiler, artifact verifier, FFM
