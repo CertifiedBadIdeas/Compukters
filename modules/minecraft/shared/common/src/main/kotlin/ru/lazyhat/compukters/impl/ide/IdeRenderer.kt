@@ -84,7 +84,7 @@ object IdeRenderer {
                 projectSwitcherOpen,
                 projectFirstRow,
             )
-        output.base()
+        output.base(state.page is IdePageState.Start)
         if (!geometry.supported || !viewportSupported) {
             output.scaleControls(uiScale, enabled = true)
             output.ui(
@@ -137,7 +137,7 @@ object IdeRenderer {
         private val gitFieldFocusScroll = mutableMapOf<IdeGitField, Int>()
         private var bottomScrollMaximum = 0
 
-        fun base() {
+        fun base(startPage: Boolean) {
             fills += IdeFillDraw(IdeFillKind.Background, geometry.viewport, IdeColors.DIM, Z_BACKGROUND)
             if (!geometry.supported) return
             fills += IdeFillDraw(IdeFillKind.Border, expand(geometry.panel, 1), IdeColors.BORDER, Z_PANEL)
@@ -146,11 +146,15 @@ object IdeRenderer {
             panel(IdePanelKind.Toolbar, geometry.toolbar, IdeColors.PANEL)
             panel(IdePanelKind.ToolStripe, geometry.toolStripe, IdeColors.PANEL)
             panel(IdePanelKind.Status, geometry.status, IdeColors.PANEL)
-            geometry.tree?.let { panel(IdePanelKind.Tree, it, IdeColors.PANEL_ALT) }
-            panel(IdePanelKind.Editor, geometry.editor, IdeColors.EDITOR)
-            geometry.diagnostics?.let { panel(IdePanelKind.Diagnostics, it, IdeColors.PANEL_ALT) }
-            geometry.treeSplitter?.let { fills += IdeFillDraw(IdeFillKind.Splitter, it, IdeColors.PANEL, Z_CONTENT) }
-            geometry.diagnosticsSplitter?.let { fills += IdeFillDraw(IdeFillKind.Splitter, it, IdeColors.PANEL, Z_CONTENT) }
+            if (startPage) {
+                panel(IdePanelKind.Editor, geometry.content, IdeColors.EDITOR)
+            } else {
+                geometry.tree?.let { panel(IdePanelKind.Tree, it, IdeColors.PANEL_ALT) }
+                panel(IdePanelKind.Editor, geometry.editor, IdeColors.EDITOR)
+                geometry.diagnostics?.let { panel(IdePanelKind.Diagnostics, it, IdeColors.PANEL_ALT) }
+                geometry.treeSplitter?.let { fills += IdeFillDraw(IdeFillKind.Splitter, it, IdeColors.PANEL, Z_CONTENT) }
+                geometry.diagnosticsSplitter?.let { fills += IdeFillDraw(IdeFillKind.Splitter, it, IdeColors.PANEL, Z_CONTENT) }
+            }
         }
 
         fun scaleControls(
@@ -180,37 +184,46 @@ object IdeRenderer {
             busy: Set<IdeBusyOperation>,
         ) {
             ui(IdeTextKind.Header, "Compukters IDE · ${targetLabel(targetState)}", geometry.header.left + 6, geometry.header.top + 7)
-            listOf(
-                IdeHitAction.CreateProject to "Create",
-                IdeHitAction.OpenExisting to "Open directory",
-                IdeHitAction.CloneProject to "Clone HTTPS",
-                if (IdeBusyOperation.Project in
-                    busy
-                ) {
-                    IdeHitAction.GitCancel to "Cancel clone"
-                } else {
-                    IdeHitAction.GitAuthenticate to "HTTPS token"
-                },
-            ).forEachIndexed { index, (action, label) ->
-                val width = (geometry.toolbar.width - 12) / 4
-                val bounds =
-                    IdeRect(
-                        geometry.toolbar.left + 6 + index * width,
-                        geometry.toolbar.top + 3,
-                        geometry.toolbar.left + 6 + (index + 1) * width - 4,
-                        geometry.toolbar.bottom - 3,
-                    )
-                target(action, bounds, busy.isEmpty() || action == IdeHitAction.GitCancel, label)
-                ui(IdeTextKind.Toolbar, label, bounds.left + 4, bounds.top + 4, clip = bounds)
+            val width = minOf(900, geometry.content.width - 8)
+            val height = minOf(360, geometry.content.height - 4)
+            val left = geometry.content.left + (geometry.content.width - width) / 2
+            val top = geometry.content.top + (geometry.content.height - height) / 2
+            val bounds = IdeRect(left, top, left + width, top + height)
+            panel(IdePanelKind.ProjectSelection, bounds, IdeColors.PANEL_ALT)
+            ui(IdeTextKind.StartProject, "Projects", bounds.left + 6, bounds.top + 5, clip = bounds)
+            val sideActions = width >= 660 && height >= 160
+            val actionsLeft = if (sideActions) bounds.right - 168 else bounds.left + 4
+            val actionsTop = if (sideActions) bounds.top + 24 else bounds.bottom - 44
+            val actionsWidth = if (sideActions) 164 else (bounds.width - 12) / 2
+            val actions =
+                listOf(
+                    IdeHitAction.CreateProject to "Create project",
+                    IdeHitAction.OpenExisting to "Open directory",
+                    IdeHitAction.CloneProject to "Clone HTTPS",
+                    if (IdeBusyOperation.Project in busy) {
+                        IdeHitAction.GitCancel to "Cancel clone"
+                    } else {
+                        IdeHitAction.GitAuthenticate to "HTTPS token"
+                    },
+                )
+            actions.forEachIndexed { index, (action, label) ->
+                val x = actionsLeft + if (sideActions) 0 else index % 2 * (actionsWidth + 4)
+                val y = actionsTop + if (sideActions) index * 30 else index / 2 * 20
+                val actionBounds = IdeRect(x, y, x + actionsWidth, y + if (sideActions) 24 else 18)
+                target(action, actionBounds, busy.isEmpty() || action == IdeHitAction.GitCancel, label)
+                ui(IdeTextKind.ProjectAction, label, actionBounds.left + 4, actionBounds.top + 4, clip = actionBounds)
             }
-            val maximumRows = ((geometry.editor.height - 12) / PROJECT_ROW_HEIGHT).coerceAtLeast(1)
+            val listTop = bounds.top + 24
+            val listBottom = if (sideActions) bounds.bottom - 4 else actionsTop - 4
+            val listRight = if (sideActions) actionsLeft - 8 else bounds.right - 4
+            val maximumRows = ((listBottom - listTop) / PROJECT_ROW_HEIGHT).coerceAtLeast(0)
             val first = projectFirstRow.coerceIn(0, (page.projects.size - maximumRows).coerceAtLeast(0))
             page.projects.drop(first).take(maximumRows).forEachIndexed { index, project ->
-                val top = geometry.editor.top + 6 + index * PROJECT_ROW_HEIGHT
+                val rowTop = listTop + index * PROJECT_ROW_HEIGHT
                 projectRow(
                     project,
                     first + index,
-                    IdeRect(geometry.editor.left + 6, top, geometry.editor.right - 6, top + PROJECT_ROW_HEIGHT),
+                    IdeRect(bounds.left + 4, rowTop, listRight, rowTop + PROJECT_ROW_HEIGHT),
                     busy.isEmpty(),
                     false,
                     Z_TARGET,
@@ -220,10 +233,11 @@ object IdeRenderer {
             if (page.projects.isEmpty()) {
                 ui(
                     IdeTextKind.StartProject,
-                    "Create a project or open an existing directory to remember it here.",
-                    geometry.editor.left + 8,
-                    geometry.editor.top + 8,
-                    clip = geometry.editor,
+                    "No saved projects. Create, open or clone a project.",
+                    bounds.left + 6,
+                    listTop + 5,
+                    IdeColors.MUTED,
+                    clip = IdeRect(bounds.left + 4, listTop, listRight, listBottom),
                 )
             }
             if (busy.isNotEmpty()) ui(IdeTextKind.Status, "Opening project…", geometry.status.left + 6, geometry.status.top + 5)

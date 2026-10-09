@@ -118,7 +118,8 @@ class IdeRendererStateTest {
         val choices = model.hitTargets.filter { it.action == IdeHitAction.ProjectChoice }
         assertEquals(20, choices.first().choiceIndex)
         assertTrue(choices.last().choiceIndex!! < 40)
-        assertTrue(choices.all { geometry().editor.contains(it.bounds) })
+        val selection = model.panels.single { it.kind == IdePanelKind.ProjectSelection }.bounds
+        assertTrue(choices.all { selection.contains(it.bounds) })
         val state = workspaceState(IdeEditorView.Empty, IdeBuildState.Idle, projects = projects)
         val switcher = IdeRenderer.extract(state, geometry(), projectSwitcherOpen = true, projectFirstRow = 20)
         val menu = switcher.panels.single { it.kind == IdePanelKind.ProjectSwitcher }.bounds
@@ -886,18 +887,44 @@ class IdeRendererStateTest {
         )
         assertTrue(model.hitTargets.any { it.action == IdeHitAction.CreateProject && it.enabled })
         assertTrue(model.hitTargets.any { it.action == IdeHitAction.OpenExisting && it.enabled })
-        assertEquals(
-            listOf("Create", "Open directory", "Clone HTTPS", "HTTPS token"),
-            model.text
-                .filter {
-                    it.kind == IdeTextKind.Toolbar
-                }.map { it.value },
-        )
-        assertTrue(
-            model.text.filter { it.kind == IdeTextKind.Toolbar }.minOf { it.zIndex } >
-                model.panels.filter { it.kind == IdePanelKind.Control && geometry().toolbar.contains(it.bounds) }.maxOf { it.zIndex },
-        )
+        val selection = model.panels.single { it.kind == IdePanelKind.ProjectSelection }.bounds
+        val entryActions =
+            model.hitTargets.filter {
+                it.action in
+                    setOf(IdeHitAction.CreateProject, IdeHitAction.OpenExisting, IdeHitAction.CloneProject, IdeHitAction.GitAuthenticate)
+            }
+        assertEquals(4, entryActions.size)
+        assertTrue(entryActions.all { selection.contains(it.bounds) })
+        assertTrue(model.panels.none { it.kind == IdePanelKind.Tree || it.kind == IdePanelKind.Diagnostics })
+        val rows = model.hitTargets.filter { it.action == IdeHitAction.ProjectChoice }
+        assertTrue(rows.all { selection.contains(it.bounds) && it.bounds.right < entryActions.first().bounds.left })
+        assertTrue(model.text.none { it.kind == IdeTextKind.Toolbar })
         assertTrue(model.zOrdered())
+    }
+
+    @Test
+    fun `project selection stays available with an empty catalog and at minimum supported size`() {
+        val actions = setOf(IdeHitAction.CreateProject, IdeHitAction.OpenExisting, IdeHitAction.CloneProject, IdeHitAction.GitAuthenticate)
+        for ((width, height) in listOf(960 to 540, 480 to 320, 260 to 184)) {
+            val geometry = IdeRenderGeometry.compute(width, height, 180, 120, false, false, IdeCodeFontProfile.DEFAULT)
+            for (projects in listOf(emptyList(), listOf(IdeProjectSummary("alpha", "Alpha")))) {
+                val model = IdeRenderer.extract(IdeViewState.startPage(projects), geometry)
+                val selection = model.panels.single { it.kind == IdePanelKind.ProjectSelection }.bounds
+                assertTrue(geometry.content.contains(selection))
+                val controls = model.hitTargets.filter { it.action in actions || it.choiceIndex != null }
+                assertEquals(4, controls.count { it.action in actions && it.enabled })
+                assertEquals(projects.size, controls.count { it.action == IdeHitAction.ProjectChoice })
+                assertTrue(controls.all { selection.contains(it.bounds) })
+                for ((index, control) in controls.withIndex()) {
+                    assertTrue(
+                        controls.drop(index + 1).none {
+                            control.bounds.left < it.bounds.right && control.bounds.right > it.bounds.left &&
+                                control.bounds.top < it.bounds.bottom && control.bounds.bottom > it.bounds.top
+                        },
+                    )
+                }
+            }
+        }
     }
 
     @Test
