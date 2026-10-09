@@ -34,6 +34,67 @@ import kotlin.test.assertTrue
 
 class ProjectCatalogTest {
     @Test
+    fun `owned folders rename without overwriting and stale handles cannot delete replacements`() {
+        val root = createTempDirectory("compukters-managed-")
+        val catalog = ProjectCatalog.open(root)
+        val original = catalog.create("first")
+        catalog.create("occupied")
+        assertFailsWith<ProjectCatalogException> { catalog.rename(original, "occupied") }
+        assertTrue(original.handle.isValid())
+        val renamed = catalog.rename(original, "second")
+        assertFalse(original.handle.isValid())
+        assertEquals(root.resolve("second"), renamed.handle.canonicalPath)
+        assertTrue(renamed.handle.isValid())
+        val replacement = catalog.create("first")
+        assertFailsWith<ProjectCatalogException> { catalog.remove(original) }
+        assertTrue(replacement.handle.isValid())
+        catalog.remove(renamed)
+        assertFalse(root.resolve("second").exists())
+        assertEquals(setOf("first", "occupied"), catalog.projects().map { it.directoryName }.toSet())
+    }
+
+    @Test
+    fun `forgetting an external project persists without modifying its files`() {
+        val root = createTempDirectory("compukters-registered-")
+        val external = ProjectCatalog.open(createTempDirectory("compukters-external-")).create("external")
+        val catalog = ProjectCatalog.open(root)
+        val registered = catalog.register(external.handle.canonicalPath)
+        assertTrue(registered.external)
+        assertEquals(listOf(registered.directoryName), ProjectCatalog.open(root).projects().map { it.directoryName })
+        assertFailsWith<IllegalArgumentException> { catalog.rename(registered, "renamed") }
+        val manifest =
+            external.handle.canonicalPath
+                .resolve("compukter.toml")
+                .readText()
+        catalog.remove(registered)
+        assertTrue(ProjectCatalog.open(root).projects().isEmpty())
+        assertTrue(external.handle.isValid())
+        assertEquals(
+            manifest,
+            external.handle.canonicalPath
+                .resolve("compukter.toml")
+                .readText(),
+        )
+        assertTrue(
+            external.handle.canonicalPath
+                .resolve("src/main.kt")
+                .exists(),
+        )
+    }
+
+    @Test
+    fun `owned deletion removes symbolic links without touching their targets`() {
+        val root = createTempDirectory("compukters-managed-")
+        val outside = createTempDirectory("compukters-outside-")
+        outside.resolve("keep.txt").writeText("keep")
+        val catalog = ProjectCatalog.open(root)
+        val project = catalog.create("demo")
+        Files.createSymbolicLink(project.handle.canonicalPath.resolve("link"), outside)
+        catalog.remove(project)
+        assertEquals("keep", outside.resolve("keep.txt").readText())
+    }
+
+    @Test
     fun `imports publish validated projects and clean failed partial repositories`() {
         val root = createTempDirectory("compukters-project-import-")
         val catalog = ProjectCatalog.open(root)

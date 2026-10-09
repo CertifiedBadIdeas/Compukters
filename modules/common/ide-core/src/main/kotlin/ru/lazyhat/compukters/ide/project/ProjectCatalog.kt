@@ -101,6 +101,73 @@ class ProjectCatalog private constructor(
         }
     }
 
+    /** Renames an owned folder; the project manifest and source contents stay intact. */
+    fun rename(
+        project: ProjectDescriptor,
+        name: String,
+    ): ProjectDescriptor {
+        require(!project.external) { "external project folders cannot be renamed here" }
+        validateDirectoryName(name)
+        return catalogOperation("rename project") { root ->
+            validateOwnedIdentity(root, project)
+            if (name == project.directoryName) return@catalogOperation describeOwned(root, name)
+            if (SecureProjectFiles.attributesOrNull(root, Path.of(name)) != null) {
+                throw ProjectCatalogException("project folder already exists: $name")
+            }
+            root.move(Path.of(project.directoryName), root, Path.of(name))
+            describeOwned(root, name)
+        }
+    }
+
+    /** Owned projects delete their folder; external projects only remove their registration. */
+    fun remove(project: ProjectDescriptor) {
+        catalogOperation("remove project") { root ->
+            if (project.external) {
+                SecureProjectFiles.validateFilename(Path.of(project.directoryName))
+                val registered = SecureProjectFiles.readText(root, project.directoryName, limits.pathUtf8Bytes)
+                if (Path.of(registered) != project.handle.canonicalPath) {
+                    throw ProjectCatalogException("external project registration changed")
+                }
+                root.deleteFile(Path.of(project.directoryName))
+            } else {
+                validateOwnedIdentity(root, project)
+
+                // Walk relative to opened directory handles and never follow symbolic links.
+                fun removeEntry(
+                    parent: SecureDirectoryStream<Path>,
+                    name: Path,
+                ) {
+                    val attributes = SecureProjectFiles.attributes(parent, name)
+                    if (attributes.isDirectory && !attributes.isSymbolicLink) {
+                        parent.newDirectoryStream(name, LinkOption.NOFOLLOW_LINKS).use { child ->
+                            child.map { it.fileName }.forEach { removeEntry(child, it) }
+                        }
+                        if (SecureProjectFiles.attributes(parent, name).fileKey() != attributes.fileKey()) {
+                            throw ProjectCatalogException("project entry changed during deletion")
+                        }
+                        parent.deleteDirectory(name)
+                    } else {
+                        parent.deleteFile(name)
+                    }
+                }
+                removeEntry(root, Path.of(project.directoryName))
+            }
+        }
+    }
+
+    private fun validateOwnedIdentity(
+        root: SecureDirectoryStream<Path>,
+        project: ProjectDescriptor,
+    ) {
+        validateDirectoryName(project.directoryName)
+        val attributes = SecureProjectFiles.attributesOrNull(root, Path.of(project.directoryName))
+        if (project.handle.canonicalPath != rootIdentity.canonicalPath.resolve(project.directoryName) ||
+            attributes?.fileKey() != project.handle.identity.fileKey || attributes.isSymbolicLink || !attributes.isDirectory
+        ) {
+            throw ProjectCatalogException("project folder identity changed: ${project.directoryName}")
+        }
+    }
+
     /** Registers an existing root in place. Reopening the catalog preserves this project identity. */
     fun register(projectRoot: Path): ProjectDescriptor {
         val identity = SecureProjectFiles.identity(projectRoot)
@@ -286,7 +353,7 @@ class ProjectCatalog private constructor(
         private const val MAIN_FILENAME = "main.kt"
         private const val DEFAULT_MAIN = "fun main() {\n}\n"
         private const val STAGING_PREFIX = ".creating-"
-        private const val REGISTRATION_PREFIX = ".registered-"
+        private const val REGISTRATION_PREFIX = REGISTERED_PROJECT_PREFIX
         private val WRITE_OPTIONS: Set<OpenOption> =
             setOf(StandardOpenOption.WRITE, StandardOpenOption.CREATE_NEW, LinkOption.NOFOLLOW_LINKS)
     }

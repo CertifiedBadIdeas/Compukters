@@ -50,4 +50,8 @@ data class ProjectDescriptor(
     val directoryName: String,
     val manifest: ProjectManifest,
     val handle: ProjectHandle,
-)
+) {
+    val external: Boolean get() = directoryName.startsWith(REGISTERED_PROJECT_PREFIX)
+}
+
+internal const val REGISTERED_PROJECT_PREFIX = ".registered-"
