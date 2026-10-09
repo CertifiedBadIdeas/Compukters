@@ -627,6 +627,9 @@ class IdeInputAdapter(
                 uiActions.activate(action)
             }
 
+            IdeHitAction.ScaleAuto,
+            IdeHitAction.ScaleTwo,
+            IdeHitAction.ScaleThree,
             IdeHitAction.OpenExisting,
             IdeHitAction.CloneProject,
             IdeHitAction.ProjectTool,

@@ -126,9 +126,15 @@ internal class IdeScreen(
         button: Int,
     ): Boolean {
         val viewport = viewport()
-        if (!viewport.supported) return true
         val uiX = viewport.toVirtualX(mouseX)
         val uiY = viewport.toVirtualY(mouseY)
+        if (button == 0 && (!viewport.supported || (prompt.state == null && application.controller.viewState().dialog == null))) {
+            IdeUiScaleControl.hit(IdeRect(0, 0, viewport.width, viewport.height), uiX, uiY)?.let { mode ->
+                application.preferences.saveUiScale(mode)
+                return true
+            }
+        }
+        if (!viewport.supported) return true
         val modifiers = currentModifiers()
         val doubleClick = isDoubleClick(uiX, uiY, button)
         val geometry = geometry()
@@ -409,10 +415,6 @@ internal class IdeScreen(
         graphics.fill(0, 0, width, height, IdeColors.DIM)
         val viewport = viewport()
         viewport.withTransform(graphics.pose()) {
-            if (!viewport.supported) {
-                JetBrainsMonoRendering.drawString(graphics, font, UNSUPPORTED_MESSAGE, 4, 4, TERMINAL_TEXT)
-                return@withTransform
-            }
             renderSupported(graphics, mouseX, mouseY, partialTick, viewport)
         }
     }
@@ -438,6 +440,8 @@ internal class IdeScreen(
                 terminalVisible = terminalOverlay.visible,
                 explorerDrag = input.explorerDragVisual,
                 projectSwitcherOpen = projectSwitcherOpen && prompt.state == null && state.dialog == null,
+                uiScale = application.preferences.uiScale(),
+                viewportSupported = viewport().supported,
                 pointerX = viewport.toVirtualX(mouseX.toDouble()).toInt(),
                 pointerY = viewport.toVirtualY(mouseY.toDouble()).toInt(),
             )
@@ -495,7 +499,7 @@ internal class IdeScreen(
         }
         executeIdeRenderOperations(
             operations = operations,
-            terminalVisible = terminalOverlay.visible,
+            terminalVisible = terminalOverlay.visible && viewport.supported,
             renderTerminal = { renderTerminalOverlay(graphics, terminalOverlayGeometry(geometry), viewport) },
         )
         super.render(
@@ -534,7 +538,7 @@ internal class IdeScreen(
 
     private fun viewport(): CompuktersUiViewport {
         val window = client().window
-        return CompuktersUiViewport.admit(window.width, window.height, window.guiScale.toInt(), fixedScale = 3)
+        return CompuktersUiViewport.admitIde(window.width, window.height, window.guiScale.toInt(), application.preferences.uiScale())
     }
 
     private fun focusState(): IdeFocusState {
@@ -580,6 +584,8 @@ internal class IdeScreen(
                 terminalVisible = terminalOverlay.visible,
                 explorerDrag = input.explorerDragVisual,
                 projectSwitcherOpen = projectSwitcherOpen && prompt.state == null && state.dialog == null,
+                uiScale = application.preferences.uiScale(),
+                viewportSupported = viewport().supported,
             )
         return when (val page = state.page) {
             is IdePageState.Start -> {
@@ -621,6 +627,10 @@ internal class IdeScreen(
 
     private fun activateUiAction(action: IdeHitAction): Boolean {
         when (action) {
+            IdeHitAction.ScaleAuto, IdeHitAction.ScaleTwo, IdeHitAction.ScaleThree -> {
+                application.preferences.saveUiScale(IdeUiScale.entries.single { it.action == action })
+            }
+
             IdeHitAction.CreateProject -> {
                 projectSwitcherOpen = false
                 prompt.open(IdePromptKind.CreateProject)

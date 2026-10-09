@@ -74,6 +74,10 @@ interface IdeLayoutStore {
     fun load(): IdeLayoutSettings
 
     fun save(settings: IdeLayoutSettings)
+
+    fun loadUiScale(): IdeUiScale
+
+    fun saveUiScale(scale: IdeUiScale)
 }
 
 class IdeClientPreferences(
@@ -107,6 +111,10 @@ class IdeClientPreferences(
     }
 
     fun layout(): IdeLayoutSettings = layout.load()
+
+    fun uiScale(): IdeUiScale = layout.loadUiScale()
+
+    fun saveUiScale(scale: IdeUiScale) = layout.saveUiScale(scale)
 
     private fun loadChecked(): IdePreferences? {
         if (!Files.exists(file, LinkOption.NOFOLLOW_LINKS)) return null

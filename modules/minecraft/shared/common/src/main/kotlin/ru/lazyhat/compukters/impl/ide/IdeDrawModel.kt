@@ -77,6 +77,9 @@ enum class IdeFillKind {
 enum class IdeScissorKind { Tree, Editor, Diagnostics, Completion, SemanticPopup, ProjectSwitcher, Tooltip }
 
 enum class IdeHitAction {
+    ScaleAuto,
+    ScaleTwo,
+    ScaleThree,
     CreateProject,
     OpenProject,
     OpenExisting,

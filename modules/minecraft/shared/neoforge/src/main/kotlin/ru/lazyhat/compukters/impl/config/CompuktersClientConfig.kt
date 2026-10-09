@@ -21,6 +21,7 @@ package ru.lazyhat.compukters.impl.config
 import net.neoforged.neoforge.common.ModConfigSpec
 import ru.lazyhat.compukters.impl.ide.IdeLayoutSettings
 import ru.lazyhat.compukters.impl.ide.IdeLayoutStore
+import ru.lazyhat.compukters.impl.ide.IdeUiScale
 
 /** Client preferences backed by the NeoForge configuration store. */
 object CompuktersClientConfig {
@@ -49,6 +50,11 @@ object CompuktersClientConfig {
             .comment("Whether the IDE diagnostics panel is expanded")
             .define("ide.diagnostics_expanded", true)
 
+    internal val ideUiScale =
+        builder
+            .comment("IDE UI scale: AUTO selects 2 below QHD and 3 at QHD or above; TWO and THREE are fixed")
+            .defineEnum("ide.ui_scale", IdeUiScale.AUTO)
+
     val SPEC: ModConfigSpec = builder.build()
 
     internal fun admitIdeLayout(
@@ -58,6 +64,13 @@ object CompuktersClientConfig {
     ): IdeLayoutSettings = IdeLayoutSettings.admit(treeWidth, diagnosticsHeight, diagnosticsExpanded)
 
     internal object IdeLayout : IdeLayoutStore {
+        override fun loadUiScale(): IdeUiScale = ideUiScale.get()
+
+        override fun saveUiScale(scale: IdeUiScale) {
+            ideUiScale.set(scale)
+            ideUiScale.save()
+        }
+
         override fun load(): IdeLayoutSettings =
             admitIdeLayout(
                 runCatching(ideTreeWidth::get).getOrDefault(IdeLayoutSettings.DEFAULT_TREE_WIDTH),

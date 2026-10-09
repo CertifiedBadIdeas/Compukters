@@ -94,6 +94,25 @@ import kotlin.test.assertTrue
 
 class IdeRendererStateTest {
     @Test
+    fun `scale choices remain clickable when the selected scale cannot admit the window`() {
+        val geometry = IdeRenderGeometry.compute(426, 240, 180, 120, true, true, IdeCodeFontProfile.DEFAULT)
+        val model =
+            IdeRenderer.extract(
+                IdeViewState.startPage(emptyList()),
+                geometry,
+                uiScale = IdeUiScale.THREE,
+                viewportSupported = false,
+            )
+        val choices = model.hitTargets.filter { target -> IdeUiScale.entries.any { it.action == target.action } }
+        assertEquals(3, choices.size)
+        assertTrue(choices.all { it.enabled && geometry.viewport.contains(it.bounds) })
+        assertEquals(IdeHitAction.ScaleThree, choices.single { it.selected }.action)
+        val auto = choices.single { it.action == IdeHitAction.ScaleAuto }.bounds
+        assertEquals(IdeUiScale.AUTO, IdeUiScaleControl.hit(geometry.viewport, auto.left + 1.0, auto.top + 1.0))
+        assertTrue(model.text.any { it.value.contains("Window is too small") })
+    }
+
+    @Test
     fun `Git gutter marks additions and deletions at both document boundaries`() {
         val geometry = geometry()
         val kinds = ru.lazyhat.compukters.ide.git.GitLineChangeKind.entries
@@ -836,7 +855,7 @@ class IdeRendererStateTest {
         )
         assertTrue(
             model.text.filter { it.kind == IdeTextKind.Toolbar }.minOf { it.zIndex } >
-                model.panels.filter { it.kind == IdePanelKind.Control }.maxOf { it.zIndex },
+                model.panels.filter { it.kind == IdePanelKind.Control && geometry().toolbar.contains(it.bounds) }.maxOf { it.zIndex },
         )
         assertTrue(model.zOrdered())
     }
