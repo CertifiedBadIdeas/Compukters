@@ -149,7 +149,9 @@ Existing delimiters are reused; autoimports and caret placement share an atomic 
 an empty lambda into an indented block while preserving LF/CRLF and leading indentation. Imports, callable
 references, type positions and shorthand string interpolation still insert only names. Automatic completion is
 suppressed at function declaration names, including extension and local functions, without suppressing type or
-body completion or explicit requests.
+body completion or explicit requests. Literal content in quoted and raw strings, character literals and comments
+produces no completion candidates, including explicit requests. Shorthand `$name`, a bare unescaped `$` and
+`${...}` interpolation retain completion; nested string literals and comments inside interpolation are excluded.
 
 **Evidence:**
 [`CompletionQueryTest`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/ide-analysis-k2/src/test/kotlin/ru/lazyhat/compukters/ide/analysis/k2/query/CompletionQueryTest.kt),
@@ -161,8 +163,10 @@ test `forked worker returns semantic completion`; `CompletionQueryTest`, tests `
 from resolved function parameters`, `autoimported project functions retain semantic call shapes`, and `block
 interpolation permits calls but an empty shorthand template does not`, `automatic completion suppresses
 function declaration names`, and `function declarations retain completion in types bodies and explicit
-requests`; `CompletionQueryTest`, tests `completion labels single lambda arguments with braces and unnamed
-function types` and `autoimported lambda function labels use the same brace presentation`;
+requests`, `completion suppresses literal content and comments including nested template literals`, and
+`completion remains available inside quoted and raw string interpolations`; `CompletionQueryTest`, tests
+`completion labels single lambda arguments with braces and unnamed function types` and
+`autoimported lambda function labels use the same brace presentation`;
 `CompletionQueryTest`, test `completion preserves specialized member and extension signatures with declared
 receiver context` and `scope functions specialize their result and lambda from the explicit receiver`
 (including an empty dot selector, nullable receivers, generic receiver expressions and empty safe-call

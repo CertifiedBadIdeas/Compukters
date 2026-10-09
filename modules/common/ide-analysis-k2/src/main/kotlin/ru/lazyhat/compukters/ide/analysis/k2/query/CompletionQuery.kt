@@ -108,7 +108,7 @@ internal object CompletionQuery {
         require(query.offsetUtf16 <= source.length) { "analysis cursor exceeds source" }
         val context = CompletionContext.parse(file, source, query.offsetUtf16)
         val items =
-            if (query.trigger == CompletionTrigger.Automatic && context.isFunctionDeclarationName) {
+            if (!context.allowsCompletion || (query.trigger == CompletionTrigger.Automatic && context.isFunctionDeclarationName)) {
                 emptyList()
             } else {
                 analyze(file) { collect(context, file, snapshot, limits) }

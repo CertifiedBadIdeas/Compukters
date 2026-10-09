@@ -183,6 +183,9 @@ listed in [Kotlin support](developers/kotlin-support.md) and [standard library s
 
 ### In-game IDE
 
+- Completion excludes ordinary string content, character literals and comments, while preserving suggestions
+  inside shorthand and expression interpolation in quoted and raw strings.
+
 - With no project open, a central **Projects** panel groups saved folder paths with create, open and HTTPS clone
   actions; the header menu provides the same project management while editing. Both lists scroll, and projects with missing or invalid manifests remain editable, with analysis unavailable until their configuration is repaired. IDE-owned folders support
   collision-safe rename and confirmed deletion; external directories remain registered across restarts and expose a

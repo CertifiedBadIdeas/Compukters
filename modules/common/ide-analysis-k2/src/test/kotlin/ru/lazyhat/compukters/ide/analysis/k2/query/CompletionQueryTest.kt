@@ -41,6 +41,52 @@ import kotlin.test.assertTrue
 
 class CompletionQueryTest {
     @Test
+    fun `completion suppresses literal content and comments including nested template literals`() {
+        val contexts =
+            listOf(
+                "\"completionT|\"",
+                "\"completionT|",
+                "\"\"\"completionT|\"\"\"",
+                "\"\"\"first line\ncompletionT|\"\"\"",
+                "\"\\\$completionT|\"",
+                "'completionT|'",
+                "// completionT|\n",
+                "/* outer /* completionT| */ end */",
+                "\"\${\"completionT|\"}\"",
+                "\"\${ /* completionT| */ 1 }\"",
+            )
+        for (context in contexts) {
+            val marked = "fun completionTarget() {}\nfun main() { $context }"
+            val offset = marked.indexOf('|')
+            val source = marked.replace("|", "")
+            K2QueryFixture.source("main.kt" to source).use { fixture ->
+                for (trigger in CompletionTrigger.entries) {
+                    assertTrue(fixture.complete("main.kt", offset, trigger).items.isEmpty(), "$context: $trigger")
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `completion remains available inside quoted and raw string interpolations`() {
+        val contexts =
+            listOf(
+                "\"\$completionT|\"",
+                "\"\${completionT|}\"",
+                "\"\"\"\$completionT|\"\"\"",
+                "\"\"\"first line\n\${completionT|}\"\"\"",
+                "\"\${\"\${completionT|}\"}\"",
+            )
+        for (context in contexts) {
+            val marked = "fun completionTarget() {}\nfun main() { val text = $context }"
+            val offset = marked.indexOf('|')
+            K2QueryFixture.source("main.kt" to marked.replace("|", "")).use { fixture ->
+                assertTrue(fixture.complete("main.kt", offset).items.any { it.insertText == "completionTarget" }, context)
+            }
+        }
+    }
+
+    @Test
     fun `math completion resolves overloads constants and typed extensions`() {
         for (attachedSources in listOf(false, true)) {
             val source = "import kotlin.math.*\nfun main() { val value: Double = 1.0; value. }"
