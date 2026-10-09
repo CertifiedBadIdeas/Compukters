@@ -109,17 +109,29 @@ class ReleaseTest(unittest.TestCase):
         init_repository(self.root)
         command(self.root, '-c', 'protocol.file.allow=always', 'submodule', 'add', '-q', str(vm), 'host/compukter-vm')
         (self.root / 'gradle.properties').write_text('version = 0.5.0\n')
-        (self.root / '.gitignore').write_text('build\n')
+        (self.root / '.gitignore').write_text('build\ndist\n')
         (self.root / 'docs').mkdir()
         (self.root / 'docs/CHANGELOG.md').write_text('## 0.5.0 — 2026-10-09\n\nNew capability.\n\n## 0.4.0 — 2026-09-12\n\nOld capability.\n')
         for minecraft, family, transport in release.TARGETS:
-            path = self.root / f'modules/minecraft/{family}/{family}-neoforge/build/libs' / f'compukters-{minecraft}-neoforge-0.5.0.jar'
+            path = self.root / 'dist' / minecraft / f'compukters-{minecraft}-neoforge-0.5.0.jar'
             path.parent.mkdir(parents=True)
             with zipfile.ZipFile(path, 'w') as archive:
                 for platform, filename in [('linux', f'libcompukter_{transport}.so'), ('windows', f'compukter_{transport}.dll')]:
                     archive.writestr(f'META-INF/natives/{platform}/x86_64/{filename}', b'native fixture')
                 archive.writestr(release.TOOLING + '.bundle', 'format=1\nbundleSha256=' + 'a' * 64 + '\n')
                 archive.writestr(release.TOOLING + '.zip.xz', b'carrier fixture')
+        for addon in release.ADDONS:
+            addon_version = '1.0' if addon == 'sable' else '2.0'
+            properties = self.root / 'addons' / addon / 'gradle.properties'
+            properties.parent.mkdir(parents=True)
+            properties.write_text(f'addonVersion = {addon_version}\n')
+            path = self.root / 'dist/1.21.1' / f'compukters-{addon}-1.21.1-neoforge-0.5-{addon_version}.jar'
+            with zipfile.ZipFile(path, 'w') as archive:
+                archive.writestr(f'META-INF/compukters/addons/{addon}.cagb', b'addon fixture')
+                archive.writestr('META-INF/neoforge.mods.toml',
+                                 f'[[mods]]\nmodId="compukters_{addon}"\nversion="{addon_version}"\n'
+                                 f'[[dependencies.compukters_{addon}]]\nmodId="compukters"\n'
+                                 'type="required"\nversionRange="[0.5.0,0.6.0)"\n')
         command(self.root, 'add', '.')
         command(self.root, 'commit', '-qm', 'Release fixture')
         command(self.root, 'tag', 'v0.5.0')
@@ -136,7 +148,77 @@ class ReleaseTest(unittest.TestCase):
         self.assertEqual([a['minecraft'] for a in manifest['artifacts']], ['1.21.1', '26.1.2'])
         self.assertEqual(manifest['components']['tooling']['delivery'], 'bundled')
         self.assertEqual((self.output / 'release-notes.md').read_text(), 'New capability.\n')
-        self.assertEqual(len((self.output / 'checksums.sha256').read_text().splitlines()), 4)
+        self.assertEqual([a['addon'] for a in manifest['addons']], release.ADDONS)
+        self.assertEqual(manifest['schema'], 2)
+        self.assertEqual(len((self.output / 'checksums.sha256').read_text().splitlines()), 7)
+
+    def test_missing_addon_is_rejected_before_staging(self):
+        next((self.root / 'dist/1.21.1').glob('*sable*.jar')).unlink()
+        with self.assertRaises(FileNotFoundError):
+            release.prepare(self.root, self.output, 'v0.5.0')
+        self.assertFalse(self.output.exists())
+
+    def test_addon_guest_bundle_and_metadata_are_required(self):
+        path = next((self.root / 'dist/1.21.1').glob('*sable*.jar'))
+        with zipfile.ZipFile(path, 'w') as archive:
+            archive.writestr('unrelated', b'data')
+        with self.assertRaisesRegex(ValueError, 'addon metadata or Guest bundle'):
+            release.prepare(self.root, self.output, 'v0.5.0')
+        self.assertFalse(self.output.exists())
+
+    def test_addon_identity_and_dependency_range_are_verified(self):
+        path = next((self.root / 'dist/1.21.1').glob('*sable*.jar'))
+        with zipfile.ZipFile(path) as archive:
+            metadata = archive.read('META-INF/neoforge.mods.toml').decode()
+        for before, after, error in [('version="1.0"', 'version="9.0"', 'identity/version'),
+                                     ('[0.5.0,0.6.0)', '[0.4.0,)', 'dependency mismatch')]:
+            with self.subTest(error=error):
+                with zipfile.ZipFile(path, 'w') as archive:
+                    archive.writestr('META-INF/compukters/addons/sable.cagb', b'addon fixture')
+                    archive.writestr('META-INF/neoforge.mods.toml', metadata.replace(before, after))
+                with self.assertRaisesRegex(ValueError, error):
+                    release.prepare(self.root, self.output, 'v0.5.0')
+        self.assertFalse(self.output.exists())
+
+    def test_modified_addon_prevents_github_publication(self):
+        manifest, _ = self.prepared()
+        client = GitHubFixture(manifest, self.output)
+        (self.output / manifest['addons'][0]['filename']).write_bytes(b'changed')
+        with self.assertRaisesRegex(ValueError, 'addon changed after staging'):
+            release.publish_github(self.output, client)
+        self.assertIsNone(client.existing)
+
+    def test_schema_one_can_resume_without_addons(self):
+        manifest, _ = self.prepared()
+        for artifact in manifest.pop('addons'):
+            (self.output / artifact['filename']).unlink()
+        manifest['schema'] = 1
+        (self.output / 'release.json').write_text(json.dumps(manifest))
+        files = sorted(p for p in self.output.iterdir() if p.name != 'checksums.sha256')
+        (self.output / 'checksums.sha256').write_text(''.join(
+            f'{hashlib.sha256(p.read_bytes()).hexdigest()}  {p.name}\n' for p in files))
+        self.assertEqual(release.load_release(self.output), manifest)
+        client = GitHubFixture(manifest, self.output)
+        release.publish_github(self.output, client)
+        self.assertEqual(len(client.uploads), 5)
+
+    def test_unknown_schema_and_incomplete_addon_inventory_are_rejected(self):
+        manifest, _ = self.prepared()
+        for invalid, error in [(dict(manifest, schema=99), 'unsupported release manifest'),
+                               (dict(manifest, addons=manifest['addons'][:-1]), 'missing or extra release addons')]:
+            with self.subTest(error=error):
+                (self.output / 'release.json').write_text(json.dumps(invalid))
+                with self.assertRaisesRegex(ValueError, error):
+                    release.load_release(self.output)
+
+    def test_stale_module_output_cannot_replace_missing_distribution_jar(self):
+        source = self.root / 'dist/1.21.1/compukters-1.21.1-neoforge-0.5.0.jar'
+        legacy = self.root / 'modules/minecraft/v1_21_1/v1_21_1-neoforge/build/libs' / source.name
+        legacy.parent.mkdir(parents=True)
+        source.rename(legacy)
+        with self.assertRaises(FileNotFoundError):
+            release.prepare(self.root, self.output, 'v0.5.0')
+        self.assertFalse(self.output.exists())
 
     def test_wrong_tag_and_dirty_checkout_are_rejected_before_staging(self):
         with self.assertRaisesRegex(ValueError, 'exact version tag'):
@@ -153,7 +235,7 @@ class ReleaseTest(unittest.TestCase):
             release.changelog(self.root, '0.5.0')
 
     def test_missing_native_or_tooling_rejected(self):
-        for artifact in self.root.glob('modules/**/build/libs/*.jar'):
+        for artifact in self.root.glob('dist/**/*.jar'):
             with zipfile.ZipFile(artifact, 'w') as archive:
                 archive.writestr('unrelated', b'data')
         with self.assertRaisesRegex(ValueError, 'autonomous universal'):
@@ -207,7 +289,8 @@ class ReleaseTest(unittest.TestCase):
         client = GitHubFixture(manifest, self.output)
         release.publish_github(self.output, client)
         release.publish_github(self.output, client)
-        self.assertEqual(len(client.uploads), 5)
+        self.assertEqual(len(client.uploads), 8)
+        self.assertTrue({artifact['filename'] for artifact in manifest['addons']}.issubset(client.uploads))
         self.assertEqual(client.finished, 1)
         self.assertFalse(client.existing['draft'])
 
@@ -221,7 +304,7 @@ class ReleaseTest(unittest.TestCase):
         self.assertEqual(client.finished, 0)
         client.fail_after = None
         release.publish_github(self.output, client)
-        self.assertEqual(len(client.uploads), 5)
+        self.assertEqual(len(client.uploads), 8)
         self.assertEqual(client.finished, 1)
 
     def test_github_conflicting_asset_prevents_missing_uploads(self):

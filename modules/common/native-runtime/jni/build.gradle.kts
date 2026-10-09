@@ -54,7 +54,7 @@ val compukterJniLibrary = rootProject.file(".toolchain/build/cargo/compukter-jni
 val generatedDevelopmentNativeResources = layout.buildDirectory.dir("generated/native-resources")
 val generatedReleaseNativeResources = layout.buildDirectory.dir("generated/release-native-resources")
 val runtimeBundleDirectory = providers.gradleProperty("compukterRuntimeBundleDir").map(rootProject::file)
-val releaseRuntimeRequested = requestsUniversalReleaseBuild(gradle.startParameter.taskNames)
+val releaseRuntimeRequested = requestsUniversalReleaseBuild(gradle)
 val compukterVmRoot = rootProject.file("host/compukter-vm")
 val compukterVmCommit =
     providers.exec {

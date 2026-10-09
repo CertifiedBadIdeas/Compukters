@@ -9,7 +9,9 @@ permalink: /RELEASES/
 
 The `Verified mod release` workflow builds the autonomous NeoForge JARs for
 Minecraft 1.21.1 and 26.1.2. Each contains its tooling carrier and both Linux and
-Windows natives. GitHub Releases receives both JARs, release notes, a versioned
+Windows natives. The workflow collects these and the Create, Sable and Propulsion
+addon JARs into `dist/`, grouped by Minecraft version, and preserves that layout
+as an Actions artifact. GitHub Releases receives all five JARs, release notes, a versioned
 composition inventory, and SHA-256 checksums. Modrinth receives one version per
 Minecraft target in the existing [Compukters project](https://modrinth.com/mod/compukters),
 ID `xriOD3eh`.
@@ -38,16 +40,19 @@ preparing the candidate; missing or mismatched Runtime assets stop the release.
 2. Run `verifyLocalFull` on that exact candidate before release preparation is
    declared complete. Use the existing release tasks to create the local tag;
    `tagRelease` creates `vX.Y.Z` without changing the version.
-3. Run `buildReleaseUniversalJar` from the root on the clean exact tag. It downloads
-   and admits the pinned published Runtime bundles and verifies both target archives.
+3. Run `./gradlew-sandbox-dev-parallel-summary -p addons/dev collectReleaseDistributionJars`
+   on the clean exact tag. It downloads and admits the pinned published Runtime bundles,
+   runs both `buildReleaseUniversalJar` gates, verifies the addon archives and collects
+   the five JARs into `dist/`. For local Rust builds use `collectDistributionJars` instead.
 4. After the candidate/tag is available remotely, a manual `Verified mod release`
    run with input `tag: vX.Y.Z` reruns verification and stores temporary release
    files and complete Gradle logs for seven days. A manual run never publishes.
 
 Local non-interactive commands use `./gradlew-sandbox-dev-parallel-summary` with
 JDK 25 selected. The CI runner installs JDK 21/25 and the VM's pinned Rust toolchain,
-fetches locked Cargo dependencies, runs `verifyLocalFull`, then runs the separate
-`buildReleaseUniversalJar` gate. Existing Gradle checks own build and admission;
+fetches locked Cargo dependencies, runs `verifyLocalFull`, then runs
+`collectReleaseDistributionJars`, including both `buildReleaseUniversalJar` gates.
+Existing Gradle checks own build and admission;
 release-transfer tooling does not substitute for them.
 
 ## Publish and recover

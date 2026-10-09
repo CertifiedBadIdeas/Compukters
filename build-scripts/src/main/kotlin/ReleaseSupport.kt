@@ -16,6 +16,8 @@
  * limitations under the License.
  */
 
+import org.gradle.api.invocation.Gradle
+
 data class ReleaseVersion(
     val major: Int,
     val minor: Int,
@@ -121,8 +123,12 @@ fun expectedNativeResources(
 
 fun requestsUniversalReleaseBuild(taskNames: List<String>): Boolean =
     taskNames.any {
-        it.substringAfterLast(':') == "buildReleaseUniversalJar"
+        it.substringAfterLast(':') in
+            setOf("buildReleaseUniversalJar", "collectReleaseDistributionJars", "stageReleaseDistributionModJars")
     }
+
+fun requestsUniversalReleaseBuild(build: Gradle): Boolean =
+    generateSequence(build) { it.parent }.any { requestsUniversalReleaseBuild(it.startParameter.taskNames) }
 
 fun validateNativeResources(
     actual: List<String>,
