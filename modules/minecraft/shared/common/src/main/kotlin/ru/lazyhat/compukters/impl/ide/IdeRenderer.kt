@@ -70,6 +70,7 @@ object IdeRenderer {
         pointerY: Int? = null,
         uiScale: IdeUiScale = IdeUiScale.AUTO,
         viewportSupported: Boolean = true,
+        projectFirstRow: Int = 0,
     ): IdeDrawModel {
         val output =
             Builder(
@@ -81,6 +82,7 @@ object IdeRenderer {
                 terminalVisible,
                 explorerDrag,
                 projectSwitcherOpen,
+                projectFirstRow,
             )
         output.base()
         if (!geometry.supported || !viewportSupported) {
@@ -121,6 +123,7 @@ object IdeRenderer {
         private val terminalVisible: Boolean,
         private val explorerDrag: IdeExplorerDragVisual?,
         private val projectSwitcherOpen: Boolean,
+        private val projectFirstRow: Int,
     ) {
         private val panels = mutableListOf<IdePanelDraw>()
         private val text = mutableListOf<IdeTextDraw>()
@@ -200,13 +203,27 @@ object IdeRenderer {
                 target(action, bounds, busy.isEmpty() || action == IdeHitAction.GitCancel, label)
                 ui(IdeTextKind.Toolbar, label, bounds.left + 4, bounds.top + 4, clip = bounds)
             }
-            val maximumRows = geometry.editor.height / UI_LINE_HEIGHT
-            page.projects.take(maximumRows).forEachIndexed { index, project ->
+            val maximumRows = ((geometry.editor.height - 12) / PROJECT_ROW_HEIGHT).coerceAtLeast(1)
+            val first = projectFirstRow.coerceIn(0, (page.projects.size - maximumRows).coerceAtLeast(0))
+            page.projects.drop(first).take(maximumRows).forEachIndexed { index, project ->
+                val top = geometry.editor.top + 6 + index * PROJECT_ROW_HEIGHT
+                projectRow(
+                    project,
+                    first + index,
+                    IdeRect(geometry.editor.left + 6, top, geometry.editor.right - 6, top + PROJECT_ROW_HEIGHT),
+                    busy.isEmpty(),
+                    false,
+                    Z_TARGET,
+                    Z_CONTENT,
+                )
+            }
+            if (page.projects.isEmpty()) {
                 ui(
                     IdeTextKind.StartProject,
-                    project.displayName,
+                    "Create a project or open an existing directory to remember it here.",
                     geometry.editor.left + 8,
-                    geometry.editor.top + 6 + index * UI_LINE_HEIGHT,
+                    geometry.editor.top + 8,
+                    clip = geometry.editor,
                 )
             }
             if (busy.isNotEmpty()) ui(IdeTextKind.Status, "Opening project…", geometry.status.left + 6, geometry.status.top + 5)
@@ -228,10 +245,11 @@ object IdeRenderer {
             busy: Set<IdeBusyOperation>,
             caretVisible: Boolean,
         ) {
-            val projectControl = projectControl(workspace.project.displayName)
-            target(IdeHitAction.ProjectSwitcher, projectControl, true, "Switch project", selected = projectSwitcherOpen)
+            val projectTitle = "Projects · ${workspace.project.displayName}"
+            val projectControl = projectControl(projectTitle)
+            target(IdeHitAction.ProjectSwitcher, projectControl, true, "Choose or manage projects", selected = projectSwitcherOpen)
             val projectLabelWidth = ((projectControl.width - 18) / 6).coerceAtLeast(1)
-            val projectLabel = workspace.project.displayName.take(projectLabelWidth)
+            val projectLabel = projectTitle.take(projectLabelWidth)
             ui(IdeTextKind.Header, "$projectLabel ▾", projectControl.left + 5, projectControl.top + 5)
             val active = workspace.activeFile?.value ?: "No file"
             val fileColors = IdeGitFileColors(workspace.git.status ?: workspace.git.result?.status)
@@ -290,15 +308,16 @@ object IdeRenderer {
             control: IdeRect,
         ) {
             val availableHeight = (geometry.status.top - geometry.header.bottom - 4).coerceAtLeast(PROJECT_ROW_HEIGHT)
-            val projectRows = ((availableHeight / PROJECT_ROW_HEIGHT) - 4).coerceAtLeast(0)
-            val visibleProjects = workspace.projects.take(projectRows)
+            val projectRows = ((availableHeight - 4 * PROJECT_ACTION_HEIGHT) / PROJECT_ROW_HEIGHT).coerceAtLeast(0)
+            val first = projectFirstRow.coerceIn(0, (workspace.projects.size - projectRows).coerceAtLeast(0))
+            val visibleProjects = workspace.projects.drop(first).take(projectRows)
             val width = minOf(PROJECT_SWITCHER_WIDTH, geometry.panel.right - control.left - 4).coerceAtLeast(control.width)
             val bounds =
                 IdeRect(
                     control.left,
                     geometry.header.bottom,
                     control.left + width,
-                    geometry.header.bottom + (visibleProjects.size + 4) * PROJECT_ROW_HEIGHT + 2,
+                    geometry.header.bottom + visibleProjects.size * PROJECT_ROW_HEIGHT + 4 * PROJECT_ACTION_HEIGHT + 2,
                 )
             panel(IdePanelKind.ProjectSwitcher, bounds, IdeColors.PANEL_ALT, Z_PROJECT_SWITCHER)
             scissors += IdeScissorDraw(IdeScissorKind.ProjectSwitcher, bounds, Z_PROJECT_SWITCHER)
@@ -310,17 +329,15 @@ object IdeRenderer {
                         bounds.right - 1,
                         bounds.top + 1 + (index + 1) * PROJECT_ROW_HEIGHT,
                     )
-                val selected = project.directoryName == workspace.project.directoryName
-                if (selected) fills += IdeFillDraw(IdeFillKind.Selection, row, IdeColors.SELECTION, Z_PROJECT_SWITCHER_SELECTION)
-                target(
-                    IdeHitAction.ProjectChoice,
+                projectRow(
+                    project,
+                    first + index,
                     row,
-                    !selected,
-                    selected = selected,
-                    z = Z_PROJECT_SWITCHER_TARGET,
-                    choiceIndex = index,
+                    true,
+                    project.directoryName == workspace.project.directoryName,
+                    Z_PROJECT_SWITCHER_TARGET,
+                    Z_PROJECT_SWITCHER_TEXT,
                 )
-                ui(IdeTextKind.ProjectChoice, project.displayName, row.left + 6, row.top + 5, clip = bounds, z = Z_PROJECT_SWITCHER_TEXT)
             }
             listOf(
                 IdeHitAction.CreateProject to "+ New project",
@@ -328,11 +345,60 @@ object IdeRenderer {
                 IdeHitAction.CloneProject to "Clone HTTPS repository",
                 IdeHitAction.GitAuthenticate to "HTTPS token · session only",
             ).forEachIndexed { index, (action, label) ->
-                val top = bounds.top + 1 + (visibleProjects.size + index) * PROJECT_ROW_HEIGHT
-                val row = IdeRect(bounds.left + 1, top, bounds.right - 1, top + PROJECT_ROW_HEIGHT)
+                val top = bounds.top + 1 + visibleProjects.size * PROJECT_ROW_HEIGHT + index * PROJECT_ACTION_HEIGHT
+                val row = IdeRect(bounds.left + 1, top, bounds.right - 1, top + PROJECT_ACTION_HEIGHT)
                 target(action, row, true, z = Z_PROJECT_SWITCHER_TARGET)
                 ui(IdeTextKind.ProjectAction, label, row.left + 6, row.top + 5, clip = bounds, z = Z_PROJECT_SWITCHER_TEXT)
             }
+        }
+
+        private fun projectRow(
+            project: ru.lazyhat.compukters.ide.client.state.IdeProjectSummary,
+            index: Int,
+            row: IdeRect,
+            enabled: Boolean,
+            selected: Boolean,
+            targetZ: Int,
+            textZ: Int,
+        ) {
+            val actionsWidth = if (project.external) 112 else 158
+            val open = IdeRect(row.left, row.top, row.right - actionsWidth - 6, row.bottom - 2)
+            target(
+                IdeHitAction.ProjectChoice,
+                open,
+                enabled && !selected,
+                project.path,
+                z = targetZ,
+                selected = selected,
+                choiceIndex = index,
+            )
+            ui(
+                IdeTextKind.ProjectChoice,
+                if (project.external) "External · ${project.displayName}" else "${project.displayName} · IDE folder",
+                open.left + 5,
+                open.top + 4,
+                clip = open,
+                z = textZ,
+            )
+            ui(IdeTextKind.ProjectChoice, project.path, open.left + 5, open.top + 19, IdeColors.MUTED, clip = open, z = textZ)
+            var left = open.right + 4
+            if (!project.external) {
+                val rename = IdeRect(left, row.top + 4, left + 60, row.bottom - 6)
+                target(IdeHitAction.RenameProjectFolder, rename, enabled, "Rename project folder", z = targetZ, choiceIndex = index)
+                ui(IdeTextKind.ProjectAction, "Rename…", rename.left + 4, rename.top + 5, clip = rename, z = textZ)
+                left = rename.right + 4
+            }
+            val remove = IdeRect(left, row.top + 4, row.right, row.bottom - 6)
+            val label = if (project.external) "Remove from list" else "Delete folder…"
+            target(
+                if (project.external) IdeHitAction.ForgetExternalProject else IdeHitAction.DeleteProjectFolder,
+                remove,
+                enabled,
+                if (project.external) "Remove from list; files are kept" else "Delete folder and all files after confirmation",
+                z = targetZ,
+                choiceIndex = index,
+            )
+            ui(IdeTextKind.ProjectAction, label, remove.left + 4, remove.top + 5, clip = remove, z = textZ)
         }
 
         private fun gitPanel(
@@ -2510,8 +2576,9 @@ object IdeRenderer {
     private const val TAB_WIDTH = 4
     private const val UI_LINE_HEIGHT = 12
     private const val PROJECT_CONTROL_MINIMUM_WIDTH = 80
-    private const val PROJECT_SWITCHER_WIDTH = 220
-    private const val PROJECT_ROW_HEIGHT = 18
+    private const val PROJECT_SWITCHER_WIDTH = 540
+    private const val PROJECT_ROW_HEIGHT = 40
+    private const val PROJECT_ACTION_HEIGHT = 18
     private const val TOOLBAR_ICON_CONTROL_WIDTH = 22
     private const val TOOLBAR_GROUP_GAP = 6
     private const val TOOLTIP_MARGIN = 4

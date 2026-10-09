@@ -26,7 +26,10 @@ Credentials remain in this IDE session and are forgotten on close. They are not 
 locks or remote URLs, and are not sent to the Minecraft server. Use an HTTPS URL without an embedded username/password,
 query or fragment. SSH transport is deferred.
 
-Click the project name in the header to switch projects, create a new one, open another directory or clone a repository.
+Click **Projects** in the header to choose a saved project, create a new one, open another directory or clone a repository.
+The start page and project menu show each folder path and distinguish IDE folders from **External** projects.
+Scroll the list to reach additional projects. An external path is remembered across IDE and Minecraft restarts, so
+you only need to enter it once.
 Modified buffers are saved before a project transition. A failed create/open/clone keeps the current project available.
 
 ## UI scale
@@ -50,6 +53,22 @@ addons = []
 Old `format = 1` manifests with `[modules]` are rejected with a validation error. Replace that section with
 `addons`; redstone and terminal support are built in and do not need addon requirements. Keep any optional addon
 requirements in `addons`, such as `["sable", "propulsion"]`. Editing the manifest preserves your source files.
+
+## Manage project folders
+
+Project rows have different actions depending on where their files live:
+
+- **Rename…** changes a folder inside the IDE projects directory. Enter a single new folder name; an existing folder
+  cannot be overwritten. The manifest name and file contents are unchanged, and the active project reopens with its
+  remembered file and editor position.
+- **Delete folder…** permanently removes an IDE-owned project folder and all its contents, including its Git repository,
+  after a confirmation showing the folder path.
+- **Remove from list** is the only removal action for an **External** project. Its confirmation explicitly says that
+  files will be kept. The external directory is never deleted or renamed by these controls; reopening its path adds it
+  to the list again.
+
+Save modified files before renaming or removing the active project. Management controls wait for outstanding IDE
+operations to finish.
 
 ## Rename a file or folder
 

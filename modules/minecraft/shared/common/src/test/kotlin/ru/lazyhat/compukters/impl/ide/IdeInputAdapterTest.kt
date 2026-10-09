@@ -49,6 +49,73 @@ import kotlin.test.assertTrue
 
 class IdeInputAdapterTest {
     @Test
+    fun `scrolling project list opens the displayed project using its absolute index`() {
+        val fixture = fixture()
+        val geometry = IdeRenderGeometry.compute(960, 540, 180, 120, true, true, IdeCodeFontProfile.DEFAULT)
+        val projects = (0 until 40).map { IdeProjectSummary("project$it", "Project $it", "/tmp/project$it") }
+        val state =
+            ru.lazyhat.compukters.ide.client.state.IdeViewState
+                .startPage(projects)
+        val first = IdeRenderer.extract(state, geometry)
+        val row = first.hitTargets.first { it.action == IdeHitAction.ProjectChoice }.bounds
+        assertTrue(
+            fixture.adapter.scroll(
+                row.left + 2.0,
+                row.top + 2.0,
+                0.0,
+                -1.0,
+                IdePointerContext(geometry, projects = projects, hitTargets = first.hitTargets),
+            ),
+        )
+        assertTrue(fixture.adapter.projectFirstRow > 0)
+        val scrolled = IdeRenderer.extract(state, geometry, projectFirstRow = fixture.adapter.projectFirstRow)
+        val selected = scrolled.hitTargets.first { it.action == IdeHitAction.ProjectChoice }
+        assertTrue(
+            fixture.adapter.pointerClicked(
+                selected.bounds.left + 2.0,
+                selected.bounds.top + 2.0,
+                0,
+                IdePointerContext(geometry, projects = projects, hitTargets = scrolled.hitTargets),
+            ),
+        )
+        assertEquals(
+            projects[selected.choiceIndex!!].directoryName,
+            fixture.commands
+                .filterIsInstance<IdeCommand.OpenProject>()
+                .single()
+                .directoryName,
+        )
+    }
+
+    @Test
+    fun `external projects cannot be routed through folder deletion even with a stale target`() {
+        val fixture = fixture()
+        val geometry = IdeRenderGeometry.compute(960, 540, 180, 120, true, true, IdeCodeFontProfile.DEFAULT)
+        val external = IdeProjectSummary(".registered-outside", "Outside", "/tmp/outside", external = true)
+
+        fun target(action: IdeHitAction) =
+            IdeHitTarget(action, IdeRect(20, 20, 180, 38), true, null, IdeFocusGroup.Page, 70, choiceIndex = 0)
+        assertFalse(
+            fixture.adapter.pointerClicked(
+                30.0,
+                30.0,
+                0,
+                IdePointerContext(geometry, projects = listOf(external), hitTargets = listOf(target(IdeHitAction.DeleteProjectFolder))),
+            ),
+        )
+        assertTrue(fixture.commands.isEmpty())
+        assertTrue(
+            fixture.adapter.pointerClicked(
+                30.0,
+                30.0,
+                0,
+                IdePointerContext(geometry, projects = listOf(external), hitTargets = listOf(target(IdeHitAction.ForgetExternalProject))),
+            ),
+        )
+        assertEquals(IdeCommand.RequestRemoveProject(external.directoryName), fixture.commands.first())
+    }
+
+    @Test
     fun `bottom history scrolling does not scroll editor or Commit`() {
         val fixture = fixture()
         val geometry = IdeRenderGeometry.compute(960, 540, 180, 120, true, true, IdeCodeFontProfile.DEFAULT)

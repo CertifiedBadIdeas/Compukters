@@ -26,6 +26,7 @@ import ru.lazyhat.compukters.ide.git.GitCancellation
 import ru.lazyhat.compukters.ide.git.GitCredentials
 import ru.lazyhat.compukters.ide.git.GitOperation
 import ru.lazyhat.compukters.ide.project.ProjectCatalog
+import ru.lazyhat.compukters.ide.project.ProjectDescriptor
 import ru.lazyhat.compukters.ide.project.ProjectHandle
 import ru.lazyhat.compukters.ide.project.ProjectLimits
 import ru.lazyhat.compukters.ide.project.document.ProjectDocumentException
@@ -82,6 +83,20 @@ class DefaultIdeWorkspace internal constructor(
     )
 
     override fun projects() = submit("projects", catalog::projects)
+
+    override fun renameProject(
+        project: ProjectDescriptor,
+        name: String,
+    ) = submit("renameProject") {
+        catalog.rename(project, name)
+        catalog.projects()
+    }
+
+    override fun removeProject(project: ProjectDescriptor) =
+        submit("removeProject") {
+            catalog.remove(project)
+            catalog.projects()
+        }
 
     override fun createProject(name: String) = submit("createProject") { catalog.create(name) }
 

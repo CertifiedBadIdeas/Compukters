@@ -33,6 +33,8 @@ import java.util.Collections
 data class IdeProjectSummary(
     val directoryName: String,
     val displayName: String,
+    val path: String = "",
+    val external: Boolean = false,
 ) {
     init {
         require(directoryName.isNotBlank()) { "project directory name must not be blank" }

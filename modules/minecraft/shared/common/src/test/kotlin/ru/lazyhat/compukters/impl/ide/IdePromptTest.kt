@@ -18,8 +18,23 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 class IdePromptTest {
+    @Test
+    fun `project folder rename accepts a single name and preserves the catalog identity`() {
+        val prompt = IdePromptController()
+        prompt.open(IdePromptKind.RenameProject("old"), "new")
+        assertEquals(
+            ru.lazyhat.compukters.ide.client.state.IdeCommand
+                .RenameProject("old", "new"),
+            prompt.confirm(),
+        )
+        prompt.open(IdePromptKind.RenameProject("old"), "../escape")
+        assertEquals(null, prompt.confirm())
+        assertTrue(prompt.state?.error != null)
+    }
+
     @Test
     fun `clone and commit forms emit commands only after all fields are admitted`() {
         val prompt = IdePromptController()

@@ -98,6 +98,79 @@ import kotlin.test.assertTrue
 
 class IdeClientControllerTest {
     @Test
+    fun `external project removal explicitly confirms forgetting and preserves files`() {
+        val external = ProjectCatalog.open(createTempDirectory("compukters-external-ui-")).create("outside")
+        val fixture = ControllerFixture()
+        fixture.startAndTick()
+        fixture.controller.dispatch(IdeCommand.ImportProject(external.handle.canonicalPath.toString()))
+        repeat(4) { fixture.controller.tick() }
+        val summary = fixture.workspaceView().project
+        assertTrue(summary.external)
+        assertEquals(external.handle.canonicalPath.toString(), summary.path)
+        fixture.controller.dispatch(IdeCommand.RequestRemoveProject(summary.directoryName))
+        val confirmation = assertIs<IdeDialogState.Confirmation>(fixture.controller.viewState().dialog)
+        assertEquals("Forget external project", confirmation.title)
+        assertTrue(confirmation.message.contains("Files will be kept"))
+        fixture.controller.dispatch(IdeCommand.ConfirmDialog(confirmation.actionId))
+        repeat(4) { fixture.controller.tick() }
+        assertTrue(external.handle.isValid())
+        assertTrue(
+            external.handle.canonicalPath
+                .resolve("src/main.kt")
+                .toFile()
+                .isFile,
+        )
+        assertTrue(assertIs<IdePageState.Start>(fixture.controller.viewState().page).projects.none { it.external })
+        fixture.controller.close()
+    }
+
+    @Test
+    fun `active project folder rename refreshes handles and deletion requires confirmation`() {
+        val fixture = ControllerFixture(preferences = preferences("demo", "src/main.kt"))
+        fixture.startAndTick()
+        fixture.controller.dispatch(IdeCommand.Edit(IdeEditorInput.SetCaret(2, false)))
+        fixture.controller.dispatch(IdeCommand.RenameProject("demo", "renamed"))
+        repeat(4) { fixture.controller.tick() }
+        assertEquals("renamed", fixture.workspaceView().project.directoryName)
+        assertEquals("renamed", fixture.preferences.current()?.lastProjectDirectory)
+        assertEquals(2, fixture.textEditor().caretUtf16)
+        assertFalse(
+            fixture.workspace.descriptor.handle
+                .isValid(),
+        )
+        fixture.controller.dispatch(IdeCommand.RequestRemoveProject("renamed"))
+        val first = assertIs<IdeDialogState.Confirmation>(fixture.controller.viewState().dialog)
+        fixture.controller.dispatch(IdeCommand.ConfirmDialog(first.actionId + 1))
+        assertEquals(first, fixture.controller.viewState().dialog)
+        fixture.controller.dispatch(IdeCommand.CancelDialog)
+        assertEquals("renamed", fixture.workspaceView().project.directoryName)
+        fixture.controller.dispatch(IdeCommand.RequestRemoveProject("renamed"))
+        val confirmed = assertIs<IdeDialogState.Confirmation>(fixture.controller.viewState().dialog)
+        fixture.controller.dispatch(IdeCommand.ConfirmDialog(confirmed.actionId))
+        repeat(4) { fixture.controller.tick() }
+        assertTrue(assertIs<IdePageState.Start>(fixture.controller.viewState().page).projects.isEmpty())
+        assertEquals(null, fixture.preferences.current()?.lastProjectDirectory)
+        fixture.controller.close()
+    }
+
+    @Test
+    fun `dirty active buffers prevent project rename and removal`() {
+        val fixture = ControllerFixture(preferences = preferences("demo", "src/main.kt"))
+        fixture.startAndTick()
+        fixture.controller.dispatch(IdeCommand.Edit(IdeEditorInput.Type("unsaved")))
+        fixture.controller.dispatch(IdeCommand.RenameProject("demo", "renamed"))
+        fixture.controller.dispatch(IdeCommand.RequestRemoveProject("demo"))
+        assertTrue(
+            fixture.workspace.descriptor.handle
+                .isValid(),
+        )
+        assertEquals(null, fixture.controller.viewState().dialog)
+        assertEquals("demo", fixture.workspaceView().project.directoryName)
+        assertTrue(fixture.textEditor().dirty)
+        fixture.controller.close()
+    }
+
+    @Test
     fun `Git inspection is read only throttled and rejects old buffer and project results`() {
         val fixture = ControllerFixture(preferences = preferences("demo", "src/main.kt"), additionalProject = true)
         fixture.workspace.inspectEnabled = true
@@ -1844,6 +1917,28 @@ internal class ControlledWorkspace(
     }
 
     override fun projects(): CompletableFuture<List<ProjectDescriptor>> = completed(listOfNotNull(descriptor, additionalDescriptor))
+
+    override fun renameProject(
+        project: ProjectDescriptor,
+        name: String,
+    ) = completeCall {
+        ProjectCatalog.open(root).rename(project, name)
+        ProjectCatalog.open(root).projects()
+    }
+
+    override fun removeProject(project: ProjectDescriptor) =
+        completeCall {
+            ProjectCatalog.open(root).remove(project)
+            ProjectCatalog.open(root).projects()
+        }
+
+    override fun importProject(root: String) =
+        completeCall {
+            ProjectCatalog.open(this.root).register(
+                java.nio.file.Path
+                    .of(root),
+            )
+        }
 
     override fun createProject(name: String): CompletableFuture<ProjectDescriptor> = completeCall { ProjectCatalog.open(root).create(name) }
 

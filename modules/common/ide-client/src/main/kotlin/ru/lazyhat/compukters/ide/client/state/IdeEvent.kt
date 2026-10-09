@@ -124,6 +124,15 @@ sealed interface IdeEvent {
         val failure: String?,
     ) : IdeEvent
 
+    data class ProjectsManaged(
+        val generation: Long,
+        val previousDirectory: String,
+        val renamedDirectory: String?,
+        val projects: List<ProjectDescriptor>,
+        val activeDirectory: String?,
+        val reopenActive: Boolean,
+    ) : IdeEvent
+
     data class ProjectCatalogLoaded(
         val generation: Long,
         val projects: List<ProjectDescriptor>,
@@ -237,6 +246,8 @@ interface ReplaceableIdeEvent {
 internal fun IdeEvent.copyForQueue(): IdeEvent =
     when (this) {
         is IdeEvent.RenameLoaded -> copy(files = Collections.unmodifiableMap(files.toMap()))
+
+        is IdeEvent.ProjectsManaged -> copy(projects = Collections.unmodifiableList(projects.toList()))
 
         is IdeEvent.ProjectCatalogLoaded -> copy(projects = Collections.unmodifiableList(projects.toList()))
 
