@@ -94,6 +94,17 @@ import kotlin.test.assertTrue
 
 class IdeRendererStateTest {
     @Test
+    fun `opening page shows only a neutral background without project actions`() {
+        val state = IdeViewState.startPage(emptyList()).copy(page = IdePageState.Opening)
+        val model = IdeRenderer.extract(state, geometry())
+        assertTrue(model.panels.isEmpty())
+        assertTrue(model.text.isEmpty())
+        assertTrue(model.icons.isEmpty())
+        assertTrue(model.hitTargets.isEmpty())
+        assertEquals(listOf(IdeFillKind.Background), model.fills.map { it.kind })
+    }
+
+    @Test
     fun `external projects expose remove from list but never folder deletion or rename`() {
         val projects =
             listOf(

@@ -183,6 +183,9 @@ listed in [Kotlin support](developers/kotlin-support.md) and [standard library s
 
 ### In-game IDE
 
+- Reopening the IDE restores the remembered project over a neutral background, without flashing the project
+  selection screen; unavailable projects reveal the catalog for recovery.
+
 - Completion excludes ordinary string content, character literals and comments, while preserving suggestions
   inside shorthand and expression interpolation in quoted and raw strings.
 
