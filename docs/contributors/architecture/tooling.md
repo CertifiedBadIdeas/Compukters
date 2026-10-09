@@ -61,7 +61,9 @@ The client IDE has a separate analysis path. `ide-analysis-client` owns the boun
 cancellation, and worker lifetime without depending on K2. `ide-analysis-k2` owns the isolated incremental K2
 workspace and answers diagnostics, completion, symbol, reference, expression, and semantic-token queries. Compilation
 and analysis use the same resolved platform bundle and source-snapshot identities, but have separate worker sessions
-and result contracts.
+and result contracts. The worker queue retires completed requests atomically with its cancellation-acknowledgement
+decision. A cancellation accepted before retirement receives an acknowledgement; a later cancellation is acknowledged
+by the server as completed work. Response callbacks run outside the queue lock.
 
 Analysis protocol v15 adds a peripheral-provider role to semantic tokens and completion kinds. The worker identifies providers through inheritance of `PeripheralProvider`, including companion values; type references retain their ordinary class role. The editor renders provider values in the dedicated palette color with a `P` completion badge.
 

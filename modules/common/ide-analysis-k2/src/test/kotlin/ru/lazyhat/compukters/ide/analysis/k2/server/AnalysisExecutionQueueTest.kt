@@ -22,6 +22,7 @@ import ru.lazyhat.compukters.compiler.worker.protocol.RequestId
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.test.Test
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
@@ -47,6 +48,36 @@ class AnalysisExecutionQueueTest {
             assertTrue(queue.cancel(RequestId.of(1uL)))
 
             cancelled.get(5, TimeUnit.SECONDS)
+        }
+    }
+
+    @Test
+    fun `cancellation racing completion always acknowledges accepted cancellation`() {
+        AnalysisExecutionQueue(maximumQueued = 2).use { queue ->
+            repeat(20_000) { index ->
+                val requestId = RequestId.of((index * 2 + 1).toULong())
+                val started = CountDownLatch(1)
+                val release = CountDownLatch(1)
+                val drained = CompletableFuture<Unit>()
+                val acknowledged = AtomicBoolean()
+                assertTrue(
+                    queue.submit(
+                        requestId,
+                        task = {
+                            started.countDown()
+                            release.await(5, TimeUnit.SECONDS)
+                        },
+                        onCancelled = { acknowledged.set(true) },
+                    ),
+                )
+                assertTrue(queue.submit(RequestId.of((index * 2 + 2).toULong()), { drained.complete(Unit) }, {}))
+                assertTrue(started.await(5, TimeUnit.SECONDS))
+                release.countDown()
+                repeat(index % 500) { Thread.onSpinWait() }
+                val accepted = queue.cancel(requestId)
+                drained.get(5, TimeUnit.SECONDS)
+                assertTrue(!accepted || acknowledged.get(), "accepted cancellation lost its acknowledgement at iteration $index")
+            }
         }
     }
 

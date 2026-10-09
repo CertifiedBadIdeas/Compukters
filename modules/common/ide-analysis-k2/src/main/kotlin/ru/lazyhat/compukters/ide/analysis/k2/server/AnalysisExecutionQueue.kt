@@ -128,11 +128,15 @@ internal class AnalysisExecutionQueue(
             } catch (throwable: Throwable) {
                 if (!work.cancellation.isCancelled) runCatching { work.onFailure(throwable) }
             } finally {
-                if (work.cancellation.isCancelled) runCatching(work.onCancelled)
-                synchronized(lock) {
-                    if (active === work) active = queued.removeFirstOrNull()
-                    if (active == null) return
-                }
+                // Retire work atomically with the acknowledgement decision so an accepted cancellation cannot be lost.
+                val (cancelled, hasNext) =
+                    synchronized(lock) {
+                        val cancelled = work.cancellation.isCancelled
+                        if (active === work) active = queued.removeFirstOrNull()
+                        cancelled to (active != null)
+                    }
+                if (cancelled) runCatching(work.onCancelled)
+                if (!hasNext) return
             }
         }
     }

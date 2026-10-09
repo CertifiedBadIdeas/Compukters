@@ -176,6 +176,9 @@ listed in [Kotlin support](developers/kotlin-support.md) and [standard library s
 
 ### In-game IDE
 
+- Analysis cancellation remains acknowledged when a request finishes concurrently, keeping the K2 worker warm
+  and subsequent edits incremental instead of waiting for a timeout and reopening the project.
+
 - The compiler worker stays warm for two minutes after closing the IDE, reducing repeated compilation delays when
   editing and testing programs between IDE visits. Closing an active build still cancels it; idle timeout and game
   shutdown release the worker.
