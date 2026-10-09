@@ -26,7 +26,7 @@ dependencies = [
 
 [[package]]
 name = "compukter-vm"
-version = "0.20.0"
+version = "0.21.3"
 dependencies = [
  "libm",
  "ryu",
