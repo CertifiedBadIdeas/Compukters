@@ -44,6 +44,9 @@ import java.nio.file.Path
 import java.nio.file.StandardOpenOption
 import java.security.MessageDigest
 import java.time.Duration
+import java.util.Properties
+import org.gradle.api.Project
+import org.gradle.api.provider.Provider
 import kotlin.io.path.name
 
 data class RuntimeBundleContract(
@@ -73,10 +76,17 @@ enum class RuntimeBundleDownloadResult {
     DOWNLOADED,
 }
 
-fun currentRuntimeBundleContract(vmCommit: String): RuntimeBundleContract =
-    RuntimeBundleContract(
-        runtimeVersion = "0.20.0",
-        ffiAbi = 20,
+private const val SUPPORTED_RUNTIME_ABI = 21
+
+fun currentRuntimeBundleContract(runtimeVersion: String, vmCommit: String): RuntimeBundleContract {
+    val version = Regex("0\\.([1-9][0-9]*)\\.(0|[1-9][0-9]*)").matchEntire(runtimeVersion)
+    require(version?.groupValues?.get(1)?.toIntOrNull() == SUPPORTED_RUNTIME_ABI) {
+        "unsupported Runtime ABI; expected $SUPPORTED_RUNTIME_ABI"
+    }
+    require(Regex("[0-9a-f]{40}").matches(vmCommit)) { "runtime release commit is not canonical" }
+    return RuntimeBundleContract(
+        runtimeVersion = runtimeVersion,
+        ffiAbi = SUPPORTED_RUNTIME_ABI,
         vmCommit = vmCommit,
         formats =
             sortedMapOf(
@@ -87,6 +97,21 @@ fun currentRuntimeBundleContract(vmCommit: String): RuntimeBundleContract =
                 "resource-snapshot" to 2,
             ),
     )
+}
+
+fun parseRuntimeBundleContract(text: String): RuntimeBundleContract {
+    val properties = Properties().apply { load(text.reader()) }
+    require(properties.stringPropertyNames() == setOf("version", "vmCommit")) { "invalid runtime release descriptor" }
+    return currentRuntimeBundleContract(properties.getProperty("version"), properties.getProperty("vmCommit"))
+}
+
+fun Project.runtimeBundleContractProvider(): Provider<RuntimeBundleContract> {
+    val releaseFile = rootProject.layout.file(
+        providers.gradleProperty("compukterRuntimeReleaseFile")
+            .orElse("config/runtime-release.properties").map(rootProject::file),
+    )
+    return providers.fileContents(releaseFile).asText.map(::parseRuntimeBundleContract)
+}
 
 fun runtimeBundleAssetNames(contract: RuntimeBundleContract): List<String> {
     require(Regex("""0\.(0|[1-9]\d*)\.(0|[1-9]\d*)""").matches(contract.runtimeVersion)) {
@@ -233,6 +258,13 @@ object RuntimeBundleSupport {
             Files.createDirectories(output.parent)
             Files.write(output, native.bytes, StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE)
         }
+        val identity = stagingDirectory.resolve("META-INF/compukters/runtime.properties")
+        Files.createDirectories(identity.parent)
+        Files.writeString(
+            identity,
+            "version=${contract.runtimeVersion}\nvmCommit=${contract.vmCommit}\nffiAbi=${contract.ffiAbi}\n",
+            StandardOpenOption.CREATE_NEW,
+        )
         return selected.map(ValidatedNative::result)
     }
 

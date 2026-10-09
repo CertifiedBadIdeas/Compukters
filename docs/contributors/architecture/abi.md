@@ -46,6 +46,11 @@ checkpoint restore in both directions, filesystem state, executable admission an
 contract or codec changes require an ABI increment; a revision must preserve those contracts. The earlier
 unpublished development identity based on the full version is rejected without a fallback. CI exchanges a
 full-computer checkpoint between two real builds of adjacent revisions in both directions.
+FFM/JNI admission checks native ABI 21 without a package-revision constraint. Release selection is
+separate: `config/runtime-release.properties` selects one compatible published revision and its exact
+release commit, independently of the development VM submodule. Alternate descriptors may select any
+`0.21.x`; packaging still verifies the selected archive identity, formats and hashes. Both mod archives
+and the release inventory record the actual selected native component for future external delivery.
 Production version preparation queries the latest complete stable GitHub Release. Revision and ABI requests
 are idempotent within a release cycle; an ABI request updates the native constant and version together.
 After successful publication the workflow prepares the next revision on `main`. An explicit ABI request
@@ -133,9 +138,9 @@ payload and directory costs decrease the physical artifact size.
 
 Compact debug paths retain container format 3.0 and semantic Runtime ABI 1.15; the current native C ABI is 21 for checkpoint transport. New readers accept
 legacy artifacts; readers without DEBUG_PATHS support reject its critical section. This is a reader capability
-requirement independent of semantic ABI. Published Runtime 0.20.0 bundles predate this support: compact output
-requires a Runtime rebuilt from the updated source, and a future published bundle/pin update before packaging
-with released natives. This source change alone does not establish production-bundle or release compatibility.
+requirement independent of semantic ABI. The mod pins Runtime 0.21.3 with native C ABI 21, which includes
+this reader support. Release packaging admits the published bundles only when their version, ABI, formats,
+checksums and VM commit match the pin; a source-built native alone does not establish release compatibility.
 
 Native C ABI 17 appends a length-prefixed, bounded UTF-8 trace to terminal outcome tags 2 (OOM), 5 (Guest trap), and
 6 (VM fault), after their existing scalar payload. Empty text means unavailable diagnostic text. FFM and JNI validate
@@ -177,7 +182,8 @@ the native verifier streams the original indexed envelope, offsets, padding and 
 existing module hash. Other semantic sections retain raw-payload hashing; the range marker is excluded. Imports,
 precompiled module identities and source diagnostics therefore keep their hashes. Container 3.0, semantic
 Runtime ABI 1.15 remain unchanged by root ranges; the current native C ABI is 21 for checkpoint transport. Readers predating the marker reject it as unknown critical.
-Updated source-built natives are required; published Runtime 0.20.0 bundles and their pins do not contain this capability.
+The mod's Runtime 0.21.3 pin includes this reader capability; the release gate validates the published bundles
+against their exact pinned VM commit before packaging.
 
 
 ## Runtime ABI 1.3

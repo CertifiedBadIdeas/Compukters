@@ -19,6 +19,11 @@ listed in [Kotlin support](developers/kotlin-support.md) and [standard library s
 
 ### Release delivery
 
+- Autonomous mod archives use Runtime 0.21.3 / native ABI 21, including checkpoint transport and compact
+  debug-path and safepoint-root readers, with exact published bundle and VM revision checks.
+- Native compatibility depends on ABI, permitting any `0.21.x` Runtime independently of the development
+  VM source revision. Release selection and checksums remain explicit; mod archives and inventory record
+  the actual selected native component.
 - Successful Runtime publication prepares the next development revision on `main`. Version preparation uses
   the latest complete published release; incompatible changes explicitly raise the version and native ABI
   together once, and further bump requests keep that candidate until publication.
