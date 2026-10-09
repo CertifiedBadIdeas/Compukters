@@ -71,6 +71,34 @@ import kotlin.test.assertTrue
 
 class IdeAnalysisFlowTest {
     @Test
+    fun `polling manifest changes disables and restores analysis without reopening the project`() {
+        val requests = FlowAnalysisRequests()
+        val fixture =
+            ControllerFixture(preferences("demo", "src/main.kt"), analysisCoordinatorFactory = { workspace ->
+                coordinator(workspace, requests)
+            })
+        fixture.startAndTick()
+        assertIs<IdeAnalysisState.Active>(fixture.textEditor().analysis)
+        val manifest =
+            fixture.workspace.descriptor.handle.canonicalPath
+                .resolve("compukter.toml")
+                .toFile()
+        val valid = manifest.readBytes()
+        val before = fixture.workspace.buildInputRequests
+        manifest.writeText("format = 99\nname = \"demo\"\n")
+        fixture.controller.dispatch(IdeCommand.Poll)
+        fixture.controller.tick()
+        assertIs<IdeAnalysisState.Unavailable>(fixture.textEditor().analysis)
+        assertTrue(fixture.workspace.buildInputRequests > before)
+
+        manifest.writeBytes(valid)
+        fixture.controller.dispatch(IdeCommand.Poll)
+        fixture.controller.tick()
+        assertIs<IdeAnalysisState.Active>(fixture.textEditor().analysis)
+        fixture.controller.close()
+    }
+
+    @Test
     fun `parameter info follows the caret rejects stale results and dismisses explicitly`() {
         val requests = FlowAnalysisRequests()
         val fixture =

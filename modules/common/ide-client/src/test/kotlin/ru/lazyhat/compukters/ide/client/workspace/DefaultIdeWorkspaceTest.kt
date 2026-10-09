@@ -59,7 +59,7 @@ class DefaultIdeWorkspaceTest {
     }
 
     @Test
-    fun `listing projects does not parse unopened manifests and opening validates only the selected project`() {
+    fun `projects with invalid manifests open for editing and can be repaired`() {
         val root = createTempDirectory("compukters-workspace-manifest-")
         val catalog = ProjectCatalog.open(root)
         val healthy = catalog.create("healthy")
@@ -79,8 +79,22 @@ class DefaultIdeWorkspaceTest {
                     .isNotEmpty(),
             )
             val selectedBroken = projects.single { it.directoryName == broken.directoryName }
-            val failure = failure(workspace.tree(selectedBroken.handle))
-            assertTrue(failure.message.orEmpty().contains("invalid project manifest: broken"))
+            assertTrue(
+                workspace
+                    .tree(selectedBroken.handle)
+                    .get(5, TimeUnit.SECONDS)
+                    .flatten()
+                    .isNotEmpty(),
+            )
+            val path = ProjectPath.file("compukter.toml")
+            val opened = assertIs<ProjectFileOpenResult.Text>(workspace.open(selectedBroken.handle, path).get(5, TimeUnit.SECONDS))
+            val repaired = "format = 3\nname = \"broken\"\naddons = []\n"
+            val result =
+                workspace
+                    .save(IdeSaveRequest(selectedBroken.handle, path, opened.snapshot.revision, repaired))
+                    .get(5, TimeUnit.SECONDS)
+            assertIs<ru.lazyhat.compukters.ide.project.document.DocumentSaveResult.Saved>(result)
+            assertEquals("broken", catalog.readManifest(selectedBroken.handle).name)
             assertEquals(2, workspace.projects().get(5, TimeUnit.SECONDS).size)
         }
         root.toFile().deleteRecursively()

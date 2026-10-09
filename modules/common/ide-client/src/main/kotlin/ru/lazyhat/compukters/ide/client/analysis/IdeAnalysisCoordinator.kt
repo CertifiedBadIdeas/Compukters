@@ -846,6 +846,7 @@ class IdeAnalysisCoordinator(
             }
         val snapshot =
             try {
+                ProjectManifestCodec.decode(input.manifestBytes.toString(Charsets.UTF_8))
                 overlaySnapshot(snapshotFactory.create(input, current.path, current.text, target), current).also {
                     validateSnapshot(it, current)
                 }

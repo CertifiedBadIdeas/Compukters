@@ -105,6 +105,7 @@ class ProjectCatalogTest {
                     .createDirectory()
                     .resolve("config")
                     .writeText("partial")
+                error("clone interrupted")
             }
         }
         assertTrue(root.listDirectoryEntries().isEmpty())
@@ -120,6 +121,21 @@ class ProjectCatalogTest {
         assertEquals("imported", catalog.readManifest(imported.handle).name)
         assertEquals(root.resolve("clone"), imported.handle.canonicalPath)
         assertEquals(listOf("clone"), root.listDirectoryEntries().map { it.fileName.toString() })
+    }
+
+    @Test
+    fun `imports and external registration admit editable roots with invalid manifests`() {
+        val catalog = ProjectCatalog.open(createTempDirectory("compukters-invalid-import-"))
+        val imported =
+            catalog.importProject("repair") { destination ->
+                destination.resolve("compukter.toml").writeText("format = 99\nname = \"repair\"\n")
+            }
+        assertTrue(imported.handle.isValid())
+        assertFailsWith<ProjectCatalogException> { catalog.readManifest(imported.handle) }
+        val externalCatalog = ProjectCatalog.open(createTempDirectory("compukters-invalid-register-"))
+        val registered = externalCatalog.register(imported.handle.canonicalPath)
+        assertTrue(registered.external)
+        assertEquals(imported.handle.canonicalPath, registered.handle.canonicalPath)
     }
 
     @Test
@@ -146,10 +162,13 @@ class ProjectCatalogTest {
     }
 
     @Test
-    fun `invalid registration publishes nothing and owned project registration deduplicates`() {
+    fun `external folders without a manifest register and owned project registration deduplicates`() {
         val root = createTempDirectory("compukters-catalog-invalid-")
         val catalog = ProjectCatalog.open(root)
-        assertFailsWith<Exception> { catalog.register(createTempDirectory("compukters-no-manifest-")) }
+        val missing = catalog.register(createTempDirectory("compukters-no-manifest-"))
+        assertTrue(missing.external)
+        assertTrue(missing.handle.isValid())
+        catalog.remove(missing)
         assertTrue(root.listDirectoryEntries().isEmpty())
         val owned = catalog.create("owned")
         assertEquals(owned.directoryName, catalog.register(owned.handle.canonicalPath).directoryName)

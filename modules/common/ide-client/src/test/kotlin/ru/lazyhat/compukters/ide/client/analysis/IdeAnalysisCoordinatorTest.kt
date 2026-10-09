@@ -79,6 +79,34 @@ import kotlin.test.assertTrue
 
 class IdeAnalysisCoordinatorTest {
     @Test
+    fun `invalid manifest prevents analysis requests and repair restores analysis`() {
+        val fixture = fixture("fun main() {}")
+        val manifest = fixture.project.canonicalPath.resolve("compukter.toml")
+        val valid = manifest.readBytes()
+        manifest.toFile().writeText("format = 99\nname = \"demo\"\n")
+
+        fixture.coordinator.open(fixture.project, path(), fixture.text, 0)
+        assertTrue(assertIs<IdeAnalysisState.Unavailable>(fixture.coordinator.state()).detail.contains("unsupported manifest format"))
+        fixture.coordinator.manualCompletion()
+        assertTrue(fixture.requests.snapshots.isEmpty())
+        assertTrue(fixture.requests.manualOffsets.isEmpty())
+
+        manifest.toFile().writeBytes(valid)
+        fixture.coordinator.reload()
+        assertIs<IdeAnalysisState.Active>(fixture.coordinator.state())
+        assertEquals(1, fixture.requests.snapshots.size)
+        val completionsAfterRepair = fixture.requests.manualOffsets.toList()
+
+        manifest.toFile().writeText("format = 99\nname = \"demo\"\n")
+        fixture.coordinator.reload()
+        assertIs<IdeAnalysisState.Unavailable>(fixture.coordinator.state())
+        fixture.coordinator.manualCompletion()
+        assertEquals(1, fixture.requests.snapshots.size)
+        assertEquals(completionsAfterRepair, fixture.requests.manualOffsets)
+        fixture.coordinator.close()
+    }
+
+    @Test
     fun `autocomplete defers diagnostics retains untouched problems and resumes after empty result or dismissal`() {
         val fixture = AnalysisFixture("bad; ca")
         val initial = fixture.open()

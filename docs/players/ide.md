@@ -17,8 +17,8 @@ target; the project and its Git repository live on your own Minecraft client. Th
 **Open directory** accepts the absolute path of an existing Compukters project and registers it in place. It does not
 copy your files. Opening the same directory again reuses its catalog entry.
 
-**Clone HTTPS** asks for the repository URL and then a local project name. The repository must contain a valid
-`compukter.toml` at its root and admitted project content. The IDE clones into a temporary directory and publishes the
+**Clone HTTPS** asks for the repository URL and then a local project name. The repository content must pass the project filesystem checks. Its `compukter.toml` may be missing or invalid
+so it can be repaired in the editor. The IDE clones into a temporary directory and publishes the
 project only after validation succeeds; a failed or cancelled clone does not appear in the project list.
 
 For a private clone, use **HTTPS token** first. Enter your Git hosting username, then the token in the masked field.
@@ -32,7 +32,9 @@ With a project open, click **Projects** in the header to choose or manage projec
 The start page and project menu show each folder path and distinguish IDE folders from **External** projects.
 Scroll the list to reach additional projects. An external path is remembered across IDE and Minecraft restarts, so
 you only need to enter it once. Listing saved folders does not read their manifests; a missing or invalid
-`compukter.toml` is reported when that project is opened and does not hide other projects.
+`compukter.toml` does not hide other projects or prevent opening files. Such a project stays editable, with analysis
+and compilation unavailable until its manifest is repaired and saved. Analysis also requires a resolved `compukter.lock`.
+Saved changes to the manifest and lock refresh analysis without reopening the project.
 Modified buffers are saved before a project transition. A failed create/open/clone keeps the current project available.
 
 ## UI scale

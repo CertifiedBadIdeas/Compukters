@@ -166,7 +166,6 @@ class ProjectCatalog private constructor(
         val identity = SecureProjectFiles.identity(projectRoot)
         val id = "$REGISTRATION_PREFIX${UUID.randomUUID()}"
         val descriptor = ProjectDescriptor(id, ProjectHandle(id, identity))
-        readManifest(descriptor.handle)
         projects().firstOrNull { it.handle.identity.canonicalPath == identity.canonicalPath }?.let {
             check(it.handle.identity == identity) { "project changed during registration" }
             return it
@@ -196,7 +195,6 @@ class ProjectCatalog private constructor(
         try {
             materialize(stagingPath)
             val staged = describe(stagingName, stagingPath)
-            readManifest(staged.handle)
             ru.lazyhat.compukters.ide.project.tree
                 .ProjectTreeStore(staged.handle, limits)
                 .scan()
