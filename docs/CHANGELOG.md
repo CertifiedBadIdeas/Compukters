@@ -207,8 +207,9 @@ listed in [Kotlin support](developers/kotlin-support.md) and [standard library s
 - Text-entry dialogs show a labeled input field with a contrasting background, focus border and visible caret.
   Long values scroll to keep the end of the input visible; authentication tokens remain masked.
 - File switches preserve caret, viewport and undo history in a bounded document cache. The editor highlights the
-  current line and uses contrasting panels, draggable dividers and popup shadows. The IDE uses a fixed scale of 3
-  at every window size, independently of the Minecraft GUI scale.
+  current line and uses contrasting panels, draggable dividers and popup shadows. The header offers a saved Auto / 2 / 3 scale choice,
+  independently of the Minecraft GUI scale. Auto uses 2 below QHD (including 1920×1080) and 3 at QHD and above.
+  Scale controls remain available when the selected scale is too large for the window.
 - Kotlin lexical highlighting colors the `value` modifier, function calls, qualified/use-site annotations and Unicode
   escapes; numeric literals remain separate from range operators and member access while semantic colors take precedence.
 - `Alt+F7` opens semantic Find Usages with navigable context. Clickable problems, gutter markers, status counts

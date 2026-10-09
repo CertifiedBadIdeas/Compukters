@@ -29,6 +29,14 @@ query or fragment. SSH transport is deferred.
 Click the project name in the header to switch projects, create a new one, open another directory or clone a repository.
 Modified buffers are saved before a project transition. A failed create/open/clone keeps the current project available.
 
+## UI scale
+
+Choose **Auto**, **2** or **3** beside **Scale** in the IDE header. The selection takes effect immediately and is
+saved in the client configuration across IDE sessions and game restarts. It does not change Minecraft's GUI scale.
+**Auto** uses 2 below 2560×1440 (including 1920×1080), and 3 at 2560×1440 or above. Fixed selections retain their chosen
+scale when the window is resized. If the window becomes too small, the scale controls remain available so you can
+choose **Auto** or **2**, or enlarge the window.
+
 ## Project manifest
 
 Current projects use `format = 3`. For a project using only built-in libraries:

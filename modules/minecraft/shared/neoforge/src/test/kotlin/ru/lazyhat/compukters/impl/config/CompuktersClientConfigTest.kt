@@ -19,12 +19,25 @@
 package ru.lazyhat.compukters.impl.config
 
 import com.electronwill.nightconfig.core.CommentedConfig
+import ru.lazyhat.compukters.impl.ide.IdeUiScale
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 internal class CompuktersClientConfigTest {
+    @Test
+    fun `all scale selections survive config admission without resetting layout`() {
+        for (mode in IdeUiScale.entries) {
+            val config = CommentedConfig.inMemory()
+            config.set<String>("ide.ui_scale", mode.name)
+            config.set<Int>("ide.tree_width", 233)
+            CompuktersClientConfig.SPEC.correct(config)
+            assertEquals(mode.name, config.get<Any>("ide.ui_scale").toString())
+            assertEquals(233, config.get<Int>("ide.tree_width"))
+        }
+    }
+
     @Test
     fun `old font preferences are discarded without losing IDE layout`() {
         listOf("cozette", "dina", "proggy_tiny", "jetbrains_mono").forEach { oldFont ->

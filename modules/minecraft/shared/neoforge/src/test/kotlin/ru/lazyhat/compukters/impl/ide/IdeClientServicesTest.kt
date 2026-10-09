@@ -337,6 +337,14 @@ internal object TestTargetTransport : IdeClientTargetTransport {
 }
 
 internal object TestLayoutStore : IdeLayoutStore {
+    private var scale = IdeUiScale.AUTO
+
+    override fun loadUiScale(): IdeUiScale = scale
+
+    override fun saveUiScale(scale: IdeUiScale) {
+        this.scale = scale
+    }
+
     private var settings = IdeLayoutSettings.defaults()
 
     override fun load(): IdeLayoutSettings = settings

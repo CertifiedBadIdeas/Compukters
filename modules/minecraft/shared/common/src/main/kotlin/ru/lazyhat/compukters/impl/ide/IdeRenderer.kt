@@ -68,6 +68,8 @@ object IdeRenderer {
         projectSwitcherOpen: Boolean = false,
         pointerX: Int? = null,
         pointerY: Int? = null,
+        uiScale: IdeUiScale = IdeUiScale.AUTO,
+        viewportSupported: Boolean = true,
     ): IdeDrawModel {
         val output =
             Builder(
@@ -81,8 +83,16 @@ object IdeRenderer {
                 projectSwitcherOpen,
             )
         output.base()
-        if (!geometry.supported) {
-            output.ui(IdeTextKind.Status, geometry.unsupportedMessage, 8, 8, IdeColors.ERROR)
+        if (!geometry.supported || !viewportSupported) {
+            output.scaleControls(uiScale, enabled = true)
+            output.ui(
+                IdeTextKind.Status,
+                "Window is too small for this IDE scale. Choose Auto or 2 above.",
+                8,
+                32,
+                IdeColors.ERROR,
+                clip = geometry.viewport,
+            )
             return output.build()
         }
         when (val page = state.page) {
@@ -90,6 +100,7 @@ object IdeRenderer {
             is IdePageState.Workspace -> output.workspace(page.value, state.target, state.tooling, state.busy, caretVisible)
         }
         output.terminalTool(state.target)
+        output.scaleControls(uiScale, enabled = prompt == null && state.dialog == null)
         val dialog = state.dialog
         if (prompt != null) {
             output.prompt(prompt)
@@ -137,6 +148,27 @@ object IdeRenderer {
             geometry.diagnostics?.let { panel(IdePanelKind.Diagnostics, it, IdeColors.PANEL_ALT) }
             geometry.treeSplitter?.let { fills += IdeFillDraw(IdeFillKind.Splitter, it, IdeColors.PANEL, Z_CONTENT) }
             geometry.diagnosticsSplitter?.let { fills += IdeFillDraw(IdeFillKind.Splitter, it, IdeColors.PANEL, Z_CONTENT) }
+        }
+
+        fun scaleControls(
+            scale: IdeUiScale,
+            enabled: Boolean,
+        ) {
+            val options = IdeUiScaleControl.options(geometry.viewport)
+            if (options.isEmpty()) return
+            val first = options.first().second
+            panels +=
+                IdePanelDraw(
+                    IdePanelKind.Header,
+                    IdeRect(first.left - 36, geometry.viewport.top, geometry.viewport.right, geometry.viewport.top + 24),
+                    IdeColors.PANEL,
+                    Z_POPUP - 1,
+                )
+            ui(IdeTextKind.Header, "Scale", first.left - 36, first.top + 4, z = Z_POPUP_TEXT)
+            options.forEach { (mode, bounds) ->
+                target(mode.action, bounds, enabled, "IDE scale: ${mode.label}", z = Z_POPUP_TARGET, selected = mode == scale)
+                ui(IdeTextKind.Header, mode.label, bounds.left + 3, bounds.top + 4, clip = bounds, z = Z_POPUP_TEXT)
+            }
         }
 
         fun start(
@@ -204,7 +236,7 @@ object IdeRenderer {
             val active = workspace.activeFile?.value ?: "No file"
             val fileColors = IdeGitFileColors(workspace.git.status ?: workspace.git.result?.status)
             val activeLeft = projectControl.right + 7
-            val activeWidth = ((geometry.header.right - activeLeft - 6) / font.cellWidth).coerceAtLeast(0)
+            val activeWidth = ((geometry.header.right - IdeUiScaleControl.WIDTH - activeLeft - 6) / font.cellWidth).coerceAtLeast(0)
             val targetText = " · ${targetLabel(targetState)}"
             val visibleActive = active.take((activeWidth - targetText.length).coerceAtLeast(0))
             ui(IdeTextKind.Header, visibleActive, activeLeft, geometry.header.top + 7, fileColors.color(active), geometry.header)

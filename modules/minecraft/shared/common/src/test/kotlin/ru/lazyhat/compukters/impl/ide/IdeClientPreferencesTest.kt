@@ -30,6 +30,27 @@ import kotlin.test.assertNull
 
 class IdeClientPreferencesTest {
     @Test
+    fun `scale selection survives reopening and independent layout and session saves`() {
+        val root = createTempDirectory("compukters-ide-scale-").toAbsolutePath().normalize()
+        try {
+            val layout = RecordingIdeLayoutStore(IdeLayoutSettings.defaults())
+            val file = root.resolve("session.preferences")
+            val store = IdeClientPreferences(file, layout)
+            assertEquals(IdeUiScale.AUTO, store.uiScale())
+            for (mode in IdeUiScale.entries) {
+                store.saveUiScale(mode)
+                store.saveLayout(IdeLayoutSettings.admit(233, 151, false))
+                store.save(IdePreferences.admit("demo", "src/main.kt", 12, 4, 5, 233, 151, false))
+                assertEquals(mode, IdeClientPreferences(file, layout).uiScale())
+                assertEquals(233, store.layout().treeWidth)
+                assertEquals("demo", store.load()!!.lastProjectDirectory)
+            }
+        } finally {
+            root.toFile().deleteRecursively()
+        }
+    }
+
+    @Test
     fun `commit author persists across stores and can be replaced while format two remains readable`() {
         val root = createTempDirectory("compukters-ide-author-").toAbsolutePath().normalize()
         try {
@@ -146,6 +167,14 @@ class IdeClientPreferencesTest {
 private class RecordingIdeLayoutStore(
     private var current: IdeLayoutSettings,
 ) : IdeLayoutStore {
+    private var scale = IdeUiScale.AUTO
+
+    override fun loadUiScale(): IdeUiScale = scale
+
+    override fun saveUiScale(scale: IdeUiScale) {
+        this.scale = scale
+    }
+
     val saves = mutableListOf<IdeLayoutSettings>()
 
     override fun load(): IdeLayoutSettings = current

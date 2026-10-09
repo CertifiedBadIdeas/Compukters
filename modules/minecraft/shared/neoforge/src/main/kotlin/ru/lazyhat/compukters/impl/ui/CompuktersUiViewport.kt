@@ -18,6 +18,8 @@
 
 package ru.lazyhat.compukters.impl.ui
 
+import ru.lazyhat.compukters.impl.ide.IdeUiScale
+
 internal class CompuktersUiViewport private constructor(
     val physicalScale: Int,
     val minecraftGuiScale: Int,
@@ -41,6 +43,19 @@ internal class CompuktersUiViewport private constructor(
     companion object {
         const val MIN_WIDTH = 640
         const val MIN_HEIGHT = 360
+
+        fun admitIde(
+            framebufferWidth: Int,
+            framebufferHeight: Int,
+            minecraftGuiScale: Int,
+            mode: IdeUiScale = IdeUiScale.AUTO,
+        ): CompuktersUiViewport =
+            admit(
+                framebufferWidth,
+                framebufferHeight,
+                minecraftGuiScale,
+                fixedScale = mode.fixedScale ?: if (framebufferWidth >= 2560 && framebufferHeight >= 1440) 3 else 2,
+            )
 
         fun admit(
             framebufferWidth: Int,

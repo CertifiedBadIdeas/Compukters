@@ -18,6 +18,7 @@
 
 package ru.lazyhat.compukters.impl.ui
 
+import ru.lazyhat.compukters.impl.ide.IdeUiScale
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -25,40 +26,45 @@ import kotlin.test.assertTrue
 
 class CompuktersUiViewportTest {
     @Test
-    fun `IDE scale stays fixed at three and exact pointer transform`() {
-        for ((width, height) in listOf(640 to 360, 1280 to 720, 1920 to 1080, 2560 to 1440, 3840 to 2160)) {
-            val ide = CompuktersUiViewport.admit(width, height, 4, fixedScale = 3)
-            assertEquals(3, ide.physicalScale)
-            assertEquals(width / ide.physicalScale, ide.width)
-            assertEquals(height / ide.physicalScale, ide.height)
-            assertEquals(120.0, ide.toMinecraftX(ide.toVirtualX(120.0)), 0.0001)
-            assertEquals(width >= 1920 && height >= 1080, ide.supported)
+    fun `explicit IDE scale overrides auto at full HD and QHD`() {
+        for ((width, height) in listOf(1920 to 1080, 2560 to 1440)) {
+            for (mode in listOf(IdeUiScale.TWO, IdeUiScale.THREE)) {
+                val viewport = CompuktersUiViewport.admitIde(width, height, 4, mode)
+                assertEquals(mode.fixedScale, viewport.physicalScale)
+                assertEquals(width / viewport.physicalScale, viewport.width)
+                assertEquals(height / viewport.physicalScale, viewport.height)
+            }
         }
+        assertFalse(CompuktersUiViewport.admitIde(1280, 720, 4, IdeUiScale.THREE).supported)
+        assertTrue(CompuktersUiViewport.admitIde(1280, 720, 4, IdeUiScale.AUTO).supported)
     }
 
     @Test
-    fun `IDE rejects undersized windows without reducing scale below three`() {
-        for ((width, height) in listOf(1280 to 720, 1919 to 1080, 1920 to 1079, 0 to -1)) {
-            val ide = CompuktersUiViewport.admit(width, height, 4, fixedScale = 3)
-            assertEquals(3, ide.physicalScale)
-            assertFalse(ide.supported)
+    fun `IDE uses scale two below QHD and three at QHD and above`() {
+        for ((width, height) in listOf(1280 to 720, 1920 to 1080, 1920 to 1200, 2559 to 1440, 2560 to 1439)) {
+            val ide = CompuktersUiViewport.admitIde(width, height, 4)
+            assertEquals(2, ide.physicalScale)
+            assertTrue(ide.supported)
         }
-        val ide = CompuktersUiViewport.admit(1920, 1080, 4, fixedScale = 3)
-        assertEquals(640, ide.width)
-        assertEquals(360, ide.height)
-        assertTrue(ide.supported)
+        for ((width, height) in listOf(2560 to 1440, 3840 to 2160)) {
+            val ide = CompuktersUiViewport.admitIde(width, height, 4)
+            assertEquals(3, ide.physicalScale)
+            assertTrue(ide.supported)
+        }
+        assertFalse(CompuktersUiViewport.admitIde(1279, 720, 4).supported)
+        assertFalse(CompuktersUiViewport.admitIde(1280, 719, 4).supported)
     }
 
     @Test
-    fun `fixed IDE scale is independent from Minecraft GUI scale`() {
+    fun `full HD IDE exposes more editor space with exact independent pointer transforms`() {
         for (minecraftScale in listOf(1, 2, 3, 4, 6)) {
-            val ide = CompuktersUiViewport.admit(3840, 2160, minecraftScale, fixedScale = 3)
-            assertEquals(3, ide.physicalScale)
-            assertEquals(1280, ide.width)
-            assertEquals(720, ide.height)
+            val ide = CompuktersUiViewport.admitIde(1920, 1080, minecraftScale)
+            assertEquals(2, ide.physicalScale)
+            assertEquals(960, ide.width)
+            assertEquals(540, ide.height)
             assertEquals(120.0, ide.toMinecraftX(ide.toVirtualX(120.0)), 0.0001)
             assertEquals(90.0, ide.toMinecraftY(ide.toVirtualY(90.0)), 0.0001)
-            assertTrue(ide.supported)
+            assertEquals(9.0, ide.toMinecraftX(ide.toVirtualDelta(9.0)), 0.0001)
         }
     }
 
