@@ -38,6 +38,15 @@ import java.util.concurrent.CompletableFuture
 interface IdeWorkspace : AutoCloseable {
     fun projects(): CompletableFuture<List<ProjectDescriptor>>
 
+    fun renameProject(
+        project: ProjectDescriptor,
+        name: String,
+    ): CompletableFuture<List<ProjectDescriptor>> =
+        CompletableFuture.failedFuture(UnsupportedOperationException("project folder rename is unavailable"))
+
+    fun removeProject(project: ProjectDescriptor): CompletableFuture<List<ProjectDescriptor>> =
+        CompletableFuture.failedFuture(UnsupportedOperationException("project removal is unavailable"))
+
     fun createProject(name: String): CompletableFuture<ProjectDescriptor>
 
     fun importProject(root: String): CompletableFuture<ProjectDescriptor> =

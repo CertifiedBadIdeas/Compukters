@@ -54,6 +54,10 @@ sealed interface IdePromptKind {
 
     data object CreateDirectory : IdePromptKind
 
+    data class RenameProject(
+        val directoryName: String,
+    ) : IdePromptKind
+
     data object RenameSymbol : IdePromptKind
 
     data class Rename(
@@ -82,6 +86,7 @@ data class IdePromptState(
             IdePromptKind.CreateText -> "Create text file"
             IdePromptKind.CreateDirectory -> "Create directory"
             is IdePromptKind.Rename -> "Rename ${kind.source.value} · destination path"
+            is IdePromptKind.RenameProject -> "Rename project folder · ${kind.directoryName}"
             IdePromptKind.RenameSymbol -> "Rename symbol · new name"
         }
     val fieldLabel: String get() =
@@ -98,6 +103,7 @@ data class IdePromptState(
             IdePromptKind.CreateText -> "File path"
             IdePromptKind.CreateDirectory -> "Directory path"
             is IdePromptKind.Rename -> "Destination path"
+            is IdePromptKind.RenameProject -> "New directory name"
             IdePromptKind.RenameSymbol -> "New name"
         }
     val displayValue: String get() = if (kind is IdePromptKind.GitToken) "•".repeat(value.length.coerceAtMost(48)) else value
@@ -218,6 +224,13 @@ class IdePromptController {
 
                     is IdePromptKind.Rename -> {
                         IdeCommand.Rename(kind.source, ProjectPath.file(value))
+                    }
+
+                    is IdePromptKind.RenameProject -> {
+                        require(
+                            value.isNotBlank() && value != "." && value != ".." && value.none { it == '/' || it == '\\' },
+                        ) { "Enter one directory name" }
+                        IdeCommand.RenameProject(kind.directoryName, value)
                     }
 
                     IdePromptKind.RenameSymbol -> {

@@ -99,6 +99,7 @@ internal class IdeScreen(
             IdeUiActionSink(::activateUiAction),
             IdeClipboardWriter { minecraft.keyboardHandler.clipboard = it },
             IdeSelectionSource(application.controller::selectedText),
+            IdeProjectActionSink(::activateProjectAction),
         )
     private val splitters = IdeSplitterInteraction(application.preferences.layout(), application.preferences::saveLayout)
     private val terminalOverlay = IdeTerminalOverlayController(application.targetTerminal)
@@ -416,6 +417,7 @@ internal class IdeScreen(
                 terminalState = terminalOverlay.state().presentationStatus(),
                 terminalVisible = terminalOverlay.visible,
                 explorerDrag = input.explorerDragVisual,
+                projectFirstRow = input.projectFirstRow,
                 projectSwitcherOpen = projectSwitcherOpen && prompt.state == null && state.dialog == null,
                 uiScale = application.preferences.uiScale(),
                 viewportSupported = viewport().supported,
@@ -559,6 +561,7 @@ internal class IdeScreen(
                 terminalState = terminalOverlay.state().presentationStatus(),
                 terminalVisible = terminalOverlay.visible,
                 explorerDrag = input.explorerDragVisual,
+                projectFirstRow = input.projectFirstRow,
                 projectSwitcherOpen = projectSwitcherOpen && prompt.state == null && state.dialog == null,
                 uiScale = application.preferences.uiScale(),
                 viewportSupported = viewport().supported,
@@ -800,6 +803,16 @@ internal class IdeScreen(
 
             is IdeTargetState.Failed -> target
         }
+
+    private fun activateProjectAction(
+        action: IdeHitAction,
+        project: ru.lazyhat.compukters.ide.client.state.IdeProjectSummary,
+    ): Boolean {
+        if (action != IdeHitAction.RenameProjectFolder || project.external) return false
+        projectSwitcherOpen = false
+        prompt.open(IdePromptKind.RenameProject(project.directoryName), project.displayName)
+        return true
+    }
 
     private fun confirmPrompt(): Boolean {
         val command = prompt.confirm() ?: return true

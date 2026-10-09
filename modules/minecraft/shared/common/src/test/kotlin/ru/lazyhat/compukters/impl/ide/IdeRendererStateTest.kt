@@ -94,6 +94,39 @@ import kotlin.test.assertTrue
 
 class IdeRendererStateTest {
     @Test
+    fun `external projects expose remove from list but never folder deletion or rename`() {
+        val projects =
+            listOf(
+                IdeProjectSummary("owned", "Owned", "/tmp/projects/owned"),
+                IdeProjectSummary(".registered-external", "Outside", "/tmp/external/project", external = true),
+            )
+        val model = IdeRenderer.extract(IdeViewState.startPage(projects), geometry())
+        assertEquals(listOf(0), model.hitTargets.filter { it.action == IdeHitAction.DeleteProjectFolder }.map { it.choiceIndex })
+        assertEquals(listOf(0), model.hitTargets.filter { it.action == IdeHitAction.RenameProjectFolder }.map { it.choiceIndex })
+        val forget = model.hitTargets.single { it.action == IdeHitAction.ForgetExternalProject }
+        assertEquals(1, forget.choiceIndex)
+        assertTrue(forget.tooltip!!.contains("files are kept"))
+        assertTrue(model.text.any { it.value == "Remove from list" })
+        assertTrue(model.text.any { it.value == "External · Outside" })
+        assertTrue(model.text.any { it.value == "/tmp/external/project" })
+    }
+
+    @Test
+    fun `project list scroll uses absolute project indexes and stays inside viewport`() {
+        val projects = (0 until 40).map { IdeProjectSummary("project$it", "Project $it", "/tmp/project$it") }
+        val model = IdeRenderer.extract(IdeViewState.startPage(projects), geometry(), projectFirstRow = 20)
+        val choices = model.hitTargets.filter { it.action == IdeHitAction.ProjectChoice }
+        assertEquals(20, choices.first().choiceIndex)
+        assertTrue(choices.last().choiceIndex!! < 40)
+        assertTrue(choices.all { geometry().editor.contains(it.bounds) })
+        val state = workspaceState(IdeEditorView.Empty, IdeBuildState.Idle, projects = projects)
+        val switcher = IdeRenderer.extract(state, geometry(), projectSwitcherOpen = true, projectFirstRow = 20)
+        val menu = switcher.panels.single { it.kind == IdePanelKind.ProjectSwitcher }.bounds
+        assertTrue(menu.bottom <= geometry().status.top)
+        assertEquals(20, switcher.hitTargets.first { it.action == IdeHitAction.ProjectChoice }.choiceIndex)
+    }
+
+    @Test
     fun `scale choices remain clickable when the selected scale cannot admit the window`() {
         val geometry = IdeRenderGeometry.compute(426, 240, 180, 120, true, true, IdeCodeFontProfile.DEFAULT)
         val model =
@@ -843,7 +876,14 @@ class IdeRendererStateTest {
 
         val model = IdeRenderer.extract(state, geometry())
 
-        assertEquals(listOf("Alpha", "Beta"), model.text.filter { it.kind == IdeTextKind.StartProject }.map { it.value })
+        assertEquals(
+            listOf("Alpha · IDE folder", "Beta · IDE folder"),
+            model.text
+                .filter {
+                    it.kind == IdeTextKind.ProjectChoice &&
+                        it.value.isNotBlank()
+                }.map { it.value },
+        )
         assertTrue(model.hitTargets.any { it.action == IdeHitAction.CreateProject && it.enabled })
         assertTrue(model.hitTargets.any { it.action == IdeHitAction.OpenExisting && it.enabled })
         assertEquals(
@@ -905,7 +945,14 @@ class IdeRendererStateTest {
         val choices = model.hitTargets.filter { it.action == IdeHitAction.ProjectChoice }
         assertEquals(listOf(0, 1), choices.map { it.choiceIndex })
         assertTrue(choices.single { it.choiceIndex == 0 }.selected)
-        assertEquals(listOf("Demo", "Second"), model.text.filter { it.kind == IdeTextKind.ProjectChoice }.map { it.value })
+        assertEquals(
+            listOf("Demo · IDE folder", "Second · IDE folder"),
+            model.text
+                .filter {
+                    it.kind == IdeTextKind.ProjectChoice &&
+                        it.value.isNotBlank()
+                }.map { it.value },
+        )
         assertTrue(model.hitTargets.any { it.action == IdeHitAction.CreateProject && it.zIndex > choices.first().zIndex - 1 })
         assertTrue(
             model.panels

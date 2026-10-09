@@ -183,6 +183,11 @@ listed in [Kotlin support](developers/kotlin-support.md) and [standard library s
 
 ### In-game IDE
 
+- The start page and **Projects** menu show a scrollable list of saved folder paths. IDE-owned folders support
+  collision-safe rename and confirmed deletion; external directories remain registered across restarts and expose a
+  distinct **Remove from list** action that preserves their files. Renaming retains the active file and editor position;
+  unsaved buffers prevent folder management until saved.
+
 - Creating or cloning a project opens the admitted project directly, independently of invalid sibling manifests;
   catalog errors include the manifest validation detail.
 

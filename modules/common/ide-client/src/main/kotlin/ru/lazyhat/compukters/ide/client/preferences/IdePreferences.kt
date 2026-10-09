@@ -98,6 +98,24 @@ class IdePreferences private constructor(
         )
     }
 
+    fun replaceProjectDirectory(
+        source: String,
+        target: String?,
+    ): IdePreferences {
+        val updated = LinkedHashMap(projectStates)
+        val previous = updated.remove(source)
+        if (target != null && previous != null) updated[target] = previous
+        return admit(
+            lastProjectDirectory = if (lastProjectDirectory == source) target else lastProjectDirectory,
+            projectStates = updated,
+            treeWidth = treeWidth,
+            diagnosticsHeight = diagnosticsHeight,
+            diagnosticsExpanded = diagnosticsExpanded,
+            gitAuthorName = gitAuthorName,
+            gitAuthorEmail = gitAuthorEmail,
+        )
+    }
+
     fun rememberGitAuthor(
         name: String,
         email: String,

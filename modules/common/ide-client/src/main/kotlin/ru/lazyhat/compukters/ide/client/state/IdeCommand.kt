@@ -96,6 +96,15 @@ sealed interface IdeCommand {
 
     data object CancelGit : IdeCommand
 
+    data class RenameProject(
+        val directoryName: String,
+        val name: String,
+    ) : IdeCommand
+
+    data class RequestRemoveProject(
+        val directoryName: String,
+    ) : IdeCommand
+
     data class OpenProject(
         val directoryName: String,
     ) : IdeCommand

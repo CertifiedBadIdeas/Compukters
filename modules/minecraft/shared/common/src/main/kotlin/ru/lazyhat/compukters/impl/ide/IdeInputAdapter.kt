@@ -54,6 +54,13 @@ fun interface IdeUiActionSink {
     fun activate(action: IdeHitAction): Boolean
 }
 
+fun interface IdeProjectActionSink {
+    fun activate(
+        action: IdeHitAction,
+        project: IdeProjectSummary,
+    ): Boolean
+}
+
 enum class IdeFocusArea { Editor, Tree, Panel, Terminal, None }
 
 data class IdeFocusState(
@@ -116,7 +123,10 @@ class IdeInputAdapter(
     private val uiActions: IdeUiActionSink = IdeUiActionSink { false },
     private val clipboardWriter: IdeClipboardWriter = IdeClipboardWriter {},
     private val selectionSource: IdeSelectionSource = IdeSelectionSource { null },
+    private val projectActions: IdeProjectActionSink = IdeProjectActionSink { _, _ -> false },
 ) {
+    var projectFirstRow: Int = 0
+        private set
     var treeFirstRow: Int = 0
         private set
     private var explorerCapture: ExplorerCapture? = null
@@ -471,6 +481,17 @@ class IdeInputAdapter(
                         return true
                     }
                 }
+                if (target.action == IdeHitAction.RenameProjectFolder || target.action == IdeHitAction.DeleteProjectFolder ||
+                    target.action == IdeHitAction.ForgetExternalProject
+                ) {
+                    val project = target.choiceIndex?.let(context.projects::getOrNull) ?: return false
+                    if (target.action == IdeHitAction.RenameProjectFolder) {
+                        if (project.external) return false
+                        return projectActions.activate(target.action, project)
+                    }
+                    if ((target.action == IdeHitAction.ForgetExternalProject) != project.external) return false
+                    return dispatch(IdeCommand.RequestRemoveProject(project.directoryName))
+                }
                 if (target.action == IdeHitAction.ProjectChoice) {
                     val index = target.choiceIndex
                     val project = index?.let(context.projects::getOrNull)
@@ -504,7 +525,7 @@ class IdeInputAdapter(
                 } else {
                     sink.dispatch(IdeCommand.Edit(IdeEditorInput.SetCaret(offset, shift)))
                 }
-            } else if (context.projects.isNotEmpty()) {
+            } else if (context.projects.isNotEmpty() && context.hitTargets.none { it.action == IdeHitAction.ProjectChoice }) {
                 val row = ((y - geometry.editor.top - START_ROWS_TOP).toInt() / UI_LINE_HEIGHT)
                 context.projects.getOrNull(row)?.let { sink.dispatch(IdeCommand.OpenProject(it.directoryName)) }
             }
@@ -639,6 +660,9 @@ class IdeInputAdapter(
             IdeHitAction.GitCommit,
             IdeHitAction.GitAuthenticate,
             IdeHitAction.CreateProject,
+            IdeHitAction.RenameProjectFolder,
+            IdeHitAction.DeleteProjectFolder,
+            IdeHitAction.ForgetExternalProject,
             IdeHitAction.OpenProject,
             IdeHitAction.ProjectSwitcher,
             IdeHitAction.CreateText,
@@ -702,6 +726,22 @@ class IdeInputAdapter(
         vertical: Double,
         context: IdePointerContext,
     ): Boolean {
+        val projectRows = context.hitTargets.filter { it.action == IdeHitAction.ProjectChoice }
+        if (projectRows.isNotEmpty() && projectRows.any { y >= it.bounds.top && y < it.bounds.bottom } &&
+            context.hitTargets.any {
+                it.bounds.contains(x, y) && (
+                    it.action == IdeHitAction.ProjectChoice ||
+                        it.action == IdeHitAction.RenameProjectFolder || it.action == IdeHitAction.DeleteProjectFolder ||
+                        it.action == IdeHitAction.ForgetExternalProject
+                )
+            }
+        ) {
+            val first = projectRows.minOf { it.choiceIndex ?: 0 }
+            projectFirstRow =
+                (first + (-vertical * SCROLL_ROWS).toInt()).coerceIn(0, (context.projects.size - projectRows.size).coerceAtLeast(0))
+            pointerActivity()
+            return true
+        }
         if (context.bottomTab == ru.lazyhat.compukters.ide.client.state.IdeBottomTab.GitLog &&
             context.geometry.diagnostics?.contains(x, y) == true
         ) {

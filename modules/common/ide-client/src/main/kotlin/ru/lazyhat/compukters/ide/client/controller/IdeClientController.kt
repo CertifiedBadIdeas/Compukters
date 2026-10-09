@@ -217,6 +217,8 @@ class IdeClientController(
     private var admittedDelete: AdmittedProjectDelete? = null
     private var preferencesSnapshot = IdePreferences.empty(DEFAULT_TREE_WIDTH, DEFAULT_DIAGNOSTICS_HEIGHT, true)
     private val eventOverflow = AtomicBoolean()
+    private var managingProjects = false
+    private var pendingCatalogRemoval: Pair<Long, ProjectDescriptor>? = null
     private var buildState: IdeBuildState = IdeBuildState.Idle
     private var pendingBuildAction: PendingBuildAction? = null
     private var latestBuildOperation = 0L
@@ -268,6 +270,7 @@ class IdeClientController(
     fun dispatch(command: IdeCommand) {
         checkOwner()
         check(started && !closed) { "IDE controller is not active" }
+        if (managingProjects) return
         if (creatingProject && command !is IdeCommand.CancelGit && command !is IdeCommand.OpenProject) return
         if (IdeBusyOperation.Git in state.busy && command !is IdeCommand.CancelGit &&
             command !is IdeCommand.GitVisible && command !is IdeCommand.ScrollGit && command !is IdeCommand.OpenProject &&
@@ -450,6 +453,30 @@ class IdeClientController(
                 createProject(command.name)
             }
 
+            is IdeCommand.RenameProject -> {
+                manageProject(command.directoryName, command.name)
+            }
+
+            is IdeCommand.RequestRemoveProject -> {
+                val selected = catalog.singleOrNull { it.directoryName == command.directoryName } ?: return
+                if (!canManageProject(selected)) return
+                val actionId = nextOperationId++
+                pendingCatalogRemoval = actionId to selected
+                state =
+                    state.copy(
+                        dialog =
+                            IdeDialogState.Confirmation(
+                                if (selected.external) "Forget external project" else "Delete project folder",
+                                if (selected.external) {
+                                    "Remove ${selected.handle.canonicalPath} from the list? Files will be kept."
+                                } else {
+                                    "Permanently delete ${selected.handle.canonicalPath} and ALL files inside?"
+                                },
+                                actionId,
+                            ),
+                    )
+            }
+
             is IdeCommand.OpenProject -> {
                 requestProjectSwitch(command.directoryName)
             }
@@ -522,6 +549,7 @@ class IdeClientController(
                     refreshTargetState()
                 } else {
                     admittedDelete = null
+                    pendingCatalogRemoval = null
                     state = state.copy(dialog = null)
                 }
             }
@@ -1771,6 +1799,69 @@ class IdeClientController(
         }
     }
 
+    private fun canManageProject(selected: ProjectDescriptor): Boolean {
+        if (state.busy.isNotEmpty()) {
+            publishProblem("Wait for the current IDE operation before managing project folders")
+            return false
+        }
+        if (selected.directoryName == project?.directoryName && documents.values.any { it.dirty }) {
+            publishProblem("Save changed files before renaming or removing this project")
+            return false
+        }
+        return true
+    }
+
+    private fun manageProject(
+        directoryName: String,
+        name: String?,
+        admitted: ProjectDescriptor? = null,
+    ) {
+        val selected = admitted ?: catalog.singleOrNull { it.directoryName == directoryName } ?: return
+        if (!canManageProject(selected)) return
+        val active = project?.directoryName == directoryName
+        if (active) {
+            generation = Math.incrementExact(generation)
+            cancelBuildJobs()
+            closeAnalysisFile(forceDrop = true)
+        }
+        managingProjects = true
+        state = state.copy(generation = generation, dialog = null, busy = state.busy + IdeBusyOperation.Project)
+        val requestGeneration = generation
+        val activeDirectory = if (active) name else project?.directoryName
+        val operation = if (name == null) workspace.removeProject(selected) else workspace.renameProject(selected, name)
+        operation.whenComplete { projects, failure ->
+            if (failure == null) {
+                enqueue(IdeEvent.ProjectsManaged(requestGeneration, directoryName, name, projects, activeDirectory, active))
+            } else {
+                enqueueFailure(requestGeneration, IdeBusyOperation.Project, failure)
+            }
+        }
+    }
+
+    private fun acceptManagedProjects(event: IdeEvent.ProjectsManaged) {
+        managingProjects = false
+        catalog = event.projects
+        if (event.reopenActive) project?.let { persistPreferences(editor?.path ?: binary?.path) }
+        preferencesSnapshot = preferencesSnapshot.replaceProjectDirectory(event.previousDirectory, event.renamedDirectory)
+        runCatching { preferences.save(preferencesSnapshot) }
+        state = state.copy(busy = state.busy - IdeBusyOperation.Project)
+        if (event.reopenActive) {
+            closeProjectDocuments()
+            closeComputerPreview()
+            closeAttachedSourcePreview()
+            cancelComputerTransfer()
+            project = null
+            tree = null
+            binary = null
+            state = state.copy(page = IdePageState.Start(catalog.take(limits.projectRows).map(::summary), null))
+            event.activeDirectory?.let(::openProject)
+        } else if (project == null) {
+            state = state.copy(page = IdePageState.Start(catalog.take(limits.projectRows).map(::summary), null))
+        } else {
+            publishWorkspace()
+        }
+    }
+
     private fun requestDelete(path: ProjectPath) {
         val selected = project ?: return
         val operationId = nextOperationId++
@@ -1789,6 +1880,13 @@ class IdeClientController(
 
     private fun confirmDialog(actionId: Long) {
         val dialog = state.dialog as? IdeDialogState.Confirmation ?: return
+        pendingCatalogRemoval?.let { (expectedAction, selected) ->
+            if (actionId != expectedAction || dialog.actionId != actionId) return
+            pendingCatalogRemoval = null
+            state = state.copy(dialog = null)
+            manageProject(selected.directoryName, null, selected)
+            return
+        }
         val admitted = admittedDelete ?: return
         if (dialog.actionId != actionId) return
         state = state.copy(dialog = null)
@@ -1863,6 +1961,10 @@ class IdeClientController(
 
             is IdeEvent.GitFinished -> {
                 acceptGit(event)
+            }
+
+            is IdeEvent.ProjectsManaged -> {
+                acceptManagedProjects(event)
             }
 
             is IdeEvent.ProjectCatalogLoaded -> {
@@ -1953,7 +2055,10 @@ class IdeClientController(
             }
 
             is IdeEvent.Failed -> {
+                val managementFailed = managingProjects && event.operation == IdeBusyOperation.Project
+                if (managementFailed) managingProjects = false
                 acceptFailure(event)
+                if (managementFailed && project?.handle?.isValid() == true) editor?.let(::openAnalysis)
             }
 
             is IdeEvent.CatalogLoaded,
@@ -3723,6 +3828,8 @@ class IdeClientController(
     }
 
     private fun recoverToStart(message: String) {
+        managingProjects = false
+        pendingCatalogRemoval = null
         cancelComputerTransfer()
         cancelBuildJobs()
         pendingBuildAction = null
@@ -3802,7 +3909,13 @@ class IdeClientController(
     private fun problem(message: String): IdeProblem = IdeProblem(message.boundedUtf8(limits.statusUtf8Bytes), IdeProblemSeverity.Error)
 
     private fun summary(descriptor: ProjectDescriptor): IdeProjectSummary =
-        IdeProjectSummary(descriptor.directoryName, descriptor.manifest.name)
+        IdeProjectSummary(
+            descriptor.directoryName,
+            descriptor.handle.canonicalPath.fileName
+                .toString(),
+            descriptor.handle.canonicalPath.toString(),
+            descriptor.external,
+        )
 
     private fun checkOwner() {
         check(Thread.currentThread() === owner) { "IDE controller may only be used from its construction thread" }
@@ -3940,6 +4053,8 @@ private fun IdeEvent.generationOrNull(): Long? =
         is IdeEvent.GitInspected -> generation
 
         is IdeEvent.GitFinished -> generation
+
+        is IdeEvent.ProjectsManaged -> generation
 
         is IdeEvent.ProjectCatalogLoaded -> generation
 
