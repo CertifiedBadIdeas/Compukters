@@ -81,6 +81,8 @@ data class IdeWorkspaceView(
 )
 
 sealed interface IdePageState {
+    data object Opening : IdePageState
+
     class Start(
         projects: List<IdeProjectSummary>,
         val error: IdeProblem?,

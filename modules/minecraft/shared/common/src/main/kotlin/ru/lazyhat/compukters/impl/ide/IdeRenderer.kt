@@ -84,6 +84,10 @@ object IdeRenderer {
                 projectSwitcherOpen,
                 projectFirstRow,
             )
+        if (state.page == IdePageState.Opening) {
+            output.background()
+            return output.build()
+        }
         output.base(state.page is IdePageState.Start)
         if (!geometry.supported || !viewportSupported) {
             output.scaleControls(uiScale, enabled = true)
@@ -98,6 +102,7 @@ object IdeRenderer {
             return output.build()
         }
         when (val page = state.page) {
+            IdePageState.Opening -> Unit
             is IdePageState.Start -> output.start(page, state.target, state.busy)
             is IdePageState.Workspace -> output.workspace(page.value, state.target, state.tooling, state.busy, caretVisible)
         }
@@ -137,8 +142,12 @@ object IdeRenderer {
         private val gitFieldFocusScroll = mutableMapOf<IdeGitField, Int>()
         private var bottomScrollMaximum = 0
 
-        fun base(startPage: Boolean) {
+        fun background() {
             fills += IdeFillDraw(IdeFillKind.Background, geometry.viewport, IdeColors.DIM, Z_BACKGROUND)
+        }
+
+        fun base(startPage: Boolean) {
+            background()
             if (!geometry.supported) return
             fills += IdeFillDraw(IdeFillKind.Border, expand(geometry.panel, 1), IdeColors.BORDER, Z_PANEL)
             panel(IdePanelKind.Main, geometry.panel, IdeColors.PANEL)

@@ -1041,6 +1041,50 @@ class IdeClientControllerTest {
     }
 
     @Test
+    fun `restoring a remembered project stays on opening page until its tree is ready`() {
+        val fixture = ControllerFixture(preferences = preferences("demo", "src/main.kt"))
+        val catalog = CompletableFuture<List<ProjectDescriptor>>()
+        val tree = CompletableFuture<ProjectTree>()
+        fixture.workspace.catalogResult = catalog
+        fixture.workspace.treeResult = tree
+        assertEquals(IdePageState.Opening, fixture.controller.viewState().page)
+        fixture.controller.start()
+        fixture.controller.tick()
+        assertEquals(IdePageState.Opening, fixture.controller.viewState().page)
+
+        catalog.complete(listOf(fixture.workspace.descriptor))
+        fixture.controller.tick()
+        assertEquals(IdePageState.Opening, fixture.controller.viewState().page)
+
+        tree.complete(ProjectTreeStore(fixture.workspace.descriptor.handle).scan())
+        repeat(4) { fixture.controller.tick() }
+        assertEquals("demo", fixture.workspaceView().project.directoryName)
+        fixture.controller.close()
+    }
+
+    @Test
+    fun `opening failures reveal the project catalog with the error`() {
+        for (failCatalog in listOf(true, false)) {
+            val fixture = ControllerFixture(preferences = preferences("demo", "src/main.kt"))
+            if (failCatalog) {
+                fixture.workspace.catalogResult = CompletableFuture.failedFuture(IllegalStateException("catalog unavailable"))
+            } else {
+                fixture.workspace.treeResult = CompletableFuture.failedFuture(IllegalStateException("project unavailable"))
+            }
+            fixture.startAndTick()
+            val start = assertIs<IdePageState.Start>(fixture.controller.viewState().page)
+            assertEquals(if (failCatalog) "catalog unavailable" else "project unavailable", start.error?.message)
+            assertTrue(
+                fixture.controller
+                    .viewState()
+                    .busy
+                    .isEmpty(),
+            )
+            fixture.controller.close()
+        }
+    }
+
+    @Test
     fun `start restores remembered project and file`() {
         val fixture = ControllerFixture(preferences = preferences("demo", "src/main.kt"))
 
@@ -1867,6 +1911,8 @@ internal class ControlledWorkspace(
     val saveRequests = mutableListOf<IdeSaveRequest>()
     var inspectEnabled = false
     val inspections = mutableListOf<CompletableFuture<GitResult?>>()
+    var catalogResult: CompletableFuture<List<ProjectDescriptor>>? = null
+    var treeResult: CompletableFuture<ProjectTree>? = null
 
     override fun inspectGit(
         project: ProjectHandle,
@@ -1916,7 +1962,8 @@ internal class ControlledWorkspace(
         openResults[other] = ProjectFileOpenResult.Text(store.open(other))
     }
 
-    override fun projects(): CompletableFuture<List<ProjectDescriptor>> = completed(listOfNotNull(descriptor, additionalDescriptor))
+    override fun projects(): CompletableFuture<List<ProjectDescriptor>> =
+        catalogResult ?: completed(listOfNotNull(descriptor, additionalDescriptor))
 
     override fun renameProject(
         project: ProjectDescriptor,
@@ -1942,7 +1989,8 @@ internal class ControlledWorkspace(
 
     override fun createProject(name: String): CompletableFuture<ProjectDescriptor> = completeCall { ProjectCatalog.open(root).create(name) }
 
-    override fun tree(project: ProjectHandle): CompletableFuture<ProjectTree> = completeCall { ProjectTreeStore(project).scan() }
+    override fun tree(project: ProjectHandle): CompletableFuture<ProjectTree> =
+        treeResult ?: completeCall { ProjectTreeStore(project).scan() }
 
     override fun open(
         project: ProjectHandle,

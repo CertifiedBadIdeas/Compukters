@@ -562,6 +562,10 @@ internal class IdeScreen(
                 viewportSupported = viewport().supported,
             )
         return when (val page = state.page) {
+            IdePageState.Opening -> {
+                IdePointerContext(geometry)
+            }
+
             is IdePageState.Start -> {
                 IdePointerContext(
                     geometry,

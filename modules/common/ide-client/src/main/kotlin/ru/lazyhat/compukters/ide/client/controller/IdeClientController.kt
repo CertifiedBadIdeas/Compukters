@@ -143,6 +143,7 @@ class IdeClientController(
     private val owner = Thread.currentThread()
     private var state =
         IdeViewState.startPage(emptyList()).copy(
+            page = IdePageState.Opening,
             tooling =
                 when {
                     tooling != null -> IdeToolingState.Preparing
@@ -2091,9 +2092,11 @@ class IdeClientController(
     private fun acceptCatalog(event: IdeEvent.ProjectCatalogLoaded) {
         catalog = event.projects
         val summaries = catalog.take(limits.projectRows).map(::summary)
-        state = IdeViewState(generation, IdePageState.Start(summaries, null), null, emptySet(), state.target, state.tooling)
         val remembered = preferencesSnapshot.lastProjectDirectory
-        if (remembered != null && catalog.any { it.directoryName == remembered }) openProject(remembered)
+        val restoreProject = remembered != null && catalog.any { it.directoryName == remembered }
+        val page = if (restoreProject) IdePageState.Opening else IdePageState.Start(summaries, null)
+        state = IdeViewState(generation, page, null, emptySet(), state.target, state.tooling)
+        if (restoreProject) openProject(requireNotNull(remembered))
     }
 
     private fun acceptBuildInput(event: IdeEvent.BuildInputLoaded) {
@@ -2660,7 +2663,15 @@ class IdeClientController(
             recoverToStart("Project root changed; reopen the project")
             return
         }
-        state = state.copy(busy = state.busy - event.operation, page = pageWithProblem(event.problem))
+        val failedPage =
+            if (state.page == IdePageState.Opening &&
+                (event.operation == IdeBusyOperation.Catalog || event.operation == IdeBusyOperation.Project)
+            ) {
+                IdePageState.Start(catalog.take(limits.projectRows).map(::summary), event.problem)
+            } else {
+                pageWithProblem(event.problem)
+            }
+        state = state.copy(busy = state.busy - event.operation, page = failedPage)
         if (event.operation == IdeBusyOperation.Build || event.operation == IdeBusyOperation.Resolve) {
             pendingBuildAction = null
             buildState = IdeBuildState.Failed(IdeBuildFailureKind.Platform, event.problem.message)
@@ -3886,6 +3897,7 @@ class IdeClientController(
 
     private fun pageWithProblem(problem: IdeProblem): IdePageState =
         when (val page = state.page) {
+            IdePageState.Opening -> page
             is IdePageState.Start -> IdePageState.Start(page.projects, problem)
             is IdePageState.Workspace -> IdePageState.Workspace(page.value.copy(status = problem))
         }
