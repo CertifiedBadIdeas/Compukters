@@ -21,6 +21,7 @@ listed in [Kotlin support](developers/kotlin-support.md) and [standard library s
 
 ### Release delivery
 
+- Sable integration and the all-addon development stand target Sable 2.0.6 for Minecraft 1.21.1 NeoForge.
 - Autonomous mod archives use Runtime 0.21.3 / native ABI 21, including checkpoint transport and compact
   debug-path and safepoint-root readers, with exact published bundle and VM revision checks.
 - Native compatibility depends on ABI, permitting any `0.21.x` Runtime independently of the development

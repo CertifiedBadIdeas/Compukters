@@ -15,7 +15,7 @@ It pins Minecraft 1.21.1 and NeoForge 21.1.252 with the following runtime:
 | --- | --- |
 | Compukters + Compukters: Create + Compukters: Sable + Compukters: Propulsion | Current checkout |
 | Create | 6.0.10 |
-| Sable | 2.0.5 |
+| Sable | 2.0.6 |
 | Aeronautics bundle (Aeronautics, Simulated, Offroad) | 1.3.1 |
 | Create Propulsion: Simulated | 1.1.5 |
 
@@ -72,7 +72,7 @@ in each Guest project's
 `compukter.toml`. See the [Sable guide]({{ '/SABLE/' | relative_url }}) and [Propulsion guide]({{ '/PROPULSION/' | relative_url }}) for examples,
 units and control lifetime.
 
-Joint verification on 2026-10-06 passed `verifyAddons` and all 18 required GameTest scenarios.
+Joint verification on 2026-10-09 with Sable 2.0.6 passed `check`, `verifyAddons` and all 25 required GameTest scenarios.
 Interactive construction/flight behavior still needs manual testing. Propulsion 1.1.5 emits
 missing-model warnings (including oxidizer states and lodestone tracker overlay) from its upstream resources; these
 do not prevent startup.
