@@ -13,7 +13,7 @@ headings so this page has one stable URL that can be shared outside the reposito
 
 ## 0.6.0 — In development
 
-## 0.5.0 — 2026-10-09
+## 0.5.0 — 2026-10-10
 
 This release expands Guest Kotlin, adds independently installed Create, Sable and Propulsion integrations for
 Minecraft 1.21.1, and improves the in-game IDE and computer runtime. Exact language and library boundaries are
