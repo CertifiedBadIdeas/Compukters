@@ -189,8 +189,9 @@ listed in [Kotlin support](developers/kotlin-support.md) and [standard library s
   distinct **Remove from list** action that preserves their files. Renaming retains the active file and editor position;
   unsaved buffers prevent folder management until saved.
 
-- Creating or cloning a project opens the admitted project directly, independently of invalid sibling manifests;
-  catalog errors include the manifest validation detail.
+- New projects start with a runnable Hello World example, with comments explaining the entry point, terminal
+  output, dependency resolution and IDE build/run actions. Creating or cloning opens the admitted project directly, independently of
+  invalid sibling manifests; catalog errors include the manifest validation detail.
 
 - Analysis cancellation remains acknowledged when a request finishes concurrently, keeping the K2 worker warm
   and subsequent edits incremental instead of waiting for a timeout and reopening the project.

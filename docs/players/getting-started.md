@@ -75,7 +75,8 @@ Kotlin files and can be deployed to the computer you opened it from.
 1. Click **IDE** in the computer terminal or press **Ctrl+I**. Opening the IDE from the terminal automatically attaches
    that computer as the target. You can also look directly at a computer and press Ctrl+I.
 2. Choose **Create**, enter `hello`, and confirm. The IDE creates `compukter.toml` and opens `src/main.kt`.
-3. Enter this program:
+3. The new project already contains this Hello World program, with comments explaining the entry point, terminal
+   output and IDE build/run actions. You can run it as is or change the greeting:
 
 ```kotlin
 fun main() {
@@ -83,10 +84,11 @@ fun main() {
 }
 ```
 
-4. Press **Ctrl+S**, then use **Build** or press **Ctrl+F9**. Wait for the status line to report a successful build.
-5. Use **Deploy** to install `/home/hello` on the attached computer. Confirm the overwrite dialog if that path already
+4. Use **Resolve Dependencies** and wait for success. This creates `compukter.lock`, which is required before building.
+5. Press **Ctrl+S**, then use **Build** or press **Ctrl+F9**. Wait for the status line to report a successful build.
+6. Use **Deploy** to install `/home/hello` on the attached computer. Confirm the overwrite dialog if that path already
    exists.
-6. Open the **Terminal** tool on the right and run `hello` at the shell prompt.
+7. Open the **Terminal** tool on the right and run `hello` at the shell prompt.
 
 The triangular **Run** action is the shortcut for the final sequence: it saves, builds, deploys the manifest program,
 and submits its installed path to the attached computer.

@@ -270,6 +270,9 @@ class ProjectDocumentSessionTest {
 
     private fun fixture(): Fixture {
         val project = ProjectCatalog.open(createTempDirectory("compukters-session-")).create("hello")
+        project.handle.canonicalPath
+            .resolve("src/main.kt")
+            .writeText("fun main() {\n}\n")
         val clock = FakeClock()
         val session = ProjectDocumentSession.open(project.handle, ProjectPath.source("src/main.kt"), clock::now)
         return Fixture(project, project.handle.canonicalPath.resolve("src/main.kt"), clock, session)

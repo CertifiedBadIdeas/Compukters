@@ -356,7 +356,18 @@ class ProjectCatalog private constructor(
         private const val MANIFEST_FILENAME = "compukter.toml"
         private const val SOURCE_DIRECTORY = "src"
         private const val MAIN_FILENAME = "main.kt"
-        private const val DEFAULT_MAIN = "fun main() {\n}\n"
+        private val DEFAULT_MAIN =
+            """
+            // First use Resolve Dependencies to create compukter.lock, then wait for success.
+            // Save with Ctrl+S, then build with Ctrl+F9 (or the Build button).
+            // With a computer attached, Run builds, deploys and starts this program.
+
+            // main is the entry point: the computer starts executing here.
+            fun main() {
+                // println writes a line to the computer terminal.
+                println("Hello from Compukters!")
+            }
+            """.trimIndent() + "\n"
         private const val STAGING_PREFIX = ".creating-"
         private const val REGISTRATION_PREFIX = REGISTERED_PROJECT_PREFIX
         private val WRITE_OPTIONS: Set<OpenOption> =
