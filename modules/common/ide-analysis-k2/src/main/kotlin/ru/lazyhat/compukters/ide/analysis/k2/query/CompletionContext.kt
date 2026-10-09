@@ -20,6 +20,7 @@ package ru.lazyhat.compukters.ide.analysis.k2.query
 
 import com.intellij.psi.PsiComment
 import com.intellij.psi.PsiElement
+import org.jetbrains.kotlin.lexer.KtTokens
 import org.jetbrains.kotlin.psi.KtBlockExpression
 import org.jetbrains.kotlin.psi.KtBlockStringTemplateEntry
 import org.jetbrains.kotlin.psi.KtClassBody
@@ -27,10 +28,13 @@ import org.jetbrains.kotlin.psi.KtDeclarationWithBody
 import org.jetbrains.kotlin.psi.KtElement
 import org.jetbrains.kotlin.psi.KtFile
 import org.jetbrains.kotlin.psi.KtImportDirective
+import org.jetbrains.kotlin.psi.KtLiteralStringTemplateEntry
 import org.jetbrains.kotlin.psi.KtNameReferenceExpression
 import org.jetbrains.kotlin.psi.KtNamedFunction
 import org.jetbrains.kotlin.psi.KtPackageDirective
 import org.jetbrains.kotlin.psi.KtQualifiedExpression
+import org.jetbrains.kotlin.psi.KtSimpleNameStringTemplateEntry
+import org.jetbrains.kotlin.psi.KtStringTemplateEntry
 import org.jetbrains.kotlin.psi.KtStringTemplateExpression
 import ru.lazyhat.compukters.ide.editor.EditorRange
 
@@ -48,6 +52,7 @@ internal data class CompletionContext(
     val receiver: org.jetbrains.kotlin.psi.KtExpression?,
     val keywordContext: KeywordContext,
     val isFunctionDeclarationName: Boolean,
+    val allowsCompletion: Boolean,
 ) {
     companion object {
         fun parse(
@@ -84,7 +89,33 @@ internal data class CompletionContext(
                 generateSequence(leaf) { it.parent }
                     .filterIsInstance<KtNamedFunction>()
                     .any { it.nameIdentifier == leaf }
-            return CompletionContext(prefix, EditorRange(start, offsetUtf16), position, receiver, keywordContext, isFunctionDeclarationName)
+            return CompletionContext(
+                prefix,
+                EditorRange(start, offsetUtf16),
+                position,
+                receiver,
+                keywordContext,
+                isFunctionDeclarationName,
+                allowsCompletion(leaf, source, offsetUtf16),
+            )
+        }
+
+        private fun allowsCompletion(
+            leaf: PsiElement?,
+            source: String,
+            offset: Int,
+        ): Boolean {
+            if (leaf?.node?.elementType == KtTokens.CHARACTER_LITERAL) return false
+            // The nearest template entry owns the context, including strings nested in ${...}.
+            for (element in generateSequence(leaf) { it.parent }) {
+                when (element) {
+                    is PsiComment -> return false
+                    is KtBlockStringTemplateEntry, is KtSimpleNameStringTemplateEntry -> return true
+                    is KtLiteralStringTemplateEntry -> return offset > 0 && source[offset - 1] == '$'
+                    is KtStringTemplateEntry, is KtStringTemplateExpression -> return false
+                }
+            }
+            return true
         }
 
         private fun keywordContext(
