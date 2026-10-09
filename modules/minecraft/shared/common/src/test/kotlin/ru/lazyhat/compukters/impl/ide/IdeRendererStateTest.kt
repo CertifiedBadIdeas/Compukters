@@ -112,6 +112,49 @@ class IdeRendererStateTest {
     }
 
     @Test
+    fun `project menu routes folder management controls instead of treating them as outside clicks`() {
+        val projects =
+            listOf(
+                IdeProjectSummary("demo", "Demo", "/tmp/projects/demo"),
+                IdeProjectSummary(".registered-outside", "Outside", "/tmp/outside", external = true),
+            )
+        val geometry = geometry()
+        val model =
+            IdeRenderer.extract(
+                workspaceState(IdeEditorView.Empty, IdeBuildState.Idle, projects = projects),
+                geometry,
+                projectSwitcherOpen = true,
+            )
+        val commands = mutableListOf<IdeCommand>()
+        val renamed = mutableListOf<String>()
+        val input =
+            IdeInputAdapter(
+                IdeCommandSink { commands += it },
+                IdeClipboard { "" },
+                ru.lazyhat.compukters.ide.client
+                    .IdeClientLimits(),
+                projectActions =
+                    IdeProjectActionSink { _, project ->
+                        renamed += project.directoryName
+                        true
+                    },
+            )
+        val context = IdePointerContext(geometry, projects = projects, hitTargets = model.hitTargets)
+        for (action in listOf(IdeHitAction.DeleteProjectFolder, IdeHitAction.ForgetExternalProject, IdeHitAction.RenameProjectFolder)) {
+            val control = model.hitTargets.single { it.action == action }
+            assertTrue(control.isProjectSwitcherControl)
+            assertTrue(input.pointerClicked(control.bounds.left + 2.0, control.bounds.top + 2.0, 0, context))
+        }
+        assertEquals(
+            listOf<IdeCommand>(IdeCommand.RequestRemoveProject("demo"), IdeCommand.RequestRemoveProject(".registered-outside")),
+            commands,
+        )
+        assertEquals(listOf("demo"), renamed)
+        assertTrue(model.hitTargets.single { it.action == IdeHitAction.ProjectSwitcher }.isProjectSwitcherControl)
+        assertFalse(model.hitTargets.single { it.action == IdeHitAction.ScaleAuto }.isProjectSwitcherControl)
+    }
+
+    @Test
     fun `project list scroll uses absolute project indexes and stays inside viewport`() {
         val projects = (0 until 40).map { IdeProjectSummary("project$it", "Project $it", "/tmp/project$it") }
         val model = IdeRenderer.extract(IdeViewState.startPage(projects), geometry(), projectFirstRow = 20)

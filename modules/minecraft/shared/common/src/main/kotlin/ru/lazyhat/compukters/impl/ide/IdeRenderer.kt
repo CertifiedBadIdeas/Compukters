@@ -351,6 +351,7 @@ object IdeRenderer {
                     project.directoryName == workspace.project.directoryName,
                     Z_PROJECT_SWITCHER_TARGET,
                     Z_PROJECT_SWITCHER_TEXT,
+                    IdeFocusGroup.ProjectSwitcher,
                 )
             }
             listOf(
@@ -361,7 +362,7 @@ object IdeRenderer {
             ).forEachIndexed { index, (action, label) ->
                 val top = bounds.top + 1 + visibleProjects.size * PROJECT_ROW_HEIGHT + index * PROJECT_ACTION_HEIGHT
                 val row = IdeRect(bounds.left + 1, top, bounds.right - 1, top + PROJECT_ACTION_HEIGHT)
-                target(action, row, true, z = Z_PROJECT_SWITCHER_TARGET)
+                target(action, row, true, focusGroup = IdeFocusGroup.ProjectSwitcher, z = Z_PROJECT_SWITCHER_TARGET)
                 ui(IdeTextKind.ProjectAction, label, row.left + 6, row.top + 5, clip = bounds, z = Z_PROJECT_SWITCHER_TEXT)
             }
         }
@@ -374,6 +375,7 @@ object IdeRenderer {
             selected: Boolean,
             targetZ: Int,
             textZ: Int,
+            focusGroup: IdeFocusGroup = IdeFocusGroup.Page,
         ) {
             val actionsWidth = if (project.external) 112 else 158
             val open = IdeRect(row.left, row.top, row.right - actionsWidth - 6, row.bottom - 2)
@@ -382,6 +384,7 @@ object IdeRenderer {
                 open,
                 enabled && !selected,
                 project.path,
+                focusGroup = focusGroup,
                 z = targetZ,
                 selected = selected,
                 choiceIndex = index,
@@ -398,7 +401,15 @@ object IdeRenderer {
             var left = open.right + 4
             if (!project.external) {
                 val rename = IdeRect(left, row.top + 4, left + 60, row.bottom - 6)
-                target(IdeHitAction.RenameProjectFolder, rename, enabled, "Rename project folder", z = targetZ, choiceIndex = index)
+                target(
+                    IdeHitAction.RenameProjectFolder,
+                    rename,
+                    enabled,
+                    "Rename project folder",
+                    focusGroup = focusGroup,
+                    z = targetZ,
+                    choiceIndex = index,
+                )
                 ui(IdeTextKind.ProjectAction, "Rename…", rename.left + 4, rename.top + 5, clip = rename, z = textZ)
                 left = rename.right + 4
             }
@@ -409,6 +420,7 @@ object IdeRenderer {
                 remove,
                 enabled,
                 if (project.external) "Remove from list; files are kept" else "Delete folder and all files after confirmation",
+                focusGroup = focusGroup,
                 z = targetZ,
                 choiceIndex = index,
             )
