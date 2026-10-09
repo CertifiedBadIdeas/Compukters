@@ -60,12 +60,7 @@ val compukterVmLock = compukterVmRoot.resolve("Cargo.lock")
 registerCompukterVmReleaseTasks(compukterVmRoot)
 
 val releaseRuntimeBundleDirectory = providers.gradleProperty("compukterRuntimeBundleDir").map(rootProject::file)
-val releaseRuntimeVmCommit =
-    providers.exec {
-        workingDir(compukterVmRoot)
-        commandLine("git", "rev-parse", "HEAD")
-    }.standardOutput.asText.map(String::trim)
-val releaseRuntimeContract = releaseRuntimeVmCommit.map(::currentRuntimeBundleContract)
+val releaseRuntimeContract = runtimeBundleContractProvider()
 val downloadedReleaseRuntimeBundleDirectory =
     providers.provider {
         gradle.gradleUserHomeDir.resolve("caches/compukters/runtime/${releaseRuntimeContract.get().runtimeVersion}")
@@ -76,6 +71,8 @@ tasks.register("downloadCompukterRuntimeBundles") {
     group = "build"
     inputs.property("runtimeVersion", releaseRuntimeContract.map(RuntimeBundleContract::runtimeVersion))
     inputs.property("runtimeReleaseTag", releaseRuntimeContract.map(RuntimeBundleContract::releaseTag))
+    inputs.property("runtimeVmCommit", releaseRuntimeContract.map(RuntimeBundleContract::vmCommit))
+    inputs.property("runtimeAbi", releaseRuntimeContract.map(RuntimeBundleContract::ffiAbi))
     outputs.dir(downloadedReleaseRuntimeBundleDirectory)
     onlyIf { !releaseRuntimeBundleDirectory.isPresent }
     doLast {

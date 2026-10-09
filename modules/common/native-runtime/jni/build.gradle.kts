@@ -56,12 +56,7 @@ val generatedReleaseNativeResources = layout.buildDirectory.dir("generated/relea
 val runtimeBundleDirectory = providers.gradleProperty("compukterRuntimeBundleDir").map(rootProject::file)
 val releaseRuntimeRequested = requestsUniversalReleaseBuild(gradle)
 val compukterVmRoot = rootProject.file("host/compukter-vm")
-val compukterVmCommit =
-    providers.exec {
-        workingDir(compukterVmRoot)
-        commandLine("git", "rev-parse", "HEAD")
-    }.standardOutput.asText.map(String::trim)
-val runtimeBundleContract = compukterVmCommit.map(::currentRuntimeBundleContract)
+val runtimeBundleContract = rootProject.runtimeBundleContractProvider()
 val downloadedRuntimeBundleDirectory =
     providers.provider {
         rootProject.gradle.gradleUserHomeDir
@@ -90,7 +85,9 @@ val preparePackagedReleaseRuntime =
         group = "build"
         dependsOn(rootProject.tasks.named("downloadCompukterRuntimeBundles"))
         inputs.dir(selectedReleaseRuntimeBundleDirectory)
-        inputs.property("compukterVmCommit", compukterVmCommit)
+        inputs.property("runtimeVersion", runtimeBundleContract.map(RuntimeBundleContract::runtimeVersion))
+        inputs.property("runtimeVmCommit", runtimeBundleContract.map(RuntimeBundleContract::vmCommit))
+        inputs.property("runtimeAbi", runtimeBundleContract.map(RuntimeBundleContract::ffiAbi))
         outputs.dir(generatedReleaseNativeResources)
         doLast {
             val output = generatedReleaseNativeResources.get().asFile.toPath()

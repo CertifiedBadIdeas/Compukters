@@ -26,11 +26,17 @@ publishing. The build job needs no publishing credentials; the publishing job ru
 only after a pushed release tag passes all verification.
 
 Publish the matching native Runtime first. The mod's Runtime contract in
-`build-scripts/src/main/kotlin/RuntimeBundleSupport.kt` must match the published
-Linux/Windows assets, their manifests, and the pinned VM commit. A source-built
+`config/runtime-release.properties` selects the published Runtime version and its
+release commit. The mod accepts every revision of native ABI 21; the selected
+release need not match the development VM submodule commit. To select another
+compatible revision, provide its descriptor with `-PcompukterRuntimeReleaseFile=/path/to/runtime-release.properties`.
+The selected identity must match the published Linux/Windows assets and their manifests. A source-built
 native that implements newer artifact reader features does not establish that an
 older published bundle supports those features. Keep these contracts aligned when
 preparing the candidate; missing or mismatched Runtime assets stop the release.
+Both mod JARs record the selected native release at `META-INF/compukters/runtime.properties`.
+Inventory schema 3 records that actual component separately from the source submodule revision;
+the transfer tool retains readers for inventories 1 and 2 when resuming their publication.
 
 ## Prepare and validate a candidate
 

@@ -83,6 +83,21 @@ def inspect_bundled(path, transport):
                 'delivery': 'bundled'}
 
 
+def inspect_runtime(path):
+    with zipfile.ZipFile(path) as archive:
+        entry = archive.getinfo('META-INF/compukters/runtime.properties')
+        require(entry.file_size <= 4096, 'runtime identity exceeds limit')
+        rows = archive.read(entry).decode('utf-8').splitlines()
+        require(len(rows) == 3 and all('=' in row for row in rows), 'invalid runtime identity')
+        identity = dict(row.split('=', 1) for row in rows)
+        require(set(identity) == {'version', 'vmCommit', 'ffiAbi'}, 'invalid runtime identity fields')
+        version = re.fullmatch(r'0\.([1-9]\d*)\.(0|[1-9]\d*)', identity['version'])
+        require(version and identity['ffiAbi'] == version[1], 'runtime identity ABI mismatch')
+        require(re.fullmatch('[0-9a-f]{40}', identity['vmCommit']), 'invalid runtime release revision')
+        return {'version': identity['version'], 'abi': int(identity['ffiAbi']),
+                'revision': identity['vmCommit'], 'delivery': 'bundled'}
+
+
 def prepare(root, output, tag):
     version = properties(root / 'gradle.properties')['version'].strip()
     require(re.fullmatch(r'(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)', version),
@@ -96,12 +111,16 @@ def prepare(root, output, tag):
     notes = changelog(root, version)
     artifacts = []
     tooling = None
+    runtime = None
     for minecraft, _, transport in TARGETS:
         filename = f'compukters-{minecraft}-neoforge-{version}.jar'
         source = root / 'dist' / minecraft / filename
         component = inspect_bundled(source, transport)
         require(tooling is None or tooling == component, 'Minecraft targets have different tooling components')
         tooling = component
+        selected_runtime = inspect_runtime(source)
+        require(runtime is None or runtime == selected_runtime, 'Minecraft targets have different Runtime releases')
+        runtime = selected_runtime
         artifacts.append({'filename': filename, 'source': source, 'minecraft': minecraft,
                           'loader': 'neoforge', 'distribution': 'bundled', 'bytes': source.stat().st_size,
                           'hashes': digests(source), 'version_number': f'{minecraft}-neoforge-{version}'})
@@ -120,10 +139,10 @@ def prepare(root, output, tag):
     output.mkdir(parents=True)
     for artifact in artifacts + addons:
         shutil.copyfile(artifact.pop('source'), output / artifact['filename'])
-    manifest = {'schema': 2, 'repository': REPOSITORY, 'modrinth_project': PROJECT,
+    manifest = {'schema': 3, 'repository': REPOSITORY, 'modrinth_project': PROJECT,
                 'tag': tag, 'version': version, 'revision': git(root, 'rev-parse', 'HEAD'),
                 'vm_revision': git(root / 'host/compukter-vm', 'rev-parse', 'HEAD'),
-                'components': {'tooling': tooling}, 'artifacts': artifacts, 'addons': addons}
+                'components': {'tooling': tooling, 'runtime': runtime}, 'artifacts': artifacts, 'addons': addons}
     (output / 'release.json').write_text(json.dumps(manifest, indent=2) + '\n')
     (output / 'release-notes.md').write_text(notes)
     files = sorted(path for path in output.iterdir() if path.is_file())
@@ -153,7 +172,7 @@ def inspect_addon(path, addon, addon_version, mod_version):
 
 def load_release(directory):
     manifest = json.loads((directory / 'release.json').read_text())
-    require(manifest['schema'] in (1, 2) and manifest['repository'] == REPOSITORY,
+    require(manifest['schema'] in (1, 2, 3) and manifest['repository'] == REPOSITORY,
             'unsupported release manifest')
     require(manifest['modrinth_project'] == PROJECT, 'unexpected destination project')
     require(re.fullmatch(r'(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)', manifest['version']),
@@ -169,9 +188,11 @@ def load_release(directory):
         path = directory / artifact['filename']
         require(digests(path) == artifact['hashes'] and path.stat().st_size == artifact['bytes'],
                 f'artifact changed after staging: {path.name}')
-    addons = manifest['addons'] if manifest['schema'] == 2 else []
-    require(manifest['schema'] == 2 or 'addons' not in manifest, 'schema 1 cannot declare addons')
-    require([a['addon'] for a in addons] == (ADDONS if manifest['schema'] == 2 else []),
+        if manifest['schema'] == 3:
+            require(inspect_runtime(path) == manifest['components']['runtime'], 'Runtime composition differs from inventory')
+    addons = manifest['addons'] if manifest['schema'] >= 2 else []
+    require(manifest['schema'] >= 2 or 'addons' not in manifest, 'schema 1 cannot declare addons')
+    require([a['addon'] for a in addons] == (ADDONS if manifest['schema'] >= 2 else []),
             'missing or extra release addons')
     line = '.'.join(manifest['version'].split('.')[:2])
     for artifact in addons:

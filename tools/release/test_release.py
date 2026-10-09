@@ -120,6 +120,8 @@ class ReleaseTest(unittest.TestCase):
                     archive.writestr(f'META-INF/natives/{platform}/x86_64/{filename}', b'native fixture')
                 archive.writestr(release.TOOLING + '.bundle', 'format=1\nbundleSha256=' + 'a' * 64 + '\n')
                 archive.writestr(release.TOOLING + '.zip.xz', b'carrier fixture')
+                archive.writestr('META-INF/compukters/runtime.properties',
+                                 'version=0.21.2\nvmCommit=' + 'b' * 40 + '\nffiAbi=21\n')
         for addon in release.ADDONS:
             addon_version = '1.0' if addon == 'sable' else '2.0'
             properties = self.root / 'addons' / addon / 'gradle.properties'
@@ -149,8 +151,30 @@ class ReleaseTest(unittest.TestCase):
         self.assertEqual(manifest['components']['tooling']['delivery'], 'bundled')
         self.assertEqual((self.output / 'release-notes.md').read_text(), 'New capability.\n')
         self.assertEqual([a['addon'] for a in manifest['addons']], release.ADDONS)
-        self.assertEqual(manifest['schema'], 2)
+        self.assertEqual(manifest['schema'], 3)
+        self.assertEqual(manifest['components']['runtime']['version'], '0.21.2')
+        self.assertEqual(manifest['components']['runtime']['abi'], 21)
+        self.assertNotEqual(manifest['components']['runtime']['revision'], manifest['vm_revision'])
         self.assertEqual(len((self.output / 'checksums.sha256').read_text().splitlines()), 7)
+
+    def test_runtime_composition_must_match_the_packaged_release(self):
+        manifest, _ = self.prepared()
+        manifest['components']['runtime']['revision'] = 'c' * 40
+        (self.output / 'release.json').write_text(json.dumps(manifest))
+        with self.assertRaisesRegex(ValueError, 'Runtime composition differs'):
+            release.load_release(self.output)
+
+    def test_minecraft_targets_cannot_package_different_runtime_releases(self):
+        path = self.root / 'dist/26.1.2/compukters-26.1.2-neoforge-0.5.0.jar'
+        with zipfile.ZipFile(path) as archive:
+            entries = {name: archive.read(name) for name in archive.namelist()}
+        entries['META-INF/compukters/runtime.properties'] = ('version=0.21.3\nvmCommit=' + 'c' * 40 + '\nffiAbi=21\n').encode()
+        with zipfile.ZipFile(path, 'w') as archive:
+            for name, content in entries.items():
+                archive.writestr(name, content)
+        with self.assertRaisesRegex(ValueError, 'different Runtime releases'):
+            self.prepared()
+        self.assertFalse(self.output.exists())
 
     def test_missing_addon_is_rejected_before_staging(self):
         next((self.root / 'dist/1.21.1').glob('*sable*.jar')).unlink()
