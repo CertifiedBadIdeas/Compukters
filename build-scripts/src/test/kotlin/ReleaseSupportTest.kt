@@ -16,11 +16,31 @@
  * limitations under the License.
  */
 
+import org.gradle.api.invocation.Gradle
+import org.gradle.testfixtures.ProjectBuilder
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Test
+import java.lang.reflect.Proxy
 
 class ReleaseSupportTest {
+    @Test
+    fun includedBuildUsesTheOuterDistributionMode() {
+        fun build(tasks: List<String>, parent: Gradle? = null): Gradle {
+            val parameters = ProjectBuilder.builder().build().gradle.startParameter.apply { setTaskNames(tasks) }
+            return Proxy.newProxyInstance(Gradle::class.java.classLoader, arrayOf(Gradle::class.java)) { _, method, _ ->
+                when (method.name) {
+                    "getParent" -> parent
+                    "getStartParameter" -> parameters
+                    else -> error("Unexpected Gradle method: ${method.name}")
+                }
+            } as Gradle
+        }
+        val release = build(listOf("collectReleaseDistributionJars"))
+        assertEquals(true, requestsUniversalReleaseBuild(build(emptyList(), build(emptyList(), release))))
+        assertEquals(false, requestsUniversalReleaseBuild(build(emptyList(), build(listOf("collectDistributionJars")))))
+    }
+
     @Test
     fun stableVersionDerivesTagAndNextDevelopmentVersion() {
         val version = ReleaseVersion.parse("0.1.0")
@@ -170,6 +190,9 @@ class ReleaseSupportTest {
     fun onlyTheExplicitReleaseAssemblyTaskSelectsUniversalRuntimeMode() {
         assertEquals(true, requestsUniversalReleaseBuild(listOf(":v26_1-neoforge:buildReleaseUniversalJar")))
         assertEquals(true, requestsUniversalReleaseBuild(listOf("buildReleaseUniversalJar")))
+        assertEquals(true, requestsUniversalReleaseBuild(listOf("collectReleaseDistributionJars")))
+        assertEquals(true, requestsUniversalReleaseBuild(listOf(":Compukters:stageReleaseDistributionModJars")))
+        assertEquals(false, requestsUniversalReleaseBuild(listOf("collectDistributionJars")))
         assertEquals(false, requestsUniversalReleaseBuild(listOf(":v26_1-neoforge:buildProductionUniversalJar")))
         assertEquals(false, requestsUniversalReleaseBuild(listOf("release")))
     }

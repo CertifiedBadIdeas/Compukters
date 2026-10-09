@@ -19,7 +19,7 @@ concurrency:
 
 jobs:
   build:
-    name: Verify and assemble autonomous JARs
+    name: Verify and collect mod and addon JARs
     runs-on: ubuntu-latest
     timeout-minutes: 180
     outputs:
@@ -69,8 +69,14 @@ jobs:
         run: ./gradlew-sandbox-dev-parallel-summary downloadCompukterRuntimeBundles --max-workers=2
       - name: Fully verify exact candidate
         run: ./gradlew-sandbox-dev-parallel-summary verifyLocalFull --max-workers=2
-      - name: Verify clean tagged universal release archives
-        run: ./gradlew-sandbox-dev-parallel-summary buildReleaseUniversalJar --max-workers=2
+      - name: Collect mod and addons with clean tagged universal release gates
+        run: ./gradlew-sandbox-dev-parallel-summary -p addons/dev collectReleaseDistributionJars --max-workers=2
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: mod-and-addons-${{ github.run_id }}-${{ github.run_attempt }}
+          path: dist/
+          if-no-files-found: error
+          retention-days: 7
       - name: Stage release inventory and checksums
         run: python3 tools/release/release.py prepare --tag "$RELEASE_TAG" --output build/release
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4

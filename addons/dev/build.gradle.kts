@@ -186,18 +186,22 @@ tasks.configureEach {
     if (name == "runGameTestServer") dependsOn(addonGameTestMods.values)
 }
 
-tasks.register<Sync>("collectDistributionJars") {
-    group = "compukters distribution"
-    description = "Builds and collects production mod and first-party addon JARs into workspace dist/."
-    duplicatesStrategy = DuplicatesStrategy.FAIL
-    outputs.upToDateWhen { false }
-    val mods = files(layout.projectDirectory.dir("../../build/distribution"))
-        .builtBy(gradle.includedBuild("Compukters").task(":stageDistributionModJars"))
-    from(mods)
-    listOf("create", "sable", "propulsion").forEach { addon ->
-        val archives = files(layout.projectDirectory.dir("../$addon/build/distribution"))
-            .builtBy(gradle.includedBuild("compukters-$addon").task(":stageDistributionJar"))
-        from(archives) { into("1.21.1") }
+listOf(false, true).forEach { release ->
+    tasks.register<Sync>(if (release) "collectReleaseDistributionJars" else "collectDistributionJars") {
+        group = "compukters distribution"
+        description = "Collects ${if (release) "downloaded universal release" else "locally built Runtime"} mod and addon JARs into dist/."
+        duplicatesStrategy = DuplicatesStrategy.FAIL
+        outputs.upToDateWhen { false }
+        val mods = files(layout.projectDirectory.dir("../../build/distribution"))
+            .builtBy(gradle.includedBuild("Compukters").task(
+                if (release) ":stageReleaseDistributionModJars" else ":stageDistributionModJars",
+            ))
+        from(mods)
+        listOf("create", "sable", "propulsion").forEach { addon ->
+            val archives = files(layout.projectDirectory.dir("../$addon/build/distribution"))
+                .builtBy(gradle.includedBuild("compukters-$addon").task(":stageDistributionJar"))
+            from(archives) { into("1.21.1") }
+        }
+        into(layout.projectDirectory.dir("../../dist"))
     }
-    into(layout.projectDirectory.dir("../../dist"))
 }

@@ -12,6 +12,7 @@ import re
 import shutil
 import subprocess
 import tempfile
+import tomllib
 import urllib.error
 import urllib.request
 import uuid
@@ -20,6 +21,7 @@ import zipfile
 PROJECT = 'xriOD3eh'
 REPOSITORY = 'CertifiedBadIdeas/Compukters'
 TARGETS = [('1.21.1', 'v1_21_1', 'jni'), ('26.1.2', 'v26_1', 'ffi')]
+ADDONS = ['create', 'sable', 'propulsion']
 TOOLING = 'tooling/workers/k2-tooling-workers'
 MAX_ARTIFACT = 256 * 1024 * 1024
 
@@ -94,23 +96,34 @@ def prepare(root, output, tag):
     notes = changelog(root, version)
     artifacts = []
     tooling = None
-    for minecraft, family, transport in TARGETS:
+    for minecraft, _, transport in TARGETS:
         filename = f'compukters-{minecraft}-neoforge-{version}.jar'
-        source = root / f'modules/minecraft/{family}/{family}-neoforge/build/libs' / filename
+        source = root / 'dist' / minecraft / filename
         component = inspect_bundled(source, transport)
         require(tooling is None or tooling == component, 'Minecraft targets have different tooling components')
         tooling = component
         artifacts.append({'filename': filename, 'source': source, 'minecraft': minecraft,
                           'loader': 'neoforge', 'distribution': 'bundled', 'bytes': source.stat().st_size,
                           'hashes': digests(source), 'version_number': f'{minecraft}-neoforge-{version}'})
+    addons = []
+    line = '.'.join(version.split('.')[:2])
+    for addon in ADDONS:
+        addon_version = properties(root / 'addons' / addon / 'gradle.properties')['addonVersion']
+        require(re.fullmatch(r'(0|[1-9]\d*)\.(0|[1-9]\d*)', addon_version), 'invalid addon version')
+        filename = f'compukters-{addon}-1.21.1-neoforge-{line}-{addon_version}.jar'
+        source = root / 'dist/1.21.1' / filename
+        inspect_addon(source, addon, addon_version, version)
+        addons.append({'addon': addon, 'version': addon_version, 'compukters_line': line,
+                       'filename': filename, 'source': source, 'minecraft': '1.21.1', 'loader': 'neoforge',
+                       'bytes': source.stat().st_size, 'hashes': digests(source)})
     require(not output.exists(), 'release staging directory already exists; use a fresh output directory')
     output.mkdir(parents=True)
-    for artifact in artifacts:
+    for artifact in artifacts + addons:
         shutil.copyfile(artifact.pop('source'), output / artifact['filename'])
-    manifest = {'schema': 1, 'repository': REPOSITORY, 'modrinth_project': PROJECT,
+    manifest = {'schema': 2, 'repository': REPOSITORY, 'modrinth_project': PROJECT,
                 'tag': tag, 'version': version, 'revision': git(root, 'rev-parse', 'HEAD'),
                 'vm_revision': git(root / 'host/compukter-vm', 'rev-parse', 'HEAD'),
-                'components': {'tooling': tooling}, 'artifacts': artifacts}
+                'components': {'tooling': tooling}, 'artifacts': artifacts, 'addons': addons}
     (output / 'release.json').write_text(json.dumps(manifest, indent=2) + '\n')
     (output / 'release-notes.md').write_text(notes)
     files = sorted(path for path in output.iterdir() if path.is_file())
@@ -119,9 +132,28 @@ def prepare(root, output, tag):
     return manifest
 
 
+def inspect_addon(path, addon, addon_version, mod_version):
+    with zipfile.ZipFile(path) as archive:
+        names = archive.namelist()
+        require(len(names) == len(set(names)), 'duplicate addon JAR entries')
+        require('META-INF/neoforge.mods.toml' in names
+                and f'META-INF/compukters/addons/{addon}.cagb' in names, 'missing addon metadata or Guest bundle')
+        metadata = tomllib.loads(archive.read('META-INF/neoforge.mods.toml').decode())
+        mod_id = 'compukters_' + addon
+        mods = metadata.get('mods', [])
+        require(len(mods) == 1 and mods[0].get('modId') == mod_id and mods[0].get('version') == addon_version,
+                'addon identity/version mismatch')
+        major, minor, _ = map(int, mod_version.split('.'))
+        dependencies = metadata.get('dependencies', {}).get(mod_id, [])
+        base = [entry for entry in dependencies if entry.get('modId') == 'compukters']
+        require(len(base) == 1 and base[0].get('type') == 'required'
+                and base[0].get('versionRange') == f'[{mod_version},{major}.{minor + 1}.0)',
+                'addon Compukters dependency mismatch')
+
+
 def load_release(directory):
     manifest = json.loads((directory / 'release.json').read_text())
-    require(manifest['schema'] == 1 and manifest['repository'] == REPOSITORY,
+    require(manifest['schema'] in (1, 2) and manifest['repository'] == REPOSITORY,
             'unsupported release manifest')
     require(manifest['modrinth_project'] == PROJECT, 'unexpected destination project')
     require(re.fullmatch(r'(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)', manifest['version']),
@@ -137,7 +169,22 @@ def load_release(directory):
         path = directory / artifact['filename']
         require(digests(path) == artifact['hashes'] and path.stat().st_size == artifact['bytes'],
                 f'artifact changed after staging: {path.name}')
-    expected_files = sorted(['release.json', 'release-notes.md'] + [a['filename'] for a in manifest['artifacts']])
+    addons = manifest['addons'] if manifest['schema'] == 2 else []
+    require(manifest['schema'] == 2 or 'addons' not in manifest, 'schema 1 cannot declare addons')
+    require([a['addon'] for a in addons] == (ADDONS if manifest['schema'] == 2 else []),
+            'missing or extra release addons')
+    line = '.'.join(manifest['version'].split('.')[:2])
+    for artifact in addons:
+        addon, addon_version = artifact['addon'], artifact['version']
+        require(re.fullmatch(r'(0|[1-9]\d*)\.(0|[1-9]\d*)', addon_version), 'invalid addon version')
+        require(artifact['filename'] == f'compukters-{addon}-1.21.1-neoforge-{line}-{addon_version}.jar'
+                and artifact['minecraft'] == '1.21.1' and artifact['loader'] == 'neoforge'
+                and artifact['compukters_line'] == line, 'unsupported addon composition')
+        path = directory / artifact['filename']
+        require(digests(path) == artifact['hashes'] and path.stat().st_size == artifact['bytes'],
+                f'addon changed after staging: {path.name}')
+        inspect_addon(path, addon, addon_version, manifest['version'])
+    expected_files = sorted(['release.json', 'release-notes.md'] + [a['filename'] for a in manifest['artifacts'] + addons])
     expected_checksums = ''.join(f'{hashlib.sha256((directory / name).read_bytes()).hexdigest()}  {name}\n'
                                  for name in expected_files)
     require((directory / 'checksums.sha256').read_text() == expected_checksums, 'staged release checksum inventory differs')
@@ -276,7 +323,7 @@ def publish_github(directory, client):
     title = f'Compukters {manifest["version"]}'
     files = {name: directory / name for name in
              ['release.json', 'release-notes.md', 'checksums.sha256']
-             + [artifact['filename'] for artifact in manifest['artifacts']]}
+             + [artifact['filename'] for artifact in manifest['artifacts'] + manifest.get('addons', [])]}
     existing = client.get(tag)
     if existing is None:
         client.create(tag, title, directory / 'release-notes.md')
@@ -325,7 +372,8 @@ def main():
             prepare(args.root.resolve(), args.output.resolve(), args.tag)
         elif args.command == 'verify':
             manifest = load_release(args.directory)
-            print(f'Verified staged release {manifest["tag"]}: {len(manifest["artifacts"])} autonomous JARs')
+            print(f'Verified staged release {manifest["tag"]}: {len(manifest["artifacts"])} mod JARs, '
+                  f'{len(manifest.get("addons", []))} addon JARs')
         elif args.command == 'github':
             publish_github(args.directory, GitHub())
         else:

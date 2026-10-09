@@ -28,12 +28,16 @@ To collect the production mod JARs and first-party addons in one workspace folde
 
 ```bash
 ./gradlew-sandbox-dev-parallel-summary -p addons/dev collectDistributionJars
+# Clean exact-tag universal release using the pinned downloadable Runtime bundles:
+./gradlew-sandbox-dev-parallel-summary -p addons/dev collectReleaseDistributionJars
 ```
 
 The task builds and verifies the archives before synchronizing `dist/`: `1.21.1/` contains Compukters plus the
 Create, Sable and Propulsion addons; `26.1.2/` contains Compukters. Re-running removes stale distribution files.
-These are production archives for the configured local native platform; tagged multi-platform publication still
-requires the separate release gate below. Third-party mods required by addons must be installed separately.
+`collectDistributionJars` builds Rust locally and packages the configured local native platform.
+`collectReleaseDistributionJars` downloads the pinned Linux/Windows Runtime bundles and runs both clean tagged
+release gates before collecting the same mod/addon layout. Full candidate verification remains a separate step.
+Third-party mods required by addons must be installed separately.
 
 Minecraft-independent Gradle modules are grouped beneath `modules/common`, while
 all game-facing code is grouped beneath `modules/minecraft`. Minecraft and

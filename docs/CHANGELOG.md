@@ -19,10 +19,13 @@ listed in [Kotlin support](developers/kotlin-support.md) and [standard library s
 
 ### Release delivery
 
-- `collectDistributionJars` builds and verifies the mod and first-party addon archives, collecting them in
-  `dist/` by Minecraft version and removing stale files on subsequent runs.
+- Runtime CI runs its Rust checks on both Linux and Windows for ordinary pushes and pull requests.
+- `collectDistributionJars` builds Rust locally; `collectReleaseDistributionJars` downloads pinned Linux/Windows
+  Runtime bundles and applies both tagged release gates. Both verify the mod and first-party addons, collecting
+  archives in `dist/` by Minecraft version and removing stale files on subsequent runs.
 - Verified autonomous NeoForge releases can be published to GitHub Releases and Modrinth from the same tagged
-  artifacts, with component identities, checksums and resumable publication. Manual workflow runs validate the
+  artifacts, with component identities, checksums and resumable publication. GitHub Releases also includes the
+  Create, Sable and Propulsion addon archives. Manual workflow runs validate the
   candidate without publishing.
 
 ### Guest Kotlin

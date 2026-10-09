@@ -19,7 +19,13 @@
 import org.gradle.api.Project
 
 private val developmentTasks = setOf("runClient", "runClient2", "runClient3", "runServer", "runGameTestServer")
-private val distributionTasks = setOf("buildProductionUniversalJar", "buildReleaseUniversalJar", "stageDistributionModJars")
+private val distributionTasks =
+    setOf(
+        "buildProductionUniversalJar",
+        "buildReleaseUniversalJar",
+        "stageDistributionModJars",
+        "stageReleaseDistributionModJars",
+    )
 private val verificationTasks =
     setOf(
         "verifyLocalFast",
