@@ -239,6 +239,24 @@ class IdeBuildCoordinatorTest {
     }
 
     @Test
+    fun `cancellation is forwarded after compilation returns its future`() {
+        val returnBarrier = CompletableFuture<Unit>()
+        fixture.compilation.returnBarrier = returnBarrier
+        val active = fixture.coordinator.build(5, fixture.input(fixture.canonicalLock()))
+        try {
+            active.started.get(5, TimeUnit.SECONDS)
+            fixture.compilation.awaitInput()
+            assertTrue(active.cancel())
+            assertEquals(0, fixture.compilation.cancelCalls)
+            assertEquals(IdeBuildFailureKind.Cancelled, assertIs<IdeBuildState.Failed>(active.result.get(5, TimeUnit.SECONDS)).kind)
+        } finally {
+            returnBarrier.complete(Unit)
+        }
+        fixture.compilation.awaitCancellation()
+        assertEquals(1, fixture.compilation.cancelCalls)
+    }
+
+    @Test
     fun `unsatisfied local profile fails before compiler and cancellation reaches active compilation`() {
         val mismatched =
             ProjectLockCodec
@@ -256,6 +274,7 @@ class IdeBuildCoordinatorTest {
         active.started.get(5, TimeUnit.SECONDS)
         fixture.compilation.awaitInput()
         assertTrue(active.cancel())
+        fixture.compilation.awaitCancellation()
         assertEquals(1, fixture.compilation.cancelCalls)
     }
 }
@@ -298,6 +317,8 @@ private class ControlledCompilationService : ClientCompilationService {
     val inputs = mutableListOf<ClientBuildSnapshot>()
     private val submitted = LinkedBlockingQueue<ClientBuildSnapshot>()
     private val futures = ArrayDeque<CompletableFuture<ClientBuildResult>>()
+    private val cancelled = CompletableFuture<Unit>()
+    var returnBarrier: CompletableFuture<Unit>? = null
     var cancelCalls = 0
 
     override fun build(input: ClientBuildSnapshot): CompletableFuture<ClientBuildResult> {
@@ -305,10 +326,13 @@ private class ControlledCompilationService : ClientCompilationService {
         synchronized(inputs) { inputs += input }
         futures.addLast(future)
         submitted.add(input)
+        returnBarrier?.get(5, TimeUnit.SECONDS)
         return future
     }
 
     fun awaitInput(): ClientBuildSnapshot = requireNotNull(submitted.poll(5, TimeUnit.SECONDS))
+
+    fun awaitCancellation() = cancelled.get(5, TimeUnit.SECONDS)
 
     fun complete(result: ClientBuildResult) {
         futures.removeFirst().complete(result)
@@ -316,6 +340,7 @@ private class ControlledCompilationService : ClientCompilationService {
 
     override fun cancel(future: CompletableFuture<ClientBuildResult>): Boolean {
         cancelCalls++
+        cancelled.complete(Unit)
         return true
     }
 
