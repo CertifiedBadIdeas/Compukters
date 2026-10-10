@@ -56,7 +56,7 @@ class AddonReleaseTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'exact addon tag'):
             self.prepare()
         command(self.root, 'tag', 'v2.0')
-        (self.sdk / 'sdk.properties').write_text('format=1\nsdkVersion=0.5.0\nmodVersion=0.6.0\nmodBuildVersion=0.6.0-S\n')
+        (self.sdk / 'sdk.properties').write_text('format=1\nsdkVersion=0.5.0\nmodVersion=0.6.0\nmodBuildVersion=0.6.0-SNAPSHOT\n')
         with self.assertRaisesRegex(ValueError, 'stable Compukters SDK'):
             self.prepare()
 

@@ -234,7 +234,7 @@ fun computeEffectiveBuildVersion(
     return if (headTags.any { it in releaseTags }) {
         baseVersion
     } else {
-        "$baseVersion-S"
+        "$baseVersion-SNAPSHOT"
     }
 }
 

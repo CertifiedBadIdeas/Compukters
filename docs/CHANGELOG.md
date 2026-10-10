@@ -13,6 +13,9 @@ headings so this page has one stable URL that can be shared outside the reposito
 
 ## 0.6.0 — In development
 
+- Development builds use the standard `-SNAPSHOT` suffix, allowing NeoForge to order them below the matching
+  release and accept them within published addon dependency ranges.
+
 ## 0.5.1 — 2026-10-10
 
 - Create, Sable and Propulsion integrations have independent repositories and tag-only GitHub release workflows.

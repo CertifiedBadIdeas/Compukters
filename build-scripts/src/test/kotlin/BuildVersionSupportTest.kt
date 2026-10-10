@@ -16,10 +16,24 @@
  * limitations under the License.
  */
 
+import org.apache.maven.artifact.versioning.DefaultArtifactVersion
+import org.apache.maven.artifact.versioning.VersionRange
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertFalse
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 
 class BuildVersionSupportTest {
+    @Test
+    fun publishedAddonRangeAcceptsNextDevelopmentBuildButRejectsNextRelease() {
+        val range = VersionRange.createFromVersionSpec("[0.5.1,0.6.0)")
+        val developmentVersion = computeEffectiveBuildVersion("0.6.0", emptyList())
+        val releaseVersion = computeEffectiveBuildVersion("0.6.0", listOf("v0.6.0"))
+        assertTrue(range.containsVersion(DefaultArtifactVersion(developmentVersion)))
+        assertFalse(range.containsVersion(DefaultArtifactVersion(releaseVersion)))
+        assertFalse(range.containsVersion(DefaultArtifactVersion("0.5.0")))
+    }
+
     @Test
     fun keepsReleaseVersionWhenHeadHasMatchingVersionTag() {
         assertEquals(
@@ -45,7 +59,7 @@ class BuildVersionSupportTest {
     @Test
     fun marksUntaggedHeadAsSnapshot() {
         assertEquals(
-            "0.2.0-S",
+            "0.2.0-SNAPSHOT",
             computeEffectiveBuildVersion(
                 baseVersion = "0.2.0",
                 headTags = emptyList(),
@@ -56,7 +70,7 @@ class BuildVersionSupportTest {
     @Test
     fun marksMismatchedTagAsSnapshot() {
         assertEquals(
-            "0.2.0-S",
+            "0.2.0-SNAPSHOT",
             computeEffectiveBuildVersion(
                 baseVersion = "0.2.0",
                 headTags = listOf("v0.1.0"),

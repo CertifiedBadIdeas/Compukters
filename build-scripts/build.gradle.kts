@@ -40,6 +40,7 @@ dependencies {
     implementation(libs.xz)
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json-jvm:${libs.versions.kotlinx.serialization.runtime.get()}")
 
+    testImplementation("org.apache.maven:maven-artifact:3.9.9")
     testImplementation("org.junit.jupiter:junit-jupiter-api:6.1.3")
     testRuntimeOnly("org.junit.jupiter:junit-jupiter-engine:6.1.3")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher:6.1.3")
