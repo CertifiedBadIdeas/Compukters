@@ -12,7 +12,9 @@ at HEAD, a clean pinned checkout, a released changelog section, both official-na
 JARs and bundled tooling plus Linux/Windows natives. The output directory must be
 new. Sources are the exact named JARs under `dist/<minecraft>/`, produced by
 `./gradlew-sandbox-dev-parallel-summary -p addons/dev collectReleaseDistributionJars`.
-It records both supported NeoForge targets and all three first-party addons.
+Run `packageAddonDevelopmentDependencies` in the same clean tagged checkout as well.
+It creates `build/distribution/compukters-addon-development-X.Y.Z.zip`.
+The inventory records both NeoForge targets, all three first-party addons and this SDK archive.
 
 `release.py verify --directory build/release` validates the staged files against
 the inventory and checksums. `release.py modrinth --directory build/release`
@@ -21,10 +23,10 @@ versions for conflicts before any upload and resumes missing targets on retry.
 There is no automatic POST retry after an ambiguous transport failure: rerun the
 command to reconcile remote versions first.
 
-## Inventory schema 3
+## Inventory schema 4
 
 `release.json` has `schema`, `repository`, `modrinth_project`, `tag`, `version`,
-`revision`, `vm_revision`, `components`, `artifacts`, and `addons`. Revisions identify the
+`revision`, `vm_revision`, `components`, `artifacts`, `addons`, and `development`. Revisions identify the
 parent and pinned VM commits. `components.tooling` records `bundle_sha256`
 (the canonical tooling identity), `manifest_sha256`, `carrier_sha256`, and
 `delivery: bundled`.
@@ -37,12 +39,15 @@ native compatibility is determined by ABI rather than package revision.
 Each artifact records its basename, Minecraft version, loader, Modrinth version
 number, byte length, SHA-256/SHA-512 digests, and `distribution: bundled`.
 `release-notes.md` contains only the current changelog section; `checksums.sha256`
-covers the inventory, notes, and all five JARs. Addons have independent `x.y` versions;
+covers the inventory, notes, all five JARs and the SDK ZIP. Addons have independent `x.y` versions;
 their entries record addon identity, target Compukters line, Minecraft version,
 loader, filename, byte length and SHA-256/SHA-512. Their packaged mod identity,
 Guest bundle and bounded Compukters dependency are verified before staging.
-GitHub receives the addons; Modrinth receives only the two base-mod artifacts.
-Readers accept schema 1 without addons and schema 2 without a native component identity
+The `development` entry records the SDK version, archive filename, byte length and hashes.
+The SDK ZIP contains a file Maven repository with the plugin marker, plugin, compiler tooling, platform bundle,
+host contracts, both adapters and both development mod JARs, plus metadata and licenses.
+GitHub receives the addons and SDK; Modrinth receives only the two base-mod artifacts.
+Readers accept schema 3 without development assets, schema 1 without addons and schema 2 without a native component identity
 for recovery of previously staged releases. All schemas deliberately admit only the
 current autonomous composition. A future downloaded composition must add an
 explicit contract for pinned component locations, lengths, hashes, and offline

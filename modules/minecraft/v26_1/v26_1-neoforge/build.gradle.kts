@@ -34,6 +34,18 @@ plugins {
     alias(libs.plugins.metadataConvention)
     alias(libs.plugins.minecraftSharedSourcesConvention)
     id("minecraft-gametest-convention")
+    `maven-publish`
+}
+
+publishing {
+    publications {
+        create<MavenPublication>("developmentMod") {
+            groupId = project.group.toString()
+            artifactId = "compukters-neoforge-26.1.2-dev"
+            version = rootProject.version.toString()
+            artifact(tasks.named("developmentModJar"))
+        }
+    }
 }
 
 loom {

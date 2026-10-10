@@ -13,6 +13,10 @@ headings so this page has one stable URL that can be shared outside the reposito
 
 ## 0.6.0 — In development
 
+- GitHub Releases include an addon development SDK archive with the Gradle plugin, Guest compiler, platform,
+  host APIs and development mod JARs for both supported Minecraft targets. Standalone addon builds can use
+  these dependencies without a separate hosted Maven repository.
+
 ## 0.5.0 — 2026-10-10
 
 This release expands Guest Kotlin, adds independently installed Create, Sable and Propulsion integrations for

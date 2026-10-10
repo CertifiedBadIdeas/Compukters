@@ -135,14 +135,19 @@ def prepare(root, output, tag):
         addons.append({'addon': addon, 'version': addon_version, 'compukters_line': line,
                        'filename': filename, 'source': source, 'minecraft': '1.21.1', 'loader': 'neoforge',
                        'bytes': source.stat().st_size, 'hashes': digests(source)})
+    sdk_source = root / 'build/distribution' / f'compukters-addon-development-{version}.zip'
+    sdk_version = inspect_sdk(sdk_source, version)
+    development = [{'kind': 'addon-sdk', 'sdk_version': sdk_version, 'filename': sdk_source.name,
+                    'source': sdk_source, 'bytes': sdk_source.stat().st_size, 'hashes': digests(sdk_source)}]
     require(not output.exists(), 'release staging directory already exists; use a fresh output directory')
     output.mkdir(parents=True)
-    for artifact in artifacts + addons:
+    for artifact in artifacts + addons + development:
         shutil.copyfile(artifact.pop('source'), output / artifact['filename'])
-    manifest = {'schema': 3, 'repository': REPOSITORY, 'modrinth_project': PROJECT,
+    manifest = {'schema': 4, 'repository': REPOSITORY, 'modrinth_project': PROJECT,
                 'tag': tag, 'version': version, 'revision': git(root, 'rev-parse', 'HEAD'),
                 'vm_revision': git(root / 'host/compukter-vm', 'rev-parse', 'HEAD'),
-                'components': {'tooling': tooling, 'runtime': runtime}, 'artifacts': artifacts, 'addons': addons}
+                'components': {'tooling': tooling, 'runtime': runtime}, 'artifacts': artifacts,
+                'addons': addons, 'development': development}
     (output / 'release.json').write_text(json.dumps(manifest, indent=2) + '\n')
     (output / 'release-notes.md').write_text(notes)
     files = sorted(path for path in output.iterdir() if path.is_file())
@@ -170,9 +175,37 @@ def inspect_addon(path, addon, addon_version, mod_version):
                 'addon Compukters dependency mismatch')
 
 
+def inspect_sdk(path, mod_version):
+    with zipfile.ZipFile(path) as archive:
+        names = archive.namelist()
+        require(len(names) == len(set(names)), 'duplicate SDK archive entries')
+        require(all(not name.startswith('/') and '..' not in Path(name).parts for name in names), 'unsafe SDK archive path')
+        entry = archive.getinfo('sdk.properties')
+        require(entry.file_size <= 4096, 'SDK metadata exceeds limit')
+        identity = dict(line.split('=', 1) for line in archive.read(entry).decode().splitlines())
+        sdk = identity.get('sdkVersion', '')
+        require(identity.get('format') == '1' and identity.get('modVersion') == mod_version
+                and identity.get('modBuildVersion', mod_version) == mod_version
+                and re.fullmatch(r'(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)', sdk), 'SDK identity differs')
+        required = [f'repository/ru/lazyhat/compukters/{name}/{sdk}/{name}-{sdk}.{extension}'
+                    for name, extension in [('compukters-addon-gradle-plugin', 'jar'),
+                                            ('compukters-addon-api', 'jar'), ('compukters-addon-tooling', 'jar'),
+                                            ('compukters-guest-platform', 'cpb'),
+                                            ('compukters-addon-neoforge-1.21.1', 'jar'),
+                                            ('compukters-addon-neoforge-26.1.2', 'jar')]]
+        marker = 'ru.lazyhat.compukters.addon'
+        required += [f'repository/{marker}/{marker}.gradle.plugin/{sdk}/{marker}.gradle.plugin-{sdk}.pom',
+                     'LICENSE', 'NOTICE']
+        required += [f'repository/ru/lazyhat/compukters/compukters-neoforge-{mc}-dev/{mod_version}/'
+                     f'compukters-neoforge-{mc}-dev-{mod_version}.jar' for mc, _, _ in TARGETS]
+        require(all(name in names and archive.getinfo(name).file_size > 0 for name in required),
+                'SDK archive is missing development dependencies')
+        return sdk
+
+
 def load_release(directory):
     manifest = json.loads((directory / 'release.json').read_text())
-    require(manifest['schema'] in (1, 2, 3) and manifest['repository'] == REPOSITORY,
+    require(manifest['schema'] in (1, 2, 3, 4) and manifest['repository'] == REPOSITORY,
             'unsupported release manifest')
     require(manifest['modrinth_project'] == PROJECT, 'unexpected destination project')
     require(re.fullmatch(r'(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)', manifest['version']),
@@ -188,7 +221,7 @@ def load_release(directory):
         path = directory / artifact['filename']
         require(digests(path) == artifact['hashes'] and path.stat().st_size == artifact['bytes'],
                 f'artifact changed after staging: {path.name}')
-        if manifest['schema'] == 3:
+        if manifest['schema'] >= 3:
             require(inspect_runtime(path) == manifest['components']['runtime'], 'Runtime composition differs from inventory')
     addons = manifest['addons'] if manifest['schema'] >= 2 else []
     require(manifest['schema'] >= 2 or 'addons' not in manifest, 'schema 1 cannot declare addons')
@@ -205,7 +238,17 @@ def load_release(directory):
         require(digests(path) == artifact['hashes'] and path.stat().st_size == artifact['bytes'],
                 f'addon changed after staging: {path.name}')
         inspect_addon(path, addon, addon_version, manifest['version'])
-    expected_files = sorted(['release.json', 'release-notes.md'] + [a['filename'] for a in manifest['artifacts'] + addons])
+    development = manifest['development'] if manifest['schema'] >= 4 else []
+    require(manifest['schema'] >= 4 or 'development' not in manifest, 'legacy schema cannot declare development assets')
+    if manifest['schema'] >= 4:
+        require(len(development) == 1 and development[0]['kind'] == 'addon-sdk', 'invalid development assets')
+        sdk = development[0]
+        require(sdk['filename'] == f'compukters-addon-development-{manifest["version"]}.zip', 'invalid SDK filename')
+        path = directory / sdk['filename']
+        require(path.stat().st_size == sdk['bytes'] and digests(path) == sdk['hashes'], 'SDK changed after staging')
+        require(inspect_sdk(path, manifest['version']) == sdk['sdk_version'], 'SDK version differs from inventory')
+    expected_files = sorted(['release.json', 'release-notes.md']
+                            + [a['filename'] for a in manifest['artifacts'] + addons + development])
     expected_checksums = ''.join(f'{hashlib.sha256((directory / name).read_bytes()).hexdigest()}  {name}\n'
                                  for name in expected_files)
     require((directory / 'checksums.sha256').read_text() == expected_checksums, 'staged release checksum inventory differs')
@@ -344,7 +387,8 @@ def publish_github(directory, client):
     title = f'Compukters {manifest["version"]}'
     files = {name: directory / name for name in
              ['release.json', 'release-notes.md', 'checksums.sha256']
-             + [artifact['filename'] for artifact in manifest['artifacts'] + manifest.get('addons', [])]}
+             + [artifact['filename'] for artifact in manifest['artifacts'] + manifest.get('addons', [])
+                + manifest.get('development', [])]}
     existing = client.get(tag)
     if existing is None:
         client.create(tag, title, directory / 'release-notes.md')

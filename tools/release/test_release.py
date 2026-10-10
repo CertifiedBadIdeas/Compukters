@@ -134,6 +134,21 @@ class ReleaseTest(unittest.TestCase):
                                  f'[[mods]]\nmodId="compukters_{addon}"\nversion="{addon_version}"\n'
                                  f'[[dependencies.compukters_{addon}]]\nmodId="compukters"\n'
                                  'type="required"\nversionRange="[0.5.0,0.6.0)"\n')
+        sdk = self.root / 'build/distribution/compukters-addon-development-0.5.0.zip'
+        sdk.parent.mkdir(parents=True)
+        with zipfile.ZipFile(sdk, 'w') as archive:
+            archive.writestr('sdk.properties', 'format=1\nsdkVersion=0.5.0\nmodVersion=0.5.0\n')
+            for name, extension in [('compukters-addon-gradle-plugin', 'jar'), ('compukters-addon-api', 'jar'),
+                                    ('compukters-addon-tooling', 'jar'), ('compukters-guest-platform', 'cpb'),
+                                    ('compukters-addon-neoforge-1.21.1', 'jar'),
+                                    ('compukters-addon-neoforge-26.1.2', 'jar'),
+                                    ('compukters-neoforge-1.21.1-dev', 'jar'),
+                                    ('compukters-neoforge-26.1.2-dev', 'jar')]:
+                archive.writestr(f'repository/ru/lazyhat/compukters/{name}/0.5.0/{name}-0.5.0.{extension}', b'SDK fixture')
+            marker = 'ru.lazyhat.compukters.addon'
+            archive.writestr(f'repository/{marker}/{marker}.gradle.plugin/0.5.0/{marker}.gradle.plugin-0.5.0.pom', b'plugin marker')
+            archive.writestr('LICENSE', b'license fixture')
+            archive.writestr('NOTICE', b'notice fixture')
         command(self.root, 'add', '.')
         command(self.root, 'commit', '-qm', 'Release fixture')
         command(self.root, 'tag', 'v0.5.0')
@@ -151,11 +166,39 @@ class ReleaseTest(unittest.TestCase):
         self.assertEqual(manifest['components']['tooling']['delivery'], 'bundled')
         self.assertEqual((self.output / 'release-notes.md').read_text(), 'New capability.\n')
         self.assertEqual([a['addon'] for a in manifest['addons']], release.ADDONS)
-        self.assertEqual(manifest['schema'], 3)
+        self.assertEqual(manifest['schema'], 4)
         self.assertEqual(manifest['components']['runtime']['version'], '0.21.2')
         self.assertEqual(manifest['components']['runtime']['abi'], 21)
         self.assertNotEqual(manifest['components']['runtime']['revision'], manifest['vm_revision'])
-        self.assertEqual(len((self.output / 'checksums.sha256').read_text().splitlines()), 7)
+        self.assertEqual(len((self.output / 'checksums.sha256').read_text().splitlines()), 8)
+        self.assertEqual(manifest['development'][0]['sdk_version'], '0.5.0')
+
+    def test_modified_sdk_prevents_publication(self):
+        manifest, _ = self.prepared()
+        client = GitHubFixture(manifest, self.output)
+        (self.output / manifest['development'][0]['filename']).write_bytes(b'changed SDK')
+        with self.assertRaisesRegex(ValueError, 'SDK changed after staging'):
+            release.publish_github(self.output, client)
+        self.assertIsNone(client.existing)
+
+    def test_sdk_rejects_snapshot_and_missing_dependency_before_staging(self):
+        sdk = self.root / 'build/distribution/compukters-addon-development-0.5.0.zip'
+        with zipfile.ZipFile(sdk) as archive:
+            original = {name: archive.read(name) for name in archive.namelist()}
+        for defect, error in [('snapshot', 'SDK identity differs'),
+                              ('missing', 'missing development dependencies')]:
+            with self.subTest(defect=defect):
+                entries = dict(original)
+                if defect == 'snapshot':
+                    entries['sdk.properties'] += b'modBuildVersion=0.5.0-S\n'
+                else:
+                    del entries['repository/ru/lazyhat/compukters/compukters-addon-tooling/0.5.0/compukters-addon-tooling-0.5.0.jar']
+                with zipfile.ZipFile(sdk, 'w') as archive:
+                    for name, content in entries.items():
+                        archive.writestr(name, content)
+                with self.assertRaisesRegex(ValueError, error):
+                    release.prepare(self.root, self.output, 'v0.5.0')
+                self.assertFalse(self.output.exists())
 
     def test_runtime_composition_must_match_the_packaged_release(self):
         manifest, _ = self.prepared()
@@ -214,7 +257,7 @@ class ReleaseTest(unittest.TestCase):
 
     def test_schema_one_can_resume_without_addons(self):
         manifest, _ = self.prepared()
-        for artifact in manifest.pop('addons'):
+        for artifact in manifest.pop('addons') + manifest.pop('development'):
             (self.output / artifact['filename']).unlink()
         manifest['schema'] = 1
         (self.output / 'release.json').write_text(json.dumps(manifest))
@@ -329,7 +372,7 @@ class ReleaseTest(unittest.TestCase):
         client = GitHubFixture(manifest, self.output)
         release.publish_github(self.output, client)
         release.publish_github(self.output, client)
-        self.assertEqual(len(client.uploads), 8)
+        self.assertEqual(len(client.uploads), 9)
         self.assertTrue({artifact['filename'] for artifact in manifest['addons']}.issubset(client.uploads))
         self.assertEqual(client.finished, 1)
         self.assertFalse(client.existing['draft'])
@@ -344,7 +387,7 @@ class ReleaseTest(unittest.TestCase):
         self.assertEqual(client.finished, 0)
         client.fail_after = None
         release.publish_github(self.output, client)
-        self.assertEqual(len(client.uploads), 8)
+        self.assertEqual(len(client.uploads), 9)
         self.assertEqual(client.finished, 1)
 
     def test_github_conflicting_asset_prevents_missing_uploads(self):
