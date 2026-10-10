@@ -253,7 +253,7 @@ The consumable `compuktersAddonBundle` configuration is also available to custom
 ## Joint development runs
 
 [`addons/dev`](https://github.com/CertifiedBadIdeas/Compukters/tree/dev/addons/dev) composes the main mod and the
-independent Create, Sable and Propulsion builds, with Aeronautics 1.3.1 (including Simulated/Offroad) and Propulsion: Simulated 1.1.5
+independent Create, Sable and Propulsion builds, with Aeronautics 1.3.2 (including Simulated/Offroad) and Propulsion: Simulated 1.1.5
 on the runtime classpath. From that directory, run `./gradlew-sandbox-dev-parallel-summary verifyAddons`
 for all three addon checks, or `./gradlew-sandbox-dev-parallel runGameTestServer` for their shared real NeoForge scenarios.
 `runClient` and `runServer` use the same upstream dependency pins and ordinary development archives. This build

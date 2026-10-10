@@ -88,7 +88,7 @@ dependencies {
     runtimeOnly(baseMod)
     add(gameTest.implementationConfigurationName, baseMod)
     addonMods.values.forEach { runtimeOnly(it) }
-    physicsMods("maven.modrinth:create-aeronautics:Vzp221Un")
+    physicsMods("maven.modrinth:create-aeronautics:44pLdPGg")
     physicsMods("maven.modrinth:create-propulsion-simulated:H13U56dc")
     modRuntimeOnly(files(physicsMods))
     modRuntimeOnly(aeronauticsLibraries)

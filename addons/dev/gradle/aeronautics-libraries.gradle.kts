@@ -35,15 +35,15 @@ abstract class AeronauticsEmbeddedMods : TransformAction<TransformParameters.Non
 
     override fun transform(outputs: TransformOutputs) {
         val expected = setOf(
-            "dev.eriksonn.aeronautics.aeronautics-neoforge-1.21.1-1.3.1.jar",
-            "dev.ryanhcode.offroad.offroad-neoforge-1.21.1-1.3.1.jar",
-            "dev.simulated_team.simulated.simulated-neoforge-1.21.1-1.3.1.jar",
+            "dev.eriksonn.aeronautics.aeronautics-neoforge-1.21.1-1.3.2.jar",
+            "dev.ryanhcode.offroad.offroad-neoforge-1.21.1-1.3.2.jar",
+            "dev.simulated_team.simulated.simulated-neoforge-1.21.1-1.3.2.jar",
         )
         ZipFile(artifact.get().asFile).use { bundle ->
             val entries = bundle.entries().asSequence()
                 .filter { it.name.startsWith("META-INF/jarjar/") && it.name.endsWith(".jar") }.toList()
             check(entries.map { it.name.substringAfterLast('/') }.toSet() == expected) {
-                "unexpected embedded mod layout in pinned Aeronautics 1.3.1"
+                "unexpected embedded mod layout in pinned Aeronautics 1.3.2"
             }
             entries.forEach { entry ->
                 bundle.getInputStream(entry).use { input ->
@@ -65,4 +65,4 @@ val embeddedMods = configurations.create("aeronauticsNestedMods") {
     isTransitive = false
     attributes.attribute(ArtifactTypeDefinition.ARTIFACT_TYPE_ATTRIBUTE, embeddedType)
 }
-dependencies.add(embeddedMods.name, "maven.modrinth:create-aeronautics:Vzp221Un")
+dependencies.add(embeddedMods.name, "maven.modrinth:create-aeronautics:44pLdPGg")
