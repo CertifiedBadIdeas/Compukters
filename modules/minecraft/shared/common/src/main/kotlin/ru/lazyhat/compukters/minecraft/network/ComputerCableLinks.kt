@@ -61,7 +61,12 @@ object ComputerCableLinks {
     fun peer(
         level: ServerLevel,
         computer: BlockPos,
-    ): BlockPos? {
+    ): BlockPos? = line(level, computer)?.computers?.takeIf { it.size == 2 }?.firstOrNull { it != computer }
+
+    internal fun line(
+        level: ServerLevel,
+        computer: BlockPos,
+    ): ComputerCableResult.Line<BlockPos>? {
         check(level.server.isSameThread)
         if (!level.hasChunkAt(computer) || level.getBlockState(computer).block !is ComputerBlock) return null
         val cache = caches.getOrPut(level) { hashMapOf() }
@@ -72,7 +77,7 @@ object ComputerCableLinks {
                     result.nodes.forEach { cache[it] = result }
                 }
             }
-        return (result as? ComputerCableResult.Line)?.computers?.takeIf { it.size == 2 }?.firstOrNull { it != computer }
+        return result as? ComputerCableResult.Line
     }
 
     private fun inspect(

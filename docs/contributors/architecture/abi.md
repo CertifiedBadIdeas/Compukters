@@ -42,6 +42,19 @@ implementations, Pair and populated factories in `stdlib:core` 1.11.0. Their mod
 format 5, platform ABI 3 and Runtime ABI 1.15 remain unchanged by hash collections. The current native C ABI is 22 for checkpoint transport. Programs and dependent
 platform/addon inputs must resolve the matching module identities. Hashing, generic equality, managed
 objects and specialization reuse existing instructions and representation rules.
+## Computer network capability
+
+`compukter:core` 2.2.0 adds `compukters:network` ABI 1.0, with three asynchronous operations: 0 returns connection status,
+1 accepts a `ByteArray` and returns Unit, and 2 waits for and returns one `ByteArray`. The host keeps waiting request IDs
+in each program scope; the physical computer owns its shared volatile inbox. Mailboxes hold 16 messages per endpoint,
+with a 4096-byte message limit and a 1 MiB world queued-byte cap. The loaded-world adapter bounds active derived
+connections to 256 and indexed cable/endpoint positions to 65,536. It never forces chunks.
+
+The dependency index retires only affected connections on cable/computer mutation and participating chunk events;
+ordinary neighbor updates do not retire a link. Exact block-entity identity and VM epoch prevent replacement or reboot
+from inheriting queued data. A repaired cable creates a new generation. Resource checkpoint version 1 stores waiting
+receive identities only; restoration completes them with input/output failure because inboxes are transient.
+
 ## Guest math module identity
 
 `stdlib:core` 1.12.0 adds the portable `kotlin.math` surface. Floating primitives require Runtime ABI 1.16;
@@ -98,7 +111,7 @@ rebinds an old handle to a replacement. Panel identities live in block-entity pe
 format 4 restores writer leases and bounded private frames (including owning task and cumulative work) after
 peripheral admission, without replaying published pixels or overwriting another active writer. Readers accept
 formats 2 and 3; legacy format-2 rows are consumed but never replayed. `compukters:display` 1.1 retains operations
-0–3 and appends operations 4–16. `compukter:core` is 2.1.0; the native ABI and checkpoint envelope are unchanged.
+0–3 and appends operations 4–16. `compukter:core` is now 2.2.0 with the separate network capability; display operation selectors remain unchanged.
 
 The Minecraft addon SDK optionally accepts `CompuktersPersistentPeripheralEndpoint`, extending the existing
 endpoint interface with a persisted exact-device stamp (at most 128 UTF-8 bytes). The base adapter forwards

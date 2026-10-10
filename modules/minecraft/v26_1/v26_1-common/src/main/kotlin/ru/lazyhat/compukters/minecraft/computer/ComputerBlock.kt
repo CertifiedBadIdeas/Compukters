@@ -42,6 +42,7 @@ import net.minecraft.world.phys.BlockHitResult
 import ru.lazyhat.compukters.core.network.CableNode
 import ru.lazyhat.compukters.lang.runtime.vm.RedstoneWire
 import ru.lazyhat.compukters.minecraft.network.ComputerCableLinks
+import ru.lazyhat.compukters.minecraft.network.ComputerCableMessages
 import java.util.function.Supplier
 
 // Input and output sides are independent GPIO, not a passive redstone conductor.
@@ -110,6 +111,7 @@ class ComputerBlock(
     ) {
         super.affectNeighborsAfterRemoval(state, level, position, movedByPiston)
         ComputerCableLinks.invalidate(level)
+        ComputerCableMessages.changed(level, position, false)
     }
 
     override fun playerWillDestroy(
@@ -171,6 +173,7 @@ class ComputerBlock(
     ) {
         super.onPlace(state, level, position, oldState, movedByPiston)
         ComputerCableLinks.invalidate(level)
+        if (oldState.block !== state.block) ComputerCableMessages.changed(level, position, false)
         if (!level.isClientSide && oldState.block === this && oldState.getValue(FACING) != state.getValue(FACING)) {
             (level.getBlockEntity(position) as? ComputerBlockEntity)?.markRedstoneInputDirty()
             Direction.entries.forEach { direction ->

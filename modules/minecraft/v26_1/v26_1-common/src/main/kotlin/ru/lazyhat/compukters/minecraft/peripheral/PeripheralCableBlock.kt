@@ -40,6 +40,7 @@ import net.minecraft.world.phys.shapes.VoxelShape
 import ru.lazyhat.compukters.core.network.CableNode
 import ru.lazyhat.compukters.minecraft.computer.ComputerBlock
 import ru.lazyhat.compukters.minecraft.network.ComputerCableLinks
+import ru.lazyhat.compukters.minecraft.network.ComputerCableMessages
 
 class PeripheralCableBlock(
     properties: BlockBehaviour.Properties,
@@ -100,6 +101,7 @@ class PeripheralCableBlock(
         super.onPlace(state, level, position, oldState, movedByPiston)
         PeripheralCableTopologyCache.invalidate(level)
         ComputerCableLinks.invalidate(level)
+        if (oldState.block !== state.block) ComputerCableMessages.changed(level, position, true)
     }
 
     override fun affectNeighborsAfterRemoval(
@@ -111,6 +113,7 @@ class PeripheralCableBlock(
         super.affectNeighborsAfterRemoval(state, level, position, movedByPiston)
         PeripheralCableTopologyCache.invalidate(level)
         ComputerCableLinks.invalidate(level)
+        ComputerCableMessages.changed(level, position, true)
     }
 
     override fun neighborChanged(
