@@ -72,7 +72,7 @@ nonexpired `mod-verified-<commit>` artifact. Runs are serialized by commit SHA, 
 branch and tag pushes. `stage` records all five admitted universal archives and exact source/component
 identity in `verification.json`; `verify` checks both identity and the actual archives again.
 
-Untagged archives retain the normal `-S` product version. Their full checks can be reused by the tag,
+Untagged archives retain the normal `-SNAPSHOT` product version. Their full checks can be reused by the tag,
 but stable archives are assembled anew through the unchanged tagged release gates. When the first
 build already saw the exact version tag, the evidence also contains a verified stable release inventory,
 which the tag reuses without recompilation. A publishing failure does not invalidate its successful

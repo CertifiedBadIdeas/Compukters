@@ -31,15 +31,15 @@ class EvidenceTest(unittest.TestCase):
             with zipfile.ZipFile(stable, 'w') as archive:
                 for name, value in entries.items():
                     archive.writestr(name, value)
-            snapshot = stable.with_name(stable.name.replace('0.5.0.jar', '0.5.0-S.jar'))
-            entries['META-INF/neoforge.mods.toml'] = b'[[mods]]\nmodId="compukters"\nversion="0.5.0-S"\n'
+            snapshot = stable.with_name(stable.name.replace('0.5.0.jar', '0.5.0-SNAPSHOT.jar'))
+            entries['META-INF/neoforge.mods.toml'] = b'[[mods]]\nmodId="compukters"\nversion="0.5.0-SNAPSHOT"\n'
             with zipfile.ZipFile(snapshot, 'w') as archive:
                 for name, value in entries.items():
                     archive.writestr(name, value)
 
     def test_snapshot_evidence_can_be_reused_after_tag_on_same_commit(self):
         manifest = ci.stage(self.root, self.output)
-        self.assertEqual('0.5.0-S', manifest['effective_version'])
+        self.assertEqual('0.5.0-SNAPSHOT', manifest['effective_version'])
         self.assertEqual(5, len(manifest['artifacts']))
         fixtures.command(self.root, 'tag', 'v0.5.0')
         ci.validate_tag(self.root, 'v0.5.0')
@@ -84,8 +84,8 @@ class EvidenceTest(unittest.TestCase):
                 ci.verify(self.root, self.output)
 
     def test_archive_metadata_must_match_snapshot_name(self):
-        path = self.root / 'dist/1.21.1/compukters-1.21.1-neoforge-0.5.0-S.jar'
-        stable = path.with_name(path.name.replace('-S.jar', '.jar'))
+        path = self.root / 'dist/1.21.1/compukters-1.21.1-neoforge-0.5.0-SNAPSHOT.jar'
+        stable = path.with_name(path.name.replace('-SNAPSHOT.jar', '.jar'))
         path.write_bytes(stable.read_bytes())
         with self.assertRaisesRegex(ValueError, 'product identity'):
             ci.stage(self.root, self.output)

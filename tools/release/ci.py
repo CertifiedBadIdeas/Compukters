@@ -71,7 +71,7 @@ def validate_tag(root, tag):
 def effective_version(root):
     version = identity(root)['version']
     tags = release.git(root, 'tag', '--points-at', 'HEAD').splitlines()
-    return version if any(tag in (version, 'v' + version) for tag in tags) else version + '-S'
+    return version if any(tag in (version, 'v' + version) for tag in tags) else version + '-SNAPSHOT'
 
 
 def expected_archives(root, effective):
@@ -138,7 +138,7 @@ def verify(root, directory):
     release.require(set(manifest) == set(current) | {'effective_version', 'artifacts'}, 'unknown CI evidence fields')
     release.require(all(manifest[key] == value for key, value in current.items()), 'CI evidence source identity differs')
     effective = manifest['effective_version']
-    release.require(effective in (current['version'], current['version'] + '-S'), 'unsupported CI archive version')
+    release.require(effective in (current['version'], current['version'] + '-SNAPSHOT'), 'unsupported CI archive version')
     release.require(manifest['artifacts'] == inspect_archives(root, directory, effective), 'CI archives changed after verification')
     if effective == current['version']:
         stable = release.load_release(directory)

@@ -207,7 +207,7 @@ class ReleaseTest(unittest.TestCase):
             with self.subTest(defect=defect):
                 entries = dict(original)
                 if defect == 'snapshot':
-                    entries['sdk.properties'] = entries['sdk.properties'].replace(b'modBuildVersion=0.5.0', b'modBuildVersion=0.5.0-S')
+                    entries['sdk.properties'] = entries['sdk.properties'].replace(b'modBuildVersion=0.5.0', b'modBuildVersion=0.5.0-SNAPSHOT')
                 elif defect == 'metadata':
                     entries['sdk.properties'] = entries['sdk.properties'].replace(b'modBuildVersion=0.5.0\n', b'')
                 else:
