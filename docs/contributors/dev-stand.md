@@ -16,11 +16,12 @@ It pins Minecraft 1.21.1 and NeoForge 21.1.252 with the following runtime:
 | Compukters + Compukters: Create + Compukters: Sable + Compukters: Propulsion | Current checkout |
 | Create | 6.0.10 |
 | Sable | 2.0.6 |
-| Aeronautics bundle (Aeronautics, Simulated, Offroad) | 1.3.1 |
+| Aeronautics bundle (Aeronautics, Simulated, Offroad) | 1.3.2 |
 | Create Propulsion: Simulated | 1.1.5 |
 
-Pinned Modrinth versions: [Aeronautics Vzp221Un](https://modrinth.com/mod/create-aeronautics/version/Vzp221Un),
+Pinned Modrinth versions: [Aeronautics 44pLdPGg](https://modrinth.com/mod/create-aeronautics/version/44pLdPGg),
 [Propulsion H13U56dc](https://modrinth.com/mod/create-propulsion-simulated/version/H13U56dc).
+Aeronautics 1.3.2 includes the upstream JEI compatibility fix; the older 1.3.1 bundle fails with recent JEI versions.
 The exact bundled Aeronautics mods and Sable libraries are extracted for the Loom dev classpath; no separate versions
 of Simulated/Offroad are selected. This stand has no distributable umbrella JAR.
 The main mod has no upstream physics dependency; the three Compukters addons remain independent.

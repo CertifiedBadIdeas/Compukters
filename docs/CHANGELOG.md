@@ -13,6 +13,9 @@ headings so this page has one stable URL that can be shared outside the reposito
 
 ## 0.6.0 — In development
 
+- The addon development stand and standalone Propulsion build use Aeronautics/Simulated 1.3.2, fixing the
+  Simulated mixin crash with recent JEI versions.
+
 - Development builds use the standard `-SNAPSHOT` suffix, allowing NeoForge to order them below the matching
   release and accept them within published addon dependency ranges.
 

@@ -27,7 +27,7 @@ Install Compukters: Propulsion, the base mod and its upstream runtime on client 
 | Create | 6.0.10 through 6.0.x |
 | Sable | 2.0.6 |
 | Propulsion: Simulated | 1.1.5 (Modrinth H13U56dc) |
-| Simulated | 1.3.1, supplied by the Aeronautics 1.3.1 bundle |
+| Simulated | 1.3.2, supplied by the Aeronautics 1.3.2 bundle |
 
 The Compukters addon does not require Compukters: Create or Compukters: Sable. Its upstream mods still require the
 runtime above, including Simulated even though upstream Propulsion metadata omits that dependency.
