@@ -62,23 +62,25 @@ normal changed-side packets resume afterward, so a steady input present at start
 
 ## Peripheral fabric
 
-The Minecraft carrier also owns a direct-touch peripheral fabric. Passive orthogonal cables form bounded components
-across loaded chunks without forcing chunk loads. Addon providers map a touched block or multiblock part to a canonical
-logical identity; a versioned world directory stores normalized names against that identity independently of computers
-and cable topology. Lookup includes the computer's six face-adjacent provider contacts together with its cable component,
-scoped by addon ID. It deduplicates logical identities across both paths, rejects duplicate reachable names, and never
-returns a partial component after a traversal bound is exceeded. Typed addon host handles bind to the resolved device
-identity, so later rewiring or renaming cannot redirect an existing handle. The cable cache stores physical contact
-positions and faces; providers resolve current logical identities on every lookup. Multiblock activation changes
-therefore remain visible even when the engine or controller is not adjacent to a cable. Physical candidates are
-bounded by six faces per admitted cable plus the computer's six direct contacts; each level caches at most 65,536 physical
-contacts. The existing 1024 logical-device limit applies after identity deduplication.
+The Minecraft carrier resolves its six direct provider contacts and persisted remote network members. Providers
+map contacts to canonical logical identities. A versioned overworld SavedData directory owns network UUIDs, names
+and member identities independently of computer lifetime; NeoForge persistent block-entity UUIDs prevent replacement
+blocks from inheriting membership. Member names belong to that directory; unbound adjacent devices retain the separate
+world-owned naming directory. Configurator selection lives in item custom data, with server-side proximity, held-item
+and exact-instance validation for edits. Chunk-load callbacks refresh address hints without forcing chunk loads.
+
+Membership does not imply reachability. A computer resolves only loaded, same-dimension members within the configured
+Euclidean radius (64 blocks by default), then deduplicates them with direct contacts. Discovery sorts canonical
+identities and rejects ambiguous reachable names. Networks are bounded to 1,024 members each, 4,096 networks and
+65,536 total members per world. Computers in a network are membership anchors, not Guest peripheral endpoints.
+Cable blocks no longer contribute discovery. Guest signatures and permanently stale handles remain unchanged.
+This stage uses ordinary block coordinates; Sable transforms and assembly transfers are outside its scope.
 
 ## Text displays
 
 The base text display uses the same bounded world-request path with an internal `compukters:display` capability. Its
 20x10 buffer and exclusive writer lease belong to the display block entity on the server, outside the VM terminal.
-The block tick checks its writer and cable reachability even while Guest code is idle. Stopping or disconnecting that
+The block tick checks its writer and device reachability even while Guest code is idle. Stopping or disconnecting that
 writer clears the screen, and no display text is saved in world NBT. During hibernation the computer checkpoint
 retains its owned rows and writer handle. A persisted display UUID distinguishes the same device from a replacement;
 restoration reacquires a reachable matching display without overwriting another writer. Missing or replaced devices
@@ -127,7 +129,7 @@ cleanup after predicate failure.
 
 
 The Minecraft adapter binds registered `ComputerPeripheralContract<T>` descriptors once per program, through
-`ComputerPeripheralRuntime`. Loaded cable/direct contacts sort by x/y/z, provider and device key; side lookup
+`ComputerPeripheralRuntime`. Loaded network/direct contacts sort by x/y/z, provider and device key; side lookup
 resolves the contacted face directly. SDK 0.5.0 adds typed `CompuktersPeripheralContract<T>` registration and
 `CompuktersComputerContext.peripheral` access, retaining the earlier overloads. SDK JARs depend on core only at
 compile time and retain their explicit thin-archive class inventory. Both Minecraft version families compile the
@@ -138,7 +140,7 @@ All public acquisition uses typed providers and the common Side; the earlier Dis
 and separate side types are removed. Display operations still own output leases;
 discovery creates no lease, and reset releases buffers touched by the program. The real text-display GameTest
 fixture covers typed selection, interface casts, predicates, optional/strict absence and cleanup after a thrown
-predicate before exercising a world write and cable disconnection.
+predicate before exercising a world write and network disconnection.
 
 ## Addon module selection and Propulsion
 
@@ -159,7 +161,7 @@ The independent `addons/propulsion` build owns named Creative Thruster and Creat
 `propulsion.api` Guest module.
 It depends on upstream Propulsion/Create/Sable types, without depending on other Compukters addon implementations.
 Commands and observations execute through the existing server-thread addon request boundary; physics and VM cadence
-are unchanged. Controller identity and cable reachability bind each handle. A server-confined lease registry owns
+are unchanged. Controller identity and device reachability bind each handle. A server-confined lease registry owns
 only temporary program control, validates active leases on server ticks, and restores normal redstone on release.
 It does not mirror authoritative thrust or physics state. Typed observations copy current upstream fields in kN.
 The pinned Propulsion binary persists digital commands, so a dedicated read/write mixin marks owned full NBT saves
