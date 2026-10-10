@@ -308,6 +308,22 @@ class ReleaseTest(unittest.TestCase):
             release.publish_modrinth(self.output, client)
         self.assertEqual(client.uploads, [])
 
+    def test_github_lookup_includes_drafts_on_later_pages(self):
+        draft = {'tag_name': 'v0.5.0', 'draft': True}
+        pages = [[{'tag_name': 'v0.4.0'}], [draft]]
+        with patch.object(release.GitHub, 'cli', return_value=json.dumps(pages)) as cli:
+            self.assertEqual(release.GitHub().get('v0.5.0'), draft)
+        cli.assert_called_once_with('api', f'repos/{release.REPOSITORY}/releases?per_page=100',
+                                    '--paginate', '--slurp')
+
+    def test_github_lookup_rejects_duplicate_tags_and_admits_absence(self):
+        with patch.object(release.GitHub, 'cli', return_value='[[]]'):
+            self.assertIsNone(release.GitHub().get('v0.5.0'))
+        pages = [[{'tag_name': 'v0.5.0'}], [{'tag_name': 'v0.5.0'}]]
+        with patch.object(release.GitHub, 'cli', return_value=json.dumps(pages)):
+            with self.assertRaisesRegex(ValueError, 'duplicate GitHub releases'):
+                release.GitHub().get('v0.5.0')
+
     def test_github_publication_and_retry_preserve_assets(self):
         manifest, _ = self.prepared()
         client = GitHubFixture(manifest, self.output)

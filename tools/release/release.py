@@ -304,12 +304,12 @@ class GitHub:
         raise ValueError('release tag nesting exceeds limit')
 
     def get(self, tag):
-        result = subprocess.run(['gh', 'api', f'repos/{REPOSITORY}/releases/tags/{tag}'],
-                                capture_output=True, text=True)
-        if result.returncode and 'HTTP 404' in result.stderr:
-            return None
-        require(result.returncode == 0, 'could not inspect GitHub release')
-        return json.loads(result.stdout)
+        # The tag endpoint omits drafts; listing admits both draft recovery and published releases.
+        pages = json.loads(self.cli('api', f'repos/{REPOSITORY}/releases?per_page=100',
+                                    '--paginate', '--slurp'))
+        matches = [release for page in pages for release in page if release['tag_name'] == tag]
+        require(len(matches) <= 1, 'duplicate GitHub releases for tag')
+        return matches[0] if matches else None
 
     def create(self, tag, title, notes):
         self.cli('release', 'create', tag, '--repo', REPOSITORY, '--verify-tag', '--draft',
