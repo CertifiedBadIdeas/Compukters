@@ -20,7 +20,7 @@ internal object DisplayRasterFont {
             Font.createFont(Font.TRUETYPE_FONT, it).deriveFont(10f)
         }
     }
-    private val glyphs = linkedMapOf<Int, BooleanArray>()
+    private val glyphs = linkedMapOf<Pair<Int, Int>, BooleanArray>()
 
     fun draw(
         canvas: DisplayCanvas,
@@ -35,6 +35,8 @@ internal object DisplayRasterFont {
         DisplayCanvas.requireColor(color)
         require(text.toByteArray(Charsets.UTF_8).size <= 1024)
         require(text.none { it in '\uD800'..'\uDFFF' } || validSurrogates(text))
+        val cellWidth = 6 * scale
+        val cellHeight = 12 * scale
         val points = text.codePoints().toArray()
         require(points.size <= 256)
         val lines = mutableListOf<MutableList<BooleanArray>>(mutableListOf())
@@ -42,34 +44,40 @@ internal object DisplayRasterFont {
             if (point == '\n'.code) {
                 lines += mutableListOf<BooleanArray>()
             } else if (point != '\r'.code) {
-                lines.last() += glyph(point)
+                lines.last() += glyph(point, scale)
             }
         }
-        val width = (lines.maxOfOrNull { it.size } ?: 0) * 6 * scale
-        val height = lines.size * 12 * scale
+        val width = (lines.maxOfOrNull { it.size } ?: 0) * cellWidth
+        val height = lines.size * cellHeight
         canvas.mask(owner, x, y, width, height, color) { px, py ->
-            val glyph = lines[py / (12 * scale)].getOrNull(px / (6 * scale))
-            glyph?.get(((py / scale) % 12) * 6 + ((px / scale) % 6)) == true
+            val glyph = lines[py / cellHeight].getOrNull(px / cellWidth)
+            glyph?.get((py % cellHeight) * cellWidth + (px % cellWidth)) == true
         }
     }
 
-    private fun glyph(point: Int): BooleanArray {
-        glyphs[point]?.let { return it }
+    private fun glyph(
+        point: Int,
+        scale: Int,
+    ): BooleanArray {
+        val key = point to scale
+        glyphs[key]?.let { return it }
         val actual = if (font.canDisplay(point)) point else '?'.code
-        val image = BufferedImage(6, 12, BufferedImage.TYPE_BYTE_BINARY)
+        val width = 6 * scale
+        val height = 12 * scale
+        val image = BufferedImage(width, height, BufferedImage.TYPE_BYTE_BINARY)
         image.createGraphics().let { graphics ->
             try {
-                graphics.font = font
+                graphics.font = font.deriveFont(10f * scale)
                 graphics.color = Color.WHITE
                 graphics.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_OFF)
-                graphics.drawString(String(Character.toChars(actual)), 0, 9)
+                graphics.drawString(String(Character.toChars(actual)), 0, 9 * scale)
             } finally {
                 graphics.dispose()
             }
         }
-        val result = BooleanArray(6 * 12) { index -> image.getRGB(index % 6, index / 6) and 0xFFFFFF != 0 }
+        val result = BooleanArray(width * height) { index -> image.getRGB(index % width, index / width) and 0xFFFFFF != 0 }
         if (glyphs.size >= 512) glyphs.remove(glyphs.keys.first())
-        glyphs[point] = result
+        glyphs[key] = result
         return result
     }
 

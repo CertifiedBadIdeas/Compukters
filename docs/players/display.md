@@ -88,7 +88,9 @@ Colors are integers from `0x000000` to `0xFFFFFF`, encoded as `0xRRGGBB`. `rgb(r
 - `pixel(x, y, color)` and `line(x0, y0, x1, y1, color)` draw pixels and lines.
 - `rect(x, y, width, height, color)` draws a border; `fillRect(...)` fills a rectangle.
 - `text(x, y, text, color = Colors.WHITE, scale = 1)` draws monochrome JetBrains Mono glyphs in 6 × 12 pixel cells.
-  Scale is 1–8; newline advances one line. Unsupported glyphs use a replacement. Limits are 256 code points and
+  Scale is 1–8; glyphs are rasterized at the requested size, with cells of `6 × scale` by `12 × scale` pixels,
+  preserving detailed strokes without smoothing. Newline advances one line. Unsupported glyphs use a replacement.
+  Limits are 256 code points and
   1024 UTF-8 bytes per call.
 - `image(x, y, width, height, pixels)` draws row-major `IntArray` RGB pixels. Dimensions are 1–1024 and the image
   contains at most 65,536 pixels.

@@ -32,7 +32,8 @@ headings so this page has one stable URL that can be shared outside the reposito
   bounded inboxes and catchable interruption handle unavailable peers and broken connections.
 
 - Displays retain RGB graphics and their resolution across program exit, disconnection, chunk unload and server
-  restart. Programs draw pixels, lines, rectangles, text and images, with optional coherent frames.
+  restart. Programs draw pixels, lines, rectangles, text and images, with optional coherent frames. Scaled text
+  rasterizes the font at the requested size, retaining detailed strokes while preserving text cell spacing.
 - Holding the Peripheral Configurator reveals nearby devices, networks and screens with animated outlines hidden
   behind walls. Screen holes, unjoined replacement panels, selected groups and assembly previews are visible,
   with context and action hints beside the crosshair.
