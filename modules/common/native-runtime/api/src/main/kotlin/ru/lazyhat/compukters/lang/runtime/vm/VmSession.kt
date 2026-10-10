@@ -127,7 +127,12 @@ class VmSession private constructor(
                 resumeInt(identity, response.value)
             }
 
-            is HostResponse.LongSuccess, is HostResponse.DoubleSuccess, is HostResponse.CharSuccess, is HostResponse.RecordSuccess -> {
+            is HostResponse.LongSuccess,
+            is HostResponse.DoubleSuccess,
+            is HostResponse.CharSuccess,
+            is HostResponse.RecordSuccess,
+            is HostResponse.ByteArraySuccess,
+            -> {
                 bridge.resumeValue(requireHandle(), identity.taskId, identity.requestId, HostResponseWire.encode(response))
             }
 
@@ -753,14 +758,43 @@ private class WireDecoder(
 
     private fun value(): VmValue =
         when (u8()) {
-            1 -> VmValue.I32(i32())
-            2 -> VmValue.I64(i64())
-            3 -> VmValue.F32(i32())
-            4 -> VmValue.F64(i64())
-            5 -> VmValue.Bool(boolean())
-            6 -> VmValue.CharValue(u16().toChar())
-            7 -> VmValue.StringValue(String(CharArray(i32().boundedCount()) { u16().toChar() }))
-            else -> invalid()
+            1 -> {
+                VmValue.I32(i32())
+            }
+
+            2 -> {
+                VmValue.I64(i64())
+            }
+
+            3 -> {
+                VmValue.F32(i32())
+            }
+
+            4 -> {
+                VmValue.F64(i64())
+            }
+
+            5 -> {
+                VmValue.Bool(boolean())
+            }
+
+            6 -> {
+                VmValue.CharValue(u16().toChar())
+            }
+
+            7 -> {
+                VmValue.StringValue(String(CharArray(i32().boundedCount()) { u16().toChar() }))
+            }
+
+            9 -> {
+                val count = i32().boundedCount()
+                require(count <= ru.lazyhat.compukters.lang.runtime.capability.HostCapabilityLimits.MAXIMUM_BYTE_ARRAY_BYTES)
+                VmValue.ByteArrayValue(ByteArray(count).also(buffer::get))
+            }
+
+            else -> {
+                invalid()
+            }
         }
 
     private fun text(): String {

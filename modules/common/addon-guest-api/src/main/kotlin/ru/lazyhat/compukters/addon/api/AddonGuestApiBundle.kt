@@ -58,6 +58,7 @@ enum class AddonCapabilityValueType {
     CHAR,
     STRING,
     RECORD,
+    BYTE_ARRAY,
 }
 
 class AddonCapabilityOperation(

@@ -292,6 +292,7 @@ private val SUPPORTED_HOST_RESULTS =
         AddonCapabilityValueType.BOOL,
         AddonCapabilityValueType.STRING,
         AddonCapabilityValueType.RECORD,
+        AddonCapabilityValueType.BYTE_ARRAY,
     )
 
 private fun AddonCapabilityValueType.kotlinType(): String =
@@ -304,6 +305,7 @@ private fun AddonCapabilityValueType.kotlinType(): String =
         AddonCapabilityValueType.BOOL -> "Boolean"
         AddonCapabilityValueType.CHAR -> "Char"
         AddonCapabilityValueType.STRING -> "String"
+        AddonCapabilityValueType.BYTE_ARRAY -> "ByteArray"
         AddonCapabilityValueType.RECORD -> error("record types require a schema")
     }
 
@@ -318,6 +320,7 @@ private fun AddonCapabilityValueType.decodeExpression(index: Int): String =
         AddonCapabilityValueType.BOOL -> "(request.arguments[$index] as? VmValue.Bool)?.value"
         AddonCapabilityValueType.CHAR -> "(request.arguments[$index] as? VmValue.CharValue)?.value"
         AddonCapabilityValueType.STRING -> "(request.arguments[$index] as? VmValue.StringValue)?.value"
+        AddonCapabilityValueType.BYTE_ARRAY -> "(request.arguments[$index] as? VmValue.ByteArrayValue)?.value"
     }
 
 private fun AddonCapabilityValueType.encodeExpression(value: String): String =
@@ -331,6 +334,7 @@ private fun AddonCapabilityValueType.encodeExpression(value: String): String =
         AddonCapabilityValueType.F32 -> "HostResponse.FloatSuccess($value)"
         AddonCapabilityValueType.BOOL -> "HostResponse.BoolSuccess($value)"
         AddonCapabilityValueType.STRING -> "HostResponse.StringSuccess($value)"
+        AddonCapabilityValueType.BYTE_ARRAY -> "HostResponse.ByteArraySuccess($value)"
     }
 
 private fun AddonCapabilityIdentity.identityConstant(): String = "${name.uppercase().replace('-', '_')}_IDENTITY"

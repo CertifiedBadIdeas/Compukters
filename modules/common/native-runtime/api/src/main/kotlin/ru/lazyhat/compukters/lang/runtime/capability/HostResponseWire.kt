@@ -62,6 +62,10 @@ internal object HostResponseWire {
                 3 + 2 * response.value.length
             }
 
+            is HostResponse.ByteArraySuccess -> {
+                5 + response.value.size
+            }
+
             is HostResponse.RecordSuccess -> {
                 val record = response.value
                 4 + record.schema.typeName.length +
@@ -112,6 +116,12 @@ internal object HostResponseWire {
             is HostResponse.StringSuccess -> {
                 buffer.putShort(response.value.length.toShort())
                 response.value.forEach(buffer::putChar)
+            }
+
+            is HostResponse.ByteArraySuccess -> {
+                val bytes = response.value
+                buffer.putInt(bytes.size)
+                buffer.put(bytes)
             }
 
             is HostResponse.RecordSuccess -> {

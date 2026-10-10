@@ -55,6 +55,7 @@ data class AddonCapabilitySignature(
                 "Boolean" -> AddonCapabilityValueType.BOOL
                 "Char" -> AddonCapabilityValueType.CHAR
                 "String" -> AddonCapabilityValueType.STRING
+                "ByteArray" -> AddonCapabilityValueType.BYTE_ARRAY
                 else -> throw IllegalArgumentException("unsupported addon capability ABI type: $value")
             }
     }

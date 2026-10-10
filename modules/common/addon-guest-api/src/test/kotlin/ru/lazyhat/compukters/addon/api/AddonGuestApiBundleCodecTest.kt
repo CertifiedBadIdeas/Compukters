@@ -38,6 +38,18 @@ import kotlin.test.assertNull
 
 class AddonGuestApiBundleCodecTest {
     @Test
+    fun `binary capability signatures and bundle round trips preserve byte array results`() {
+        assertEquals(
+            AddonCapabilitySignature(listOf(AddonCapabilityValueType.BYTE_ARRAY), AddonCapabilityValueType.BYTE_ARRAY),
+            AddonCapabilitySignature.parse("fun(ByteArray):ByteArray"),
+        )
+        val original = bundle(result = AddonCapabilityValueType.BYTE_ARRAY, signature = "fun(Int):ByteArray")
+        assertEquals(original, AddonGuestApiBundleCodec.decode(AddonGuestApiBundleCodec.encode(original)))
+        assertFailsWith<IllegalArgumentException> { AddonCapabilitySignature.parse("fun(ByteArray?):ByteArray") }
+        assertFailsWith<IllegalArgumentException> { AddonRecordField("payload", AddonCapabilityValueType.BYTE_ARRAY) }
+    }
+
+    @Test
     fun `bundle round trip is deterministic and preserves optional sources`() {
         val first = bundle()
         val second = bundle()
