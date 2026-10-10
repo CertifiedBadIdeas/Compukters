@@ -95,6 +95,15 @@ internal object PeripheralDeviceNames {
         identity: PeripheralDeviceIdentity,
         name: String,
     ): String {
+        val screen =
+            ru.lazyhat.compukters.minecraft.display.DisplayNames
+                .surface(level, identity)
+        if (screen != null) {
+            val normalized = normalizePeripheralName(name)
+            ru.lazyhat.compukters.minecraft.display.DisplayNames
+                .rename(level, screen.id, normalized)
+            return normalized
+        }
         val member = PeripheralNetworkAccess.member(level, identity)
         if (member == null) return PeripheralDeviceNameStorage.get(level).setName(identity, name)
         val normalized = normalizePeripheralName(name)
@@ -108,6 +117,15 @@ internal object PeripheralDeviceNames {
         level: ServerLevel,
         identity: PeripheralDeviceIdentity,
     ): String? {
+        val screen =
+            ru.lazyhat.compukters.minecraft.display.DisplayNames
+                .surface(level, identity)
+        if (screen != null) {
+            val old = screen.name
+            ru.lazyhat.compukters.minecraft.display.DisplayNames
+                .rename(level, screen.id, null)
+            return old
+        }
         val member = PeripheralNetworkAccess.member(level, identity)
         if (member == null) return PeripheralDeviceNameStorage.get(level).clearName(identity)
         val storage = PeripheralNetworkStorage.get(level)
@@ -145,6 +163,12 @@ object ComputerPeripheralLookup {
         requestedName: String,
     ): ComputerPeripheralLookupResult {
         val traversal = PeripheralWorldDiscovery.discover(level, computerPosition)
+        if (providerId == "compukters-display" && traversal is PeripheralCableTraversal.Complete) {
+            return runCatching {
+                ru.lazyhat.compukters.minecraft.display.DisplayNames
+                    .lookup(level, requestedName, traversal.contacts)
+            }.getOrElse { ComputerPeripheralLookupResult(ComputerPeripheralLookupStatus.INVALID_NAME) }
+        }
         return lookupComputerPeripheral(
             providerId,
             requestedName,

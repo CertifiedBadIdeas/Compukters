@@ -172,6 +172,31 @@ object PeripheralConfiguratorServer {
         val identities = PeripheralDeviceNames.resolveContact(level, position, face)
         if (identities.size != 1) return PeripheralConfiguratorSaveResult.INVALID_TARGET
         val target = identities.single()
+        val screen =
+            ru.lazyhat.compukters.minecraft.display.DisplayNames
+                .surface(level, target)
+        if (screen != null) {
+            val connected =
+                PeripheralNetworkAccess
+                    .network(level, target.anchor)
+                    ?.members
+                    ?.map { it.identity }
+                    ?.toSet()
+                    ?: (PeripheralWorldDiscovery.discoverFromDevice(level, target.anchor) as? PeripheralCableTraversal.Complete)?.contacts
+                    ?: return PeripheralConfiguratorSaveResult.INVALID_TARGET
+            val names = PeripheralNetworkAccess.names(level, connected)
+            if (connected.any { identity ->
+                    ru.lazyhat.compukters.minecraft.display.DisplayNames
+                        .surface(level, identity)
+                        ?.id != screen.id &&
+                        names.nameOf(identity) == normalized
+                }
+            ) {
+                return PeripheralConfiguratorSaveResult.CONFLICT
+            }
+            PeripheralDeviceNames.setName(level, target, normalized)
+            return PeripheralConfiguratorSaveResult.NAMED_DEVICE
+        }
         val member = PeripheralNetworkAccess.member(level, target)
         if (member != null) {
             val network = PeripheralNetworkAccess.network(level, target.anchor) ?: return PeripheralConfiguratorSaveResult.INVALID_TARGET
@@ -222,15 +247,20 @@ object PeripheralConfiguratorServer {
             }
         val network = PeripheralNetworkAccess.network(level, target?.anchor ?: context.position)
         if (network != null) {
+            val names = PeripheralNetworkAccess.names(level, network.members.map { it.identity }.toSet())
             val counts =
                 network.members
-                    .mapNotNull { it.name }
+                    .distinctBy {
+                        ru.lazyhat.compukters.minecraft.display.DisplayNames
+                            .surface(level, it.identity)
+                            ?.id ?: it.instance
+                    }.mapNotNull { names.nameOf(it.identity) }
                     .groupingBy { it }
                     .eachCount()
-            val targetName = target?.let { PeripheralNetworkAccess.member(level, it)?.name }
+            val targetName = target?.let(names::nameOf)
             val entries =
                 network.members.map { member ->
-                    val name = member.name
+                    val name = names.nameOf(member.identity)
                     PeripheralConfiguratorEntry(
                         name,
                         member.identity.providerId,

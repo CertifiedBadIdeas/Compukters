@@ -26,17 +26,21 @@ object DisplayPeripheralIntegration {
     private const val PROVIDER_ID = "compukters-display"
     private const val DEVICE_KEY = "text"
 
-    internal val contract =
+    private fun displayContract(id: String) =
         ComputerPeripheralContract<DisplayEndpoint>(
-            "compukter:text_display",
+            id,
             PROVIDER_ID,
             DEVICE_KEY,
+            ownsReachability = true,
         ) { level, computerPosition, identity ->
             val computer = level.getBlockEntity(computerPosition) as? ComputerBlockEntity
             computer?.let { resolve(level, it, identity.anchor, null) }?.let { endpoint ->
                 PeripheralEndpoint(endpoint, endpoint.identity, endpoint.checkpointIdentity, endpoint::valid)
             }
         }
+
+    internal val contract = displayContract("compukter:text_display")
+    internal val graphicalContract = displayContract("compukter:graphical_display")
 
     fun register() {
         ComputerAddonHosts.registerPeripheral(
@@ -85,7 +89,7 @@ object DisplayPeripheralIntegration {
                     )
                 },
             registrationIdentity = this,
-            contracts = listOf(contract),
+            contracts = listOf(contract, graphicalContract),
             peripheralProvider =
                 ComputerPeripheralProvider { level, position, _ ->
                     if (!level.hasChunkAt(position) || level.getBlockEntity(position) !is DisplayBlockEntity) {
@@ -105,9 +109,20 @@ object DisplayPeripheralIntegration {
     ): DisplayEndpoint? {
         check(level.server.isSameThread) { "display peripherals must be resolved on the server thread" }
         if (!level.hasChunkAt(position)) return null
-        val display = level.getBlockEntity(position) as? DisplayBlockEntity ?: return null
+        val display = level.getBlockEntity(position) as? DisplayBlockEntity
+        val surface =
+            if (display != null) {
+                DisplayWorldAccess.surface(level, display)
+            } else {
+                DisplayStorage.get(level).directory.snapshot().singleOrNull { candidate ->
+                    (0 until candidate.canvas.rows).any { row ->
+                        (0 until candidate.canvas.columns).any { column -> DisplayWorldAccess.position(candidate, column, row) == position }
+                    }
+                }
+            }
+        surface ?: return null
         val machineEpoch = computer.terminalMachineId ?: return null
-        return WorldDisplayEndpoint(level, computer, machineEpoch, display, side)
+        return WorldDisplayEndpoint(level, computer, machineEpoch, surface)
     }
 
     private fun directionFor(
@@ -130,36 +145,43 @@ object DisplayPeripheralIntegration {
         private val level: ServerLevel,
         private val computer: ComputerBlockEntity,
         private val machineEpoch: Long,
-        private val display: DisplayBlockEntity,
-        private val side: Int?,
+        private val surface: ru.lazyhat.compukters.core.display.DisplaySurface,
     ) : DisplayEndpoint {
-        override val identity: Any = display
-        override val checkpointIdentity: String get() = display.checkpointIdentity.also { display.setChanged() }
-        override val buffer: DisplayBuffer = display.buffer
+        override val identity: Any = surface.canvas
+        override val checkpointIdentity: String get() = surface.id.toString()
+        override val canvas: ru.lazyhat.compukters.core.display.DisplayCanvas = surface.canvas
+
+        override fun leaseValid(): Boolean = computer.peripheralCheckpointPending || valid()
+
+        private var expired = false
 
         override fun valid(): Boolean {
-            check(level.server.isSameThread) { "display handles must be validated on the server thread" }
+            if (expired) return false
+            return available().also { if (!it) expired = true }
+        }
+
+        private fun available(): Boolean {
+            check(level.server.isSameThread)
             val computerPosition = computer.blockPos
-            val displayPosition = display.blockPos
-            if (!level.hasChunkAt(computerPosition) || !level.hasChunkAt(displayPosition)) return false
-            if (computer.isRemoved || display.isRemoved) return false
-            if (level.getBlockEntity(computerPosition) !== computer || level.getBlockEntity(displayPosition) !== display) return false
+            if (!level.hasChunkAt(computerPosition) || computer.isRemoved ||
+                level.getBlockEntity(computerPosition) !== computer
+            ) {
+                return false
+            }
             if (computer.terminalMachineId != machineEpoch || !computer.peripheralResourcesAvailable()) return false
-            return if (side == null) {
-                ComputerPeripheralLookup.isReachable(
-                    level,
-                    computerPosition,
-                    ComputerPeripheralIdentity(PROVIDER_ID, displayPosition, DEVICE_KEY),
-                )
-            } else {
-                val direction = directionFor(computer.blockState.getValue(ComputerBlock.FACING), side) ?: return false
-                computerPosition.relative(direction) == displayPosition
+            if (DisplayStorage.get(level).directory.byId(surface.id) !== surface) return false
+            return surface.panels.any { panel ->
+                val position = DisplayWorldAccess.position(surface, panel.column, panel.row)
+                if (!level.hasChunkAt(position)) return@any false
+                val entity = level.getBlockEntity(position) as? DisplayBlockEntity ?: return@any false
+                entity.checkpointIdentity == panel.instance.toString() && !entity.isRemoved &&
+                    entity.blockState.getValue(DisplayBlock.FACING) == DisplayWorldAccess.facing(surface) &&
+                    ComputerPeripheralLookup.isReachable(
+                        level,
+                        computerPosition,
+                        ComputerPeripheralIdentity(PROVIDER_ID, position, DEVICE_KEY),
+                    )
             }
         }
     }
-
-    private fun ProgramComputerState.isPoweredOn(): Boolean =
-        this is ProgramComputerState.Running ||
-            this is ProgramComputerState.WaitingForInput ||
-            this is ProgramComputerState.WaitingForCompiler
 }

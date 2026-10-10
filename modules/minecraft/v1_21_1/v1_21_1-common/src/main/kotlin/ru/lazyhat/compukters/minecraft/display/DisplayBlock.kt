@@ -85,6 +85,9 @@ class DisplayBlock(
         newState: BlockState,
         movedByPiston: Boolean,
     ) {
+        if (state.block !== newState.block && level is net.minecraft.server.level.ServerLevel) {
+            DisplayWorldAccess.remove(level, position)
+        }
         super.onRemove(state, level, position, newState, movedByPiston)
         if (state.block !== newState.block) PeripheralCableTopologyCache.invalidate(level)
     }

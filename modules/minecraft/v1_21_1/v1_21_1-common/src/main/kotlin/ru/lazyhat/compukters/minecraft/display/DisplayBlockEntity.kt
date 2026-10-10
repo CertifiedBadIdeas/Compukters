@@ -23,31 +23,80 @@ open class DisplayBlockEntity(
     position: BlockPos,
     blockState: BlockState,
 ) : BlockEntity(type, position, blockState) {
-    internal val buffer = DisplayBuffer()
     internal var checkpointIdentity: String =
         java.util.UUID
             .randomUUID()
             .toString()
         private set
-    private var publishedRevision = 0L
+    private var publishedRevision = -1L
+    private var publishedSurface: java.util.UUID? = null
+    private var publishedMode = -1
+    private val clientImage = DisplayClientImage()
+    private var sentRgb = ByteArray(64 * 64 * 3)
 
-    internal fun serverTick() {
-        val serverLevel = level as? ServerLevel ?: return
-        buffer.tick()
-        if (buffer.revision != publishedRevision) {
-            publishedRevision = buffer.revision
-            serverLevel.sendBlockUpdated(blockPos, blockState, blockState, Block.UPDATE_CLIENTS)
+    fun displayColor(
+        x: Int,
+        y: Int,
+    ): Int = requireNotNull(canvasSurface()).canvas.pixelAt(x, y)
+
+    fun screenIdentity(): java.util.UUID? = canvasSurface()?.id
+
+    fun screenMode(): Int = canvasSurface()?.canvas?.mode ?: publishedMode
+
+    fun displayDensity(): Int = clientImage.density
+
+    fun displayPixels(): ByteArray = clientImage.rgb
+
+    fun displayRevision(): Long = clientImage.revision
+
+    internal fun canvasSurface(): ru.lazyhat.compukters.core.display.DisplaySurface? =
+        (level as? ServerLevel)?.let { DisplayWorldAccess.surface(it, this) }
+
+    fun publishClientFrame() {
+        val clientLevel = level ?: return
+        if (!clientLevel.isClientSide) return
+        clientImage.publish { position ->
+            if (clientLevel.hasChunkAt(BlockPos.of(position))) {
+                (clientLevel.getBlockEntity(BlockPos.of(position)) as? DisplayBlockEntity)?.clientImage
+            } else {
+                null
+            }
         }
     }
 
-    fun displayRows(): List<String> = buffer.rows()
+    internal fun serverTick() {
+        val serverLevel = level as? ServerLevel ?: return
+        val surface = DisplayWorldAccess.surface(serverLevel, this) ?: return
+        surface.canvas.expire()
+        val publication = DisplayWorldAccess.publication(serverLevel, surface)
+        if (publication.revision == publishedRevision && publication.id == publishedSurface) return
+        val instance = java.util.UUID.fromString(checkpointIdentity)
+        val pixels = publication.tiles[instance] ?: return
+        if (!DisplayWorldAccess.admitSync(serverLevel, pixels.size + publication.panels.length * 2 + 128)) return
+        publishedRevision = publication.revision
+        publishedSurface = publication.id
+        publishedMode = publication.mode
+        sentRgb = pixels
+        serverLevel.sendBlockUpdated(blockPos, blockState, blockState, Block.UPDATE_CLIENTS)
+        publication.remaining.remove(instance)
+    }
+
+    fun hasDisplayPixels(): Boolean = canvasSurface()?.canvas?.encodeRgb()?.any { it != 0.toByte() } ?: sentRgb.any { it != 0.toByte() }
 
     override fun getUpdatePacket(): Packet<ClientGamePacketListener> = ClientboundBlockEntityDataPacket.create(this)
 
     override fun getUpdateTag(registries: HolderLookup.Provider): CompoundTag =
         CompoundTag().apply {
-            putBoolean(SYNC_KEY, true)
-            displayRows().forEachIndexed { index, row -> putString("$ROW_KEY$index", row) }
+            val surface = canvasSurface()
+            val publication = surface?.let { DisplayWorldAccess.publication(level as ServerLevel, it) }
+            val bytes = publication?.tiles?.get(java.util.UUID.fromString(checkpointIdentity)) ?: sentRgb
+            putInt("display_mode", publication?.mode ?: 2)
+            putByteArray("display_rgb", bytes)
+            if (publication != null) {
+                putString("display_surface", publication.id.toString())
+                putLong("display_revision", publication.revision)
+                putString("display_panels", publication.panels)
+            }
         }
 
     override fun loadAdditional(
@@ -60,8 +109,14 @@ open class DisplayBlockEntity(
                 .fromString(tag.getString(IDENTITY_KEY))
                 .toString()
         }.getOrNull()?.let { checkpointIdentity = it }
-        if (tag.getBoolean(SYNC_KEY)) {
-            buffer.applySnapshot(List(DisplayBuffer.HEIGHT) { tag.getString("$ROW_KEY$it") })
+        if (tag.contains("display_rgb")) {
+            clientImage.receive(
+                tag.getInt("display_mode"),
+                tag.getByteArray("display_rgb"),
+                tag.getString("display_surface"),
+                tag.getLong("display_revision"),
+                tag.getString("display_panels"),
+            )
         }
     }
 
@@ -75,7 +130,5 @@ open class DisplayBlockEntity(
 
     private companion object {
         const val IDENTITY_KEY = "compukters_display_identity"
-        const val SYNC_KEY = "display_sync"
-        const val ROW_KEY = "display_row_"
     }
 }

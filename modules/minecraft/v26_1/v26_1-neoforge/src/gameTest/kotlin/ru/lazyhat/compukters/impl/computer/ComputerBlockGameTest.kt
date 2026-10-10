@@ -73,6 +73,14 @@ object ComputerBlockGameTest {
             TextDisplayGameTest(testData("text_display")),
         )
         event.registerTest(
+            Identifier.fromNamespaceAndPath(MOD_ID, "graphical_display"),
+            GraphicalDisplayGameTest(testData("graphical_display")),
+        )
+        event.registerTest(
+            Identifier.fromNamespaceAndPath(MOD_ID, "graphical_display_hibernation"),
+            GraphicalDisplayHibernationGameTest(testData("graphical_display_hibernation")),
+        )
+        event.registerTest(
             Identifier.fromNamespaceAndPath(MOD_ID, "peripheral_cable"),
             PeripheralCableGameTest(testData("peripheral_cable")),
         )

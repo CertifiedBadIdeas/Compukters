@@ -25,7 +25,7 @@ import ru.lazyhat.compukters.minecraft.peripheral.ComputerPeripheralLookupStatus
 import ru.lazyhat.compukters.minecraft.peripheral.ComputerPeripheralNames
 import java.util.concurrent.CompletableFuture
 
-internal object TextDisplayGameTestScenario {
+internal object GraphicalDisplayHibernationGameTestScenario {
     fun run(helper: GameTestHelper) {
         val computerPosition = BlockPos(2, 2, 2)
         val displayPosition = BlockPos(5, 2, 2)
@@ -53,6 +53,7 @@ internal object TextDisplayGameTestScenario {
         PeripheralNetworkGameTestFixtures.bind(helper, computerPosition, displayPosition)
         computer.prepareTerminalAsync()
         var setup: CompletableFuture<Void>? = null
+        var terminal: CompletableFuture<ru.lazyhat.compukters.lang.runtime.vm.TerminalState?>? = null
 
         helper
             .startSequence()
@@ -93,7 +94,13 @@ internal object TextDisplayGameTestScenario {
                 helper.assertTrue(setup?.isDone == true, "display program setup is pending")
                 setup!!.getNow(null)
             }.thenWaitUntil {
-                helper.assertTrue(display.hasDisplayPixels(), "Guest program did not write on display")
+                helper.assertTrue(display.displayColor(0, 0) == 0x112233, "published pixel is missing")
+                if (terminal == null) terminal = computer.terminalFullStateAsync()
+                helper.assertTrue(terminal!!.isDone, "terminal snapshot is pending")
+                val state = terminal!!.join()
+                terminal = null
+                val text = state?.cells?.joinToString("") { String(Character.toChars(it.codePoint)) }
+                helper.assertTrue(text?.contains("FRAME-PENDING") == true, "frame has not opened")
             }.thenExecute {
                 oldEpoch = computer.terminalMachineId
                 saved = computer.saveWithFullMetadata(helper.level.registryAccess())
@@ -113,8 +120,14 @@ internal object TextDisplayGameTestScenario {
                 helper.level.setBlockEntity(computer)
                 helper.assertTrue(computer.computerId() == computerId, "display writer identity changed")
             }.thenWaitUntil {
-                // The Guest writes Ready only once, then sleeps forever. A fresh shell cannot satisfy this.
-                helper.assertTrue(display.hasDisplayPixels(), "hibernation erased the published display image")
+                // Only resuming inside the open frame can publish both pixels; cold start cannot satisfy this.
+                helper.assertTrue(
+                    display.displayColor(0, 0) == 0x445566 && display.displayColor(1, 0) == 0x778899,
+                    "hibernation did not commit frame: pixels=${display.displayColor(
+                        0,
+                        0,
+                    )},${display.displayColor(1, 0)} state=${computer.runtimeState}",
+                )
                 helper.assertTrue(computer.terminalMachineId != oldEpoch, "restored display writer retained its old epoch")
             }.thenExecute {
                 PeripheralNetworkGameTestFixtures.unbind(helper, displayPosition)
@@ -124,7 +137,7 @@ internal object TextDisplayGameTestScenario {
     }
 
     private fun fixture(): ByteArray =
-        requireNotNull(javaClass.getResourceAsStream("/fixtures/display.cpkt")) {
+        requireNotNull(javaClass.getResourceAsStream("/fixtures/graphical-display-hibernation.cpkt")) {
             "missing generated text display GameTest fixture"
         }.use { it.readAllBytes() }
 }

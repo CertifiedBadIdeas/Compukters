@@ -16,25 +16,13 @@
  * limitations under the License.
  */
 
-plugins {
-    alias(libs.plugins.v1211)
-    alias(libs.plugins.commonConvention)
-    alias(libs.plugins.commonRuntimeResourcesConvention)
-    alias(libs.plugins.minecraftSharedSourcesConvention)
-}
+package ru.lazyhat.compukters.minecraft.display
 
-architectury {
-    common("neoforge")
-}
+import net.minecraft.nbt.NbtOps
 
-dependencies {
-    implementation(projects.addonApi)
-    implementation(projects.addonGuestApi)
-}
-
-// Rasterization tests use the same font bytes as the production NeoForge archive.
-tasks.processTestResources {
-    from(rootProject.file("modules/minecraft/shared/neoforge/src/main/resources/assets/compukters/font/ide/jetbrains_mono_regular.ttf")) {
-        into("assets/compukters/font/ide")
+internal object DisplayStorageTestPersistence {
+    fun roundTrip(storage: DisplayStorage): DisplayStorage {
+        val encoded = DisplayStorage.CODEC.encodeStart(NbtOps.INSTANCE, storage).getOrThrow()
+        return DisplayStorage.CODEC.parse(NbtOps.INSTANCE, encoded).getOrThrow()
     }
 }
