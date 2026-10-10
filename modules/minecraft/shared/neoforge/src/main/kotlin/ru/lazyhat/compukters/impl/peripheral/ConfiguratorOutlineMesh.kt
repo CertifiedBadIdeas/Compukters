@@ -8,9 +8,12 @@ package ru.lazyhat.compukters.impl.peripheral
 
 import com.mojang.blaze3d.vertex.PoseStack
 import com.mojang.blaze3d.vertex.VertexConsumer
+import net.minecraft.client.Minecraft
 import net.minecraft.client.renderer.texture.OverlayTexture
 import net.minecraft.world.phys.AABB
+import net.minecraft.world.phys.Vec3
 import ru.lazyhat.compukters.minecraft.peripheral.ConfiguratorOutline
+import ru.lazyhat.compukters.minecraft.peripheral.PeripheralWorldPositions
 import kotlin.math.sin
 
 /** Solid thin edge ribbons rather than hardware lines: stable width and normal depth testing. */
@@ -76,8 +79,10 @@ internal object ConfiguratorOutlineMesh {
             ny: Float,
             nz: Float,
         ) {
+            val level = Minecraft.getInstance().level ?: return
+            val point = PeripheralWorldPositions.project(level, Vec3(x, y, z)) ?: return
             vertices
-                .addVertex(pose, x.toFloat(), y.toFloat(), z.toFloat())
+                .addVertex(pose, point.x.toFloat(), point.y.toFloat(), point.z.toFloat())
                 .setColor(color)
                 .setUv(u, v)
                 .setOverlay(OverlayTexture.NO_OVERLAY)

@@ -27,6 +27,16 @@ import net.minecraft.gametest.framework.TestEnvironmentDefinition
 import net.minecraft.network.chat.Component
 import net.minecraft.network.chat.MutableComponent
 
+internal class PeripheralTransferGameTest(
+    testData: TestData<Holder<TestEnvironmentDefinition<*>>>,
+) : GameTestInstance(testData) {
+    override fun run(helper: GameTestHelper) = PeripheralTransferGameTestScenario.run(helper)
+
+    override fun codec(): MapCodec<out GameTestInstance> = MapCodec.unit(this)
+
+    override fun typeDescription(): MutableComponent = Component.literal("Compukters peripheral block transfer")
+}
+
 internal class ComputerLifecycleGameTest(
     testData: TestData<Holder<TestEnvironmentDefinition<*>>>,
 ) : GameTestInstance(testData) {

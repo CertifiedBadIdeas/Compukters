@@ -53,6 +53,10 @@ object ComputerBlockGameTest {
                 0,
             )
         event.registerTest(
+            Identifier.fromNamespaceAndPath(MOD_ID, "peripheral_transfer"),
+            PeripheralTransferGameTest(testData("peripheral_transfer")),
+        )
+        event.registerTest(
             Identifier.fromNamespaceAndPath(MOD_ID, "computer_network"),
             ComputerNetworkGameTest(testData("computer_network")),
         )

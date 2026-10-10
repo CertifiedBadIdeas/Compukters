@@ -11,6 +11,7 @@ import net.minecraft.core.Direction
 import net.minecraft.server.level.ServerLevel
 import net.minecraft.server.level.ServerPlayer
 import net.minecraft.world.InteractionHand
+import net.minecraft.world.phys.Vec3
 import ru.lazyhat.compukters.minecraft.computer.ComputerBlockEntity
 import ru.lazyhat.compukters.minecraft.display.DisplayBlockEntity
 import ru.lazyhat.compukters.minecraft.display.DisplayStorage
@@ -89,42 +90,67 @@ object ConfiguratorOverlayServer {
         val devices = mutableListOf<ConfiguratorOverlayDevice>()
         var inspected = 0
         var truncated = false
-        scan@ for (cx in ((center.x - radius) shr 4)..((center.x + radius) shr 4)) {
-            for (cz in ((center.z - radius) shr 4)..((center.z + radius) shr 4)) {
-                val chunk = level.chunkSource.getChunkNow(cx, cz) ?: continue
-                for (entity in chunk.blockEntities.values) {
-                    if (++inspected > 4096 || devices.size == ConfiguratorOverlaySnapshot.MAX_DEVICES) {
-                        truncated = true
-                        break@scan
+        val worldCenter =
+            PeripheralWorldPositions.project(level, Vec3.atCenterOf(center))
+                ?: return ConfiguratorOverlaySnapshot(emptyList(), emptyList())
+        val scanCenter = BlockPos.containing(worldCenter)
+        val ordinary =
+            sequence {
+                for (cx in ((scanCenter.x - radius) shr 4)..((scanCenter.x + radius) shr 4)) {
+                    for (cz in ((scanCenter.z - radius) shr 4)..((scanCenter.z + radius) shr 4)) {
+                        val chunk = level.chunkSource.getChunkNow(cx, cz) ?: continue
+                        yieldAll(chunk.blockEntities.values)
                     }
-                    if (entity.isRemoved || !entity.blockPos.closerThan(center, radius.toDouble())) continue
-                    val identities =
-                        if (entity is ComputerBlockEntity) {
-                            emptyList()
-                        } else {
-                            Direction.entries.flatMap { PeripheralDeviceNames.resolveContact(level, entity.blockPos, it) }.distinct()
-                        }
-                    if (entity !is ComputerBlockEntity && entity !is DisplayBlockEntity && identities.isEmpty()) continue
-                    val screen = (entity as? DisplayBlockEntity)?.let { directory.byPanel(UUID.fromString(it.checkpointIdentity)) }
-                    val instance = screen?.id ?: PeripheralNetworkAccess.instance(entity)
-                    val network = instance?.let(networks::networkOf)
-                    val names =
-                        identities.mapNotNull { identity ->
-                            network?.members?.firstOrNull { it.instance == instance && it.identity == identity }?.name
-                                ?: PeripheralDeviceNameStorage.get(level).directory.nameOf(identity)
-                        }
-                    val title = screen?.name ?: names.firstOrNull() ?: entity.blockState.block.descriptionId
-                    devices +=
-                        ConfiguratorOverlayDevice(entity.blockPos.immutable(), title, network?.id, network?.name.orEmpty(), screen?.id)
                 }
             }
+        for (
+        entity in (ordinary + PeripheralWorldPositions.nearby(level, Vec3.atCenterOf(center), radius.toDouble()))
+            .distinctBy { it.blockPos }
+        ) {
+            if (++inspected > 4096 || devices.size == ConfiguratorOverlaySnapshot.MAX_DEVICES) {
+                truncated = true
+                break
+            }
+            if (entity.isRemoved ||
+                !PeripheralWorldPositions.within(
+                    level,
+                    Vec3.atCenterOf(entity.blockPos),
+                    Vec3.atCenterOf(center),
+                    radius.toDouble(),
+                )
+            ) {
+                continue
+            }
+            val identities =
+                if (entity is ComputerBlockEntity) {
+                    emptyList()
+                } else {
+                    Direction.entries.flatMap { PeripheralDeviceNames.resolveContact(level, entity.blockPos, it) }.distinct()
+                }
+            if (entity !is ComputerBlockEntity && entity !is DisplayBlockEntity && identities.isEmpty()) continue
+            val screen = (entity as? DisplayBlockEntity)?.let { directory.byPanel(UUID.fromString(it.checkpointIdentity)) }
+            val instance = screen?.id ?: PeripheralNetworkAccess.instance(entity)
+            val network = instance?.let(networks::networkOf)
+            val names =
+                identities.mapNotNull { identity ->
+                    network?.members?.firstOrNull { it.instance == instance && it.identity == identity }?.name
+                        ?: PeripheralDeviceNameStorage.get(level).directory.nameOf(identity)
+                }
+            val title = screen?.name ?: names.firstOrNull() ?: entity.blockState.block.descriptionId
+            devices +=
+                ConfiguratorOverlayDevice(entity.blockPos.immutable(), title, network?.id, network?.name.orEmpty(), screen?.id)
         }
         val screens =
             directory
                 .snapshot()
                 .filter { surface ->
                     surface.panels.any { panel ->
-                        DisplayWorldAccess.position(surface, panel.column, panel.row).closerThan(center, radius.toDouble())
+                        PeripheralWorldPositions.within(
+                            level,
+                            Vec3.atCenterOf(DisplayWorldAccess.position(surface, panel.column, panel.row)),
+                            Vec3.atCenterOf(center),
+                            radius.toDouble(),
+                        )
                     }
                 }.map { surface ->
                     ConfiguratorOverlayScreen(

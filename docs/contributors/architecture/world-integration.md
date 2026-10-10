@@ -74,7 +74,17 @@ Euclidean radius (64 blocks by default), then deduplicates them with direct cont
 identities and rejects ambiguous reachable names. Networks are bounded to 1,024 members each, 4,096 networks and
 65,536 total members per world. Computers in a network are membership anchors, not Guest peripheral endpoints.
 Cable blocks no longer contribute discovery. Guest signatures and permanently stale handles remain unchanged.
-This stage uses ordinary block coordinates; Sable transforms and assembly transfers are outside its scope.
+The optional `CompuktersPeripheralWorldIntegration` SDK adapter projects storage coordinates to live world positions
+and supplies already-loaded nearby block entities for configurator overlays. Ordinary worlds use the identity
+projection. The Sable addon uses logical poses on client and server; unloaded/removed plot locations return unavailable.
+Range checks and configurator proximity project both endpoints, while exact block identities still use storage addresses.
+
+Explicit batch transfers capture exact source identities before copying blocks and guard source removal and destination
+display creation until the whole batch completes. Closing the scope relocates only matching destinations whose source
+was removed; a copied member whose saved address differs from the source cannot transfer another block's membership.
+The scope is cleared even when the move throws. Complete displays retain canvas UUID, name and published RGB state;
+relocation retires location-bound handles and private frames. Moving part of a display splits it into panels, retaining
+the network, each published tile and the name on the first panel. Ordinary removal outside a transfer remains destructive.
 
 ## Displays
 

@@ -14,6 +14,46 @@ import kotlin.test.assertNull
 
 class DisplayDirectoryTest {
     @Test
+    fun `moving between directories transfers authority and persists the new geometry`() {
+        val source = DisplayDirectory()
+        val destination = DisplayDirectory()
+        val panel = UUID.randomUUID()
+        val old = source.create(1, 2, 3, 0, 1, 1, listOf(DisplayPanel(0, 0, panel)))
+        source.rename(old.id, "cross-dimension")
+        val moved = source.relocate(old.id, 10, 20, 30, 2, destination)
+        assertNull(source.byId(old.id))
+        assertNull(source.byPanel(panel))
+        assertEquals(moved.id, destination.byPanel(panel)?.id)
+        assertEquals("cross-dimension", destination.byId(old.id)?.name)
+        assertEquals(0, DisplayDirectory.decode(source.encode()).snapshot().size)
+        assertEquals(10, DisplayDirectory.decode(destination.encode()).byPanel(panel)?.originX)
+    }
+
+    @Test
+    fun `relocation preserves saved canvas identity names holes and published tiles and retires handles`() {
+        val directory = DisplayDirectory()
+        val panels = listOf(DisplayPanel(0, 0, UUID.randomUUID()), DisplayPanel(2, 1, UUID.randomUUID()))
+        val old = directory.create(10, 10, 10, 0, 3, 2, panels)
+        directory.rename(old.id, "moving-screen")
+        val owner = Any()
+        old.canvas.acquire(owner) { true }
+        old.canvas.setMode(owner, 0)
+        old.canvas.pixel(owner, 32, 16, 0x123456)
+        old.canvas.begin(owner)
+        old.canvas.pixel(owner, 32, 16, 0xFFFFFF)
+        val moved = directory.relocate(old.id, 1000, 20, -500, 3)
+        assertEquals(old.id, moved.id)
+        assertEquals(panels, moved.panels)
+        assertEquals("moving-screen", moved.name)
+        assertEquals(0x123456, moved.canvas.pixelAt(32, 16))
+        kotlin.test.assertFalse(old.canvas.owns(owner))
+        val restored = requireNotNull(DisplayDirectory.decode(directory.encode()).byPanel(panels.last().instance))
+        assertEquals(listOf(1000, 20, -500, 3), listOf(restored.originX, restored.originY, restored.originZ, restored.facing))
+        assertEquals(moved.id, restored.id)
+        assertEquals(0x123456, restored.canvas.pixelAt(32, 16))
+    }
+
+    @Test
     fun `holes and last panel destruction have distinct persistent lifetimes`() {
         val directory = DisplayDirectory()
         val first = UUID.randomUUID()
