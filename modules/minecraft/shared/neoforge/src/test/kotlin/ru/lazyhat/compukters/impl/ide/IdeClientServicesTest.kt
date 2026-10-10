@@ -100,8 +100,8 @@ internal class IdeClientServicesTest {
 
     @Test
     fun `production analysis timing favors completion without starving presentation`() {
-        assertEquals(150_000_000L, ProductionIdeApplicationFactory.analysisTiming.presentationDebounceNanos)
-        assertEquals(75_000_000L, ProductionIdeApplicationFactory.analysisTiming.automaticCompletionDebounceNanos)
+        assertEquals(100_000_000L, ProductionIdeApplicationFactory.analysisTiming.presentationDebounceNanos)
+        assertEquals(50_000_000L, ProductionIdeApplicationFactory.analysisTiming.automaticCompletionDebounceNanos)
         assertEquals(400_000_000L, ProductionIdeApplicationFactory.analysisTiming.hoverDebounceNanos)
     }
 

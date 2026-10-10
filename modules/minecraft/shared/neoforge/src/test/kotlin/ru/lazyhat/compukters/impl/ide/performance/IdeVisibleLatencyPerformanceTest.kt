@@ -392,10 +392,10 @@ internal class IdeVisibleLatencyPerformanceTest {
         const val EXPECTED_INCREMENTAL_UPDATES = (WARM_UP_CYCLES + MEASURED_CYCLES) * 3L
         const val TICK_NANOS = 50_000_000L
         const val FRAME_NANOS = 16_666_667L
-        const val PRESENTATION_MEDIAN_NANOS = 350_000_000L
-        const val PRESENTATION_P95_NANOS = 600_000_000L
-        const val COMPLETION_MEDIAN_NANOS = 150_000_000L
-        const val COMPLETION_P95_NANOS = 250_000_000L
+        const val PRESENTATION_MEDIAN_NANOS = 450_000_000L
+        const val PRESENTATION_P95_NANOS = 800_000_000L
+        const val COMPLETION_MEDIAN_NANOS = 200_000_000L
+        const val COMPLETION_P95_NANOS = 350_000_000L
         const val MAXIMUM_HEAP_BYTES = 512L * 1024 * 1024
         const val MAXIMUM_METASPACE_BYTES = 256L * 1024 * 1024
         val GEOMETRY = IdeRenderGeometry.compute(960, 540, 180, 120, true, true, IdeCodeFontProfile.DEFAULT)

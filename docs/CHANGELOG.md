@@ -45,8 +45,9 @@ listed in [Kotlin support](developers/kotlin-support.md) and [standard library s
   Tag publication reuses successful checks of the same commit, assembling stable JARs only when the
   earlier build carried `-S`. Simultaneous branch/tag pushes are queued; an already assembled stable
   inventory is reused without recompilation.
-  The full gate measures IDE latency after functional checks finish, retaining the existing SLO limits
-  without competition from compilation, archive transformation or GameTest servers.
+  Functional checks run in parallel; the full gate measures IDE latency afterward without competition from
+  compilation, archive transformation or GameTest servers. Visible completion is checked against a 200 ms
+  median / 350 ms p95 budget, and semantic presentation against 450 ms / 800 ms.
 - Verified autonomous NeoForge releases can be published to GitHub Releases and Modrinth from the same tagged
   artifacts, with component identities, checksums and resumable publication. GitHub Releases also includes the
   Create, Sable and Propulsion addon archives. Manual workflow runs validate the
@@ -187,7 +188,9 @@ listed in [Kotlin support](developers/kotlin-support.md) and [standard library s
   selection screen; unavailable projects reveal the catalog for recovery.
 
 - Completion excludes ordinary string content, character literals and comments, while preserving suggestions
-  inside shorthand and expression interpolation in quoted and raw strings.
+  inside shorthand and expression interpolation in quoted and raw strings. Automatic completion waits 50 ms
+  after an edit and semantic presentation waits 100 ms, leaving time for analysis and rendering within the
+  visible response targets.
 
 - With no project open, a central **Projects** panel groups saved folder paths with create, open and HTTPS clone
   actions; the header menu provides the same project management while editing. Both lists scroll, and projects with missing or invalid manifests remain editable, with analysis unavailable until their configuration is repaired. IDE-owned folders support
