@@ -25,6 +25,43 @@ import kotlin.test.assertFailsWith
 
 class ProjectWorkerProtocolTest {
     @Test
+    fun `source free preparation round trips and rejects old frames and malformed bundles`() {
+        val bundle = TrustedBundleIdentity.of("api", Hash256.zero())
+        val request = LibraryPreparationRequest(RequestId.of(2uL), identity(), WorkerLimits(sourceFiles = 0), listOf(bundle))
+        val encoded = WorkerCodec.encodeFrame(WorkerMessageCodec.encode(request))
+        assertEquals(request, WorkerMessageCodec.decode(WorkerCodec.decodeFrame(encoded, WorkerLimits().frameBytes)))
+        val response = LibrariesPrepared(request.requestId, CompilationMetrics(1uL, 2uL, 3uL))
+        assertEquals(response, WorkerMessageCodec.decode(WorkerMessageCodec.encode(response)))
+        assertFailsWith<IllegalArgumentException> {
+            LibraryPreparationRequest(request.requestId, identity(), WorkerLimits(), listOf(bundle, bundle))
+        }
+        val old = encoded.copyOf().also { it[4] = 4 }
+        assertEquals(
+            WorkerProtocolError.WRONG_VERSION,
+            assertFailsWith<WorkerProtocolException> { WorkerCodec.decodeFrame(old, WorkerLimits().frameBytes) }.error,
+        )
+        val payload = WorkerMessageCodec.encode(request).payload
+        val excessivePayloadCount =
+            payload.copyOf().also {
+                it[it.size - 4] = 1
+                it[it.size - 3] = 4
+            }
+        assertEquals(
+            WorkerProtocolError.COUNT_LIMIT,
+            assertFailsWith<WorkerProtocolException> {
+                WorkerMessageCodec.decode(WorkerFrame(request.type, excessivePayloadCount))
+            }.error,
+        )
+
+        assertFailsWith<WorkerProtocolException> {
+            WorkerMessageCodec.decode(WorkerFrame(request.type, payload.copyOf(payload.size - 1)))
+        }
+        assertFailsWith<WorkerProtocolException> {
+            WorkerMessageCodec.decode(WorkerFrame(request.type, payload + byteArrayOf(0)))
+        }
+    }
+
+    @Test
     fun `multi-source request with trusted bundle identities round trips canonically`() {
         val request =
             CompileRequest(
@@ -86,7 +123,7 @@ class ProjectWorkerProtocolTest {
     }
 
     @Test
-    fun `protocol v4 explicitly rejects a v1 frame`() {
+    fun `protocol v5 explicitly rejects a v1 frame`() {
         val encoded = WorkerCodec.encodeFrame(WorkerMessageCodec.encode(request(listOf(source("main.kt", "x")), WorkerLimits())))
         val v1 =
             encoded.copyOf().also { bytes ->

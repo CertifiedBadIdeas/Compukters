@@ -26,6 +26,8 @@ import ru.lazyhat.compukters.compiler.worker.protocol.CompileRequest
 import ru.lazyhat.compukters.compiler.worker.protocol.CompileResult
 import ru.lazyhat.compukters.compiler.worker.protocol.CompileSuccess
 import ru.lazyhat.compukters.compiler.worker.protocol.Hash256
+import ru.lazyhat.compukters.compiler.worker.protocol.LibrariesPrepared
+import ru.lazyhat.compukters.compiler.worker.protocol.LibraryPreparationRequest
 import ru.lazyhat.compukters.compiler.worker.protocol.PlatformFailure
 import ru.lazyhat.compukters.compiler.worker.protocol.PlatformFailureClass
 import ru.lazyhat.compukters.compiler.worker.protocol.RequestId
@@ -46,6 +48,40 @@ import kotlin.test.assertIs
 import kotlin.test.assertTrue
 
 class CompilerWorkerControllerTest {
+    @Test
+    fun `preparation reuses worker and queued preparation yields to compilation`() =
+        withController(1) { controller, factory, processes, identity, limits ->
+            val worker = processes.single()
+            worker.enqueue(WorkerHandshake(identity, WorkerFeature.entries.toSet(), limits))
+            val prepare = controller.prepareLibraries(emptyList())
+            val request = assertIs<LibraryPreparationRequest>(worker.awaitWrite())
+            val superseded = controller.prepareLibraries(emptyList())
+            val compile = controller.compile(source("first"))
+            assertEquals(PlatformFailureClass.CANCELLED, assertIs<PlatformFailure>(superseded.get(5, TimeUnit.SECONDS)).failureClass)
+            worker.enqueue(LibrariesPrepared(request.requestId, CompilationMetrics(1uL, 2uL, 3uL)))
+            assertIs<LibrariesPrepared>(prepare.get(5, TimeUnit.SECONDS))
+            val compilation = assertIs<CompileRequest>(worker.awaitWrite())
+            worker.enqueue(success(compilation.requestId, byteArrayOf(1)))
+            assertIs<CompileSuccess>(compile.get(5, TimeUnit.SECONDS))
+            assertEquals(1, factory.starts.size)
+        }
+
+    @Test
+    fun `preparation rejects compile response and recovers with a new worker`() =
+        withController(2) { controller, factory, processes, identity, limits ->
+            processes[0].enqueue(WorkerHandshake(identity, WorkerFeature.entries.toSet(), limits))
+            val preparation = controller.prepareLibraries(emptyList())
+            val request = assertIs<LibraryPreparationRequest>(processes[0].awaitWrite())
+            processes[0].enqueue(success(request.requestId, byteArrayOf(1)))
+            assertEquals(PlatformFailureClass.PROTOCOL, assertIs<PlatformFailure>(preparation.get(5, TimeUnit.SECONDS)).failureClass)
+            processes[1].enqueue(handshake(identity, limits))
+            val compile = controller.compile(source("next"))
+            val compilation = assertIs<CompileRequest>(processes[1].awaitWrite())
+            processes[1].enqueue(success(compilation.requestId, byteArrayOf(1)))
+            assertIs<CompileSuccess>(compile.get(5, TimeUnit.SECONDS))
+            assertEquals(2, factory.starts.size)
+        }
+
     @Test
     fun `trusted bundle identities are forwarded with the canonical snapshot`() =
         withController(1) { controller, _, processes, identity, limits ->
@@ -236,7 +272,7 @@ class CompilerWorkerControllerTest {
     private fun handshake(
         identity: WorkerIdentity,
         limits: WorkerLimits,
-    ) = WorkerHandshake(identity, setOf(WorkerFeature.PROJECT_SNAPSHOT, WorkerFeature.KOTLIN_IR), limits)
+    ) = WorkerHandshake(identity, setOf(WorkerFeature.PROJECT_SNAPSHOT, WorkerFeature.KOTLIN_IR, WorkerFeature.LIBRARY_PREPARATION), limits)
 
     private fun success(
         requestId: RequestId,

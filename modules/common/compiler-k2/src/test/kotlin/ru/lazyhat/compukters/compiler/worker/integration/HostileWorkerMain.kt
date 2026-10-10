@@ -35,7 +35,13 @@ import java.security.MessageDigest
 import kotlin.system.exitProcess
 
 fun main() {
-    write(WorkerHandshake(hostileIdentity(), setOf(WorkerFeature.PROJECT_SNAPSHOT, WorkerFeature.KOTLIN_IR), WorkerLimits()))
+    write(
+        WorkerHandshake(
+            hostileIdentity(),
+            setOf(WorkerFeature.PROJECT_SNAPSHOT, WorkerFeature.KOTLIN_IR, WorkerFeature.LIBRARY_PREPARATION),
+            WorkerLimits(),
+        ),
+    )
     val request = WorkerMessageCodec.decode(WorkerCodec.decodeFrame(readFrame(), WorkerLimits().frameBytes)) as CompileRequest
     when (
         request.sources

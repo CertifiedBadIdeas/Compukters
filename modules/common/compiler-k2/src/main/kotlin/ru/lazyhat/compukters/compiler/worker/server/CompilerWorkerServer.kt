@@ -27,6 +27,8 @@ import ru.lazyhat.compukters.compiler.worker.protocol.CompileSuccess
 import ru.lazyhat.compukters.compiler.worker.protocol.CompilerFailure
 import ru.lazyhat.compukters.compiler.worker.protocol.DiagnosticSeverity
 import ru.lazyhat.compukters.compiler.worker.protocol.Hash256
+import ru.lazyhat.compukters.compiler.worker.protocol.LibrariesPrepared
+import ru.lazyhat.compukters.compiler.worker.protocol.LibraryPreparationRequest
 import ru.lazyhat.compukters.compiler.worker.protocol.PlatformFailure
 import ru.lazyhat.compukters.compiler.worker.protocol.PlatformFailureClass
 import ru.lazyhat.compukters.compiler.worker.protocol.WorkerCodec
@@ -35,6 +37,8 @@ import ru.lazyhat.compukters.compiler.worker.protocol.WorkerHandshake
 import ru.lazyhat.compukters.compiler.worker.protocol.WorkerIdentity
 import ru.lazyhat.compukters.compiler.worker.protocol.WorkerLimits
 import ru.lazyhat.compukters.compiler.worker.protocol.WorkerMessageCodec
+import ru.lazyhat.compukters.compiler.worker.protocol.WorkerRequest
+import ru.lazyhat.compukters.compiler.worker.protocol.WorkerResult
 import java.io.InputStream
 import java.io.OutputStream
 import java.lang.management.ManagementFactory
@@ -42,6 +46,10 @@ import java.security.MessageDigest
 
 fun interface CompilationHandler {
     fun compile(request: CompileRequest): K2CompilationResult
+}
+
+fun interface LibraryPreparationHandler {
+    fun prepare(request: LibraryPreparationRequest)
 }
 
 enum class WorkerServerExit { CLEAN_EOF, PROTOCOL_ERROR }
@@ -52,13 +60,14 @@ class CompilerWorkerServer(
     private val input: InputStream,
     private val output: OutputStream,
     private val compiler: CompilationHandler,
+    private val preparer: LibraryPreparationHandler,
     private val nanoTime: () -> Long = System::nanoTime,
 ) {
     fun run(): WorkerServerExit {
         write(
             WorkerHandshake(
                 identity,
-                setOf(WorkerFeature.PROJECT_SNAPSHOT, WorkerFeature.KOTLIN_IR),
+                setOf(WorkerFeature.PROJECT_SNAPSHOT, WorkerFeature.KOTLIN_IR, WorkerFeature.LIBRARY_PREPARATION),
                 hardLimits,
             ),
         )
@@ -71,17 +80,36 @@ class CompilerWorkerServer(
                 }
             val request =
                 try {
-                    WorkerMessageCodec.decode(WorkerCodec.decodeFrame(bytes, hardLimits.frameBytes)) as? CompileRequest
+                    WorkerMessageCodec.decode(WorkerCodec.decodeFrame(bytes, hardLimits.frameBytes)) as? WorkerRequest
                         ?: return WorkerServerExit.PROTOCOL_ERROR
                 } catch (_: IllegalArgumentException) {
                     return WorkerServerExit.PROTOCOL_ERROR
                 }
             val admitted = admit(request)
             if (admitted == null) {
-                write(PlatformFailure(request.requestId, PlatformFailureClass.PROTOCOL, "compile request exceeds worker limits"))
+                write(PlatformFailure(request.requestId, PlatformFailureClass.PROTOCOL, "worker request exceeds worker limits"))
                 return WorkerServerExit.PROTOCOL_ERROR
             }
-            write(compile(admitted))
+            write(
+                when (admitted) {
+                    is CompileRequest -> compile(admitted)
+                    is LibraryPreparationRequest -> prepare(admitted)
+                },
+            )
+        }
+    }
+
+    private fun prepare(request: LibraryPreparationRequest): WorkerResult {
+        val started = nanoTime()
+        return try {
+            preparer.prepare(request)
+            LibrariesPrepared(request.requestId, metrics(elapsed(started, nanoTime())))
+        } catch (exception: Exception) {
+            PlatformFailure(
+                request.requestId,
+                PlatformFailureClass.INTERNAL_COMPILER,
+                bounded(exception.message ?: "library preparation failed", request.limits.diagnosticTextBytes),
+            )
         }
     }
 
@@ -130,7 +158,10 @@ class CompilerWorkerServer(
         }
     }
 
-    private fun admit(request: CompileRequest): CompileRequest? {
+    private fun admit(request: WorkerRequest): WorkerRequest? {
+        if (request.expectedIdentity != identity) return null
+        if (request is LibraryPreparationRequest) return request.copy(limits = request.limits.tightenedWith(hardLimits))
+        require(request is CompileRequest)
         if (request.expectedIdentity != identity || request.sources.size > hardLimits.sourceFiles) return null
         if (request.sources.any { it.content.size > hardLimits.sourceFileBytes }) return null
         if (request.sources.sumOf { it.content.size.toLong() } > hardLimits.sourceBytes.toLong()) return null

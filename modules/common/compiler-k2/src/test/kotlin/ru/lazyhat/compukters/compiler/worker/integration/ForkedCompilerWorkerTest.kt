@@ -27,12 +27,18 @@ import ru.lazyhat.compukters.compiler.worker.controller.PublishedWorkerPayload
 import ru.lazyhat.compukters.compiler.worker.controller.WorkerLaunch
 import ru.lazyhat.compukters.compiler.worker.controller.WorkerPayloadLoader
 import ru.lazyhat.compukters.compiler.worker.controller.WorkerProcessFactory
+import ru.lazyhat.compukters.compiler.worker.k2.K2CompilerAdapter
 import ru.lazyhat.compukters.compiler.worker.protocol.BinaryValue
 import ru.lazyhat.compukters.compiler.worker.protocol.CompileSuccess
 import ru.lazyhat.compukters.compiler.worker.protocol.CompilerFailure
 import ru.lazyhat.compukters.compiler.worker.protocol.DiagnosticCategory
+import ru.lazyhat.compukters.compiler.worker.protocol.Hash256
+import ru.lazyhat.compukters.compiler.worker.protocol.LibrariesPrepared
+import ru.lazyhat.compukters.compiler.worker.protocol.TrustedBundleIdentity
 import ru.lazyhat.compukters.compiler.worker.protocol.VirtualSourcePath
 import ru.lazyhat.compukters.compiler.worker.protocol.WorkerLimits
+import ru.lazyhat.compukters.platform.bundle.PlatformBundleCodec
+import ru.lazyhat.compukters.platform.bundle.PlatformModuleGraph
 import java.nio.file.Path
 import java.util.concurrent.TimeUnit
 import kotlin.io.path.createTempDirectory
@@ -43,6 +49,30 @@ import kotlin.test.assertIs
 import kotlin.test.assertTrue
 
 class ForkedCompilerWorkerTest {
+    @Test
+    fun `source free preparation preserves the first project artifact`() {
+        val platform =
+            K2CompilerAdapter::class.java.getResourceAsStream("/compukters-platform/compukters-platform.cpb")!!.use {
+                PlatformBundleCodec.decode(it.readBytes())
+            }
+        val modules =
+            PlatformModuleGraph(platform).resolve(platform.modules.mapTo(mutableSetOf()) { it.id }).modules.map {
+                TrustedBundleIdentity.of(it.id.toString(), Hash256.of(PlatformBundleCodec.moduleContentHash(it).toByteArray()))
+            }
+        val program = "fun main() { val values = listOf(1, 2); val result = values.map { it + 1 }; println(result[0]) }"
+        var preparedArtifact: BinaryValue? = null
+        withRealWorker { controller ->
+            assertIs<LibrariesPrepared>(controller.prepareLibraries(modules).get(90, TimeUnit.SECONDS))
+            val result = compile(controller, program, modules)
+            preparedArtifact = assertIs<CompileSuccess>(result, result.toString()).artifact
+            assertIs<CompilerFailure>(compile(controller, "val missing: Missing = 1", modules))
+            assertEquals(preparedArtifact, assertIs<CompileSuccess>(compile(controller, program, modules)).artifact)
+        }
+        withRealWorker { controller ->
+            assertEquals(preparedArtifact, assertIs<CompileSuccess>(compile(controller, program, modules)).artifact)
+        }
+    }
+
     @Test
     fun `forked worker resolves two project sources in one K2 session before lowering`() =
         withRealWorker { controller ->
@@ -120,12 +150,14 @@ class ForkedCompilerWorkerTest {
     private fun compile(
         controller: CompilerWorkerController,
         source: String,
+        modules: List<TrustedBundleIdentity> = emptyList(),
     ) = controller
         .compile(
             ProjectSnapshot.of(
                 listOf(ProjectSource(VirtualSourcePath.kotlin("project/main.kt"), BinaryValue.of(source.encodeToByteArray()))),
                 WorkerLimits(),
             ),
+            platformModules = modules,
         ).get(90, TimeUnit.SECONDS)
 
     private fun withRealWorker(block: (CompilerWorkerController) -> Unit) {

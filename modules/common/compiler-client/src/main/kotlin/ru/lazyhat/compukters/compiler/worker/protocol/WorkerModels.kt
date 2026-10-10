@@ -126,7 +126,7 @@ data class WorkerIdentity(
     val platformAbi: Hash256,
 )
 
-enum class WorkerFeature { PROJECT_SNAPSHOT, KOTLIN_IR }
+enum class WorkerFeature { PROJECT_SNAPSHOT, KOTLIN_IR, LIBRARY_PREPARATION }
 
 enum class TargetSettings { KOTLIN_2_4_JVM_17 }
 
@@ -173,8 +173,20 @@ data class WorkerHandshake(
     override val type = WorkerMessageType.HANDSHAKE
 }
 
-sealed interface CompileResult : WorkerMessage {
+sealed interface WorkerResult : WorkerMessage {
     val requestId: RequestId
+}
+
+sealed interface CompileResult : WorkerResult
+
+sealed interface LibraryPreparationResult : WorkerResult
+
+sealed interface WorkerRequest : WorkerMessage {
+    val requestId: RequestId
+    val expectedIdentity: WorkerIdentity
+    val limits: WorkerLimits
+    val platformModules: List<TrustedBundleIdentity>
+    val addonBundles: List<TrustedBundlePayload>
 }
 
 class TrustedBundleIdentity private constructor(
@@ -208,25 +220,21 @@ class TrustedBundlePayload(
 }
 
 class CompileRequest(
-    val requestId: RequestId,
+    override val requestId: RequestId,
     sources: List<ProjectSource>,
     val target: TargetSettings,
-    val expectedIdentity: WorkerIdentity,
-    val limits: WorkerLimits,
+    override val expectedIdentity: WorkerIdentity,
+    override val limits: WorkerLimits,
     platformModules: List<TrustedBundleIdentity> = emptyList(),
     addonBundles: List<TrustedBundlePayload> = emptyList(),
-) : WorkerMessage {
+) : WorkerRequest {
     override val type = WorkerMessageType.COMPILE_REQUEST
     val sources: List<ProjectSource> = ProjectSnapshot.of(sources, limits).sources
-    val platformModules: List<TrustedBundleIdentity> = platformModules.toList()
-    val addonBundles: List<TrustedBundlePayload> = addonBundles.toList()
+    override val platformModules: List<TrustedBundleIdentity> = platformModules.toList()
+    override val addonBundles: List<TrustedBundlePayload> = addonBundles.toList()
 
     init {
-        requireUniqueBundles(this.platformModules, "platform modules")
-        requireUniqueBundles(this.addonBundles.map(TrustedBundlePayload::identity), "addon bundles")
-        require(this.addonBundles.all { payload -> this.platformModules.any { it.hash == payload.identity.hash } }) {
-            "addon bundle payloads must belong to selected platform modules"
-        }
+        validateBundles(this.platformModules, this.addonBundles)
     }
 
     fun copy(
@@ -250,12 +258,50 @@ class CompileRequest(
             addonBundles == other.addonBundles
 
     override fun hashCode(): Int = listOf(requestId, sources, target, expectedIdentity, limits, platformModules, addonBundles).hashCode()
+}
 
-    private fun requireUniqueBundles(
-        bundles: List<TrustedBundleIdentity>,
-        description: String,
-    ) {
-        require(bundles.map(TrustedBundleIdentity::name).toSet().size == bundles.size) { "$description must have unique names" }
+class LibraryPreparationRequest(
+    override val requestId: RequestId,
+    override val expectedIdentity: WorkerIdentity,
+    override val limits: WorkerLimits,
+    platformModules: List<TrustedBundleIdentity> = emptyList(),
+    addonBundles: List<TrustedBundlePayload> = emptyList(),
+) : WorkerRequest {
+    override val type = WorkerMessageType.LIBRARY_PREPARATION_REQUEST
+    override val platformModules = platformModules.toList()
+    override val addonBundles = addonBundles.toList()
+
+    init {
+        validateBundles(this.platformModules, this.addonBundles)
+    }
+
+    fun copy(
+        requestId: RequestId = this.requestId,
+        limits: WorkerLimits = this.limits,
+    ): LibraryPreparationRequest = LibraryPreparationRequest(requestId, expectedIdentity, limits, platformModules, addonBundles)
+
+    override fun equals(other: Any?): Boolean =
+        other is LibraryPreparationRequest && requestId == other.requestId && expectedIdentity == other.expectedIdentity &&
+            limits == other.limits && platformModules == other.platformModules && addonBundles == other.addonBundles
+
+    override fun hashCode(): Int = listOf(requestId, expectedIdentity, limits, platformModules, addonBundles).hashCode()
+}
+
+data class LibrariesPrepared(
+    override val requestId: RequestId,
+    val metrics: CompilationMetrics,
+) : LibraryPreparationResult {
+    override val type = WorkerMessageType.LIBRARIES_PREPARED
+}
+
+private fun validateBundles(
+    modules: List<TrustedBundleIdentity>,
+    payloads: List<TrustedBundlePayload>,
+) {
+    require(modules.map(TrustedBundleIdentity::name).toSet().size == modules.size) { "platform modules must have unique names" }
+    require(payloads.map { it.identity.name }.toSet().size == payloads.size) { "addon bundles must have unique names" }
+    require(payloads.all { payload -> modules.any { it.hash == payload.identity.hash } }) {
+        "addon bundle payloads must belong to selected platform modules"
     }
 }
 
@@ -281,7 +327,8 @@ data class PlatformFailure(
     override val requestId: RequestId,
     val failureClass: PlatformFailureClass,
     val detail: String,
-) : CompileResult {
+) : CompileResult,
+    LibraryPreparationResult {
     override val type = WorkerMessageType.PLATFORM_FAILURE
 }
 
@@ -332,6 +379,8 @@ enum class WorkerMessageType(
     COMPILE_SUCCESS(3),
     COMPILER_FAILURE(4),
     PLATFORM_FAILURE(5),
+    LIBRARY_PREPARATION_REQUEST(6),
+    LIBRARIES_PREPARED(7),
     ;
 
     companion object {
