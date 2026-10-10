@@ -146,7 +146,8 @@ class ReleaseTest(unittest.TestCase):
                                     ('compukters-neoforge-26.1.2-dev', 'jar')]:
                 archive.writestr(f'repository/ru/lazyhat/compukters/{name}/0.5.0/{name}-0.5.0.{extension}', b'SDK fixture')
             marker = 'ru.lazyhat.compukters.addon'
-            archive.writestr(f'repository/{marker}/{marker}.gradle.plugin/0.5.0/{marker}.gradle.plugin-0.5.0.pom', b'plugin marker')
+            marker_group = 'ru/lazyhat/compukters/addon'
+            archive.writestr(f'repository/{marker_group}/{marker}.gradle.plugin/0.5.0/{marker}.gradle.plugin-0.5.0.pom', b'plugin marker')
             archive.writestr('LICENSE', b'license fixture')
             archive.writestr('NOTICE', b'notice fixture')
             archive.writestr('tools/release.py', b'release tool fixture')
