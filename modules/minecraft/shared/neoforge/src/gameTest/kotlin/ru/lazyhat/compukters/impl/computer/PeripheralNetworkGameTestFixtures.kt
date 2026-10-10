@@ -23,6 +23,8 @@ import net.minecraft.core.Direction
 import net.minecraft.gametest.framework.GameTestHelper
 import net.minecraft.world.InteractionHand
 import net.minecraft.world.item.ItemStack
+import net.minecraft.world.phys.BlockHitResult
+import net.minecraft.world.phys.Vec3
 import ru.lazyhat.compukters.impl.registry.CompuktersRegistry
 import ru.lazyhat.compukters.minecraft.peripheral.PeripheralBindingResult
 import ru.lazyhat.compukters.minecraft.peripheral.PeripheralConfiguratorItem
@@ -40,21 +42,20 @@ internal object PeripheralNetworkGameTestFixtures {
         val item = stack.item as PeripheralConfiguratorItem
         player.setItemInHand(InteractionHand.MAIN_HAND, stack)
         item.use(helper.level, player, InteractionHand.MAIN_HAND)
-        for ((index, relative) in (listOf(computer) + devices).withIndex()) {
+        for (relative in listOf(computer) + devices) {
             val absolute = helper.absolutePos(relative)
             player.setPos(absolute.x + 0.5, absolute.y + 0.5, absolute.z + 0.5)
-            val result = PeripheralConfiguratorServer.bind(player, InteractionHand.MAIN_HAND, absolute, Direction.WEST)
-            helper.assertTrue(
-                result in
-                    if (index ==
-                        0
-                    ) {
-                        setOf(PeripheralBindingResult.CREATED, PeripheralBindingResult.SELECTED)
-                    } else {
-                        setOf(PeripheralBindingResult.BOUND)
-                    },
-                "network binding failed: $result",
-            )
+            val result =
+                player.gameMode.useItemOn(
+                    player,
+                    helper.level,
+                    stack,
+                    InteractionHand.MAIN_HAND,
+                    BlockHitResult(Vec3.atCenterOf(absolute), Direction.WEST, absolute, false),
+                )
+            helper.assertTrue(result.consumesAction(), "configurator click was not handled")
+            helper.assertTrue(item.selectedNetwork(stack) != null, "ordinary computer click must select a network")
+            helper.assertTrue(player.containerMenu === player.inventoryMenu, "configurator must not open a block's menu")
         }
         return checkNotNull(item.selectedNetwork(stack))
     }
