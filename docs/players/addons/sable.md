@@ -1,7 +1,7 @@
 ---
 layout: default
 title: Sable addon
-description: Read construction pose and velocity from Guest Kotlin.
+description: Read construction physics and use peripheral networks on Sable constructions.
 section: players
 permalink: /SABLE/
 ---
@@ -24,8 +24,25 @@ Install Compukters: Sable alongside the base mod and upstream Sable on client an
 The base mod works without Sable. This addon does not require Compukters: Create.
 
 Addon releases use `x.y` (API compatibility line and compatible update), separately from the Compukters target line.
-For example, `compukters-sable-1.21.1-neoforge-0.5-1.0.jar` targets Compukters 0.5 and is addon version 1.0. Exact minimum
+For example, `compukters-sable-1.21.1-neoforge-0.6-1.1.jar` targets Compukters 0.6 and is addon version 1.1. Exact minimum
 versions are enforced by loader metadata. See [addon versioning]({{ '/ADDON-DEVELOPMENT/' | relative_url }}#first-party-addon-versions).
+
+## Peripheral networks
+
+Use the configurator's network mode to bind computers and peripherals exactly as in the
+[peripheral guide]({{ '/PERIPHERALS/' | relative_url }}). You can bind devices before assembly or directly on a construction.
+Networks can include shore devices and devices on separate constructions. Guest calls such as
+`GraphicalDisplay.named("screen")` and Create peripheral lookup remain the same; using networks does not require adding
+`"sable"` to `compukter.toml`.
+
+The configurable 64-block default radius is measured from each computer to the peripheral's current world position,
+including construction rotation and scale. Both devices must be loaded and in the same dimension. Leaving range makes
+the device unavailable without removing its binding; a stale Guest handle must be acquired again.
+
+Assembly and moving blocks back to the world retain network membership and names. Moving a complete composed display
+also retains its screen identity and published image. If only part of a screen moves, it becomes separate panels:
+each keeps its part of the image and network, and the first panel keeps the name. Private drawing frames are discarded.
+The configurator's outlines and network inspection use the current construction positions.
 
 ## Read your first snapshot
 

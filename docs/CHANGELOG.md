@@ -13,6 +13,10 @@ headings so this page has one stable URL that can be shared outside the reposito
 
 ## 0.6.0 — In development
 
+- Compukters: Sable 1.1 supports peripheral networks between shore devices and moving constructions. Access follows
+  real world distance, including rotation and scale; assembly and return preserve bindings, names and complete display
+  images. Partial display transfers split into panels with their published tiles and network membership.
+
 - Repeated Guest compilation reuses resolved platform-library analysis within the retained compiler worker.
   Changing the dependency selection replaces that preparation; each project compilation keeps its own source
   session and specialization state.
