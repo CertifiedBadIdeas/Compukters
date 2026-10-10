@@ -296,7 +296,7 @@ class IdeBuildCoordinator(
                 return
             }
         control.compilation.set(compilation)
-        if (control.cancelled.get()) services.compilation.cancel(compilation)
+        if (control.cancelled.get()) cancelCompilation(control)
         compilation.whenComplete { result, failure ->
             if (control.result.isDone) return@whenComplete
             if (failure != null) {
@@ -457,10 +457,17 @@ class IdeBuildCoordinator(
         return EditorRange(start.toInt(), end.toInt())
     }
 
+    private fun cancelCompilation(control: BuildControl) {
+        val compilation = control.compilation.get() ?: return
+        if (control.compilationCancellationForwarded.compareAndSet(false, true)) {
+            services.compilation.cancel(compilation)
+        }
+    }
+
     private fun cancel(control: BuildControl): Boolean {
         if (control.result.isDone || !control.cancelled.compareAndSet(false, true)) return false
         control.preparation.get()?.cancel(false)
-        control.compilation.get()?.let(services.compilation::cancel)
+        cancelCompilation(control)
         control.result.complete(IdeBuildState.Failed(IdeBuildFailureKind.Cancelled, "client compilation cancelled"))
         return true
     }
@@ -502,6 +509,7 @@ class IdeBuildCoordinator(
         val started = CompletableFuture<IdeBuildState.Compiling>()
         val result = CompletableFuture<IdeBuildState>()
         val cancelled = AtomicBoolean()
+        val compilationCancellationForwarded = AtomicBoolean()
         val preparation = AtomicReference<Future<*>?>()
         val compilation = AtomicReference<CompletableFuture<ClientBuildResult>?>()
     }
