@@ -27,6 +27,14 @@ import java.util.concurrent.CompletableFuture
 interface AnalysisRequestCoordinator : AutoCloseable {
     fun cancelCompletion() = Unit
 
+    /** Stop obsolete work immediately while the next source snapshot is prepared asynchronously. */
+    fun sourceInvalidated() {
+        cancelCompletion()
+        cancelPointerInteraction()
+        cancelSymbolOccurrences()
+        cancelParameterInfo()
+    }
+
     /** Cancel any diagnostic pass and control the next presentation's diagnostics, retaining semantic work. */
     fun setDiagnosticsEnabled(
         enabled: Boolean,
@@ -163,6 +171,26 @@ class DefaultAnalysisRequestCoordinator(
         require(presentationDebounceNanos >= 0) { "presentation debounce must not be negative" }
         require(automaticCompletionDebounceNanos >= 0) { "automatic-completion debounce must not be negative" }
         require(hoverDebounceNanos >= 0) { "hover debounce must not be negative" }
+    }
+
+    override fun sourceInvalidated() {
+        val previous: List<CompletableFuture<AnalysisClientResult>>
+        synchronized(lock) {
+            if (closed) return
+            snapshot = null
+            presentationTask?.cancel()
+            completionTask?.cancel()
+            presentationTask = null
+            completionTask = null
+            previous = listOfNotNull(presentationFuture, completionFuture)
+            presentationFuture = null
+            completionFuture = null
+            completionTrigger = null
+        }
+        previous.forEach(client::cancel)
+        cancelPointerInteraction()
+        cancelSymbolOccurrences()
+        cancelParameterInfo()
     }
 
     override fun sourceChanged(

@@ -38,6 +38,7 @@ internal class FakeAnalysisWorkerProcess : WorkerProcess {
     private var context = AnalysisProtocolContext.unchecked()
     val operations = mutableListOf<String>()
     val terminationGraces = mutableListOf<Long>()
+    var beforeWrite: (AnalysisMessage) -> Unit = {}
     var stderr = ByteArray(0)
     override var exitCode: Int? = null
     override var isAlive = true
@@ -74,6 +75,7 @@ internal class FakeAnalysisWorkerProcess : WorkerProcess {
                     AnalysisProtocolContext.unchecked()
                 },
             )
+        beforeWrite(decoded)
         if (decoded is OpenSnapshotRequest) context = AnalysisProtocolContext.of(decoded.sources, decoded.profile, decoded.limits)
         synchronized(operations) { operations += "write:${envelope.type}" }
         writes.put(decoded)

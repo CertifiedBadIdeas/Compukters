@@ -50,6 +50,8 @@ import ru.lazyhat.compukters.ide.analysis.protocol.UpdateSnapshotRequest
 import ru.lazyhat.compukters.ide.editor.EditorRange
 import ru.lazyhat.compukters.worker.process.WorkerLaunch
 import java.nio.file.Path
+import java.util.concurrent.CompletableFuture
+import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -57,6 +59,60 @@ import kotlin.test.assertIs
 import kotlin.test.assertTrue
 
 class AnalysisWorkerControllerTest {
+    @Test
+    fun `cancellation returns while the query pipe write is blocked`() =
+        withController(1) { controller, _, processes, workerIdentity, limits ->
+            val worker = processes.single()
+            val snapshot = open(controller, worker, workerIdentity, limits)
+            val entered = CountDownLatch(1)
+            val release = CountDownLatch(1)
+            worker.beforeWrite = { message ->
+                if (message is AnalysisQueryRequest) {
+                    entered.countDown()
+                    check(release.await(5, TimeUnit.SECONDS))
+                }
+            }
+            val result = controller.query(snapshot, AnalysisQuery.ExpressionInfo(snapshot.identity, path(), 3))
+            assertTrue(entered.await(5, TimeUnit.SECONDS))
+            try {
+                val cancelled = CompletableFuture.supplyAsync { controller.cancel(result) }
+                assertTrue(cancelled.get(200, TimeUnit.MILLISECONDS))
+            } finally {
+                release.countDown()
+            }
+            val request = assertIs<AnalysisQueryRequest>(worker.awaitWrite())
+            assertEquals(request.requestId, assertIs<CancelAnalysisRequest>(worker.awaitWrite()).requestId)
+            worker.enqueue(AnalysisCancelled(request.requestId, snapshot.identity))
+            assertEquals(AnalysisClientResult.Cancelled, result.get(5, TimeUnit.SECONDS))
+        }
+
+    @Test
+    fun `cancellation returns without waiting for its pipe write`() =
+        withController(1) { controller, _, processes, workerIdentity, limits ->
+            val worker = processes.single()
+            val snapshot = open(controller, worker, workerIdentity, limits)
+            val result = controller.query(snapshot, AnalysisQuery.ExpressionInfo(snapshot.identity, path(), 3))
+            val request = assertIs<AnalysisQueryRequest>(worker.awaitWrite())
+            val entered = CountDownLatch(1)
+            val release = CountDownLatch(1)
+            worker.beforeWrite = { message ->
+                if (message is CancelAnalysisRequest) {
+                    entered.countDown()
+                    check(release.await(5, TimeUnit.SECONDS))
+                }
+            }
+            try {
+                val cancelled = CompletableFuture.supplyAsync { controller.cancel(result) }
+                assertTrue(entered.await(5, TimeUnit.SECONDS))
+                assertTrue(cancelled.get(200, TimeUnit.MILLISECONDS))
+            } finally {
+                release.countDown()
+            }
+            assertEquals(request.requestId, assertIs<CancelAnalysisRequest>(worker.awaitWrite()).requestId)
+            worker.enqueue(AnalysisCancelled(request.requestId, snapshot.identity))
+            assertEquals(AnalysisClientResult.Cancelled, result.get(5, TimeUnit.SECONDS))
+        }
+
     @Test
     fun `invalidated query workspace is reopened before the next query`() =
         withController(1) { controller, _, processes, workerIdentity, limits ->

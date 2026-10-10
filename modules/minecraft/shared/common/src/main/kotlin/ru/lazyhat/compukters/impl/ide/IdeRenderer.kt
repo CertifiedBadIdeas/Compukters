@@ -27,6 +27,7 @@ import ru.lazyhat.compukters.ide.client.analysis.IdeDeclarationTarget
 import ru.lazyhat.compukters.ide.client.analysis.IdeParameterInfoState
 import ru.lazyhat.compukters.ide.client.analysis.IdeSemanticAnchor
 import ru.lazyhat.compukters.ide.client.analysis.IdeSemanticInteraction
+import ru.lazyhat.compukters.ide.client.analysis.presentationOrNull
 import ru.lazyhat.compukters.ide.client.build.IdeBuildState
 import ru.lazyhat.compukters.ide.client.files.IdeComputerChildren
 import ru.lazyhat.compukters.ide.client.files.IdeComputerNode
@@ -1513,7 +1514,7 @@ object IdeRenderer {
         ) {
             if (line.isEmpty()) return
             val lexical = editor.lexical.lines.getOrNull(lineIndex)
-            val semantic = (editor.analysis as? IdeAnalysisState.Active)?.presentation
+            val semantic = editor.analysis.presentationOrNull()
             val link =
                 ((editor.analysis as? IdeAnalysisState.Active)?.interaction as? IdeSemanticInteraction.Link)
                     ?.takeIf { it.anchor.path.value == editor.path?.value }

@@ -124,6 +124,10 @@ class AnalysisWorkerController(
         Executors.newSingleThreadExecutor { task ->
             Thread(task, "compukter-analysis-controller").apply { isDaemon = true }
         }
+    private val cancellationExecutor =
+        Executors.newSingleThreadExecutor { task ->
+            Thread(task, "compukter-analysis-cancellation").apply { isDaemon = true }
+        }
     private val scheduler = AnalysisScheduler<Pending>()
     private var retainedSnapshot: AdmittedAnalysisSnapshot? = null
     private var process: WorkerProcess? = null
@@ -177,6 +181,7 @@ class AnalysisWorkerController(
         synchronized(lock) {
             if (future.isDone) return false
             pending = schedulerItems().filterIsInstance<Pending.Query>().firstOrNull { it.future === future } ?: return false
+            if (pending.cancelled) return false
             active = scheduler.active?.value === pending
             if (active && pending.querySent && !pending.awaitingResponse) return false
             pending.cancelled = true
@@ -187,8 +192,8 @@ class AnalysisWorkerController(
                 child = null
             }
         }
-        if (active) child?.let { safelySendCancel(it, pending.requestId) }
-        if (!active || child == null) pending.future.complete(AnalysisClientResult.Cancelled)
+        if (active) child?.let { scheduleCancel(it, pending.requestId) }
+        if (!active) pending.future.complete(AnalysisClientResult.Cancelled)
         return true
     }
 
@@ -222,6 +227,7 @@ class AnalysisWorkerController(
         pending.forEach { completeCancelled(it.value) }
         child?.terminate(policy.terminationGraceMillis)
         executor.shutdownNow()
+        cancellationExecutor.shutdownNow()
     }
 
     private fun enqueueLocked(pending: Pending): List<Pending> {
@@ -318,20 +324,18 @@ class AnalysisWorkerController(
             return
         }
         val queryContext = context(pending.snapshot).forQuery(pending.query)
-        val sent =
-            synchronized(lock) {
-                if (pending.cancelled) {
-                    false
-                } else {
-                    send(child, AnalysisQueryRequest(pending.requestId, pending.query), queryContext)
-                    pending.querySent = true
-                    pending.awaitingResponse = true
-                    true
-                }
-            }
-        if (!sent) {
+        val shouldSend = synchronized(lock) { !pending.cancelled }
+        if (!shouldSend) {
             pending.future.complete(AnalysisClientResult.Cancelled)
             return
+        }
+        // Pipe backpressure must never hold the lock needed by input-side cancellation and enqueueing.
+        send(child, AnalysisQueryRequest(pending.requestId, pending.query), queryContext)
+        synchronized(lock) {
+            pending.querySent = true
+            pending.awaitingResponse = true
+            // A cancellation during the write is sent only after the query frame is complete.
+            if (pending.cancelled) scheduleCancel(child, pending.requestId)
         }
         val response = receiveQueryResponse(child, pending, queryContext)
         when (response) {
@@ -618,11 +622,16 @@ class AnalysisWorkerController(
         }
     }
 
-    private fun safelySendCancel(
+    private fun scheduleCancel(
         child: WorkerProcess,
         requestId: RequestId,
     ) {
-        runCatching { send(child, CancelAnalysisRequest(requestId), AnalysisProtocolContext.unchecked()) }
+        synchronized(lock) {
+            if (closed || process !== child) return
+            cancellationExecutor.execute {
+                runCatching { send(child, CancelAnalysisRequest(requestId), AnalysisProtocolContext.unchecked()) }
+            }
+        }
     }
 
     private fun invalidate() {
