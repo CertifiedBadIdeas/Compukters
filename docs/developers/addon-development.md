@@ -37,7 +37,7 @@ is needed for public assets. The archive contains a local file Maven repository,
 plugin DSL remain unchanged. There is no separate hosted Maven repository for Compukters dependencies.
 Kotlin, NeoForge and other upstream build dependencies still use their normal repositories.
 
-The template defaults to `compuktersRelease=0.5.1`. Until that release is published, use local mode explicitly:
+The template defaults to the published SDK `compuktersRelease=0.5.1`. To develop against local sources, select source mode explicitly:
 
 ```shell
 # In the Compukters checkout:
