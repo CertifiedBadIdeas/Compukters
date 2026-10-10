@@ -351,3 +351,20 @@ exact platform source module.
 and
 [`MinimalScriptLoweringTest`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/compiler-k2/src/test/kotlin/ru/lazyhat/compukters/compiler/worker/k2/MinimalScriptLoweringTest.kt),
 test `platform callable lookalike remains an ordinary project call`.
+
+
+## Computer network messages
+
+`compukter:core` 2.2.0 exposes `compukter.network.Network.connected: Boolean`, `send(ByteArray)` and
+`receive(): ByteArray`. Ordinary Guest calls lower to the trusted asynchronous `compukters:network` capability ABI 1.0:
+operations 0 (connection status), 1 (send) and 2 (receive). The physical cable selects exactly one peer, so the API has no
+addresses. A receive retains its task/request identity while waiting and completes through bounded server-thread polling.
+The compiler fixture task `:compiler-k2:generateNetworkConformanceArtifacts` and both Minecraft versions' real
+`computer_network` GameTests cover all 256 byte values, empty messages and catchable interruption.
+
+Runtime native ABI 22 transports byte arrays directly through JNI and FFM. The outbound call has an aggregate 4096-byte
+array limit and the returned array has the same limit. Buffers are owned snapshots; a sender's later writes cannot alter
+queued data. Each computer's inbox is shared by its program scopes and holds up to 16 messages. Queues are volatile;
+cable mutation, endpoint replacement/reboot and participating chunk unload retire the connection and discard its data.
+Restoring a pending receive completes it with `compukter.io.IOException` rather than rebinding it to a new connection.
+See the [player network guide]({{ '/PERIPHERALS/' | relative_url }}) for setup and a two-computer echo example.

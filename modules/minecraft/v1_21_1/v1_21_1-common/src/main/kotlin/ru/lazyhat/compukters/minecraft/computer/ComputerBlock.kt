@@ -38,7 +38,10 @@ import net.minecraft.world.level.block.state.BlockState
 import net.minecraft.world.level.block.state.StateDefinition
 import net.minecraft.world.level.block.state.properties.BlockStateProperties
 import net.minecraft.world.phys.BlockHitResult
+import ru.lazyhat.compukters.core.network.CableNode
 import ru.lazyhat.compukters.lang.runtime.vm.RedstoneWire
+import ru.lazyhat.compukters.minecraft.network.ComputerCableLinks
+import ru.lazyhat.compukters.minecraft.network.ComputerCableMessages
 import java.util.function.Supplier
 
 // Input and output sides are independent GPIO, not a passive redstone conductor.
@@ -57,8 +60,12 @@ class ComputerBlock(
         builder.add(FACING)
     }
 
-    override fun getStateForPlacement(context: BlockPlaceContext): BlockState =
-        defaultBlockState().setValue(FACING, placementFacing(context.horizontalDirection))
+    override fun getStateForPlacement(context: BlockPlaceContext): BlockState? =
+        if (ComputerCableLinks.allowPlacement(context, CableNode.COMPUTER)) {
+            defaultBlockState().setValue(FACING, placementFacing(context.horizontalDirection))
+        } else {
+            null
+        }
 
     override fun rotate(
         blockState: BlockState,
@@ -93,6 +100,18 @@ class ComputerBlock(
         val entity = level.getBlockEntity(position) as? ComputerBlockEntity ?: return InteractionResult.PASS
         terminalOpener(serverPlayer, entity)
         return InteractionResult.SUCCESS
+    }
+
+    override fun onRemove(
+        state: BlockState,
+        level: Level,
+        position: BlockPos,
+        newState: BlockState,
+        movedByPiston: Boolean,
+    ) {
+        super.onRemove(state, level, position, newState, movedByPiston)
+        ComputerCableLinks.invalidate(level)
+        if (newState.block !== state.block) ComputerCableMessages.changed(level, position, false)
     }
 
     override fun playerWillDestroy(
@@ -154,6 +173,8 @@ class ComputerBlock(
         movedByPiston: Boolean,
     ) {
         super.onPlace(state, level, position, oldState, movedByPiston)
+        ComputerCableLinks.invalidate(level)
+        if (oldState.block !== state.block) ComputerCableMessages.changed(level, position, false)
         if (!level.isClientSide && oldState.block === this && oldState.getValue(FACING) != state.getValue(FACING)) {
             (level.getBlockEntity(position) as? ComputerBlockEntity)?.markRedstoneInputDirty()
             Direction.entries.forEach { direction ->

@@ -24,6 +24,18 @@ import kotlin.test.assertFailsWith
 
 class HostResponseWireTest {
     @Test
+    fun `byte arrays preserve raw bits and snapshot ownership`() {
+        val original = byteArrayOf(0, -128, -1)
+        val response = HostResponse.ByteArraySuccess(original)
+        original.fill(17)
+        response.value.fill(42)
+        assertContentEquals(byteArrayOf(1, 9, 3, 0, 0, 0, 0, -128, -1), HostResponseWire.encode(response))
+        assertContentEquals(byteArrayOf(1, 9, 0, 0, 0, 0), HostResponseWire.encode(HostResponse.ByteArraySuccess(byteArrayOf())))
+        assertFailsWith<IllegalArgumentException> { HostResponse.ByteArraySuccess(ByteArray(4097)) }
+        kotlin.test.assertEquals(4102, HostResponseWire.encode(HostResponse.ByteArraySuccess(ByteArray(4096))).size)
+    }
+
+    @Test
     fun `response values retain signed long IEEE bits and isolated UTF16 surrogates`() {
         assertContentEquals(byteArrayOf(1, 2, 0, 0, 0, 0, 0, 0, 0, -128), HostResponseWire.encode(HostResponse.LongSuccess(Long.MIN_VALUE)))
         assertContentEquals(byteArrayOf(1, 4, 0, 0, 0, 0, 0, 0, 0, -128), HostResponseWire.encode(HostResponse.DoubleSuccess(-0.0)))

@@ -1778,3 +1778,22 @@ tasks.register<Test>("generateMathConformanceArtifact") {
         systemProperty("compukter.vm.mathArtifact", mathConformanceArtifact.get().asFile.absolutePath)
     }
 }
+
+
+val networkConformanceDirectory = layout.buildDirectory.dir("generated/conformance/network")
+val generateNetworkConformanceArtifacts = tasks.register<Test>("generateNetworkConformanceArtifacts") {
+    description = "Compiles binary point-to-point computer messaging and interruption programs."
+    group = "verification"
+    dependsOn(tasks.jar)
+    useJUnitPlatform()
+    testClassesDirs = sourceSets.test.get().output.classesDirs
+    classpath = sourceSets.test.get().runtimeClasspath
+    filter.includeTestsMatching("*binary computer network programs lower for GameTest*")
+    inputs.file(workerJar)
+    outputs.dir(networkConformanceDirectory)
+    doFirst {
+        networkConformanceDirectory.get().asFile.mkdirs()
+        systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
+        systemProperty("compukter.vm.networkArtifacts", networkConformanceDirectory.get().asFile.absolutePath)
+    }
+}

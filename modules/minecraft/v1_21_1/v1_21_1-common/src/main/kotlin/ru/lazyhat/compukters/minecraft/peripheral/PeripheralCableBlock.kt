@@ -35,8 +35,10 @@ import net.minecraft.world.level.block.state.properties.BooleanProperty
 import net.minecraft.world.phys.shapes.CollisionContext
 import net.minecraft.world.phys.shapes.Shapes
 import net.minecraft.world.phys.shapes.VoxelShape
-import ru.lazyhat.compukters.minecraft.computer.ComputerAddonHosts
+import ru.lazyhat.compukters.core.network.CableNode
 import ru.lazyhat.compukters.minecraft.computer.ComputerBlock
+import ru.lazyhat.compukters.minecraft.network.ComputerCableLinks
+import ru.lazyhat.compukters.minecraft.network.ComputerCableMessages
 
 class PeripheralCableBlock(
     properties: BlockBehaviour.Properties,
@@ -58,8 +60,12 @@ class PeripheralCableBlock(
         builder.add(DOWN, UP, NORTH, SOUTH, WEST, EAST)
     }
 
-    override fun getStateForPlacement(context: BlockPlaceContext): BlockState =
-        connectedState(defaultBlockState(), context.level, context.clickedPos)
+    override fun getStateForPlacement(context: BlockPlaceContext): BlockState? =
+        if (ComputerCableLinks.allowPlacement(context, CableNode.CABLE)) {
+            connectedState(defaultBlockState(), context.level, context.clickedPos)
+        } else {
+            null
+        }
 
     override fun updateShape(
         state: BlockState,
@@ -71,7 +77,7 @@ class PeripheralCableBlock(
     ): BlockState =
         state.setValue(
             PROPERTY_BY_DIRECTION.getValue(direction),
-            connectsTo(level, neighborPosition, direction, neighborState, state.getValue(PROPERTY_BY_DIRECTION.getValue(direction))),
+            connectsTo(neighborState),
         )
 
     override fun getShape(
@@ -90,6 +96,8 @@ class PeripheralCableBlock(
     ) {
         super.onPlace(state, level, position, oldState, movedByPiston)
         PeripheralCableTopologyCache.invalidate(level)
+        ComputerCableLinks.invalidate(level)
+        if (oldState.block !== state.block) ComputerCableMessages.changed(level, position, true)
     }
 
     override fun onRemove(
@@ -101,6 +109,8 @@ class PeripheralCableBlock(
     ) {
         super.onRemove(state, level, position, newState, movedByPiston)
         PeripheralCableTopologyCache.invalidate(level)
+        ComputerCableLinks.invalidate(level)
+        if (newState.block !== state.block) ComputerCableMessages.changed(level, position, true)
     }
 
     override fun neighborChanged(
@@ -113,6 +123,7 @@ class PeripheralCableBlock(
     ) {
         super.neighborChanged(state, level, position, neighborBlock, neighborPosition, movedByPiston)
         PeripheralCableTopologyCache.invalidate(level)
+        ComputerCableLinks.invalidate(level)
         if (!level.isClientSide) level.scheduleTick(position, this, CONNECTION_REFRESH_DELAY)
     }
 
@@ -135,21 +146,12 @@ class PeripheralCableBlock(
             val neighborPosition = position.relative(direction)
             state.setValue(
                 PROPERTY_BY_DIRECTION.getValue(direction),
-                connectsTo(level, neighborPosition, direction, level.getBlockState(neighborPosition), false),
+                connectsTo(level.getBlockState(neighborPosition)),
             )
         }
 
-    private fun connectsTo(
-        level: BlockGetter,
-        neighborPosition: BlockPos,
-        direction: Direction,
-        neighborState: BlockState,
-        clientFallback: Boolean,
-    ): Boolean {
-        if (PeripheralCableBlocks.contains(neighborState) || neighborState.block is ComputerBlock) return true
-        val serverLevel = level as? ServerLevel ?: return clientFallback
-        return ComputerAddonHosts.resolvePeripheralContact(serverLevel, neighborPosition, direction.opposite).isNotEmpty()
-    }
+    private fun connectsTo(neighborState: BlockState): Boolean =
+        PeripheralCableBlocks.contains(neighborState) || neighborState.block is ComputerBlock
 
     companion object {
         private const val CONNECTION_REFRESH_DELAY = 1

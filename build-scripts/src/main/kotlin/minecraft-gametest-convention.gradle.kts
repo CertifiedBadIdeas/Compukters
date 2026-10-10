@@ -37,6 +37,8 @@ tasks.named<ProcessResources>(gameTest.processResourcesTaskName) {
     dependsOn(":compiler-k2:generateRedstoneConformanceArtifact")
     dependsOn(":compiler-k2:generateSoundConformanceArtifact")
     dependsOn(":compiler-k2:generateDisplayConformanceArtifact")
+    dependsOn(":compiler-k2:generateNetworkConformanceArtifacts")
+    from(project(":compiler-k2").layout.buildDirectory.dir("generated/conformance/network")) { into("fixtures") }
     dependsOn(":compiler-k2:generateGraphicalDisplayConformanceArtifact")
     from(graphicalDisplayArtifact) { into("fixtures") }
     from(project(":compiler-k2").layout.buildDirectory.file("generated/conformance/graphical-display-hibernation.cpkt")) { into("fixtures") }

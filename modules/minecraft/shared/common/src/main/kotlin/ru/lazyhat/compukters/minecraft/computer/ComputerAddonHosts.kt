@@ -31,10 +31,12 @@ import ru.lazyhat.compukters.api.addon.ProgramAddonHost
 import ru.lazyhat.compukters.core.device.runtime.peripheral.PeripheralProgramHost
 import ru.lazyhat.compukters.core.device.runtime.program.programAddonHostOf
 import ru.lazyhat.compukters.core.device.runtime.program.programScopedAddonHostOf
+import ru.lazyhat.compukters.core.network.ComputerNetworkProgramHost
 import ru.lazyhat.compukters.lang.runtime.capability.HostCapabilitySchema
 import ru.lazyhat.compukters.lang.runtime.capability.HostRecordField
 import ru.lazyhat.compukters.lang.runtime.capability.HostRecordSchema
 import ru.lazyhat.compukters.lang.runtime.capability.HostValueType
+import ru.lazyhat.compukters.minecraft.network.ComputerCableMessages
 import ru.lazyhat.compukters.minecraft.peripheral.ComputerPeripheralContract
 import ru.lazyhat.compukters.minecraft.peripheral.ComputerPeripheralRuntime
 import java.util.concurrent.CopyOnWriteArrayList
@@ -141,7 +143,11 @@ object ComputerAddonHosts {
         return programScopedAddonHostOf {
             val peripherals =
                 ComputerPeripheralRuntime(level, position, state.getValue(ComputerBlock.FACING), factories.flatMap { it.contracts })
-            val hosts = mutableListOf<ProgramAddonHost>(PeripheralProgramHost(peripherals.session))
+            val hosts =
+                mutableListOf<ProgramAddonHost>(
+                    PeripheralProgramHost(peripherals.session),
+                    ComputerNetworkProgramHost(ComputerCableMessages.endpoint(level, position)),
+                )
             try {
                 factories.forEach { registration ->
                     registration.factory.create(level, position, state, peripherals)?.let { host ->

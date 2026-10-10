@@ -32,6 +32,7 @@ enum class HostValueType(
     CHAR(6),
     STRING(7),
     RECORD(8),
+    BYTE_ARRAY(9),
 }
 
 class HostOperationSchema(
@@ -93,6 +94,7 @@ class HostCapabilitySchema(
 }
 
 object HostCapabilityLimits {
+    const val MAXIMUM_BYTE_ARRAY_BYTES: Int = 4096
     const val MAXIMUM_CAPABILITIES: Int = 28
     const val MAXIMUM_OPERATIONS: Int = 256
     const val MAXIMUM_ARGUMENTS: Int = 32

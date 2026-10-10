@@ -54,6 +54,22 @@ sealed interface HostResponse {
         val value: String,
     ) : HostResponse
 
+    /** Snapshot ownership: callers cannot mutate a published host value. */
+    class ByteArraySuccess(
+        value: ByteArray,
+    ) : HostResponse {
+        private val bytes = value.copyOf()
+        val value: ByteArray get() = bytes.copyOf()
+
+        init {
+            require(bytes.size <= ru.lazyhat.compukters.lang.runtime.capability.HostCapabilityLimits.MAXIMUM_BYTE_ARRAY_BYTES)
+        }
+
+        override fun equals(other: Any?): Boolean = other is ByteArraySuccess && bytes.contentEquals(other.bytes)
+
+        override fun hashCode(): Int = bytes.contentHashCode()
+    }
+
     data class RecordSuccess(
         val value: HostRecordValue,
     ) : HostResponse
