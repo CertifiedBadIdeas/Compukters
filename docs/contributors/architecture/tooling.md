@@ -65,6 +65,10 @@ and result contracts. The worker queue retires completed requests atomically wit
 decision. A cancellation accepted before retirement receives an acknowledgement; a later cancellation is acknowledged
 by the server as completed work. Response callbacks run outside the queue lock.
 
+The production client coalesces presentation changes for 100 ms and automatic completion for 50 ms;
+hover waits 400 ms. These delays share the visible response budget with K2 processing, the client tick and
+the next rendered frame. Manual completion remains immediate, and newer edits cancel obsolete work.
+
 Analysis protocol v15 adds a peripheral-provider role to semantic tokens and completion kinds. The worker identifies providers through inheritance of `PeripheralProvider`, including companion values; type references retain their ordinary class role. The editor renders provider values in the dedicated palette color with a `P` completion badge.
 
 The protocol also carries explicit Kotlin format, rename-admission, and parameter-information requests.

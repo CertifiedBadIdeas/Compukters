@@ -268,7 +268,7 @@ internal data class IdeAnalysisTiming(
 )
 
 internal object ProductionIdeApplicationFactory {
-    val analysisTiming = IdeAnalysisTiming(150_000_000L, 75_000_000L, 400_000_000L)
+    val analysisTiming = IdeAnalysisTiming(100_000_000L, 50_000_000L, 400_000_000L)
 
     data class PreparedWorkers(
         val compilerPayload: ru.lazyhat.compukters.compiler.worker.controller.PublishedWorkerPayload,

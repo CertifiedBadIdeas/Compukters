@@ -75,7 +75,7 @@ jobs:
       - name: Fetch exact published Runtime bundles
         run: ./gradlew downloadCompukterRuntimeBundles --no-daemon --max-workers=2
       - name: Fully verify exact candidate
-        run: ./gradlew verifyLocalFull --no-daemon --max-workers=2
+        run: ./gradlew verifyLocalFull --no-daemon --parallel --max-workers=2
       - name: Collect universal mod and addon JARs
         shell: bash
         run: |

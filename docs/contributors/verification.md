@@ -39,6 +39,8 @@ incremental-update and memory assertions, but does not compete with parallel com
 or GameTest servers. Ordinary module `check` does not run this machine-sensitive measurement;
 the complete verification gate still requires it. For a focused measurement, run the task directly on an idle host.
 Dedicated latency measurement tasks always execute rather than reusing cached results from another host or run.
+The visible completion budget is 200 ms median and 350 ms p95; semantic presentation has a 450 ms median
+and 800 ms p95 budget. Both include analysis, client tick observation and the first rendered frame.
 
 ## Addon control latency
 
