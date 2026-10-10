@@ -129,6 +129,40 @@ class DisplayHostStateTest {
         assertEquals(123, endpoint.canvas.pixelAt(100, 100))
     }
 
+    @Test
+    fun `legacy text reaches the whole composite grid and crosses panel boundaries`() {
+        val endpoint = FakeDisplayEndpoint(3, 2)
+        val host = DisplayHostState({ endpoint }, { DisplayResolution.Found(endpoint) })
+        val handle = assertIs<HostResponse.IntSuccess>(host.call(0, VmValue.I32(0))).value
+
+        fun write(
+            x: Int,
+            y: Int,
+            text: String,
+        ) = host.call(2, VmValue.I32(handle), VmValue.I32(x), VmValue.I32(y), VmValue.StringValue(text))
+        assertEquals(HostResponse.UnitSuccess, write(19, 0, "WWWWW"))
+        assertTrue((0 until 12).any { y -> (128 until 144).any { x -> endpoint.canvas.pixelAt(x, y) != 0 } })
+        assertEquals(HostResponse.UnitSuccess, write(59, 19, "W"))
+        assertTrue((228 until 240).any { y -> (354 until 360).any { x -> endpoint.canvas.pixelAt(x, y) != 0 } })
+        assertEquals(HostResponse.UnitSuccess, write(59, 19, " "))
+        assertFalse((228 until 240).any { y -> (354 until 360).any { x -> endpoint.canvas.pixelAt(x, y) != 0 } })
+        val before = endpoint.canvas.encodeRgb()
+        for ((x, y, text) in listOf(Triple(60, 0, "W"), Triple(0, 20, "W"), Triple(59, 19, "WW"), Triple(-1, 0, "W"))) {
+            assertIs<HostResponse.Failure>(write(x, y, text))
+        }
+        kotlin.test.assertContentEquals(before, endpoint.canvas.encodeRgb())
+    }
+
+    @Test
+    fun `legacy text keeps single panel bounds`() {
+        val endpoint = FakeDisplayEndpoint()
+        val host = DisplayHostState({ endpoint }, { DisplayResolution.Found(endpoint) })
+        val handle = assertIs<HostResponse.IntSuccess>(host.call(0, VmValue.I32(0))).value
+        assertEquals(HostResponse.UnitSuccess, host.call(2, VmValue.I32(handle), VmValue.I32(19), VmValue.I32(9), VmValue.StringValue("W")))
+        assertIs<HostResponse.Failure>(host.call(2, VmValue.I32(handle), VmValue.I32(20), VmValue.I32(0), VmValue.StringValue("W")))
+        assertIs<HostResponse.Failure>(host.call(2, VmValue.I32(handle), VmValue.I32(0), VmValue.I32(10), VmValue.StringValue("W")))
+    }
+
     private fun DisplayHostState.call(
         operation: Int,
         vararg arguments: VmValue,
@@ -144,11 +178,14 @@ class DisplayHostStateTest {
             ),
         ).response
 
-    private class FakeDisplayEndpoint : DisplayEndpoint {
+    private class FakeDisplayEndpoint(
+        columns: Int = 1,
+        rows: Int = 1,
+    ) : DisplayEndpoint {
         override val identity = Any()
         override val canvas =
             ru.lazyhat.compukters.core.display
-                .DisplayCanvas(1, 1)
+                .DisplayCanvas(columns, rows)
         var present = true
 
         override fun valid(): Boolean = present

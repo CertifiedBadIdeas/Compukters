@@ -215,12 +215,14 @@ tests, and
 `GraphicalDisplay` addresses a persistent RGB canvas assembled from one or more coplanar panels, including holes.
 The program selects 16, 32, 64 or 128 pixels per block. Drawing primitives publish immediately; the inline `frame`
 extension supports private, exception-safe grouped updates and hibernation. One program holds the writer lease;
-release never erases the published pixels. `TextDisplay` retains its 20x10 API, rasterized into the same canvas at
-`HIGH` density. Both are typed peripheral providers, and multiple reachable panels discover as one canvas.
+release never erases the published pixels. `TextDisplay` retains its character-grid API, with 20 columns per block
+across and 10 rows per block down throughout the composite canvas, rasterized at `HIGH` density. Both are typed peripheral providers, and multiple reachable panels discover as one canvas.
 
 **Evidence:** `DisplayCanvasTest`, `DisplayDirectoryTest`, `DisplayClientImageTest`, `DisplayHostStateTest`,
 `DisplayPersistenceTest`, `MinimalScriptLoweringTest`, and the real `GraphicalDisplayGameTestScenario`,
-`GraphicalDisplayHibernationGameTestScenario` and `TextDisplayGameTestScenario`.
+`GraphicalDisplayHibernationGameTestScenario` and `TextDisplayGameTestScenario`. `DisplayHostStateTest`, tests
+`legacy text reaches the whole composite grid and crosses panel boundaries` and `legacy text keeps single panel bounds`,
+cover composite coordinates, row overflow rejection, cell replacement and unchanged single-panel limits.
 See [Display](https://certifiedbadideas.github.io/Compukters/DISPLAY/).
 
 ### Redstone GPIO

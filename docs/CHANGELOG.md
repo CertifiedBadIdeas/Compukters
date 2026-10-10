@@ -22,7 +22,7 @@ headings so this page has one stable URL that can be shared outside the reposito
   restores its portion of the image; removing the last panel deletes the screen. Programs select 16×16, 32×32, 64×64
   or 128×128 pixels per block. A screen has one network binding shared by all panels. Assembly inherits a single
   existing network or clears conflicting bindings; any surviving panel keeps the screen reachable. Existing
-  `TextDisplay` programs use the same persistent canvas.
+  `TextDisplay` programs use the same persistent canvas, with their text grid spanning the entire composite screen.
 
 - The addon development stand and standalone Propulsion build use Aeronautics/Simulated 1.3.2, fixing the
   Simulated mixin crash with recent JEI versions.

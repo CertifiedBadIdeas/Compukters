@@ -247,7 +247,9 @@ internal class DisplayHostState(
         text: String,
     ): HostResponse =
         withEndpoint(handle) { endpoint ->
-            require(x in 0 until 20 && y in 0 until 10 && text.codePointCount(0, text.length) <= 20 - x)
+            val columns = endpoint.canvas.columns * 20
+            val rows = endpoint.canvas.rows * 10
+            require(x in 0 until columns && y in 0 until rows && text.codePointCount(0, text.length) <= columns - x)
             require(text.toByteArray(Charsets.UTF_8).size <= 256 && text.none(Character::isISOControl))
             require(text.codePoints().noneMatch { it in 0xD800..0xDFFF })
             endpoint.canvas.acquire(owner, endpoint::leaseValid)
