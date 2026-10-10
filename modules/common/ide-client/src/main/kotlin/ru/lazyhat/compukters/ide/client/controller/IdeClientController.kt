@@ -34,6 +34,7 @@ import ru.lazyhat.compukters.ide.client.analysis.IdeUsages
 import ru.lazyhat.compukters.ide.client.analysis.IdeUsagesOutcome
 import ru.lazyhat.compukters.ide.client.analysis.IdeVisibleLatencyTrace
 import ru.lazyhat.compukters.ide.client.analysis.KotlinSourceTokenRange
+import ru.lazyhat.compukters.ide.client.analysis.presentationOrNull
 import ru.lazyhat.compukters.ide.client.build.IdeBuildCoordinator
 import ru.lazyhat.compukters.ide.client.build.IdeBuildFailureKind
 import ru.lazyhat.compukters.ide.client.build.IdeBuildJob
@@ -3258,8 +3259,7 @@ class IdeClientController(
         val rows = mutableListOf<IdeDiagnosticRow>()
         val active = editor
         if (attachedSourcePreview == null && computerPreview == null && active != null) {
-            val analysis = observedAnalysisState as? IdeAnalysisState.Active
-            val values = analysis?.presentation?.diagnostics.orEmpty()
+            val values = observedAnalysisState.presentationOrNull()?.diagnostics.orEmpty()
             if (values.isNotEmpty()) {
                 val text = active.document.materialize()
                 rows +=
