@@ -163,10 +163,12 @@ listed in [Kotlin support](developers/kotlin-support.md) and [standard library s
   update. Production JAR names also carry the target Compukters major/minor line; loader metadata restricts the
   base mod to the build's minimum version within that line. NeoForge sees the base product version independently
   of Minecraft/loader archive prefixes, with snapshot suffixes retained in development builds.
-- Passive peripheral cables support orthogonal, branching and looping connections across loaded chunks without
-  loading additional chunks. Direct contacts on all six computer faces and cable contacts share logical identity,
-  deduplication and ambiguous-name handling. The Peripheral Configurator edits persistent world-owned device names,
-  reports duplicates, inspects cable networks and rejects stale changes; Shift-use clears a name.
+- Persistent peripheral networks connect computers and devices remotely through a network mode in the Peripheral
+  Configurator. Networks and device names survive computer replacement; each computer reaches loaded members in
+  the same dimension within a configurable radius of 64 blocks by default. The configurator creates/selects networks,
+  binds or removes members, and shows availability. Direct face access remains available. Peripheral Cables remain
+  as blocks but no longer provide discovery; existing devices require manual binding. This first stage covers ordinary
+  world coordinates; Sable construction integration is a separate follow-up.
 - Text displays, Create devices and Propulsion creative engines use typed companion providers with `first`,
   `firstOrNull`, `filter`, `all`, `at`/`atOrNull` and `named`/`namedOrNull`. Handles remain bound to exact devices;
   replacement or loss of reachability cannot silently redirect them. Addons register typed discovery contracts

@@ -1,14 +1,14 @@
 ---
 layout: default
-title: Peripherals and cables
+title: Peripherals and networks
 description: Connect computers to adjacent or named devices and understand device lifetime.
 section: players
 permalink: /PERIPHERALS/
 ---
 
-# Peripherals and cables
+# Peripherals and networks
 
-A computer can reach devices directly on its six faces or through loaded Peripheral Cables. A device API belongs to
+A computer can reach devices directly on its six faces or through a remotely bound peripheral network. A device API belongs to
 the integration that provides it: displays are built into Compukters, while Create and Propulsion devices need their
 corresponding addons.
 
@@ -17,9 +17,30 @@ corresponding addons.
 For a directly adjacent device, use `Device.at(Side.front)` or the API's existing side helper. Sides are relative to the computer's
 front face: `front`, `back`, `left`, `right`, `top` and `bottom`.
 
-For a named connection, connect the device to the computer with Peripheral Cables and use the Peripheral Configurator
-to name the device. Give devices unique names among those reachable from the computer. Cable paths can branch and loop;
-discovery stays within loaded chunks and does not force-load the world.
+For a remote connection, use the Peripheral Configurator:
+
+1. Use it in the air to switch from naming mode to network mode.
+2. Click an unbound computer or device to create a network. Clicking an already bound member selects its network.
+3. Click other computers and devices to join them to the selected network. The selected configurator glows.
+4. Use it in the air again to return to naming mode. Click a peripheral to give it a name, or click a computer to
+   rename the network and inspect its members. The inspector shows unavailable devices and lets you remove members.
+
+Shift-use in the air clears the selected network. In network mode, Shift-click a member to unbind it;
+in naming mode, Shift-click a peripheral to clear its name. A member belongs to one network at a time;
+unbind it before joining a different network. Names must be unique within the network.
+
+The network persists independently of its computers. After replacing a computer, select the existing network by
+clicking one of its peripherals, then bind the new computer. Other members keep their bindings and names. A replacement
+peripheral does not inherit the removed block's membership.
+
+Each computer can reach loaded peripherals in the same dimension within 64 blocks of itself, measured in three dimensions.
+The server can configure this through `peripherals.access_radius` (1–1,024 blocks). Joining a distant member is allowed:
+a network can extend arbitrarily far, but each computer has its own accessible subset. No chunks are force-loaded.
+This initial implementation covers stationary devices in the ordinary world; Sable construction coordinates and
+assembly transfer require a separate integration.
+
+Peripheral Cables no longer participate in discovery. Existing cable blocks remain, but devices must be bound with the
+configurator; cable connections are not migrated automatically. Direct adjacent access still works without binding.
 
 For example, open a named display:
 

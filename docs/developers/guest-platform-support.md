@@ -95,7 +95,7 @@ native `computer.rs` process lifetime/request routing tests.
 
 The independent Minecraft 1.21.1 Propulsion addon exposes `propulsion.thrusters.CreativeThruster.named(name)`,
 normalized Double throttle, saved thrust percentage, `close()` and immutable `CreativeThrusterState` snapshots
-in kN. One program owns writes; reading does not claim control. Completion, cable loss, removal and Sable
+in kN. One program owns writes; reading does not claim control. Completion, loss of reachability, removal and Sable
 assembly release digital input. Upstream Propulsion retains Float precision and its ordinary startup,
 atmosphere and obstruction behavior.
 
@@ -142,7 +142,7 @@ and separate color while type references remain ordinary classes.
 **Status:** Supported.
 
 When Create 6.0.10 through 6.0.x is loaded, the optional `create` addon exposes computer-local sides and
-persistent names reachable over passive peripheral cables through `Kinetics`. Programs can read exact `Float`
+persistent names reachable through peripheral networks through `Kinetics`. Programs can read exact `Float`
 speed, stress, and capacity values; wait for speed or load changes; and read or set a rotation controller's
 target speed. Handles remain bound to the exact acquired block entity and fail rather than rebinding after
 replacement.
