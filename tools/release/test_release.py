@@ -137,7 +137,7 @@ class ReleaseTest(unittest.TestCase):
         sdk = self.root / 'build/distribution/compukters-addon-development-0.5.0.zip'
         sdk.parent.mkdir(parents=True)
         with zipfile.ZipFile(sdk, 'w') as archive:
-            archive.writestr('sdk.properties', 'format=1\nsdkVersion=0.5.0\nmodVersion=0.5.0\n')
+            archive.writestr('sdk.properties', 'format=1\nsdkVersion=0.5.0\nmodVersion=0.5.0\nmodBuildVersion=0.5.0\n')
             for name, extension in [('compukters-addon-gradle-plugin', 'jar'), ('compukters-addon-api', 'jar'),
                                     ('compukters-addon-tooling', 'jar'), ('compukters-guest-platform', 'cpb'),
                                     ('compukters-addon-neoforge-1.21.1', 'jar'),
@@ -149,6 +149,8 @@ class ReleaseTest(unittest.TestCase):
             archive.writestr(f'repository/{marker}/{marker}.gradle.plugin/0.5.0/{marker}.gradle.plugin-0.5.0.pom', b'plugin marker')
             archive.writestr('LICENSE', b'license fixture')
             archive.writestr('NOTICE', b'notice fixture')
+            archive.writestr('tools/release.py', b'release tool fixture')
+            archive.writestr('tools/addon_release.py', b'addon tool fixture')
         command(self.root, 'add', '.')
         command(self.root, 'commit', '-qm', 'Release fixture')
         command(self.root, 'tag', 'v0.5.0')
@@ -181,16 +183,32 @@ class ReleaseTest(unittest.TestCase):
             release.publish_github(self.output, client)
         self.assertIsNone(client.existing)
 
+    def test_schema_three_can_resume_without_sdk(self):
+        manifest, _ = self.prepared()
+        for asset in manifest.pop('development'):
+            (self.output / asset['filename']).unlink()
+        manifest['schema'] = 3
+        (self.output / 'release.json').write_text(json.dumps(manifest) + '\n')
+        files = sorted(p for p in self.output.iterdir() if p.name != 'checksums.sha256')
+        (self.output / 'checksums.sha256').write_text(''.join(
+            f'{hashlib.sha256(p.read_bytes()).hexdigest()}  {p.name}\n' for p in files))
+        self.assertEqual(release.load_release(self.output), manifest)
+        client = GitHubFixture(manifest, self.output)
+        release.publish_github(self.output, client)
+        self.assertEqual(len(client.uploads), 8)
+
     def test_sdk_rejects_snapshot_and_missing_dependency_before_staging(self):
         sdk = self.root / 'build/distribution/compukters-addon-development-0.5.0.zip'
         with zipfile.ZipFile(sdk) as archive:
             original = {name: archive.read(name) for name in archive.namelist()}
-        for defect, error in [('snapshot', 'SDK identity differs'),
+        for defect, error in [('snapshot', 'SDK identity differs'), ('metadata', 'SDK identity differs'),
                               ('missing', 'missing development dependencies')]:
             with self.subTest(defect=defect):
                 entries = dict(original)
                 if defect == 'snapshot':
-                    entries['sdk.properties'] += b'modBuildVersion=0.5.0-S\n'
+                    entries['sdk.properties'] = entries['sdk.properties'].replace(b'modBuildVersion=0.5.0', b'modBuildVersion=0.5.0-S')
+                elif defect == 'metadata':
+                    entries['sdk.properties'] = entries['sdk.properties'].replace(b'modBuildVersion=0.5.0\n', b'')
                 else:
                     del entries['repository/ru/lazyhat/compukters/compukters-addon-tooling/0.5.0/compukters-addon-tooling-0.5.0.jar']
                 with zipfile.ZipFile(sdk, 'w') as archive:

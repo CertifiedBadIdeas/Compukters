@@ -42,16 +42,14 @@ jobs:
           java-version: |
             21
             25
-      - name: Prepare pinned Rust toolchain and locked build dependencies
+      - name: Fetch exact Runtime bundles
+        run: ./gradlew downloadCompukterRuntimeBundles --no-daemon --parallel --max-workers=2
+      - name: Stage addon SDK with published Runtime bundles
         shell: bash
         run: |
           set -euo pipefail
-          rust_version=$(python3 -c 'import tomllib; print(tomllib.load(open("host/compukter-vm/rust-toolchain.toml", "rb"))["toolchain"]["channel"])')
-          rustup toolchain install "$rust_version" --profile minimal
-          rustup default "$rust_version"
-          cargo fetch --locked --manifest-path host/compukter-vm/Cargo.toml
-      - name: Publish local addon SDK and fetch exact Runtime bundles
-        run: ./gradlew :addon-gradle-plugin:publishAddonSdkToMavenLocal downloadCompukterRuntimeBundles --no-daemon --parallel --max-workers=2
+          runtime_version=$(python3 -c 'from pathlib import Path; import sys; sys.path.insert(0, "tools/release"); import release; print(release.properties(Path("config/runtime-release.properties"))["version"])')
+          ./gradlew stageAddonDevelopmentDependencies --no-daemon --parallel --max-workers=2 -PcompukterRuntimeBundleDir="$HOME/.gradle/caches/compukters/runtime/$runtime_version"
       - name: Build stable JARs without test tasks
         run: ./gradlew -p addons/dev collectReleaseDistributionJars :Compukters:packageAddonDevelopmentDependencies --no-daemon --parallel --max-workers=2 -x :Compukters:native-runtime-ffm:packagedNativeIntegrationTest -x :Compukters:native-runtime-jni:packagedNativeIntegrationTest
       - name: Stage and verify release inventory

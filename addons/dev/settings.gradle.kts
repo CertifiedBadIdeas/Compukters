@@ -22,7 +22,6 @@ check(JavaVersion.current().isCompatibleWith(JavaVersion.VERSION_25)) {
 
 pluginManagement {
     repositories {
-        mavenLocal()
         mavenCentral()
         maven("https://maven.architectury.dev/")
         maven("https://maven.fabricmc.net/")
@@ -34,7 +33,6 @@ pluginManagement {
         id("dev.architectury.loom") version "1.17.491"
         id("architectury-plugin") version "3.5.169"
         id("org.jmailen.kotlinter") version "5.7.0"
-        id("ru.lazyhat.compukters.addon") version "0.5.0"
     }
 }
 

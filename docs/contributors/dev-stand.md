@@ -28,6 +28,8 @@ The main mod has no upstream physics dependency; the three Compukters addons rem
 For an interactive client from the repository root:
 
 ```sh
+git submodule update --init --recursive
+./gradlew stageAddonDevelopmentDependencies
 cd addons/dev
 ./gradlew runClient
 ```

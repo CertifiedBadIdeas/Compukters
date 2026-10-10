@@ -179,13 +179,16 @@ def inspect_sdk(path, mod_version):
     with zipfile.ZipFile(path) as archive:
         names = archive.namelist()
         require(len(names) == len(set(names)), 'duplicate SDK archive entries')
-        require(all(not name.startswith('/') and '..' not in Path(name).parts for name in names), 'unsafe SDK archive path')
+        require(all(not name.startswith('/') and '\\' not in name and ':' not in name
+                    and '..' not in Path(name).parts for name in names), 'unsafe SDK archive path')
         entry = archive.getinfo('sdk.properties')
         require(entry.file_size <= 4096, 'SDK metadata exceeds limit')
-        identity = dict(line.split('=', 1) for line in archive.read(entry).decode().splitlines())
+        rows = archive.read(entry).decode().splitlines()
+        identity = dict(line.split('=', 1) for line in rows)
+        require(len(rows) == len(identity), 'duplicate SDK metadata field')
         sdk = identity.get('sdkVersion', '')
         require(identity.get('format') == '1' and identity.get('modVersion') == mod_version
-                and identity.get('modBuildVersion', mod_version) == mod_version
+                and identity.get('modBuildVersion') == mod_version
                 and re.fullmatch(r'(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)', sdk), 'SDK identity differs')
         required = [f'repository/ru/lazyhat/compukters/{name}/{sdk}/{name}-{sdk}.{extension}'
                     for name, extension in [('compukters-addon-gradle-plugin', 'jar'),
@@ -195,7 +198,7 @@ def inspect_sdk(path, mod_version):
                                             ('compukters-addon-neoforge-26.1.2', 'jar')]]
         marker = 'ru.lazyhat.compukters.addon'
         required += [f'repository/{marker}/{marker}.gradle.plugin/{sdk}/{marker}.gradle.plugin-{sdk}.pom',
-                     'LICENSE', 'NOTICE']
+                     'LICENSE', 'NOTICE', 'tools/release.py', 'tools/addon_release.py']
         required += [f'repository/ru/lazyhat/compukters/compukters-neoforge-{mc}-dev/{mod_version}/'
                      f'compukters-neoforge-{mc}-dev-{mod_version}.jar' for mc, _, _ in TARGETS]
         require(all(name in names and archive.getinfo(name).file_size > 0 for name in required),
@@ -332,30 +335,33 @@ def publish_modrinth(directory, client):
 
 
 class GitHub:
+    def __init__(self, repository=REPOSITORY):
+        self.repository = repository
+
     def cli(self, *args):
         result = subprocess.run(['gh', *args], capture_output=True, text=True)
         require(result.returncode == 0, 'GitHub command failed: ' + ' '.join(args[:3]))
         return result.stdout
 
     def tag_revision(self, tag):
-        reference = json.loads(self.cli('api', f'repos/{REPOSITORY}/git/ref/tags/{tag}'))['object']
+        reference = json.loads(self.cli('api', f'repos/{self.repository}/git/ref/tags/{tag}'))['object']
         for _ in range(8):
             if reference['type'] == 'commit':
                 return reference['sha']
             require(reference['type'] == 'tag', 'release tag does not point to a commit')
-            reference = json.loads(self.cli('api', f'repos/{REPOSITORY}/git/tags/{reference["sha"]}'))['object']
+            reference = json.loads(self.cli('api', f'repos/{self.repository}/git/tags/{reference["sha"]}'))['object']
         raise ValueError('release tag nesting exceeds limit')
 
     def get(self, tag):
         # The tag endpoint omits drafts; listing admits both draft recovery and published releases.
-        pages = json.loads(self.cli('api', f'repos/{REPOSITORY}/releases?per_page=100',
+        pages = json.loads(self.cli('api', f'repos/{self.repository}/releases?per_page=100',
                                     '--paginate', '--slurp'))
         matches = [release for page in pages for release in page if release['tag_name'] == tag]
         require(len(matches) <= 1, 'duplicate GitHub releases for tag')
         return matches[0] if matches else None
 
     def create(self, tag, title, notes):
-        self.cli('release', 'create', tag, '--repo', REPOSITORY, '--verify-tag', '--draft',
+        self.cli('release', 'create', tag, '--repo', self.repository, '--verify-tag', '--draft',
                  '--title', title, '--notes-file', str(notes))
 
     def asset_digest(self, asset):
@@ -367,28 +373,32 @@ class GitHub:
             path = Path(directory) / 'asset'
             with path.open('wb') as output:
                 result = subprocess.run(['gh', 'api', '-H', 'Accept: application/octet-stream',
-                                         f'repos/{REPOSITORY}/releases/assets/{asset["id"]}'],
+                                         f'repos/{self.repository}/releases/assets/{asset["id"]}'],
                                         stdout=output, stderr=subprocess.PIPE)
             require(result.returncode == 0, 'could not verify existing GitHub asset')
             return digests(path)['sha256']
 
     def upload(self, tag, path):
-        self.cli('release', 'upload', tag, str(path), '--repo', REPOSITORY)
+        self.cli('release', 'upload', tag, str(path), '--repo', self.repository)
 
     def finish(self, tag):
-        self.cli('release', 'edit', tag, '--repo', REPOSITORY, '--draft=false', '--latest')
+        self.cli('release', 'edit', tag, '--repo', self.repository, '--draft=false', '--latest')
 
 
 def publish_github(directory, client):
     manifest = load_release(directory)
-    tag = manifest['tag']
-    require(client.tag_revision(tag) == manifest['revision'], 'remote tag differs from verified release revision')
     notes = (directory / 'release-notes.md').read_text()
     title = f'Compukters {manifest["version"]}'
     files = {name: directory / name for name in
              ['release.json', 'release-notes.md', 'checksums.sha256']
              + [artifact['filename'] for artifact in manifest['artifacts'] + manifest.get('addons', [])
                 + manifest.get('development', [])]}
+    publish_files(directory, client, manifest, files, title, notes)
+
+
+def publish_files(directory, client, manifest, files, title, notes):
+    tag = manifest['tag']
+    require(client.tag_revision(tag) == manifest['revision'], 'remote tag differs from verified release revision')
     existing = client.get(tag)
     if existing is None:
         client.create(tag, title, directory / 'release-notes.md')
@@ -406,6 +416,7 @@ def publish_github(directory, client):
                 and client.asset_digest(asset) == digests(path)['sha256'],
                 f'conflicting GitHub asset: {path.name}')
     present = {asset['name'] for asset in assets}
+    require(existing['draft'] or present == set(files), 'published GitHub release has an incomplete asset set')
     for name, path in files.items():
         if name not in present:
             client.upload(tag, path)

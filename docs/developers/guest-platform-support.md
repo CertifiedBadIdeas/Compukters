@@ -75,7 +75,7 @@ tests `records_copy_validate_and_publish_only_after_budgeted_materialization`,
 `record_admission_requires_runtime_and_exact_nested_layout`,
 `record_allocation_failure_is_budgeted_bounded_and_releases_unpublished_storage` and
 `other_task_responses_do_not_replace_an_incomplete_record_frame`, plus
-[`SableObservationGameTests`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/addons/sable/src/gameTest/kotlin/ru/lazyhat/compukters/integration/sable/SableObservationGameTests.kt),
+[`SableObservationGameTests`](https://github.com/CertifiedBadIdeas/Compukters-sable/blob/main/src/gameTest/kotlin/ru/lazyhat/compukters/integration/sable/SableObservationGameTests.kt),
 scenario `computerAssemblyAndReturn`, compiling and executing the typed Guest API through JNI.
 
 ### Program-owned addon resources
@@ -100,9 +100,9 @@ assembly release digital input. Upstream Propulsion retains Float precision and 
 atmosphere and obstruction behavior.
 
 **Evidence:**
-[`CreativeThrusterGameTests`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/addons/propulsion/src/gameTest/kotlin/ru/lazyhat/compukters/integration/propulsion/CreativeThrusterGameTests.kt),
+[`CreativeThrusterGameTests`](https://github.com/CertifiedBadIdeas/Compukers-propulsion/blob/main/src/gameTest/kotlin/ru/lazyhat/compukters/integration/propulsion/CreativeThrusterGameTests.kt),
 `guestControlLifetime` and `multiblockAssemblyClearsControl` compile and run real Guest programs through JNI.
-See the [addon README](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/addons/propulsion/README.md).
+See the [addon README](https://github.com/CertifiedBadIdeas/Compukers-propulsion/blob/main/README.md).
 
 ### Creative Vector Thruster control
 

@@ -13,6 +13,10 @@ headings so this page has one stable URL that can be shared outside the reposito
 
 ## 0.6.0 — In development
 
+- Create, Sable and Propulsion integrations have independent repositories and tag-only GitHub release workflows.
+  The main workspace pins them as submodules and retains the combined development stand and five-JAR distribution.
+- A standalone addon template includes a Guest greeting API, host handler, ABI lock and example IDE project,
+  with explicit local-source and downloaded-SDK build modes.
 - GitHub Releases include an addon development SDK archive with the Gradle plugin, Guest compiler, platform,
   host APIs and development mod JARs for both supported Minecraft targets. Standalone addon builds can use
   these dependencies without a separate hosted Maven repository.

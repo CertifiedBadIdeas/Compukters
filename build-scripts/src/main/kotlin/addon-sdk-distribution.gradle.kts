@@ -57,8 +57,14 @@ val stageRepository = tasks.register("stageAddonDevelopmentDependencies") {
     inputs.property("sdkVersion", sdkVersion)
     inputs.property("modVersion", productVersion)
     inputs.property("modBuildVersion", productBuildVersion)
+    inputs.files("tools/release/release.py", "tools/release/addon_release.py")
     outputs.file(sdkDirectory.map { it.file("sdk.properties") })
+    outputs.dir(sdkDirectory.map { it.dir("tools") })
     doLast {
+        project.copy {
+            from("tools/release/release.py", "tools/release/addon_release.py")
+            into(sdkDirectory.get().dir("tools"))
+        }
         sdkDirectory.get().file("sdk.properties").asFile.writeText(
             "format=1\nsdkVersion=$sdkVersion\nmodVersion=$productVersion\nmodBuildVersion=$productBuildVersion\n",
         )

@@ -61,9 +61,9 @@ run `bumpAfterRelease` to start the next development minor; for example, `0.5.0`
 
 Local non-interactive commands use `./gradlew-sandbox-dev-parallel-summary` with
 JDK 25 selected. GitHub Actions uses standard `./gradlew` with live output and
-`--no-daemon --parallel --max-workers=2`. The runner installs JDK 21/25 and the pinned Rust toolchain,
-fetches locked build dependencies, publishes the addon SDK to Maven Local, and downloads the exact
-Linux/Windows Runtime bundles before building the five stable JARs and the addon SDK archive.
+`--no-daemon --parallel --max-workers=2`. The runner installs JDK 21/25, downloads the exact Linux/Windows Runtime bundles, stages the addon SDK using those
+published natives, and then builds the five stable JARs and the addon SDK archive.
+This path neither installs a Rust toolchain nor fetches Cargo dependencies: the native Runtime is already published.
 
 CI tests are temporarily disabled. It does not run `verifyLocalFull`, JVM/Rust tests, GameTests,
 conformance scenarios or IDE latency measurements. The two `packagedNativeIntegrationTest` tasks

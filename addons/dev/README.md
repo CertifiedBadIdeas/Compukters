@@ -9,6 +9,8 @@ versions, temporary chunk-loading controls and lifecycle verification details.
 For an interactive client from the repository root:
 
 ```sh
+git submodule update --init --recursive
+./gradlew stageAddonDevelopmentDependencies
 cd addons/dev
 ./gradlew runClient
 ```
