@@ -15,7 +15,7 @@ public value class TextDisplay internal constructor(private val handle: Int) : P
         override fun wrap(handle: Int): TextDisplay = TextDisplay(handle)
     }
 
-    /** Writes within one row of the display's 20 by 10 character grid. */
+    /** Writes within one row of the screen's grid: 20 columns per block across and 10 rows per block down. */
     public fun writeAt(x: Int, y: Int, text: String) {
         DisplayBindings.writeAt(handle, x, y, text)
     }

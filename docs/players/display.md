@@ -104,7 +104,8 @@ it stale; replacing or reconnecting a device does not revive a stale handle.
 
 ## Existing text programs
 
-`TextDisplay` remains available with its 20-column, 10-row grid API:
+`TextDisplay` remains available with a character grid spanning the whole screen: 20 columns per block across and
+10 rows per block down. A 3×2-block screen has 60 columns and 20 rows, including holes:
 
 ```kotlin
 import compukter.display.TextDisplay
@@ -116,7 +117,8 @@ fun main() {
 }
 ```
 
-`writeAt` selects `HIGH` density and rasterizes text into the same persistent RGB canvas. Its 20 × 10 cells occupy
-the top-left block of a composite screen. Changing from another density clears the image first. Each write replaces its cells, including spaces. Text must fit within
+`writeAt` selects `HIGH` density and rasterizes text into the same persistent RGB canvas. Cells use a continuous
+6×12-pixel grid from the canvas's top-left corner; text can cross panel boundaries. Changing from another density
+clears the image first. Each write replaces its cells, including spaces. Text must fit within
 one row, contain no control characters or line breaks, and use at most 256 UTF-8 bytes. `clear()` clears the entire
 canvas. Existing text and graphical programs share the same writer lease.
