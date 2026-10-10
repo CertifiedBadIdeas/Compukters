@@ -144,7 +144,7 @@ class WorkerRecoveryTest {
     private fun handshake(
         identity: WorkerIdentity,
         limits: WorkerLimits,
-    ) = WorkerHandshake(identity, setOf(WorkerFeature.PROJECT_SNAPSHOT, WorkerFeature.KOTLIN_IR), limits)
+    ) = WorkerHandshake(identity, setOf(WorkerFeature.PROJECT_SNAPSHOT, WorkerFeature.KOTLIN_IR, WorkerFeature.LIBRARY_PREPARATION), limits)
 
     private fun success(requestId: RequestId): CompileSuccess {
         val artifact = byteArrayOf(1)

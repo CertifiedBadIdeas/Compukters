@@ -23,6 +23,9 @@ import ru.lazyhat.compukters.compiler.worker.protocol.CompileRequest
 import ru.lazyhat.compukters.compiler.worker.protocol.CompileResult
 import ru.lazyhat.compukters.compiler.worker.protocol.CompileSuccess
 import ru.lazyhat.compukters.compiler.worker.protocol.CompilerFailure
+import ru.lazyhat.compukters.compiler.worker.protocol.LibrariesPrepared
+import ru.lazyhat.compukters.compiler.worker.protocol.LibraryPreparationRequest
+import ru.lazyhat.compukters.compiler.worker.protocol.LibraryPreparationResult
 import ru.lazyhat.compukters.compiler.worker.protocol.PlatformFailure
 import ru.lazyhat.compukters.compiler.worker.protocol.PlatformFailureClass
 import ru.lazyhat.compukters.compiler.worker.protocol.RequestId
@@ -35,11 +38,13 @@ import ru.lazyhat.compukters.compiler.worker.protocol.WorkerHandshake
 import ru.lazyhat.compukters.compiler.worker.protocol.WorkerLimits
 import ru.lazyhat.compukters.compiler.worker.protocol.WorkerMessage
 import ru.lazyhat.compukters.compiler.worker.protocol.WorkerMessageCodec
+import ru.lazyhat.compukters.compiler.worker.protocol.WorkerRequest
+import ru.lazyhat.compukters.compiler.worker.protocol.WorkerResult
 import java.security.MessageDigest
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.Executors
 
-enum class CompilerWorkerState { STOPPED, STARTING, IDLE, COMPILING, INVALID }
+enum class CompilerWorkerState { STOPPED, STARTING, IDLE, COMPILING, PREPARING, INVALID }
 
 class WorkerQueueFullException : IllegalStateException("compiler worker queue is full")
 
@@ -69,8 +74,8 @@ class CompilerWorkerController(
             Thread(task, "compukter-compiler-controller").apply { isDaemon = true }
         }
     private var process: WorkerProcess? = null
-    private var active: Pending? = null
-    private var queued: Pending? = null
+    private var active: Pending<*>? = null
+    private var queued: Pending<*>? = null
     private var nextRequestId = 1uL
     private var closed = false
     private var state = CompilerWorkerState.STOPPED
@@ -89,34 +94,44 @@ class CompilerWorkerController(
         target: TargetSettings = TargetSettings.KOTLIN_2_4_JVM_17,
         platformModules: List<TrustedBundleIdentity> = emptyList(),
         addonBundles: List<TrustedBundlePayload> = emptyList(),
-    ): CompletableFuture<CompileResult> {
-        val future = CompletableFuture<CompileResult>()
+    ): CompletableFuture<CompileResult> =
+        enqueue(CompileResult::class.java) { id ->
+            CompileRequest(id, snapshot.sources, target, launch.expectedIdentity, limits, platformModules, addonBundles)
+        }
+
+    fun prepareLibraries(
+        platformModules: List<TrustedBundleIdentity>,
+        addonBundles: List<TrustedBundlePayload> = emptyList(),
+    ): CompletableFuture<LibraryPreparationResult> =
+        enqueue(LibraryPreparationResult::class.java) { id ->
+            LibraryPreparationRequest(id, launch.expectedIdentity, limits, platformModules, addonBundles)
+        }
+
+    private fun <T : WorkerResult> enqueue(
+        resultType: Class<T>,
+        requestFactory: (RequestId) -> WorkerRequest,
+    ): CompletableFuture<T> {
+        val future = CompletableFuture<T>()
         var startDrain = false
+        var superseded: Pending<*>? = null
         synchronized(lock) {
             if (closed) {
                 future.completeExceptionally(IllegalStateException("compiler worker controller is closed"))
                 return future
             }
+            check(nextRequestId != 0uL) { "request ID space exhausted" }
+            val request = requestFactory(RequestId.of(nextRequestId))
+            val waiting = queued
+            if (waiting?.request is LibraryPreparationRequest) {
+                queued = null
+                superseded = waiting
+            }
             if (active != null && queued != null) {
                 future.completeExceptionally(WorkerQueueFullException())
                 return future
             }
-            check(nextRequestId != 0uL) { "request ID space exhausted" }
-            val requestId = RequestId.of(nextRequestId)
             nextRequestId++
-            val pending =
-                Pending(
-                    CompileRequest(
-                        requestId,
-                        snapshot.sources,
-                        target,
-                        launch.expectedIdentity,
-                        limits,
-                        platformModules,
-                        addonBundles,
-                    ),
-                    future,
-                )
+            val pending = Pending(request, future, resultType)
             if (active == null) {
                 active = pending
                 startDrain = true
@@ -124,12 +139,13 @@ class CompilerWorkerController(
                 queued = pending
             }
         }
+        superseded?.let { it.complete(PlatformFailure(it.request.requestId, PlatformFailureClass.CANCELLED, "preparation superseded")) }
         if (startDrain) executor.execute(::drain)
         return future
     }
 
-    fun cancel(future: CompletableFuture<CompileResult>): Boolean {
-        val pending: Pending
+    fun cancel(future: CompletableFuture<out WorkerResult>): Boolean {
+        val pending: Pending<*>
         val child: WorkerProcess?
         val activeCancellation: Boolean
         synchronized(lock) {
@@ -159,12 +175,12 @@ class CompilerWorkerController(
                 if (!closed && process == null && (active === pending || active == null)) state = CompilerWorkerState.STOPPED
             }
         }
-        pending.future.complete(requireNotNull(pending.terminalResult))
+        pending.complete(requireNotNull(pending.terminalResult))
         return true
     }
 
     override fun close() {
-        val pending: List<Pending>
+        val pending: List<Pending<*>>
         val child: WorkerProcess?
         synchronized(lock) {
             if (closed) return
@@ -183,7 +199,7 @@ class CompilerWorkerController(
         }
         child?.terminate(policy.terminationGraceMillis)
         pending.forEach { item ->
-            item.future.complete(requireNotNull(item.terminalResult))
+            item.complete(requireNotNull(item.terminalResult))
         }
         executor.shutdownNow()
     }
@@ -196,7 +212,7 @@ class CompilerWorkerController(
                 synchronized(lock) {
                     pending.terminalResult ?: result.also { pending.terminalResult = it }
                 }
-            pending.future.complete(terminalResult)
+            pending.complete(terminalResult)
             synchronized(lock) {
                 if (active === pending) {
                     active = queued
@@ -207,13 +223,13 @@ class CompilerWorkerController(
         }
     }
 
-    private fun runRequest(pending: Pending): CompileResult =
+    private fun runRequest(pending: Pending<*>): WorkerResult =
         try {
             val request = pending.request
             if (pending.cancelled) throw ControllerFault(PlatformFailureClass.CANCELLED, "compilation cancelled")
             val child = ensureWorker(pending)
             if (pending.cancelled) throw ControllerFault(PlatformFailureClass.CANCELLED, "compilation cancelled")
-            setState(CompilerWorkerState.COMPILING)
+            setState(if (request is LibraryPreparationRequest) CompilerWorkerState.PREPARING else CompilerWorkerState.COMPILING)
             val outbound = encode(request)
             try {
                 child.writeFrame(outbound)
@@ -230,8 +246,9 @@ class CompilerWorkerController(
                 } ?: throw exitFault(child)
             val message = decode(frame)
             val result =
-                message as? CompileResult ?: throw ControllerFault(PlatformFailureClass.PROTOCOL, "unexpected message while compiling")
+                message as? WorkerResult ?: throw ControllerFault(PlatformFailureClass.PROTOCOL, "unexpected message while compiling")
             if (result.requestId != request.requestId) throw ControllerFault(PlatformFailureClass.PROTOCOL, "terminal request ID mismatch")
+            if (!pending.resultType.isInstance(result)) throw ControllerFault(PlatformFailureClass.PROTOCOL, "unexpected result type")
             validateResult(result)
             synchronized(lock) {
                 if (pending.cancelled) throw ControllerFault(PlatformFailureClass.CANCELLED, "compilation cancelled")
@@ -246,7 +263,7 @@ class CompilerWorkerController(
             PlatformFailure(pending.request.requestId, PlatformFailureClass.PROTOCOL, boundedDetail(exception.message.orEmpty()))
         }
 
-    private fun ensureWorker(pending: Pending): WorkerProcess {
+    private fun ensureWorker(pending: Pending<*>): WorkerProcess {
         synchronized(lock) {
             process?.takeIf(WorkerProcess::isAlive)?.let { return it }
             state = CompilerWorkerState.STARTING
@@ -292,8 +309,12 @@ class CompilerWorkerController(
         return child
     }
 
-    private fun validateResult(result: CompileResult) {
+    private fun validateResult(result: WorkerResult) {
         when (result) {
+            is LibrariesPrepared -> {
+                Unit
+            }
+
             is CompileSuccess -> {
                 if (result.artifact.size >
                     limits.artifactBytes
@@ -359,12 +380,17 @@ class CompilerWorkerController(
         synchronized(lock) { state = value }
     }
 
-    private data class Pending(
-        val request: CompileRequest,
-        val future: CompletableFuture<CompileResult>,
+    private class Pending<T : WorkerResult>(
+        val request: WorkerRequest,
+        val future: CompletableFuture<T>,
+        val resultType: Class<T>,
         @Volatile var cancelled: Boolean = false,
-        var terminalResult: CompileResult? = null,
-    )
+        var terminalResult: WorkerResult? = null,
+    ) {
+        fun complete(result: WorkerResult) {
+            future.complete(resultType.cast(result))
+        }
+    }
 
     private class ControllerFault(
         val failureClass: PlatformFailureClass,
@@ -379,7 +405,7 @@ class CompilerWorkerController(
 
     private companion object {
         const val MAX_FAILURE_DETAIL_BYTES = 4096
-        val REQUIRED_FEATURES = setOf(WorkerFeature.PROJECT_SNAPSHOT, WorkerFeature.KOTLIN_IR)
+        val REQUIRED_FEATURES = setOf(WorkerFeature.PROJECT_SNAPSHOT, WorkerFeature.KOTLIN_IR, WorkerFeature.LIBRARY_PREPARATION)
         val MEMORY_FAILURE_MARKERS = listOf("OutOfMemoryError", "Java heap space", "Metaspace")
     }
 
