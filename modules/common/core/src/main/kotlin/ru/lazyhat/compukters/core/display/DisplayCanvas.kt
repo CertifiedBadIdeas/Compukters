@@ -70,6 +70,10 @@ class DisplayCanvas(
         }
     }
 
+    internal fun retire() {
+        writer?.let(::release)
+    }
+
     fun expire() {
         val owner = writer
         if (owner != null && !connected()) release(owner)
