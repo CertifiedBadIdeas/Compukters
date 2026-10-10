@@ -22,8 +22,10 @@ import ru.lazyhat.compukters.compiler.artifact.analysis.runtimeExceptionKinds
 import ru.lazyhat.compukters.compiler.artifact.model.Artifact
 import ru.lazyhat.compukters.compiler.artifact.model.Constant
 import ru.lazyhat.compukters.compiler.artifact.model.FieldRef
+import ru.lazyhat.compukters.compiler.artifact.model.FunctionFlag
 import ru.lazyhat.compukters.compiler.artifact.model.FunctionRef
 import ru.lazyhat.compukters.compiler.artifact.model.Instruction
+import ru.lazyhat.compukters.compiler.artifact.model.MetadataText
 import ru.lazyhat.compukters.compiler.artifact.model.Module
 import ru.lazyhat.compukters.compiler.artifact.model.NominalType
 import ru.lazyhat.compukters.compiler.artifact.model.SymbolKind
@@ -110,7 +112,36 @@ internal class ReachabilityGraph(
     private val importTargets = mutableMapOf<Pair<Int, Int>, Int>()
     private val moduleHashes = artifact.modules.map { hashes[it] }
 
+    private data class DispatchShape(
+        val name: MetadataText,
+        val parameters: UInt,
+    )
+
+    private data class MethodCandidate(
+        val module: Int,
+        val owner: Int,
+        val function: Int,
+    )
+
+    private val dispatchShapes = mutableSetOf<DispatchShape>()
+    private val methodCandidates =
+        buildMap<DispatchShape, MutableList<MethodCandidate>> {
+            artifact.modules.forEachIndexed { moduleIndex, module ->
+                module.types.forEachIndexed { typeIndex, type ->
+                    methodRange(type)?.let { (start, count) ->
+                        markRange(start, count) { functionIndex ->
+                            val function = module.functions[functionIndex]
+                            val shape = DispatchShape(module.strings[function.name.value.toInt()], function.parameterCount)
+                            getOrPut(shape) { mutableListOf() } += MethodCandidate(moduleIndex, typeIndex, functionIndex)
+                        }
+                    }
+                }
+            }
+        }
+    private var preserveMethods = false
+
     fun analyze(preserveLibraryExports: Boolean = false): ReachabilityResult {
+        preserveMethods = preserveLibraryExports
         require(
             artifact.entry.module.value
                 .toInt() in artifact.modules.indices,
@@ -231,14 +262,36 @@ internal class ReachabilityGraph(
                 type.interfaces.forEach { markType(module, it) }
                 type.initializer?.let { markFunction(module, it.value.toInt()) }
                 markRange(type.fieldStart, type.fieldCount) { markField(module, it) }
-                markRange(type.methodStart, type.methodCount) { markFunction(module, it) }
+                markMethods(module, type.methodStart, type.methodCount)
             }
 
             is NominalType.Interface -> {
                 type.superType?.let { markType(module, it) }
                 type.interfaces.forEach { markType(module, it) }
-                markRange(type.methodStart, type.methodCount) { markFunction(module, it) }
+                markMethods(module, type.methodStart, type.methodCount)
             }
+        }
+    }
+
+    private fun methodRange(type: NominalType): Pair<UInt, UInt>? =
+        when (type) {
+            is NominalType.Class -> type.methodStart to type.methodCount
+            is NominalType.Interface -> type.methodStart to type.methodCount
+            else -> null
+        }
+
+    private fun markMethods(
+        module: Int,
+        start: UInt,
+        count: UInt,
+    ) {
+        markRange(start, count) { index ->
+            val source = artifact.modules[module]
+            val function = source.functions[index]
+            val shape = DispatchShape(source.strings[function.name.value.toInt()], function.parameterCount)
+            // Native admission resolves every retained virtual/interface declaration, including direct-call targets.
+            // Name and arity deliberately overapproximate its signature and ancestry checks.
+            if (preserveMethods || shape in dispatchShapes) markFunction(module, index)
         }
     }
 
@@ -296,6 +349,16 @@ internal class ReachabilityGraph(
         function: ru.lazyhat.compukters.compiler.artifact.model.Function,
     ) {
         function.owner?.let { markType(module, it) }
+        val owner = function.owner?.let { resolveType(module, it) }
+        val interfaceOwner = owner?.let { artifact.modules[it.first].types[it.second] is NominalType.Interface } == true
+        if (FunctionFlag.VIRTUAL in function.flags || interfaceOwner) {
+            val shape = DispatchShape(artifact.modules[module].strings[function.name.value.toInt()], function.parameterCount)
+            if (dispatchShapes.add(shape)) {
+                methodCandidates[shape].orEmpty().forEach { candidate ->
+                    if (candidate.owner in reachable[candidate.module].types) markFunction(candidate.module, candidate.function)
+                }
+            }
+        }
         markString(module, function.name.value.toInt())
         markType(module, function.signature)
         function.values.forEach { markValueType(module, it.semanticType) }

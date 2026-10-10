@@ -120,8 +120,17 @@ specialization but binds ordinary implementations, including private helpers, to
 emitting them again in the consumer. Kotlin source visibility still governs access to those helpers. Ordinary function
 exports use the qualified declaration symbol and canonical signature, so same-name functions in different packages or
 owners remain distinct even when their lowered signatures coincide. Fragment assembly retains exported
-implementations and their dependencies; final application linking removes unreachable records. Tooling normalizes
-dependency module indexes into symbolic identities before linking so a shared library retains one owner across
+implementations, complete exported class/interface method ranges and their dependencies. Final application linking
+retains methods reached by calls, imports and class initializers, then closes over matching name/parameter-count
+candidates on reachable types for every retained virtual or interface-owned declaration. This conservative closure
+preserves implementations, inherited methods, interface defaults and bridges required by native admission, even for
+virtual declarations reached through direct calls. Newly reached types and method bodies extend the closure until
+stable. Relocation rebuilds both method start and count while preserving contiguous order. Fields remain conservative;
+unused methods and their otherwise unreachable dependencies disappear without changing the executable format or ABI.
+Minimum semantic Runtime ABI is recomputed from the remaining instructions and types, including ABI 1.10 when an
+array or exception root retains superclass methods; deleted method bodies cannot implicitly supply that requirement.
+
+Tooling normalizes dependency module indexes into symbolic identities before linking so a shared library retains one owner across
 fragment containers. The final executable restores concrete indexes. Generic binary templates are not part of the
 platform bundle or VM artifact contract. Bundle format 9 and standalone module format 5 reject older representations.
 Selected addon modules can provide source templates through the same verified source-library path. Their metadata
