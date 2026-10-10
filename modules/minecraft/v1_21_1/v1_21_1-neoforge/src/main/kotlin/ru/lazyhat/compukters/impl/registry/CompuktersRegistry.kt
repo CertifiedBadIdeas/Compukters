@@ -36,6 +36,7 @@ import net.neoforged.neoforge.registries.DeferredRegister
 import ru.lazyhat.compukters.core.MOD_ID
 import ru.lazyhat.compukters.impl.computer.NeoForgeComputerBlockEntity
 import ru.lazyhat.compukters.impl.display.NeoForgeDisplayBlockEntity
+import ru.lazyhat.compukters.impl.peripheral.NeoForgePeripheralConfiguratorItem
 import ru.lazyhat.compukters.impl.terminal.TerminalNetwork
 import ru.lazyhat.compukters.minecraft.computer.ComputerBlock
 import ru.lazyhat.compukters.minecraft.display.DisplayBlock
@@ -96,7 +97,7 @@ object CompuktersRegistry {
     val PERIPHERAL_CONFIGURATOR_ITEM: DeferredItem<PeripheralConfiguratorItem> =
         items.registerItem(
             "peripheral_configurator",
-            ::PeripheralConfiguratorItem,
+            ::NeoForgePeripheralConfiguratorItem,
             Item.Properties().stacksTo(1),
         )
 

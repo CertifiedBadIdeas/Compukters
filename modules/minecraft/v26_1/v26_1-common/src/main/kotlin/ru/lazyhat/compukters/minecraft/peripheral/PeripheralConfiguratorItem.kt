@@ -33,7 +33,7 @@ import net.minecraft.world.level.Level
 import ru.lazyhat.compukters.minecraft.computer.ComputerBlockEntity
 import java.util.UUID
 
-class PeripheralConfiguratorItem(
+open class PeripheralConfiguratorItem(
     properties: Properties,
 ) : Item(properties) {
     fun networkMode(stack: ItemStack): Boolean =
