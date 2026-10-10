@@ -36,8 +36,9 @@ peripheral does not inherit the removed block's membership.
 Each computer can reach loaded peripherals in the same dimension within 64 blocks of itself, measured in three dimensions.
 The server can configure this through `peripherals.access_radius` (1–1,024 blocks). Joining a distant member is allowed:
 a network can extend arbitrarily far, but each computer has its own accessible subset. No chunks are force-loaded.
-This initial implementation covers stationary devices in the ordinary world; Sable construction coordinates and
-assembly transfer require a separate integration.
+With [Compukters: Sable]({{ '/SABLE/' | relative_url }}), distance follows the current construction position, rotation
+and scale. The same network can connect devices on shore and on separate constructions. Assembly and return retain
+bindings and names; no special Guest API is needed.
 
 Cable blocks are now Computer Cables, reserved for physical connections between computers. Place a continuous line
 between two computers; the line can turn or run vertically, but cannot branch or loop. A computer accepts one adjacent

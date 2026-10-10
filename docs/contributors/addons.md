@@ -27,6 +27,11 @@ base-mod and GameTest implementation classes. Player-facing behavior lives in th
 
 ## Sable
 
+The addon registers the SDK world-projection adapter and wraps upstream `SubLevelAssemblyHelper.moveBlocks` in an
+explicit peripheral-transfer scope. The base mod owns network and display SavedData; the addon supplies live logical
+poses and exact block mappings. Run workspace and addon Gradle builds sequentially: the addon includes the workspace
+build and shares its output directories.
+
 The snapshot adapter is request-only: no background feed, subscriptions or cached body registry. Membership is resolved
 for each request. The SDK validates bounded immutable record shapes; Rust materializes the reply in budgeted slices
 without invoking Guest constructors. Structured responses use Runtime ABI 1.13 and bundled native C ABI 20.
