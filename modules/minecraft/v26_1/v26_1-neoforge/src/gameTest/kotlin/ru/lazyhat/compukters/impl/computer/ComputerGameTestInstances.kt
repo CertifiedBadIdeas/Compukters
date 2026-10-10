@@ -126,3 +126,13 @@ internal class ComputerCableGameTest(
 
     override fun typeDescription(): MutableComponent = Component.literal("Compukters point-to-point cable placement")
 }
+
+internal class ComputerNetworkGameTest(
+    testData: TestData<Holder<TestEnvironmentDefinition<*>>>,
+) : GameTestInstance(testData) {
+    override fun run(helper: GameTestHelper) = ComputerNetworkGameTestScenario.run(helper)
+
+    override fun codec(): MapCodec<out GameTestInstance> = MapCodec.unit(this)
+
+    override fun typeDescription(): MutableComponent = Component.literal("Compukters binary computer messaging")
+}

@@ -21,18 +21,28 @@ package ru.lazyhat.compukters.impl.network
 import net.minecraft.server.level.ServerLevel
 import net.neoforged.neoforge.event.level.ChunkEvent
 import ru.lazyhat.compukters.minecraft.network.ComputerCableLinks
+import ru.lazyhat.compukters.minecraft.network.ComputerCableMessages
 
 object ComputerCableLifecycle {
-    fun onChunkLoad(event: ChunkEvent.Load) = invalidate(event.level as? ServerLevel)
+    fun onChunkLoad(event: ChunkEvent.Load) = invalidate(event.level as? ServerLevel, event.chunk.pos)
 
-    fun onChunkUnload(event: ChunkEvent.Unload) = invalidate(event.level as? ServerLevel)
+    fun onChunkUnload(event: ChunkEvent.Unload) = invalidate(event.level as? ServerLevel, event.chunk.pos)
 
-    private fun invalidate(level: ServerLevel?) {
+    fun onLevelUnload(event: net.neoforged.neoforge.event.level.LevelEvent.Unload) {
+        val level = event.level as? ServerLevel ?: return
+        ComputerCableMessages.clear(level)
+        ComputerCableLinks.invalidate(level)
+    }
+
+    private fun invalidate(
+        level: ServerLevel?,
+        chunk: net.minecraft.world.level.ChunkPos,
+    ) {
         if (level == null) return
-        if (level.server.isSameThread) {
+        val action = {
             ComputerCableLinks.invalidate(level)
-        } else {
-            level.server.execute { ComputerCableLinks.invalidate(level) }
+            ComputerCableMessages.chunkChanged(level, chunk)
         }
+        if (level.server.isSameThread) action() else level.server.execute(action)
     }
 }

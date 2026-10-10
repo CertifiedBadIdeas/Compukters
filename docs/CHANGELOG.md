@@ -19,6 +19,8 @@ headings so this page has one stable URL that can be shared outside the reposito
 
 - Existing Peripheral Cables become Computer Cables: one nonbranching physical line joins two computers, with one
   cable connection per computer. Placement rejects branches, loops and occupied ports without consuming the item.
+  Guest programs exchange binary messages through `Network.send(ByteArray)` and `Network.receive()` with no addresses;
+  bounded inboxes and catchable interruption handle unavailable peers and broken connections.
 
 - Displays retain RGB graphics and their resolution across program exit, disconnection, chunk unload and server
   restart. Programs draw pixels, lines, rectangles, text and images, with optional coherent frames.

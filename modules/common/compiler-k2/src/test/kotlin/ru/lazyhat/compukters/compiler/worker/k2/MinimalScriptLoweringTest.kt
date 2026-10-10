@@ -1616,6 +1616,66 @@ class MinimalScriptLoweringTest {
         }
 
     @Test
+    fun `binary computer network programs lower for GameTest`() =
+        withAdapter { adapter ->
+            val programs =
+                mapOf(
+                    "network-sender" to
+                        """
+                        import compukter.network.Network
+                        fun main() {
+                            require(Network.connected)
+                            val bytes = ByteArray(256) { it.toByte() }
+                            Network.send(bytes)
+                            bytes[0] = 42
+                            val reply = Network.receive()
+                            require(reply.size == 256)
+                            for (i in 0 until reply.size) require(reply[i] == i.toByte())
+                            Network.send(byteArrayOf())
+                            require(Network.receive().size == 0)
+                            println("NETWORK-SENDER-OK")
+                        }
+                        """.trimIndent(),
+                    "network-receiver" to
+                        """
+                        import compukter.network.Network
+                        fun main() {
+                            require(Network.connected)
+                            val bytes = Network.receive()
+                            require(bytes.size == 256)
+                            for (i in 0 until bytes.size) require(bytes[i] == i.toByte())
+                            Network.send(bytes)
+                            require(Network.receive().size == 0)
+                            Network.send(byteArrayOf())
+                            println("NETWORK-RECEIVER-OK")
+                        }
+                        """.trimIndent(),
+                    "network-disconnect" to
+                        """
+                        import compukter.network.Network
+                        import compukter.io.IOException
+                        fun main() {
+                            println("NETWORK-WAITING")
+                            try { Network.receive(); error("receive survived cut") }
+                            catch (error: IOException) { println("NETWORK-INTERRUPTED") }
+                        }
+                        """.trimIndent(),
+                )
+            programs.forEach { (name, source) ->
+                val result = adapter.compile(request(source))
+                val artifact = assertNotNull(result.artifact, result.diagnostics.joinToString()).toByteArray()
+                System.getProperty("compukter.vm.networkArtifacts")?.let { directory ->
+                    java.nio.file.Files
+                        .write(
+                            java.nio.file.Path
+                                .of(directory, "$name.cpkt"),
+                            artifact,
+                        )
+                }
+            }
+        }
+
+    @Test
     fun `graphical display API lowers modes RGB images and exception safe frames`() =
         withAdapter { adapter ->
             val source =
