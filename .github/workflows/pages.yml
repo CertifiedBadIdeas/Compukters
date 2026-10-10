@@ -7,13 +7,11 @@ on:
       - ".github/workflows/pages.yml"
       - "docs/**"
       - "api-build/**"
+      - ".gitmodules"
       - "modules/common/guest-platform/src/platform/**"
-      - "addons/create/src/compuktersAddon/kotlin/**"
-      - "addons/create/gradle.properties"
-      - "addons/sable/src/compuktersAddon/kotlin/**"
-      - "addons/sable/gradle.properties"
-      - "addons/propulsion/src/compuktersAddon/kotlin/**"
-      - "addons/propulsion/gradle.properties"
+      - "addons/create"
+      - "addons/sable"
+      - "addons/propulsion"
       - "gradle.properties"
       - "modules/minecraft/shared/common/src/main/kotlin/ru/lazyhat/compukters/impl/ide/IdeColors.kt"
   workflow_dispatch:
@@ -33,6 +31,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+      - name: Checkout addon API sources
+        run: git submodule update --init addons/create addons/sable addons/propulsion
       - name: Set up Java
         uses: actions/setup-java@v5
         with:
