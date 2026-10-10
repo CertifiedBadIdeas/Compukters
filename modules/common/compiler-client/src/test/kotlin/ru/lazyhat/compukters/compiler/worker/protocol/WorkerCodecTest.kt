@@ -45,7 +45,7 @@ class WorkerCodecTest {
                 0x50,
                 0x4b,
                 0x57,
-                0x04,
+                0x05,
                 0x00,
                 0x02,
                 0x00,
@@ -110,7 +110,11 @@ class WorkerCodecTest {
 
         val messages =
             listOf<WorkerMessage>(
-                WorkerHandshake(identity, setOf(WorkerFeature.PROJECT_SNAPSHOT, WorkerFeature.KOTLIN_IR), limits),
+                WorkerHandshake(
+                    identity,
+                    setOf(WorkerFeature.PROJECT_SNAPSHOT, WorkerFeature.KOTLIN_IR, WorkerFeature.LIBRARY_PREPARATION),
+                    limits,
+                ),
                 CompileRequest(
                     requestId = requestId,
                     sources =

@@ -17,9 +17,10 @@ headings so this page has one stable URL that can be shared outside the reposito
   real world distance, including rotation and scale; assembly and return preserve bindings, names and complete display
   images. Partial display transfers split into panels with their published tiles and network membership.
 
-- Repeated Guest compilation reuses resolved platform-library analysis within the retained compiler worker.
-  Changing the dependency selection replaces that preparation; each project compilation keeps its own source
-  session and specialization state.
+- The IDE prepares resolved compiler libraries in the background when opening a project and after dependency or
+  target-profile changes. Repeated Guest compilation reuses that library analysis within the retained worker,
+  including across IDE reopenings. Changing the dependency selection replaces the preparation; each project
+  compilation keeps its own source session and specialization state. Queued preparation yields to Build.
 
 - Host capabilities and addon SDK bindings exchange `ByteArray` directly, preserving arbitrary binary data within
   a 4096-byte call limit. Runtime 0.22.0 / native ABI 22 replaces the previous native boundary; existing VM checkpoints

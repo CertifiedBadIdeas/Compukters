@@ -172,20 +172,28 @@ class DefaultIdeWorkspace internal constructor(
         import: ProjectImport,
     ) = submit("importTree") { ProjectTreeStore(project, projectLimits).importTree(import) }
 
+    override fun projectConfiguration(project: ProjectHandle) = submit("projectConfiguration") { configurationNow(project) }
+
+    private fun configurationNow(project: ProjectHandle): IdeProjectConfiguration {
+        check(project.isValid()) { "project was invalidated" }
+        val documents = ProjectDocumentStore(project, projectLimits)
+        val manifest = documents.open(ProjectPath.file("compukter.toml")).text.encodeToByteArray()
+        val lock =
+            try {
+                documents.open(ProjectPath.file("compukter.lock")).text.encodeToByteArray()
+            } catch (exception: ProjectDocumentException) {
+                if (exception.reason == ProjectDocumentFailure.MISSING) null else throw exception
+            }
+        check(project.isValid()) { "project was invalidated" }
+        return IdeProjectConfiguration(project, manifest, lock)
+    }
+
     override fun buildInput(project: ProjectHandle) =
         submit("buildInput") {
-            check(project.isValid()) { "project was invalidated" }
-            val documents = ProjectDocumentStore(project, projectLimits)
-            val manifest = documents.open(ProjectPath.file("compukter.toml")).text.encodeToByteArray()
-            val lock =
-                try {
-                    documents.open(ProjectPath.file("compukter.lock")).text.encodeToByteArray()
-                } catch (exception: ProjectDocumentException) {
-                    if (exception.reason == ProjectDocumentFailure.MISSING) null else throw exception
-                }
+            val configuration = configurationNow(project)
             val sources = ProjectSnapshotLoader.loadSourceSet(project.canonicalPath, workerLimits)
             check(project.isValid()) { "project was invalidated" }
-            IdeBuildInput(project, manifest, lock, sources)
+            IdeBuildInput(project, configuration.manifestBytes, configuration.lockBytes, sources)
         }
 
     override fun close() {

@@ -31,6 +31,8 @@ import ru.lazyhat.compukters.compiler.worker.controller.WorkerProcessFactory
 import ru.lazyhat.compukters.compiler.worker.protocol.BinaryValue
 import ru.lazyhat.compukters.compiler.worker.protocol.CompileRequest
 import ru.lazyhat.compukters.compiler.worker.protocol.CompileResult
+import ru.lazyhat.compukters.compiler.worker.protocol.LibraryPreparationRequest
+import ru.lazyhat.compukters.compiler.worker.protocol.LibraryPreparationResult
 import ru.lazyhat.compukters.compiler.worker.protocol.VirtualSourcePath
 import ru.lazyhat.compukters.compiler.worker.protocol.WorkerLimits
 import ru.lazyhat.compukters.ide.compiler.ClientBuildResult
@@ -65,6 +67,19 @@ import kotlin.test.assertIs
 import kotlin.test.assertTrue
 
 class ForkedClientCompilationTest {
+    @Test
+    fun `client service preparation launches no build and reuses the backend for first build`() =
+        withClient { fixture ->
+            val input = fixture.input(null, "fun main() { val answer = 42 }")
+            assertIs<ru.lazyhat.compukters.compiler.worker.protocol.LibrariesPrepared>(
+                fixture.service.prepareLibraries(input.profile).get(90, TimeUnit.SECONDS),
+            )
+            assertEquals(0, fixture.backend.compileCalls)
+            assertIs<ClientBuildResult.Success>(fixture.service.build(input).get(90, TimeUnit.SECONDS))
+            assertEquals(1, fixture.processStarts)
+            assertEquals(1, fixture.backend.compileCalls)
+        }
+
     @Test
     fun `real client path compiles multi-file project and reuses global cache`() =
         withClient { fixture ->
@@ -223,6 +238,9 @@ class ForkedClientCompilationTest {
     ) : ClientCompilerBackend {
         var compileCalls = 0
             private set
+
+        override fun prepareLibraries(request: LibraryPreparationRequest): CompletableFuture<LibraryPreparationResult> =
+            delegate.prepareLibraries(request)
 
         override fun compile(request: CompileRequest): CompletableFuture<CompileResult> {
             compileCalls++

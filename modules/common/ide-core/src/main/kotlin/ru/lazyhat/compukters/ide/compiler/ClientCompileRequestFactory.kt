@@ -22,6 +22,7 @@ import ru.lazyhat.compukters.compiler.project.ProjectSnapshot
 import ru.lazyhat.compukters.compiler.worker.protocol.BinaryValue
 import ru.lazyhat.compukters.compiler.worker.protocol.CompileRequest
 import ru.lazyhat.compukters.compiler.worker.protocol.Hash256
+import ru.lazyhat.compukters.compiler.worker.protocol.LibraryPreparationRequest
 import ru.lazyhat.compukters.compiler.worker.protocol.RequestId
 import ru.lazyhat.compukters.compiler.worker.protocol.TargetSettings
 import ru.lazyhat.compukters.compiler.worker.protocol.TrustedBundleIdentity
@@ -47,21 +48,13 @@ data class PreparedClientCompilation(
 
 object ClientCompileRequestFactory {
     fun prepare(input: ClientBuildSnapshot): PreparedClientCompilation {
-        val toolchain = input.profile.toolchain
         val request =
             CompileRequest(
                 requestId = IDENTITY_REQUEST_ID,
                 sources = input.sources.sources,
                 target = input.target,
                 expectedIdentity =
-                    WorkerIdentity(
-                        toolchain.compilerVersion,
-                        toolchain.languageVersion,
-                        toolchain.codegenAbi,
-                        toolchain.artifactWriterVersion,
-                        toolchain.payloadHash,
-                        toolchain.platformAbi,
-                    ),
+                    workerIdentity(input.profile),
                 limits = input.profile.limits,
                 platformModules = input.profile.modules.map(::trustedIdentity),
                 addonBundles = input.profile.addonBundles,
@@ -70,6 +63,27 @@ object ClientCompileRequestFactory {
             request,
             ClientCompilationIdentity.compute(request, input.manifestBytes, input.lockBytes, input.profile),
             SourceSnapshotIdentity.of(input.sources),
+        )
+    }
+
+    fun prepareLibraries(profile: CompileProfile): LibraryPreparationRequest =
+        LibraryPreparationRequest(
+            IDENTITY_REQUEST_ID,
+            workerIdentity(profile),
+            profile.limits,
+            profile.modules.map(::trustedIdentity),
+            profile.addonBundles,
+        )
+
+    private fun workerIdentity(profile: CompileProfile): WorkerIdentity {
+        val toolchain = profile.toolchain
+        return WorkerIdentity(
+            toolchain.compilerVersion,
+            toolchain.languageVersion,
+            toolchain.codegenAbi,
+            toolchain.artifactWriterVersion,
+            toolchain.payloadHash,
+            toolchain.platformAbi,
         )
     }
 

@@ -33,7 +33,22 @@ published bundles. Executable container format 3 and existing Guest array repres
 | Native session transport | C ABI 22, checked by both FFM and JNI | `host/compukter-vm/ffi/src/lib.rs` and `modules/common/native-runtime` |
 | Base platform | Bundle format 9, standalone module format 5, platform ABI 3 | `PlatformBundleCodec` in `modules/common/platform-bundle` |
 | Kotlin metadata carrier | Private format 6 | `platform-k2` |
+| Compiler worker | Protocol 5; explicit source-free library preparation | `compiler-client` and `compiler-k2` |
 | IDE analysis | Protocol 15 | `ide-analysis-client` and `ide-analysis-k2` |
+
+## Compiler worker preparation
+
+Compiler protocol 5 adds `LIBRARY_PREPARATION_REQUEST` (wire tag 6), `LIBRARIES_PREPARED` (tag 7) and the
+`LIBRARY_PREPARATION` feature bit. The request contains request ID, pinned worker identity, limits, ordered selected
+module identities and immutable addon payloads, with no project sources or target artifact. Preparation validates
+selection and fills the same single-entry library frontend cache used by compilation. The acknowledgement carries
+request ID and resource/timing metrics; it never contains a `.cpkt`. Platform failures remain valid terminal results
+for either operation. A mismatched result kind or request ID invalidates the client worker.
+
+Protocol 4 frames are rejected without a fallback. Worker payload hashes change with the new producer and consumer;
+platform, artifact, codegen and native ABI contracts are unchanged. Both operations share bounded framing, admission,
+queue capacity and deadlines. Queued preparation yields to explicit compilation; an active preparation completes
+before the next request. No project FIR or IR enters the retained library cache.
 
 ## Guest hash collection module identities
 

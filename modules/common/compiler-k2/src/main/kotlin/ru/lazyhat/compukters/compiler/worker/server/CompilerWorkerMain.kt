@@ -51,6 +51,7 @@ fun main() {
                     BufferedInputStream(System.`in`),
                     BufferedOutputStream(System.out),
                     adapter::compile,
+                    adapter::prepareLibraries,
                 ).run()
             }
         if (exit == WorkerServerExit.PROTOCOL_ERROR) exitProcess(3)

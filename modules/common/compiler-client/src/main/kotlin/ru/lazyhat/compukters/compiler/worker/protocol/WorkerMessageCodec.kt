@@ -49,6 +49,19 @@ object WorkerMessageCodec {
                 sink.bundlePayloads(message.addonBundles)
             }
 
+            is LibraryPreparationRequest -> {
+                sink.u64(message.requestId.value)
+                sink.identity(message.expectedIdentity)
+                sink.limits(message.limits)
+                sink.bundles(message.platformModules)
+                sink.bundlePayloads(message.addonBundles)
+            }
+
+            is LibrariesPrepared -> {
+                sink.u64(message.requestId.value)
+                sink.metrics(message.metrics)
+            }
+
             is CompileSuccess -> {
                 sink.u64(message.requestId.value)
                 sink.bytes(message.artifact)
@@ -82,6 +95,14 @@ object WorkerMessageCodec {
 
                 WorkerMessageType.COMPILE_REQUEST -> {
                     source.compileRequest()
+                }
+
+                WorkerMessageType.LIBRARY_PREPARATION_REQUEST -> {
+                    source.libraryPreparationRequest()
+                }
+
+                WorkerMessageType.LIBRARIES_PREPARED -> {
+                    LibrariesPrepared(RequestId.of(source.u64()), source.metrics())
                 }
 
                 WorkerMessageType.COMPILE_SUCCESS -> {
@@ -325,6 +346,19 @@ private class MessageSource(
             CompileRequest(requestId, sources, target, identity, limits, platformModules, addonBundles)
         } catch (exception: IllegalArgumentException) {
             fail(WorkerProtocolError.INVALID_MESSAGE_VALUE, exception.message ?: "invalid compile request")
+        }
+    }
+
+    fun libraryPreparationRequest(): LibraryPreparationRequest {
+        val requestId = RequestId.of(u64())
+        val identity = identity()
+        val limits = limits()
+        val modules = bundles()
+        val payloads = bundlePayloads()
+        return try {
+            LibraryPreparationRequest(requestId, identity, limits, modules, payloads)
+        } catch (exception: IllegalArgumentException) {
+            fail(WorkerProtocolError.INVALID_MESSAGE_VALUE, exception.message ?: "invalid library preparation request")
         }
     }
 

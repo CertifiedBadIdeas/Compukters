@@ -29,6 +29,8 @@ import ru.lazyhat.compukters.compiler.worker.protocol.CompilerFailure
 import ru.lazyhat.compukters.compiler.worker.protocol.DiagnosticCategory
 import ru.lazyhat.compukters.compiler.worker.protocol.DiagnosticSeverity
 import ru.lazyhat.compukters.compiler.worker.protocol.Hash256
+import ru.lazyhat.compukters.compiler.worker.protocol.LibrariesPrepared
+import ru.lazyhat.compukters.compiler.worker.protocol.LibraryPreparationRequest
 import ru.lazyhat.compukters.compiler.worker.protocol.PlatformFailure
 import ru.lazyhat.compukters.compiler.worker.protocol.PlatformFailureClass
 import ru.lazyhat.compukters.compiler.worker.protocol.RequestId
@@ -50,6 +52,43 @@ import kotlin.test.assertIs
 import kotlin.test.assertTrue
 
 class CompilerWorkerServerTest {
+    @Test
+    fun `preparation has no project compilation or artifact and validates identity`() {
+        val request = LibraryPreparationRequest(RequestId.of(1uL), identity(), HARD_LIMITS.copy(sourceFiles = 0))
+        val output = ByteArrayOutputStream()
+        var calls = 0
+        CompilerWorkerServer(
+            identity(),
+            HARD_LIMITS,
+            ByteArrayInputStream(encode(request)),
+            output,
+            compiler = { error("preparation must not compile a project") },
+            preparer = { admitted ->
+                calls++
+                assertEquals(0, admitted.limits.sourceFiles)
+                assertEquals(request.expectedIdentity, admitted.expectedIdentity)
+            },
+        ).run()
+        val messages = decodeAll(output.toByteArray())
+        assertEquals(1, calls)
+        assertEquals(request.requestId, assertIs<LibrariesPrepared>(messages[1]).requestId)
+        assertEquals(2, messages.size)
+        val bad = LibraryPreparationRequest(RequestId.of(2uL), identity().copy(codegenAbi = 999u), HARD_LIMITS)
+        val rejected = ByteArrayOutputStream()
+        assertEquals(
+            WorkerServerExit.PROTOCOL_ERROR,
+            CompilerWorkerServer(
+                identity(),
+                HARD_LIMITS,
+                ByteArrayInputStream(encode(bad)),
+                rejected,
+                compiler = { error("must not compile") },
+                preparer = { error("must not prepare") },
+            ).run(),
+        )
+        assertEquals(PlatformFailureClass.PROTOCOL, assertIs<PlatformFailure>(decodeAll(rejected.toByteArray())[1]).failureClass)
+    }
+
     @Test
     fun `handshake is first and one request yields one matching success`() {
         val request = request(7uL, "val answer: Int = 42")
@@ -126,6 +165,7 @@ class CompilerWorkerServerTest {
             HARD_LIMITS,
             ByteArrayInputStream(valid + malformed),
             output,
+            preparer = { error("must not prepare") },
             compiler = { K2CompilationResult(ExitCode.OK, emptyList(), true, BinaryValue.of(byteArrayOf(7)), false) },
         ).run()
 
@@ -140,6 +180,7 @@ class CompilerWorkerServerTest {
             HARD_LIMITS,
             ByteArrayInputStream(ByteArray(0)),
             idle,
+            preparer = { error("must not prepare") },
             compiler = { error("must not compile") },
         ).run()
         assertEquals(1, decodeAll(idle.toByteArray()).size)
@@ -156,6 +197,7 @@ class CompilerWorkerServerTest {
             ByteArrayInputStream(requests.fold(ByteArray(0)) { bytes, request -> bytes + encode(request) }),
             output,
             compiler,
+            preparer = { error("must not prepare") },
         ).run()
         return decodeAll(output.toByteArray())
     }
