@@ -186,6 +186,29 @@ internal class PeripheralNetworkDirectory(
         if (inherited != null) bind(inherited, target)
     }
 
+    fun checkReplacementCapacity(
+        instance: UUID,
+        count: Int,
+    ) {
+        require(count >= 1)
+        val network = networkOf(instance) ?: return
+        val removed = network.members.count { it.instance == instance }
+        check(network.members.size - removed + count <= MAXIMUM_MEMBERS && memberCount - removed + count <= MAXIMUM_TOTAL_MEMBERS) {
+            "Peripheral member limit reached"
+        }
+    }
+
+    fun replace(
+        instance: UUID,
+        members: List<PeripheralNetworkMember>,
+    ) {
+        require(members.distinctBy { it.instance }.size == members.size && members.all { it.instance !in membership })
+        checkReplacementCapacity(instance, members.size)
+        val network = networkOf(instance) ?: return
+        remove(instance)
+        members.forEach { bind(network.id, it) }
+    }
+
     fun remove(instance: UUID): Boolean {
         val id = membership.remove(instance) ?: return false
         val network = networks.getValue(id)

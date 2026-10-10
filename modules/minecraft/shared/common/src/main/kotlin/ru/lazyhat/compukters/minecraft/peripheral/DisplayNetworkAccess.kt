@@ -38,6 +38,21 @@ internal object DisplayNetworkAccess {
         position: BlockPos,
     ) = PeripheralDeviceIdentity("compukters-display", level.dimension().toString(), position, "text")
 
+    /** A copied or stale stamp must not transfer another block's saved membership. */
+    fun physicalSource(
+        level: ServerLevel,
+        entity: DisplayBlockEntity,
+    ): UUID? {
+        val stamp = PeripheralNetworkAccess.instance(entity) ?: return null
+        val network = PeripheralNetworkStorage.get(level).directory.networkOf(stamp) ?: return stamp
+        return stamp.takeIf {
+            network.members.any { member ->
+                member.instance == stamp && member.identity.providerId == "compukters-display" &&
+                    member.identity.dimension == level.dimension().toString() && member.identity.anchor == entity.blockPos
+            }
+        }
+    }
+
     fun sources(
         level: ServerLevel,
         screen: DisplaySurface,
@@ -46,7 +61,7 @@ internal object DisplayNetworkAccess {
             screen.panels.mapNotNull { panel ->
                 val pos = DisplayWorldAccess.position(screen, panel.column, panel.row)
                 val entity = if (level.hasChunkAt(pos)) level.getBlockEntity(pos) as? DisplayBlockEntity else null
-                entity?.takeIf { matches(screen, panel.instance, it) }?.let { PeripheralNetworkAccess.instance(it) }
+                entity?.takeIf { matches(screen, panel.instance, it) }?.let { physicalSource(level, it) }
             }
 
     fun consolidate(
@@ -156,6 +171,27 @@ internal object DisplayNetworkAccess {
         storage.directory.bind(network.id, updated)
         storage.directory.setName(screen.id, updated.identity, screen.name)
         storage.setDirty()
+    }
+
+    fun checkSplit(
+        level: ServerLevel,
+        screen: DisplaySurface,
+    ) {
+        check(migrate(level, screen)) { "Load screen panels to adopt their old network bindings before splitting" }
+        PeripheralNetworkStorage.get(level).directory.checkReplacementCapacity(screen.id, screen.panels.size)
+    }
+
+    fun split(
+        level: ServerLevel,
+        previous: UUID,
+        screens: List<DisplaySurface>,
+    ) {
+        val storage = PeripheralNetworkStorage.get(level)
+        storage.directory.replace(previous, screens.map { member(level, it) })
+        storage.setDirty()
+        migrated[level]?.remove(previous)
+        legacyPending[level]?.remove(previous)
+        completed(level).addAll(screens.map { it.id })
     }
 
     fun remove(

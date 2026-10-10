@@ -41,11 +41,23 @@ opposite corners of a rectangle, at most 8 by 8 blocks. All panels must face the
 The whole rectangle must be loaded while assembling. Empty positions inside it are valid holes, including at creation.
 Assembly creates a new blank canvas from standalone panels; an existing composite screen must not overlap the selection.
 
-The selected screen remains in the configurator. Place another display in a hole and click it to join that screen.
-Shift-click a panel to select its existing screen; shift-use the configurator in the air to clear the selection.
+The selected screen remains in the configurator. Click a standalone panel outside its rectangle to expand it,
+up to 8×8 blocks; the whole expanded rectangle must be loaded. Compatible standalone panels inside the new rectangle
+join too. The screen keeps its image at the same physical positions, resolution, name and network; newly covered
+pixels start black. Shift-click a panel to select an existing screen; shift-use in the air to clear the selection.
+A replacement placed in a hole automatically rejoins when its orientation matches exactly one existing screen.
+A panel facing another way stays separate until it is reoriented. Overlapping screen holes leave the panel separate;
+select the intended screen and click the panel to join manually.
+Last-panel destruction still deletes the screen, so a later replacement starts a new one.
+
+To dismantle a screen, Shift-click to select it, then Shift-click one of its panels again. Each installed panel becomes
+an independent 1×1 screen, keeping its portion of the image, resolution and network. The shared name and configurator
+selection are cleared; empty slots no longer reserve an area. All installed panels must be loaded. Expansion and
+splitting invalidate old program handles and discard unfinished private frames; reopen the display from the program.
 While the configurator is held in either hand, softly animated outlines show nearby devices, networks and screens.
 They are hidden by walls. Hovered and selected groups are brighter; screen boundaries and dashed holes remain visible.
-An amber panel inside a screen belongs to a separate screen and has not joined the surrounding assembly. Point at it
+An amber panel inside a screen belongs to a separate screen and has not joined the surrounding assembly, for example
+because its orientation differs or several screens could claim it. Point at it
 for the membership and click-action hints. Selecting the first corner previews a valid rectangle while aiming at the
 second corner. Putting the configurator away removes the overlay.
 
