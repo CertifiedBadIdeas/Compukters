@@ -25,12 +25,31 @@ changes. All artifacts belonging to one SDK release share that SDK version:
 | `ru.lazyhat.compukters:compukters-addon-neoforge-1.21.1` | Thin compile-only registration adapter for NeoForge 1.21.1 |
 | `ru.lazyhat.compukters:compukters-addon-neoforge-26.1.2` | Thin compile-only registration adapter for NeoForge 26.1.2 |
 
-Released coordinates are intended to resolve from Maven Central. Before an SDK version is published, a Compukters
-checkout can publish the same SDK coordinates to Maven Local with:
+## Start from the template
+
+Use [Compukers-addon-template](https://github.com/CertifiedBadIdeas/Compukers-addon-template) for a minimal NeoForge
+1.21.1 addon. It includes a Guest greeting API, generated host handler, ABI lock, wrapper and a sample IDE project.
+Gradle runs on JDK 25; the addon targets Java 21.
+
+Tagged Compukters releases starting with 0.6.0 include `compukters-addon-development-X.Y.Z.zip` on GitHub Releases.
+The template downloads this exact archive and verifies it against the release's `checksums.sha256`; no GitHub token
+is needed for public assets. The archive contains a local file Maven repository, so the public SDK coordinates and
+plugin DSL remain unchanged. There is no separate hosted Maven repository for Compukters dependencies.
+Kotlin, NeoForge and other upstream build dependencies still use their normal repositories.
+
+The template defaults to `compuktersRelease=0.6.0`. Until that release is published, use local mode explicitly:
 
 ```shell
-./gradlew :addon-gradle-plugin:publishAddonSdkToMavenLocal
+# In the Compukters checkout:
+./gradlew stageAddonDevelopmentDependencies
+# In the template checkout:
+./gradlew build -PcompuktersWorkspace=../Compukters
 ```
+
+Workspace mode uses the staged plugin and builds the current local APIs, compiler, platform and development mod
+through a composite build. It never silently switches to downloaded dependencies. An already unpacked SDK can
+instead be selected with `-PcompuktersSdkDirectory=/path/to/sdk`; this mode requires no Compukters source checkout.
+For existing local first-party builds, `:addon-gradle-plugin:publishAddonSdkToMavenLocal` remains available.
 
 The common API and target adapters are compile-only dependencies and carry the SDK version. Isolated TestKit
 verification creates its own temporary Maven layout directly from the built SDK artifacts.
@@ -77,24 +96,11 @@ Stable development and GameTest archive names are retained for the workspace's i
 
 ## Apply the plugin
 
-Keep the normal Kotlin, Loom and NeoForge setup of your mod. Add Maven Central to both plugin and dependency
-resolution, then apply the matching Compukters plugin version:
-
-```kotlin
-// settings.gradle.kts
-pluginManagement {
-    repositories {
-        mavenCentral()
-        gradlePluginPortal()
-    }
-}
-
-dependencyResolutionManagement {
-    repositories {
-        mavenCentral()
-    }
-}
-```
+Keep the normal Kotlin, Loom and NeoForge setup of your mod. The template's
+`gradle/compukters-sdk.settings.gradle.kts` resolves the SDK and configures plugin management. Existing builds can
+use the same file and select the SDK explicitly. Point dependency resolution at the archive's `repository/` directory
+as well; reserve the Compukters groups for that file repository so missing SDK artifacts fail at their source.
+Then apply the matching Compukters plugin version:
 
 ```kotlin
 // build.gradle.kts

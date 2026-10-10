@@ -12,7 +12,8 @@ Minecraft 1.21.1 and 26.1.2. Each contains its tooling carrier and both Linux an
 Windows natives. The workflow collects these and the Create, Sable and Propulsion
 addon JARs into `dist/`, grouped by Minecraft version, and preserves that layout
 as an Actions artifact. GitHub Releases receives all five JARs, release notes, a versioned
-composition inventory, and SHA-256 checksums. Modrinth receives one version per
+composition inventory, SHA-256 checksums, and `compukters-addon-development-X.Y.Z.zip`.
+The SDK archive supplies development dependencies for standalone addon builds without a separate hosted Maven repository. Modrinth receives one version per
 Minecraft target in the existing [Compukters project](https://modrinth.com/mod/compukters),
 ID `xriOD3eh`.
 
@@ -35,8 +36,8 @@ native that implements newer artifact reader features does not establish that an
 older published bundle supports those features. Keep these contracts aligned when
 preparing the candidate; missing or mismatched Runtime assets stop the release.
 Both mod JARs record the selected native release at `META-INF/compukters/runtime.properties`.
-Inventory schema 3 records that actual component separately from the source submodule revision;
-the transfer tool retains readers for inventories 1 and 2 when resuming their publication.
+Inventory schema 4 records that actual component separately from the source submodule revision;
+the transfer tool retains readers for inventories 1, 2 and 3 when resuming their publication.
 
 ## Prepare and validate a candidate
 
@@ -51,7 +52,7 @@ run `bumpAfterRelease` to start the next development minor; for example, `0.5.0`
 2. Run `verifyLocalFull` on that exact candidate before release preparation is
    declared complete. Use the existing release tasks to create the local tag;
    `tagRelease` creates `vX.Y.Z` without changing the version.
-3. Run `./gradlew-sandbox-dev-parallel-summary -p addons/dev collectReleaseDistributionJars`
+3. Run `./gradlew-sandbox-dev-parallel-summary -p addons/dev collectReleaseDistributionJars :Compukters:packageAddonDevelopmentDependencies`
    on the clean exact tag. It downloads and admits the pinned published Runtime bundles,
    runs both `buildReleaseUniversalJar` gates, verifies the addon archives and collects
    the five JARs into `dist/`. For local Rust builds use `collectDistributionJars` instead.
@@ -62,7 +63,7 @@ Local non-interactive commands use `./gradlew-sandbox-dev-parallel-summary` with
 JDK 25 selected. GitHub Actions uses standard `./gradlew` with live output and
 `--no-daemon --parallel --max-workers=2`. The runner installs JDK 21/25 and the pinned Rust toolchain,
 fetches locked build dependencies, publishes the addon SDK to Maven Local, and downloads the exact
-Linux/Windows Runtime bundles before building the five stable archives.
+Linux/Windows Runtime bundles before building the five stable JARs and the addon SDK archive.
 
 CI tests are temporarily disabled. It does not run `verifyLocalFull`, JVM/Rust tests, GameTests,
 conformance scenarios or IDE latency measurements. The two `packagedNativeIntegrationTest` tasks
@@ -71,7 +72,7 @@ native bundle identity and release inventory checks remain enabled. This build e
 and publication evidence; it does not establish full test coverage or native execution evidence.
 Local full verification and the complete tagged gates above remain available for release preparation.
 
-The build uploads five JARs, release notes, inventory and checksums as one Actions artifact retained
+The build uploads five JARs, the SDK ZIP, release notes, inventory and checksums as one Actions artifact retained
 for seven days. Runs for the same tag are queued without cancellation. There is no branch verification
 artifact to reuse in this temporary tag-only workflow.
 

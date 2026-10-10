@@ -25,6 +25,7 @@ private val distributionTasks =
         "buildReleaseUniversalJar",
         "stageDistributionModJars",
         "stageReleaseDistributionModJars",
+        "packageAddonDevelopmentDependencies",
     )
 private val verificationTasks =
     setOf(
@@ -41,6 +42,7 @@ private val verificationTasks =
 private val addonSdkTasks =
     setOf(
         "publishAddonSdkToMavenLocal",
+        "stageAddonDevelopmentDependencies",
         "assembleAddonGuestApiBundle",
         "assemblePlatformBundle",
         "updateAddonGuestApiAbiLock",

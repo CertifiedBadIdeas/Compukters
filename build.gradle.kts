@@ -21,6 +21,7 @@ plugins {
     id("media-license-convention")
     alias(libs.plugins.kotlin) apply false
     alias(libs.plugins.releaseConvention)
+    id("addon-sdk-distribution")
 }
 
 organizeCompuktersTasks()

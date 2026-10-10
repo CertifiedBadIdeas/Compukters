@@ -53,7 +53,7 @@ jobs:
       - name: Publish local addon SDK and fetch exact Runtime bundles
         run: ./gradlew :addon-gradle-plugin:publishAddonSdkToMavenLocal downloadCompukterRuntimeBundles --no-daemon --parallel --max-workers=2
       - name: Build stable JARs without test tasks
-        run: ./gradlew -p addons/dev collectReleaseDistributionJars --no-daemon --parallel --max-workers=2 -x :Compukters:native-runtime-ffm:packagedNativeIntegrationTest -x :Compukters:native-runtime-jni:packagedNativeIntegrationTest
+        run: ./gradlew -p addons/dev collectReleaseDistributionJars :Compukters:packageAddonDevelopmentDependencies --no-daemon --parallel --max-workers=2 -x :Compukters:native-runtime-ffm:packagedNativeIntegrationTest -x :Compukters:native-runtime-jni:packagedNativeIntegrationTest
       - name: Stage and verify release inventory
         run: |
           python3 tools/release/release.py prepare --tag "$RELEASE_TAG" --output build/release

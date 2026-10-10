@@ -63,7 +63,7 @@ publishing {
         create<MavenPublication>("developmentMod") {
             groupId = project.group.toString()
             artifactId = "compukters-neoforge-1.21.1-dev"
-            version = project.version.toString()
+            version = rootProject.version.toString()
             artifact(developmentModJar)
         }
     }
