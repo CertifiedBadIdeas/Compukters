@@ -19,6 +19,10 @@ internal object DisplayNames {
         name: String?,
     ) {
         DisplayStorage.get(level).directory.rename(id, name)
+        ru.lazyhat.compukters.minecraft.peripheral.DisplayNetworkAccess.refresh(
+            level,
+            requireNotNull(DisplayStorage.get(level).directory.byId(id)),
+        )
     }
 
     fun surface(

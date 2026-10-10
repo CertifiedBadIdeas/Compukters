@@ -100,6 +100,13 @@ internal object PeripheralNetworkBinding {
             } else {
                 PeripheralDeviceNames.resolveContact(level, position, face).singleOrNull() ?: return null
             }
+        if (contacted is ru.lazyhat.compukters.minecraft.display.DisplayBlockEntity) {
+            val screen =
+                ru.lazyhat.compukters.minecraft.display.DisplayWorldAccess
+                    .surface(level, contacted, create) ?: return null
+            if (!DisplayNetworkAccess.migrate(level, screen)) return null
+            return DisplayNetworkAccess.member(level, screen)
+        }
         if (!level.hasChunkAt(identity.anchor)) return null
         val anchor = level.getBlockEntity(identity.anchor) ?: return null
         val instance = PeripheralNetworkAccess.instance(anchor, create) ?: return null

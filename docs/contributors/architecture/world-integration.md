@@ -88,6 +88,15 @@ Missing panels are holes in the logical image. Last-panel destruction removes th
 Panel block entities persist only their instance identity, never duplicate the authoritative canvas. The configurator
 assembles at most 8x8 blocks, selects existing screens and joins replacement panels into holes.
 
+`DisplayNetworkAccess` stores one network member under the canvas UUID, retaining the existing display provider and
+`text` device key. A physical panel is only an address hint; discovery and availability validate any loaded exact
+member within the computer's radius. Binding, selection and removal through any panel address the same canvas.
+Assembly and joining inherit a single source network, or remove all participating memberships when networks differ.
+Partial destruction refreshes the hint; last-panel destruction removes membership. Legacy physical-panel bindings
+are consolidated only after their loaded block entities validate the saved panel identities and physical stamps.
+An incomplete legacy upgrade waits for remaining chunks without forcing loads or granting replacement blocks access.
+The network SavedData schema and Guest capability remain unchanged; screen names remain authoritative in DisplayStorage.
+
 Each program holds an exclusive canvas lease. Reset, termination or loss of every reachable panel releases it without
 erasing pixels. Private frames belong to one cooperative task, are bounded to 262144 pixels per program, and carry a
 cumulative work counter. Resource checkpoints preserve leases and private frames without replaying published pixels.

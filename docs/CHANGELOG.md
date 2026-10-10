@@ -20,7 +20,9 @@ headings so this page has one stable URL that can be shared outside the reposito
   with context and action hints beside the crosshair.
 - The Peripheral Configurator assembles planar screens up to 8×8 blocks, including holes. Replacing a missing panel
   restores its portion of the image; removing the last panel deletes the screen. Programs select 16×16, 32×32, 64×64
-  or 128×128 pixels per block. Existing `TextDisplay` programs use the same persistent canvas.
+  or 128×128 pixels per block. A screen has one network binding shared by all panels. Assembly inherits a single
+  existing network or clears conflicting bindings; any surviving panel keeps the screen reachable. Existing
+  `TextDisplay` programs use the same persistent canvas.
 
 - The addon development stand and standalone Propulsion build use Aeronautics/Simulated 1.3.2, fixing the
   Simulated mixin crash with recent JEI versions.

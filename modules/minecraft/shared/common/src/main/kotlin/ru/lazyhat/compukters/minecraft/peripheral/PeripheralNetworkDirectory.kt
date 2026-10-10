@@ -175,6 +175,17 @@ internal class PeripheralNetworkDirectory(
         return get(network.id)!!
     }
 
+    /** Collapse physical/source screen memberships; a disagreement leaves the result unbound. */
+    fun consolidate(
+        sources: Set<UUID>,
+        target: PeripheralNetworkMember,
+    ) {
+        val instances = sources + target.instance
+        val inherited = instances.mapNotNull { membership[it] }.distinct().singleOrNull()
+        instances.forEach(::remove)
+        if (inherited != null) bind(inherited, target)
+    }
+
     fun remove(instance: UUID): Boolean {
         val id = membership.remove(instance) ?: return false
         val network = networks.getValue(id)

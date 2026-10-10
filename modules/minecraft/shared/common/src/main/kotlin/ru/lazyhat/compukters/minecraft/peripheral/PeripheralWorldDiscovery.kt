@@ -193,7 +193,7 @@ object ComputerPeripheralLookup {
             }
         if (direct) return true
         return PeripheralNetworkAccess.network(level, computerPosition)?.members.orEmpty().any { member ->
-            member.identity == expected && PeripheralNetworkAccess.available(level, computerPosition, member)
+            PeripheralNetworkAccess.reachableIdentity(level, computerPosition, member, expected.anchor) == expected
         }
     }
 }
@@ -279,8 +279,7 @@ internal object PeripheralWorldDiscovery {
             network
                 ?.members
                 .orEmpty()
-                .filter { member -> PeripheralNetworkAccess.available(level, computerPosition, member) }
-                .map { it.identity }
+                .mapNotNull { member -> PeripheralNetworkAccess.reachableIdentity(level, computerPosition, member) }
         val combined = (direct.contacts + remote).toSet()
         return if (combined.size > DEFAULT_LIMITS.maximumContacts) {
             PeripheralCableTraversal.LimitExceeded(PeripheralCableLimit.CONTACTS, DEFAULT_LIMITS.maximumContacts)
