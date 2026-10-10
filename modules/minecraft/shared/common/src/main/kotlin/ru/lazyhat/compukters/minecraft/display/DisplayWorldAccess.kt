@@ -11,7 +11,10 @@ import net.minecraft.core.Direction
 import net.minecraft.server.level.ServerLevel
 import ru.lazyhat.compukters.core.display.DisplayPanel
 import ru.lazyhat.compukters.core.display.DisplaySurface
+import ru.lazyhat.compukters.minecraft.peripheral.DisplayNetworkAccess
 import ru.lazyhat.compukters.minecraft.peripheral.PeripheralCableTopologyCache
+import ru.lazyhat.compukters.minecraft.peripheral.PeripheralNetworkAccess
+import ru.lazyhat.compukters.minecraft.peripheral.PeripheralNetworkStorage
 import java.util.UUID
 
 /** All canvas mutations and membership changes are confined to the owning server thread. */
@@ -119,7 +122,10 @@ internal object DisplayWorldAccess {
                 .takeIf {
                     position(it, panel.column, panel.row) == entity.blockPos &&
                         facing(it) == entity.blockState.getValue(DisplayBlock.FACING)
-                }?.let { attachBudget(level, it) }
+                }?.let {
+                    DisplayNetworkAccess.migrate(level, it)
+                    attachBudget(level, it)
+                }
         }
         if (!create) return null
         // Placing a block beyond world limits leaves an unavailable black panel, never crashes its tick.
@@ -145,9 +151,15 @@ internal object DisplayWorldAccess {
             ru.lazyhat.compukters.minecraft.peripheral
                 .PeripheralDeviceIdentity("compukters-display", level.dimension().toString(), position, "text")
         val legacyName =
-            ru.lazyhat.compukters.minecraft.peripheral.PeripheralNetworkAccess
-                .member(level, identity)
-                ?.name
+            PeripheralNetworkAccess.instance(entity)?.let { stamp ->
+                PeripheralNetworkStorage
+                    .get(level)
+                    .directory
+                    .networkOf(stamp)
+                    ?.members
+                    ?.firstOrNull { it.instance == stamp }
+                    ?.name
+            }
                 ?: ru.lazyhat.compukters.minecraft.peripheral.PeripheralDeviceNameStorage
                     .get(level)
                     .directory
@@ -158,6 +170,7 @@ internal object DisplayWorldAccess {
                 .get(level)
                 .clearName(identity)
         }
+        DisplayNetworkAccess.migrate(level, created)
         return attachBudget(level, created)
     }
 
@@ -180,7 +193,13 @@ internal object DisplayWorldAccess {
             } ?: return
         val member = surface.panels.single { position(surface, it.column, it.row) == removedPosition }
         directory.remove(member.instance)
-        if (directory.byId(surface.id) == null) publications[level]?.remove(surface.id)
+        val remaining = directory.byId(surface.id)
+        if (remaining == null) {
+            publications[level]?.remove(surface.id)
+            DisplayNetworkAccess.remove(level, surface.id)
+        } else {
+            DisplayNetworkAccess.refresh(level, remaining)
+        }
         PeripheralCableTopologyCache.invalidate(level)
     }
 
@@ -206,6 +225,7 @@ internal object DisplayWorldAccess {
         val directory = DisplayStorage.get(level).directory
         val panels = mutableListOf<DisplayPanel>()
         val oldScreens = linkedSetOf<DisplaySurface>()
+        val networkSources = linkedSetOf<UUID>()
         for (row in 0 until rows.toInt()) {
             for (column in 0 until columns.toInt()) {
                 val position = origin.relative(right, column).below(row)
@@ -214,7 +234,11 @@ internal object DisplayWorldAccess {
                 require(entity.blockState.getValue(DisplayBlock.FACING) == facing) { "Display orientations differ" }
                 val old = surface(level, entity, false)
                 require(old == null || old.panels.size == 1) { "Panel already belongs to a composite display" }
-                if (old != null) oldScreens += old
+                if (old != null) {
+                    oldScreens += old
+                    networkSources += DisplayNetworkAccess.sources(level, old)
+                }
+                PeripheralNetworkAccess.instance(entity)?.let { networkSources += it }
                 panels += DisplayPanel(column, row, UUID.fromString(entity.checkpointIdentity))
             }
         }
@@ -224,6 +248,7 @@ internal object DisplayWorldAccess {
         check(directory.snapshot().size - oldScreens.size < ru.lazyhat.compukters.core.display.DisplayDirectory.MAXIMUM_SCREENS)
         oldScreens.forEach { old -> old.panels.forEach { directory.remove(it.instance) } }
         val result = directory.create(origin.x, origin.y, origin.z, facings.indexOf(facing), columns.toInt(), rows.toInt(), panels)
+        DisplayNetworkAccess.consolidate(level, networkSources, result)
         panels.forEach { panel -> level.getBlockEntity(position(result, panel.column, panel.row))?.setChanged() }
         PeripheralCableTopologyCache.invalidate(level)
         return result
@@ -246,9 +271,15 @@ internal object DisplayWorldAccess {
         require(surface.panels.none { it.column == column && it.row == row })
         val old = surface(level, entity, false)
         require(old == null || old.panels.size == 1) { "Panel already belongs to a composite screen" }
+        require(DisplayNetworkAccess.migrate(level, surface)) { "Load screen panels to adopt their old network bindings before joining" }
+        val networkSources =
+            DisplayNetworkAccess.sources(level, surface) +
+                old?.let { DisplayNetworkAccess.sources(level, it) }.orEmpty() +
+                listOfNotNull(PeripheralNetworkAccess.instance(entity))
         val instance = UUID.fromString(entity.checkpointIdentity)
         if (old != null) directory.remove(instance)
         directory.join(id, DisplayPanel(column, row, instance))
+        DisplayNetworkAccess.consolidate(level, networkSources.toSet(), requireNotNull(directory.byId(id)))
         entity.setChanged()
         PeripheralCableTopologyCache.invalidate(level)
     }

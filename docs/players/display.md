@@ -49,7 +49,10 @@ An amber panel inside a screen belongs to a separate screen and has not joined t
 for the membership and click-action hints. Selecting the first corner previews a valid rectangle while aiming at the
 second corner. Putting the configurator away removes the overlay.
 
-A composite screen has one name, one resolution, one image and one writer lease. Reaching any loaded member reaches
+A composite screen has one network binding, one name, one resolution, one image and one writer lease.
+Connecting or disconnecting any panel changes the binding of the whole screen. Assembly and joining inherit the
+only network used by the participating screens; unbound panels do not interfere. If participating screens belong
+to different networks, assembly or joining succeeds and disconnects the resulting screen from all networks. Reaching any loaded member reaches
 the screen; typed discovery lists it once. Coordinates start at the top left when viewing its front, increase rightward
 and downward, and include holes. Breaking a panel preserves geometry and pixels behind the hole. A new panel joined
 there shows those pixels. Breaking the last panel deletes the canvas, name and resolution. Unloading a chunk does not.

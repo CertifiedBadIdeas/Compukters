@@ -49,6 +49,7 @@ internal object GraphicalDisplayGameTestScenario {
                 }.screen == null,
             "overlay created an uninitialized screen",
         )
+        val inheritedNetwork = PeripheralNetworkGameTestFixtures.bind(helper, computerPosition, first)
         val player = helper.makeMockServerPlayerInLevel()
         val stack = ItemStack(CompuktersRegistry.PERIPHERAL_CONFIGURATOR_ITEM.get())
         val selections = mutableMapOf<String, String>()
@@ -68,7 +69,38 @@ internal object GraphicalDisplayGameTestScenario {
             ComputerPeripheralIdentity("compukters-display", helper.absolutePos(first), "text"),
             "panel",
         )
+        helper.assertTrue(
+            PeripheralNetworkGameTestFixtures.bind(helper, second) == inheritedNetwork,
+            "assembly did not inherit the only bound panel's network",
+        )
         PeripheralNetworkGameTestFixtures.bind(helper, computerPosition, first, second)
+
+        fun inspection() =
+            ru.lazyhat.compukters.minecraft.peripheral.PeripheralConfiguratorServer.inspect(
+                helper.level,
+                ru.lazyhat.compukters.minecraft.peripheral
+                    .PeripheralConfiguratorContext(helper.absolutePos(computerPosition), Direction.WEST),
+                ru.lazyhat.compukters.minecraft.peripheral.PeripheralConfiguratorMode.INSPECT_NETWORK,
+            )
+        helper.assertTrue(inspection().entries.size == 2, "binding both panels created duplicate network members")
+        helper.assertTrue(
+            listOf(first, second).all { pos ->
+                ru.lazyhat.compukters.minecraft.peripheral.ComputerPeripheralLookup.isReachable(
+                    helper.level,
+                    helper.absolutePos(computerPosition),
+                    ComputerPeripheralIdentity("compukters-display", helper.absolutePos(pos), "text"),
+                )
+            },
+            "a network-bound screen was unreachable through a non-anchor panel",
+        )
+        helper.assertTrue(
+            inspection().entries.single { it.providerId == "compukters-display" }.instance == id,
+            "network identity differs from logical screen identity",
+        )
+        PeripheralNetworkGameTestFixtures.unbind(helper, second)
+        helper.assertTrue(inspection().entries.size == 1, "unbinding a panel did not unbind the whole screen")
+        PeripheralNetworkGameTestFixtures.bind(helper, computerPosition, second)
+        helper.assertTrue(inspection().entries.size == 2, "binding through the other panel failed")
         val beforeOverlayColor = display.displayColor(0, 0)
         val overlay =
             ru.lazyhat.compukters.minecraft.peripheral.ConfiguratorOverlayServer
@@ -133,6 +165,21 @@ internal object GraphicalDisplayGameTestScenario {
                 helper.assertTrue(display.screenIdentity() == other.screenIdentity(), "composite identity diverged")
                 helper.setBlock(first, Blocks.AIR)
                 helper.assertTrue(other.screenIdentity() == id, "removing a panel deleted the remaining canvas")
+                helper.assertTrue(
+                    inspection().entries.single { it.providerId == "compukters-display" }.availability ==
+                        ru.lazyhat.compukters.minecraft.peripheral.PeripheralNetworkAvailability.AVAILABLE,
+                    "removing the address panel disconnected the remaining screen",
+                )
+                helper.assertTrue(
+                    ru.lazyhat.compukters.minecraft.peripheral.ComputerPeripheralLookup
+                        .find(
+                            helper.level,
+                            helper.absolutePos(computerPosition),
+                            "compukters-display",
+                            "panel",
+                        ).status == ru.lazyhat.compukters.minecraft.peripheral.ComputerPeripheralLookupStatus.FOUND,
+                    "named discovery did not reach the surviving panel",
+                )
                 helper.assertTrue(other.displayColor(0, 0) == 0xFFFF00, "pixels in a hole were lost")
                 helper.setBlock(
                     first,
@@ -175,6 +222,7 @@ internal object GraphicalDisplayGameTestScenario {
                 )
                 helper.setBlock(first, Blocks.AIR)
                 helper.setBlock(second, Blocks.AIR)
+                helper.assertTrue(inspection().entries.size == 1, "last panel removal retained network membership")
                 helper.setBlock(
                     second,
                     CompuktersRegistry.DISPLAY
@@ -186,6 +234,80 @@ internal object GraphicalDisplayGameTestScenario {
                 helper.assertTrue(
                     fresh.screenIdentity() != id && fresh.screenMode() == 2 && !fresh.hasDisplayPixels(),
                     "last panel destruction retained the old canvas",
+                )
+                val left = BlockPos(4, 2, 6)
+                val right = BlockPos(5, 2, 6)
+                for (pos in listOf(left, right)) {
+                    helper.setBlock(
+                        pos,
+                        CompuktersRegistry.DISPLAY
+                            .get()
+                            .defaultBlockState()
+                            .setValue(DisplayBlock.FACING, Direction.NORTH),
+                    )
+                }
+                val leftNetwork = PeripheralNetworkGameTestFixtures.bind(helper, left)
+                val rightNetwork = PeripheralNetworkGameTestFixtures.bind(helper, right)
+                helper.assertTrue(leftNetwork != rightNetwork, "conflict fixture did not create separate networks")
+                selections.clear()
+                for (pos in listOf(left, right)) {
+                    val absoluteConflict = helper.absolutePos(pos)
+                    player.setPos(absoluteConflict.x + 0.5, absoluteConflict.y + 0.5, absoluteConflict.z + 0.5)
+                    DisplayAssembly.click(player, stack, absoluteConflict, { selections[it].orEmpty() }, { key, value ->
+                        if (value == null) selections.remove(key) else selections[key] = value
+                    })
+                }
+                val conflictOverlay =
+                    ru.lazyhat.compukters.minecraft.peripheral.ConfiguratorOverlayServer.collect(
+                        helper.level,
+                        helper.absolutePos(left),
+                    )
+                val conflictDevices =
+                    conflictOverlay.devices.filter {
+                        it.position in
+                            setOf(helper.absolutePos(left), helper.absolutePos(right))
+                    }
+                helper.assertTrue(
+                    conflictDevices.size == 2 && conflictDevices.all { it.network == null } &&
+                        conflictDevices.map { it.screen }.distinct().size == 1 && conflictDevices.first().screen != null,
+                    "conflicting panel networks prevented assembly or survived on the new screen",
+                )
+
+                fun replaceAndJoin(networkBeforeJoin: java.util.UUID?): java.util.UUID {
+                    helper.setBlock(right, Blocks.AIR)
+                    helper.setBlock(
+                        right,
+                        CompuktersRegistry.DISPLAY
+                            .get()
+                            .defaultBlockState()
+                            .setValue(DisplayBlock.FACING, Direction.NORTH),
+                    )
+                    val panelNetwork = PeripheralNetworkGameTestFixtures.bind(helper, right)
+                    helper.assertTrue(panelNetwork != networkBeforeJoin, "join fixture did not create a different network")
+                    val absoluteJoin = helper.absolutePos(right)
+                    player.setPos(absoluteJoin.x + 0.5, absoluteJoin.y + 0.5, absoluteJoin.z + 0.5)
+                    DisplayAssembly.click(player, stack, absoluteJoin, { selections[it].orEmpty() }, { key, value ->
+                        if (value == null) selections.remove(key) else selections[key] = value
+                    })
+                    return panelNetwork
+                }
+                val targetNetwork = PeripheralNetworkGameTestFixtures.bind(helper, left)
+                replaceAndJoin(targetNetwork)
+                helper.assertTrue(
+                    ru.lazyhat.compukters.minecraft.peripheral.ConfiguratorOverlayServer
+                        .collect(helper.level, helper.absolutePos(left))
+                        .devices
+                        .filter { it.position in setOf(helper.absolutePos(left), helper.absolutePos(right)) }
+                        .all {
+                            it.network ==
+                                null
+                        },
+                    "joining a panel from another network did not clear the entire screen binding",
+                )
+                val joinedNetwork = replaceAndJoin(null)
+                helper.assertTrue(
+                    PeripheralNetworkGameTestFixtures.bind(helper, left) == joinedNetwork,
+                    "joining the only bound panel did not bind the whole screen to its network",
                 )
             }.thenSucceed()
     }

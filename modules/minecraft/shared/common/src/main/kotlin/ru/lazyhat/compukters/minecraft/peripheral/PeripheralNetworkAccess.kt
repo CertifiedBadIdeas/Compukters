@@ -51,6 +51,13 @@ object PeripheralNetworkAccess {
     ): PeripheralNetwork? {
         if (!level.hasChunkAt(computer)) return null
         val entity = level.getBlockEntity(computer) ?: return null
+        if (entity is ru.lazyhat.compukters.minecraft.display.DisplayBlockEntity) {
+            val screen =
+                ru.lazyhat.compukters.minecraft.display.DisplayWorldAccess
+                    .surface(level, entity, false) ?: return null
+            if (!DisplayNetworkAccess.migrate(level, screen)) return null
+            return PeripheralNetworkStorage.get(level).directory.networkOf(screen.id)
+        }
         refresh(entity)
         val id = instance(entity) ?: return null
         return PeripheralNetworkStorage.get(level).directory.networkOf(id)
@@ -92,6 +99,18 @@ object PeripheralNetworkAccess {
     ): PeripheralNetworkMember? {
         if (!level.hasChunkAt(identity.anchor)) return null
         val entity = level.getBlockEntity(identity.anchor) ?: return null
+        if (entity is ru.lazyhat.compukters.minecraft.display.DisplayBlockEntity) {
+            val screen =
+                ru.lazyhat.compukters.minecraft.display.DisplayWorldAccess
+                    .surface(level, entity, false) ?: return null
+            if (!DisplayNetworkAccess.migrate(level, screen)) return null
+            return PeripheralNetworkStorage
+                .get(level)
+                .directory
+                .networkOf(screen.id)
+                ?.members
+                ?.firstOrNull { it.instance == screen.id }
+        }
         val stamp = instance(entity) ?: return null
         return PeripheralNetworkStorage.get(level).directory.networkOf(stamp)?.members?.firstOrNull {
             it.instance == stamp && it.identity == identity
@@ -122,6 +141,21 @@ object PeripheralNetworkAccess {
         )
     }
 
+    internal fun reachableIdentity(
+        level: ServerLevel,
+        computer: BlockPos,
+        member: PeripheralNetworkMember,
+        contact: BlockPos? = null,
+    ): PeripheralDeviceIdentity? {
+        if (member.identity.dimension != level.dimension().toString()) return null
+        if (member.identity.providerId == "compukters-display") {
+            ru.lazyhat.compukters.minecraft.display.DisplayStorage.get(level).directory.byId(member.instance)?.let {
+                return DisplayNetworkAccess.reachable(level, computer, it, contact)
+            }
+        }
+        return member.identity.takeIf { (contact == null || contact == it.anchor) && available(level, computer, member) }
+    }
+
     internal fun available(
         level: ServerLevel,
         computer: BlockPos,
@@ -134,6 +168,11 @@ object PeripheralNetworkAccess {
         member: PeripheralNetworkMember,
     ): PeripheralNetworkAvailability {
         if (member.identity.dimension != level.dimension().toString()) return PeripheralNetworkAvailability.OTHER_DIMENSION
+        if (member.identity.providerId == "compukters-display") {
+            ru.lazyhat.compukters.minecraft.display.DisplayStorage.get(level).directory.byId(member.instance)?.let {
+                return DisplayNetworkAccess.availability(level, computer, it)
+            }
+        }
         if (!peripheralInRange(
                 level.dimension().toString(),
                 computer,

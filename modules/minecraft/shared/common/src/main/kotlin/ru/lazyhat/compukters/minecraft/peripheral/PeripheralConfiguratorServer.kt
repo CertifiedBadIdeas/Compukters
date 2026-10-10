@@ -229,12 +229,14 @@ object PeripheralConfiguratorServer {
         val sender = opener ?: return false
         val level = player.level() as? ServerLevel ?: return false
         if (!validRange(player, context)) return false
-        val inspection = inspection(level, context, mode)
+        val inspection = inspect(level, context, mode)
         sender(player, hand, inspection)
         return true
     }
 
-    private fun inspection(
+    /** Build the same server-side snapshot used by the configurator UI. */
+    @JvmStatic
+    fun inspect(
         level: ServerLevel,
         context: PeripheralConfiguratorContext,
         mode: PeripheralConfiguratorMode,

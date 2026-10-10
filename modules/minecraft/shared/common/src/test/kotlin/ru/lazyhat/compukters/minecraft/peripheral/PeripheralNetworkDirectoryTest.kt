@@ -147,6 +147,55 @@ class PeripheralNetworkDirectoryTest {
         assertFailsWith<IllegalArgumentException> { PeripheralNetworkCodecs.directory.parse(JsonOps.INSTANCE, encoded).getOrThrow() }
     }
 
+    @Test
+    fun `screen inherits the only bound panel and collapses duplicate bindings`() {
+        val directory = PeripheralNetworkDirectory()
+        val network = directory.create("factory")
+        val first = member(2)
+        val second = member(3)
+        val screen = member(2).copy(name = "panel")
+        directory.bind(network.id, first)
+        directory.consolidate(setOf(first.instance, second.instance), screen)
+        assertEquals(listOf(screen), directory.get(network.id)!!.members)
+        assertNull(directory.networkOf(first.instance))
+        directory.bind(network.id, second)
+        directory.consolidate(setOf(second.instance), screen)
+        assertEquals(listOf(screen), directory.get(network.id)!!.members)
+        val encoded = PeripheralNetworkCodecs.directory.encodeStart(JsonOps.INSTANCE, directory).getOrThrow()
+        val restored = PeripheralNetworkCodecs.directory.parse(JsonOps.INSTANCE, encoded).getOrThrow()
+        assertEquals(network.id, restored.networkOf(screen.instance)?.id)
+    }
+
+    @Test
+    fun `assembling panels from different networks clears all source and target bindings`() {
+        val directory = PeripheralNetworkDirectory()
+        val firstNetwork = directory.create("first")
+        val secondNetwork = directory.create("second")
+        val first = member(2)
+        val second = member(3)
+        val unrelated = member(10)
+        directory.bind(firstNetwork.id, first)
+        directory.bind(firstNetwork.id, unrelated)
+        directory.bind(secondNetwork.id, second)
+        directory.consolidate(setOf(second.instance), first)
+        assertNull(directory.networkOf(first.instance))
+        assertNull(directory.networkOf(second.instance))
+        assertEquals(listOf(unrelated), directory.get(firstNetwork.id)!!.members)
+        assertTrue(directory.get(secondNetwork.id)!!.members.isEmpty())
+    }
+
+    @Test
+    fun `consolidation at the member limit frees source slots before binding the screen`() {
+        val directory = PeripheralNetworkDirectory()
+        val network = directory.create("factory")
+        val members = List(PeripheralNetworkDirectory.MAXIMUM_MEMBERS) { member(it) }
+        members.forEach { directory.bind(network.id, it) }
+        val screen = member(0)
+        directory.consolidate(members.take(2).map { it.instance }.toSet(), screen)
+        assertEquals(PeripheralNetworkDirectory.MAXIMUM_MEMBERS - 1, directory.get(network.id)!!.members.size)
+        assertEquals(network.id, directory.networkOf(screen.instance)?.id)
+    }
+
     private fun member(
         x: Int,
         provider: String = "display",

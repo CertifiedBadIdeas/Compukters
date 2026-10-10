@@ -105,9 +105,9 @@ object ConfiguratorOverlayServer {
                             Direction.entries.flatMap { PeripheralDeviceNames.resolveContact(level, entity.blockPos, it) }.distinct()
                         }
                     if (entity !is ComputerBlockEntity && entity !is DisplayBlockEntity && identities.isEmpty()) continue
-                    val instance = PeripheralNetworkAccess.instance(entity)
-                    val network = instance?.let(networks::networkOf)
                     val screen = (entity as? DisplayBlockEntity)?.let { directory.byPanel(UUID.fromString(it.checkpointIdentity)) }
+                    val instance = screen?.id ?: PeripheralNetworkAccess.instance(entity)
+                    val network = instance?.let(networks::networkOf)
                     val names =
                         identities.mapNotNull { identity ->
                             network?.members?.firstOrNull { it.instance == instance && it.identity == identity }?.name
