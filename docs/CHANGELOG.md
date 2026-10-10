@@ -11,6 +11,8 @@ section: players
 This page records user-visible Compukters changes. The newest version is first; releases remain as permanent section
 headings so this page has one stable URL that can be shared outside the repository.
 
+## 0.6.0 — In development
+
 ## 0.5.1 — 2026-10-10
 
 - Create, Sable and Propulsion integrations have independent repositories and tag-only GitHub release workflows.
