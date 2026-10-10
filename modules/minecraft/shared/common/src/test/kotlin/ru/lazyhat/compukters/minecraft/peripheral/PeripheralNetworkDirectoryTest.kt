@@ -1,0 +1,121 @@
+/*
+ * The Compukters Developers
+ *
+ * Copyright 2026 Vsevolod Petrov (lazyhat)
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     https://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package ru.lazyhat.compukters.minecraft.peripheral
+
+import com.mojang.serialization.JsonOps
+import net.minecraft.core.BlockPos
+import java.util.UUID
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
+import kotlin.test.assertNull
+import kotlin.test.assertTrue
+
+class PeripheralNetworkDirectoryTest {
+    @Test
+    fun `computer removal retains network and devices and replacement must explicitly join`() {
+        val directory = PeripheralNetworkDirectory()
+        val network = directory.create("factory")
+        val pc = member(0, PeripheralNetworkMember.COMPUTER_PROVIDER)
+        val device = member(32)
+        directory.bind(network.id, pc)
+        directory.bind(network.id, device)
+        directory.remove(pc.instance)
+        val replacement = member(0, PeripheralNetworkMember.COMPUTER_PROVIDER)
+        assertNull(directory.networkOf(replacement.instance))
+        assertEquals(listOf(device), directory.get(network.id)?.members)
+        directory.bind(network.id, replacement)
+        assertEquals(network.id, directory.networkOf(replacement.instance)?.id)
+    }
+
+    @Test
+    fun `membership has no diameter limit but each computer has independent spherical reach`() {
+        val directory = PeripheralNetworkDirectory()
+        val network = directory.create("factory")
+        val near = member(64)
+        val far = member(200)
+        directory.bind(network.id, near)
+        directory.bind(network.id, far)
+        assertTrue(peripheralInRange(DIMENSION, BlockPos.ZERO, near.identity, 64))
+        assertFalse(peripheralInRange(DIMENSION, BlockPos.ZERO, far.identity, 64))
+        assertTrue(peripheralInRange(DIMENSION, BlockPos(200, 0, 0), far.identity, 64))
+        assertFalse(peripheralInRange("minecraft:the_nether", BlockPos.ZERO, near.identity, 64))
+        assertFalse(peripheralInRange(DIMENSION, BlockPos(0, 1, 0), near.identity, 64))
+    }
+
+    @Test
+    fun `membership and instance identities survive codec reload`() {
+        val directory = PeripheralNetworkDirectory()
+        val network = directory.create("factory")
+        val device = member(2)
+        directory.bind(network.id, device)
+        val encoded = PeripheralNetworkCodecs.directory.encodeStart(JsonOps.INSTANCE, directory).getOrThrow()
+        val restored = PeripheralNetworkCodecs.directory.parse(JsonOps.INSTANCE, encoded).getOrThrow()
+        assertEquals(directory.snapshot(), restored.snapshot())
+        assertEquals(network.id, restored.networkOf(device.instance)?.id)
+        assertNull(restored.networkOf(member(2).instance))
+    }
+
+    @Test
+    fun `device cannot join multiple networks and rejected binding preserves state`() {
+        val directory = PeripheralNetworkDirectory()
+        val first = directory.create("first")
+        val second = directory.create("second")
+        val device = member(0)
+        directory.bind(first.id, device)
+        val before = directory.snapshot()
+        assertFailsWith<IllegalArgumentException> { directory.bind(second.id, device) }
+        assertEquals(before, directory.snapshot())
+    }
+
+    @Test
+    fun `member limit applies to far and unavailable members without partial mutation`() {
+        val directory = PeripheralNetworkDirectory()
+        val network = directory.create("factory")
+        repeat(PeripheralNetworkDirectory.MAXIMUM_MEMBERS) { directory.bind(network.id, member(it * 100)) }
+        assertFailsWith<IllegalArgumentException> { directory.bind(network.id, member(-1)) }
+        assertEquals(PeripheralNetworkDirectory.MAXIMUM_MEMBERS, directory.get(network.id)?.members?.size)
+    }
+
+    @Test
+    fun `malformed duplicate membership is rejected on reload`() {
+        val device = member(0)
+        assertFailsWith<IllegalArgumentException> {
+            PeripheralNetworkDirectory(
+                listOf(
+                    PeripheralNetwork(UUID.randomUUID(), "first", listOf(device)),
+                    PeripheralNetwork(UUID.randomUUID(), "second", listOf(device)),
+                ),
+            )
+        }
+    }
+
+    private fun member(
+        x: Int,
+        provider: String = "display",
+    ) = PeripheralNetworkMember(
+        UUID.randomUUID(),
+        PeripheralDeviceIdentity(provider, DIMENSION, BlockPos(x, 0, 0), "device"),
+    )
+
+    companion object {
+        private const val DIMENSION = "minecraft:overworld"
+    }
+}

@@ -56,6 +56,14 @@ object CompuktersServerConfig {
             .comment("Maximum calibrated share of one server tick granted to Guest VM instructions, in percent")
             .defineInRange("vm.host_share_percent", 5, 1, 50)
 
+    private val peripheralRadius =
+        builder
+            .comment(
+                "Maximum Euclidean distance in blocks from a computer to its bound peripheral; loaded devices in the same dimension only",
+            ).defineInRange("peripherals.access_radius", 64, 1, 1024)
+
+    fun peripheralAccessRadius(): Int = peripheralRadius.get()
+
     val SPEC: ModConfigSpec = builder.build()
 
     fun maximumActors(): Int = maximumActors.get()
