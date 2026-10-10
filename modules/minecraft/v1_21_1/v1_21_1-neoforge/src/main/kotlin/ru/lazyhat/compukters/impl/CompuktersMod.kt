@@ -68,6 +68,7 @@ class CompuktersMod(
             IdeClientBootstrap.register(eventBus)
             DisplayClientBootstrap.register(eventBus)
         }
+        NeoForge.EVENT_BUS.addListener(ru.lazyhat.compukters.impl.peripheral.PeripheralNetworkLifecycle::onChunkLoad)
         NeoForge.EVENT_BUS.addListener(NeoForgeWorldFileSystemStores::onLevelSave)
         NeoForge.EVENT_BUS.addListener(VmBenchmarkCommands::register)
         NeoForge.EVENT_BUS.addListener(ComputerCommands::register)

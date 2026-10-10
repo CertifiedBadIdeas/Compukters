@@ -18,50 +18,101 @@
 
 package ru.lazyhat.compukters.minecraft.peripheral
 
+import net.minecraft.core.component.DataComponents
+import net.minecraft.nbt.CompoundTag
 import net.minecraft.network.chat.Component
 import net.minecraft.server.level.ServerLevel
 import net.minecraft.server.level.ServerPlayer
+import net.minecraft.world.InteractionHand
 import net.minecraft.world.InteractionResult
+import net.minecraft.world.InteractionResultHolder
 import net.minecraft.world.item.Item
+import net.minecraft.world.item.ItemStack
+import net.minecraft.world.item.component.CustomData
 import net.minecraft.world.item.context.UseOnContext
+import net.minecraft.world.level.Level
+import ru.lazyhat.compukters.minecraft.computer.ComputerBlockEntity
+import java.util.UUID
 
 class PeripheralConfiguratorItem(
     properties: Properties,
 ) : Item(properties) {
+    fun networkMode(stack: ItemStack): Boolean = stack.get(DataComponents.CUSTOM_DATA)?.copyTag()?.getBoolean(MODE_KEY) ?: false
+
+    fun selectedNetwork(stack: ItemStack): UUID? {
+        val value = stack.get(DataComponents.CUSTOM_DATA)?.copyTag()?.getString(NETWORK_KEY) ?: return null
+        return runCatching { UUID.fromString(value) }.getOrNull()
+    }
+
+    fun selectNetwork(
+        stack: ItemStack,
+        id: UUID?,
+    ) {
+        val data = stack.get(DataComponents.CUSTOM_DATA)?.copyTag() ?: CompoundTag()
+        if (id == null) data.remove(NETWORK_KEY) else data.putString(NETWORK_KEY, id.toString())
+        stack.set(DataComponents.CUSTOM_DATA, CustomData.of(data))
+    }
+
+    override fun isFoil(stack: ItemStack): Boolean = selectedNetwork(stack) != null || super.isFoil(stack)
+
+    override fun use(
+        level: Level,
+        player: net.minecraft.world.entity.player.Player,
+        hand: InteractionHand,
+    ): InteractionResultHolder<ItemStack> {
+        val stack = player.getItemInHand(hand)
+        if (player is ServerPlayer) {
+            if (player.isShiftKeyDown) {
+                selectNetwork(stack, null)
+                player.sendSystemMessage(Component.translatable("item.compukters.peripheral_configurator.selection_cleared"))
+            } else {
+                val data = stack.get(DataComponents.CUSTOM_DATA)?.copyTag() ?: CompoundTag()
+                val next = !networkMode(stack)
+                data.putBoolean(MODE_KEY, next)
+                stack.set(DataComponents.CUSTOM_DATA, CustomData.of(data))
+                player.sendSystemMessage(
+                    Component.translatable("item.compukters.peripheral_configurator.mode." + if (next) "network" else "name"),
+                )
+            }
+        }
+        return InteractionResultHolder.sidedSuccess(stack, level.isClientSide)
+    }
+
     override fun useOn(context: UseOnContext): InteractionResult {
         if (context.level.isClientSide) return InteractionResult.SUCCESS
         val level = context.level as? ServerLevel ?: return InteractionResult.PASS
         val player = context.player as? ServerPlayer ?: return InteractionResult.PASS
-        if (PeripheralCableBlocks.contains(level.getBlockState(context.clickedPos))) {
-            return if (PeripheralConfiguratorServer.openCable(player, context.hand, context.clickedPos, context.clickedFace)) {
-                InteractionResult.SUCCESS
-            } else {
-                InteractionResult.CONSUME
+        if (networkMode(context.itemInHand)) {
+            val result = PeripheralNetworkBinding.click(player, context.hand, context.clickedPos, context.clickedFace)
+            player.sendSystemMessage(
+                Component.translatable("item.compukters.peripheral_configurator.binding.${result.name.lowercase(java.util.Locale.ROOT)}"),
+            )
+            return InteractionResult.SUCCESS
+        }
+        if (level.getBlockEntity(context.clickedPos) is ComputerBlockEntity) {
+            if (!PeripheralConfiguratorServer.openComputer(player, context.hand, context.clickedPos, context.clickedFace)) {
+                player.sendSystemMessage(Component.translatable("item.compukters.peripheral_configurator.no_network"))
             }
+            return InteractionResult.CONSUME
         }
         val identities = PeripheralDeviceNames.resolveContact(level, context.clickedPos, context.clickedFace)
         if (player.isShiftKeyDown && identities.size == 1) {
-            val identity = identities.single()
-            PeripheralDeviceNames.clearName(level, identity)
-            player.displayClientMessage(Component.translatable("item.compukters.peripheral_configurator.cleared"), false)
+            PeripheralDeviceNames.clearName(level, identities.single())
+            player.sendSystemMessage(Component.translatable("item.compukters.peripheral_configurator.cleared"))
             return InteractionResult.SUCCESS
         }
         if (identities.size > 1) {
-            player.displayClientMessage(Component.translatable("item.compukters.peripheral_configurator.ambiguous"), false)
+            player.sendSystemMessage(Component.translatable("item.compukters.peripheral_configurator.ambiguous"))
             return InteractionResult.CONSUME
         }
-        return if (
-            PeripheralConfiguratorServer.openDevice(
-                player,
-                context.hand,
-                context.clickedPos,
-                context.clickedFace,
-            )
-        ) {
-            InteractionResult.SUCCESS
-        } else {
-            player.displayClientMessage(Component.translatable("item.compukters.peripheral_configurator.missing"), false)
-            InteractionResult.CONSUME
+        if (!PeripheralConfiguratorServer.openDevice(player, context.hand, context.clickedPos, context.clickedFace)) {
+            player.sendSystemMessage(Component.translatable("item.compukters.peripheral_configurator.missing"))
         }
+        return InteractionResult.CONSUME
+    }
+
+    companion object {
+        private const val MODE_KEY = "compukters_network_mode"
+        private const val NETWORK_KEY = "compukters_selected_network"
     }
 }

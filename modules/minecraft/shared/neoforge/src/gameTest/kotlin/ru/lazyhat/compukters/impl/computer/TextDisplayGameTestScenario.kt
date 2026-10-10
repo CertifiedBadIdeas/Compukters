@@ -28,11 +28,8 @@ import java.util.concurrent.CompletableFuture
 internal object TextDisplayGameTestScenario {
     fun run(helper: GameTestHelper) {
         val computerPosition = BlockPos(2, 2, 2)
-        val junction = BlockPos(4, 2, 2)
         val displayPosition = BlockPos(5, 2, 2)
         helper.setBlock(computerPosition, CompuktersRegistry.COMPUTER.get())
-        helper.setBlock(BlockPos(3, 2, 2), CompuktersRegistry.PERIPHERAL_CABLE.get())
-        helper.setBlock(junction, CompuktersRegistry.PERIPHERAL_CABLE.get())
         helper.setBlock(
             displayPosition,
             CompuktersRegistry.DISPLAY
@@ -53,6 +50,7 @@ internal object TextDisplayGameTestScenario {
             ComputerPeripheralIdentity("compukters-display", helper.absolutePos(displayPosition), "text"),
             "panel",
         )
+        PeripheralNetworkGameTestFixtures.bind(helper, computerPosition, displayPosition)
         computer.prepareTerminalAsync()
         var setup: CompletableFuture<Void>? = null
 
@@ -72,7 +70,7 @@ internal object TextDisplayGameTestScenario {
                         "compukters-display",
                         "panel",
                     )
-                helper.assertTrue(lookup.status == ComputerPeripheralLookupStatus.FOUND, "display was not found through cable")
+                helper.assertTrue(lookup.status == ComputerPeripheralLookupStatus.FOUND, "display was not found through bound network")
                 setup =
                     computer
                         .verifyForDeployAsync(fixture())
@@ -119,9 +117,9 @@ internal object TextDisplayGameTestScenario {
                 helper.assertTrue(display.displayRows()[0].startsWith("Ready"), "hibernation did not restore display rows and lease")
                 helper.assertTrue(computer.terminalMachineId != oldEpoch, "restored display writer retained its old epoch")
             }.thenExecute {
-                helper.setBlock(junction, Blocks.AIR)
+                PeripheralNetworkGameTestFixtures.unbind(helper, displayPosition)
             }.thenWaitUntil {
-                helper.assertTrue(display.displayRows()[0].isBlank(), "display did not clear after cable disconnect")
+                helper.assertTrue(display.displayRows()[0].isBlank(), "display did not clear after network removal")
             }.thenSucceed()
     }
 

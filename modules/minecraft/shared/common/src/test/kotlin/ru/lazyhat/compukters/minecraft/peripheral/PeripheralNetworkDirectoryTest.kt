@@ -107,6 +107,46 @@ class PeripheralNetworkDirectoryTest {
         }
     }
 
+    @Test
+    fun `relocation retains exact instance membership and its name`() {
+        val directory = PeripheralNetworkDirectory()
+        val network = directory.create("factory")
+        val device = member(2)
+        directory.bind(network.id, device)
+        directory.setName(device.instance, device.identity, "pump")
+        assertTrue(directory.relocate(device.instance, DIMENSION, BlockPos(20, 3, 4)))
+        val restored = directory.networkOf(device.instance)!!.members.single()
+        assertEquals("pump", restored.name)
+        assertEquals(BlockPos(20, 3, 4), restored.identity.anchor)
+        assertFalse(directory.relocate(device.instance, DIMENSION, restored.identity.anchor))
+    }
+
+    @Test
+    fun `network and names survive the actual target saved data round trip`() {
+        val storage = PeripheralNetworkStorage()
+        val network = storage.directory.create("factory")
+        val device = member(2)
+        storage.directory.bind(network.id, device)
+        storage.directory.setName(device.instance, device.identity, "pump")
+        storage.setDirty()
+        val restored = PeripheralNetworkStorageTestPersistence.roundTrip(storage)
+        assertEquals(storage.directory.snapshot(), restored.directory.snapshot())
+        assertEquals(network.id, restored.directory.networkOf(device.instance)?.id)
+    }
+
+    @Test
+    fun `unknown persisted schema version is rejected`() {
+        val encoded =
+            PeripheralNetworkCodecs.directory
+                .encodeStart(
+                    JsonOps.INSTANCE,
+                    PeripheralNetworkDirectory(),
+                ).getOrThrow()
+                .asJsonObject
+        encoded.addProperty("version", 2)
+        assertFailsWith<IllegalArgumentException> { PeripheralNetworkCodecs.directory.parse(JsonOps.INSTANCE, encoded).getOrThrow() }
+    }
+
     private fun member(
         x: Int,
         provider: String = "display",

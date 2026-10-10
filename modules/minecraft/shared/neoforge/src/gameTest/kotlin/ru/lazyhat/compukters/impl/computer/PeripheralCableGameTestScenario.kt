@@ -33,7 +33,6 @@ import ru.lazyhat.compukters.minecraft.computer.ComputerPeripheralProvider
 import ru.lazyhat.compukters.minecraft.peripheral.ComputerPeripheralLookup
 import ru.lazyhat.compukters.minecraft.peripheral.ComputerPeripheralLookupStatus
 import ru.lazyhat.compukters.minecraft.peripheral.ComputerPeripheralNames
-import ru.lazyhat.compukters.minecraft.peripheral.PeripheralCableBlock
 import ru.lazyhat.compukters.minecraft.peripheral.PeripheralConfiguratorContext
 import ru.lazyhat.compukters.minecraft.peripheral.PeripheralConfiguratorSaveResult
 import ru.lazyhat.compukters.minecraft.peripheral.PeripheralConfiguratorServer
@@ -68,38 +67,73 @@ internal object PeripheralCableGameTestScenario {
         helper
             .startSequence()
             .thenExecuteAfter(2) {
-                helper.assertTrue(
-                    helper.getBlockState(BlockPos(4, 2, 3)).getValue(PeripheralCableBlock.EAST),
-                    "cable did not connect to the first compatible block",
-                )
-                helper.assertTrue(
-                    helper.getBlockState(BlockPos(4, 2, 1)).getValue(PeripheralCableBlock.EAST),
-                    "cable did not connect to the second compatible block",
-                )
-                assertFound(helper, computer, "input", helper.absolutePos(firstDevice))
-                assertFound(helper, computer, "output", helper.absolutePos(secondDevice))
-                verifyConfiguratorSave(helper, computer, firstIdentity, secondIdentity)
-                val adjacent = computer.above()
-                helper.setBlock(adjacent, Blocks.BARREL)
-                ComputerPeripheralNames.setName(
-                    level,
-                    ComputerPeripheralIdentity(TEST_PROVIDER_ID, helper.absolutePos(adjacent), FIRST_DEVICE_KEY),
-                    "input",
-                )
-                assertStatus(helper, computer, "input", ComputerPeripheralLookupStatus.AMBIGUOUS)
-                helper.setBlock(adjacent, Blocks.AIR)
-                assertFound(helper, computer, "input", firstIdentity.anchor)
-            }.thenExecute {
-                helper.setBlock(junction, Blocks.AIR)
+                // Physical legacy cables do not grant remote peripheral access anymore.
                 assertStatus(helper, computer, "input", ComputerPeripheralLookupStatus.MISSING)
                 assertStatus(helper, computer, "output", ComputerPeripheralLookupStatus.MISSING)
+                PeripheralNetworkGameTestFixtures.bind(helper, computer, firstDevice, secondDevice)
+                assertFound(helper, computer, "input", firstIdentity.anchor)
+                assertFound(helper, computer, "output", secondIdentity.anchor)
+                verifyConfiguratorSave(helper, computer, firstIdentity, secondIdentity)
             }.thenExecute {
-                helper.setBlock(junction, cable)
-                assertFound(helper, computer, "input", helper.absolutePos(firstDevice))
-                assertFound(helper, computer, "output", helper.absolutePos(secondDevice))
+                // Membership is independent of cable topology.
+                helper.setBlock(junction, Blocks.AIR)
+                assertFound(helper, computer, "input", firstIdentity.anchor)
+                PeripheralNetworkGameTestFixtures.unbind(helper, firstDevice)
+                assertStatus(helper, computer, "input", ComputerPeripheralLookupStatus.MISSING)
+                assertFound(helper, computer, "output", secondIdentity.anchor)
             }.thenExecute {
-                ComputerPeripheralNames.setName(level, secondIdentity, "input")
-                assertStatus(helper, computer, "input", ComputerPeripheralLookupStatus.AMBIGUOUS)
+                PeripheralNetworkGameTestFixtures.bind(helper, computer, firstDevice)
+                ComputerPeripheralNames.setName(level, firstIdentity, "input")
+                assertFound(helper, computer, "input", firstIdentity.anchor)
+                helper.setBlock(firstDevice, Blocks.AIR)
+                helper.setBlock(firstDevice, Blocks.BARREL)
+                assertStatus(helper, computer, "input", ComputerPeripheralLookupStatus.MISSING)
+            }.thenExecute {
+                // A fresh computer does not inherit membership by position; reconnect explicitly.
+                helper.setBlock(computer, Blocks.AIR)
+                helper.setBlock(computer, CompuktersRegistry.COMPUTER.get())
+                assertStatus(helper, computer, "output", ComputerPeripheralLookupStatus.MISSING)
+                val player = helper.makeMockServerPlayerInLevel()
+                val stack = ItemStack(CompuktersRegistry.PERIPHERAL_CONFIGURATOR_ITEM.get())
+                val item = stack.item as ru.lazyhat.compukters.minecraft.peripheral.PeripheralConfiguratorItem
+                player.setItemInHand(InteractionHand.MAIN_HAND, stack)
+                item.use(level, player, InteractionHand.MAIN_HAND)
+                for (relative in listOf(secondDevice, computer)) {
+                    val absolute = helper.absolutePos(relative)
+                    player.setPos(absolute.x + 0.5, absolute.y + 0.5, absolute.z + 0.5)
+                    val result = PeripheralConfiguratorServer.bind(player, InteractionHand.MAIN_HAND, absolute, Direction.WEST)
+                    helper.assertTrue(
+                        result in
+                            setOf(
+                                ru.lazyhat.compukters.minecraft.peripheral.PeripheralBindingResult.SELECTED,
+                                ru.lazyhat.compukters.minecraft.peripheral.PeripheralBindingResult.BOUND,
+                            ),
+                        "computer reconnection failed: $result",
+                    )
+                }
+                assertFound(helper, computer, "output", secondIdentity.anchor)
+                val highDevice = BlockPos(2, 72, 2)
+                helper.setBlock(highDevice, Blocks.BARREL)
+                PeripheralNetworkGameTestFixtures.bind(helper, computer, highDevice)
+                val highIdentity = ComputerPeripheralIdentity(TEST_PROVIDER_ID, helper.absolutePos(highDevice), FIRST_DEVICE_KEY)
+                ComputerPeripheralNames.setName(level, highIdentity, "distant")
+                assertStatus(helper, computer, "distant", ComputerPeripheralLookupStatus.MISSING)
+                // An independently connected computer can reach that same member.
+                val highComputer = BlockPos(5, 72, 2)
+                helper.setBlock(highComputer, CompuktersRegistry.COMPUTER.get())
+                item.selectNetwork(stack, null)
+                for (relative in listOf(highDevice, highComputer)) {
+                    val absolute = helper.absolutePos(relative)
+                    player.setPos(absolute.x + 0.5, absolute.y + 0.5, absolute.z + 0.5)
+                    PeripheralConfiguratorServer.bind(player, InteractionHand.MAIN_HAND, absolute, Direction.WEST)
+                }
+                assertFound(helper, highComputer, "distant", highIdentity.anchor)
+                assertStatus(helper, highComputer, "output", ComputerPeripheralLookupStatus.MISSING)
+                // Out-of-template fixtures are removed explicitly.
+                PeripheralNetworkGameTestFixtures.unbind(helper, highDevice)
+                PeripheralNetworkGameTestFixtures.unbind(helper, highComputer)
+                helper.setBlock(highDevice, Blocks.AIR)
+                helper.setBlock(highComputer, Blocks.AIR)
             }.thenSucceed()
     }
 
@@ -182,8 +216,20 @@ internal object PeripheralCableGameTestScenario {
             PeripheralConfiguratorContext(
                 firstIdentity.anchor,
                 Direction.WEST,
+                ru.lazyhat.compukters.impl.peripheral.PeripheralInstanceStamps.stamp(
+                    checkNotNull(helper.level.getBlockEntity(firstIdentity.anchor)),
+                    false,
+                ),
             )
-        val secondContext = firstContext.copy(position = secondIdentity.anchor)
+        val secondContext =
+            firstContext.copy(
+                position = secondIdentity.anchor,
+                instance =
+                    ru.lazyhat.compukters.impl.peripheral.PeripheralInstanceStamps.stamp(
+                        checkNotNull(helper.level.getBlockEntity(secondIdentity.anchor)),
+                        false,
+                    ),
+            )
 
         val renamed = PeripheralConfiguratorServer.save(player, InteractionHand.MAIN_HAND, firstContext, "sensor")
         helper.assertTrue(renamed == PeripheralConfiguratorSaveResult.NAMED_DEVICE, "configurator did not rename the target: $renamed")
