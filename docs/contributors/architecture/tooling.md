@@ -79,9 +79,20 @@ and result contracts. The worker queue retires completed requests atomically wit
 decision. A cancellation accepted before retirement receives an acknowledgement; a later cancellation is acknowledged
 by the server as completed work. Response callbacks run outside the queue lock.
 
-The production client coalesces presentation changes for 100 ms and automatic completion for 50 ms;
+The IDE prepares admitted analysis snapshots on a screen-owned background scheduler, outside the input thread.
+Opening and reloading prepare immediately; source edits coalesce for 25 ms before manifest/profile admission and
+snapshot hashing. Cancelled preparation is removed from the timer queue; only one preparation can run and one latest
+revision can wait. Caret and manual-completion changes are read at publication, while source, target-profile and
+lifecycle revisions reject obsolete preparation. Closing the screen cancels preparation and closes its scheduler.
+Rebased semantic tokens and diagnostics remain visible while a new snapshot is pending; interactive queries require
+an admitted snapshot. Query pipe writes run outside the worker-controller lock, and cancellation writes run on a
+separate executor after the query frame is sent, keeping pipe backpressure off the input thread. Request IDs and
+cancellation acknowledgements retain their existing protocol contract.
+
+After preparation, the production client coalesces presentation changes for 100 ms and automatic completion for 50 ms;
 hover waits 400 ms. These delays share the visible response budget with K2 processing, the client tick and
-the next rendered frame. Manual completion remains immediate, and newer edits cancel obsolete work.
+the next rendered frame. Manual completion enqueues immediately for an admitted snapshot and is retained while
+preparation is pending. Newer edits cancel obsolete work before their replacement snapshot is prepared.
 
 Analysis protocol v15 adds a peripheral-provider role to semantic tokens and completion kinds. The worker identifies providers through inheritance of `PeripheralProvider`, including companion values; type references retain their ordinary class role. The editor renders provider values in the dedicated palette color with a `P` completion badge.
 

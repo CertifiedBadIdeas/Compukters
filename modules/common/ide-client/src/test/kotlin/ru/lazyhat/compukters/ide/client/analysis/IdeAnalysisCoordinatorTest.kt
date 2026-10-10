@@ -45,6 +45,8 @@ import ru.lazyhat.compukters.ide.analysis.controller.AdmittedAnalysisSnapshot
 import ru.lazyhat.compukters.ide.analysis.controller.AnalysisClientResult
 import ru.lazyhat.compukters.ide.analysis.controller.AnalysisRequestCoordinator
 import ru.lazyhat.compukters.ide.analysis.controller.AnalysisResultSink
+import ru.lazyhat.compukters.ide.analysis.controller.AnalysisScheduledTask
+import ru.lazyhat.compukters.ide.analysis.controller.AnalysisTaskScheduler
 import ru.lazyhat.compukters.ide.analysis.protocol.AdmittedAnalysisProfile
 import ru.lazyhat.compukters.ide.analysis.protocol.AnalysisFailureKind
 import ru.lazyhat.compukters.ide.analysis.protocol.AnalysisLimits
@@ -69,6 +71,8 @@ import ru.lazyhat.compukters.platform.bundle.PlatformModuleId
 import ru.lazyhat.compukters.platform.bundle.PlatformSource
 import ru.lazyhat.compukters.worker.value.ImmutableBytes
 import java.util.concurrent.CompletableFuture
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 import kotlin.io.path.createTempDirectory
 import kotlin.io.path.readBytes
 import kotlin.test.Test
@@ -78,6 +82,182 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class IdeAnalysisCoordinatorTest {
+    @Test
+    fun `target change during preparation discards the old profile`() {
+        val scheduler = ControlledPreparationScheduler()
+        val fixture = AnalysisFixture("a", preparationScheduler = scheduler)
+        val target = TargetCompileProfile(TEST_TOOLCHAIN, emptyList(), WorkerLimits())
+        fixture.beforeSnapshot = { fixture.coordinator.updateTargetProfile(target) }
+        fixture.coordinator.open(fixture.project, path(), "a", 0)
+        scheduler.runNext()
+        assertEquals(emptyList(), fixture.requests.snapshots)
+        scheduler.runNext()
+        assertIs<IdeAnalysisState.Active>(fixture.coordinator.state())
+        assertEquals(1, fixture.requests.snapshots.size)
+        fixture.coordinator.close()
+    }
+
+    @Test
+    fun `closing during preparation prevents publication`() {
+        val scheduler = ControlledPreparationScheduler()
+        val fixture = AnalysisFixture("a", preparationScheduler = scheduler)
+        fixture.beforeSnapshot = { fixture.coordinator.close() }
+        fixture.coordinator.open(fixture.project, path(), "a", 0)
+        scheduler.runNext()
+        assertEquals(emptyList(), fixture.requests.snapshots)
+        assertIs<IdeAnalysisState.Idle>(fixture.coordinator.state())
+    }
+
+    @Test
+    fun `burst retains rebased presentation while preparation is pending`() {
+        val scheduler = ControlledPreparationScheduler()
+        val fixture = AnalysisFixture("val answer = 42", preparationScheduler = scheduler)
+        fixture.coordinator.open(fixture.project, path(), fixture.text, 0)
+        scheduler.runNext()
+        val initial = fixture.requests.snapshots.single()
+        val token = SemanticToken(path(), EditorRange(4, 10), SemanticCategory.LocalVariable)
+        fixture.publish(
+            AnalysisClientResult.Success(
+                AnalysisResult.Presentation(
+                    initial.identity,
+                    SnapshotPresentation.create(
+                        initial.identity,
+                        mapOf(path() to fixture.text.length),
+                        semanticTokens = listOf(token),
+                    ),
+                ),
+            ),
+        )
+        fixture.coordinator.sourceChanged(fixture.project, path(), " val answer = 42", 1, " ", change = insertion(0, 0, 1))
+        fixture.coordinator.sourceChanged(fixture.project, path(), "  val answer = 42", 2, " ", change = insertion(0, 1, 2))
+        val pending = assertIs<IdeAnalysisState.Loading>(fixture.coordinator.state())
+        assertEquals(
+            EditorRange(6, 12),
+            pending.presentation.semanticTokens
+                .single()
+                .range,
+        )
+        scheduler.runNext()
+        assertEquals(pending.presentation.semanticTokens, activeState(fixture).presentation.semanticTokens)
+        fixture.coordinator.close()
+    }
+
+    @Test
+    fun `burst prepares only the latest source revision`() {
+        val scheduler = ControlledPreparationScheduler()
+        val fixture = AnalysisFixture("a", preparationScheduler = scheduler)
+        fixture.coordinator.open(fixture.project, path(), "a", 0)
+        scheduler.runNext()
+        val initial = fixture.requests.snapshots.single()
+        repeat(50) { index ->
+            fixture.coordinator.sourceChanged(fixture.project, path(), "a".repeat(index + 2), index + 1L, "a")
+        }
+        assertEquals(listOf("a"), fixture.preparedTexts)
+        assertEquals(1, scheduler.pendingCount)
+        fixture.publish(
+            AnalysisClientResult.Success(
+                AnalysisResult.Presentation(initial.identity, SnapshotPresentation.create(initial.identity, mapOf(path() to 1))),
+            ),
+        )
+        assertIs<IdeAnalysisState.Loading>(fixture.coordinator.state())
+        scheduler.runNext()
+        assertEquals(listOf("a", "a".repeat(51)), fixture.preparedTexts)
+        assertEquals(50L, activeState(fixture).documentRevision)
+        assertEquals(2, fixture.requests.snapshots.size)
+        assertEquals(listOf(51), fixture.requests.automaticOffsets)
+        fixture.coordinator.close()
+    }
+
+    @Test
+    fun `edit during preparation discards its obsolete result`() {
+        val scheduler = ControlledPreparationScheduler()
+        val fixture = AnalysisFixture("a", preparationScheduler = scheduler)
+        fixture.coordinator.open(fixture.project, path(), "a", 0)
+        scheduler.runNext()
+        fixture.beforeSnapshot = { text ->
+            if (text == "ab") fixture.coordinator.sourceChanged(fixture.project, path(), "abc", 2, "c")
+        }
+        fixture.coordinator.sourceChanged(fixture.project, path(), "ab", 1, "b")
+        scheduler.runNext()
+        assertIs<IdeAnalysisState.Loading>(fixture.coordinator.state())
+        assertEquals(1, fixture.requests.snapshots.size)
+        scheduler.runNext()
+        assertEquals(2L, activeState(fixture).documentRevision)
+        assertEquals(2, fixture.requests.snapshots.size)
+        fixture.coordinator.close()
+    }
+
+    @Test
+    fun `manual completion and caret movement during preparation use the latest caret`() {
+        val scheduler = ControlledPreparationScheduler()
+        val fixture = AnalysisFixture("abc", preparationScheduler = scheduler)
+        fixture.coordinator.open(fixture.project, path(), "abc", 0)
+        fixture.beforeSnapshot = {
+            fixture.coordinator.caretMoved(1)
+            fixture.coordinator.manualCompletion()
+        }
+        scheduler.runNext()
+        assertIs<IdeAnalysisState.Active>(fixture.coordinator.state())
+        assertEquals(listOf(1), fixture.requests.manualOffsets)
+        fixture.coordinator.close()
+    }
+
+    @Test
+    fun `closing a file removes its queued preparation`() {
+        val scheduler = ControlledPreparationScheduler()
+        val fixture = AnalysisFixture("a", preparationScheduler = scheduler)
+        fixture.coordinator.open(fixture.project, path(), "a", 0)
+        fixture.coordinator.closeFile()
+        assertEquals(0, scheduler.pendingCount)
+        assertEquals(emptyList(), fixture.preparedTexts)
+        assertIs<IdeAnalysisState.Idle>(fixture.coordinator.state())
+        fixture.coordinator.close()
+        assertTrue(scheduler.closed)
+    }
+
+    @Test
+    fun `input remains responsive while snapshot preparation is blocked`() {
+        val fixture = AnalysisFixture("a", preparationScheduler = IdeAnalysisPreparationScheduler())
+        val opened = CompletableFuture<Unit>()
+        val newest = CompletableFuture<Unit>()
+        fixture.requests.onSourceChanged = { snapshot ->
+            if (snapshot.sources.sources
+                    .single()
+                    .content
+                    .toByteArray()
+                    .decodeToString() == "abc"
+            ) {
+                newest.complete(Unit)
+            } else {
+                opened.complete(Unit)
+            }
+        }
+        val entered = CountDownLatch(1)
+        val release = CountDownLatch(1)
+        fixture.beforeSnapshot = { text ->
+            if (text == "ab") {
+                entered.countDown()
+                check(release.await(5, TimeUnit.SECONDS))
+            }
+        }
+        try {
+            fixture.coordinator.open(fixture.project, path(), "a", 0)
+            opened.get(5, TimeUnit.SECONDS)
+            fixture.coordinator.sourceChanged(fixture.project, path(), "ab", 1, "b")
+            assertTrue(entered.await(5, TimeUnit.SECONDS))
+            CompletableFuture
+                .runAsync {
+                    fixture.coordinator.sourceChanged(fixture.project, path(), "abc", 2, "c")
+                }.get(200, TimeUnit.MILLISECONDS)
+            release.countDown()
+            newest.get(5, TimeUnit.SECONDS)
+            assertEquals(2L, activeState(fixture).documentRevision)
+        } finally {
+            release.countDown()
+            fixture.coordinator.close()
+        }
+    }
+
     @Test
     fun `invalid manifest prevents analysis requests and repair restores analysis`() {
         val fixture = fixture("fun main() {}")
@@ -1271,8 +1451,11 @@ private class AnalysisFixture(
     visibleLatency: IdeVisibleLatencyTrace = IdeVisibleLatencyTrace.None,
     attachedSources: IdeAttachedSourceCatalog = IdeAttachedSourceCatalog.empty(),
     private val extraSources: List<ProjectSource> = emptyList(),
+    preparationScheduler: AnalysisTaskScheduler = ImmediateAnalysisTaskScheduler,
 ) {
     var text = initialText
+    var beforeSnapshot: (String) -> Unit = {}
+    val preparedTexts = mutableListOf<String>()
     val descriptor = ProjectCatalog.open(createTempDirectory("compukters-analysis-")).create("demo")
     val project: ProjectHandle = descriptor.handle
     val requests = RecordingRequests()
@@ -1286,6 +1469,8 @@ private class AnalysisFixture(
                 },
             snapshotFactory =
                 IdeAnalysisSnapshotFactory { input, activePath, activeText, _ ->
+                    beforeSnapshot(activeText)
+                    preparedTexts += activeText
                     require(activeText != rejectedText) { "rejected analysis source" }
                     snapshot(input, activePath, activeText)
                 },
@@ -1293,6 +1478,7 @@ private class AnalysisFixture(
             visibleLatency = visibleLatency,
             attachedSources = attachedSources,
             platformCatalog = TEST_PLATFORM_CATALOG,
+            preparationScheduler = preparationScheduler,
         )
 
     fun open(): AdmittedAnalysisSnapshot {
@@ -1496,3 +1682,27 @@ private fun source(text: String) =
 private fun hash(seed: Int) = Hash256.of(ByteArray(32) { seed.toByte() })
 
 private val ANALYSIS_LIMITS = WorkerLimits(sourceFiles = 8, sourceFileBytes = 4096, sourceBytes = 8192)
+
+private class ControlledPreparationScheduler : AnalysisTaskScheduler {
+    private val tasks = mutableListOf<() -> Unit>()
+    var closed = false
+    val pendingCount: Int get() = tasks.size
+
+    override fun schedule(
+        delayNanos: Long,
+        action: () -> Unit,
+    ): AnalysisScheduledTask {
+        check(!closed)
+        tasks += action
+        return AnalysisScheduledTask { tasks.remove(action) }
+    }
+
+    fun runNext() {
+        tasks.removeAt(0).invoke()
+    }
+
+    override fun close() {
+        closed = true
+        tasks.clear()
+    }
+}

@@ -482,6 +482,7 @@ class IdeAnalysisFlowTest {
         IdeAnalysisSnapshotFactory { input, path, text, _ -> analysisSnapshot(input.sources, path, text) },
         IdeAnalysisRequestFactory { sink -> requests.apply { this.sink = sink } },
         platformCatalog = TEST_PLATFORM_CATALOG,
+        preparationScheduler = ru.lazyhat.compukters.ide.client.analysis.ImmediateAnalysisTaskScheduler,
     )
 }
 
