@@ -13,6 +13,10 @@ headings so this page has one stable URL that can be shared outside the reposito
 
 ## 0.6.0 — In development
 
+- Host capabilities and addon SDK bindings exchange `ByteArray` directly, preserving arbitrary binary data within
+  a 4096-byte call limit. Runtime 0.22.0 / native ABI 22 replaces the previous native boundary; existing VM checkpoints
+  cold boot while retaining persistent files.
+
 - Existing Peripheral Cables become Computer Cables: one nonbranching physical line joins two computers, with one
   cable connection per computer. Placement rejects branches, loops and occupied ports without consuming the item.
 

@@ -66,6 +66,7 @@ internal fun HostResponse.valueType(): HostValueType =
         is HostResponse.BoolSuccess -> HostValueType.BOOL
         is HostResponse.CharSuccess -> HostValueType.CHAR
         is HostResponse.StringSuccess -> HostValueType.STRING
+        is HostResponse.ByteArraySuccess -> HostValueType.BYTE_ARRAY
         is HostResponse.RecordSuccess -> HostValueType.RECORD
         is HostResponse.Failure -> error("failures cannot be record fields")
     }

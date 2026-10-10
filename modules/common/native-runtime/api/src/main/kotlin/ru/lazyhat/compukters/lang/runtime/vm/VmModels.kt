@@ -28,6 +28,22 @@ data class CapabilityIdentity(
 )
 
 sealed interface VmValue {
+    /** Snapshot ownership: callers cannot mutate a published host value. */
+    class ByteArrayValue(
+        value: ByteArray,
+    ) : VmValue {
+        private val bytes = value.copyOf()
+        val value: ByteArray get() = bytes.copyOf()
+
+        init {
+            require(bytes.size <= ru.lazyhat.compukters.lang.runtime.capability.HostCapabilityLimits.MAXIMUM_BYTE_ARRAY_BYTES)
+        }
+
+        override fun equals(other: Any?): Boolean = other is ByteArrayValue && bytes.contentEquals(other.bytes)
+
+        override fun hashCode(): Int = bytes.contentHashCode()
+    }
+
     data class I32(
         val value: Int,
     ) : VmValue
@@ -182,6 +198,7 @@ enum class QuotaKind(
     HOST_REQUEST_CODE_UNITS(0),
     HOST_REQUESTS(1),
     ACCEPTED_RESPONSES(2),
+    HOST_REQUEST_BYTES(3),
 }
 
 enum class HostFailureKind(

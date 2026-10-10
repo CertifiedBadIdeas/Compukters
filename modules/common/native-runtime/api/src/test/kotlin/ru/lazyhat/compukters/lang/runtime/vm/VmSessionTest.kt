@@ -33,6 +33,38 @@ import kotlin.test.assertFailsWith
 
 class VmSessionTest {
     @Test
+    fun `byte array requests and responses preserve identity and copied raw bits`() {
+        val bridge = FakeBridge(createResult = bytes(0, long(11)))
+        bridge.outcomes +=
+            bytes(
+                1,
+                int(1),
+                int(2),
+                long(9),
+                int(3),
+                "app".encodeToByteArray(),
+                int(6),
+                "device".encodeToByteArray(),
+                short(1),
+                short(0),
+                int(1),
+                int(1),
+                9,
+                int(3),
+                byteArrayOf(0, -128, -1),
+                0,
+            )
+        VmSession.open(byteArrayOf(1), bridge).use { session ->
+            val request = (session.advance(64, 64, Int.MAX_VALUE) as VmOutcome.HostRequestBatch).requests.single()
+            val value = request.arguments.single() as VmValue.ByteArrayValue
+            value.value.fill(42)
+            assertEquals(VmValue.ByteArrayValue(byteArrayOf(0, -128, -1)), value)
+            session.resume(request.identity, HostResponse.ByteArraySuccess(byteArrayOf(0, -128, -1)))
+        }
+        assertEquals(listOf(EncodedResponse(11, 2, 9, byteArrayOf(1, 9, 3, 0, 0, 0, 0, -128, -1).toList())), bridge.encodedResponses)
+    }
+
+    @Test
     fun `creation paths forward canonical host capability schemas`() {
         val schema =
             HostCapabilitySchema(
