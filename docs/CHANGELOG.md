@@ -41,17 +41,12 @@ listed in [Kotlin support](developers/kotlin-support.md) and [standard library s
 - `collectDistributionJars` builds Rust locally; `collectReleaseDistributionJars` downloads pinned Linux/Windows
   Runtime bundles and applies both tagged release gates. Both verify the mod and first-party addons, collecting
   archives in `dist/` by Minecraft version and removing stale files on subsequent runs.
-- Mod CI performs full verification and collects universal mod/addon archives on branch pushes before tagging.
-  Tag publication reuses successful checks of the same commit, assembling stable JARs only when the
-  earlier build carried `-S`. Simultaneous branch/tag pushes are queued; an already assembled stable
-  inventory is reused without recompilation.
-  Functional checks run in parallel; the full gate measures IDE latency afterward without competition from
-  compilation, archive transformation or GameTest servers. Visible completion is checked against a 200 ms
-  median / 350 ms p95 budget, and semantic presentation against 450 ms / 800 ms.
+- Mod publication runs only for pushed release tags, builds both universal mod archives and three addons in
+  parallel, and prepares the addon SDK locally before compiling independent addon builds. Automated CI tests
+  are temporarily disabled; exact tag, Runtime bundle, archive composition and checksum checks remain enabled.
 - Verified autonomous NeoForge releases can be published to GitHub Releases and Modrinth from the same tagged
   artifacts, with component identities, checksums and resumable publication. GitHub Releases also includes the
-  Create, Sable and Propulsion addon archives. Manual workflow runs validate the
-  candidate without publishing.
+  Create, Sable and Propulsion addon archives.
 
 ### Guest Kotlin
 
