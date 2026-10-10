@@ -1,0 +1,2001 @@
+[
+  {
+    "path": "before/pid/sample-1.cpkt",
+    "sha256": "d0c069d15033af00b22cf813f7e619ed5d9a2badd5f905d4c87cac1a85f364e2",
+    "artifact_bytes": 214100,
+    "format": [
+      3,
+      0
+    ],
+    "minimum_runtime_abi": [
+      1,
+      15
+    ],
+    "entry_module": 0,
+    "sections": [
+      {
+        "kind": "MANIFEST",
+        "scope": 0,
+        "flags": 3,
+        "bytes": 112,
+        "records": 1
+      },
+      {
+        "kind": "MODULES",
+        "scope": 0,
+        "flags": 3,
+        "bytes": 408,
+        "records": 6
+      },
+      {
+        "kind": "CAPABILITIES",
+        "scope": 0,
+        "flags": 3,
+        "bytes": 160,
+        "records": 5
+      },
+      {
+        "kind": "STRINGS",
+        "scope": 1,
+        "flags": 3,
+        "bytes": 3422,
+        "records": 86
+      },
+      {
+        "kind": "TYPES",
+        "scope": 1,
+        "flags": 3,
+        "bytes": 1392,
+        "records": 35
+      },
+      {
+        "kind": "CONSTANTS",
+        "scope": 1,
+        "flags": 3,
+        "bytes": 669,
+        "records": 59
+      },
+      {
+        "kind": "IMPORTS",
+        "scope": 1,
+        "flags": 3,
+        "bytes": 2672,
+        "records": 51
+      },
+      {
+        "kind": "EXPORTS",
+        "scope": 1,
+        "flags": 3,
+        "bytes": 24,
+        "records": 0
+      },
+      {
+        "kind": "FIELDS",
+        "scope": 1,
+        "flags": 3,
+        "bytes": 160,
+        "records": 5
+      },
+      {
+        "kind": "FUNCTIONS",
+        "scope": 1,
+        "flags": 3,
+        "bytes": 3252,
+        "records": 17
+      },
+      {
+        "kind": "BLOCKS",
+        "scope": 1,
+        "flags": 3,
+        "bytes": 5872,
+        "records": 209
+      },
+      {
+        "kind": "CODE",
+        "scope": 1,
+        "flags": 3,
+        "bytes": 9815,
+        "records": 209
+      },
+      {
+        "kind": "EXCEPTIONS",
+        "scope": 1,
+        "flags": 3,
+        "bytes": 48,
+        "records": 1
+      },
+      {
+        "kind": "UTF16_LITERALS",
+        "scope": 1,
+        "flags": 3,
+        "bytes": 802,
+        "records": 23
+      },
+      {
+        "kind": "SAFEPOINT_ROOTS",
+        "scope": 1,
+        "flags": 3,
+        "bytes": 18528,
+        "records": 434
+      },
+      {
+        "kind": "DEBUG",
+        "scope": 1,
+        "flags": 0,
+        "bytes": 29428,
+        "records": 919
+      },
+      {
+        "kind": "DEBUG_PATHS",
+        "scope": 1,
+        "flags": 1,
+        "bytes": 120,
+        "records": 3
+      },
+      {
+        "kind": "SAFEPOINT_ROOT_RANGES",
+        "scope": 1,
+        "flags": 1,
+        "bytes": 16,
+        "records": 1
+      },
+      {
+        "kind": "DEBUG_SOURCE_POSITIONS",
+        "scope": 1,
+        "flags": 0,
+        "bytes": 14724,
+        "records": 919
+      },
+      {
+        "kind": "STRINGS",
+        "scope": 2,
+        "flags": 3,
+        "bytes": 311,
+        "records": 11
+      },
+      {
+        "kind": "TYPES",
+        "scope": 2,
+        "flags": 3,
+        "bytes": 200,
+        "records": 5
+      },
+      {
+        "kind": "CONSTANTS",
+        "scope": 2,
+        "flags": 3,
+        "bytes": 47,
+        "records": 3
+      },
+      {
+        "kind": "IMPORTS",
+        "scope": 2,
+        "flags": 3,
+        "bytes": 232,
+        "records": 4
+      },
+      {
+        "kind": "EXPORTS",
+        "scope": 2,
+        "flags": 3,
+        "bytes": 80,
+        "records": 3
+      },
+      {
+        "kind": "FIELDS",
+        "scope": 2,
+        "flags": 3,
+        "bytes": 24,
+        "records": 0
+      },
+      {
+        "kind": "FUNCTIONS",
+        "scope": 2,
+        "flags": 3,
+        "bytes": 283,
+        "records": 3
+      },
+      {
+        "kind": "BLOCKS",
+        "scope": 2,
+        "flags": 3,
+        "bytes": 272,
+        "records": 9
+      },
+      {
+        "kind": "CODE",
+        "scope": 2,
+        "flags": 3,
+        "bytes": 225,
+        "records": 9
+      },
+      {
+        "kind": "EXCEPTIONS",
+        "scope": 2,
+        "flags": 3,
+        "bytes": 24,
+        "records": 0
+      },
+      {
+        "kind": "UTF16_LITERALS",
+        "scope": 2,
+        "flags": 3,
+        "bytes": 86,
+        "records": 2
+      },
+      {
+        "kind": "SAFEPOINT_ROOTS",
+        "scope": 2,
+        "flags": 3,
+        "bytes": 492,
+        "records": 20
+      },
+      {
+        "kind": "STRINGS",
+        "scope": 3,
+        "flags": 3,
+        "bytes": 6822,
+        "records": 159
+      },
+      {
+        "kind": "TYPES",
+        "scope": 3,
+        "flags": 3,
+        "bytes": 7356,
+        "records": 197
+      },
+      {
+        "kind": "CONSTANTS",
+        "scope": 3,
+        "flags": 3,
+        "bytes": 232,
+        "records": 22
+      },
+      {
+        "kind": "IMPORTS",
+        "scope": 3,
+        "flags": 3,
+        "bytes": 1008,
+        "records": 19
+      },
+      {
+        "kind": "EXPORTS",
+        "scope": 3,
+        "flags": 3,
+        "bytes": 464,
+        "records": 22
+      },
+      {
+        "kind": "FIELDS",
+        "scope": 3,
+        "flags": 3,
+        "bytes": 944,
+        "records": 33
+      },
+      {
+        "kind": "FUNCTIONS",
+        "scope": 3,
+        "flags": 3,
+        "bytes": 14865,
+        "records": 164
+      },
+      {
+        "kind": "BLOCKS",
+        "scope": 3,
+        "flags": 3,
+        "bytes": 14024,
+        "records": 500
+      },
+      {
+        "kind": "CODE",
+        "scope": 3,
+        "flags": 3,
+        "bytes": 14728,
+        "records": 500
+      },
+      {
+        "kind": "EXCEPTIONS",
+        "scope": 3,
+        "flags": 3,
+        "bytes": 136,
+        "records": 4
+      },
+      {
+        "kind": "UTF16_LITERALS",
+        "scope": 3,
+        "flags": 3,
+        "bytes": 712,
+        "records": 10
+      },
+      {
+        "kind": "SAFEPOINT_ROOTS",
+        "scope": 3,
+        "flags": 3,
+        "bytes": 24324,
+        "records": 826
+      },
+      {
+        "kind": "SAFEPOINT_ROOT_RANGES",
+        "scope": 3,
+        "flags": 1,
+        "bytes": 16,
+        "records": 1
+      },
+      {
+        "kind": "STRINGS",
+        "scope": 4,
+        "flags": 3,
+        "bytes": 1507,
+        "records": 44
+      },
+      {
+        "kind": "TYPES",
+        "scope": 4,
+        "flags": 3,
+        "bytes": 1636,
+        "records": 44
+      },
+      {
+        "kind": "CONSTANTS",
+        "scope": 4,
+        "flags": 3,
+        "bytes": 75,
+        "records": 6
+      },
+      {
+        "kind": "IMPORTS",
+        "scope": 4,
+        "flags": 3,
+        "bytes": 440,
+        "records": 8
+      },
+      {
+        "kind": "EXPORTS",
+        "scope": 4,
+        "flags": 3,
+        "bytes": 280,
+        "records": 13
+      },
+      {
+        "kind": "FIELDS",
+        "scope": 4,
+        "flags": 3,
+        "bytes": 24,
+        "records": 0
+      },
+      {
+        "kind": "FUNCTIONS",
+        "scope": 4,
+        "flags": 3,
+        "bytes": 2278,
+        "records": 35
+      },
+      {
+        "kind": "BLOCKS",
+        "scope": 4,
+        "flags": 3,
+        "bytes": 496,
+        "records": 17
+      },
+      {
+        "kind": "CODE",
+        "scope": 4,
+        "flags": 3,
+        "bytes": 516,
+        "records": 17
+      },
+      {
+        "kind": "EXCEPTIONS",
+        "scope": 4,
+        "flags": 3,
+        "bytes": 24,
+        "records": 0
+      },
+      {
+        "kind": "UTF16_LITERALS",
+        "scope": 4,
+        "flags": 3,
+        "bytes": 62,
+        "records": 1
+      },
+      {
+        "kind": "SAFEPOINT_ROOTS",
+        "scope": 4,
+        "flags": 3,
+        "bytes": 764,
+        "records": 27
+      },
+      {
+        "kind": "SAFEPOINT_ROOT_RANGES",
+        "scope": 4,
+        "flags": 1,
+        "bytes": 16,
+        "records": 1
+      },
+      {
+        "kind": "STRINGS",
+        "scope": 5,
+        "flags": 3,
+        "bytes": 1048,
+        "records": 41
+      },
+      {
+        "kind": "TYPES",
+        "scope": 5,
+        "flags": 3,
+        "bytes": 444,
+        "records": 12
+      },
+      {
+        "kind": "CONSTANTS",
+        "scope": 5,
+        "flags": 3,
+        "bytes": 81,
+        "records": 7
+      },
+      {
+        "kind": "IMPORTS",
+        "scope": 5,
+        "flags": 3,
+        "bytes": 232,
+        "records": 4
+      },
+      {
+        "kind": "EXPORTS",
+        "scope": 5,
+        "flags": 3,
+        "bytes": 400,
+        "records": 19
+      },
+      {
+        "kind": "FIELDS",
+        "scope": 5,
+        "flags": 3,
+        "bytes": 496,
+        "records": 17
+      },
+      {
+        "kind": "FUNCTIONS",
+        "scope": 5,
+        "flags": 3,
+        "bytes": 1158,
+        "records": 7
+      },
+      {
+        "kind": "BLOCKS",
+        "scope": 5,
+        "flags": 3,
+        "bytes": 4472,
+        "records": 159
+      },
+      {
+        "kind": "CODE",
+        "scope": 5,
+        "flags": 3,
+        "bytes": 4701,
+        "records": 159
+      },
+      {
+        "kind": "EXCEPTIONS",
+        "scope": 5,
+        "flags": 3,
+        "bytes": 24,
+        "records": 0
+      },
+      {
+        "kind": "UTF16_LITERALS",
+        "scope": 5,
+        "flags": 3,
+        "bytes": 24,
+        "records": 0
+      },
+      {
+        "kind": "SAFEPOINT_ROOTS",
+        "scope": 5,
+        "flags": 3,
+        "bytes": 7016,
+        "records": 230
+      },
+      {
+        "kind": "SAFEPOINT_ROOT_RANGES",
+        "scope": 5,
+        "flags": 1,
+        "bytes": 16,
+        "records": 1
+      },
+      {
+        "kind": "STRINGS",
+        "scope": 6,
+        "flags": 3,
+        "bytes": 531,
+        "records": 21
+      },
+      {
+        "kind": "TYPES",
+        "scope": 6,
+        "flags": 3,
+        "bytes": 696,
+        "records": 19
+      },
+      {
+        "kind": "CONSTANTS",
+        "scope": 6,
+        "flags": 3,
+        "bytes": 24,
+        "records": 0
+      },
+      {
+        "kind": "IMPORTS",
+        "scope": 6,
+        "flags": 3,
+        "bytes": 24,
+        "records": 0
+      },
+      {
+        "kind": "EXPORTS",
+        "scope": 6,
+        "flags": 3,
+        "bytes": 240,
+        "records": 11
+      },
+      {
+        "kind": "FIELDS",
+        "scope": 6,
+        "flags": 3,
+        "bytes": 80,
+        "records": 2
+      },
+      {
+        "kind": "FUNCTIONS",
+        "scope": 6,
+        "flags": 3,
+        "bytes": 459,
+        "records": 6
+      },
+      {
+        "kind": "BLOCKS",
+        "scope": 6,
+        "flags": 3,
+        "bytes": 528,
+        "records": 18
+      },
+      {
+        "kind": "CODE",
+        "scope": 6,
+        "flags": 3,
+        "bytes": 257,
+        "records": 18
+      },
+      {
+        "kind": "EXCEPTIONS",
+        "scope": 6,
+        "flags": 3,
+        "bytes": 24,
+        "records": 0
+      },
+      {
+        "kind": "UTF16_LITERALS",
+        "scope": 6,
+        "flags": 3,
+        "bytes": 24,
+        "records": 0
+      },
+      {
+        "kind": "SAFEPOINT_ROOTS",
+        "scope": 6,
+        "flags": 3,
+        "bytes": 612,
+        "records": 25
+      }
+    ],
+    "section_bytes": {
+      "MANIFEST": 112,
+      "MODULES": 408,
+      "CAPABILITIES": 160,
+      "STRINGS": 13641,
+      "TYPES": 11724,
+      "CONSTANTS": 1128,
+      "IMPORTS": 4608,
+      "EXPORTS": 1488,
+      "FIELDS": 1728,
+      "FUNCTIONS": 22295,
+      "BLOCKS": 25664,
+      "CODE": 30242,
+      "EXCEPTIONS": 280,
+      "UTF16_LITERALS": 1710,
+      "SAFEPOINT_ROOTS": 51736,
+      "DEBUG": 29428,
+      "DEBUG_PATHS": 120,
+      "SAFEPOINT_ROOT_RANGES": 64,
+      "DEBUG_SOURCE_POSITIONS": 14724
+    },
+    "section_records": {
+      "MANIFEST": 1,
+      "MODULES": 6,
+      "CAPABILITIES": 5,
+      "STRINGS": 362,
+      "TYPES": 312,
+      "CONSTANTS": 97,
+      "IMPORTS": 86,
+      "EXPORTS": 68,
+      "FIELDS": 57,
+      "FUNCTIONS": 232,
+      "BLOCKS": 912,
+      "CODE": 912,
+      "EXCEPTIONS": 5,
+      "UTF16_LITERALS": 36,
+      "SAFEPOINT_ROOTS": 1562,
+      "DEBUG": 919,
+      "DEBUG_PATHS": 3,
+      "SAFEPOINT_ROOT_RANGES": 4,
+      "DEBUG_SOURCE_POSITIONS": 919
+    },
+    "header_directory_digest_padding_bytes": 2840,
+    "debug_path_bytes": 88,
+    "debug_unique_paths": 3,
+    "debug_paths": {
+      "src/main.kt": 555,
+      "platform/stdlib/core/libraries/stdlib-core/kotlin/Assertions.kt": 21,
+      "src/control.kt": 343
+    },
+    "modeled_path_intern_saving_bytes": 0,
+    "conservative_debug_coalesce_records": 43,
+    "modeled_debug_coalesce_saving_bytes": 2064,
+    "empty_root_maps": 785,
+    "distinct_root_sets": 164,
+    "consecutive_same_block_root_map_duplicates": 1511,
+    "gzip9_bytes": 52129,
+    "estimate_notes": "Path pool and debug coalescing estimates are separate and must not be added. Coalescing keeps referenced inline parents; lookup semantics require behavioral validation. gzip9 is an offline storage experiment, not a supported executable format. This tool checks container accounting, not full VM validity."
+  },
+  {
+    "path": "before/hello/sample-1.cpkt",
+    "sha256": "2a7d126dd30c3f5b744316bd5f40a551e92660b9146513587c27667156d90fd3",
+    "artifact_bytes": 6708,
+    "format": [
+      3,
+      0
+    ],
+    "minimum_runtime_abi": [
+      1,
+      11
+    ],
+    "entry_module": 0,
+    "sections": [
+      {
+        "kind": "MANIFEST",
+        "scope": 0,
+        "flags": 3,
+        "bytes": 112,
+        "records": 1
+      },
+      {
+        "kind": "MODULES",
+        "scope": 0,
+        "flags": 3,
+        "bytes": 212,
+        "records": 3
+      },
+      {
+        "kind": "CAPABILITIES",
+        "scope": 0,
+        "flags": 3,
+        "bytes": 48,
+        "records": 1
+      },
+      {
+        "kind": "STRINGS",
+        "scope": 1,
+        "flags": 3,
+        "bytes": 116,
+        "records": 6
+      },
+      {
+        "kind": "TYPES",
+        "scope": 1,
+        "flags": 3,
+        "bytes": 80,
+        "records": 2
+      },
+      {
+        "kind": "CONSTANTS",
+        "scope": 1,
+        "flags": 3,
+        "bytes": 29,
+        "records": 1
+      },
+      {
+        "kind": "IMPORTS",
+        "scope": 1,
+        "flags": 3,
+        "bytes": 128,
+        "records": 2
+      },
+      {
+        "kind": "EXPORTS",
+        "scope": 1,
+        "flags": 3,
+        "bytes": 24,
+        "records": 0
+      },
+      {
+        "kind": "FIELDS",
+        "scope": 1,
+        "flags": 3,
+        "bytes": 24,
+        "records": 0
+      },
+      {
+        "kind": "FUNCTIONS",
+        "scope": 1,
+        "flags": 3,
+        "bytes": 73,
+        "records": 1
+      },
+      {
+        "kind": "BLOCKS",
+        "scope": 1,
+        "flags": 3,
+        "bytes": 48,
+        "records": 1
+      },
+      {
+        "kind": "CODE",
+        "scope": 1,
+        "flags": 3,
+        "bytes": 51,
+        "records": 1
+      },
+      {
+        "kind": "EXCEPTIONS",
+        "scope": 1,
+        "flags": 3,
+        "bytes": 24,
+        "records": 0
+      },
+      {
+        "kind": "UTF16_LITERALS",
+        "scope": 1,
+        "flags": 3,
+        "bytes": 50,
+        "records": 1
+      },
+      {
+        "kind": "SAFEPOINT_ROOTS",
+        "scope": 1,
+        "flags": 3,
+        "bytes": 84,
+        "records": 3
+      },
+      {
+        "kind": "DEBUG",
+        "scope": 1,
+        "flags": 0,
+        "bytes": 149,
+        "records": 3
+      },
+      {
+        "kind": "DEBUG_SOURCE_POSITIONS",
+        "scope": 1,
+        "flags": 0,
+        "bytes": 68,
+        "records": 3
+      },
+      {
+        "kind": "STRINGS",
+        "scope": 2,
+        "flags": 3,
+        "bytes": 110,
+        "records": 5
+      },
+      {
+        "kind": "TYPES",
+        "scope": 2,
+        "flags": 3,
+        "bytes": 88,
+        "records": 2
+      },
+      {
+        "kind": "CONSTANTS",
+        "scope": 2,
+        "flags": 3,
+        "bytes": 29,
+        "records": 1
+      },
+      {
+        "kind": "IMPORTS",
+        "scope": 2,
+        "flags": 3,
+        "bytes": 72,
+        "records": 1
+      },
+      {
+        "kind": "EXPORTS",
+        "scope": 2,
+        "flags": 3,
+        "bytes": 40,
+        "records": 1
+      },
+      {
+        "kind": "FIELDS",
+        "scope": 2,
+        "flags": 3,
+        "bytes": 24,
+        "records": 0
+      },
+      {
+        "kind": "FUNCTIONS",
+        "scope": 2,
+        "flags": 3,
+        "bytes": 156,
+        "records": 2
+      },
+      {
+        "kind": "BLOCKS",
+        "scope": 2,
+        "flags": 3,
+        "bytes": 104,
+        "records": 3
+      },
+      {
+        "kind": "CODE",
+        "scope": 2,
+        "flags": 3,
+        "bytes": 87,
+        "records": 3
+      },
+      {
+        "kind": "EXCEPTIONS",
+        "scope": 2,
+        "flags": 3,
+        "bytes": 24,
+        "records": 0
+      },
+      {
+        "kind": "UTF16_LITERALS",
+        "scope": 2,
+        "flags": 3,
+        "bytes": 26,
+        "records": 1
+      },
+      {
+        "kind": "SAFEPOINT_ROOTS",
+        "scope": 2,
+        "flags": 3,
+        "bytes": 188,
+        "records": 7
+      },
+      {
+        "kind": "STRINGS",
+        "scope": 3,
+        "flags": 3,
+        "bytes": 330,
+        "records": 14
+      },
+      {
+        "kind": "TYPES",
+        "scope": 3,
+        "flags": 3,
+        "bytes": 552,
+        "records": 15
+      },
+      {
+        "kind": "CONSTANTS",
+        "scope": 3,
+        "flags": 3,
+        "bytes": 24,
+        "records": 0
+      },
+      {
+        "kind": "IMPORTS",
+        "scope": 3,
+        "flags": 3,
+        "bytes": 24,
+        "records": 0
+      },
+      {
+        "kind": "EXPORTS",
+        "scope": 3,
+        "flags": 3,
+        "bytes": 40,
+        "records": 1
+      },
+      {
+        "kind": "FIELDS",
+        "scope": 3,
+        "flags": 3,
+        "bytes": 80,
+        "records": 2
+      },
+      {
+        "kind": "FUNCTIONS",
+        "scope": 3,
+        "flags": 3,
+        "bytes": 459,
+        "records": 6
+      },
+      {
+        "kind": "BLOCKS",
+        "scope": 3,
+        "flags": 3,
+        "bytes": 528,
+        "records": 18
+      },
+      {
+        "kind": "CODE",
+        "scope": 3,
+        "flags": 3,
+        "bytes": 257,
+        "records": 18
+      },
+      {
+        "kind": "EXCEPTIONS",
+        "scope": 3,
+        "flags": 3,
+        "bytes": 24,
+        "records": 0
+      },
+      {
+        "kind": "UTF16_LITERALS",
+        "scope": 3,
+        "flags": 3,
+        "bytes": 24,
+        "records": 0
+      },
+      {
+        "kind": "SAFEPOINT_ROOTS",
+        "scope": 3,
+        "flags": 3,
+        "bytes": 612,
+        "records": 25
+      }
+    ],
+    "section_bytes": {
+      "MANIFEST": 112,
+      "MODULES": 212,
+      "CAPABILITIES": 48,
+      "STRINGS": 556,
+      "TYPES": 720,
+      "CONSTANTS": 82,
+      "IMPORTS": 224,
+      "EXPORTS": 104,
+      "FIELDS": 128,
+      "FUNCTIONS": 688,
+      "BLOCKS": 680,
+      "CODE": 395,
+      "EXCEPTIONS": 72,
+      "UTF16_LITERALS": 100,
+      "SAFEPOINT_ROOTS": 884,
+      "DEBUG": 149,
+      "DEBUG_SOURCE_POSITIONS": 68
+    },
+    "section_records": {
+      "MANIFEST": 1,
+      "MODULES": 3,
+      "CAPABILITIES": 1,
+      "STRINGS": 25,
+      "TYPES": 19,
+      "CONSTANTS": 2,
+      "IMPORTS": 3,
+      "EXPORTS": 2,
+      "FIELDS": 2,
+      "FUNCTIONS": 9,
+      "BLOCKS": 22,
+      "CODE": 22,
+      "EXCEPTIONS": 0,
+      "UTF16_LITERALS": 2,
+      "SAFEPOINT_ROOTS": 35,
+      "DEBUG": 3,
+      "DEBUG_SOURCE_POSITIONS": 3
+    },
+    "header_directory_digest_padding_bytes": 1486,
+    "debug_path_bytes": 33,
+    "debug_unique_paths": 1,
+    "debug_paths": {
+      "src/main.kt": 3
+    },
+    "modeled_path_intern_saving_bytes": -34,
+    "conservative_debug_coalesce_records": 0,
+    "modeled_debug_coalesce_saving_bytes": 0,
+    "empty_root_maps": 12,
+    "distinct_root_sets": 11,
+    "consecutive_same_block_root_map_duplicates": 1,
+    "gzip9_bytes": 1830,
+    "estimate_notes": "Path pool and debug coalescing estimates are separate and must not be added. Coalescing keeps referenced inline parents; lookup semantics require behavioral validation. gzip9 is an offline storage experiment, not a supported executable format. This tool checks container accounting, not full VM validity."
+  },
+  {
+    "path": "after/pid/sample-1.cpkt",
+    "sha256": "aa39457e2bc544d584a94bfa138dc6f3e8136a3832f188dc53d41d461bc4f21c",
+    "artifact_bytes": 152916,
+    "format": [
+      3,
+      0
+    ],
+    "minimum_runtime_abi": [
+      1,
+      15
+    ],
+    "entry_module": 0,
+    "sections": [
+      {
+        "kind": "MANIFEST",
+        "scope": 0,
+        "flags": 3,
+        "bytes": 112,
+        "records": 1
+      },
+      {
+        "kind": "MODULES",
+        "scope": 0,
+        "flags": 3,
+        "bytes": 408,
+        "records": 6
+      },
+      {
+        "kind": "CAPABILITIES",
+        "scope": 0,
+        "flags": 3,
+        "bytes": 160,
+        "records": 5
+      },
+      {
+        "kind": "STRINGS",
+        "scope": 1,
+        "flags": 3,
+        "bytes": 3422,
+        "records": 86
+      },
+      {
+        "kind": "TYPES",
+        "scope": 1,
+        "flags": 3,
+        "bytes": 1392,
+        "records": 35
+      },
+      {
+        "kind": "CONSTANTS",
+        "scope": 1,
+        "flags": 3,
+        "bytes": 669,
+        "records": 59
+      },
+      {
+        "kind": "IMPORTS",
+        "scope": 1,
+        "flags": 3,
+        "bytes": 2672,
+        "records": 51
+      },
+      {
+        "kind": "EXPORTS",
+        "scope": 1,
+        "flags": 3,
+        "bytes": 24,
+        "records": 0
+      },
+      {
+        "kind": "FIELDS",
+        "scope": 1,
+        "flags": 3,
+        "bytes": 160,
+        "records": 5
+      },
+      {
+        "kind": "FUNCTIONS",
+        "scope": 1,
+        "flags": 3,
+        "bytes": 3252,
+        "records": 17
+      },
+      {
+        "kind": "BLOCKS",
+        "scope": 1,
+        "flags": 3,
+        "bytes": 5872,
+        "records": 209
+      },
+      {
+        "kind": "CODE",
+        "scope": 1,
+        "flags": 3,
+        "bytes": 9815,
+        "records": 209
+      },
+      {
+        "kind": "EXCEPTIONS",
+        "scope": 1,
+        "flags": 3,
+        "bytes": 48,
+        "records": 1
+      },
+      {
+        "kind": "UTF16_LITERALS",
+        "scope": 1,
+        "flags": 3,
+        "bytes": 802,
+        "records": 23
+      },
+      {
+        "kind": "SAFEPOINT_ROOTS",
+        "scope": 1,
+        "flags": 3,
+        "bytes": 18528,
+        "records": 434
+      },
+      {
+        "kind": "DEBUG",
+        "scope": 1,
+        "flags": 0,
+        "bytes": 29428,
+        "records": 919
+      },
+      {
+        "kind": "DEBUG_PATHS",
+        "scope": 1,
+        "flags": 1,
+        "bytes": 120,
+        "records": 3
+      },
+      {
+        "kind": "SAFEPOINT_ROOT_RANGES",
+        "scope": 1,
+        "flags": 1,
+        "bytes": 16,
+        "records": 1
+      },
+      {
+        "kind": "DEBUG_SOURCE_POSITIONS",
+        "scope": 1,
+        "flags": 0,
+        "bytes": 14724,
+        "records": 919
+      },
+      {
+        "kind": "STRINGS",
+        "scope": 2,
+        "flags": 3,
+        "bytes": 311,
+        "records": 11
+      },
+      {
+        "kind": "TYPES",
+        "scope": 2,
+        "flags": 3,
+        "bytes": 200,
+        "records": 5
+      },
+      {
+        "kind": "CONSTANTS",
+        "scope": 2,
+        "flags": 3,
+        "bytes": 47,
+        "records": 3
+      },
+      {
+        "kind": "IMPORTS",
+        "scope": 2,
+        "flags": 3,
+        "bytes": 232,
+        "records": 4
+      },
+      {
+        "kind": "EXPORTS",
+        "scope": 2,
+        "flags": 3,
+        "bytes": 80,
+        "records": 3
+      },
+      {
+        "kind": "FIELDS",
+        "scope": 2,
+        "flags": 3,
+        "bytes": 24,
+        "records": 0
+      },
+      {
+        "kind": "FUNCTIONS",
+        "scope": 2,
+        "flags": 3,
+        "bytes": 283,
+        "records": 3
+      },
+      {
+        "kind": "BLOCKS",
+        "scope": 2,
+        "flags": 3,
+        "bytes": 272,
+        "records": 9
+      },
+      {
+        "kind": "CODE",
+        "scope": 2,
+        "flags": 3,
+        "bytes": 225,
+        "records": 9
+      },
+      {
+        "kind": "EXCEPTIONS",
+        "scope": 2,
+        "flags": 3,
+        "bytes": 24,
+        "records": 0
+      },
+      {
+        "kind": "UTF16_LITERALS",
+        "scope": 2,
+        "flags": 3,
+        "bytes": 86,
+        "records": 2
+      },
+      {
+        "kind": "SAFEPOINT_ROOTS",
+        "scope": 2,
+        "flags": 3,
+        "bytes": 492,
+        "records": 20
+      },
+      {
+        "kind": "STRINGS",
+        "scope": 3,
+        "flags": 3,
+        "bytes": 3179,
+        "records": 72
+      },
+      {
+        "kind": "TYPES",
+        "scope": 3,
+        "flags": 3,
+        "bytes": 1068,
+        "records": 28
+      },
+      {
+        "kind": "CONSTANTS",
+        "scope": 3,
+        "flags": 3,
+        "bytes": 178,
+        "records": 16
+      },
+      {
+        "kind": "IMPORTS",
+        "scope": 3,
+        "flags": 3,
+        "bytes": 488,
+        "records": 9
+      },
+      {
+        "kind": "EXPORTS",
+        "scope": 3,
+        "flags": 3,
+        "bytes": 464,
+        "records": 22
+      },
+      {
+        "kind": "FIELDS",
+        "scope": 3,
+        "flags": 3,
+        "bytes": 664,
+        "records": 23
+      },
+      {
+        "kind": "FUNCTIONS",
+        "scope": 3,
+        "flags": 3,
+        "bytes": 2171,
+        "records": 19
+      },
+      {
+        "kind": "BLOCKS",
+        "scope": 3,
+        "flags": 3,
+        "bytes": 7640,
+        "records": 272
+      },
+      {
+        "kind": "CODE",
+        "scope": 3,
+        "flags": 3,
+        "bytes": 6598,
+        "records": 272
+      },
+      {
+        "kind": "EXCEPTIONS",
+        "scope": 3,
+        "flags": 3,
+        "bytes": 48,
+        "records": 1
+      },
+      {
+        "kind": "UTF16_LITERALS",
+        "scope": 3,
+        "flags": 3,
+        "bytes": 520,
+        "records": 7
+      },
+      {
+        "kind": "SAFEPOINT_ROOTS",
+        "scope": 3,
+        "flags": 3,
+        "bytes": 9816,
+        "records": 330
+      },
+      {
+        "kind": "SAFEPOINT_ROOT_RANGES",
+        "scope": 3,
+        "flags": 1,
+        "bytes": 16,
+        "records": 1
+      },
+      {
+        "kind": "STRINGS",
+        "scope": 4,
+        "flags": 3,
+        "bytes": 423,
+        "records": 15
+      },
+      {
+        "kind": "TYPES",
+        "scope": 4,
+        "flags": 3,
+        "bytes": 284,
+        "records": 6
+      },
+      {
+        "kind": "CONSTANTS",
+        "scope": 4,
+        "flags": 3,
+        "bytes": 39,
+        "records": 2
+      },
+      {
+        "kind": "IMPORTS",
+        "scope": 4,
+        "flags": 3,
+        "bytes": 384,
+        "records": 7
+      },
+      {
+        "kind": "EXPORTS",
+        "scope": 4,
+        "flags": 3,
+        "bytes": 104,
+        "records": 4
+      },
+      {
+        "kind": "FIELDS",
+        "scope": 4,
+        "flags": 3,
+        "bytes": 24,
+        "records": 0
+      },
+      {
+        "kind": "FUNCTIONS",
+        "scope": 4,
+        "flags": 3,
+        "bytes": 467,
+        "records": 5
+      },
+      {
+        "kind": "BLOCKS",
+        "scope": 4,
+        "flags": 3,
+        "bytes": 272,
+        "records": 9
+      },
+      {
+        "kind": "CODE",
+        "scope": 4,
+        "flags": 3,
+        "bytes": 246,
+        "records": 9
+      },
+      {
+        "kind": "EXCEPTIONS",
+        "scope": 4,
+        "flags": 3,
+        "bytes": 24,
+        "records": 0
+      },
+      {
+        "kind": "UTF16_LITERALS",
+        "scope": 4,
+        "flags": 3,
+        "bytes": 62,
+        "records": 1
+      },
+      {
+        "kind": "SAFEPOINT_ROOTS",
+        "scope": 4,
+        "flags": 3,
+        "bytes": 536,
+        "records": 21
+      },
+      {
+        "kind": "STRINGS",
+        "scope": 5,
+        "flags": 3,
+        "bytes": 1013,
+        "records": 39
+      },
+      {
+        "kind": "TYPES",
+        "scope": 5,
+        "flags": 3,
+        "bytes": 316,
+        "records": 8
+      },
+      {
+        "kind": "CONSTANTS",
+        "scope": 5,
+        "flags": 3,
+        "bytes": 76,
+        "records": 6
+      },
+      {
+        "kind": "IMPORTS",
+        "scope": 5,
+        "flags": 3,
+        "bytes": 176,
+        "records": 3
+      },
+      {
+        "kind": "EXPORTS",
+        "scope": 5,
+        "flags": 3,
+        "bytes": 400,
+        "records": 19
+      },
+      {
+        "kind": "FIELDS",
+        "scope": 5,
+        "flags": 3,
+        "bytes": 496,
+        "records": 17
+      },
+      {
+        "kind": "FUNCTIONS",
+        "scope": 5,
+        "flags": 3,
+        "bytes": 743,
+        "records": 4
+      },
+      {
+        "kind": "BLOCKS",
+        "scope": 5,
+        "flags": 3,
+        "bytes": 4392,
+        "records": 156
+      },
+      {
+        "kind": "CODE",
+        "scope": 5,
+        "flags": 3,
+        "bytes": 3969,
+        "records": 156
+      },
+      {
+        "kind": "EXCEPTIONS",
+        "scope": 5,
+        "flags": 3,
+        "bytes": 24,
+        "records": 0
+      },
+      {
+        "kind": "UTF16_LITERALS",
+        "scope": 5,
+        "flags": 3,
+        "bytes": 24,
+        "records": 0
+      },
+      {
+        "kind": "SAFEPOINT_ROOTS",
+        "scope": 5,
+        "flags": 3,
+        "bytes": 6220,
+        "records": 203
+      },
+      {
+        "kind": "SAFEPOINT_ROOT_RANGES",
+        "scope": 5,
+        "flags": 1,
+        "bytes": 16,
+        "records": 1
+      },
+      {
+        "kind": "STRINGS",
+        "scope": 6,
+        "flags": 3,
+        "bytes": 397,
+        "records": 16
+      },
+      {
+        "kind": "TYPES",
+        "scope": 6,
+        "flags": 3,
+        "bytes": 528,
+        "records": 14
+      },
+      {
+        "kind": "CONSTANTS",
+        "scope": 6,
+        "flags": 3,
+        "bytes": 24,
+        "records": 0
+      },
+      {
+        "kind": "IMPORTS",
+        "scope": 6,
+        "flags": 3,
+        "bytes": 24,
+        "records": 0
+      },
+      {
+        "kind": "EXPORTS",
+        "scope": 6,
+        "flags": 3,
+        "bytes": 224,
+        "records": 10
+      },
+      {
+        "kind": "FIELDS",
+        "scope": 6,
+        "flags": 3,
+        "bytes": 80,
+        "records": 2
+      },
+      {
+        "kind": "FUNCTIONS",
+        "scope": 6,
+        "flags": 3,
+        "bytes": 327,
+        "records": 4
+      },
+      {
+        "kind": "BLOCKS",
+        "scope": 6,
+        "flags": 3,
+        "bytes": 360,
+        "records": 12
+      },
+      {
+        "kind": "CODE",
+        "scope": 6,
+        "flags": 3,
+        "bytes": 185,
+        "records": 12
+      },
+      {
+        "kind": "EXCEPTIONS",
+        "scope": 6,
+        "flags": 3,
+        "bytes": 24,
+        "records": 0
+      },
+      {
+        "kind": "UTF16_LITERALS",
+        "scope": 6,
+        "flags": 3,
+        "bytes": 24,
+        "records": 0
+      },
+      {
+        "kind": "SAFEPOINT_ROOTS",
+        "scope": 6,
+        "flags": 3,
+        "bytes": 436,
+        "records": 17
+      }
+    ],
+    "section_bytes": {
+      "MANIFEST": 112,
+      "MODULES": 408,
+      "CAPABILITIES": 160,
+      "STRINGS": 8745,
+      "TYPES": 3788,
+      "CONSTANTS": 1033,
+      "IMPORTS": 3976,
+      "EXPORTS": 1296,
+      "FIELDS": 1448,
+      "FUNCTIONS": 7243,
+      "BLOCKS": 18808,
+      "CODE": 21038,
+      "EXCEPTIONS": 192,
+      "UTF16_LITERALS": 1518,
+      "SAFEPOINT_ROOTS": 36028,
+      "DEBUG": 29428,
+      "DEBUG_PATHS": 120,
+      "SAFEPOINT_ROOT_RANGES": 48,
+      "DEBUG_SOURCE_POSITIONS": 14724
+    },
+    "section_records": {
+      "MANIFEST": 1,
+      "MODULES": 6,
+      "CAPABILITIES": 5,
+      "STRINGS": 239,
+      "TYPES": 96,
+      "CONSTANTS": 86,
+      "IMPORTS": 74,
+      "EXPORTS": 58,
+      "FIELDS": 47,
+      "FUNCTIONS": 52,
+      "BLOCKS": 667,
+      "CODE": 667,
+      "EXCEPTIONS": 2,
+      "UTF16_LITERALS": 33,
+      "SAFEPOINT_ROOTS": 1025,
+      "DEBUG": 919,
+      "DEBUG_PATHS": 3,
+      "SAFEPOINT_ROOT_RANGES": 3,
+      "DEBUG_SOURCE_POSITIONS": 919
+    },
+    "header_directory_digest_padding_bytes": 2803,
+    "debug_path_bytes": 88,
+    "debug_unique_paths": 3,
+    "debug_paths": {
+      "src/main.kt": 555,
+      "platform/stdlib/core/libraries/stdlib-core/kotlin/Assertions.kt": 21,
+      "src/control.kt": 343
+    },
+    "modeled_path_intern_saving_bytes": 0,
+    "conservative_debug_coalesce_records": 43,
+    "modeled_debug_coalesce_saving_bytes": 2064,
+    "empty_root_maps": 616,
+    "distinct_root_sets": 132,
+    "consecutive_same_block_root_map_duplicates": 1127,
+    "gzip9_bytes": 37582,
+    "estimate_notes": "Path pool and debug coalescing estimates are separate and must not be added. Coalescing keeps referenced inline parents; lookup semantics require behavioral validation. gzip9 is an offline storage experiment, not a supported executable format. This tool checks container accounting, not full VM validity."
+  },
+  {
+    "path": "after/hello/sample-1.cpkt",
+    "sha256": "b8f3d9dd969b6654964cfecc453f166910a7e29b57e93ab11f42ccec3ef17b68",
+    "artifact_bytes": 4632,
+    "format": [
+      3,
+      0
+    ],
+    "minimum_runtime_abi": [
+      1,
+      9
+    ],
+    "entry_module": 0,
+    "sections": [
+      {
+        "kind": "MANIFEST",
+        "scope": 0,
+        "flags": 3,
+        "bytes": 112,
+        "records": 1
+      },
+      {
+        "kind": "MODULES",
+        "scope": 0,
+        "flags": 3,
+        "bytes": 212,
+        "records": 3
+      },
+      {
+        "kind": "CAPABILITIES",
+        "scope": 0,
+        "flags": 3,
+        "bytes": 48,
+        "records": 1
+      },
+      {
+        "kind": "STRINGS",
+        "scope": 1,
+        "flags": 3,
+        "bytes": 116,
+        "records": 6
+      },
+      {
+        "kind": "TYPES",
+        "scope": 1,
+        "flags": 3,
+        "bytes": 80,
+        "records": 2
+      },
+      {
+        "kind": "CONSTANTS",
+        "scope": 1,
+        "flags": 3,
+        "bytes": 29,
+        "records": 1
+      },
+      {
+        "kind": "IMPORTS",
+        "scope": 1,
+        "flags": 3,
+        "bytes": 128,
+        "records": 2
+      },
+      {
+        "kind": "EXPORTS",
+        "scope": 1,
+        "flags": 3,
+        "bytes": 24,
+        "records": 0
+      },
+      {
+        "kind": "FIELDS",
+        "scope": 1,
+        "flags": 3,
+        "bytes": 24,
+        "records": 0
+      },
+      {
+        "kind": "FUNCTIONS",
+        "scope": 1,
+        "flags": 3,
+        "bytes": 73,
+        "records": 1
+      },
+      {
+        "kind": "BLOCKS",
+        "scope": 1,
+        "flags": 3,
+        "bytes": 48,
+        "records": 1
+      },
+      {
+        "kind": "CODE",
+        "scope": 1,
+        "flags": 3,
+        "bytes": 51,
+        "records": 1
+      },
+      {
+        "kind": "EXCEPTIONS",
+        "scope": 1,
+        "flags": 3,
+        "bytes": 24,
+        "records": 0
+      },
+      {
+        "kind": "UTF16_LITERALS",
+        "scope": 1,
+        "flags": 3,
+        "bytes": 50,
+        "records": 1
+      },
+      {
+        "kind": "SAFEPOINT_ROOTS",
+        "scope": 1,
+        "flags": 3,
+        "bytes": 84,
+        "records": 3
+      },
+      {
+        "kind": "DEBUG",
+        "scope": 1,
+        "flags": 0,
+        "bytes": 149,
+        "records": 3
+      },
+      {
+        "kind": "DEBUG_SOURCE_POSITIONS",
+        "scope": 1,
+        "flags": 0,
+        "bytes": 68,
+        "records": 3
+      },
+      {
+        "kind": "STRINGS",
+        "scope": 2,
+        "flags": 3,
+        "bytes": 110,
+        "records": 5
+      },
+      {
+        "kind": "TYPES",
+        "scope": 2,
+        "flags": 3,
+        "bytes": 88,
+        "records": 2
+      },
+      {
+        "kind": "CONSTANTS",
+        "scope": 2,
+        "flags": 3,
+        "bytes": 29,
+        "records": 1
+      },
+      {
+        "kind": "IMPORTS",
+        "scope": 2,
+        "flags": 3,
+        "bytes": 72,
+        "records": 1
+      },
+      {
+        "kind": "EXPORTS",
+        "scope": 2,
+        "flags": 3,
+        "bytes": 40,
+        "records": 1
+      },
+      {
+        "kind": "FIELDS",
+        "scope": 2,
+        "flags": 3,
+        "bytes": 24,
+        "records": 0
+      },
+      {
+        "kind": "FUNCTIONS",
+        "scope": 2,
+        "flags": 3,
+        "bytes": 156,
+        "records": 2
+      },
+      {
+        "kind": "BLOCKS",
+        "scope": 2,
+        "flags": 3,
+        "bytes": 104,
+        "records": 3
+      },
+      {
+        "kind": "CODE",
+        "scope": 2,
+        "flags": 3,
+        "bytes": 87,
+        "records": 3
+      },
+      {
+        "kind": "EXCEPTIONS",
+        "scope": 2,
+        "flags": 3,
+        "bytes": 24,
+        "records": 0
+      },
+      {
+        "kind": "UTF16_LITERALS",
+        "scope": 2,
+        "flags": 3,
+        "bytes": 26,
+        "records": 1
+      },
+      {
+        "kind": "SAFEPOINT_ROOTS",
+        "scope": 2,
+        "flags": 3,
+        "bytes": 188,
+        "records": 7
+      },
+      {
+        "kind": "STRINGS",
+        "scope": 3,
+        "flags": 3,
+        "bytes": 267,
+        "records": 10
+      },
+      {
+        "kind": "TYPES",
+        "scope": 3,
+        "flags": 3,
+        "bytes": 312,
+        "records": 8
+      },
+      {
+        "kind": "CONSTANTS",
+        "scope": 3,
+        "flags": 3,
+        "bytes": 24,
+        "records": 0
+      },
+      {
+        "kind": "IMPORTS",
+        "scope": 3,
+        "flags": 3,
+        "bytes": 24,
+        "records": 0
+      },
+      {
+        "kind": "EXPORTS",
+        "scope": 3,
+        "flags": 3,
+        "bytes": 40,
+        "records": 1
+      },
+      {
+        "kind": "FIELDS",
+        "scope": 3,
+        "flags": 3,
+        "bytes": 80,
+        "records": 2
+      },
+      {
+        "kind": "FUNCTIONS",
+        "scope": 3,
+        "flags": 3,
+        "bytes": 24,
+        "records": 0
+      },
+      {
+        "kind": "BLOCKS",
+        "scope": 3,
+        "flags": 3,
+        "bytes": 24,
+        "records": 0
+      },
+      {
+        "kind": "CODE",
+        "scope": 3,
+        "flags": 3,
+        "bytes": 24,
+        "records": 0
+      },
+      {
+        "kind": "EXCEPTIONS",
+        "scope": 3,
+        "flags": 3,
+        "bytes": 24,
+        "records": 0
+      },
+      {
+        "kind": "UTF16_LITERALS",
+        "scope": 3,
+        "flags": 3,
+        "bytes": 24,
+        "records": 0
+      },
+      {
+        "kind": "SAFEPOINT_ROOTS",
+        "scope": 3,
+        "flags": 3,
+        "bytes": 24,
+        "records": 0
+      }
+    ],
+    "section_bytes": {
+      "MANIFEST": 112,
+      "MODULES": 212,
+      "CAPABILITIES": 48,
+      "STRINGS": 493,
+      "TYPES": 480,
+      "CONSTANTS": 82,
+      "IMPORTS": 224,
+      "EXPORTS": 104,
+      "FIELDS": 128,
+      "FUNCTIONS": 253,
+      "BLOCKS": 176,
+      "CODE": 162,
+      "EXCEPTIONS": 72,
+      "UTF16_LITERALS": 100,
+      "SAFEPOINT_ROOTS": 296,
+      "DEBUG": 149,
+      "DEBUG_SOURCE_POSITIONS": 68
+    },
+    "section_records": {
+      "MANIFEST": 1,
+      "MODULES": 3,
+      "CAPABILITIES": 1,
+      "STRINGS": 21,
+      "TYPES": 12,
+      "CONSTANTS": 2,
+      "IMPORTS": 3,
+      "EXPORTS": 2,
+      "FIELDS": 2,
+      "FUNCTIONS": 3,
+      "BLOCKS": 4,
+      "CODE": 4,
+      "EXCEPTIONS": 0,
+      "UTF16_LITERALS": 2,
+      "SAFEPOINT_ROOTS": 10,
+      "DEBUG": 3,
+      "DEBUG_SOURCE_POSITIONS": 3
+    },
+    "header_directory_digest_padding_bytes": 1473,
+    "debug_path_bytes": 33,
+    "debug_unique_paths": 1,
+    "debug_paths": {
+      "src/main.kt": 3
+    },
+    "modeled_path_intern_saving_bytes": -34,
+    "conservative_debug_coalesce_records": 0,
+    "modeled_debug_coalesce_saving_bytes": 0,
+    "empty_root_maps": 4,
+    "distinct_root_sets": 6,
+    "consecutive_same_block_root_map_duplicates": 0,
+    "gzip9_bytes": 1271,
+    "estimate_notes": "Path pool and debug coalescing estimates are separate and must not be added. Coalescing keeps referenced inline parents; lookup semantics require behavioral validation. gzip9 is an offline storage experiment, not a supported executable format. This tool checks container accounting, not full VM validity."
+  }
+]

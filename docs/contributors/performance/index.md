@@ -15,6 +15,7 @@ interpreter measurements answer different questions: they exclude Minecraft life
 
 | Report | Scope |
 | --- | --- |
+| [Executable method reachability, 2026-10-11]({{ '/EXECUTABLE-METHOD-REACHABILITY-2026-10-11/' | relative_url }}) | PID/Hello World sizes, matched compilation timings and dispatch conformance |
 | [Direct final-class calls, 2026-10-08]({{ '/VM-FINAL-CALLS-2026-10-08/' | relative_url }}) | Compiler devirtualization, matched CPU trials and dispatch conformance |
 | [Builtin sizes and optimization opportunities, 2026-10-07]({{ '/VM-OPTIMIZATION-SURVEY-2026-10-07/' | relative_url }}) | Section inventories, debug/root metadata models and CPU profiles |
 | [Runtime 0.20.0 baseline, 2026-10-07]({{ '/VM-PERFORMANCE-2026-10-07/' | relative_url }}) | Fresh compiled Guest workloads through the untraced interpreter |

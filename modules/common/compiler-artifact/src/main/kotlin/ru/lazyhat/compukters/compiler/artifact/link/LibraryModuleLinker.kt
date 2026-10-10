@@ -317,6 +317,7 @@ private fun minimumRuntimeAbi(
     modules: List<Module>,
 ): AbiVersion {
     var required = declared
+    if (hasRootSuperclassMethods(modules)) required = maxOf(required, AbiVersion(1u, 10u))
     if (modules.any { module -> module.blocks.any { block -> block.instructions.any { it.usesUnsignedSemantics() } } }) {
         required = maxOf(required, AbiVersion(1u, 14u))
     }
@@ -389,6 +390,41 @@ private fun minimumRuntimeAbi(
     }
     return required
 }
+
+private fun hasRootSuperclassMethods(modules: List<Module>): Boolean =
+    modules.withIndex().any { (moduleIndex, module) ->
+        module.types.any { type ->
+            val parent =
+                when (type) {
+                    is NominalType.Array -> type.superType
+                    is NominalType.Class -> type.superType.takeIf { type.throwableRoot || type.runtimeExceptionKind != null }
+                    else -> null
+                }
+            val parentType = parent?.let { resolveLinkedType(modules, moduleIndex, it) } as? NominalType.Class
+            parentType != null && parentType.methodCount != 0u
+        }
+    }
+
+private fun resolveLinkedType(
+    modules: List<Module>,
+    moduleIndex: Int,
+    type: TypeRef,
+): NominalType =
+    when (type) {
+        is TypeRef.Local -> {
+            modules[moduleIndex].types[type.id.value.toInt()]
+        }
+
+        is TypeRef.Imported -> {
+            val module = modules[moduleIndex]
+            val import = module.imports[type.id.value.toInt()]
+            require(import.kind == ru.lazyhat.compukters.compiler.artifact.model.SymbolKind.TYPE) { "type refers to a non-type import" }
+            val target = modules[import.targetModule.value.toInt()]
+            val name = module.strings[import.targetName.value.toInt()]
+            val export = target.exports.single { it.kind == import.kind && target.strings[it.name.value.toInt()] == name }
+            target.types[export.localSymbol.toInt()]
+        }
+    }
 
 private fun Manifest.withLinkedRequirements(
     requiredStackBytes: UInt,
@@ -605,22 +641,26 @@ private fun relocateType(
         }
 
         is NominalType.Class -> {
+            val (methodStart, methodCount) = relocateMethods(type.methodStart, type.methodCount, ids.functions)
             type.copy(
                 name = ids.string(type.name),
                 superType = type.superType?.let(ids::type),
                 interfaces = type.interfaces.map(ids::type).sortedBy(::encodeTypeRef),
                 fieldStart = relocateStart(type.fieldStart, type.fieldCount, ids.fields, "field"),
-                methodStart = relocateStart(type.methodStart, type.methodCount, ids.functions, "method"),
+                methodStart = methodStart,
+                methodCount = methodCount,
                 initializer = type.initializer?.let(ids::function),
             )
         }
 
         is NominalType.Interface -> {
+            val (methodStart, methodCount) = relocateMethods(type.methodStart, type.methodCount, ids.functions)
             type.copy(
                 name = ids.string(type.name),
                 superType = type.superType?.let(ids::type),
                 interfaces = type.interfaces.map(ids::type).sortedBy(::encodeTypeRef),
-                methodStart = relocateStart(type.methodStart, type.methodCount, ids.functions, "method"),
+                methodStart = methodStart,
+                methodCount = methodCount,
             )
         }
     }
@@ -823,6 +863,24 @@ private fun relocateCapability(
     capability: Capability,
     ids: ModuleRelocation,
 ): Capability = capability.copy(namespace = ids.string(capability.namespace), name = ids.string(capability.name))
+
+private fun relocateMethods(
+    start: UInt,
+    count: UInt,
+    ids: DenseIds,
+): Pair<UInt, UInt> {
+    val end = start.toLong() + count.toLong()
+
+    fun lowerBound(value: Long): Int = ids.oldIndices.binarySearch(value.toInt()).let { if (it < 0) -it - 1 else it }
+    require(end <= Int.MAX_VALUE) { "method range is too large" }
+    val selected = ids.oldIndices.subList(lowerBound(start.toLong()), lowerBound(end))
+    if (selected.isEmpty()) return 0u to 0u
+    val first = ids.get(selected.first(), "method")
+    require(selected.withIndex().all { (offset, old) -> ids.get(old, "method") == first + offset }) {
+        "relocated methods are not contiguous"
+    }
+    return first.toUInt() to selected.size.toUInt()
+}
 
 private fun relocateStart(
     start: UInt,

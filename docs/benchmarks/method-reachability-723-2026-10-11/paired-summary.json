@@ -1,0 +1,42 @@
+[
+  {
+    "input": "pid",
+    "phase": "before",
+    "cold_median_ms": 4221.574241,
+    "warm_median_ms": 494.502922,
+    "warm_samples": 9,
+    "cold_samples": 3,
+    "bytes": 214100,
+    "sha256": "d0c069d15033af00b22cf813f7e619ed5d9a2badd5f905d4c87cac1a85f364e2"
+  },
+  {
+    "input": "pid",
+    "phase": "after",
+    "cold_median_ms": 4278.65261,
+    "warm_median_ms": 503.138732,
+    "warm_samples": 9,
+    "cold_samples": 3,
+    "bytes": 152916,
+    "sha256": "aa39457e2bc544d584a94bfa138dc6f3e8136a3832f188dc53d41d461bc4f21c"
+  },
+  {
+    "input": "hello",
+    "phase": "before",
+    "cold_median_ms": 4133.659044,
+    "warm_median_ms": 303.947219,
+    "warm_samples": 9,
+    "cold_samples": 3,
+    "bytes": 6708,
+    "sha256": "2a7d126dd30c3f5b744316bd5f40a551e92660b9146513587c27667156d90fd3"
+  },
+  {
+    "input": "hello",
+    "phase": "after",
+    "cold_median_ms": 3831.120346,
+    "warm_median_ms": 299.995729,
+    "warm_samples": 9,
+    "cold_samples": 3,
+    "bytes": 4632,
+    "sha256": "b8f3d9dd969b6654964cfecc453f166910a7e29b57e93ab11f42ccec3ef17b68"
+  }
+]
