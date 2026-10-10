@@ -89,6 +89,55 @@ internal class IdeVisibleLatencyPerformanceTest {
         }
     }
 
+    @Test
+    fun `production burst keeps input responsive and analyzes its final revision`() {
+        val fixture = IdeVisibleLatencyFixtures.singleFile()
+        val paths = IdeClientPaths.at(createTempDirectory("compukters-input-burst-").toAbsolutePath().normalize())
+        val prepared = ProductionIdeApplicationFactory.prepare(paths)
+        val compilerBackend =
+            ClientCompilerBackendLifetime(TimeUnit.SECONDS.toNanos(120)) {
+                ProductionIdeApplicationFactory.createCompilerBackend(paths, prepared)
+            }
+        seedProject(paths, fixture, prepared)
+        val trace = BoundedIdeVisibleLatencyCollector(IdeVisibleLatencyClock.System, maximumSamples = 128)
+        val processes = CountingWorkerProcessFactory()
+        try {
+            ProductionIdeApplicationFactory
+                .open(paths, TestTargetTransport, TestLayoutStore, trace) { workspace ->
+                    CompletableFuture.completedFuture(
+                        ProductionIdeApplicationFactory.createTooling(
+                            paths = paths,
+                            workspace = workspace,
+                            prepared = prepared,
+                            compilerBackend = compilerBackend.openSession(),
+                            visibleLatency = trace,
+                            analysisProcessFactory = processes,
+                        ),
+                    )
+                }.use { application ->
+                    val controller = application.controller
+                    openFixture(controller, processes, fixture)
+                    controller.dispatch(IdeCommand.Edit(IdeEditorInput.SetCaret(fixture.activeText(0).length, false)))
+                    val priorUpdates = processes.incrementalUpdates
+                    val durations =
+                        (1..50)
+                            .map {
+                                val start = System.nanoTime()
+                                controller.dispatch(IdeCommand.Edit(IdeEditorInput.Type(" ")))
+                                System.nanoTime() - start
+                            }.sorted()
+                    val revision = textEditor(controller).contentRevision
+                    awaitVisibleSample(controller, trace, IdeVisibleLatencyKind.Presentation, revision)
+                    println("compukters.ide.burst inputMedianMs=${durations[25] / 1_000_000.0} inputP95Ms=${durations[47] / 1_000_000.0}")
+                    assertTrue(durations[47] < TimeUnit.MILLISECONDS.toNanos(16), "burst input p95 must fit a frame")
+                    assertEquals(priorUpdates + 1, processes.incrementalUpdates, "burst must analyze only its final revision")
+                    assertEquals(1, processes.starts)
+                }
+        } finally {
+            compilerBackend.close()
+        }
+    }
+
     private fun measure(fixture: IdeVisibleLatencyFixture): IdeVisibleLatencyReport {
         val gameRoot = createTempDirectory("compukters-visible-latency-").toAbsolutePath().normalize()
         val paths = IdeClientPaths.at(gameRoot)

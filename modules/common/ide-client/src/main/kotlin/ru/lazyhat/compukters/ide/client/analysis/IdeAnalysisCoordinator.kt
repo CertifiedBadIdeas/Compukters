@@ -36,6 +36,8 @@ import ru.lazyhat.compukters.ide.analysis.controller.AdmittedAnalysisSnapshot
 import ru.lazyhat.compukters.ide.analysis.controller.AnalysisClientResult
 import ru.lazyhat.compukters.ide.analysis.controller.AnalysisRequestCoordinator
 import ru.lazyhat.compukters.ide.analysis.controller.AnalysisResultSink
+import ru.lazyhat.compukters.ide.analysis.controller.AnalysisScheduledTask
+import ru.lazyhat.compukters.ide.analysis.controller.AnalysisTaskScheduler
 import ru.lazyhat.compukters.ide.client.IdeClientLimits
 import ru.lazyhat.compukters.ide.client.workspace.IdeBuildInput
 import ru.lazyhat.compukters.ide.compiler.profile.PlatformCatalog
@@ -198,6 +200,7 @@ sealed interface IdeAnalysisState {
     data class Loading(
         val path: VirtualSourcePath,
         val documentRevision: Long,
+        val presentation: IdeAnalysisPresentation = IdeAnalysisPresentation.Empty,
     ) : IdeAnalysisState
 
     data class Active(
@@ -219,6 +222,13 @@ sealed interface IdeAnalysisState {
     ) : IdeAnalysisState
 }
 
+fun IdeAnalysisState.presentationOrNull(): IdeAnalysisPresentation? =
+    when (this) {
+        is IdeAnalysisState.Active -> presentation
+        is IdeAnalysisState.Loading -> presentation
+        is IdeAnalysisState.Unavailable, IdeAnalysisState.Idle -> null
+    }
+
 class IdeAnalysisCoordinator(
     private val inputLoader: IdeAnalysisInputLoader,
     private val snapshotFactory: IdeAnalysisSnapshotFactory,
@@ -227,6 +237,8 @@ class IdeAnalysisCoordinator(
     private val limits: IdeClientLimits = IdeClientLimits(),
     private val attachedSources: IdeAttachedSourceCatalog = IdeAttachedSourceCatalog.empty(),
     platformCatalog: PlatformCatalog,
+    private val preparationScheduler: AnalysisTaskScheduler = IdeAnalysisPreparationScheduler(),
+    private val preparationDebounceNanos: Long = 25_000_000L,
 ) : AnalysisResultSink,
     AutoCloseable {
     private val lock = Any()
@@ -247,6 +259,11 @@ class IdeAnalysisCoordinator(
     private var closed = false
     private var targetProfile: TargetCompileProfile? = null
     private var targetRevision = 0L
+    private var preparationTask: AnalysisScheduledTask? = null
+
+    init {
+        require(preparationDebounceNanos >= 0) { "analysis preparation delay must not be negative" }
+    }
 
     fun state(): IdeAnalysisState = publishedState.get()
 
@@ -275,9 +292,7 @@ class IdeAnalysisCoordinator(
             session = Session(project, admittedPath, text, documentRevision, text.length, null, null, overlays = sourceOverlays.toMap())
             publishedState.set(IdeAnalysisState.Loading(admittedPath, documentRevision))
         }
-        cancelPointerRequests()
-        requests.cancelSymbolOccurrences()
-        requests.cancelParameterInfo()
+        requests.sourceInvalidated()
         inputLoader.load(project).whenComplete { input, failure ->
             if (failure == null && input != null) {
                 acceptInput(expectedVersion, input)
@@ -315,9 +330,7 @@ class IdeAnalysisCoordinator(
             if (current.input != null) version = Math.incrementExact(version)
             val presentation =
                 change?.let { exactChange ->
-                    (publishedState.get() as? IdeAnalysisState.Active)
-                        ?.presentation
-                        ?.rebase(current.path, exactChange, text)
+                    publishedState.get().presentationOrNull()?.rebase(current.path, exactChange, text)
                 } ?: IdeAnalysisPresentation.Empty
             val updated =
                 current.copy(
@@ -332,14 +345,12 @@ class IdeAnalysisCoordinator(
                 )
             completionExpected = updated.pendingCompletion == PendingCompletion.Automatic
             session = updated
-            publishedState.set(IdeAnalysisState.Loading(updated.path, documentRevision))
+            publishedState.set(IdeAnalysisState.Loading(updated.path, documentRevision, presentation))
+            requests.sourceInvalidated()
             rebuild = updated.input?.let { Rebuild(version, updated) }
         }
-        cancelPointerRequests()
-        requests.cancelSymbolOccurrences()
-        requests.cancelParameterInfo()
         if (completionExpected) visibleLatency.automaticCompletionExpected(documentRevision)
-        rebuild?.let { pending -> rebuild(pending.version, requireNotNull(pending.session.input)) }
+        rebuild?.let { pending -> scheduleRebuild(pending.version, requireNotNull(pending.session.input), preparationDebounceNanos) }
     }
 
     fun reload(sourceOverlays: Map<VirtualSourcePath, String>? = null) {
@@ -356,9 +367,7 @@ class IdeAnalysisCoordinator(
             session = current.copy(input = null, snapshot = null, overlays = sourceOverlays?.toMap() ?: current.overlays)
             publishedState.set(IdeAnalysisState.Loading(current.path, current.documentRevision))
         }
-        cancelPointerRequests()
-        requests.cancelSymbolOccurrences()
-        requests.cancelParameterInfo()
+        requests.sourceInvalidated()
         inputLoader.load(project).whenComplete { input, failure ->
             if (failure == null && input != null) {
                 acceptInput(expectedVersion, input)
@@ -743,17 +752,20 @@ class IdeAnalysisCoordinator(
         }
 
     fun updateTargetProfile(profile: TargetCompileProfile?) {
+        val rebuild: Rebuild?
         synchronized(lock) {
-            if (targetProfile == profile) return
+            if (closed || targetProfile == profile) return
             activeAttachedSources = profile?.let { attachedSources.withAddonBundles(it.addonBundles) } ?: attachedSources
             targetProfile = profile
             targetRevision = Math.incrementExact(targetRevision)
-            requests.cancelCompletion()
-            session = session?.copy(diagnosticsDeferred = false)
-            val active = publishedState.get() as? IdeAnalysisState.Active ?: return
-            publishedState.set(active.copy(completion = null))
-            requests.setDiagnosticsEnabled(true, active.path)
+            requests.sourceInvalidated()
+            val current = session
+            if (current?.input != null) version = Math.incrementExact(version)
+            session = current?.copy(snapshot = null, pendingCompletion = null, diagnosticsDeferred = false)
+            if (current != null) publishedState.set(IdeAnalysisState.Loading(current.path, current.documentRevision))
+            rebuild = session?.takeIf { it.input != null }?.let { Rebuild(version, it) }
         }
+        rebuild?.let { pending -> scheduleRebuild(pending.version, requireNotNull(pending.session.input), 0) }
     }
 
     fun closeFile() {
@@ -763,11 +775,11 @@ class IdeAnalysisCoordinator(
             invalidateParameterInfoLocked(close = true)
             version = Math.incrementExact(version)
             session = null
+            preparationTask?.cancel()
+            preparationTask = null
             publishedState.set(IdeAnalysisState.Idle)
         }
-        cancelPointerRequests()
-        requests.cancelSymbolOccurrences()
-        requests.cancelParameterInfo()
+        requests.sourceInvalidated()
     }
 
     override fun publish(result: AnalysisClientResult) {
@@ -815,8 +827,11 @@ class IdeAnalysisCoordinator(
             closed = true
             version = Math.incrementExact(version)
             session = null
+            preparationTask?.cancel()
+            preparationTask = null
             publishedState.set(IdeAnalysisState.Idle)
         }
+        preparationScheduler.close()
         requests.close()
     }
 
@@ -832,17 +847,32 @@ class IdeAnalysisCoordinator(
             session = updated
             rebuild = Rebuild(expectedVersion, updated)
         }
-        rebuild(rebuild.version, input)
+        scheduleRebuild(rebuild.version, input, 0)
+    }
+
+    private fun scheduleRebuild(
+        expectedVersion: Long,
+        input: IdeBuildInput,
+        delayNanos: Long,
+    ) {
+        synchronized(lock) {
+            if (closed || version != expectedVersion || session?.input !== input) return
+            preparationTask?.cancel()
+            preparationTask =
+                preparationScheduler.schedule(delayNanos) {
+                    rebuild(expectedVersion, input)
+                }
+        }
     }
 
     private fun rebuild(
         expectedVersion: Long,
         input: IdeBuildInput,
     ) {
-        val (current, target) =
+        val (current, target, expectedTargetRevision) =
             synchronized(lock) {
                 val active = session?.takeIf { !closed && version == expectedVersion && it.input === input } ?: return
-                active to targetProfile
+                Triple(active, targetProfile, targetRevision)
             }
         val snapshot =
             try {
@@ -855,12 +885,18 @@ class IdeAnalysisCoordinator(
                 return
             }
         val completion: PendingCompletion?
+        val caret: Int
         val parameterInfo: ParameterInfoRequest?
         synchronized(lock) {
             val latest = session ?: return
-            if (closed || version != expectedVersion || latest !== current) return
+            if (closed || version != expectedVersion || latest.input !== input ||
+                latest.documentRevision != current.documentRevision || targetRevision != expectedTargetRevision
+            ) {
+                return
+            }
             session = latest.copy(snapshot = snapshot, pendingCompletion = null, diagnosticsDeferred = latest.pendingCompletion != null)
             completion = latest.pendingCompletion
+            caret = latest.caretOffsetUtf16
             publishedState.set(
                 IdeAnalysisState.Active(
                     snapshot.identity,
@@ -872,12 +908,12 @@ class IdeAnalysisCoordinator(
             )
             requests.setDiagnosticsEnabled(completion == null, current.path)
             requests.sourceChanged(snapshot, current.path)
+            when (completion) {
+                PendingCompletion.Automatic -> requests.automaticCompletion(current.path, caret)
+                PendingCompletion.Manual -> requests.manualCompletion(current.path, caret)
+                null -> Unit
+            }
             parameterInfo = if (parameterInfoRequested) beginParameterInfoLocked(latest, snapshot) else null
-        }
-        when (completion) {
-            PendingCompletion.Automatic -> requests.automaticCompletion(current.path, current.caretOffsetUtf16)
-            PendingCompletion.Manual -> requests.manualCompletion(current.path, current.caretOffsetUtf16)
-            null -> Unit
         }
         parameterInfo?.let(::dispatchParameterInfo)
         if (completion == null && parameterInfo == null) refreshCaretOccurrences()

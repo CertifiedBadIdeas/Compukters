@@ -13,6 +13,10 @@ headings so this page has one stable URL that can be shared outside the reposito
 
 ## 0.6.0 — In development
 
+- IDE analysis prepares project snapshots in the background and coalesces rapid edits before preparation.
+  Diagnostics, semantic highlighting and completion retain revision checks; existing presentation follows edits
+  while new results are pending. Worker cancellation no longer blocks typing on pipe writes.
+
 - Compukters: Sable 1.1 supports peripheral networks between shore devices and moving constructions. Access follows
   real world distance, including rotation and scale; assembly and return preserve bindings, names and complete display
   images. Partial display transfers split into panels with their published tiles and network membership.

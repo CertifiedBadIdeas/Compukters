@@ -1801,6 +1801,7 @@ class IdeClientControllerTest {
         IdeAnalysisRequestFactory { sink -> requests.apply { this.sink = sink } },
         latency,
         platformCatalog = TEST_PLATFORM_CATALOG,
+        preparationScheduler = ru.lazyhat.compukters.ide.client.analysis.ImmediateAnalysisTaskScheduler,
     )
 
     private fun navigationFixture(
@@ -1820,6 +1821,7 @@ class IdeClientControllerTest {
                     IdeAnalysisRequestFactory { sink -> requests.apply { this.sink = sink } },
                     attachedSources = attachedSources,
                     platformCatalog = TEST_PLATFORM_CATALOG,
+                    preparationScheduler = ru.lazyhat.compukters.ide.client.analysis.ImmediateAnalysisTaskScheduler,
                 )
             },
         )

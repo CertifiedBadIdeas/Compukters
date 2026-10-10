@@ -32,6 +32,47 @@ import kotlin.test.assertTrue
 
 class AnalysisRequestCoordinatorTest {
     @Test
+    fun `source invalidation suppresses scheduled work until the latest snapshot is ready`() {
+        val scheduler = ManualAnalysisTaskScheduler()
+        val client = RecordingAnalysisClient()
+        val coordinator = DefaultAnalysisRequestCoordinator(client, scheduler, 100, 10)
+        coordinator.sourceChanged(admittedSnapshot("val answer = 42"), testPath())
+        coordinator.automaticCompletion(testPath(), 3)
+        coordinator.sourceInvalidated()
+        scheduler.advanceBy(100)
+        assertTrue(client.queries.isEmpty())
+        val latest = admittedSnapshot("val answer = 43")
+        coordinator.sourceChanged(latest, testPath())
+        scheduler.advanceBy(100)
+        assertEquals(latest.identity, client.queries.single().identity)
+        coordinator.close()
+    }
+
+    @Test
+    fun `source invalidation cancels running presentation and rejects late publication`() {
+        val scheduler = ManualAnalysisTaskScheduler()
+        val client = RecordingAnalysisClient()
+        val published = mutableListOf<AnalysisClientResult>()
+        val coordinator = DefaultAnalysisRequestCoordinator(client, scheduler, 0, 0, resultSink = AnalysisResultSink(published::add))
+        val old = admittedSnapshot("val answer = 42")
+        coordinator.sourceChanged(old, testPath())
+        scheduler.advanceBy(0)
+        val running = client.queryFutures.single()
+        coordinator.sourceInvalidated()
+        assertTrue(running in client.cancelled)
+        running.complete(
+            AnalysisClientResult.Success(
+                ru.lazyhat.compukters.ide.analysis.AnalysisResult.Presentation(
+                    old.identity,
+                    SnapshotPresentation.create(old.identity, mapOf(testPath() to 15)),
+                ),
+            ),
+        )
+        assertTrue(published.isEmpty())
+        coordinator.close()
+    }
+
+    @Test
     fun `dismissal cancels scheduled and running completion and rejects late replies`() {
         val scheduler = ManualAnalysisTaskScheduler()
         val client = RecordingAnalysisClient()
