@@ -66,6 +66,7 @@ import ru.lazyhat.compukters.ide.client.state.IdeToolingState
 import ru.lazyhat.compukters.ide.client.state.IdeVerticalDirection
 import ru.lazyhat.compukters.ide.client.workspace.IdeBuildInput
 import ru.lazyhat.compukters.ide.client.workspace.IdeMutationRequest
+import ru.lazyhat.compukters.ide.client.workspace.IdeProjectConfiguration
 import ru.lazyhat.compukters.ide.client.workspace.IdeSaveRequest
 import ru.lazyhat.compukters.ide.client.workspace.IdeSaveResult
 import ru.lazyhat.compukters.ide.client.workspace.IdeWorkspace
@@ -2075,6 +2076,26 @@ internal class ControlledWorkspace(
         project: ProjectHandle,
         import: ProjectImport,
     ): CompletableFuture<ProjectMutationResult> = completeCall { ProjectTreeStore(project).importTree(import) }
+
+    var configurationRequests = 0
+    var configurationBarrier: CompletableFuture<IdeProjectConfiguration>? = null
+
+    override fun projectConfiguration(project: ProjectHandle): CompletableFuture<IdeProjectConfiguration> {
+        configurationRequests++
+        configurationBarrier?.let { return it }
+        val root = project.canonicalPath
+        return completed(
+            IdeProjectConfiguration(
+                project,
+                root.resolve("compukter.toml").toFile().readBytes(),
+                root
+                    .resolve("compukter.lock")
+                    .toFile()
+                    .takeIf { it.exists() }
+                    ?.readBytes(),
+            ),
+        )
+    }
 
     override fun buildInput(project: ProjectHandle): CompletableFuture<IdeBuildInput> {
         buildInputRequests++

@@ -45,13 +45,27 @@ Client IDE project
 ```
 
 The physical client runtime owns a lazy compiler backend across IDE screen sessions. Each screen retains its own
-compilation service, cache handle and backend lease. Closing the screen cancels its outstanding requests and releases
-its lease, while a completed compiler worker remains available for reopening the IDE. The final lease release starts
+compilation service, cache handle and backend lease. Closing the screen cancels its project compilations and releases
+its lease. Source-free library preparation belongs to the client owner and can finish after the screen closes;
+both prepared and completed compiler workers remain available for reopening the IDE. The final lease release starts
 a 120-second idle timeout; reopening cancels it. Expiry and replacement acquisition are serialized so workers cannot
 overlap on the same temporary directory. Client game shutdown closes the owner and timer immediately, including
-late tooling preparation. Active-request cancellation retains the existing worker termination semantics; only
-completed-worker reuse avoids the next cold startup. Source snapshots, pinned identities, artifact admission and
-result-cache verification are unchanged.
+late tooling preparation. Active project-compilation cancellation retains the existing worker termination semantics.
+Source snapshots, pinned identities, artifact admission and result-cache verification are unchanged.
+
+Opening a project with admitted manifest and lock starts background compiler-library preparation. Successful dependency
+resolution, observed configuration changes and attached target-profile changes request the matching preparation again.
+Configuration reads contain only manifest and lock bytes; source loading and project lowering remain exclusive to
+Build. The build coordinator admits preparation through the same lock validation and local/target profile resolver as
+compilation. Invalid manifests, missing/stale locks and unavailable profiles silently skip preparation, leaving editing
+and ordinary Build diagnostics available. No lock or artifact is written by preparation.
+
+Compiler protocol 5 explicitly distinguishes preparation from compilation. The same worker validates selected library
+identities and retains one library frontend cache; it prepares metadata/artifacts and generic library FIR without
+project sources or IR. In-flight identical preparation is shared across backend leases, while completed acknowledgements
+are discarded so they cannot mask a worker restart. A screen cancellation detaches its observer; idle expiry and client
+shutdown still close the backend. The bounded worker queue gives compilation priority over queued preparation and
+lets an active preparation finish before processing the next request.
 
 Both compilation services send ordered project sources, target settings, worker identity, platform-module identities,
 and limits through the same bounded compiler protocol. `compiler-k2-engine` owns the shared FIR-to-IR and Compukter

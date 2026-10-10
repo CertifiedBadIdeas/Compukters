@@ -28,8 +28,11 @@ import ru.lazyhat.compukters.compiler.worker.protocol.CompileResult
 import ru.lazyhat.compukters.compiler.worker.protocol.CompileSuccess
 import ru.lazyhat.compukters.compiler.worker.protocol.CompilerFailure
 import ru.lazyhat.compukters.compiler.worker.protocol.Hash256
+import ru.lazyhat.compukters.compiler.worker.protocol.LibraryPreparationRequest
+import ru.lazyhat.compukters.compiler.worker.protocol.LibraryPreparationResult
 import ru.lazyhat.compukters.compiler.worker.protocol.PlatformFailureClass
 import ru.lazyhat.compukters.compiler.worker.protocol.WorkerDiagnostic
+import ru.lazyhat.compukters.ide.compiler.profile.CompileProfile
 import java.security.MessageDigest
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.ExecutorService
@@ -62,12 +65,16 @@ sealed interface ClientBuildResult {
 }
 
 interface ClientCompilationService : AutoCloseable {
+    fun prepareLibraries(profile: CompileProfile): CompletableFuture<LibraryPreparationResult>
+
     fun build(input: ClientBuildSnapshot): CompletableFuture<ClientBuildResult>
 
     fun cancel(future: CompletableFuture<ClientBuildResult>): Boolean
 }
 
 interface ClientCompilerBackend : AutoCloseable {
+    fun prepareLibraries(request: LibraryPreparationRequest): CompletableFuture<LibraryPreparationResult>
+
     fun compile(request: CompileRequest): CompletableFuture<CompileResult>
 
     fun cancel(future: CompletableFuture<CompileResult>): Boolean
@@ -84,6 +91,9 @@ class ControllerClientCompilerBackend(
             request.addonBundles,
         )
 
+    override fun prepareLibraries(request: LibraryPreparationRequest): CompletableFuture<LibraryPreparationResult> =
+        controller.prepareLibraries(request.platformModules, request.addonBundles)
+
     override fun cancel(future: CompletableFuture<CompileResult>): Boolean = controller.cancel(future)
 
     override fun close() = controller.close()
@@ -98,6 +108,12 @@ class DefaultClientCompilationService(
     private var active: Build? = null
     private var queued: Build? = null
     private var closed = false
+
+    override fun prepareLibraries(profile: CompileProfile): CompletableFuture<LibraryPreparationResult> =
+        synchronized(lock) {
+            if (closed) return CompletableFuture.failedFuture(IllegalStateException("client compilation service is closed"))
+            backend.prepareLibraries(ClientCompileRequestFactory.prepareLibraries(profile))
+        }
 
     override fun build(input: ClientBuildSnapshot): CompletableFuture<ClientBuildResult> {
         val prepared = ClientCompileRequestFactory.prepare(input)

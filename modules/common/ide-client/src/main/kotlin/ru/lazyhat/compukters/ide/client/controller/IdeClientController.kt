@@ -85,6 +85,7 @@ import ru.lazyhat.compukters.ide.client.workspace.IdeMutationRequest
 import ru.lazyhat.compukters.ide.client.workspace.IdeSaveRequest
 import ru.lazyhat.compukters.ide.client.workspace.IdeWorkspace
 import ru.lazyhat.compukters.ide.client.workspace.ProjectFileOpenResult
+import ru.lazyhat.compukters.ide.compiler.profile.TargetCompileProfile
 import ru.lazyhat.compukters.ide.editor.EditorChange
 import ru.lazyhat.compukters.ide.editor.EditorDocument
 import ru.lazyhat.compukters.ide.editor.EditorEditResult
@@ -152,6 +153,9 @@ class IdeClientController(
                 },
         )
     private var buildCoordinator = buildCoordinator
+    private var libraryPreparation: CompletableFuture<*>? = null
+    private var latestLibraryPreparation = 0L
+    private var preparationTarget: TargetCompileProfile? = null
     private var analysisCoordinator = analysisCoordinator
     private var installedTooling: IdeClientTooling? = null
     private val acceptsTooling = AtomicBoolean(true)
@@ -837,6 +841,7 @@ class IdeClientController(
         if (closed) return
         persistGitAuthor()
         closed = true
+        cancelLibraryPreparation()
         gitCancellation?.cancel()
         inspectionCancellation?.cancel()
         gitCredentials?.close()
@@ -1063,6 +1068,7 @@ class IdeClientController(
     }
 
     private fun closeProjectDocuments() {
+        cancelLibraryPreparation()
         pendingRename = null
         documents.values.forEach(EditorSession::close)
         documents.clear()
@@ -1972,6 +1978,15 @@ class IdeClientController(
                 acceptCatalog(event)
             }
 
+            is IdeEvent.LibraryConfigurationLoaded -> {
+                if (event.operationId != latestLibraryPreparation || project?.handle !== event.input.project ||
+                    targetCoordinator?.attachedTarget() != event.target
+                ) {
+                    return
+                }
+                libraryPreparation = buildCoordinator?.prepareLibraries(event.input, event.target?.compileProfile)
+            }
+
             is IdeEvent.BuildInputLoaded -> {
                 acceptBuildInput(event)
             }
@@ -2070,6 +2085,27 @@ class IdeClientController(
         }
     }
 
+    private fun cancelLibraryPreparation() {
+        latestLibraryPreparation = nextOperationId++
+        libraryPreparation?.cancel(false)
+        libraryPreparation = null
+    }
+
+    private fun requestLibraryPreparation() {
+        cancelLibraryPreparation()
+        if (closed || buildCoordinator == null) return
+        val selected = project?.handle ?: return
+        val operationId = latestLibraryPreparation
+        val capturedGeneration = generation
+        val target = targetCoordinator?.attachedTarget()
+        preparationTarget = target?.compileProfile
+        workspace.projectConfiguration(selected).whenComplete { input, failure ->
+            if (failure == null && input != null && acceptsTooling.get()) {
+                events.offer(IdeEvent.LibraryConfigurationLoaded(capturedGeneration, operationId, input, target))
+            }
+        }
+    }
+
     private fun acceptTooling(tooling: IdeClientTooling) {
         if (installedTooling != null || closed) {
             tooling.close()
@@ -2079,6 +2115,7 @@ class IdeClientController(
         buildCoordinator = tooling.build
         analysisCoordinator = tooling.analysis
         state = state.copy(tooling = IdeToolingState.Ready)
+        requestLibraryPreparation()
         editor?.let(::openAnalysis)
         publishWorkspace()
     }
@@ -2199,6 +2236,11 @@ class IdeClientController(
                 publishStatus(result.detail, IdeProblemSeverity.Error)
             }
         }
+        if (event.result == IdeResolveResult.Created || event.result == IdeResolveResult.Updated ||
+            event.result == IdeResolveResult.UpToDate
+        ) {
+            requestLibraryPreparation()
+        }
         publishWorkspace()
     }
 
@@ -2233,6 +2275,7 @@ class IdeClientController(
                 catalog + event.project
             }
         tree = event.tree
+        requestLibraryPreparation()
         state = state.copy(busy = state.busy - IdeBusyOperation.Project - IdeBusyOperation.Clone)
         publishWorkspace()
         val restore = restoreEditorState?.file ?: pendingFile
@@ -2469,6 +2512,7 @@ class IdeClientController(
             val shownBinary = binary
             if (shownBinary != null && event.tree.flatten().none { it.path == shownBinary.path }) binary = null
         }
+        if (previousConfiguration != null && previousConfiguration != nextConfiguration) requestLibraryPreparation()
         if ((
                 refreshAnalysisAfterGit || (previousSources != null && previousSources != nextSources) ||
                     (previousConfiguration != null && previousConfiguration != nextConfiguration)
@@ -3587,7 +3631,12 @@ class IdeClientController(
                 }
             }
         if (state.target != current || state.dialog != dialog) state = state.copy(dialog = dialog, target = current)
-        analysisCoordinator?.updateTargetProfile(targetCoordinator?.attachedTarget()?.compileProfile)
+        val compileProfile = targetCoordinator?.attachedTarget()?.compileProfile
+        analysisCoordinator?.updateTargetProfile(compileProfile)
+        if (preparationTarget != compileProfile) {
+            preparationTarget = compileProfile
+            requestLibraryPreparation()
+        }
     }
 
     private fun refreshComputerFiles() {
@@ -4082,6 +4131,8 @@ private fun IdeEvent.generationOrNull(): Long? =
         is IdeEvent.ProjectsManaged -> generation
 
         is IdeEvent.ProjectCatalogLoaded -> generation
+
+        is IdeEvent.LibraryConfigurationLoaded -> generation
 
         is IdeEvent.BuildInputLoaded -> generation
 
