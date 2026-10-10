@@ -633,7 +633,7 @@ class MinimalScriptLoweringTest {
 
             assertContentEquals(bytes, assertNotNull(second.artifact).toByteArray())
             // Integer arithmetic and stdoutInt retain the arithmetic exception factory.
-            assertEquals(AbiVersion(1u, 11u), artifact.minimumRuntimeAbi)
+            assertEquals(AbiVersion(1u, 9u), artifact.minimumRuntimeAbi)
             assertTrue(instructions.any { it is Instruction.Add && it.type == ScalarValueType.I64 })
             assertTrue(instructions.any { it is Instruction.Subtract && it.type == ScalarValueType.I64 })
             assertTrue(instructions.any { it is Instruction.Multiply && it.type == ScalarValueType.I64 })
@@ -660,7 +660,7 @@ class MinimalScriptLoweringTest {
                 ArtifactReader.read(
                     assertNotNull(consoleOnly.artifact, consoleOnly.diagnostics.joinToString()).toByteArray(),
                 )
-            assertEquals(AbiVersion(1u, 11u), consoleArtifact.minimumRuntimeAbi)
+            assertEquals(AbiVersion(1u, 9u), consoleArtifact.minimumRuntimeAbi)
 
             System.getProperty("compukter.vm.longArtifact")?.let { output ->
                 Path.of(output).also { it.parent.createDirectories() }.writeBytes(bytes)
@@ -720,7 +720,7 @@ class MinimalScriptLoweringTest {
 
             assertContentEquals(bytes, assertNotNull(second.artifact).toByteArray())
             // Floating division itself is nonthrowing; stdoutInt uses integer division.
-            assertEquals(AbiVersion(1u, 11u), artifact.minimumRuntimeAbi)
+            assertEquals(AbiVersion(1u, 9u), artifact.minimumRuntimeAbi)
             assertTrue(instructions.any { it is Instruction.Add && it.type == ScalarValueType.F32 })
             assertTrue(instructions.any { it is Instruction.Subtract && it.type == ScalarValueType.F32 })
             assertTrue(instructions.any { it is Instruction.Multiply && it.type == ScalarValueType.F32 })
@@ -742,7 +742,7 @@ class MinimalScriptLoweringTest {
                 ArtifactReader.read(
                     assertNotNull(consoleOnly.artifact, consoleOnly.diagnostics.joinToString()).toByteArray(),
                 )
-            assertEquals(AbiVersion(1u, 11u), consoleArtifact.minimumRuntimeAbi)
+            assertEquals(AbiVersion(1u, 9u), consoleArtifact.minimumRuntimeAbi)
 
             System.getProperty("compukter.vm.floatArtifact")?.let { output ->
                 Path.of(output).also { it.parent.createDirectories() }.writeBytes(bytes)
@@ -1050,7 +1050,7 @@ class MinimalScriptLoweringTest {
             assertTrue(0x50 in opcodes, "task launch must lower to task.spawn: $opcodes")
             assertTrue(0xe8 in opcodes, "task join must lower to task.join: $opcodes")
             // Tasks.launch retains IllegalArgumentException's verified factory role through require.
-            assertEquals(AbiVersion(1u, 11u), artifact.minimumRuntimeAbi)
+            assertEquals(AbiVersion(1u, 10u), artifact.minimumRuntimeAbi)
             assertEquals(0u, artifact.manifest.maximumChannels)
             assertEquals(0u, artifact.manifest.maximumChannelValues)
             assertFalse(SemanticFeature.CHANNELS in artifact.semanticFeatures)
@@ -5579,7 +5579,7 @@ class MinimalScriptLoweringTest {
                 """.trimIndent()
             val result = adapter.compile(request(source))
             val bytes = assertNotNull(result.artifact, result.diagnostics.joinToString()).toByteArray()
-            assertEquals(AbiVersion(1u, 11u), ArtifactReader.read(bytes).minimumRuntimeAbi)
+            assertEquals(AbiVersion(1u, 0u), ArtifactReader.read(bytes).minimumRuntimeAbi)
         }
 
     @Test
@@ -6046,7 +6046,7 @@ class MinimalScriptLoweringTest {
             val second = adapter.compile(request(source))
             val artifact = assertNotNull(first.artifact, first.diagnostics.joinToString()).toByteArray()
             assertContentEquals(artifact, assertNotNull(second.artifact).toByteArray())
-            assertEquals(AbiVersion(1u, 11u), ArtifactReader.read(artifact).minimumRuntimeAbi)
+            assertEquals(AbiVersion(1u, 9u), ArtifactReader.read(artifact).minimumRuntimeAbi)
             System.getProperty("compukter.vm.exceptionsArtifact")?.let { output ->
                 Path.of(output).also { it.parent.createDirectories() }.writeBytes(artifact)
             }
@@ -6302,7 +6302,7 @@ class MinimalScriptLoweringTest {
             val second = adapter.compile(request(source))
             val bytes = assertNotNull(first.artifact, first.diagnostics.toString()).toByteArray()
             assertContentEquals(bytes, assertNotNull(second.artifact).toByteArray())
-            assertEquals(AbiVersion(1u, 11u), ArtifactReader.read(bytes).minimumRuntimeAbi)
+            assertEquals(AbiVersion(1u, 10u), ArtifactReader.read(bytes).minimumRuntimeAbi)
             System.getProperty("compukter.vm.exceptionsArtifact")?.let { output ->
                 Path.of("$output.arithmetic.cpkt").also { it.parent.createDirectories() }.writeBytes(bytes)
             }
@@ -6350,7 +6350,7 @@ class MinimalScriptLoweringTest {
             val second = adapter.compile(request(source))
             val bytes = assertNotNull(first.artifact, first.diagnostics.toString()).toByteArray()
             assertContentEquals(bytes, assertNotNull(second.artifact).toByteArray())
-            assertEquals(AbiVersion(1u, 11u), ArtifactReader.read(bytes).minimumRuntimeAbi)
+            assertEquals(AbiVersion(1u, 10u), ArtifactReader.read(bytes).minimumRuntimeAbi)
             System.getProperty("compukter.vm.exceptionsArtifact")?.let { output ->
                 Path.of("$output.operations.cpkt").also { it.parent.createDirectories() }.writeBytes(bytes)
             }
@@ -6418,7 +6418,7 @@ class MinimalScriptLoweringTest {
                 val second = adapter.compile(request(source))
                 val bytes = assertNotNull(first.artifact, "$name: ${first.diagnostics}").toByteArray()
                 assertContentEquals(bytes, assertNotNull(second.artifact).toByteArray())
-                assertEquals(AbiVersion(1u, 11u), ArtifactReader.read(bytes).minimumRuntimeAbi)
+                assertEquals(AbiVersion(1u, 10u), ArtifactReader.read(bytes).minimumRuntimeAbi)
                 System.getProperty("compukter.vm.exceptionsArtifact")?.let { output ->
                     Path.of("$output.$name.cpkt").also { it.parent.createDirectories() }.writeBytes(bytes)
                 }
