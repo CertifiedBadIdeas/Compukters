@@ -1,6 +1,6 @@
 {
   "block.compukters.compukter": "Compukter",
-  "block.compukters.display": "Text Display",
+  "block.compukters.display": "Display",
   "block.compukters.peripheral_cable": "Peripheral Cable",
   "item.compukters.peripheral_configurator": "Peripheral Configurator",
   "item.compukters.peripheral_configurator.ambiguous": "More than one addon recognizes this device",
@@ -45,5 +45,12 @@
   "item.compukters.peripheral_configurator.binding.other_network": "Member belongs to another network. Shift-use in air to clear selection, or Shift-click the member to detach it.",
   "item.compukters.peripheral_configurator.binding.missing_network": "Selected network does not exist in this world; selection cleared.",
   "item.compukters.peripheral_configurator.binding.invalid_target": "No supported computer or peripheral on this face.",
-  "item.compukters.peripheral_configurator.binding.limit_reached": "Network or member limit reached."
+  "item.compukters.peripheral_configurator.binding.limit_reached": "Network or member limit reached.",
+  "item.compukters.peripheral_configurator.mode.display": "Mode: display assembly",
+  "item.compukters.peripheral_configurator.display.missing": "Select a display block.",
+  "item.compukters.peripheral_configurator.display.selected": "Screen selected. Click a panel inside its rectangle to join it.",
+  "item.compukters.peripheral_configurator.display.joined": "Panel joined to the selected screen.",
+  "item.compukters.peripheral_configurator.display.corner": "First corner selected. Click the opposite corner to assemble the screen.",
+  "item.compukters.peripheral_configurator.display.created": "Screen assembled. Holes are allowed. Shift-click a screen to select it; Shift-use in air clears the selection.",
+  "item.compukters.peripheral_configurator.display.failed": "Cannot assemble display: %s"
 }

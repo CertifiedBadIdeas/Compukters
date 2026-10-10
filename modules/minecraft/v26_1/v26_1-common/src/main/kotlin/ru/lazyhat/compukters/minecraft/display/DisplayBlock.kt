@@ -85,6 +85,7 @@ class DisplayBlock(
         position: BlockPos,
         movedByPiston: Boolean,
     ) {
+        if (level.getBlockState(position).block !== this) DisplayWorldAccess.remove(level, position)
         super.affectNeighborsAfterRemoval(state, level, position, movedByPiston)
         PeripheralCableTopologyCache.invalidate(level)
     }

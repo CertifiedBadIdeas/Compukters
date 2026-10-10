@@ -1,20 +1,103 @@
 ---
 layout: default
-title: Text display
-description: Show program-written text on a display block in the world.
+title: Display
+description: Draw persistent RGB graphics and text on a single or composite display.
 permalink: /DISPLAY/
 section: players
 ---
 
-# Text display
+# Display
 
-The base Compukters mod includes a one-block **Text Display** on both supported Minecraft versions. Its front face
-shows a 20-column, 10-row text grid. The grid is independent of the computer's terminal and only accepts program
-output; clicking the display does not send input to the computer.
+A display keeps its RGB image and resolution in the world. Stopping a program, rebooting or unloading its computer,
+disconnecting a network, unloading display chunks and restarting the server preserve the last published image.
+Programs clear it explicitly. Clicking a display does not send keyboard input.
 
-Place a display next to a computer or connect it through loaded Peripheral Cables. For a cable-connected display, use
-the Peripheral Configurator to give it a unique name in that cable network. Sides such as `front` and `left` are
-relative to the computer's front face.
+Place a display next to a computer or bind it to the same peripheral network with the Peripheral Configurator.
+Give the screen a name in the configurator's naming mode. Sides such as `front` and `left` are relative to the computer.
+
+```kotlin
+import compukter.display.Colors
+import compukter.display.DisplayMode
+import compukter.display.GraphicalDisplay
+import compukter.display.frame
+import compukter.display.rgb
+
+fun main() {
+    val screen = GraphicalDisplay.named("panel")
+    screen.setMode(DisplayMode.LOW)
+    screen.frame {
+        clear(rgb(12, 18, 28))
+        fillRect(2, 2, width - 4, height - 4, rgb(30, 50, 80))
+        text(3, 3, "Ready", Colors.WHITE)
+        pixel(0, 0, Colors.RED)
+    }
+}
+```
+
+## Composite screens
+
+Cycle the Peripheral Configurator to **Display assembly** by using it in the air. Click two display blocks to select
+opposite corners of a rectangle, at most 8 by 8 blocks. All panels must face the same direction and occupy one plane.
+The whole rectangle must be loaded while assembling. Empty positions inside it are valid holes, including at creation.
+Assembly creates a new blank canvas from standalone panels; an existing composite screen must not overlap the selection.
+
+The selected screen remains in the configurator. Place another display in a hole and click it to join that screen.
+Shift-click a panel to select its existing screen; shift-use the configurator in the air to clear the selection.
+Particles show the selected rectangle.
+
+A composite screen has one name, one resolution, one image and one writer lease. Reaching any loaded member reaches
+the screen; typed discovery lists it once. Coordinates start at the top left when viewing its front, increase rightward
+and downward, and include holes. Breaking a panel preserves geometry and pixels behind the hole. A new panel joined
+there shows those pixels. Breaking the last panel deletes the canvas, name and resolution. Unloading a chunk does not.
+
+## Resolution and drawing
+
+Only a program changes resolution. The last applied mode is saved; changing mode clears the image to black, while
+selecting the current mode preserves it. `width`, `height` and `mode` describe the canvas, including its holes.
+
+| Mode | Pixels per block |
+| --- | --- |
+| `ULTRA_LOW` | 16 × 16 |
+| `LOW` | 32 × 32 |
+| `NORMAL` (new screen default) | 64 × 64 |
+| `HIGH` | 128 × 128 |
+
+Colors are integers from `0x000000` to `0xFFFFFF`, encoded as `0xRRGGBB`. `rgb(red, green, blue)` accepts channels from
+0 to 255. `Colors` includes black, white, red, green, blue, yellow, cyan and magenta. There is no alpha channel.
+
+- `clear(color = Colors.BLACK)` fills the canvas.
+- `pixel(x, y, color)` and `line(x0, y0, x1, y1, color)` draw pixels and lines.
+- `rect(x, y, width, height, color)` draws a border; `fillRect(...)` fills a rectangle.
+- `text(x, y, text, color = Colors.WHITE, scale = 1)` draws monochrome JetBrains Mono glyphs in 6 × 12 pixel cells.
+  Scale is 1–8; newline advances one line. Unsupported glyphs use a replacement. Limits are 256 code points and
+  1024 UTF-8 bytes per call.
+- `image(x, y, width, height, pixels)` draws row-major `IntArray` RGB pixels. Dimensions are 1–1024 and the image
+  contains at most 65,536 pixels.
+
+Graphics are clipped at canvas boundaries. Rectangle sizes cannot be negative. Drawing publishes immediately;
+there is no required `present()` call. Server work and network transfer are bounded, so large updates can be delayed.
+Clients keep the previous image until all loaded panels have received a complete publication.
+
+## Optional frames and ownership
+
+Import `compukter.display.frame` to group drawing with `screen.frame { ... }`. The changes remain private until the
+block returns, then publish together. An exception discards them. Frames cannot nest, and another cooperative task
+cannot access that screen while its frame is open. A program may hold at most 262,144 pixels in open frames combined;
+choose a lower density for a large screen. A frame also has a cumulative drawing-work limit.
+
+Hibernation preserves a private frame for the suspended program without publishing it. Restarting or terminating
+that program discards the private frame and leaves the last published image. A normal program restart acquires a new
+lease and sees the saved resolution.
+
+The first program to draw holds the exclusive writer lease. Other programs cannot overwrite the screen until it
+finishes or disconnects. Discovery alone does not claim a lease. `GraphicalDisplay` supports the standard typed
+`named`, `at`, `first`, `all` and `filter` queries, with `OrNull` forms for optional selection. Missing strict queries
+throw; ambiguous names are errors. A handle belongs to that logical canvas. Losing every reachable loaded panel makes
+it stale; replacing or reconnecting a device does not revive a stale handle.
+
+## Existing text programs
+
+`TextDisplay` remains available with its 20-column, 10-row grid API:
 
 ```kotlin
 import compukter.display.TextDisplay
@@ -23,38 +106,10 @@ fun main() {
     val screen = TextDisplay.named("panel")
     screen.clear()
     screen.writeAt(0, 0, "Warehouse")
-    screen.writeAt(0, 2, "Iron: 128")
 }
 ```
 
-`TextDisplay` also acts as a typed provider:
-
-```kotlin
-import compukter.display.TextDisplay
-import compukter.peripheral.Side
-
-val adjacent = TextDisplay.atOrNull(Side.front)
-val first = TextDisplay.firstOrNull()
-val screens = TextDisplay.filter { it != adjacent }
-```
-
-`firstOrNull` selects the first reachable display, or returns null. A typed predicate may inspect each device;
-selection stops at the first match. `first`, `at`, and `named` throw `NoSuchElementException` when absent; their
-`OrNull` forms return null. Invalid or ambiguous names and discovery limits remain errors. `all()` and `filter`
-return a snapshot of matching displays. Discovery uses stable coordinate order within the loaded cable component.
-Sides address an adjacent device directly. Merely discovering a display does not claim its output lease.
-
-For an adjacent display, use `TextDisplay.at(Side.front)`, `TextDisplay.at(Side.back)`, or another side accessor. Opening a display
-returns a handle bound to that exact block. Removing, replacing, unloading, or disconnecting it invalidates the handle;
-reconnecting does not retarget an old handle.
-
-`writeAt(x, y, text)` starts at zero-based coordinates. Text must fit within one row; an out-of-range coordinate or a
-write crossing the right edge fails instead of being clipped. Each write is limited to 256 UTF-8 bytes, and control
-characters and line breaks are rejected. The display renders unsupported font glyphs as replacement characters.
-
-The first computer to write or clear a display holds its output lease. Another computer cannot overwrite it until the
-writer stops or loses its connection. The display clears automatically when its writer shuts down, halts, reboots,
-disappears, or loses the cable path, including while the program is idle. Screen contents are not stored in world NBT;
-reloading the block starts with a blank screen. A hibernating computer retains its owned rows in its execution
-checkpoint and restores them when the same reachable display is available and its lease is free. A replacement
-display or another active writer prevents that restoration. Changed text is sent to nearby clients at most once per server tick.
+`writeAt` selects `HIGH` density and rasterizes text into the same persistent RGB canvas. Its 20 × 10 cells occupy
+the top-left block of a composite screen. Changing from another density clears the image first. Each write replaces its cells, including spaces. Text must fit within
+one row, contain no control characters or line breaks, and use at most 256 UTF-8 bytes. `clear()` clears the entire
+canvas. Existing text and graphical programs share the same writer lease.

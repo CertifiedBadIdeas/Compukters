@@ -31,3 +31,10 @@ dependencies {
     implementation(projects.addonApi)
     implementation(projects.addonGuestApi)
 }
+
+// Rasterization tests use the same font bytes as the production NeoForge archive.
+tasks.processTestResources {
+    from(rootProject.file("modules/minecraft/shared/neoforge/src/main/resources/assets/compukters/font/ide/jetbrains_mono_regular.ttf")) {
+        into("assets/compukters/font/ide")
+    }
+}

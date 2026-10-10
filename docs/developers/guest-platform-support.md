@@ -24,7 +24,7 @@ classpath.
 | --- | --- |
 | `kotlin:builtins` | Core language types, arrays, function types, and structural declarations required by K2 |
 | `stdlib:core` | Core helpers such as `require`, supported array construction, inline scope functions, indexed `repeat`, ranges and collections |
-| `compukter:core` | Runtime and environment APIs: terminal and `kotlin.io`, filesystem, compiler, child processes, cooperative `Task` / `Tasks`, redstone, sound and text displays |
+| `compukter:core` | Runtime and environment APIs: terminal and `kotlin.io`, filesystem, compiler, child processes, cooperative `Task` / `Tasks`, redstone, sound and persistent RGB displays |
 
 These module owners do not rename Kotlin packages or imports. Environment-dependent `kotlin.io` functions
 belong to `compukter:core`; the rest of the supported standard library belongs to `stdlib:core`. Module
@@ -208,16 +208,20 @@ test `sound beep lowers deterministically to a blocking Boolean capability opera
 tests, and
 [`ComputerSoundGameTest`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/minecraft/v26_1/v26_1-neoforge/src/gameTest/kotlin/ru/lazyhat/compukters/impl/computer/ComputerSoundGameTest.kt).
 
-### In-world text display
+### In-world display
 
 **Status:** Supported.
 
-`TextDisplay.named(name)` or `TextDisplay.at(Side.front)` acquires an exact display block. Programs write and
-clear its independent 20x10 grid. One computer holds the active output lease; the screen clears when that
-computer stops or disconnects. Bounds and text are validated on the server.
+`GraphicalDisplay` addresses a persistent RGB canvas assembled from one or more coplanar panels, including holes.
+The program selects 16, 32, 64 or 128 pixels per block. Drawing primitives publish immediately; the inline `frame`
+extension supports private, exception-safe grouped updates and hibernation. One program holds the writer lease;
+release never erases the published pixels. `TextDisplay` retains its 20x10 API, rasterized into the same canvas at
+`HIGH` density. Both are typed peripheral providers, and multiple reachable panels discover as one canvas.
 
-**Evidence:** `MinimalScriptLoweringTest`, `DisplayBufferTest`, `DisplayHostStateTest`, and the real
-`TextDisplayGameTestScenario`. See [Text display](https://certifiedbadideas.github.io/Compukters/DISPLAY/).
+**Evidence:** `DisplayCanvasTest`, `DisplayDirectoryTest`, `DisplayClientImageTest`, `DisplayHostStateTest`,
+`DisplayPersistenceTest`, `MinimalScriptLoweringTest`, and the real `GraphicalDisplayGameTestScenario`,
+`GraphicalDisplayHibernationGameTestScenario` and `TextDisplayGameTestScenario`.
+See [Display](https://certifiedbadideas.github.io/Compukters/DISPLAY/).
 
 ### Redstone GPIO
 
