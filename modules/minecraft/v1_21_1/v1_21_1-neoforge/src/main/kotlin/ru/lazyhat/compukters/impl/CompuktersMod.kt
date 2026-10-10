@@ -57,6 +57,10 @@ class CompuktersMod(
         val native = requireNativeRuntime()
         CompuktersRegistry.register(eventBus)
         DisplayPeripheralIntegration.register()
+        ru.lazyhat.compukters.minecraft.peripheral.PeripheralNetworkAccess.install(
+            ru.lazyhat.compukters.impl.peripheral.PeripheralInstanceStamps::stamp,
+            CompuktersServerConfig::peripheralAccessRadius,
+        )
         eventBus.addListener(TerminalNetwork::register)
         eventBus.addListener(IdeTargetNetwork::register)
         eventBus.addListener(PeripheralConfiguratorNetwork::register)
