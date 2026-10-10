@@ -36,6 +36,18 @@ published bundles. Executable container format 3 and existing Guest array repres
 | Compiler worker | Protocol 5; explicit source-free library preparation | `compiler-client` and `compiler-k2` |
 | IDE analysis | Protocol 15 | `ide-analysis-client` and `ide-analysis-k2` |
 
+## Executable method retention and minimum ABI
+
+Final executable linking may remove unused class/interface methods and their dependencies. Library assembly retains
+complete exported method surfaces. Native admission still requires implementations for every retained virtual or
+interface-owned declaration; the linker closes over conservative name/parameter-count candidates on reachable types
+and rebuilds contiguous method ranges. This changes neither CPKT 3.0 nor native C ABI 22.
+
+The artifact's minimum semantic Runtime ABI reflects remaining instructions and type layouts, rather than the full
+source library surface. Array and exception root superclass methods require ABI 1.10 even when no remaining
+instruction implies that version. Removing an unused hash body can lower a requirement without removing diagnostics
+or introducing a new encoding. Reader capabilities for compact debug/root sections remain separate requirements.
+
 ## Compiler worker preparation
 
 Compiler protocol 5 adds `LIBRARY_PREPARATION_REQUEST` (wire tag 6), `LIBRARIES_PREPARED` (tag 7) and the

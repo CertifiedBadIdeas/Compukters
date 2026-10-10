@@ -13,6 +13,9 @@ headings so this page has one stable URL that can be shared outside the reposito
 
 ## 0.6.0 — In development
 
+- Guest executables omit unused class and interface methods and their dependencies. Virtual dispatch keeps its
+  required implementations; independently compiled libraries retain their exported method surface.
+
 - IDE analysis prepares project snapshots in the background and coalesces rapid edits before preparation.
   Diagnostics, semantic highlighting and completion retain revision checks; existing presentation follows edits
   while new results are pending. Worker cancellation no longer blocks typing on pipe writes.
