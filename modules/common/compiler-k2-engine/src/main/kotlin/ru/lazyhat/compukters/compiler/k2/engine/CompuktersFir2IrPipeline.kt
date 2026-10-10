@@ -37,7 +37,10 @@ import ru.lazyhat.compukters.platform.k2.build.CompuktersFirModuleOutput
 /** Converts resolved Compukters FIR through the common K2 FIR-to-IR implementation. */
 @OptIn(CompilerConfiguration.Internals::class)
 object CompuktersFir2IrPipeline {
-    fun convert(outputs: List<CompuktersFirModuleOutput>): Fir2IrActualizedResult {
+    fun convert(
+        outputs: List<CompuktersFirModuleOutput>,
+        preserveFir: Boolean = false,
+    ): Fir2IrActualizedResult {
         require(outputs.isNotEmpty()) { "Compukters FIR-to-IR requires at least one module" }
         val diagnostics = DiagnosticsCollectorImpl()
         val configuration =
@@ -47,7 +50,14 @@ object CompuktersFir2IrPipeline {
             }
         return AllModulesFrontendOutput(outputs.map(CompuktersFirModuleOutput::frontendOutput)).convertToIrAndActualize(
             fir2IrExtensions = Fir2IrExtensions.Default,
-            fir2IrConfiguration = Fir2IrConfiguration.forKlibCompilation(configuration, diagnostics),
+            // K2's reusable-FIR mode keeps declaration bodies. The ordinary KLIB mode consumes
+            // them, replacing initializers with stubs and making a second conversion invalid.
+            fir2IrConfiguration =
+                if (preserveFir) {
+                    Fir2IrConfiguration.forAnalysisApi(configuration, LanguageVersionSettingsImpl.DEFAULT, diagnostics)
+                } else {
+                    Fir2IrConfiguration.forKlibCompilation(configuration, diagnostics)
+                },
             irGeneratorExtensions = emptyList(),
             irMangler = CompuktersIrMangler,
             visibilityConverter = Fir2IrVisibilityConverter.Default,
@@ -63,7 +73,7 @@ object CompuktersFir2IrPipeline {
         session: CompilationSession,
         sourceDependencies: List<CompuktersFirModuleOutput> = emptyList(),
     ): Artifact? {
-        val converted = convert(sourceDependencies + output)
+        val converted = convert(sourceDependencies + output, preserveFir = sourceDependencies.isNotEmpty())
         session.irSink.accept(converted.irModuleFragment, converted.pluginContext)
         return MinimalScriptLowering.lower(converted.irModuleFragment, converted.pluginContext, session)
     }
