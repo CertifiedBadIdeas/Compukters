@@ -18,7 +18,6 @@
 
 package ru.lazyhat.compukters.compiler.worker.k2
 
-import ru.lazyhat.compukters.compiler.k2.engine.library.LoadedPlatformLibraries
 import ru.lazyhat.compukters.compiler.worker.protocol.Hash256
 import ru.lazyhat.compukters.compiler.worker.protocol.TrustedBundleIdentity
 import kotlin.test.Test
@@ -30,7 +29,7 @@ import kotlin.test.assertSame
 class PreparedPlatformLibraryCacheTest {
     @Test
     fun `same module identities reuse preparation regardless of request order`() {
-        val cache = PreparedPlatformLibraryCache()
+        val cache = PreparedPlatformLibraryCache<TestLibraries>()
         val modules = listOf(identity("stdlib:core"), identity("compukter:core"))
         var loads = 0
 
@@ -44,7 +43,7 @@ class PreparedPlatformLibraryCacheTest {
 
     @Test
     fun `changing selection evicts the previous preparation`() {
-        val cache = PreparedPlatformLibraryCache()
+        val cache = PreparedPlatformLibraryCache<TestLibraries>()
         val core = listOf(identity("stdlib:core"))
         val addon = core + identity("addon:example")
         var loads = 0
@@ -61,7 +60,7 @@ class PreparedPlatformLibraryCacheTest {
 
     @Test
     fun `changed content identity reloads a same named module`() {
-        val cache = PreparedPlatformLibraryCache()
+        val cache = PreparedPlatformLibraryCache<TestLibraries>()
         var loads = 0
 
         fun load() = emptyLibraries().also { loads++ }
@@ -75,7 +74,7 @@ class PreparedPlatformLibraryCacheTest {
 
     @Test
     fun `failed replacement is retried and does not retain an older selection`() {
-        val cache = PreparedPlatformLibraryCache()
+        val cache = PreparedPlatformLibraryCache<TestLibraries>()
         val core = listOf(identity("stdlib:core"))
         val addon = core + identity("addon:example")
         val first = cache.get(core, ::emptyLibraries)
@@ -83,6 +82,7 @@ class PreparedPlatformLibraryCacheTest {
         assertFailsWith<IllegalArgumentException> {
             cache.get(addon) { throw IllegalArgumentException("invalid library") }
         }
+        assertEquals(1, first.closes)
         assertNotSame(first, cache.get(core, ::emptyLibraries))
         var loads = 0
         val replacement = cache.get(addon) { emptyLibraries().also { loads++ } }
@@ -95,5 +95,26 @@ class PreparedPlatformLibraryCacheTest {
         version: Int = 0,
     ) = TrustedBundleIdentity.of(name, Hash256.of(ByteArray(32) { version.toByte() }))
 
-    private fun emptyLibraries() = LoadedPlatformLibraries(emptyList(), emptyList(), emptyList(), emptyList())
+    @Test
+    fun `replacement and shutdown release retained resources exactly once`() {
+        val cache = PreparedPlatformLibraryCache<TestLibraries>()
+        val first = cache.get(listOf(identity("stdlib:core")), ::emptyLibraries)
+        val second = cache.get(listOf(identity("addon:example")), ::emptyLibraries)
+        assertEquals(1, first.closes)
+        assertEquals(0, second.closes)
+        cache.close()
+        cache.close()
+        assertEquals(1, second.closes)
+        assertFailsWith<IllegalStateException> { cache.get(emptyList(), ::emptyLibraries) }
+    }
+
+    private fun emptyLibraries() = TestLibraries()
+
+    private class TestLibraries : AutoCloseable {
+        var closes = 0
+
+        override fun close() {
+            closes++
+        }
+    }
 }

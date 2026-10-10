@@ -34,15 +34,12 @@ import ru.lazyhat.compukters.compiler.k2.engine.CompilationSession
 import ru.lazyhat.compukters.compiler.k2.engine.CompuktersFir2IrPipeline
 import ru.lazyhat.compukters.compiler.k2.engine.PlatformCapabilityShape
 import ru.lazyhat.compukters.compiler.k2.engine.intrinsic.*
-import ru.lazyhat.compukters.compiler.k2.engine.library.loadPlatformLibraries
 import ru.lazyhat.compukters.compiler.worker.controller.TemporaryBudget
 import ru.lazyhat.compukters.compiler.worker.controller.TemporaryUsage
 import ru.lazyhat.compukters.compiler.worker.protocol.*
 import ru.lazyhat.compukters.platform.bundle.*
 import ru.lazyhat.compukters.platform.k2.CompuktersPlatformCheckers
 import ru.lazyhat.compukters.platform.k2.CompuktersPlatformDiagnosticCode
-import ru.lazyhat.compukters.platform.k2.build.CompuktersFirBuildEnvironment
-import ru.lazyhat.compukters.platform.k2.build.CompuktersFirModuleOutput
 import ru.lazyhat.compukters.worker.value.ImmutableBytes
 import java.nio.file.Files
 import java.nio.file.Path
@@ -68,8 +65,14 @@ data class K2CompilationResult(
 class K2CompilerAdapter(
     private val inputs: K2CompilerInputs,
     private val platform: PlatformBundle = loadPackagedPlatform(),
-) {
-    private val platformLibraryCache = PreparedPlatformLibraryCache()
+) : AutoCloseable {
+    private val platformLibraryCache = PreparedPlatformLibraryCache<PreparedPlatformLibraries>()
+    private var closed = false
+
+    override fun close() {
+        closed = true
+        platformLibraryCache.close()
+    }
 
     init {
         require(Files.isRegularFile(inputs.workerJar)) { "validated worker jar is missing" }
@@ -83,6 +86,7 @@ class K2CompilerAdapter(
     }
 
     fun compile(request: CompileRequest): K2CompilationResult {
+        check(!closed) { "compiler adapter is closed" }
         require(request.expectedIdentity == inputs.expectedIdentity) { "compile request identity does not match pinned worker" }
         val diagnostics = mutableListOf<WorkerDiagnostic>()
         request.sources.forEach { source ->
@@ -119,7 +123,8 @@ class K2CompilerAdapter(
         val selection = selectModules(request)
         val selected = selection.modules
         // Selection validates module and addon content identities before any cached data can be reused.
-        val libraries = platformLibraryCache.get(request.platformModules) { loadPlatformLibraries(selected) }
+        val prepared = platformLibraryCache.get(request.platformModules) { PreparedPlatformLibraries.load(platform, selected) }
+        val libraries = prepared.libraries
         val budget = TemporaryBudget(inputs.temporaryRoot, request.limits)
         budget.requireCapacity(sourceFootprint(request))
         return budget.useRequestDirectory { requestRoot ->
@@ -135,11 +140,7 @@ class K2CompilerAdapter(
                 physical.parent.createDirectories()
                 physical.writeBytes(source.content.toByteArray())
             }
-            val sourceLibraries =
-                selected.filter { module ->
-                    module.id != platform.builtins.id &&
-                        module.sourceDeclarations.isNotEmpty()
-                }
+            val sourceLibraries = prepared.sourceLibraries
             val librarySourceNames =
                 sourceLibraries.flatMap { module ->
                     module.sources.map { source -> source.path.substringAfterLast('/') }
@@ -175,28 +176,17 @@ class K2CompilerAdapter(
                             }
                         }
                 ).toMap()
-            CompuktersFirBuildEnvironment.create().use { environment ->
-                val sourceOutputs = linkedMapOf<PlatformModuleId, CompuktersFirModuleOutput>()
-                val metadataModules = selected - sourceLibraries.toSet()
-                sourceLibraries.forEach { library ->
-                    val dependencyIds =
-                        PlatformModuleGraph(
-                            platform,
-                        ).resolve(
-                            library.dependencies.filterNot { it == platform.builtins.id }.toSet(),
-                        ).modules
-                            .mapTo(mutableSetOf(), PlatformModule::id)
-                    val dependencies = sourceOutputs.filterKeys { it in dependencyIds }.values.toList()
-                    sourceOutputs[library.id] = environment.compileGuest(library.id, library.sources, metadataModules, dependencies)
-                }
+            prepared.createProjectEnvironment().use { environment ->
+                val sourceOutputs = prepared.sourceOutputs
+                val metadataModules = prepared.metadataModules
                 val output =
                     environment.compileGuest(
                         PlatformModuleId("guest", "application"),
                         platformSources,
                         metadataModules,
-                        sourceOutputs.values.toList(),
+                        sourceOutputs,
                     )
-                val compiledOutputs = sourceOutputs.values + output
+                val compiledOutputs = sourceOutputs + output
                 compiledOutputs.flatMap { it.diagnostics.diagnosticsByFile.entries }.forEach { (file, fileDiagnostics) ->
                     val path = file?.name?.let(sourcePaths::get)
                     fileDiagnostics.forEach { diagnostic ->
@@ -273,7 +263,7 @@ class K2CompilerAdapter(
                                     ).mapTo(mutableSetOf(), PlatformDeclarationIdentity::symbol),
                             limits = request.limits,
                         )
-                    CompuktersFir2IrPipeline.lowerGuest(output, session, sourceOutputs.values.toList())?.let { lowered ->
+                    CompuktersFir2IrPipeline.lowerGuest(output, session, sourceOutputs)?.let { lowered ->
                         val linked =
                             LibraryModuleLinker.link(
                                 lowered,

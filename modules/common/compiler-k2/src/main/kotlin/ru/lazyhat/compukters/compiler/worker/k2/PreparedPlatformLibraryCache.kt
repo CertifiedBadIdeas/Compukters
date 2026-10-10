@@ -18,28 +18,41 @@
 
 package ru.lazyhat.compukters.compiler.worker.k2
 
-import ru.lazyhat.compukters.compiler.k2.engine.library.LoadedPlatformLibraries
 import ru.lazyhat.compukters.compiler.worker.protocol.TrustedBundleIdentity
 
 /** Retains only the most recent validated selection within one pinned compiler adapter. */
-internal class PreparedPlatformLibraryCache {
-    private var entry: Entry? = null
+internal class PreparedPlatformLibraryCache<T : AutoCloseable> : AutoCloseable {
+    private var closed = false
+    private var entry: Entry<T>? = null
 
     fun get(
         identities: List<TrustedBundleIdentity>,
-        load: () -> LoadedPlatformLibraries,
-    ): LoadedPlatformLibraries {
+        load: () -> T,
+    ): T {
+        check(!closed) { "library cache is closed" }
         val key = identities.toSet()
         entry?.let { cached ->
             if (cached.key == key) return cached.libraries
         }
         // Release the previous selection before loading its replacement; failed loads are never cached.
-        entry = null
+        clear()
         return load().also { entry = Entry(key, it) }
     }
 
-    private data class Entry(
+    override fun close() {
+        if (closed) return
+        closed = true
+        clear()
+    }
+
+    private fun clear() {
+        val previous = entry
+        entry = null
+        previous?.libraries?.close()
+    }
+
+    private data class Entry<T>(
         val key: Set<TrustedBundleIdentity>,
-        val libraries: LoadedPlatformLibraries,
+        val libraries: T,
     )
 }

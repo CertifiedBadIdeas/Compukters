@@ -79,10 +79,19 @@ Ordinary computer creation and target-profile requests require an already prepar
 worker resources on the server tick. Worker compilation remains asynchronous; this changes the preparation phase,
 not the compilation scheduler or wire formats.
 
-Each pinned compiler adapter retains prepared library artifacts and symbol links for its most recent validated
-module selection, keyed by module names and content hashes. A different selection replaces that one entry;
-failed preparation is not retained. Module closure and addon payload identities are still checked on every request
-before reuse. FIR/IR sessions, source snapshots and request limits remain specific to each compilation.
+Each pinned compiler adapter retains prepared library artifacts, symbol links and resolved source-library FIR for
+its most recent validated module selection, keyed by module names and content hashes. A different selection disposes
+that one entry; failed preparation is not retained. Module closure and addon payload identities are still checked on
+every request before reuse. Only admitted platform and addon modules enter this cache; project files and prospective
+user source libraries require their own source invalidation policy.
+
+The retained entry owns a library-only compiler environment. Each request creates a fresh project/PSI environment and
+source session over the same admitted metadata symbols, preserving built-in type identity across module boundaries.
+FIR-to-IR uses K2's reusable-FIR configuration when source libraries participate: ordinary KLIB conversion clears
+resolved declaration bodies and cannot safely consume the same FIR twice. IR, lowering/specialization state, source
+snapshots and request limits remain specific to each compilation. The worker closes the retained environment on
+shutdown. `K2CompilerAdapterTest` compares fresh and reused artifacts while alternating project declarations and
+generic specializations, including an unresolved reference to a previous project's function and subsequent recovery.
 
 Within one linking operation, specialization ownership, reachability and relocation share semantic hashes of
 unchanged module instances. Pruned or relocated copies receive fresh hashes; the cache is discarded after linking.
