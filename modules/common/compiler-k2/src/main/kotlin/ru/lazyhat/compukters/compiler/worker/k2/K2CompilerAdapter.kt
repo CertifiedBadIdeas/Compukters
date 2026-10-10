@@ -85,6 +85,14 @@ class K2CompilerAdapter(
         ) { "worker identity does not match the packaged Compukters platform" }
     }
 
+    fun prepareLibraries(request: LibraryPreparationRequest) {
+        check(!closed) { "compiler adapter is closed" }
+        require(request.expectedIdentity == inputs.expectedIdentity) { "preparation identity does not match pinned worker" }
+        val selection = selectModules(request)
+        val prepared = platformLibraryCache.get(request.platformModules) { PreparedPlatformLibraries.load(platform, selection.modules) }
+        check(prepared.sourceOutputs.none { it.diagnostics.hasErrors }) { "selected library frontend has errors" }
+    }
+
     fun compile(request: CompileRequest): K2CompilationResult {
         check(!closed) { "compiler adapter is closed" }
         require(request.expectedIdentity == inputs.expectedIdentity) { "compile request identity does not match pinned worker" }
@@ -314,7 +322,7 @@ class K2CompilerAdapter(
         }
     }
 
-    private fun selectModules(request: CompileRequest): SelectedPlatform {
+    private fun selectModules(request: WorkerRequest): SelectedPlatform {
         val addonBundles =
             request.addonBundles.map { payload ->
                 AddonGuestApiBundleCodec.decode(payload.content.toByteArray()).also { bundle ->

@@ -20,6 +20,9 @@ package ru.lazyhat.compukters.ide.compiler
 
 import ru.lazyhat.compukters.compiler.worker.protocol.CompileRequest
 import ru.lazyhat.compukters.compiler.worker.protocol.CompileResult
+import ru.lazyhat.compukters.compiler.worker.protocol.LibraryPreparationRequest
+import ru.lazyhat.compukters.compiler.worker.protocol.LibraryPreparationResult
+import ru.lazyhat.compukters.compiler.worker.protocol.RequestId
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
@@ -44,6 +47,7 @@ class ClientCompilerBackendLifetime(
     private val lock = Any()
     private val sessions = mutableSetOf<Session>()
     private var backend: ClientCompilerBackend? = null
+    private val preparations = mutableMapOf<LibraryPreparationRequest, CompletableFuture<LibraryPreparationResult>>()
     private var idleTask: CompilerIdleTask? = null
     private var generation = 0L
     private var closed = false
@@ -86,6 +90,7 @@ class ClientCompilerBackendLifetime(
             backend?.close()
         } finally {
             backend = null
+            preparations.clear()
         }
     }
 
@@ -100,6 +105,30 @@ class ClientCompilerBackendLifetime(
     private inner class Session : ClientCompilerBackend {
         var sessionClosed = false
         private val requests = mutableSetOf<CompletableFuture<CompileResult>>()
+
+        override fun prepareLibraries(request: LibraryPreparationRequest): CompletableFuture<LibraryPreparationResult> =
+            synchronized(lock) {
+                check(!closed && !sessionClosed) { "compiler backend session is closed" }
+                val key =
+                    request.copy(
+                        requestId =
+                            RequestId.of(1uL),
+                    )
+                val shared =
+                    preparations[key] ?: run {
+                        val delegate = backend ?: backendFactory().also { backend = it }
+                        delegate.prepareLibraries(request).also { future ->
+                            preparations[key] = future
+                            future.whenComplete { _, _ ->
+                                synchronized(lock) {
+                                    if (preparations[key] === future) preparations.remove(key)
+                                }
+                            }
+                        }
+                    }
+                // A screen may detach or cancel its observer without cancelling client-owned preparation.
+                shared.thenApply { it }
+            }
 
         override fun compile(request: CompileRequest): CompletableFuture<CompileResult> =
             synchronized(lock) {

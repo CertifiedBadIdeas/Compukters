@@ -27,6 +27,7 @@ import ru.lazyhat.compukters.ide.client.controller.IdeClientTooling
 import ru.lazyhat.compukters.ide.client.target.IdeAttachedTarget
 import ru.lazyhat.compukters.ide.client.workspace.IdeBuildInput
 import ru.lazyhat.compukters.ide.client.workspace.IdeMutationRequest
+import ru.lazyhat.compukters.ide.client.workspace.IdeProjectConfiguration
 import ru.lazyhat.compukters.ide.client.workspace.IdeSaveResult
 import ru.lazyhat.compukters.ide.client.workspace.ProjectFileOpenResult
 import ru.lazyhat.compukters.ide.git.GitOperation
@@ -70,6 +71,13 @@ sealed interface IdeEvent {
 
     data class ToolingFailed(
         val detail: String,
+    ) : IdeEvent
+
+    data class LibraryConfigurationLoaded(
+        val generation: Long,
+        val operationId: Long,
+        val input: IdeProjectConfiguration,
+        val target: IdeAttachedTarget?,
     ) : IdeEvent
 
     data class BuildInputLoaded(
@@ -253,6 +261,7 @@ internal fun IdeEvent.copyForQueue(): IdeEvent =
 
         is IdeEvent.CatalogLoaded -> copy(projects = Collections.unmodifiableList(projects.toList()))
 
+        is IdeEvent.LibraryConfigurationLoaded,
         is IdeEvent.BuildInputLoaded,
         is IdeEvent.ToolingReady,
         is IdeEvent.ToolingFailed,

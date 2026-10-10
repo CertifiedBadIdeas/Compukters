@@ -20,9 +20,13 @@ package ru.lazyhat.compukters.ide.compiler
 
 import ru.lazyhat.compukters.compiler.project.ProjectSource
 import ru.lazyhat.compukters.compiler.worker.protocol.BinaryValue
+import ru.lazyhat.compukters.compiler.worker.protocol.CompilationMetrics
 import ru.lazyhat.compukters.compiler.worker.protocol.CompileRequest
 import ru.lazyhat.compukters.compiler.worker.protocol.CompileResult
 import ru.lazyhat.compukters.compiler.worker.protocol.Hash256
+import ru.lazyhat.compukters.compiler.worker.protocol.LibrariesPrepared
+import ru.lazyhat.compukters.compiler.worker.protocol.LibraryPreparationRequest
+import ru.lazyhat.compukters.compiler.worker.protocol.LibraryPreparationResult
 import ru.lazyhat.compukters.compiler.worker.protocol.PlatformFailure
 import ru.lazyhat.compukters.compiler.worker.protocol.PlatformFailureClass
 import ru.lazyhat.compukters.compiler.worker.protocol.RequestId
@@ -41,6 +45,35 @@ import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class ClientCompilerBackendLifetimeTest {
+    @Test
+    fun `preparation is shared across sessions and survives observer cancellation and reopen`() {
+        val timer = ManualCompilerIdleScheduler()
+        val backend = RecordingCompilerBackend()
+        val owner = ClientCompilerBackendLifetime(50, timer) { backend }
+        try {
+            val request = LibraryPreparationRequest(RequestId.of(1uL), request().expectedIdentity, WorkerLimits())
+            val first = owner.openSession()
+            val observer = first.prepareLibraries(request)
+            assertTrue(observer.cancel(false))
+            first.close()
+            assertTrue(backend.cancelled.isEmpty())
+            assertFalse(backend.preparationFutures.single().isDone)
+            val reopened = owner.openSession()
+            val next = reopened.prepareLibraries(request.copy(requestId = RequestId.of(2uL)))
+            assertEquals(1, backend.preparationRequests.size)
+            backend.preparationFutures.single().complete(LibrariesPrepared(RequestId.of(1uL), CompilationMetrics(1uL, 2uL, 3uL)))
+            assertTrue(next.get(5, TimeUnit.SECONDS) is LibrariesPrepared)
+            reopened.prepareLibraries(request)
+            assertEquals(2, backend.preparationRequests.size, "completed acknowledgements must not hide worker restart")
+            reopened.close()
+            timer.tasks.last().action()
+            assertEquals(1, backend.closes)
+            assertTrue(backend.preparationFutures.last().isDone)
+        } finally {
+            owner.close()
+        }
+    }
+
     @Test
     fun `closed and reopened sessions retain a lazy backend until idle expiry`() {
         val timer = ManualCompilerIdleScheduler()
@@ -210,9 +243,17 @@ private class ManualCompilerIdleScheduler : CompilerIdleScheduler {
 private class RecordingCompilerBackend(
     private val onClose: () -> Unit = {},
 ) : ClientCompilerBackend {
+    val preparationRequests = mutableListOf<LibraryPreparationRequest>()
+    val preparationFutures = mutableListOf<CompletableFuture<LibraryPreparationResult>>()
     val pending = mutableListOf<CompletableFuture<CompileResult>>()
     val cancelled = mutableListOf<CompletableFuture<CompileResult>>()
     var closes = 0
+
+    override fun prepareLibraries(request: LibraryPreparationRequest): CompletableFuture<LibraryPreparationResult> =
+        CompletableFuture<LibraryPreparationResult>().also {
+            preparationRequests += request
+            preparationFutures += it
+        }
 
     override fun compile(request: CompileRequest): CompletableFuture<CompileResult> = CompletableFuture<CompileResult>().also(pending::add)
 
@@ -224,6 +265,7 @@ private class RecordingCompilerBackend(
     override fun close() {
         closes++
         onClose()
+        preparationFutures.forEach { it.complete(PlatformFailure(RequestId.of(1uL), PlatformFailureClass.CANCELLED, "closed")) }
         pending.forEach { it.complete(PlatformFailure(RequestId.of(1uL), PlatformFailureClass.CANCELLED, "closed")) }
     }
 }

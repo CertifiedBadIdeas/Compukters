@@ -22,6 +22,7 @@ import ru.lazyhat.compukters.compiler.project.ProjectSnapshot
 import ru.lazyhat.compukters.compiler.project.ProjectSource
 import ru.lazyhat.compukters.compiler.worker.protocol.BinaryValue
 import ru.lazyhat.compukters.compiler.worker.protocol.Hash256
+import ru.lazyhat.compukters.compiler.worker.protocol.LibraryPreparationResult
 import ru.lazyhat.compukters.compiler.worker.protocol.VirtualSourcePath
 import ru.lazyhat.compukters.compiler.worker.protocol.WorkerLimits
 import ru.lazyhat.compukters.ide.analysis.AnalysisModuleIdentity
@@ -56,6 +57,7 @@ import ru.lazyhat.compukters.ide.client.state.IdeEditorInput
 import ru.lazyhat.compukters.ide.compiler.ClientBuildResult
 import ru.lazyhat.compukters.ide.compiler.ClientBuildSnapshot
 import ru.lazyhat.compukters.ide.compiler.ClientCompilationService
+import ru.lazyhat.compukters.ide.compiler.profile.CompileProfile
 import ru.lazyhat.compukters.ide.compiler.profile.CompileProfileResolver
 import ru.lazyhat.compukters.ide.editor.EditorRange
 import ru.lazyhat.compukters.ide.project.ModuleId
@@ -484,6 +486,9 @@ class IdeAnalysisFlowTest {
 }
 
 private object NoopCompilationService : ClientCompilationService {
+    override fun prepareLibraries(profile: CompileProfile): CompletableFuture<LibraryPreparationResult> =
+        CompletableFuture.failedFuture(IllegalStateException("unexpected preparation"))
+
     override fun build(input: ClientBuildSnapshot): CompletableFuture<ClientBuildResult> =
         CompletableFuture.failedFuture(UnsupportedOperationException("not used"))
 

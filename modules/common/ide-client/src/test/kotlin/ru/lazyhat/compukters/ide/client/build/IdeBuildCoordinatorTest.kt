@@ -24,6 +24,7 @@ import ru.lazyhat.compukters.compiler.worker.protocol.BinaryValue
 import ru.lazyhat.compukters.compiler.worker.protocol.DiagnosticCategory
 import ru.lazyhat.compukters.compiler.worker.protocol.DiagnosticSeverity
 import ru.lazyhat.compukters.compiler.worker.protocol.Hash256
+import ru.lazyhat.compukters.compiler.worker.protocol.LibraryPreparationResult
 import ru.lazyhat.compukters.compiler.worker.protocol.VirtualSourcePath
 import ru.lazyhat.compukters.compiler.worker.protocol.WorkerDiagnostic
 import ru.lazyhat.compukters.compiler.worker.protocol.WorkerLimits
@@ -36,6 +37,7 @@ import ru.lazyhat.compukters.ide.client.workspace.IdeBuildInput
 import ru.lazyhat.compukters.ide.compiler.ClientBuildResult
 import ru.lazyhat.compukters.ide.compiler.ClientBuildSnapshot
 import ru.lazyhat.compukters.ide.compiler.ClientCompilationService
+import ru.lazyhat.compukters.ide.compiler.profile.CompileProfile
 import ru.lazyhat.compukters.ide.compiler.profile.CompileProfileResolver
 import ru.lazyhat.compukters.ide.compiler.profile.TargetCompileProfile
 import ru.lazyhat.compukters.ide.project.AddonId
@@ -67,6 +69,30 @@ class IdeBuildCoordinatorTest {
 
     @AfterTest
     fun close() = fixture.coordinator.close()
+
+    @Test
+    fun `preparation admits the same profile without a source snapshot or build result`() {
+        val input = fixture.input(fixture.canonicalLock()).configuration
+        assertIs<ru.lazyhat.compukters.compiler.worker.protocol.LibrariesPrepared>(
+            fixture.coordinator.prepareLibraries(input).get(5, TimeUnit.SECONDS),
+        )
+        val admitted = fixture.compilation.preparations.remove()
+        assertEquals(fixture.toolchain, admitted.toolchain)
+        assertTrue(fixture.compilation.inputs.isEmpty())
+        assertFalse(fixture.lockPath.toFile().exists(), "preparation must not resolve or publish locks")
+        val missing = fixture.input(null).configuration
+        assertEquals(null, fixture.coordinator.prepareLibraries(missing).get(5, TimeUnit.SECONDS))
+        val malformed =
+            ru.lazyhat.compukters.ide.client.workspace.IdeProjectConfiguration(
+                input.project,
+                "invalid".encodeToByteArray(),
+                input.lockBytes,
+            )
+        assertEquals(null, fixture.coordinator.prepareLibraries(malformed).get(5, TimeUnit.SECONDS))
+        val target = TargetCompileProfile(fixture.toolchain.copy(languageVersion = "old"), emptyList(), fixture.limits)
+        assertEquals(null, fixture.coordinator.prepareLibraries(input, target).get(5, TimeUnit.SECONDS))
+        assertTrue(fixture.compilation.preparations.isEmpty())
+    }
 
     @Test
     fun `resolve creates missing lock but requires confirmation before replacing existing lock`() {
@@ -314,12 +340,24 @@ private class BuildFixture {
 }
 
 private class ControlledCompilationService : ClientCompilationService {
+    val preparations = LinkedBlockingQueue<CompileProfile>()
     val inputs = mutableListOf<ClientBuildSnapshot>()
     private val submitted = LinkedBlockingQueue<ClientBuildSnapshot>()
     private val futures = ArrayDeque<CompletableFuture<ClientBuildResult>>()
     private val cancelled = CompletableFuture<Unit>()
     var returnBarrier: CompletableFuture<Unit>? = null
     var cancelCalls = 0
+
+    override fun prepareLibraries(profile: CompileProfile): CompletableFuture<LibraryPreparationResult> =
+        CompletableFuture
+            .completedFuture<LibraryPreparationResult>(
+                ru.lazyhat.compukters.compiler.worker.protocol.LibrariesPrepared(
+                    ru.lazyhat.compukters.compiler.worker.protocol.RequestId
+                        .of(1uL),
+                    ru.lazyhat.compukters.compiler.worker.protocol
+                        .CompilationMetrics(1uL, 2uL, 3uL),
+                ),
+            ).also { preparations.add(profile) }
 
     override fun build(input: ClientBuildSnapshot): CompletableFuture<ClientBuildResult> {
         val future = CompletableFuture<ClientBuildResult>()
