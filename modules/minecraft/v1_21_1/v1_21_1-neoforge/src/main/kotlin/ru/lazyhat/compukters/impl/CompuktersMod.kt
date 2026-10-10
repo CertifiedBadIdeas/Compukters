@@ -67,6 +67,8 @@ class CompuktersMod(
         if (FMLEnvironment.dist == Dist.CLIENT) {
             IdeClientBootstrap.register(eventBus)
             DisplayClientBootstrap.register(eventBus)
+            ru.lazyhat.compukters.impl.peripheral.ConfiguratorOverlayBootstrap
+                .register()
         }
         NeoForge.EVENT_BUS.addListener(ru.lazyhat.compukters.impl.peripheral.PeripheralNetworkLifecycle::onChunkLoad)
         NeoForge.EVENT_BUS.addListener(NeoForgeWorldFileSystemStores::onLevelSave)

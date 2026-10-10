@@ -116,3 +116,9 @@ stale handles remain stale; an address alone never identifies a replacement devi
 | Create Stock Ticker | [Logistics]({{ '/CREATE-LOGISTICS/' | relative_url }}) |
 | Create steam boiler | [Boilers]({{ '/CREATE-BOILERS/' | relative_url }}) |
 | Propulsion creative engines | [Propulsion]({{ '/PROPULSION/' | relative_url }}) |
+
+While holding the configurator in either hand, nearby configurable devices receive softly pulsing outlines. Members
+of a bound network share a color; hovering a member or selecting the network emphasizes the whole nearby group.
+Outlines are hidden behind blocks. The crosshair panel shows the current mode, target name, network and action hints.
+Use the item in the air to cycle modes, or shift-use it in the air to clear the selection. Display assembly also
+shows screen boundaries, holes and unjoined replacement panels; see [Display]({{ '/DISPLAY/' | relative_url }}).
