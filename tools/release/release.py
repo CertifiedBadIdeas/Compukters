@@ -197,7 +197,8 @@ def inspect_sdk(path, mod_version):
                                             ('compukters-addon-neoforge-1.21.1', 'jar'),
                                             ('compukters-addon-neoforge-26.1.2', 'jar')]]
         marker = 'ru.lazyhat.compukters.addon'
-        required += [f'repository/{marker}/{marker}.gradle.plugin/{sdk}/{marker}.gradle.plugin-{sdk}.pom',
+        marker_group = marker.replace('.', '/')
+        required += [f'repository/{marker_group}/{marker}.gradle.plugin/{sdk}/{marker}.gradle.plugin-{sdk}.pom',
                      'LICENSE', 'NOTICE', 'tools/release.py', 'tools/addon_release.py']
         required += [f'repository/ru/lazyhat/compukters/compukters-neoforge-{mc}-dev/{mod_version}/'
                      f'compukters-neoforge-{mc}-dev-{mod_version}.jar' for mc, _, _ in TARGETS]
