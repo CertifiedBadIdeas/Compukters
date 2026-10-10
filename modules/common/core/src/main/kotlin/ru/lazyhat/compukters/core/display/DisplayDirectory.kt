@@ -142,6 +142,40 @@ class DisplayDirectory(
         return expanded
     }
 
+    /** Move a complete canvas without changing its identity or published pixels. Retire location-bound handles. */
+    fun relocate(
+        id: UUID,
+        originX: Int,
+        originY: Int,
+        originZ: Int,
+        facing: Int,
+        destination: DisplayDirectory = this,
+    ): DisplaySurface {
+        val old = requireNotNull(surfaces[id]) { "Display was deleted" }
+        require(facing in 0..3)
+        if (destination !== this) {
+            check(destination.surfaces.size < MAXIMUM_SCREENS)
+            check(
+                destination.snapshot().sumOf { it.canvas.columns * it.canvas.rows } +
+                    old.canvas.columns * old.canvas.rows <= MAXIMUM_WORLD_BLOCK_AREA,
+            )
+            require(id !in destination.surfaces && old.panels.none { it.instance in destination.memberships })
+        }
+        val canvas = DisplayCanvas(old.canvas.columns, old.canvas.rows, old.canvas.mode, destination.changed)
+        canvas.restoreRgb(old.canvas.mode, old.canvas.encodeRgb())
+        val moved = DisplaySurface(id, originX, originY, originZ, facing, canvas, old.panels, old.name)
+        if (destination !== this) {
+            surfaces.remove(id)
+            old.panels.forEach { memberships.remove(it.instance) }
+            destination.changed()
+        }
+        destination.surfaces[id] = moved
+        old.panels.forEach { destination.memberships[it.instance] = id }
+        old.canvas.retire()
+        changed()
+        return moved
+    }
+
     /** Dismantle only installed panels; preserve each published tile, never private frames or shared names. */
     fun split(id: UUID): List<DisplaySurface> {
         val old = requireNotNull(surfaces[id]) { "Display was deleted" }

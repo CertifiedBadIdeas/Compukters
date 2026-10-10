@@ -30,6 +30,10 @@ import ru.lazyhat.compukters.impl.benchmark.VmBenchmarkGameTestScenario
 @PrefixGameTestTemplate(false)
 object CompuktersGameTests {
     @JvmStatic
+    @GameTest(batch = "peripheral_transfer", template = EMPTY_TEMPLATE, templateNamespace = "minecraft", timeoutTicks = TIMEOUT_TICKS)
+    fun peripheralTransfer(helper: GameTestHelper) = PeripheralTransferGameTestScenario.run(helper)
+
+    @JvmStatic
     @GameTest(batch = "computer_network", template = EMPTY_TEMPLATE, templateNamespace = "minecraft", timeoutTicks = TIMEOUT_TICKS)
     fun computerNetwork(helper: GameTestHelper) = ComputerNetworkGameTestScenario.run(helper)
 

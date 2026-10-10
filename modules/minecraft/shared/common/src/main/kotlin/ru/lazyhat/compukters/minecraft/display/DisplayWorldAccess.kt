@@ -113,6 +113,11 @@ internal object DisplayWorldAccess {
         create: Boolean = true,
     ): DisplaySurface? {
         check(level.server.isSameThread)
+        if (ru.lazyhat.compukters.minecraft.peripheral.PeripheralBlockTransfers
+                .receiving(level, entity.blockPos)
+        ) {
+            return null
+        }
         val directory = DisplayStorage.get(level).directory
         val id = UUID.fromString(entity.checkpointIdentity)
         directory.byPanel(id)?.let { surface ->
@@ -199,6 +204,11 @@ internal object DisplayWorldAccess {
         level: ServerLevel,
         removedPosition: BlockPos,
     ) {
+        if (ru.lazyhat.compukters.minecraft.peripheral.PeripheralBlockTransfers
+                .removing(level, removedPosition)
+        ) {
+            return
+        }
         val directory = DisplayStorage.get(level).directory
         val surface =
             directory.snapshot().firstOrNull { candidate ->
@@ -214,6 +224,27 @@ internal object DisplayWorldAccess {
             DisplayNetworkAccess.refresh(level, remaining)
         }
         PeripheralCableTopologyCache.invalidate(level)
+    }
+
+    fun relocate(
+        source: ServerLevel,
+        destination: ServerLevel,
+        id: UUID,
+        origin: BlockPos,
+        facing: Direction,
+    ) {
+        val moved =
+            DisplayStorage.get(source).directory.relocate(
+                id,
+                origin.x,
+                origin.y,
+                origin.z,
+                facings.indexOf(facing),
+                DisplayStorage.get(destination).directory,
+            )
+        publications[source]?.remove(id)
+        DisplayNetworkAccess.refresh(destination, moved)
+        moved.panels.forEach { destination.getBlockEntity(position(moved, it.column, it.row))?.setChanged() }
     }
 
     fun assemble(

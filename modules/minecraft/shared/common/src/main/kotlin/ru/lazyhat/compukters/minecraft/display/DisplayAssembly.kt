@@ -23,7 +23,12 @@ object DisplayAssembly {
         write: (String, String?) -> Unit,
     ) {
         val level = player.level() as? ServerLevel ?: return
-        if (!player.mayBuild() || !level.mayInteract(player, position) || player.distanceToSqr(position.center) > 64.0) return
+        if (!player.mayBuild() || !level.mayInteract(player, position) ||
+            !ru.lazyhat.compukters.minecraft.peripheral.PeripheralWorldPositions
+                .within(level, player.position(), position.center, 8.0)
+        ) {
+            return
+        }
         val entity =
             level.getBlockEntity(position) as? DisplayBlockEntity ?: run {
                 player.sendSystemMessage(Component.translatable("item.compukters.peripheral_configurator.display.missing"))

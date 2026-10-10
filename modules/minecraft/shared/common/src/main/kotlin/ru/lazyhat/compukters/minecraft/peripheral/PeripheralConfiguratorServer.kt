@@ -309,5 +309,5 @@ object PeripheralConfiguratorServer {
     private fun validRange(
         player: ServerPlayer,
         context: PeripheralConfiguratorContext,
-    ): Boolean = player.distanceToSqr(context.position.center) <= 64.0
+    ): Boolean = PeripheralWorldPositions.within(player.level(), player.position(), context.position.center, 8.0)
 }

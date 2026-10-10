@@ -46,7 +46,11 @@ internal object PeripheralNetworkBinding {
     ): PeripheralBindingResult {
         val level = player.level() as? ServerLevel ?: return PeripheralBindingResult.INVALID_TARGET
         check(level.server.isSameThread)
-        if (!level.hasChunkAt(position) || player.distanceToSqr(position.center) > 64.0) return PeripheralBindingResult.INVALID_TARGET
+        if (!level.hasChunkAt(position) ||
+            !PeripheralWorldPositions.within(level, player.position(), position.center, 8.0)
+        ) {
+            return PeripheralBindingResult.INVALID_TARGET
+        }
         val stack = player.getItemInHand(hand)
         val item = stack.item as? PeripheralConfiguratorItem ?: return PeripheralBindingResult.INVALID_TARGET
         if (!item.networkMode(stack)) return PeripheralBindingResult.INVALID_TARGET
@@ -124,7 +128,11 @@ internal object PeripheralNetworkBinding {
         val item = stack.item as? PeripheralConfiguratorItem ?: return false
         val directory = PeripheralNetworkStorage.get(level).directory
         val selected = item.selectedNetwork(stack) ?: return false
-        if (!level.hasChunkAt(context.position) || player.distanceToSqr(context.position.center) > 64.0) return false
+        if (!level.hasChunkAt(context.position) ||
+            !PeripheralWorldPositions.within(level, player.position(), context.position.center, 8.0)
+        ) {
+            return false
+        }
         if (context.instance == null || resolveMember(level, context.position, context.face)?.instance != context.instance) return false
         if (PeripheralNetworkAccess.network(level, context.position)?.id != selected) return false
         if (directory.networkOf(member)?.id != selected) return false

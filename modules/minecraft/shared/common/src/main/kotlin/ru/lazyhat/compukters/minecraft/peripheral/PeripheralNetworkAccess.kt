@@ -67,6 +67,7 @@ object PeripheralNetworkAccess {
     @JvmStatic
     fun refresh(entity: BlockEntity) {
         val level = entity.level as? ServerLevel ?: return
+        if (PeripheralBlockTransfers.receiving(level, entity.blockPos)) return
         val stamp = instance(entity) ?: return
         val storage = PeripheralNetworkStorage.get(level)
         val members =
@@ -88,6 +89,7 @@ object PeripheralNetworkAccess {
     @JvmStatic
     fun detach(entity: BlockEntity) {
         val level = entity.level as? ServerLevel ?: return
+        if (PeripheralBlockTransfers.removing(level, entity.blockPos)) return
         val stamp = instance(entity) ?: return
         val storage = PeripheralNetworkStorage.get(level)
         if (storage.directory.remove(stamp)) storage.setDirty()
@@ -173,13 +175,7 @@ object PeripheralNetworkAccess {
                 return DisplayNetworkAccess.availability(level, computer, it)
             }
         }
-        if (!peripheralInRange(
-                level.dimension().toString(),
-                computer,
-                member.identity,
-                radius(),
-            )
-        ) {
+        if (!PeripheralWorldPositions.inRange(level, computer, member.identity)) {
             return PeripheralNetworkAvailability.OUT_OF_RANGE
         }
         val position = member.identity.anchor

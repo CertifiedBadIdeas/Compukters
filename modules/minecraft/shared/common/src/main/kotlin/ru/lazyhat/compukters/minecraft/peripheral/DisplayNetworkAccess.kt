@@ -134,7 +134,7 @@ internal object DisplayNetworkAccess {
             val pos = DisplayWorldAccess.position(screen, panel.column, panel.row)
             if (contact != null && contact != pos) return@firstNotNullOfOrNull null
             val identity = identity(level, pos)
-            if (!peripheralInRange(level.dimension().toString(), computer, identity, PeripheralNetworkAccess.radius()) ||
+            if (!PeripheralWorldPositions.inRange(level, computer, identity) ||
                 !level.hasChunkAt(pos)
             ) {
                 return@firstNotNullOfOrNull null
@@ -152,7 +152,7 @@ internal object DisplayNetworkAccess {
         val inRange =
             screen.panels
                 .map { identity(level, DisplayWorldAccess.position(screen, it.column, it.row)) }
-                .filter { peripheralInRange(level.dimension().toString(), computer, it, PeripheralNetworkAccess.radius()) }
+                .filter { PeripheralWorldPositions.inRange(level, computer, it) }
         if (inRange.isEmpty()) return PeripheralNetworkAvailability.OUT_OF_RANGE
         return if (inRange.any { !level.hasChunkAt(it.anchor) }) {
             PeripheralNetworkAvailability.UNLOADED
