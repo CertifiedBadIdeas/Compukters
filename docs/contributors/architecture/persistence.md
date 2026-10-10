@@ -121,3 +121,14 @@ returned after its target lease ends is closed instead of becoming a ticket. The
 open, resync, input, and polling operations. Each viewer has at most one pending poll; replies are checked against the
 current viewer session and machine before publication. The standalone terminal uses the same bounded asynchronous
 transport as the IDE terminal, and its viewer state is discarded when the server stops.
+
+## Display canvases
+
+A dimension's `DisplayStorage` is the sole authority for published display pixels, density, geometry, membership and
+name. Directory format 1 stores packed RGB bytes with strict dimension, allocation, member and payload checks.
+A directory allows at most 128 screens and 1024 logical block positions, including holes. The final panel's destruction
+deletes its screen; unloading panels leaves the record intact. Panel NBT retains only instance UUIDs.
+
+Computer resource snapshots store display leases and private, bounded frame drafts for suspended execution. They do
+not store or replay published images. Saving the world during an open frame saves the previous published canvas;
+the computer checkpoint independently retains the draft for successful resumption.

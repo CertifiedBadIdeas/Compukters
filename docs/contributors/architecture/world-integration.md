@@ -76,16 +76,31 @@ identities and rejects ambiguous reachable names. Networks are bounded to 1,024 
 Cable blocks no longer contribute discovery. Guest signatures and permanently stale handles remain unchanged.
 This stage uses ordinary block coordinates; Sable transforms and assembly transfers are outside its scope.
 
-## Text displays
+## Displays
 
-The base text display uses the same bounded world-request path with an internal `compukters:display` capability. Its
-20x10 buffer and exclusive writer lease belong to the display block entity on the server, outside the VM terminal.
-The block tick checks its writer and device reachability even while Guest code is idle. Stopping or disconnecting that
-writer clears the screen, and no display text is saved in world NBT. During hibernation the computer checkpoint
-retains its owned rows and writer handle. A persisted display UUID distinguishes the same device from a replacement;
-restoration reacquires a reachable matching display without overwriting another writer. Missing or replaced devices
-leave the old handle stale. Clients receive at most one full-grid block-entity
-update per changed server tick and render text on the oriented front face.
+`compukters:display` capability 1.1 appends graphical operations 4–16 to the original operations 0–3. Guest
+`compukter:core` 2.1.0 exposes `GraphicalDisplay`, resolution modes, RGB colors, drawing and an inline `frame`
+extension. `TextDisplay` remains source-compatible and rasterizes its 20x10 grid at HIGH density.
+
+A dimension-owned `DisplayStorage` SavedData contains a bounded `DisplayDirectory`: logical screen UUIDs, one
+plane and fixed rectangular geometry, actual panel UUIDs, a shared name, density and packed published RGB bytes.
+Missing panels are holes in the logical image. Last-panel destruction removes the record; chunk unload does not.
+Panel block entities persist only their instance identity, never duplicate the authoritative canvas. The configurator
+assembles at most 8x8 blocks, selects existing screens and joins replacement panels into holes.
+
+Each program holds an exclusive canvas lease. Reset, termination or loss of every reachable panel releases it without
+erasing pixels. Private frames belong to one cooperative task, are bounded to 262144 pixels per program, and carry a
+cumulative work counter. Resource checkpoints preserve leases and private frames without replaying published pixels.
+Asynchronous computer hibernation retains its lease validity through checkpoint capture, then host reset releases it.
+Guest operations still reject detached endpoints throughout that transition. Composite contracts opt into their own
+member reachability; the original four-argument JVM constructor remains available to already compiled addons.
+
+The server freezes a publication while its panel tiles are being sent under the dimension's 512KiB/tick budget.
+Every tile carries a screen identity, publication sequence and member positions. Clients stage tiles until all loaded
+members have the same publication, then swap images together. Chunk tracking sends the current frozen publication;
+unloaded members and holes do not block the client. Dynamic emissive textures update only on committed revisions and
+are released when panels unload. Deterministic clipping and a 4M pixel-work/tick budget bound server drawing.
+
 
 ## Foreground termination
 
@@ -138,7 +153,7 @@ canonical shared adapter sources.
 TextDisplay is a scalar value class implementing Peripheral, with a canonical box and a managed companion provider.
 All public acquisition uses typed providers and the common Side; the earlier Display/Create/Propulsion helpers
 and separate side types are removed. Display operations still own output leases;
-discovery creates no lease, and reset releases buffers touched by the program. The real text-display GameTest
+discovery creates no lease, and reset releases writer leases without erasing published pixels. The real text-display GameTest
 fixture covers typed selection, interface casts, predicates, optional/strict absence and cleanup after a thrown
 predicate before exercising a world write and network disconnection.
 
