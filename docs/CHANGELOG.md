@@ -13,6 +13,9 @@ headings so this page has one stable URL that can be shared outside the reposito
 
 ## 0.6.0 — In development
 
+- Existing Peripheral Cables become Computer Cables: one nonbranching physical line joins two computers, with one
+  cable connection per computer. Placement rejects branches, loops and occupied ports without consuming the item.
+
 - Displays retain RGB graphics and their resolution across program exit, disconnection, chunk unload and server
   restart. Programs draw pixels, lines, rectangles, text and images, with optional coherent frames.
 - The Peripheral Configurator assembles planar screens up to 8×8 blocks, including holes. Replacing a missing panel

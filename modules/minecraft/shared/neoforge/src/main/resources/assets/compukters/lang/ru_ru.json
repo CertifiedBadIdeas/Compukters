@@ -28,5 +28,12 @@
   "item.compukters.peripheral_configurator.display.joined": "Панель присоединена к экрану.",
   "item.compukters.peripheral_configurator.display.corner": "Первый угол выбран. Нажмите на противоположный угол, чтобы собрать экран.",
   "item.compukters.peripheral_configurator.display.created": "Экран собран. Дырки допустимы. Shift-нажатие выбирает экран; Shift-использование в воздухе сбрасывает выбор.",
-  "item.compukters.peripheral_configurator.display.failed": "Не удалось собрать экран: %s"
+  "item.compukters.peripheral_configurator.display.failed": "Не удалось собрать экран: %s",
+  "block.compukters.peripheral_cable": "Компьютерный кабель",
+  "message.compukters.cable.branch": "Кабельная линия не может разветвляться.",
+  "message.compukters.cable.port_occupied": "Порт компьютера уже занят кабелем.",
+  "message.compukters.cable.loop": "Кабельной линии нужны два конца: замыкание в кольцо запрещено.",
+  "message.compukters.cable.too_many_computers": "Кабельная линия может соединить только два компьютера.",
+  "message.compukters.cable.limit_reached": "Кабельная линия слишком длинная.",
+  "message.compukters.cable.unloaded": "Перед продолжением линии загрузите соседние чанки."
 }

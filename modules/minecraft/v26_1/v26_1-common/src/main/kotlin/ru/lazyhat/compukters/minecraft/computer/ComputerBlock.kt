@@ -39,7 +39,9 @@ import net.minecraft.world.level.block.state.StateDefinition
 import net.minecraft.world.level.block.state.properties.BlockStateProperties
 import net.minecraft.world.level.redstone.Orientation
 import net.minecraft.world.phys.BlockHitResult
+import ru.lazyhat.compukters.core.network.CableNode
 import ru.lazyhat.compukters.lang.runtime.vm.RedstoneWire
+import ru.lazyhat.compukters.minecraft.network.ComputerCableLinks
 import java.util.function.Supplier
 
 // Input and output sides are independent GPIO, not a passive redstone conductor.
@@ -58,8 +60,12 @@ class ComputerBlock(
         builder.add(FACING)
     }
 
-    override fun getStateForPlacement(context: BlockPlaceContext): BlockState =
-        defaultBlockState().setValue(FACING, placementFacing(context.horizontalDirection))
+    override fun getStateForPlacement(context: BlockPlaceContext): BlockState? =
+        if (ComputerCableLinks.allowPlacement(context, CableNode.COMPUTER)) {
+            defaultBlockState().setValue(FACING, placementFacing(context.horizontalDirection))
+        } else {
+            null
+        }
 
     override fun rotate(
         blockState: BlockState,
@@ -94,6 +100,16 @@ class ComputerBlock(
         val entity = level.getBlockEntity(position) as? ComputerBlockEntity ?: return InteractionResult.PASS
         terminalOpener(serverPlayer, entity)
         return InteractionResult.SUCCESS_SERVER
+    }
+
+    override fun affectNeighborsAfterRemoval(
+        state: BlockState,
+        level: net.minecraft.server.level.ServerLevel,
+        position: BlockPos,
+        movedByPiston: Boolean,
+    ) {
+        super.affectNeighborsAfterRemoval(state, level, position, movedByPiston)
+        ComputerCableLinks.invalidate(level)
     }
 
     override fun playerWillDestroy(
@@ -154,6 +170,7 @@ class ComputerBlock(
         movedByPiston: Boolean,
     ) {
         super.onPlace(state, level, position, oldState, movedByPiston)
+        ComputerCableLinks.invalidate(level)
         if (!level.isClientSide && oldState.block === this && oldState.getValue(FACING) != state.getValue(FACING)) {
             (level.getBlockEntity(position) as? ComputerBlockEntity)?.markRedstoneInputDirty()
             Direction.entries.forEach { direction ->

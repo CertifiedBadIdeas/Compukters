@@ -39,8 +39,13 @@ a network can extend arbitrarily far, but each computer has its own accessible s
 This initial implementation covers stationary devices in the ordinary world; Sable construction coordinates and
 assembly transfer require a separate integration.
 
-Peripheral Cables no longer participate in discovery. Existing cable blocks remain, but devices must be bound with the
-configurator; cable connections are not migrated automatically. Direct adjacent access still works without binding.
+Cable blocks are now Computer Cables, reserved for physical connections between computers. Place a continuous line
+between two computers; the line can turn or run vertically, but cannot branch or loop. A computer accepts one adjacent
+cable. Invalid placement is rejected with a message and keeps the item in your hand. Old branched constructions remain
+in the world but provide no computer link. Links require the entire line and both computers to be loaded.
+
+Cables do not participate in peripheral discovery. Bind peripherals with the configurator; old cable connections are
+not migrated automatically. Direct adjacent access still works without binding.
 
 For example, open a named display:
 
