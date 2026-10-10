@@ -46,6 +46,7 @@ import ru.lazyhat.compukters.lang.runtime.vm.TerminalModifier
 import ru.lazyhat.compukters.lang.runtime.vm.TerminalState
 import ru.lazyhat.compukters.lang.runtime.vm.TerminalUpdate
 import ru.lazyhat.compukters.lang.runtime.vm.VmExecutableRevision
+import ru.lazyhat.compukters.minecraft.network.ComputerCableMessages
 import java.util.concurrent.CompletableFuture
 import kotlin.math.pow
 
@@ -290,6 +291,9 @@ open class ComputerBlockEntity internal constructor(
                 deviceId = deviceId,
                 machineEpoch = machineId,
                 stateSink = { _, state ->
+                    if (!state.isPoweredOn() && runtimeState.isPoweredOn()) {
+                        level?.let { ComputerCableMessages.changed(it, blockPos, false) }
+                    }
                     runtimeState = state
                     if (state.isPoweredOn()) {
                         powerOffReason = null
@@ -382,6 +386,7 @@ open class ComputerBlockEntity internal constructor(
         val closed = closeRuntime(carrier, hibernate)
         carrier = null
         carrierRetryTicks = 0
+        level?.let { ComputerCableMessages.changed(it, blockPos, false) }
         terminalMachineId = null
         filesystemLease?.release(closed)?.whenComplete { _, _ -> }
         filesystemLease = null
@@ -391,6 +396,7 @@ open class ComputerBlockEntity internal constructor(
         val closed = closeRuntime(carrier, hibernate = true)
         carrier = null
         carrierRetryTicks = 0
+        level?.let { ComputerCableMessages.changed(it, blockPos, false) }
         terminalMachineId = null
         filesystemLease = null
         return closed

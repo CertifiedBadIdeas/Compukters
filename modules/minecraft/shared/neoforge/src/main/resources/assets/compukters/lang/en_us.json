@@ -1,7 +1,7 @@
 {
   "block.compukters.compukter": "Compukter",
   "block.compukters.display": "Display",
-  "block.compukters.peripheral_cable": "Peripheral Cable",
+  "block.compukters.peripheral_cable": "Computer Cable",
   "item.compukters.peripheral_configurator": "Peripheral Configurator",
   "item.compukters.peripheral_configurator.ambiguous": "More than one addon recognizes this device",
   "item.compukters.peripheral_configurator.cleared": "Peripheral name cleared",
@@ -70,5 +70,11 @@
   "overlay.compukters.configurator.controls": "Use in air: next mode · Shift-use in air: clear selection",
   "overlay.compukters.configurator.invalid_preview": "Corners must share facing and plane; maximum 8×8",
   "overlay.compukters.configurator.unnamed": "Unnamed",
-  "overlay.compukters.configurator.action.display_only": "Point at a display to assemble or select a screen"
+  "overlay.compukters.configurator.action.display_only": "Point at a display to assemble or select a screen",
+  "message.compukters.cable.branch": "Cable lines cannot branch.",
+  "message.compukters.cable.port_occupied": "This computer already has a cable connection.",
+  "message.compukters.cable.loop": "A cable line must have two ends; loops cannot connect computers.",
+  "message.compukters.cable.too_many_computers": "A cable line can connect only two computers.",
+  "message.compukters.cable.limit_reached": "This cable line is too large.",
+  "message.compukters.cable.unloaded": "Load the neighboring chunks before extending this cable line."
 }

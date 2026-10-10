@@ -17,6 +17,15 @@ headings so this page has one stable URL that can be shared outside the reposito
   Changing the dependency selection replaces that preparation; each project compilation keeps its own source
   session and specialization state.
 
+- Host capabilities and addon SDK bindings exchange `ByteArray` directly, preserving arbitrary binary data within
+  a 4096-byte call limit. Runtime 0.22.0 / native ABI 22 replaces the previous native boundary; existing VM checkpoints
+  cold boot while retaining persistent files.
+
+- Existing Peripheral Cables become Computer Cables: one nonbranching physical line joins two computers, with one
+  cable connection per computer. Placement rejects branches, loops and occupied ports without consuming the item.
+  Guest programs exchange binary messages through `Network.send(ByteArray)` and `Network.receive()` with no addresses;
+  bounded inboxes and catchable interruption handle unavailable peers and broken connections.
+
 - Displays retain RGB graphics and their resolution across program exit, disconnection, chunk unload and server
   restart. Programs draw pixels, lines, rectangles, text and images, with optional coherent frames.
 - Holding the Peripheral Configurator reveals nearby devices, networks and screens with animated outlines hidden

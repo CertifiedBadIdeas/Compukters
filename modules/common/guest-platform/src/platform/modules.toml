@@ -12,6 +12,6 @@ sources = ["libraries/stdlib-core/**/*.kt"]
 
 [[module]]
 id = "compukter:core"
-version = "2.1.0"
+version = "2.2.0"
 dependencies = ["stdlib:core"]
 sources = ["libraries/compukter-core/**/*.kt"]

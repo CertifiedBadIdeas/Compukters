@@ -39,8 +39,13 @@ a network can extend arbitrarily far, but each computer has its own accessible s
 This initial implementation covers stationary devices in the ordinary world; Sable construction coordinates and
 assembly transfer require a separate integration.
 
-Peripheral Cables no longer participate in discovery. Existing cable blocks remain, but devices must be bound with the
-configurator; cable connections are not migrated automatically. Direct adjacent access still works without binding.
+Cable blocks are now Computer Cables, reserved for physical connections between computers. Place a continuous line
+between two computers; the line can turn or run vertically, but cannot branch or loop. A computer accepts one adjacent
+cable. Invalid placement is rejected with a message and keeps the item in your hand. Old branched constructions remain
+in the world but provide no computer link. Links require the entire line and both computers to be loaded.
+
+Cables do not participate in peripheral discovery. Bind peripherals with the configurator; old cable connections are
+not migrated automatically. Direct adjacent access still works without binding.
 
 For example, open a named display:
 
@@ -56,6 +61,46 @@ fun main() {
 
 An adjacent display can instead be opened with `TextDisplay.at(Side.front)`. Follow the
 [display guide]({{ '/DISPLAY/' | relative_url }}) for bounds and output ownership.
+
+## Send messages between computers
+
+Connect two powered-on computers with one Computer Cable line. The cable determines the peer; no name, address,
+modem or configurator binding is required. Both computers and the entire cable must be loaded in the same world.
+
+On the first computer:
+
+```kotlin
+import compukter.network.Network
+
+fun main() {
+    if (!Network.connected) return
+    Network.send(byteArrayOf(0, -128, -1))
+    val reply = Network.receive()
+    println(reply.size)
+}
+```
+
+On the second computer:
+
+```kotlin
+import compukter.network.Network
+
+fun main() {
+    val message = Network.receive()
+    Network.send(message)
+}
+```
+
+`send` copies one complete message into the peer's inbox. `receive` waits for one message without blocking the server.
+Each inbox holds up to 16 messages, each at most 4096 bytes; empty messages are valid. The world also has a shared
+1 MiB queued-byte budget. A full inbox or unavailable connection throws `compukter.io.IOException`; applications can
+catch it and retry later. Oversized Guest arguments are rejected by the VM's host-request quota before dispatch.
+Programs on one computer share its inbox and consume messages in arrival order.
+
+Cutting the cable, replacing or powering off a computer, or unloading a participating chunk discards queued messages
+and interrupts waiting receives. Repairing the cable creates a fresh connection. Queues are transient and are not saved
+across hibernation or server restarts; a restored waiting receive reports interruption. Messages already accepted by
+`send` are queued, without a delivery acknowledgment. Peripheral bindings remain separate from this cable connection.
 
 ## Typed discovery
 

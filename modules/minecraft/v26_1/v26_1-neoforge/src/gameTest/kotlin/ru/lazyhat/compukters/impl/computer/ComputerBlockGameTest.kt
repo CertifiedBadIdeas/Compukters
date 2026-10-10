@@ -53,6 +53,14 @@ object ComputerBlockGameTest {
                 0,
             )
         event.registerTest(
+            Identifier.fromNamespaceAndPath(MOD_ID, "computer_network"),
+            ComputerNetworkGameTest(testData("computer_network")),
+        )
+        event.registerTest(
+            Identifier.fromNamespaceAndPath(MOD_ID, "computer_cable"),
+            ComputerCableGameTest(testData("computer_cable")),
+        )
+        event.registerTest(
             Identifier.fromNamespaceAndPath(MOD_ID, "computer_lifecycle"),
             ComputerLifecycleGameTest(testData("computer_lifecycle")),
         )

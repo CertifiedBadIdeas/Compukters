@@ -73,7 +73,7 @@ data class HostRecordField(
 ) {
     init {
         require(Regex("[A-Za-z_][A-Za-z0-9_]{0,63}").matches(name)) { "invalid record field name: $name" }
-        require(type != HostValueType.UNIT) { "Unit cannot be a record field" }
+        require(type != HostValueType.UNIT && type != HostValueType.BYTE_ARRAY) { "Unit and ByteArray cannot be record fields" }
         require((type == HostValueType.RECORD) == (record != null)) { "record field schema does not match its type" }
     }
 }

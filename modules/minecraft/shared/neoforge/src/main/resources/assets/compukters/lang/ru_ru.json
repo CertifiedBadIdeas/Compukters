@@ -46,5 +46,12 @@
   "overlay.compukters.configurator.controls": "Использование в воздухе: следующий режим · С Shift: сброс выбора",
   "overlay.compukters.configurator.invalid_preview": "Углы должны лежать в одной плоскости и смотреть одинаково; максимум 8×8",
   "overlay.compukters.configurator.unnamed": "Без имени",
-  "overlay.compukters.configurator.action.display_only": "Наведитесь на дисплей для сборки или выбора экрана"
+  "overlay.compukters.configurator.action.display_only": "Наведитесь на дисплей для сборки или выбора экрана",
+  "block.compukters.peripheral_cable": "Компьютерный кабель",
+  "message.compukters.cable.branch": "Кабельная линия не может разветвляться.",
+  "message.compukters.cable.port_occupied": "Порт компьютера уже занят кабелем.",
+  "message.compukters.cable.loop": "Кабельной линии нужны два конца: замыкание в кольцо запрещено.",
+  "message.compukters.cable.too_many_computers": "Кабельная линия может соединить только два компьютера.",
+  "message.compukters.cable.limit_reached": "Кабельная линия слишком длинная.",
+  "message.compukters.cable.unloaded": "Перед продолжением линии загрузите соседние чанки."
 }
