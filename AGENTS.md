@@ -2,8 +2,11 @@
 
 ## Workspace & Working Checkout
 
-Treat this repository root as the Compukters workspace. Do not create Git worktrees; perform all work in the user's
-current checkout and current branch unless the user explicitly requests a worktree for a specific task.
+Treat this repository root as the Compukters workspace. For repository changes, use a separate Git worktree and task
+branch by default; reuse the existing worktree for the same task. Keep the user's original checkout and unrelated
+changes intact. Read-only investigation may stay in the current checkout. Work in the user's current checkout only
+when they explicitly request it. Initialize required submodules at the task checkout's pinned revisions, and do not
+merge, push or remove the task worktree without authorization.
 
 Do not spawn sub-agents or delegate work to other agents unless the user explicitly requests sub-agent or
 parallel-agent involvement for a specific task.

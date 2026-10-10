@@ -87,7 +87,12 @@ class PeripheralSession<I : Any>(
         val identities = discover().distinct()
         if (identities.size > maximumSnapshotEntries) unavailable("Peripheral discovery limit exceeded")
         // Resolve exact instances now, without allocating device handles. Later reads cannot bind replacements.
-        val entries = identities.filter(contract::accepts).mapNotNull { resolve(contract, it) }
+        val instances = java.util.Collections.newSetFromMap(java.util.IdentityHashMap<Any, Boolean>())
+        val entries =
+            identities
+                .filter(contract::accepts)
+                .mapNotNull { resolve(contract, it) }
+                .filter { instances.add(it.endpoint.identity) }
         val id = nextId(nextSnapshot, "snapshot")
         nextSnapshot += 1
         snapshots[id] = entries

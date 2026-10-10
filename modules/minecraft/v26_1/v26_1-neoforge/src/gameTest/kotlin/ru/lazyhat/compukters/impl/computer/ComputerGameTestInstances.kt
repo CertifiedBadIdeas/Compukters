@@ -77,6 +77,26 @@ internal class TextDisplayGameTest(
     override fun typeDescription(): MutableComponent = Component.literal("Compukters text display")
 }
 
+internal class GraphicalDisplayGameTest(
+    testData: TestData<Holder<TestEnvironmentDefinition<*>>>,
+) : GameTestInstance(testData) {
+    override fun run(helper: GameTestHelper) = GraphicalDisplayGameTestScenario.run(helper)
+
+    override fun codec(): MapCodec<out GameTestInstance> = MapCodec.unit(this)
+
+    override fun typeDescription(): MutableComponent = Component.literal("Compukters composite graphical display")
+}
+
+internal class GraphicalDisplayHibernationGameTest(
+    testData: TestData<Holder<TestEnvironmentDefinition<*>>>,
+) : GameTestInstance(testData) {
+    override fun run(helper: GameTestHelper) = GraphicalDisplayHibernationGameTestScenario.run(helper)
+
+    override fun codec(): MapCodec<out GameTestInstance> = MapCodec.unit(this)
+
+    override fun typeDescription(): MutableComponent = Component.literal("Compukters graphical frame hibernation")
+}
+
 internal class VmActorServiceGameTest(
     testData: TestData<Holder<TestEnvironmentDefinition<*>>>,
 ) : GameTestInstance(testData) {

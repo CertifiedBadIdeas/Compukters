@@ -75,6 +75,19 @@ object CompuktersGameTests {
     fun textDisplay(helper: GameTestHelper) = TextDisplayGameTestScenario.run(helper)
 
     @JvmStatic
+    @GameTest(batch = "graphical_display", template = EMPTY_TEMPLATE, templateNamespace = "minecraft", timeoutTicks = TIMEOUT_TICKS)
+    fun graphicalDisplay(helper: GameTestHelper) = GraphicalDisplayGameTestScenario.run(helper)
+
+    @JvmStatic
+    @GameTest(
+        batch = "graphical_display_hibernation",
+        template = EMPTY_TEMPLATE,
+        templateNamespace = "minecraft",
+        timeoutTicks = TIMEOUT_TICKS,
+    )
+    fun graphicalDisplayHibernation(helper: GameTestHelper) = GraphicalDisplayHibernationGameTestScenario.run(helper)
+
+    @JvmStatic
     @GameTest(
         batch = "peripheral_cable",
         template = EMPTY_TEMPLATE,

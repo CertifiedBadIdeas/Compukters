@@ -80,9 +80,11 @@ restore resource descriptions for live scopes; retired scopes are dropped and ne
 Peripheral resource format 2 preserves handle and discovery token high-water marks, ordered discovery
 snapshots and contract/location/persistent-instance descriptors. Exact matching instances may rebind after
 loading; missing, replaced or unidentifiable instances produce stale handles. A physical address alone never
-rebinds an old handle to a replacement. Display identities live in block-entity persistence; display resource
-format 2 restores owned rows and writer leases only after peripheral admission and without overwriting
-another active writer.
+rebinds an old handle to a replacement. Panel identities live in block-entity persistence and canvas identities in dimension SavedData. Display resource
+format 4 restores writer leases and bounded private frames (including owning task and cumulative work) after
+peripheral admission, without replaying published pixels or overwriting another active writer. Readers accept
+formats 2 and 3; legacy format-2 rows are consumed but never replayed. `compukters:display` 1.1 retains operations
+0–3 and appends operations 4–16. `compukter:core` is 2.1.0; the native ABI and checkpoint envelope are unchanged.
 
 The Minecraft addon SDK optionally accepts `CompuktersPersistentPeripheralEndpoint`, extending the existing
 endpoint interface with a persisted exact-device stamp (at most 128 UTF-8 bytes). The base adapter forwards

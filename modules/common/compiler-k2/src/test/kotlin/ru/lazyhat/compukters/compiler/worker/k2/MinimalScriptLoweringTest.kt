@@ -1616,6 +1616,83 @@ class MinimalScriptLoweringTest {
         }
 
     @Test
+    fun `graphical display API lowers modes RGB images and exception safe frames`() =
+        withAdapter { adapter ->
+            val source =
+                """
+                import compukter.display.GraphicalDisplay
+                import compukter.display.DisplayMode
+                import compukter.display.Colors
+                import compukter.display.rgb
+                import compukter.display.frame
+
+                fun main() {
+                    val screen = GraphicalDisplay.named("panel")
+                    screen.setMode(DisplayMode.HIGH)
+                    require(screen.width > 0)
+                    screen.setMode(DisplayMode.NORMAL)
+                    screen.setMode(DisplayMode.LOW)
+                    screen.setMode(DisplayMode.ULTRA_LOW)
+                    screen.clear(rgb(16, 24, 32))
+                    screen.pixel(-1, 0, Colors.RED)
+                    screen.line(0, 0, screen.width - 1, screen.height - 1, Colors.GREEN)
+                    screen.fillRect(0, 0, 4, 3, Colors.BLUE)
+                    screen.rect(0, 0, 6, 5, Colors.WHITE)
+                    screen.text(0, 0, "Ready", scale = 1)
+                    screen.image(2, 2, 2, 1, intArrayOf(Colors.RED, Colors.BLUE))
+                    screen.frame { pixel(0, 0, Colors.YELLOW) }
+                    try { screen.frame { pixel(1, 0, Colors.CYAN); throw IllegalArgumentException("abort") } }
+                    catch (error: IllegalArgumentException) { screen.pixel(1, 0, Colors.MAGENTA) }
+                }
+                """.trimIndent()
+            val result = adapter.compile(request(source))
+            val artifact = assertNotNull(result.artifact, result.diagnostics.joinToString()).toByteArray()
+            assertTrue(allOpcodes(artifact).contains(0xe9))
+            System.getProperty("compukter.vm.graphicalDisplayArtifact")?.let { output ->
+                java.nio.file.Files
+                    .write(
+                        java.nio.file.Path
+                            .of(output),
+                        artifact,
+                    )
+            }
+        }
+
+    @Test
+    fun `graphical display open frame survives hibernation for GameTest`() =
+        withAdapter { adapter ->
+            val source =
+                """
+                import compukter.display.GraphicalDisplay
+                import compukter.display.DisplayMode
+                import compukter.display.frame
+                import compukter.concurrent.Tasks
+                fun main() {
+                    val screen = GraphicalDisplay.named("panel")
+                    screen.setMode(DisplayMode.ULTRA_LOW)
+                    screen.pixel(0, 0, 0x112233)
+                    screen.frame {
+                        pixel(0, 0, 0x445566)
+                        println("FRAME-PENDING")
+                        Tasks.sleepTicks(100)
+                        pixel(1, 0, 0x778899)
+                    }
+                    println("FRAME-COMMITTED")
+                }
+                """.trimIndent()
+            val result = adapter.compile(request(source))
+            val artifact = assertNotNull(result.artifact, result.diagnostics.joinToString()).toByteArray()
+            System.getProperty("compukter.vm.graphicalDisplayHibernationArtifact")?.let { output ->
+                java.nio.file.Files
+                    .write(
+                        java.nio.file.Path
+                            .of(output),
+                        artifact,
+                    )
+            }
+        }
+
+    @Test
     fun `text display API lowers named and adjacent writes to blocking capability operations`() =
         withAdapter { adapter ->
             val source =
