@@ -761,6 +761,27 @@ val generateDisplayConformanceArtifact = tasks.register<Test>("generateDisplayCo
     }
 }
 
+val graphicalDisplayHibernationArtifact = layout.buildDirectory.file("generated/conformance/graphical-display-hibernation.cpkt")
+val graphicalDisplayArtifact = layout.buildDirectory.file("generated/conformance/graphical-display.cpkt")
+val generateGraphicalDisplayConformanceArtifact = tasks.register<Test>("generateGraphicalDisplayConformanceArtifact") {
+    description = "Compiles RGB drawing, mode selection and frame publication for real display GameTests."
+    group = "verification"
+    dependsOn(tasks.jar)
+    useJUnitPlatform()
+    testClassesDirs = sourceSets.test.get().output.classesDirs
+    classpath = sourceSets.test.get().runtimeClasspath
+    filter.includeTestsMatching("*graphical display API lowers modes RGB images and exception safe frames*")
+    filter.includeTestsMatching("*graphical display open frame survives hibernation for GameTest*")
+    inputs.file(workerJar)
+    outputs.file(graphicalDisplayArtifact)
+    outputs.file(graphicalDisplayHibernationArtifact)
+    doFirst {
+        systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
+        systemProperty("compukter.vm.graphicalDisplayArtifact", graphicalDisplayArtifact.get().asFile.absolutePath)
+        systemProperty("compukter.vm.graphicalDisplayHibernationArtifact", graphicalDisplayHibernationArtifact.get().asFile.absolutePath)
+    }
+}
+
 val generateIntLoopsConformanceArtifact = tasks.register<Test>("generateIntLoopsConformanceArtifact") {
     description = "Compiles allocation-free Kotlin Int loops for pinned VM conformance."
     group = "verification"

@@ -26,6 +26,7 @@ val gameTest by sourceSets.creating
 val commonProject = project(":${name.removeSuffix("-neoforge")}-common")
 val redstoneConformanceArtifact = project(":compiler-k2").layout.buildDirectory.file("generated/conformance/redstone.cpkt")
 val soundConformanceArtifact = project(":compiler-k2").layout.buildDirectory.file("generated/conformance/sound.cpkt")
+val graphicalDisplayArtifact = project(":compiler-k2").layout.buildDirectory.file("generated/conformance/graphical-display.cpkt")
 val displayConformanceArtifact = project(":compiler-k2").layout.buildDirectory.file("generated/conformance/display.cpkt")
 
 kotlin.target.compilations.named(gameTest.name) {
@@ -36,6 +37,9 @@ tasks.named<ProcessResources>(gameTest.processResourcesTaskName) {
     dependsOn(":compiler-k2:generateRedstoneConformanceArtifact")
     dependsOn(":compiler-k2:generateSoundConformanceArtifact")
     dependsOn(":compiler-k2:generateDisplayConformanceArtifact")
+    dependsOn(":compiler-k2:generateGraphicalDisplayConformanceArtifact")
+    from(graphicalDisplayArtifact) { into("fixtures") }
+    from(project(":compiler-k2").layout.buildDirectory.file("generated/conformance/graphical-display-hibernation.cpkt")) { into("fixtures") }
     from(redstoneConformanceArtifact) { into("fixtures") }
     from(soundConformanceArtifact) { into("fixtures") }
     from(displayConformanceArtifact) { into("fixtures") }

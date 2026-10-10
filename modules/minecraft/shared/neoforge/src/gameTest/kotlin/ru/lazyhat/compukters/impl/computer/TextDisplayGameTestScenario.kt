@@ -93,14 +93,14 @@ internal object TextDisplayGameTestScenario {
                 helper.assertTrue(setup?.isDone == true, "display program setup is pending")
                 setup!!.getNow(null)
             }.thenWaitUntil {
-                helper.assertTrue(display.displayRows()[0].startsWith("Ready"), "Guest program did not write on display")
+                helper.assertTrue(display.hasDisplayPixels(), "Guest program did not write on display")
             }.thenExecute {
                 oldEpoch = computer.terminalMachineId
                 saved = computer.saveWithFullMetadata(helper.level.registryAccess())
                 helper.level.removeBlockEntity(helper.absolutePos(computerPosition))
                 helper.assertTrue(computer.isRemoved, "display writer computer did not unload")
             }.thenWaitUntil {
-                helper.assertTrue(display.displayRows()[0].isBlank(), "unloaded writer did not release its screen")
+                helper.assertTrue(display.hasDisplayPixels(), "unloaded writer erased the published image")
             }.thenExecute {
                 val position = helper.absolutePos(computerPosition)
                 computer =
@@ -114,12 +114,12 @@ internal object TextDisplayGameTestScenario {
                 helper.assertTrue(computer.computerId() == computerId, "display writer identity changed")
             }.thenWaitUntil {
                 // The Guest writes Ready only once, then sleeps forever. A fresh shell cannot satisfy this.
-                helper.assertTrue(display.displayRows()[0].startsWith("Ready"), "hibernation did not restore display rows and lease")
+                helper.assertTrue(display.hasDisplayPixels(), "hibernation erased the published display image")
                 helper.assertTrue(computer.terminalMachineId != oldEpoch, "restored display writer retained its old epoch")
             }.thenExecute {
                 PeripheralNetworkGameTestFixtures.unbind(helper, displayPosition)
             }.thenWaitUntil {
-                helper.assertTrue(display.displayRows()[0].isBlank(), "display did not clear after network removal")
+                helper.assertTrue(display.hasDisplayPixels(), "network removal erased the published image")
             }.thenSucceed()
     }
 

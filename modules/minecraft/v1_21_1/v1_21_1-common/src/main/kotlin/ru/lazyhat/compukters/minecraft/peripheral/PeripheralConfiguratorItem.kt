@@ -37,7 +37,19 @@ import java.util.UUID
 class PeripheralConfiguratorItem(
     properties: Properties,
 ) : Item(properties) {
-    fun networkMode(stack: ItemStack): Boolean = stack.get(DataComponents.CUSTOM_DATA)?.copyTag()?.getBoolean(MODE_KEY) ?: false
+    private fun configuratorMode(stack: ItemStack): Int {
+        val data = stack.get(DataComponents.CUSTOM_DATA)?.copyTag() ?: return 0
+        val stored = if (data.contains(ASSEMBLY_MODE_KEY)) data.getInt(ASSEMBLY_MODE_KEY) else -1
+        return if (stored in 0..2) {
+            stored
+        } else if (data.getBoolean(MODE_KEY)) {
+            1
+        } else {
+            0
+        }
+    }
+
+    fun networkMode(stack: ItemStack): Boolean = configuratorMode(stack) == 1
 
     fun selectedNetwork(stack: ItemStack): UUID? {
         val value = stack.get(DataComponents.CUSTOM_DATA)?.copyTag()?.getString(NETWORK_KEY) ?: return null
@@ -64,14 +76,18 @@ class PeripheralConfiguratorItem(
         if (player is ServerPlayer) {
             if (player.isShiftKeyDown) {
                 selectNetwork(stack, null)
+                val data = stack.get(DataComponents.CUSTOM_DATA)?.copyTag() ?: CompoundTag()
+                ru.lazyhat.compukters.minecraft.display.DisplayAssembly.SELECTION_KEYS
+                    .forEach(data::remove)
+                stack.set(DataComponents.CUSTOM_DATA, CustomData.of(data))
                 player.sendSystemMessage(Component.translatable("item.compukters.peripheral_configurator.selection_cleared"))
             } else {
                 val data = stack.get(DataComponents.CUSTOM_DATA)?.copyTag() ?: CompoundTag()
-                val next = !networkMode(stack)
-                data.putBoolean(MODE_KEY, next)
+                val next = (configuratorMode(stack) + 1) % 3
+                data.putInt(ASSEMBLY_MODE_KEY, next)
                 stack.set(DataComponents.CUSTOM_DATA, CustomData.of(data))
                 player.sendSystemMessage(
-                    Component.translatable("item.compukters.peripheral_configurator.mode." + if (next) "network" else "name"),
+                    Component.translatable("item.compukters.peripheral_configurator.mode." + listOf("name", "network", "display")[next]),
                 )
             }
         }
@@ -82,6 +98,19 @@ class PeripheralConfiguratorItem(
         if (context.level.isClientSide) return InteractionResult.SUCCESS
         val level = context.level as? ServerLevel ?: return InteractionResult.PASS
         val player = context.player as? ServerPlayer ?: return InteractionResult.PASS
+        if (configuratorMode(context.itemInHand) == 2) {
+            val stack = context.itemInHand
+            val data = stack.get(DataComponents.CUSTOM_DATA)?.copyTag() ?: CompoundTag()
+            ru.lazyhat.compukters.minecraft.display.DisplayAssembly.click(
+                player,
+                stack,
+                context.clickedPos,
+                read = { key -> data.getString(key) },
+                write = { key, value -> if (value == null) data.remove(key) else data.putString(key, value) },
+            )
+            stack.set(DataComponents.CUSTOM_DATA, CustomData.of(data))
+            return InteractionResult.SUCCESS
+        }
         if (networkMode(context.itemInHand)) {
             val result = PeripheralNetworkBinding.click(player, context.hand, context.clickedPos, context.clickedFace)
             player.sendSystemMessage(
@@ -112,6 +141,7 @@ class PeripheralConfiguratorItem(
     }
 
     companion object {
+        private const val ASSEMBLY_MODE_KEY = "compukters_configurator_mode"
         private const val MODE_KEY = "compukters_network_mode"
         private const val NETWORK_KEY = "compukters_selected_network"
     }

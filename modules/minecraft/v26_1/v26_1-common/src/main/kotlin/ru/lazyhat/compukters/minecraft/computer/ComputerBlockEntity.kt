@@ -83,6 +83,10 @@ open class ComputerBlockEntity internal constructor(
     private var resumeExpected = false
     private var powerOffReason: String? = null
 
+    @Volatile
+    internal var peripheralCheckpointPending: Boolean = false
+        private set
+
     internal fun peripheralResourcesAvailable(): Boolean = runtimeState.isPoweredOn() || carrier?.restoring == true
 
     private var filesystemLease: ComputerFileSystemLease? = null
@@ -403,14 +407,17 @@ open class ComputerBlockEntity internal constructor(
         hibernate: Boolean,
     ): CompletableFuture<Long?> {
         if (current == null) return CompletableFuture.completedFuture(null)
-        return try {
-            if (hibernate) current.hibernateAsync((level as? ServerLevel)?.server?.tickCount?.toLong() ?: 0L) else current.closeAsync()
-        } catch (failure: Exception) {
-            current.closeAsync().handle { _, closing ->
-                if (closing != null) failure.addSuppressed(closing)
-                throw java.util.concurrent.CompletionException(failure)
+        peripheralCheckpointPending = hibernate
+        val closed: CompletableFuture<Long?> =
+            try {
+                if (hibernate) current.hibernateAsync((level as? ServerLevel)?.server?.tickCount?.toLong() ?: 0L) else current.closeAsync()
+            } catch (failure: Exception) {
+                current.closeAsync().handle { _, closing ->
+                    if (closing != null) failure.addSuppressed(closing)
+                    throw java.util.concurrent.CompletionException(failure)
+                }
             }
-        }
+        return closed.whenComplete { _, _ -> peripheralCheckpointPending = false }
     }
 
     private fun ProgramComputerState.isPoweredOn(): Boolean =

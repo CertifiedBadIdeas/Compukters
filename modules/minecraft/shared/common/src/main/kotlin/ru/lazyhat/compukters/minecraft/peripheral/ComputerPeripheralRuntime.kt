@@ -23,8 +23,17 @@ class ComputerPeripheralContract<T : Any>(
     val id: String,
     val providerId: String,
     val deviceKey: String,
+    val ownsReachability: Boolean,
     internal val resolve: (ServerLevel, BlockPos, ComputerPeripheralIdentity) -> PeripheralEndpoint<T>?,
-)
+) {
+    /** Retain the JVM constructor used by already compiled addons. */
+    constructor(
+        id: String,
+        providerId: String,
+        deviceKey: String,
+        resolve: (ServerLevel, BlockPos, ComputerPeripheralIdentity) -> PeripheralEndpoint<T>?,
+    ) : this(id, providerId, deviceKey, false, resolve)
+}
 
 /** Program-scoped world adapter for base discovery and typed addon operations. */
 class ComputerPeripheralRuntime internal constructor(
@@ -104,7 +113,7 @@ class ComputerPeripheralRuntime internal constructor(
             val location = ComputerPeripheralIdentity(identity.providerId, identity.location, identity.deviceKey)
             descriptor.resolve(level, computer, location)?.let { endpoint ->
                 PeripheralEndpoint(endpoint.value, endpoint.identity, endpoint.persistentIdentity) {
-                    endpoint.valid() && ComputerPeripheralLookup.isReachable(level, computer, location)
+                    endpoint.valid() && (descriptor.ownsReachability || ComputerPeripheralLookup.isReachable(level, computer, location))
                 }
             }
         }

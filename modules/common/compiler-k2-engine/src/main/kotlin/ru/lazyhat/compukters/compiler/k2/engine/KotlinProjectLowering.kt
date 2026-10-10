@@ -9991,7 +9991,7 @@ private fun capabilityShape(
 ): PlatformCapabilityShape =
     session.capabilityShapes[capability]
         ?: PlatformCapabilityShape(
-            0,
+            if (capability.namespace == "compukters" && capability.name == "display") 1 else 0,
             when (capability.namespace to capability.name) {
                 "compukter" to "terminal" -> 14u
                 "compukter" to "stdio" -> 3u
@@ -10001,7 +10001,7 @@ private fun capabilityShape(
                 "compukter" to "redstone" -> 8u
                 "compukters" to "peripheral" -> 6u
                 "compukter" to "sound" -> 1u
-                "compukters" to "display" -> 4u
+                "compukters" to "display" -> 17u
                 "compukter" to "timer" -> 1u
                 else -> error("unknown Compukters capability ${capability.namespace}:${capability.name}")
             },

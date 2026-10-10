@@ -8,27 +8,22 @@ package ru.lazyhat.compukters.impl.display
 
 import com.mojang.blaze3d.vertex.PoseStack
 import com.mojang.math.Axis
-import net.minecraft.client.Minecraft
 import net.minecraft.client.renderer.SubmitNodeCollector
 import net.minecraft.client.renderer.blockentity.BlockEntityRenderer
 import net.minecraft.client.renderer.blockentity.BlockEntityRendererProvider
 import net.minecraft.client.renderer.blockentity.state.BlockEntityRenderState
 import net.minecraft.client.renderer.feature.ModelFeatureRenderer
+import net.minecraft.client.renderer.rendertype.RenderTypes
 import net.minecraft.client.renderer.state.level.CameraRenderState
+import net.minecraft.client.renderer.texture.OverlayTexture
 import net.minecraft.core.Direction
-import net.minecraft.network.chat.Component
 import net.minecraft.world.phys.Vec3
-import ru.lazyhat.compukters.impl.font.JetBrainsMonoRendering
-import ru.lazyhat.compukters.impl.terminal.TerminalFontProfile
-import ru.lazyhat.compukters.impl.terminal.fontDescription
+import ru.lazyhat.compukters.impl.compat.Identifier
 import ru.lazyhat.compukters.minecraft.display.DisplayBlock
-import ru.lazyhat.compukters.minecraft.display.DisplayTextLayout
 
 class DisplayBlockEntityRenderer(
-    context: BlockEntityRendererProvider.Context,
+    @Suppress("UNUSED_PARAMETER") context: BlockEntityRendererProvider.Context,
 ) : BlockEntityRenderer<NeoForgeDisplayBlockEntity, DisplayRenderState> {
-    private val profile = TerminalFontProfile
-
     override fun createRenderState(): DisplayRenderState = DisplayRenderState()
 
     override fun extractRenderState(
@@ -40,7 +35,7 @@ class DisplayBlockEntityRenderer(
     ) {
         super.extractRenderState(entity, state, partialTick, cameraPosition, crumblingOverlay)
         state.facing = entity.blockState.getValue(DisplayBlock.FACING)
-        state.rows = entity.displayRows()
+        state.texture = DisplayTextureCache.texture(entity)
     }
 
     override fun submit(
@@ -49,37 +44,36 @@ class DisplayBlockEntityRenderer(
         collector: SubmitNodeCollector,
         camera: CameraRenderState,
     ) {
-        if (state.rows.all(String::isBlank)) return
+        val location = state.texture ?: return
         pose.pushPose()
         pose.translate(0.5, 0.5, 0.5)
         pose.mulPose(Axis.YP.rotationDegrees(-state.facing.toYRot()))
         pose.translate(0.0, 0.0, 0.503)
-        pose.scale(SCALE, -SCALE, SCALE)
-        DisplayTextLayout.forEachGlyph(state.rows) { x, y, codePoint ->
-            val text =
-                Component.literal(String(Character.toChars(codePoint))).withStyle { style -> style.withFont(profile.fontDescription) }
-            JetBrainsMonoRendering.submitText(
-                collector,
-                pose,
-                Minecraft.getInstance().font,
-                text,
-                x.toFloat(),
-                y.toFloat(),
-                TEXT_COLOR,
-                FULL_BRIGHT,
-            )
+        collector.submitCustomGeometry(pose, RenderTypes.entityTranslucentEmissive(location)) { saved, vertices ->
+            fun vertex(
+                x: Float,
+                y: Float,
+                u: Float,
+                v: Float,
+            ) {
+                vertices
+                    .addVertex(saved, x, y, 0f)
+                    .setColor(-1)
+                    .setUv(u, v)
+                    .setOverlay(OverlayTexture.NO_OVERLAY)
+                    .setLight(0xF000F0)
+                    .setNormal(saved, 0f, 0f, 1f)
+            }
+            vertex(-0.5f, 0.5f, 0f, 0f)
+            vertex(-0.5f, -0.5f, 0f, 1f)
+            vertex(0.5f, -0.5f, 1f, 1f)
+            vertex(0.5f, 0.5f, 1f, 0f)
         }
         pose.popPose()
-    }
-
-    private companion object {
-        const val SCALE = 0.0065f
-        const val FULL_BRIGHT = 0xF000F0
-        val TEXT_COLOR = 0xFF9FE8C3.toInt()
     }
 }
 
 class DisplayRenderState : BlockEntityRenderState() {
     var facing: Direction = Direction.NORTH
-    var rows: List<String> = emptyList()
+    var texture: Identifier? = null
 }

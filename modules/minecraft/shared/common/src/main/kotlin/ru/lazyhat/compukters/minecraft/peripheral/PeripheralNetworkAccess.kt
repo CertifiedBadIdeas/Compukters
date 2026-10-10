@@ -106,7 +106,17 @@ object PeripheralNetworkAccess {
         return PeripheralDeviceDirectory(
             identities.mapNotNull { identity ->
                 val member = member(level, identity)
-                val name = if (member != null) member.name else legacy.nameOf(identity)
+                val screen =
+                    ru.lazyhat.compukters.minecraft.display.DisplayNames
+                        .surface(level, identity)
+                val name =
+                    if (screen != null) {
+                        screen.name
+                    } else if (member != null) {
+                        member.name
+                    } else {
+                        legacy.nameOf(identity)
+                    }
                 name?.let { PeripheralDeviceName(identity, it) }
             },
         )
