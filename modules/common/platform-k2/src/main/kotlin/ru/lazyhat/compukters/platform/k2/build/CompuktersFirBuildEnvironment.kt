@@ -188,6 +188,16 @@ class CompuktersFirBuildEnvironment private constructor(
         return CompuktersFirModuleOutput(moduleData, output, diagnostics)
     }
 
+    /**
+     * Fresh project/PSI ownership with the same admitted metadata symbols as the source libraries.
+     * Request environments must close before this library owner; they never publish source sessions into it.
+     */
+    fun createGuestRequestEnvironment(): CompuktersFirBuildEnvironment =
+        create().also { request ->
+            request.guestLibraryModuleData = guestLibraryModuleData
+            request.guestPlatformModules = guestPlatformModules
+        }
+
     override fun close() {
         Disposer.dispose(disposable)
     }

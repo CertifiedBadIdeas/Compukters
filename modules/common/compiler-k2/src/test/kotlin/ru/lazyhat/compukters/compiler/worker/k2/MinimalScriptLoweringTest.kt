@@ -8065,15 +8065,13 @@ class MinimalScriptLoweringTest {
     private fun withAdapter(block: (K2CompilerAdapter) -> Unit) {
         val root = createTempDirectory("compukters-minimal-lowering-test-")
         try {
-            block(
-                K2CompilerAdapter(
-                    K2CompilerInputs(
-                        temporaryRoot = root,
-                        workerJar = Path.of(checkNotNull(System.getProperty("compukters.worker.jar"))),
-                        expectedIdentity = identity(),
-                    ),
+            K2CompilerAdapter(
+                K2CompilerInputs(
+                    temporaryRoot = root,
+                    workerJar = Path.of(checkNotNull(System.getProperty("compukters.worker.jar"))),
+                    expectedIdentity = identity(),
                 ),
-            )
+            ).use(block)
         } finally {
             root.toFile().deleteRecursively()
         }

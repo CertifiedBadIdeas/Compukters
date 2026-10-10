@@ -37,22 +37,22 @@ fun main() {
     TimeZone.setDefault(TimeZone.getTimeZone("UTC"))
     try {
         val bootstrap = WorkerBootstrap.load()
-        val adapter =
+        val exit =
             K2CompilerAdapter(
                 K2CompilerInputs(
                     temporaryRoot = bootstrap.temporaryRoot,
                     workerJar = bootstrap.workerJar,
                     expectedIdentity = bootstrap.identity,
                 ),
-            )
-        val exit =
-            CompilerWorkerServer(
-                bootstrap.identity,
-                WorkerLimits(),
-                BufferedInputStream(System.`in`),
-                BufferedOutputStream(System.out),
-                adapter::compile,
-            ).run()
+            ).use { adapter ->
+                CompilerWorkerServer(
+                    bootstrap.identity,
+                    WorkerLimits(),
+                    BufferedInputStream(System.`in`),
+                    BufferedOutputStream(System.out),
+                    adapter::compile,
+                ).run()
+            }
         if (exit == WorkerServerExit.PROTOCOL_ERROR) exitProcess(3)
     } catch (exception: Exception) {
         System.err.println("compiler worker initialization failed: ${exception.message ?: exception::class.java.simpleName}")

@@ -63,6 +63,57 @@ import kotlin.test.assertTrue
 
 class K2CompilerAdapterTest {
     @Test
+    fun `reused library frontend isolates changed project declarations and generic specializations`() {
+        val modules =
+            K2CompilerAdapter.loadPackagedPlatform().modules.map {
+                TrustedBundleIdentity.of(it.id.toString(), Hash256.of(PlatformBundleCodec.moduleContentHash(it).toByteArray()))
+            }
+        val projects =
+            listOf(
+                """
+                fun calculate(): Int = ArrayList<Int>().apply { add(1); add(2) }.map { it + 1 }.let { it[0] }
+                fun main() { require(calculate() == 2) }
+                """.trimIndent(),
+                """
+                fun calculate(): String = ArrayList<String>().apply { add("one"); add("two") }.map { it + "!" }.let { it[0] }
+                fun main() { require(calculate() == "one!") }
+                """.trimIndent(),
+                """
+                class Value(val number: Int)
+                fun calculate(): Int = ArrayList<Value>().apply { add(Value(3)) }.map { it.number }.let { it[0] }
+                fun main() { require(calculate() == 3) }
+                """.trimIndent(),
+                """
+                class Value(val text: String)
+                fun calculate(): String = ArrayList<Value>().apply { add(Value("three")) }.map { it.text }.let { it[0] }
+                fun main() { require(calculate() == "three") }
+                """.trimIndent(),
+            )
+        val expected =
+            projects.map { project ->
+                var bytes: ByteArray? = null
+                withAdapter { adapter, _ ->
+                    val result = adapter.compile(request(project, platformModules = modules))
+                    assertFalse(result.hasErrors, result.diagnostics.toString())
+                    bytes = assertNotNull(result.artifact).toByteArray()
+                }
+                assertNotNull(bytes)
+            }
+        withAdapter { adapter, _ ->
+            repeat(3) {
+                projects.forEachIndexed { index, project ->
+                    val result = adapter.compile(request(project, platformModules = modules))
+                    assertFalse(result.hasErrors, result.diagnostics.toString())
+                    assertContentEquals(expected[index], assertNotNull(result.artifact).toByteArray())
+                }
+                val invalid = adapter.compile(request("fun main() { calculate() }", platformModules = modules))
+                assertTrue(invalid.hasErrors)
+                assertNull(invalid.artifact)
+            }
+        }
+    }
+
+    @Test
     fun `source library generic functions and classes specialize in consumer`() {
         val sourceRoot =
             Path
@@ -70,6 +121,7 @@ class K2CompilerAdapterTest {
                     checkNotNull(System.getProperty("compukters.repository.root")),
                 ).resolve("modules/common/guest-platform/src/platform")
         val root = createTempDirectory("compukters-generic-library-")
+        var adapterResource: K2CompilerAdapter? = null
         try {
             Files.walk(sourceRoot).use { paths ->
                 paths.filter(Files::isRegularFile).forEach { source ->
@@ -200,7 +252,7 @@ class K2CompilerAdapterTest {
                         expectedIdentity = workerIdentity,
                     ),
                     platform,
-                )
+                ).also { adapterResource = it }
             val source =
                 source(
                     "project/Main.kt",
@@ -361,6 +413,7 @@ class K2CompilerAdapterTest {
                 unsupported.diagnostics.toString(),
             )
         } finally {
+            adapterResource?.close()
             root.toFile().deleteRecursively()
         }
     }
@@ -678,7 +731,7 @@ class K2CompilerAdapterTest {
                     ),
                     platform,
                 )
-            block(adapter, root)
+            adapter.use { block(it, root) }
         } finally {
             root.toFile().deleteRecursively()
         }

@@ -13,6 +13,10 @@ headings so this page has one stable URL that can be shared outside the reposito
 
 ## 0.6.0 — In development
 
+- Repeated Guest compilation reuses resolved platform-library analysis within the retained compiler worker.
+  Changing the dependency selection replaces that preparation; each project compilation keeps its own source
+  session and specialization state.
+
 - Displays retain RGB graphics and their resolution across program exit, disconnection, chunk unload and server
   restart. Programs draw pixels, lines, rectangles, text and images, with optional coherent frames.
 - Holding the Peripheral Configurator reveals nearby devices, networks and screens with animated outlines hidden
