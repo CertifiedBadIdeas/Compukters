@@ -78,7 +78,7 @@ object DisplayPeripheralIntegration {
                                 }
 
                                 ComputerPeripheralLookupStatus.TOPOLOGY_LIMIT_EXCEEDED -> {
-                                    unavailable("Display cable topology limit exceeded")
+                                    unavailable("Display discovery limit exceeded")
                                 }
                             }
                         },

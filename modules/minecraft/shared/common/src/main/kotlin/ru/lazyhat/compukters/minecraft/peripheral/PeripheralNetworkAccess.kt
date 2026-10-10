@@ -51,22 +51,111 @@ object PeripheralNetworkAccess {
     ): PeripheralNetwork? {
         if (!level.hasChunkAt(computer)) return null
         val entity = level.getBlockEntity(computer) ?: return null
+        refresh(entity)
         val id = instance(entity) ?: return null
         return PeripheralNetworkStorage.get(level).directory.networkOf(id)
+    }
+
+    /** Refresh saved address hints when a stamped member loads at another location. */
+    @JvmStatic
+    fun refresh(entity: BlockEntity) {
+        val level = entity.level as? ServerLevel ?: return
+        val stamp = instance(entity) ?: return
+        val storage = PeripheralNetworkStorage.get(level)
+        val members =
+            storage.directory
+                .networkOf(stamp)
+                ?.members
+                .orEmpty()
+                .filter { it.instance == stamp }
+        val previous = members.firstOrNull() ?: return
+        if (previous.identity.dimension == level.dimension().toString() && previous.identity.anchor != entity.blockPos &&
+            level.hasChunkAt(previous.identity.anchor)
+        ) {
+            val old = level.getBlockEntity(previous.identity.anchor)
+            if (old != null && instance(old) == stamp) return // A copied instance cannot steal a live member's address.
+        }
+        if (storage.directory.relocate(stamp, level.dimension().toString(), entity.blockPos)) storage.setDirty()
+    }
+
+    @JvmStatic
+    fun detach(entity: BlockEntity) {
+        val level = entity.level as? ServerLevel ?: return
+        val stamp = instance(entity) ?: return
+        val storage = PeripheralNetworkStorage.get(level)
+        if (storage.directory.remove(stamp)) storage.setDirty()
+    }
+
+    internal fun member(
+        level: ServerLevel,
+        identity: PeripheralDeviceIdentity,
+    ): PeripheralNetworkMember? {
+        if (!level.hasChunkAt(identity.anchor)) return null
+        val entity = level.getBlockEntity(identity.anchor) ?: return null
+        val stamp = instance(entity) ?: return null
+        return PeripheralNetworkStorage.get(level).directory.networkOf(stamp)?.members?.firstOrNull {
+            it.instance == stamp && it.identity == identity
+        }
+    }
+
+    internal fun names(
+        level: ServerLevel,
+        identities: Set<PeripheralDeviceIdentity>,
+    ): PeripheralDeviceDirectory {
+        val legacy = PeripheralDeviceNameStorage.get(level).directory
+        return PeripheralDeviceDirectory(
+            identities.mapNotNull { identity ->
+                val member = member(level, identity)
+                val name = if (member != null) member.name else legacy.nameOf(identity)
+                name?.let { PeripheralDeviceName(identity, it) }
+            },
+        )
     }
 
     internal fun available(
         level: ServerLevel,
         computer: BlockPos,
         member: PeripheralNetworkMember,
-    ): Boolean {
-        if (member.isComputer || !peripheralInRange(level.dimension().toString(), computer, member.identity, radius())) return false
+    ): Boolean = availability(level, computer, member) == PeripheralNetworkAvailability.AVAILABLE
+
+    internal fun availability(
+        level: ServerLevel,
+        computer: BlockPos,
+        member: PeripheralNetworkMember,
+    ): PeripheralNetworkAvailability {
+        if (member.identity.dimension != level.dimension().toString()) return PeripheralNetworkAvailability.OTHER_DIMENSION
+        if (!peripheralInRange(
+                level.dimension().toString(),
+                computer,
+                member.identity,
+                radius(),
+            )
+        ) {
+            return PeripheralNetworkAvailability.OUT_OF_RANGE
+        }
         val position = member.identity.anchor
-        if (!level.hasChunkAt(position)) return false
-        val entity = level.getBlockEntity(position) ?: return false
-        if (instance(entity) != member.instance) return false
-        return net.minecraft.core.Direction.entries.any { face ->
-            member.identity in PeripheralDeviceNames.resolveContact(level, position, face)
+        if (!level.hasChunkAt(position)) return PeripheralNetworkAvailability.UNLOADED
+        val entity = level.getBlockEntity(position) ?: return PeripheralNetworkAvailability.REPLACED
+        if (instance(entity) != member.instance) return PeripheralNetworkAvailability.REPLACED
+        if (member.isComputer) return PeripheralNetworkAvailability.COMPUTER
+        return if (net.minecraft.core.Direction.entries.any { face ->
+                member.identity in PeripheralDeviceNames.resolveContact(level, position, face)
+            }
+        ) {
+            PeripheralNetworkAvailability.AVAILABLE
+        } else {
+            PeripheralNetworkAvailability.UNAVAILABLE
         }
     }
+}
+
+/** Inspection includes unavailable members; Guest discovery only includes reachable devices. */
+enum class PeripheralNetworkAvailability {
+    AVAILABLE,
+    COMPUTER,
+    OUT_OF_RANGE,
+    OTHER_DIMENSION,
+    UNLOADED,
+    REPLACED,
+    UNAVAILABLE,
 }

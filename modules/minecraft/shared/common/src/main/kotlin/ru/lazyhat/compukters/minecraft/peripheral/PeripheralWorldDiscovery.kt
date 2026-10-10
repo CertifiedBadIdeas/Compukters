@@ -94,12 +94,27 @@ internal object PeripheralDeviceNames {
         level: ServerLevel,
         identity: PeripheralDeviceIdentity,
         name: String,
-    ): String = PeripheralDeviceNameStorage.get(level).setName(identity, name)
+    ): String {
+        val member = PeripheralNetworkAccess.member(level, identity)
+        if (member == null) return PeripheralDeviceNameStorage.get(level).setName(identity, name)
+        val normalized = normalizePeripheralName(name)
+        val storage = PeripheralNetworkStorage.get(level)
+        storage.directory.setName(member.instance, identity, normalized)
+        storage.setDirty()
+        return normalized
+    }
 
     fun clearName(
         level: ServerLevel,
         identity: PeripheralDeviceIdentity,
-    ): String? = PeripheralDeviceNameStorage.get(level).clearName(identity)
+    ): String? {
+        val member = PeripheralNetworkAccess.member(level, identity)
+        if (member == null) return PeripheralDeviceNameStorage.get(level).clearName(identity)
+        val storage = PeripheralNetworkStorage.get(level)
+        storage.directory.setName(member.instance, identity, null)
+        storage.setDirty()
+        return member.name
+    }
 }
 
 enum class ComputerPeripheralLookupStatus {
@@ -134,7 +149,7 @@ object ComputerPeripheralLookup {
             providerId,
             requestedName,
             traversal,
-            PeripheralDeviceNameStorage.get(level).directory,
+            PeripheralNetworkAccess.names(level, (traversal as? PeripheralCableTraversal.Complete)?.contacts.orEmpty()),
         )
     }
 
@@ -143,16 +158,20 @@ object ComputerPeripheralLookup {
         level: ServerLevel,
         computerPosition: BlockPos,
         identity: ComputerPeripheralIdentity,
-    ): Boolean =
-        isPeripheralReachable(
-            PeripheralDeviceIdentity(
-                identity.providerId,
-                level.dimension().toString(),
-                identity.anchor.immutable(),
-                identity.deviceKey,
-            ),
-            PeripheralWorldDiscovery.discover(level, computerPosition),
-        )
+    ): Boolean {
+        check(level.server.isSameThread)
+        val expected =
+            PeripheralDeviceIdentity(identity.providerId, level.dimension().toString(), identity.anchor.immutable(), identity.deviceKey)
+        val direct =
+            Direction.entries.any { direction ->
+                val adjacent = computerPosition.relative(direction)
+                level.hasChunkAt(adjacent) && expected in PeripheralDeviceNames.resolveContact(level, adjacent, direction.opposite)
+            }
+        if (direct) return true
+        return PeripheralNetworkAccess.network(level, computerPosition)?.members.orEmpty().any { member ->
+            member.identity == expected && PeripheralNetworkAccess.available(level, computerPosition, member)
+        }
+    }
 }
 
 object ComputerPeripheralNames {
@@ -162,7 +181,8 @@ object ComputerPeripheralNames {
         identity: ComputerPeripheralIdentity,
         requestedName: String,
     ): String =
-        PeripheralDeviceNameStorage.get(level).setName(
+        PeripheralDeviceNames.setName(
+            level,
             PeripheralDeviceIdentity(
                 identity.providerId,
                 level.dimension().toString(),
@@ -227,31 +247,38 @@ internal object PeripheralWorldDiscovery {
         level: ServerLevel,
         computerPosition: BlockPos,
     ): PeripheralCableTraversal<BlockPos, PeripheralDeviceIdentity> {
-        check(level.server.isSameThread) { "peripheral cables must be discovered on the server thread" }
-        val cables =
-            PeripheralCableTopologyCache.getOrCompute(level, computerPosition) {
-                discoverUncached(level, adjacentCables(level, computerPosition))
-            }
-        // Direct contacts use the same face-aware provider resolution and logical-device limit as cables.
-        // Resolve them afresh so placement, removal and provider activation remain visible without rewiring.
-        val combined =
-            when (cables) {
-                is PeripheralCableTraversal.Complete -> cables.copy(contacts = cables.contacts + contacts(level, computerPosition))
-                is PeripheralCableTraversal.LimitExceeded -> cables
-            }
-        return resolveContacts(level, combined)
+        check(level.server.isSameThread) { "peripheral discovery must run on the server thread" }
+        val direct = resolveContacts(level, PeripheralCableTraversal.Complete(emptySet(), contacts(level, computerPosition).toSet()))
+        if (direct !is PeripheralCableTraversal.Complete) return direct
+        val network = PeripheralNetworkAccess.network(level, computerPosition)
+        val remote =
+            network
+                ?.members
+                .orEmpty()
+                .filter { member -> PeripheralNetworkAccess.available(level, computerPosition, member) }
+                .map { it.identity }
+        val combined = (direct.contacts + remote).toSet()
+        return if (combined.size > DEFAULT_LIMITS.maximumContacts) {
+            PeripheralCableTraversal.LimitExceeded(PeripheralCableLimit.CONTACTS, DEFAULT_LIMITS.maximumContacts)
+        } else {
+            direct.copy(contacts = combined)
+        }
     }
 
     fun discoverFromDevice(
         level: ServerLevel,
         contactedPosition: BlockPos,
     ): PeripheralCableTraversal<BlockPos, PeripheralDeviceIdentity> {
-        check(level.server.isSameThread) { "peripheral cables must be discovered on the server thread" }
-        return resolveContacts(
-            level,
-            PeripheralCableTopologyCache.getOrCompute(level, contactedPosition) {
-                discoverUncached(level, adjacentCables(level, contactedPosition))
-            },
+        check(level.server.isSameThread) { "peripheral discovery must run on the server thread" }
+        val network = PeripheralNetworkAccess.network(level, contactedPosition)
+        return PeripheralCableTraversal.Complete(
+            emptySet(),
+            network
+                ?.members
+                .orEmpty()
+                .filterNot { it.isComputer }
+                .map { it.identity }
+                .toSet(),
         )
     }
 
@@ -259,36 +286,9 @@ internal object PeripheralWorldDiscovery {
         level: ServerLevel,
         cablePosition: BlockPos,
     ): PeripheralCableTraversal<BlockPos, PeripheralDeviceIdentity> {
-        check(level.server.isSameThread) { "peripheral cables must be discovered on the server thread" }
-        return resolveContacts(
-            level,
-            PeripheralCableTopologyCache.getOrCompute(level, cablePosition) {
-                discoverUncached(level, listOf(cablePosition.immutable()))
-            },
-        )
+        check(level.server.isSameThread)
+        return PeripheralCableTraversal.Complete(emptySet(), emptySet())
     }
-
-    private fun discoverUncached(
-        level: ServerLevel,
-        starts: List<BlockPos>,
-    ): PeripheralCableTraversal<BlockPos, PeripheralCableContact> =
-        PeripheralCableTopology<BlockPos, PeripheralCableContact>(
-            limits = DEFAULT_LIMITS.copy(maximumContacts = DEFAULT_LIMITS.maximumCables * Direction.entries.size),
-            neighbors = { cable ->
-                Direction.entries.mapNotNull { direction ->
-                    cable.relative(direction).immutable().takeIf { position -> isLoadedCable(level, position) }
-                }
-            },
-            contacts = { cable -> contacts(level, cable) },
-        ).traverse(starts)
-
-    private fun adjacentCables(
-        level: ServerLevel,
-        position: BlockPos,
-    ): List<BlockPos> =
-        Direction.entries.mapNotNull { direction ->
-            position.relative(direction).immutable().takeIf { adjacent -> isLoadedCable(level, adjacent) }
-        }
 
     // Keep empty and currently unloaded positions: provider availability can change without rewiring.
     private fun contacts(
@@ -315,11 +315,6 @@ internal object PeripheralWorldDiscovery {
                 emptyList()
             }
         }
-
-    private fun isLoadedCable(
-        level: ServerLevel,
-        position: BlockPos,
-    ): Boolean = level.hasChunkAt(position) && PeripheralCableBlocks.contains(level.getBlockState(position))
 
     private val DEFAULT_LIMITS =
         PeripheralCableLimits(

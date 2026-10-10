@@ -64,7 +64,7 @@ internal class PeripheralCableGameTest(
 
     override fun codec(): MapCodec<out GameTestInstance> = MapCodec.unit(this)
 
-    override fun typeDescription(): MutableComponent = Component.literal("Compukters peripheral cable fabric")
+    override fun typeDescription(): MutableComponent = Component.literal("Compukters bound peripheral networks")
 }
 
 internal class TextDisplayGameTest(

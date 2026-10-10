@@ -44,33 +44,52 @@ internal class PeripheralConfiguratorScreen(
     override fun init() {
         val panelWidth = 260
         val left = (width - panelWidth) / 2
-        if (snapshot.mode == PeripheralConfiguratorMode.EDIT_DEVICE) {
-            val editor =
-                EditBox(font, left + 10, 48, panelWidth - 20, 20, Component.translatable("screen.compukters.peripheral_configurator.name"))
-            editor.setMaxLength(32)
-            editor.value = snapshot.configuredName
-            nameBox = editor
-            addRenderableWidget(editor)
-            addRenderableWidget(
-                Button
-                    .builder(Component.translatable("gui.done")) { save() }
-                    .bounds(left + 10, height - 38, 115, 20)
-                    .build(),
+        val editor =
+            EditBox(
+                font,
+                left + 10,
+                48,
+                panelWidth - 20,
+                20,
+                Component.translatable(
+                    if (snapshot.mode ==
+                        PeripheralConfiguratorMode.EDIT_DEVICE
+                    ) {
+                        "screen.compukters.peripheral_configurator.name"
+                    } else {
+                        "screen.compukters.peripheral_configurator.network_name"
+                    },
+                ),
             )
-            addRenderableWidget(
-                Button
-                    .builder(Component.translatable("gui.cancel")) { onClose() }
-                    .bounds(left + 135, height - 38, 115, 20)
-                    .build(),
-            )
-            setInitialFocus(editor)
-        } else {
-            addRenderableWidget(
-                Button
-                    .builder(Component.translatable("gui.done")) { onClose() }
-                    .bounds(width / 2 - 57, height - 38, 115, 20)
-                    .build(),
-            )
+        editor.setMaxLength(32)
+        editor.value = nameBox?.value ?: snapshot.configuredName
+        nameBox = editor
+        addRenderableWidget(editor)
+        addRenderableWidget(
+            Button
+                .builder(Component.translatable("gui.done")) { save() }
+                .bounds(left + 10, height - 38, 115, 20)
+                .build(),
+        )
+        addRenderableWidget(
+            Button
+                .builder(Component.translatable("gui.cancel")) { onClose() }
+                .bounds(left + 135, height - 38, 115, 20)
+                .build(),
+        )
+        setInitialFocus(editor)
+        if (snapshot.mode == PeripheralConfiguratorMode.INSPECT_NETWORK) {
+            snapshot.entries.drop(rowOffset).take(visibleRows()).forEachIndexed { index, entry ->
+                entry.instance?.let { instance ->
+                    addRenderableWidget(
+                        Button
+                            .builder(Component.literal("×")) {
+                                PacketDistributor.sendToServer(RemoveMemberPayload(hand, snapshot.context.toWire(), instance))
+                            }.bounds(left + panelWidth - 28, 94 + index * 11, 18, 11)
+                            .build(),
+                    )
+                }
+            }
         }
     }
 
@@ -96,7 +115,7 @@ internal class PeripheralConfiguratorScreen(
         val left = (width - 260) / 2
         graphics.drawCenteredString(font, title, width / 2, 24, 0xffffff)
         var y = 48
-        if (snapshot.mode == PeripheralConfiguratorMode.EDIT_DEVICE) {
+        if (nameBox != null) {
             graphics.drawString(font, status(), left + 10, 74, statusColor(), false)
             y = 94
         } else {
@@ -134,12 +153,22 @@ internal class PeripheralConfiguratorScreen(
                     false,
                 )
             }
-            snapshot.entries.drop(rowOffset).take(VISIBLE_ROWS).forEach { entry ->
+            snapshot.entries.drop(rowOffset).take(visibleRows()).forEach { entry ->
                 val name =
                     entry.name?.let(Component::literal) ?: Component.translatable("screen.compukters.peripheral_configurator.unnamed")
                 val type = "${entry.providerId}:${entry.deviceKey.replace('_', ' ')}"
+                val state =
+                    Component.translatable(
+                        "screen.compukters.peripheral_configurator.availability.${entry.availability.name.lowercase(Locale.ROOT)}",
+                    )
                 val color =
-                    if (entry.duplicate) {
+                    if (entry.duplicate ||
+                        entry.availability !in
+                        setOf(
+                            ru.lazyhat.compukters.minecraft.peripheral.PeripheralNetworkAvailability.AVAILABLE,
+                            ru.lazyhat.compukters.minecraft.peripheral.PeripheralNetworkAvailability.COMPUTER,
+                        )
+                    ) {
                         0xff5555
                     } else if (entry.name == null) {
                         0x777777
@@ -148,7 +177,7 @@ internal class PeripheralConfiguratorScreen(
                     }
                 graphics.drawString(
                     font,
-                    Component.translatable("screen.compukters.peripheral_configurator.entry", name, type),
+                    font.plainSubstrByWidth("${state.string} · ${name.string} ($type)", 214),
                     left + 10,
                     y,
                     color,
@@ -156,13 +185,13 @@ internal class PeripheralConfiguratorScreen(
                 )
                 y += 11
             }
-            if (snapshot.entries.size > VISIBLE_ROWS || snapshot.truncated) {
+            if (snapshot.entries.size > visibleRows() || snapshot.truncated) {
                 graphics.drawString(
                     font,
                     Component.translatable(
                         "screen.compukters.peripheral_configurator.more",
                         rowOffset + 1,
-                        minOf(rowOffset + VISIBLE_ROWS, snapshot.entries.size),
+                        minOf(rowOffset + visibleRows(), snapshot.entries.size),
                         snapshot.totalDevices,
                     ),
                     left + 10,
@@ -189,16 +218,19 @@ internal class PeripheralConfiguratorScreen(
         scrollX: Double,
         scrollY: Double,
     ): Boolean {
-        val maximum = (snapshot.entries.size - VISIBLE_ROWS).coerceAtLeast(0)
+        val maximum = (snapshot.entries.size - visibleRows()).coerceAtLeast(0)
         if (maximum == 0 || scrollY == 0.0) return super.mouseScrolled(mouseX, mouseY, scrollX, scrollY)
         rowOffset = (rowOffset + if (scrollY > 0.0) -1 else 1).coerceIn(0, maximum)
+        rebuildWidgets()
         return true
     }
 
     internal fun handleSave(result: PeripheralConfiguratorSaveResult) {
         if (nameBox == null) return
         saveResult = result
-        if (result == PeripheralConfiguratorSaveResult.NAMED_DEVICE) {
+        if (result == PeripheralConfiguratorSaveResult.NAMED_DEVICE || result == PeripheralConfiguratorSaveResult.NAMED_NETWORK ||
+            result == PeripheralConfiguratorSaveResult.MEMBER_REMOVED
+        ) {
             onClose()
         }
     }
@@ -219,7 +251,7 @@ internal class PeripheralConfiguratorScreen(
         if (!Regex("[a-z][a-z0-9_-]{0,31}").matches(normalized)) {
             return Component.translatable("screen.compukters.peripheral_configurator.invalid")
         }
-        val count = snapshot.nameCounts[normalized] ?: 0
+        val count = if (snapshot.mode == PeripheralConfiguratorMode.INSPECT_NETWORK) 0 else snapshot.nameCounts[normalized] ?: 0
         return when {
             count == 0 -> Component.translatable("screen.compukters.peripheral_configurator.free")
             snapshot.targetName == normalized && count == 1 -> Component.translatable("screen.compukters.peripheral_configurator.current")
@@ -234,7 +266,7 @@ internal class PeripheralConfiguratorScreen(
                 .orEmpty()
                 .trim()
                 .lowercase(Locale.ROOT)
-        val count = snapshot.nameCounts[normalized] ?: 0
+        val count = if (snapshot.mode == PeripheralConfiguratorMode.INSPECT_NETWORK) 0 else snapshot.nameCounts[normalized] ?: 0
         val valid = Regex("[a-z][a-z0-9_-]{0,31}").matches(normalized)
         val available = count == 0 || (snapshot.targetName == normalized && count == 1)
         return if (valid && available) {
@@ -243,6 +275,8 @@ internal class PeripheralConfiguratorScreen(
             0xff5555
         }
     }
+
+    private fun visibleRows(): Int = ((height - 148) / 11).coerceIn(1, VISIBLE_ROWS)
 
     private companion object {
         const val VISIBLE_ROWS = 10

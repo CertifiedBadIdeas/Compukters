@@ -227,6 +227,8 @@ open class ComputerBlockEntity internal constructor(
     }
 
     internal fun destroyFileSystem() {
+        ru.lazyhat.compukters.minecraft.peripheral.PeripheralNetworkAccess
+            .detach(this)
         val serverLevel = level as? ServerLevel ?: return
         val source = filesystemContextSource ?: return
         closeCarrier(hibernate = false)

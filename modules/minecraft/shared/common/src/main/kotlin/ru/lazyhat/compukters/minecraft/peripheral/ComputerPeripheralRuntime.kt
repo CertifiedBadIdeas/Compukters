@@ -113,7 +113,7 @@ class ComputerPeripheralRuntime internal constructor(
         requireServerThread()
         return when (val traversal = PeripheralWorldDiscovery.discover(level, computer)) {
             is PeripheralCableTraversal.LimitExceeded -> {
-                throw PeripheralFailure(HostFailureKind.UNAVAILABLE, "Peripheral cable topology limit exceeded")
+                throw PeripheralFailure(HostFailureKind.UNAVAILABLE, "Peripheral discovery limit exceeded")
             }
 
             is PeripheralCableTraversal.Complete -> {
@@ -173,7 +173,7 @@ class ComputerPeripheralRuntime internal constructor(
             ComputerPeripheralLookupStatus.TOPOLOGY_LIMIT_EXCEEDED -> {
                 throw PeripheralFailure(
                     HostFailureKind.UNAVAILABLE,
-                    "Peripheral cable topology limit exceeded",
+                    "Peripheral discovery limit exceeded",
                 )
             }
         }

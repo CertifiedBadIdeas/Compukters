@@ -21,6 +21,7 @@ package ru.lazyhat.compukters.minecraft.peripheral
 import com.mojang.serialization.Codec
 import com.mojang.serialization.codecs.RecordCodecBuilder
 import net.minecraft.core.BlockPos
+import java.util.Optional
 import java.util.UUID
 
 internal object PeripheralNetworkCodecs {
@@ -34,8 +35,9 @@ internal object PeripheralNetworkCodecs {
                     Codec.STRING.fieldOf("dimension").forGetter { it.identity.dimension },
                     BlockPos.CODEC.fieldOf("anchor").forGetter { it.identity.anchor },
                     Codec.STRING.fieldOf("device_key").forGetter { it.identity.deviceKey },
-                ).apply(instance) { id, provider, dimension, anchor, key ->
-                    PeripheralNetworkMember(id, PeripheralDeviceIdentity(provider, dimension, anchor, key))
+                    Codec.STRING.optionalFieldOf("name").forGetter { Optional.ofNullable(it.name) },
+                ).apply(instance) { id, provider, dimension, anchor, key, name ->
+                    PeripheralNetworkMember(id, PeripheralDeviceIdentity(provider, dimension, anchor, key), name.orElse(null))
                 }
         }
     private val network: Codec<PeripheralNetwork> =
@@ -48,9 +50,19 @@ internal object PeripheralNetworkCodecs {
                 ).apply(instance, ::PeripheralNetwork)
         }
     val directory: Codec<PeripheralNetworkDirectory> =
-        network
-            .listOf(0, PeripheralNetworkDirectory.MAXIMUM_NETWORKS)
-            .fieldOf("networks")
-            .codec()
-            .xmap(::PeripheralNetworkDirectory, PeripheralNetworkDirectory::snapshot)
+        RecordCodecBuilder.create { instance ->
+            instance
+                .group(
+                    Codec.INT.fieldOf("version").forGetter { _: PeripheralNetworkDirectory -> 1 },
+                    network
+                        .listOf(
+                            0,
+                            PeripheralNetworkDirectory.MAXIMUM_NETWORKS,
+                        ).fieldOf("networks")
+                        .forGetter(PeripheralNetworkDirectory::snapshot),
+                ).apply(instance) { version, networks ->
+                    require(version == 1) { "Unsupported peripheral network format" }
+                    PeripheralNetworkDirectory(networks)
+                }
+        }
 }

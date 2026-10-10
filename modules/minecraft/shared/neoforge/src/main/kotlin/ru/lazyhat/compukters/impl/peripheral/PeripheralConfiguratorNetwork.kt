@@ -33,13 +33,23 @@ import ru.lazyhat.compukters.minecraft.peripheral.PeripheralConfiguratorMode
 import ru.lazyhat.compukters.minecraft.peripheral.PeripheralConfiguratorSaveResult
 import ru.lazyhat.compukters.minecraft.peripheral.PeripheralConfiguratorServer
 import ru.lazyhat.compukters.minecraft.peripheral.PeripheralConfiguratorSnapshot
+import ru.lazyhat.compukters.minecraft.peripheral.PeripheralNetworkAvailability
+import java.util.UUID
 
 object PeripheralConfiguratorNetwork {
     fun register(event: RegisterPayloadHandlersEvent) {
-        val registrar = event.registrar("2")
+        val registrar = event.registrar("3")
         registrar.playToClient(OpenPayload.TYPE, OpenPayload.CODEC, ::handleOpen)
         registrar.playToServer(SavePayload.TYPE, SavePayload.CODEC, ::handleSave)
         registrar.playToClient(SaveReplyPayload.TYPE, SaveReplyPayload.CODEC, ::handleReply)
+        registrar.playToServer(RemoveMemberPayload.TYPE, RemoveMemberPayload.CODEC) { payload, context ->
+            val player = context.player() as? ServerPlayer ?: return@playToServer
+            if (PeripheralConfiguratorServer.removeNetworkMember(player, payload.hand, payload.context.toDomain(), payload.instance)) {
+                if (!PeripheralConfiguratorServer.openComputer(player, payload.hand, payload.context.position, payload.context.face)) {
+                    context.reply(SaveReplyPayload(PeripheralConfiguratorSaveResult.MEMBER_REMOVED))
+                }
+            }
+        }
         PeripheralConfiguratorServer.installOpener { player, hand, snapshot ->
             PacketDistributor.sendToPlayer(player, OpenPayload(hand, snapshot.toWire()))
         }
@@ -104,6 +114,7 @@ internal data class SavePayload(
 internal data class ConfiguratorContextPayload(
     val position: BlockPos,
     val face: Direction,
+    val instance: UUID? = null,
 )
 
 internal data class ConfiguratorEntryPayload(
@@ -111,6 +122,8 @@ internal data class ConfiguratorEntryPayload(
     val providerId: String,
     val deviceKey: String,
     val duplicate: Boolean,
+    val instance: UUID? = null,
+    val availability: PeripheralNetworkAvailability = PeripheralNetworkAvailability.AVAILABLE,
 )
 
 internal data class ConfiguratorSnapshotPayload(
@@ -140,6 +153,27 @@ internal data class SaveReplyPayload(
     }
 }
 
+internal data class RemoveMemberPayload(
+    val hand: InteractionHand,
+    val context: ConfiguratorContextPayload,
+    val instance: UUID,
+) : CustomPacketPayload {
+    override fun type() = TYPE
+
+    companion object {
+        val TYPE = CustomPacketPayload.Type<RemoveMemberPayload>(Identifier.fromNamespaceAndPath(MOD_ID, "peripheral_network_remove"))
+        val CODEC: StreamCodec<RegistryFriendlyByteBuf, RemoveMemberPayload> =
+            codec(
+                { buffer, value ->
+                    buffer.writeEnum(value.hand)
+                    writeContext(buffer, value.context)
+                    buffer.writeUUID(value.instance)
+                },
+                { buffer -> RemoveMemberPayload(buffer.readEnum(InteractionHand::class.java), readContext(buffer), buffer.readUUID()) },
+            )
+    }
+}
+
 private fun writeOpen(
     buffer: RegistryFriendlyByteBuf,
     value: OpenPayload,
@@ -154,6 +188,8 @@ private fun writeOpen(
         buffer.writeUtf(entry.providerId, 128)
         buffer.writeUtf(entry.deviceKey, 128)
         buffer.writeBoolean(entry.duplicate)
+        buffer.writeNullable(entry.instance) { sink, id -> sink.writeUUID(id) }
+        buffer.writeEnum(entry.availability)
     }
     buffer.writeVarInt(value.snapshot.nameCounts.size)
     value.snapshot.nameCounts.forEach { (name, count) ->
@@ -172,8 +208,15 @@ private fun readOpen(buffer: RegistryFriendlyByteBuf): OpenPayload {
     val mode = buffer.readEnum(PeripheralConfiguratorMode::class.java)
     val configured = buffer.readUtf(32)
     val entries =
-        List(buffer.readVarInt().also { require(it in 0..64) }) {
-            ConfiguratorEntryPayload(buffer.readNullable { it.readUtf(32) }, buffer.readUtf(128), buffer.readUtf(128), buffer.readBoolean())
+        List(buffer.readVarInt().also { require(it in 0..1024) }) {
+            ConfiguratorEntryPayload(
+                buffer.readNullable { it.readUtf(32) },
+                buffer.readUtf(128),
+                buffer.readUtf(128),
+                buffer.readBoolean(),
+                buffer.readNullable { it.readUUID() },
+                buffer.readEnum(PeripheralNetworkAvailability::class.java),
+            )
         }
     val counts =
         buildMap {
@@ -210,24 +253,26 @@ private fun writeContext(
 ) {
     buffer.writeBlockPos(context.position)
     buffer.writeEnum(context.face)
+    buffer.writeNullable(context.instance) { sink, id -> sink.writeUUID(id) }
 }
 
 private fun readContext(buffer: RegistryFriendlyByteBuf) =
     ConfiguratorContextPayload(
         buffer.readBlockPos(),
         buffer.readEnum(Direction::class.java),
+        buffer.readNullable { it.readUUID() },
     )
 
-internal fun PeripheralConfiguratorContext.toWire() = ConfiguratorContextPayload(position, face)
+internal fun PeripheralConfiguratorContext.toWire() = ConfiguratorContextPayload(position, face, instance)
 
-private fun ConfiguratorContextPayload.toDomain() = PeripheralConfiguratorContext(position, face)
+private fun ConfiguratorContextPayload.toDomain() = PeripheralConfiguratorContext(position, face, instance)
 
 private fun PeripheralConfiguratorSnapshot.toWire() =
     ConfiguratorSnapshotPayload(
         context.toWire(),
         mode,
         configuredName,
-        entries.map { ConfiguratorEntryPayload(it.name, it.providerId, it.deviceKey, it.duplicate) },
+        entries.map { ConfiguratorEntryPayload(it.name, it.providerId, it.deviceKey, it.duplicate, it.instance, it.availability) },
         nameCounts,
         targetName,
         totalDevices,
@@ -240,7 +285,7 @@ private fun ConfiguratorSnapshotPayload.toDomain() =
         context.toDomain(),
         mode,
         configuredName,
-        entries.map { PeripheralConfiguratorEntry(it.name, it.providerId, it.deviceKey, it.duplicate) },
+        entries.map { PeripheralConfiguratorEntry(it.name, it.providerId, it.deviceKey, it.duplicate, it.instance, it.availability) },
         nameCounts,
         targetName,
         totalDevices,

@@ -24,6 +24,7 @@ import java.util.UUID
 internal data class PeripheralNetworkMember(
     val instance: UUID,
     val identity: PeripheralDeviceIdentity,
+    val name: String? = null,
 ) {
     val isComputer: Boolean get() = identity.providerId == COMPUTER_PROVIDER
 
@@ -61,6 +62,7 @@ internal class PeripheralNetworkDirectory(
                 "Duplicate network member"
             }
             network.members.forEach { member ->
+                member.name?.let { require(it == normalizePeripheralName(it)) { "Invalid member name" } }
                 require(member.identity.providerId.length in 1..128 && member.identity.deviceKey.length <= 128) { "Invalid member type" }
                 require(member.identity.dimension.length in 1..128) { "Invalid member dimension" }
                 require(membership[member.instance] == null || membership[member.instance] == network.id) {
@@ -100,7 +102,7 @@ internal class PeripheralNetworkDirectory(
         val members = network.members.toMutableList()
         if (existing >= 0) {
             require(members[existing].identity.providerId == member.identity.providerId) { "Member type changed" }
-            members[existing] = member
+            members[existing] = member.copy(name = members[existing].name)
         } else {
             require(members.size < MAXIMUM_MEMBERS && memberCount < MAXIMUM_TOTAL_MEMBERS) { "Peripheral member limit reached" }
             members += member
@@ -108,6 +110,69 @@ internal class PeripheralNetworkDirectory(
         }
         networks[id] = network.copy(members = members.toList())
         membership[member.instance] = id
+    }
+
+    fun setName(
+        instance: UUID,
+        identity: PeripheralDeviceIdentity,
+        name: String?,
+    ) {
+        val id = requireNotNull(membership[instance]) { "Member has no network" }
+        val network = networks.getValue(id)
+        val normalized = name?.let(::normalizePeripheralName)
+        networks[id] =
+            network.copy(
+                members =
+                    network.members.map {
+                        if (it.instance == instance && it.identity == identity) it.copy(name = normalized) else it
+                    },
+            )
+    }
+
+    fun relocate(
+        instance: UUID,
+        dimension: String,
+        position: BlockPos,
+    ): Boolean {
+        val network = networkOf(instance) ?: return false
+        if (network.members
+                .filter {
+                    it.instance == instance
+                }.all { it.identity.dimension == dimension && it.identity.anchor == position }
+        ) {
+            return false
+        }
+        networks[network.id] =
+            network.copy(
+                members =
+                    network.members.map {
+                        if (it.instance ==
+                            instance
+                        ) {
+                            it.copy(identity = it.identity.copy(dimension = dimension, anchor = position.immutable()))
+                        } else {
+                            it
+                        }
+                    },
+            )
+        return true
+    }
+
+    fun rename(
+        id: UUID,
+        name: String,
+    ) {
+        val network = requireNotNull(networks[id]) { "Peripheral network does not exist" }
+        networks[id] = network.copy(name = normalizePeripheralName(name))
+    }
+
+    fun createFor(member: PeripheralNetworkMember): PeripheralNetwork {
+        require(memberCount < MAXIMUM_TOTAL_MEMBERS) { "Peripheral member limit reached" }
+        require(member.instance !in membership) { "Device belongs to another network" }
+        val id = UUID.randomUUID()
+        val network = create("network-${id.toString().take(8)}", id)
+        bind(id, member)
+        return get(network.id)!!
     }
 
     fun remove(instance: UUID): Boolean {

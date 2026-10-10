@@ -27,6 +27,7 @@ import net.minecraft.world.InteractionHand
 data class PeripheralConfiguratorContext(
     val position: BlockPos,
     val face: Direction,
+    val instance: java.util.UUID? = null,
 )
 
 data class PeripheralConfiguratorEntry(
@@ -34,6 +35,8 @@ data class PeripheralConfiguratorEntry(
     val providerId: String,
     val deviceKey: String,
     val duplicate: Boolean,
+    val instance: java.util.UUID? = null,
+    val availability: PeripheralNetworkAvailability = PeripheralNetworkAvailability.AVAILABLE,
 )
 
 enum class PeripheralConfiguratorMode {
@@ -55,6 +58,8 @@ data class PeripheralConfiguratorSnapshot(
 
 enum class PeripheralConfiguratorSaveResult {
     NAMED_DEVICE,
+    NAMED_NETWORK,
+    MEMBER_REMOVED,
     INVALID_NAME,
     CONFLICT,
     INVALID_TARGET,
@@ -62,6 +67,22 @@ enum class PeripheralConfiguratorSaveResult {
 }
 
 object PeripheralConfiguratorServer {
+    @JvmStatic
+    fun bind(
+        player: ServerPlayer,
+        hand: InteractionHand,
+        position: BlockPos,
+        face: Direction,
+    ): PeripheralBindingResult = PeripheralNetworkBinding.click(player, hand, position, face)
+
+    @JvmStatic
+    fun removeNetworkMember(
+        player: ServerPlayer,
+        hand: InteractionHand,
+        context: PeripheralConfiguratorContext,
+        instance: java.util.UUID,
+    ): Boolean = PeripheralNetworkBinding.removeSelected(player, hand, context, instance)
+
     private var opener: ((ServerPlayer, InteractionHand, PeripheralConfiguratorSnapshot) -> Unit)? = null
 
     @JvmStatic
@@ -80,7 +101,34 @@ object PeripheralConfiguratorServer {
     ): Boolean {
         val level = player.level() as? ServerLevel ?: return false
         if (PeripheralDeviceNames.resolveContact(level, position, face).size != 1) return false
-        return open(player, hand, PeripheralConfiguratorContext(position.immutable(), face), PeripheralConfiguratorMode.EDIT_DEVICE)
+        val member = PeripheralNetworkBinding.resolveMember(level, position, face, true) ?: return false
+        return open(
+            player,
+            hand,
+            PeripheralConfiguratorContext(position.immutable(), face, member.instance),
+            PeripheralConfiguratorMode.EDIT_DEVICE,
+        )
+    }
+
+    @JvmStatic
+    fun openComputer(
+        player: ServerPlayer,
+        hand: InteractionHand,
+        position: BlockPos,
+        face: Direction,
+    ): Boolean {
+        val level = player.level() as? ServerLevel ?: return false
+        val network = PeripheralNetworkAccess.network(level, position) ?: return false
+        val stack = player.getItemInHand(hand)
+        val item = stack.item as? PeripheralConfiguratorItem ?: return false
+        item.selectNetwork(stack, network.id)
+        val member = PeripheralNetworkBinding.resolveMember(level, position, face) ?: return false
+        return open(
+            player,
+            hand,
+            PeripheralConfiguratorContext(position.immutable(), face, member.instance),
+            PeripheralConfiguratorMode.INSPECT_NETWORK,
+        )
     }
 
     @JvmStatic
@@ -111,10 +159,32 @@ object PeripheralConfiguratorServer {
         if (stack.item !is PeripheralConfiguratorItem) return PeripheralConfiguratorSaveResult.INVALID_TARGET
         val position = context.position
         val face = context.face
+        if (context.instance == null || PeripheralNetworkBinding.resolveMember(level, position, face)?.instance != context.instance) {
+            return PeripheralConfiguratorSaveResult.INVALID_TARGET
+        }
+        if (level.getBlockEntity(position) is ru.lazyhat.compukters.minecraft.computer.ComputerBlockEntity) {
+            val network = PeripheralNetworkAccess.network(level, position) ?: return PeripheralConfiguratorSaveResult.INVALID_TARGET
+            val storage = PeripheralNetworkStorage.get(level)
+            storage.directory.rename(network.id, normalized)
+            storage.setDirty()
+            return PeripheralConfiguratorSaveResult.NAMED_NETWORK
+        }
         val identities = PeripheralDeviceNames.resolveContact(level, position, face)
         if (identities.size != 1) return PeripheralConfiguratorSaveResult.INVALID_TARGET
         val target = identities.single()
-        val traversal = PeripheralWorldDiscovery.discoverFromDevice(level, position)
+        val member = PeripheralNetworkAccess.member(level, target)
+        if (member != null) {
+            val network = PeripheralNetworkAccess.network(level, target.anchor) ?: return PeripheralConfiguratorSaveResult.INVALID_TARGET
+            if (network.members.any {
+                    (it.instance != member.instance || it.identity != member.identity) && it.name == normalized
+                }
+            ) {
+                return PeripheralConfiguratorSaveResult.CONFLICT
+            }
+            PeripheralDeviceNames.setName(level, target, normalized)
+            return PeripheralConfiguratorSaveResult.NAMED_DEVICE
+        }
+        val traversal = PeripheralWorldDiscovery.discoverFromDevice(level, target.anchor)
         val reachable =
             (traversal as? PeripheralCableTraversal.Complete)?.contacts
                 ?: return PeripheralConfiguratorSaveResult.INVALID_TARGET
@@ -144,39 +214,64 @@ object PeripheralConfiguratorServer {
         context: PeripheralConfiguratorContext,
         mode: PeripheralConfiguratorMode,
     ): PeripheralConfiguratorSnapshot {
-        val position = context.position
         val target =
             if (mode == PeripheralConfiguratorMode.EDIT_DEVICE) {
-                PeripheralDeviceNames.resolveContact(level, position, context.face).singleOrNull()
+                PeripheralDeviceNames.resolveContact(level, context.position, context.face).singleOrNull()
             } else {
                 null
             }
-        val traversal =
-            when (mode) {
-                PeripheralConfiguratorMode.EDIT_DEVICE -> PeripheralWorldDiscovery.discoverFromDevice(level, position)
-                PeripheralConfiguratorMode.INSPECT_NETWORK -> PeripheralWorldDiscovery.discoverFromCable(level, position)
-            }
-        val directory = PeripheralDeviceNameStorage.get(level).directory
-        val targetName = target?.let(directory::nameOf)
-        return when (val value = inspectPeripheralComponent(traversal, directory, target, targetName.orEmpty())) {
-            is PeripheralInspection.LimitExceeded -> {
-                PeripheralConfiguratorSnapshot(context, mode, targetName.orEmpty(), emptyList(), emptyMap(), targetName, 0, false, true)
-            }
-
-            is PeripheralInspection.Complete -> {
-                PeripheralConfiguratorSnapshot(
-                    context,
-                    mode,
-                    if (mode == PeripheralConfiguratorMode.EDIT_DEVICE) value.targetName.orEmpty() else "",
-                    value.entries.map { PeripheralConfiguratorEntry(it.name, it.providerId, it.deviceKey, it.duplicate) },
-                    value.nameCounts,
-                    value.targetName,
-                    value.totalDevices,
-                    value.truncated,
-                    false,
-                )
-            }
+        val network = PeripheralNetworkAccess.network(level, target?.anchor ?: context.position)
+        if (network != null) {
+            val counts =
+                network.members
+                    .mapNotNull { it.name }
+                    .groupingBy { it }
+                    .eachCount()
+            val targetName = target?.let { PeripheralNetworkAccess.member(level, it)?.name }
+            val entries =
+                network.members.map { member ->
+                    val name = member.name
+                    PeripheralConfiguratorEntry(
+                        name,
+                        member.identity.providerId,
+                        member.identity.deviceKey,
+                        name != null && (counts[name] ?: 0) > 1,
+                        member.instance,
+                        if (mode ==
+                            PeripheralConfiguratorMode.INSPECT_NETWORK
+                        ) {
+                            PeripheralNetworkAccess.availability(level, context.position, member)
+                        } else {
+                            PeripheralNetworkAvailability.AVAILABLE
+                        },
+                    )
+                }
+            return PeripheralConfiguratorSnapshot(
+                context,
+                mode,
+                if (mode == PeripheralConfiguratorMode.INSPECT_NETWORK) network.name else targetName.orEmpty(),
+                entries,
+                counts,
+                targetName,
+                entries.size,
+                false,
+                false,
+            )
         }
+        val identities = setOfNotNull(target)
+        val directory = PeripheralNetworkAccess.names(level, identities)
+        val targetName = target?.let(directory::nameOf)
+        return PeripheralConfiguratorSnapshot(
+            context,
+            mode,
+            targetName.orEmpty(),
+            identities.map { PeripheralConfiguratorEntry(directory.nameOf(it), it.providerId, it.deviceKey, false) },
+            targetName?.let { mapOf(it to 1) }.orEmpty(),
+            targetName,
+            identities.size,
+            false,
+            false,
+        )
     }
 
     private fun validRange(

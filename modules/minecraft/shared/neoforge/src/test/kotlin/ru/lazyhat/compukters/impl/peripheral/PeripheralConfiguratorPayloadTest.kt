@@ -21,8 +21,11 @@ import net.minecraft.network.codec.StreamCodec
 import net.minecraft.world.InteractionHand
 import ru.lazyhat.compukters.minecraft.peripheral.PeripheralConfiguratorMode
 import ru.lazyhat.compukters.minecraft.peripheral.PeripheralConfiguratorSaveResult
+import ru.lazyhat.compukters.minecraft.peripheral.PeripheralNetworkAvailability
+import java.util.UUID
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 
 class PeripheralConfiguratorPayloadTest {
     @Test
@@ -31,6 +34,7 @@ class PeripheralConfiguratorPayloadTest {
             ConfiguratorContextPayload(
                 BlockPos(2, 64, -3),
                 Direction.NORTH,
+                UUID.randomUUID(),
             )
         val open =
             OpenPayload(
@@ -41,7 +45,14 @@ class PeripheralConfiguratorPayloadTest {
                     "motor",
                     listOf(
                         ConfiguratorEntryPayload("motor", "create", "rotation_controller", false),
-                        ConfiguratorEntryPayload(null, "create", "speedometer", false),
+                        ConfiguratorEntryPayload(
+                            null,
+                            "create",
+                            "speedometer",
+                            false,
+                            UUID.randomUUID(),
+                            PeripheralNetworkAvailability.OUT_OF_RANGE,
+                        ),
                     ),
                     mapOf("motor" to 1, "shared" to 2),
                     "motor",
@@ -56,6 +67,21 @@ class PeripheralConfiguratorPayloadTest {
         assertEquals(save, roundTrip(SavePayload.CODEC, save))
         val reply = SaveReplyPayload(PeripheralConfiguratorSaveResult.CONFLICT)
         assertEquals(reply, roundTrip(SaveReplyPayload.CODEC, reply))
+        val remove = RemoveMemberPayload(InteractionHand.MAIN_HAND, context, UUID.randomUUID())
+        assertEquals(remove, roundTrip(RemoveMemberPayload.CODEC, remove))
+    }
+
+    @Test
+    fun `oversized network snapshot is rejected before entries are read`() {
+        val buffer = RegistryFriendlyByteBuf.decorator(RegistryAccess.EMPTY).apply(Unpooled.buffer())
+        buffer.writeEnum(InteractionHand.MAIN_HAND)
+        buffer.writeBlockPos(BlockPos.ZERO)
+        buffer.writeEnum(Direction.UP)
+        buffer.writeNullable<UUID>(null) { sink, value -> sink.writeUUID(value) }
+        buffer.writeEnum(PeripheralConfiguratorMode.INSPECT_NETWORK)
+        buffer.writeUtf("factory", 32)
+        buffer.writeVarInt(1025)
+        assertFailsWith<IllegalArgumentException> { OpenPayload.CODEC.decode(buffer) }
     }
 
     private fun <T : Any> roundTrip(
