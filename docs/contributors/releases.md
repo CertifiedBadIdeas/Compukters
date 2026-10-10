@@ -7,7 +7,7 @@ permalink: /RELEASES/
 
 # Publish Compukters releases
 
-The `CI and mod release` workflow verifies branch pushes, pull requests and release tags, and builds the autonomous NeoForge JARs for
+The `Mod release` workflow runs only for pushed `v*` tags and builds the autonomous NeoForge JARs for
 Minecraft 1.21.1 and 26.1.2. Each contains its tooling carrier and both Linux and
 Windows natives. The workflow collects these and the Create, Sable and Propulsion
 addon JARs into `dist/`, grouped by Minecraft version, and preserves that layout
@@ -23,7 +23,7 @@ secret or repository secret, using a Modrinth token allowed to create versions i
 the Compukters project. The workflow uses GitHub's job token for GitHub Releases.
 Environment protection rules may be configured to require maintainer review before
 publishing. The build job needs no publishing credentials; the publishing job runs
-only after a pushed release tag passes all verification.
+only after a pushed release tag passes archive and inventory verification.
 
 Publish the matching native Runtime first. The mod's Runtime contract in
 `config/runtime-release.properties` selects the published Runtime version and its
@@ -55,42 +55,29 @@ run `bumpAfterRelease` to start the next development minor; for example, `0.5.0`
    on the clean exact tag. It downloads and admits the pinned published Runtime bundles,
    runs both `buildReleaseUniversalJar` gates, verifies the addon archives and collects
    the five JARs into `dist/`. For local Rust builds use `collectDistributionJars` instead.
-4. Push the candidate branch to run the same full CI before creating a remote tag.
-   A manual `CI and mod release` run verifies its selected branch; optional input
-   `tag: vX.Y.Z` also assembles that existing tag. Manual runs never publish.
-   JARs, complete verification evidence and reports are retained for seven days;
-   full Gradle output remains in the job logs.
+4. Push the candidate branch and its `vX.Y.Z` tag. Only the tag starts the release workflow;
+   ordinary branch pushes and pull requests do not start mod CI.
 
 Local non-interactive commands use `./gradlew-sandbox-dev-parallel-summary` with
-JDK 25 selected. GitHub Actions uses the standard `./gradlew` with live output and
-`--no-daemon --max-workers=2`. The CI runner installs JDK 21/25 and the VM's pinned Rust toolchain,
-fetches locked Cargo dependencies and runs `verifyLocalFull`. Untagged builds retain
-`-S` in the base mod version and collect the same five archives with admitted Linux/Windows
-Runtime bundles. Tagged builds use `collectReleaseDistributionJars`, including both
-`buildReleaseUniversalJar` gates.
-Existing Gradle checks own build and admission;
-release-transfer tooling does not substitute for them.
+JDK 25 selected. GitHub Actions uses standard `./gradlew` with live output and
+`--no-daemon --parallel --max-workers=2`. The runner installs JDK 21/25 and the pinned Rust toolchain,
+fetches locked build dependencies, publishes the addon SDK to Maven Local, and downloads the exact
+Linux/Windows Runtime bundles before building the five stable archives.
 
-## Reuse verification for one commit
+CI tests are temporarily disabled. It does not run `verifyLocalFull`, JVM/Rust tests, GameTests,
+conformance scenarios or IDE latency measurements. The two `packagedNativeIntegrationTest` tasks
+are explicitly excluded from the composite release build. Archive composition, exact clean-tag state,
+native bundle identity and release inventory checks remain enabled. This build establishes packaging
+and publication evidence; it does not establish full test coverage or native execution evidence.
+Local full verification and the complete tagged gates above remain available for release preparation.
 
-Branch and tag pushes share a concurrency group for their commit SHA with a queued, non-cancelling
-policy. Pushing a commit and its tag together works in either order. The first run performs full
-verification; the next selects its complete evidence after it finishes. Only the same repository's
-completed push runs with a successful verification job and a nonexpired, unambiguous artifact qualify.
-A failed publication does not discard successful verification. Missing or expired evidence causes a
-full check; an API error or a mismatched downloaded source/archive fails explicitly.
-
-Evidence records the exact parent and VM revisions, base and effective versions, selected Runtime
-release, and sizes and SHA-256/SHA-512 digests of all five JARs. Snapshot evidence is verified again
-against the tag checkout. Since `X.Y.Z-S` and `X.Y.Z` have different product metadata, a tag that reuses
-snapshot checks still assembles and verifies the stable JARs through the clean tagged universal gates.
-It does not repeat `verifyLocalFull`. If the commit already had its version tag during the first build,
-that build produced the stable release inventory, which is reused without another compilation.
+The build uploads five JARs, release notes, inventory and checksums as one Actions artifact retained
+for seven days. Runs for the same tag are queued without cancellation. There is no branch verification
+artifact to reuse in this temporary tag-only workflow.
 
 ## Publish and recover
 
-Pushing `vX.Y.Z` reuses successful same-commit verification when available, applies the tagged packaging
-gates when stable archives still need assembling, and then publishes. This is the explicit
+Pushing `vX.Y.Z` builds the stable archives, verifies their inventory, and then publishes. This is the explicit
 publication action; neither building nor creating a local tag uploads anything.
 The workflow checks `MODRINTH_TOKEN` before creating a GitHub release.
 
@@ -108,7 +95,7 @@ checked before any missing version is uploaded. The two version numbers are
 
 After a transport failure or partial publication, use **Re-run failed jobs** on
 the original tag-triggered run. A retried publishing job downloads the successful
-assembly job's original artifact through its recorded output, rather than rebuilding
+build job's original artifact through its recorded output, rather than rebuilding
 the candidate. It reconciles the existing release and resumes missing
 uploads. For example, if GitHub succeeded and the second Modrinth version failed,
 the retry preserves GitHub assets and the first Modrinth version. Inspect remote

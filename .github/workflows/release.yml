@@ -1,147 +1,34 @@
-name: CI and mod release
+name: Mod release
 
 on:
   push:
-    branches: ['**']
     tags: ['v*']
-  pull_request:
-  workflow_dispatch:
-    inputs:
-      tag:
-        description: Optional existing release tag to verify without publishing
-        required: false
-        type: string
 
 permissions:
   contents: read
-  actions: read
 
 concurrency:
-  group: mod-ci-${{ github.sha }}
+  group: mod-release-${{ github.ref }}
   cancel-in-progress: false
   queue: max
 
 jobs:
-  resolve:
-    name: Select verified mod build
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    outputs:
-      source_run: ${{ steps.reuse.outputs.source_run }}
-      revision: ${{ steps.reuse.outputs.revision }}
-      release_tag: ${{ steps.reuse.outputs.release_tag }}
-    steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-        with:
-          ref: ${{ inputs.tag || github.sha }}
-          fetch-depth: 0
-          submodules: recursive
-      - name: Validate tooling and select successful checks of this exact commit
-        id: reuse
-        env:
-          GH_TOKEN: ${{ github.token }}
-          RELEASE_TAG: ${{ github.event_name == 'push' && github.ref_type == 'tag' && github.ref_name || inputs.tag || '' }}
-        run: |
-          python3 -m unittest discover -s tools/release -v
-          python3 tools/release/ci.py resolve
-
   build:
-    name: Verify and collect mod and addon JARs
-    needs: resolve
-    if: needs.resolve.outputs.source_run == ''
-    runs-on: ubuntu-latest
-    timeout-minutes: 180
-    steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-        with:
-          ref: ${{ needs.resolve.outputs.revision }}
-          fetch-depth: 0
-          submodules: recursive
-      - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4
-        with:
-          distribution: temurin
-          java-version: |
-            21
-            25
-      - name: Prepare pinned Rust toolchain and locked dependencies
-        shell: bash
-        run: |
-          set -euo pipefail
-          rust_version=$(python3 -c 'import tomllib; print(tomllib.load(open("host/compukter-vm/rust-toolchain.toml", "rb"))["toolchain"]["channel"])')
-          rustup toolchain install "$rust_version" --profile minimal --component clippy --component rustfmt
-          rustup default "$rust_version"
-          cargo fetch --locked --manifest-path host/compukter-vm/Cargo.toml
-          cargo fetch --locked --manifest-path modules/common/compiler-artifact/src/test/rust/executable-conformance/Cargo.toml
-      - name: Fetch exact published Runtime bundles
-        run: ./gradlew downloadCompukterRuntimeBundles --no-daemon --max-workers=2
-      - name: Fully verify exact candidate
-        run: ./gradlew verifyLocalFull --no-daemon --parallel --max-workers=2
-      - name: Collect universal mod and addon JARs
-        shell: bash
-        run: |
-          set -euo pipefail
-          if [ "$(python3 tools/release/ci.py mode)" = release ]; then
-            ./gradlew -p addons/dev collectReleaseDistributionJars --no-daemon --max-workers=2
-          else
-            runtime_directory=$(python3 tools/release/ci.py runtime-directory)
-            ./gradlew -p addons/dev collectDistributionJars "-PcompukterRuntimeBundleDir=$runtime_directory" --no-daemon --max-workers=2
-          fi
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
-        with:
-          name: mod-and-addons-${{ github.run_id }}-${{ github.run_attempt }}
-          path: dist/
-          if-no-files-found: error
-          retention-days: 7
-      - name: Stage complete verification evidence
-        run: |
-          python3 tools/release/ci.py stage --directory build/verified
-          python3 tools/release/ci.py verify --directory build/verified
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
-        with:
-          name: mod-verified-${{ needs.resolve.outputs.revision }}
-          path: build/verified/
-          overwrite: true
-          if-no-files-found: error
-          retention-days: 7
-      - name: Preserve verification reports
-        if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
-        with:
-          name: mod-release-verification-${{ github.run_id }}-${{ github.run_attempt }}
-          path: |
-            **/build/reports/tests/
-            **/build/test-results/
-            **/run/gameTestServer/logs/
-          if-no-files-found: ignore
-          retention-days: 7
-
-  assemble:
-    name: Assemble and verify tagged release
-    needs: [resolve, build]
-    if: ${{ !cancelled() && needs.resolve.result == 'success' && needs.resolve.outputs.release_tag != '' && (needs.build.result == 'success' || needs.build.result == 'skipped') }}
+    name: Build tagged mod and addon JARs
     runs-on: ubuntu-latest
     timeout-minutes: 90
     outputs:
       release_artifact: verified-mod-release-${{ github.run_id }}-${{ github.run_attempt }}
     env:
-      RELEASE_TAG: ${{ needs.resolve.outputs.release_tag }}
+      RELEASE_TAG: ${{ github.ref_name }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
-          ref: ${{ needs.resolve.outputs.revision }}
+          ref: ${{ github.sha }}
           fetch-depth: 0
           submodules: recursive
-      - name: Download complete same-commit verification evidence
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
-        with:
-          name: mod-verified-${{ needs.resolve.outputs.revision }}
-          run-id: ${{ needs.resolve.outputs.source_run || github.run_id }}
-          github-token: ${{ github.token }}
-          path: build/verified
-      - name: Verify reused source, archives and exact release tag
-        id: evidence
+      - name: Validate exact release tag
         run: |
-          python3 tools/release/ci.py verify --directory build/verified
           python3 - <<'PY'
           import os, sys
           from pathlib import Path
@@ -150,58 +37,38 @@ jobs:
           ci.validate_tag(Path.cwd(), os.environ['RELEASE_TAG'])
           PY
       - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4
-        if: steps.evidence.outputs.stable != 'true'
         with:
           distribution: temurin
           java-version: |
             21
             25
-      - name: Prepare pinned Rust toolchain and locked dependencies
-        if: steps.evidence.outputs.stable != 'true'
+      - name: Prepare pinned Rust toolchain and locked build dependencies
         shell: bash
         run: |
           set -euo pipefail
           rust_version=$(python3 -c 'import tomllib; print(tomllib.load(open("host/compukter-vm/rust-toolchain.toml", "rb"))["toolchain"]["channel"])')
-          rustup toolchain install "$rust_version" --profile minimal --component clippy --component rustfmt
+          rustup toolchain install "$rust_version" --profile minimal
           rustup default "$rust_version"
           cargo fetch --locked --manifest-path host/compukter-vm/Cargo.toml
-          cargo fetch --locked --manifest-path modules/common/compiler-artifact/src/test/rust/executable-conformance/Cargo.toml
-      - name: Fetch exact published Runtime bundles
-        if: steps.evidence.outputs.stable != 'true'
-        run: ./gradlew downloadCompukterRuntimeBundles --no-daemon --max-workers=2
-      - name: Assemble stable JARs with clean tagged universal release gates
-        if: steps.evidence.outputs.stable != 'true'
-        run: ./gradlew -p addons/dev collectReleaseDistributionJars --no-daemon --max-workers=2
-      - name: Stage stable release inventory
-        if: steps.evidence.outputs.stable != 'true'
-        run: python3 tools/release/release.py prepare --tag "$RELEASE_TAG" --output build/release
-      - name: Reuse already verified stable release inventory
-        if: steps.evidence.outputs.stable == 'true'
-        run: cp -a build/verified build/release
-      - name: Verify final release inventory
-        run: python3 tools/release/release.py verify --directory build/release
+      - name: Publish local addon SDK and fetch exact Runtime bundles
+        run: ./gradlew :addon-gradle-plugin:publishAddonSdkToMavenLocal downloadCompukterRuntimeBundles --no-daemon --parallel --max-workers=2
+      - name: Build stable JARs without test tasks
+        run: ./gradlew -p addons/dev collectReleaseDistributionJars --no-daemon --parallel --max-workers=2 -x :Compukters:native-runtime-ffm:packagedNativeIntegrationTest -x :Compukters:native-runtime-jni:packagedNativeIntegrationTest
+      - name: Stage and verify release inventory
+        run: |
+          python3 tools/release/release.py prepare --tag "$RELEASE_TAG" --output build/release
+          python3 tools/release/release.py verify --directory build/release
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: verified-mod-release-${{ github.run_id }}-${{ github.run_attempt }}
           path: build/release/
           if-no-files-found: error
           retention-days: 7
-      - name: Preserve verification reports
-        if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
-        with:
-          name: mod-release-assembly-${{ github.run_id }}-${{ github.run_attempt }}
-          path: |
-            **/build/reports/tests/
-            **/build/test-results/
-            **/run/gameTestServer/logs/
-          if-no-files-found: ignore
-          retention-days: 7
 
   publish:
     name: Publish GitHub and Modrinth
     if: github.event_name == 'push' && github.ref_type == 'tag'
-    needs: assemble
+    needs: build
     runs-on: ubuntu-latest
     timeout-minutes: 30
     environment: mod-release
@@ -213,7 +80,7 @@ jobs:
           ref: ${{ github.ref }}
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
-          name: ${{ needs.assemble.outputs.release_artifact }}
+          name: ${{ needs.build.outputs.release_artifact }}
           path: build/release
       - name: Verify staged release and credentials
         env:

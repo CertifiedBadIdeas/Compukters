@@ -56,6 +56,11 @@ Run tests with `python3 -m unittest discover -s tools/release -v`.
 
 ## Unified CI evidence
 
+The current tag-only `Mod release` workflow does not use this evidence/reuse path and temporarily runs
+no tests. It publishes the local addon SDK, builds stable archives with both packaged native integration
+test tasks excluded, then verifies and uploads the release inventory. The helpers below remain available
+for complete verification evidence; the current build must not be described as full verification.
+
 `ci.py` admits complete same-commit verification evidence for the branch/tag workflow.
 `resolve` selects only same-repository push runs with a successful full verification job and one
 nonexpired `mod-verified-<commit>` artifact. Runs are serialized by commit SHA, including simultaneous

@@ -42,6 +42,10 @@ Dedicated latency measurement tasks always execute rather than reusing cached re
 The visible completion budget is 200 ms median and 350 ms p95; semantic presentation has a 450 ms median
 and 800 ms p95 budget. Both include analysis, client tick observation and the first rendered frame.
 
+Mod CI tests are temporarily disabled: the tag-only release workflow builds and validates archive composition
+and inventory, excluding both packaged native integration test tasks. A successful workflow is packaging and
+publication evidence, not a full verification result. The local verification commands remain available unchanged.
+
 ## Addon control latency
 
 Run `./gradlew-sandbox-dev-parallel -p addons/dev runGameTestServer` to include
