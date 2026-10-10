@@ -86,7 +86,7 @@ dependencies {
     shadowBundle(project(path = projects.addonGuestApi.path)) { isTransitive = false }
     common(project(path = projects.v1211Common.path)) { isTransitive = false }
     shadowBundle(project(path = projects.v1211Common.path, configuration = "transformProductionNeoForge"))
-    testImplementation(project(path = projects.v1211Common.path))
+    testImplementation(project(path = projects.v1211Common.path, configuration = "namedElements"))
     implementation(projects.nativeRuntimeJni)
     shadowBundle(project(path = projects.nativeRuntimeJni.path)) { isTransitive = false }
     implementation(projects.platformBundle)

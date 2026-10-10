@@ -37,6 +37,18 @@ internal object GraphicalDisplayGameTestScenario {
                     .setValue(DisplayBlock.FACING, Direction.NORTH),
             )
         }
+        val initialOverlay =
+            ru.lazyhat.compukters.minecraft.peripheral.ConfiguratorOverlayServer.collect(
+                helper.level,
+                helper.absolutePos(first),
+            )
+        helper.assertTrue(
+            initialOverlay.devices
+                .first {
+                    it.position == helper.absolutePos(first)
+                }.screen == null,
+            "overlay created an uninitialized screen",
+        )
         val player = helper.makeMockServerPlayerInLevel()
         val stack = ItemStack(CompuktersRegistry.PERIPHERAL_CONFIGURATOR_ITEM.get())
         val selections = mutableMapOf<String, String>()
@@ -57,6 +69,34 @@ internal object GraphicalDisplayGameTestScenario {
             "panel",
         )
         PeripheralNetworkGameTestFixtures.bind(helper, computerPosition, first, second)
+        val beforeOverlayColor = display.displayColor(0, 0)
+        val overlay =
+            ru.lazyhat.compukters.minecraft.peripheral.ConfiguratorOverlayServer
+                .collect(helper.level, helper.absolutePos(first))
+        helper.assertTrue(
+            overlay.screens.any {
+                it.id == id && it.panels.size == 2 && it.columns == 3 && it.rows == 2
+            },
+            "overlay lost composite geometry or holes",
+        )
+        helper.assertTrue(
+            overlay.devices.any {
+                it.position == helper.absolutePos(computerPosition) && it.network != null
+            },
+            "overlay lost network membership",
+        )
+        helper.assertTrue(
+            display.screenIdentity() == id && display.displayColor(0, 0) == beforeOverlayColor,
+            "holding configurator changed the screen",
+        )
+        helper.assertTrue(
+            ru.lazyhat.compukters.minecraft.peripheral.ConfiguratorOverlayServer.collect(
+                player,
+                net.minecraft.world.InteractionHand.MAIN_HAND,
+            ) ==
+                null,
+            "overlay accepted a player without a configurator",
+        )
         val computer = helper.compuktersComputerBlockEntity(computerPosition)
         computer.prepareTerminalAsync()
         var setup: CompletableFuture<Void>? = null
@@ -100,6 +140,17 @@ internal object GraphicalDisplayGameTestScenario {
                         .get()
                         .defaultBlockState()
                         .setValue(DisplayBlock.FACING, Direction.NORTH),
+                )
+                val unjoinedOverlay =
+                    ru.lazyhat.compukters.minecraft.peripheral.ConfiguratorOverlayServer.collect(
+                        helper.level,
+                        helper.absolutePos(first),
+                    )
+                helper.assertTrue(
+                    unjoinedOverlay.screens.any {
+                        it.id == id && helper.absolutePos(first) !in it.panels
+                    },
+                    "overlay treated a replacement as an existing member",
                 )
                 val absolute = helper.absolutePos(first)
                 player.setPos(absolute.x + 0.5, absolute.y + 0.5, absolute.z + 0.5)

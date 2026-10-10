@@ -36,7 +36,7 @@ import java.util.UUID
 open class PeripheralConfiguratorItem(
     properties: Properties,
 ) : Item(properties) {
-    private fun configuratorMode(stack: ItemStack): Int {
+    fun configuratorMode(stack: ItemStack): Int {
         val data = stack.get(DataComponents.CUSTOM_DATA)?.copyTag() ?: return 0
         val stored = data.getInt(ASSEMBLY_MODE_KEY).orElse(-1)
         return if (stored in 0..2) {
@@ -46,6 +46,33 @@ open class PeripheralConfiguratorItem(
         } else {
             0
         }
+    }
+
+    fun selectionDimension(stack: ItemStack): String =
+        stack
+            .get(DataComponents.CUSTOM_DATA)
+            ?.copyTag()
+            ?.getString("compukters_screen_dimension")
+            ?.orElse("") ?: ""
+
+    fun selectedScreen(stack: ItemStack): UUID? =
+        runCatching {
+            UUID.fromString(
+                stack
+                    .get(DataComponents.CUSTOM_DATA)
+                    ?.copyTag()
+                    ?.getString("compukters_selected_screen")
+                    ?.orElse(""),
+            )
+        }.getOrNull()
+
+    fun selectedCorner(stack: ItemStack): net.minecraft.core.BlockPos? {
+        val data = stack.get(DataComponents.CUSTOM_DATA)?.copyTag() ?: return null
+        return data
+            .getString("compukters_screen_corner")
+            .orElse("")
+            .toLongOrNull()
+            ?.let(net.minecraft.core.BlockPos::of)
     }
 
     fun networkMode(stack: ItemStack): Boolean = configuratorMode(stack) == 1

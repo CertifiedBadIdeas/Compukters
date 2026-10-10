@@ -7,7 +7,6 @@
 package ru.lazyhat.compukters.minecraft.display
 
 import net.minecraft.core.BlockPos
-import net.minecraft.core.particles.ParticleTypes
 import net.minecraft.network.chat.Component
 import net.minecraft.server.level.ServerLevel
 import net.minecraft.server.level.ServerPlayer
@@ -38,18 +37,15 @@ object DisplayAssembly {
                 write(SCREEN_KEY, surface.id.toString())
                 write(CORNER_KEY, null)
                 write(DIMENSION_KEY, level.dimension().toString())
-                outline(level, surface)
                 "selected"
             } else if (selected != null && first == null) {
                 require(read(DIMENSION_KEY) == level.dimension().toString())
                 DisplayWorldAccess.join(level, selected, entity)
-                outline(level, requireNotNull(DisplayStorage.get(level).directory.byId(selected)))
                 "joined"
             } else if (first == null) {
                 write(CORNER_KEY, position.asLong().toString())
                 write(INSTANCE_KEY, entity.checkpointIdentity)
                 write(DIMENSION_KEY, level.dimension().toString())
-                level.sendParticles(ParticleTypes.END_ROD, position.x + 0.5, position.y + 0.5, position.z + 0.5, 8, 0.4, 0.4, 0.4, 0.0)
                 "corner"
             } else {
                 require(read(DIMENSION_KEY) == level.dimension().toString())
@@ -59,7 +55,6 @@ object DisplayAssembly {
                 val surface = DisplayWorldAccess.assemble(level, first, position)
                 write(CORNER_KEY, null)
                 write(SCREEN_KEY, surface.id.toString())
-                outline(level, surface)
                 "created"
             }
         }.fold({ result ->
@@ -69,29 +64,6 @@ object DisplayAssembly {
                 Component.translatable("item.compukters.peripheral_configurator.display.failed", error.message.orEmpty()),
             )
         })
-    }
-
-    private fun outline(
-        level: ServerLevel,
-        surface: ru.lazyhat.compukters.core.display.DisplaySurface,
-    ) {
-        for (row in 0 until surface.canvas.rows) {
-            for (column in 0 until surface.canvas.columns) {
-                val position = DisplayWorldAccess.position(surface, column, row)
-                val facing = DisplayWorldAccess.facing(surface)
-                level.sendParticles(
-                    ParticleTypes.END_ROD,
-                    position.x + 0.5 + facing.stepX * 0.55,
-                    position.y + 0.5,
-                    position.z + 0.5 + facing.stepZ * 0.55,
-                    1,
-                    0.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                )
-            }
-        }
     }
 
     val SELECTION_KEYS: List<String> = listOf(SCREEN_KEY, CORNER_KEY, DIMENSION_KEY, INSTANCE_KEY)
