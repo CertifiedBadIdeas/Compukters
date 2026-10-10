@@ -20,6 +20,7 @@ package ru.lazyhat.compukters.ide.client.controller
 
 import ru.lazyhat.compukters.compiler.worker.protocol.BinaryValue
 import ru.lazyhat.compukters.compiler.worker.protocol.Hash256
+import ru.lazyhat.compukters.compiler.worker.protocol.LibraryPreparationResult
 import ru.lazyhat.compukters.compiler.worker.protocol.WorkerLimits
 import ru.lazyhat.compukters.ide.client.build.IdeBuildCoordinator
 import ru.lazyhat.compukters.ide.client.build.IdeBuildFailureKind
@@ -31,6 +32,7 @@ import ru.lazyhat.compukters.ide.client.state.IdeEditorInput
 import ru.lazyhat.compukters.ide.compiler.ClientBuildResult
 import ru.lazyhat.compukters.ide.compiler.ClientBuildSnapshot
 import ru.lazyhat.compukters.ide.compiler.ClientCompilationService
+import ru.lazyhat.compukters.ide.compiler.profile.CompileProfile
 import ru.lazyhat.compukters.ide.compiler.profile.CompileProfileResolver
 import ru.lazyhat.compukters.ide.project.ProjectLock
 import ru.lazyhat.compukters.ide.project.ProjectLockCodec
@@ -45,6 +47,61 @@ import kotlin.test.assertIs
 import kotlin.test.assertTrue
 
 class IdeBuildFlowTest {
+    @Test
+    fun `late configuration from an earlier preparation is ignored`() {
+        val compilation = FlowCompilationService()
+        val fixture = fixture(compilation)
+        fixture.workspace.installLock(canonicalLock())
+        val oldRead = CompletableFuture<ru.lazyhat.compukters.ide.client.workspace.IdeProjectConfiguration>()
+        fixture.workspace.configurationBarrier = oldRead
+        fixture.startAndTick()
+        assertTrue(compilation.preparations.isEmpty())
+        fixture.workspace.configurationBarrier = null
+        fixture.controller.dispatch(IdeCommand.Resolve)
+        fixture.tickUntil { compilation.preparations.isNotEmpty() }
+        val root = fixture.workspace.descriptor.handle.canonicalPath
+        oldRead.complete(
+            ru.lazyhat.compukters.ide.client.workspace.IdeProjectConfiguration(
+                fixture.workspace.descriptor.handle,
+                root.resolve("compukter.toml").toFile().readBytes(),
+                canonicalLock(),
+            ),
+        )
+        repeat(5) { fixture.controller.tick() }
+        assertEquals(1, compilation.preparations.size)
+        assertEquals(1, fixture.workspace.buildInputRequests, "only explicit Resolve may read build input")
+        fixture.controller.close()
+    }
+
+    @Test
+    fun `opening a resolved project prepares libraries without reading sources or changing build state`() {
+        val compilation = FlowCompilationService()
+        val fixture = fixture(compilation)
+        fixture.workspace.installLock(canonicalLock())
+        fixture.startAndTick()
+        fixture.tickUntil { compilation.preparations.isNotEmpty() }
+        assertEquals(0, fixture.workspace.buildInputRequests)
+        assertTrue(fixture.workspace.configurationRequests > 0)
+        assertIs<IdeBuildState.Idle>(fixture.workspaceView().build)
+        assertTrue(compilation.inputs.isEmpty())
+        fixture.controller.close()
+    }
+
+    @Test
+    fun `unresolved project skips preparation and resolve schedules it quietly`() {
+        val compilation = FlowCompilationService()
+        val fixture = fixture(compilation)
+        fixture.startAndTick()
+        repeat(5) { fixture.controller.tick() }
+        assertTrue(compilation.preparations.isEmpty())
+        assertIs<IdeBuildState.Idle>(fixture.workspaceView().build)
+        fixture.controller.dispatch(IdeCommand.Resolve)
+        fixture.tickUntil { compilation.preparations.isNotEmpty() }
+        assertTrue(compilation.inputs.isEmpty())
+        assertEquals("Created compukter.lock", fixture.workspaceView().status?.message)
+        fixture.controller.close()
+    }
+
     @Test
     fun `build saves visible editor revision before loading canonical build input`() {
         val compilation = FlowCompilationService()
@@ -200,11 +257,23 @@ class IdeBuildFlowTest {
 }
 
 private class FlowCompilationService : ClientCompilationService {
+    val preparations = LinkedBlockingQueue<CompileProfile>()
     val inputs = mutableListOf<ClientBuildSnapshot>()
     private val submitted = LinkedBlockingQueue<ClientBuildSnapshot>()
     private val futures = LinkedBlockingQueue<CompletableFuture<ClientBuildResult>>()
     private val cancelled = CompletableFuture<Unit>()
     var cancelCalls = 0
+
+    override fun prepareLibraries(profile: CompileProfile): CompletableFuture<LibraryPreparationResult> =
+        CompletableFuture
+            .completedFuture<LibraryPreparationResult>(
+                ru.lazyhat.compukters.compiler.worker.protocol.LibrariesPrepared(
+                    ru.lazyhat.compukters.compiler.worker.protocol.RequestId
+                        .of(1uL),
+                    ru.lazyhat.compukters.compiler.worker.protocol
+                        .CompilationMetrics(1uL, 2uL, 3uL),
+                ),
+            ).also { preparations.add(profile) }
 
     override fun build(input: ClientBuildSnapshot): CompletableFuture<ClientBuildResult> {
         synchronized(inputs) { inputs += input }

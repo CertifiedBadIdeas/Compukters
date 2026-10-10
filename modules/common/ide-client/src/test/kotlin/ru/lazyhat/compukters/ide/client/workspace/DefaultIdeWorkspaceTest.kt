@@ -43,6 +43,25 @@ import kotlin.test.assertTrue
 
 class DefaultIdeWorkspaceTest {
     @Test
+    fun `preparation configuration ignores invalid and oversized project sources`() {
+        val root = createTempDirectory("compukters-workspace-prepare-")
+        try {
+            val descriptor = ProjectCatalog.open(root).create("demo")
+            descriptor.handle.canonicalPath
+                .resolve("src/main.kt")
+                .writeText("x".repeat(1000))
+            DefaultIdeWorkspace(root, workerLimits = WorkerLimits(sourceFileBytes = 1, sourceBytes = 1)).use { workspace ->
+                val configuration = workspace.projectConfiguration(descriptor.handle).get(5, TimeUnit.SECONDS)
+                assertEquals(descriptor.handle, configuration.project)
+                assertTrue(configuration.manifestBytes.isNotEmpty())
+                assertFailsWith<ExecutionException> { workspace.buildInput(descriptor.handle).get(5, TimeUnit.SECONDS) }
+            }
+        } finally {
+            root.toFile().deleteRecursively()
+        }
+    }
+
+    @Test
     fun `workspace creates its missing project catalog root`() {
         val parent = createTempDirectory("compukters-workspace-first-open-")
         val projects = parent.resolve("projects")

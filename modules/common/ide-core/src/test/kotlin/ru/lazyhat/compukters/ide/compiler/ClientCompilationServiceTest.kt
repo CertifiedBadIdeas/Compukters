@@ -29,6 +29,8 @@ import ru.lazyhat.compukters.compiler.worker.protocol.CompileRequest
 import ru.lazyhat.compukters.compiler.worker.protocol.CompileResult
 import ru.lazyhat.compukters.compiler.worker.protocol.CompileSuccess
 import ru.lazyhat.compukters.compiler.worker.protocol.Hash256
+import ru.lazyhat.compukters.compiler.worker.protocol.LibraryPreparationRequest
+import ru.lazyhat.compukters.compiler.worker.protocol.LibraryPreparationResult
 import ru.lazyhat.compukters.compiler.worker.protocol.PlatformFailure
 import ru.lazyhat.compukters.compiler.worker.protocol.PlatformFailureClass
 import ru.lazyhat.compukters.compiler.worker.protocol.VirtualSourcePath
@@ -158,6 +160,10 @@ class ClientCompilationServiceTest {
         val cancelThreads = mutableListOf<String>()
         private val futures = mutableListOf<CompletableFuture<CompileResult>>()
         var cancelCalls = 0
+
+        @Synchronized
+        override fun prepareLibraries(request: LibraryPreparationRequest): CompletableFuture<LibraryPreparationResult> =
+            CompletableFuture.failedFuture(IllegalStateException("unexpected preparation"))
 
         @Synchronized
         override fun compile(request: CompileRequest): CompletableFuture<CompileResult> {

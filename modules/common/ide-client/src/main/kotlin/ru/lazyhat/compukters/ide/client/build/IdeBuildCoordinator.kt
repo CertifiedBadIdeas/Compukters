@@ -21,6 +21,7 @@ package ru.lazyhat.compukters.ide.client.build
 import ru.lazyhat.compukters.compiler.worker.controller.WorkerQueueFullException
 import ru.lazyhat.compukters.compiler.worker.protocol.BinaryValue
 import ru.lazyhat.compukters.compiler.worker.protocol.DiagnosticSeverity
+import ru.lazyhat.compukters.compiler.worker.protocol.LibraryPreparationResult
 import ru.lazyhat.compukters.compiler.worker.protocol.PlatformFailureClass
 import ru.lazyhat.compukters.compiler.worker.protocol.WorkerDiagnostic
 import ru.lazyhat.compukters.ide.analysis.EditorDiagnostic
@@ -28,10 +29,12 @@ import ru.lazyhat.compukters.ide.analysis.EditorDiagnosticSeverity
 import ru.lazyhat.compukters.ide.client.IdeClientLimits
 import ru.lazyhat.compukters.ide.client.controller.IdeControllerClock
 import ru.lazyhat.compukters.ide.client.workspace.IdeBuildInput
+import ru.lazyhat.compukters.ide.client.workspace.IdeProjectConfiguration
 import ru.lazyhat.compukters.ide.compiler.ClientBuildResult
 import ru.lazyhat.compukters.ide.compiler.ClientBuildSnapshot
 import ru.lazyhat.compukters.ide.compiler.ClientCompilationService
 import ru.lazyhat.compukters.ide.compiler.ClientCompileRequestFactory
+import ru.lazyhat.compukters.ide.compiler.profile.CompileProfile
 import ru.lazyhat.compukters.ide.compiler.profile.CompileProfileResolver
 import ru.lazyhat.compukters.ide.compiler.profile.ProfileResolution
 import ru.lazyhat.compukters.ide.compiler.profile.TargetCompileProfile
@@ -97,6 +100,8 @@ class IdeBuildCoordinator(
             ThreadPoolExecutor.AbortPolicy(),
         )
 
+    private val preparations = mutableSetOf<CompletableFuture<LibraryPreparationResult?>>()
+
     fun resolve(
         input: IdeBuildInput,
         updateExisting: Boolean,
@@ -106,6 +111,41 @@ class IdeBuildCoordinator(
             action = { resolveNow(input, updateExisting, target) },
             rejected = IdeResolveResult.Failed(if (closed.get()) "build coordinator is closed" else "build queue is full"),
         )
+
+    fun prepareLibraries(
+        input: IdeProjectConfiguration,
+        target: TargetCompileProfile? = null,
+    ): CompletableFuture<LibraryPreparationResult?> {
+        val result = CompletableFuture<LibraryPreparationResult?>()
+        synchronized(preparations) {
+            if (closed.get()) return CompletableFuture.completedFuture(null)
+            preparations += result
+        }
+        result.whenComplete { _, _ -> synchronized(preparations) { preparations -= result } }
+        try {
+            executor.execute {
+                if (result.isDone || closed.get()) return@execute
+                val profile =
+                    try {
+                        prepareProfile(input, target).profile
+                    } catch (_: Exception) {
+                        result.complete(null)
+                        return@execute
+                    }
+                if (result.isDone || closed.get()) return@execute
+                try {
+                    services.compilation.prepareLibraries(profile).whenComplete { prepared, failure ->
+                        if (failure == null) result.complete(prepared) else result.complete(null)
+                    }
+                } catch (_: Exception) {
+                    result.complete(null)
+                }
+            }
+        } catch (_: RejectedExecutionException) {
+            result.complete(null)
+        }
+        return result
+    }
 
     fun build(
         operationId: Long,
@@ -181,6 +221,7 @@ class IdeBuildCoordinator(
         if (!closed.compareAndSet(false, true)) return
         val active = synchronized(builds) { builds.toList() }
         active.forEach(::cancel)
+        synchronized(preparations) { preparations.toList().forEach { it.cancel(false) } }
         executor.shutdownNow()
         services.compilation.close()
     }
@@ -270,10 +311,10 @@ class IdeBuildCoordinator(
         }
     }
 
-    private fun prepare(
-        input: IdeBuildInput,
+    private fun prepareProfile(
+        input: IdeProjectConfiguration,
         target: TargetCompileProfile?,
-    ): PreparedBuild {
+    ): PreparedProfile {
         val manifest =
             try {
                 ProjectManifestCodec.decode(decodeStrict(input.manifestBytes))
@@ -313,15 +354,29 @@ class IdeBuildCoordinator(
                     )
                 }
             }
+        return PreparedProfile(manifest.name, lockBytes, profile)
+    }
+
+    private data class PreparedProfile(
+        val programName: String,
+        val lockBytes: ByteArray,
+        val profile: CompileProfile,
+    )
+
+    private fun prepare(
+        input: IdeBuildInput,
+        target: TargetCompileProfile?,
+    ): PreparedBuild {
+        val admitted = prepareProfile(input.configuration, target)
         val snapshot =
             ClientBuildSnapshot(
                 input.sources,
                 BinaryValue.of(input.manifestBytes),
-                BinaryValue.of(lockBytes),
-                profile,
+                BinaryValue.of(admitted.lockBytes),
+                admitted.profile,
             )
         val prepared = ClientCompileRequestFactory.prepare(snapshot)
-        return PreparedBuild(snapshot, prepared.identity, prepared.sourceSnapshotId, manifest.name)
+        return PreparedBuild(snapshot, prepared.identity, prepared.sourceSnapshotId, admitted.programName)
     }
 
     private fun mapResult(

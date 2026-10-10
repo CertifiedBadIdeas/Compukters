@@ -95,6 +95,8 @@ interface IdeWorkspace : AutoCloseable {
     ): CompletableFuture<ProjectMutationResult> =
         CompletableFuture.failedFuture(UnsupportedOperationException("project imports are unavailable"))
 
+    fun projectConfiguration(project: ProjectHandle): CompletableFuture<IdeProjectConfiguration>
+
     fun buildInput(project: ProjectHandle): CompletableFuture<IdeBuildInput>
 }
 
@@ -143,20 +145,27 @@ sealed interface IdeMutationRequest {
     ) : IdeMutationRequest
 }
 
+class IdeProjectConfiguration(
+    val project: ProjectHandle,
+    manifestBytes: ByteArray,
+    lockBytes: ByteArray?,
+) {
+    private val storedManifestBytes = manifestBytes.copyOf()
+    private val storedLockBytes = lockBytes?.copyOf()
+
+    val manifestBytes: ByteArray get() = storedManifestBytes.copyOf()
+    val lockBytes: ByteArray? get() = storedLockBytes?.copyOf()
+}
+
 class IdeBuildInput(
     val project: ProjectHandle,
     manifestBytes: ByteArray,
     lockBytes: ByteArray?,
     val sources: ProjectSnapshot,
 ) {
-    private val storedManifestBytes = manifestBytes.copyOf()
-    private val storedLockBytes = lockBytes?.copyOf()
-
-    val manifestBytes: ByteArray
-        get() = storedManifestBytes.copyOf()
-
-    val lockBytes: ByteArray?
-        get() = storedLockBytes?.copyOf()
+    val configuration = IdeProjectConfiguration(project, manifestBytes, lockBytes)
+    val manifestBytes: ByteArray get() = configuration.manifestBytes
+    val lockBytes: ByteArray? get() = configuration.lockBytes
 }
 
 sealed class IdeWorkspaceFailure(
