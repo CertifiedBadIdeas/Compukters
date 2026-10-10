@@ -157,6 +157,7 @@ class IdeBuildFlowTest {
 
         fixture.controller.close()
 
+        compilation.awaitCancellation()
         assertEquals(1, compilation.cancelCalls)
         compilation.complete(
             ClientBuildResult.Success(
@@ -202,6 +203,7 @@ private class FlowCompilationService : ClientCompilationService {
     val inputs = mutableListOf<ClientBuildSnapshot>()
     private val submitted = LinkedBlockingQueue<ClientBuildSnapshot>()
     private val futures = LinkedBlockingQueue<CompletableFuture<ClientBuildResult>>()
+    private val cancelled = CompletableFuture<Unit>()
     var cancelCalls = 0
 
     override fun build(input: ClientBuildSnapshot): CompletableFuture<ClientBuildResult> {
@@ -214,12 +216,15 @@ private class FlowCompilationService : ClientCompilationService {
 
     fun awaitInput(): ClientBuildSnapshot = requireNotNull(submitted.poll(5, TimeUnit.SECONDS))
 
+    fun awaitCancellation() = cancelled.get(5, TimeUnit.SECONDS)
+
     fun complete(result: ClientBuildResult) {
         futures.remove().complete(result)
     }
 
     override fun cancel(future: CompletableFuture<ClientBuildResult>): Boolean {
         cancelCalls++
+        cancelled.complete(Unit)
         return true
     }
 
