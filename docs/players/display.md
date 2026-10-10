@@ -43,7 +43,11 @@ Assembly creates a new blank canvas from standalone panels; an existing composit
 
 The selected screen remains in the configurator. Place another display in a hole and click it to join that screen.
 Shift-click a panel to select its existing screen; shift-use the configurator in the air to clear the selection.
-Particles show the selected rectangle.
+While the configurator is held in either hand, softly animated outlines show nearby devices, networks and screens.
+They are hidden by walls. Hovered and selected groups are brighter; screen boundaries and dashed holes remain visible.
+An amber panel inside a screen belongs to a separate screen and has not joined the surrounding assembly. Point at it
+for the membership and click-action hints. Selecting the first corner previews a valid rectangle while aiming at the
+second corner. Putting the configurator away removes the overlay.
 
 A composite screen has one name, one resolution, one image and one writer lease. Reaching any loaded member reaches
 the screen; typed discovery lists it once. Coordinates start at the top left when viewing its front, increase rightward

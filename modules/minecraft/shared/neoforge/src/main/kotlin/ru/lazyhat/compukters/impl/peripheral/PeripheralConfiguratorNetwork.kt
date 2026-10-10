@@ -38,6 +38,7 @@ import java.util.UUID
 
 object PeripheralConfiguratorNetwork {
     fun register(event: RegisterPayloadHandlersEvent) {
+        ConfiguratorOverlayNetwork.register(event)
         val registrar = event.registrar("3")
         registrar.playToClient(OpenPayload.TYPE, OpenPayload.CODEC, ::handleOpen)
         registrar.playToServer(SavePayload.TYPE, SavePayload.CODEC, ::handleSave)
