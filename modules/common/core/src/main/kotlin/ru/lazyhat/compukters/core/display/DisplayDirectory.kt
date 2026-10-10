@@ -81,6 +81,67 @@ class DisplayDirectory(
         return surface
     }
 
+    /** Grow without losing world-aligned pixels; old handles and private frames are retired. */
+    fun expand(
+        id: UUID,
+        originX: Int,
+        originY: Int,
+        originZ: Int,
+        columns: Int,
+        rows: Int,
+        offsetColumn: Int,
+        offsetRow: Int,
+    ): DisplaySurface {
+        val old = requireNotNull(surfaces[id]) { "Display was deleted" }
+        require(columns in 1..DisplayCanvas.MAXIMUM_BLOCK_SIDE && rows in 1..DisplayCanvas.MAXIMUM_BLOCK_SIDE)
+        require(offsetColumn >= 0 && offsetRow >= 0)
+        require(offsetColumn + old.canvas.columns <= columns && offsetRow + old.canvas.rows <= rows)
+        val dx =
+            when (old.facing) {
+                0 -> -offsetColumn
+                1 -> offsetColumn
+                else -> 0
+            }
+        val dz =
+            when (old.facing) {
+                2 -> offsetColumn
+                3 -> -offsetColumn
+                else -> 0
+            }
+        require(
+            originX.toLong() + dx == old.originX.toLong() && originY.toLong() - offsetRow == old.originY.toLong() &&
+                originZ.toLong() + dz == old.originZ.toLong(),
+        ) { "Expansion must preserve panel positions" }
+        check(
+            snapshot().sumOf { it.canvas.columns * it.canvas.rows } - old.canvas.columns * old.canvas.rows + columns * rows <=
+                MAXIMUM_WORLD_BLOCK_AREA,
+        ) { "World display area limit reached" }
+        val canvas = DisplayCanvas(columns, rows, old.canvas.mode, changed)
+        val previous = old.canvas.encodeRgb()
+        val rgb = ByteArray(canvas.width * canvas.height * 3)
+        val offsetX = offsetColumn * canvas.density
+        val offsetY = offsetRow * canvas.density
+        for (y in 0 until old.canvas.height) {
+            previous.copyInto(rgb, ((y + offsetY) * canvas.width + offsetX) * 3, y * old.canvas.width * 3, (y + 1) * old.canvas.width * 3)
+        }
+        canvas.restoreRgb(old.canvas.mode, rgb)
+        val expanded =
+            DisplaySurface(
+                id,
+                originX,
+                originY,
+                originZ,
+                old.facing,
+                canvas,
+                old.panels.map { it.copy(column = it.column + offsetColumn, row = it.row + offsetRow) },
+                old.name,
+            )
+        surfaces[id] = expanded
+        old.canvas.retire()
+        changed()
+        return expanded
+    }
+
     fun join(
         id: UUID,
         panel: DisplayPanel,

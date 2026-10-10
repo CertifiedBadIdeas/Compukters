@@ -37,6 +37,46 @@ class DisplayDirectoryTest {
     }
 
     @Test
+    fun `expansion preserves identity mode world pixels and holes and discards private frames`() {
+        val directory = DisplayDirectory()
+        val panel = UUID.randomUUID()
+        val old = directory.create(10, 10, 10, 0, 2, 1, listOf(DisplayPanel(0, 0, panel)))
+        directory.rename(old.id, "panel")
+        val owner = Any()
+        old.canvas.acquire(owner) { true }
+        old.canvas.setMode(owner, 0)
+        old.canvas.pixel(owner, 17, 3, 0x123456)
+        old.canvas.begin(owner)
+        old.canvas.pixel(owner, 17, 3, 0xFFFFFF)
+        val grown = directory.expand(old.id, 11, 11, 10, 4, 3, 1, 1)
+        assertEquals(old.id, grown.id)
+        assertEquals("panel", grown.name)
+        assertEquals(0, grown.canvas.mode)
+        assertEquals(listOf(DisplayPanel(1, 1, panel)), grown.panels)
+        assertEquals(0x123456, grown.canvas.pixelAt(33, 19))
+        assertEquals(0, grown.canvas.pixelAt(0, 0))
+        kotlin.test.assertFalse(old.canvas.owns(owner))
+        val saved = DisplayDirectory.decode(directory.encode()).byId(old.id)!!
+        assertEquals(grown.panels, saved.panels)
+        assertEquals(0x123456, saved.canvas.pixelAt(33, 19))
+    }
+
+    @Test
+    fun `invalid expansion leaves geometry pixels and ownership unchanged`() {
+        val directory = DisplayDirectory()
+        val old = directory.create(0, 0, 0, 0, 2, 2, listOf(DisplayPanel(0, 0, UUID.randomUUID())))
+        val owner = Any()
+        old.canvas.acquire(owner) { true }
+        old.canvas.pixel(owner, 0, 0, 123)
+        val before = directory.encode()
+        assertFailsWith<IllegalArgumentException> { directory.expand(old.id, 0, 0, 0, 9, 2, 0, 0) }
+        assertFailsWith<IllegalArgumentException> { directory.expand(old.id, 0, 0, 0, 1, 2, 0, 0) }
+        assertFailsWith<IllegalArgumentException> { directory.expand(old.id, 1, 0, 0, 3, 2, 0, 0) }
+        kotlin.test.assertContentEquals(before, directory.encode())
+        kotlin.test.assertTrue(old.canvas.owns(owner))
+    }
+
+    @Test
     fun `decode rejects truncated trailing and invalid payloads`() {
         val directory = DisplayDirectory()
         directory.create(0, 0, 0, 0, 1, 1, listOf(DisplayPanel(0, 0, UUID.randomUUID())))
