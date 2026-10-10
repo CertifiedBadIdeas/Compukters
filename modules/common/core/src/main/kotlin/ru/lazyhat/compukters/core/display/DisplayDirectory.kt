@@ -142,6 +142,46 @@ class DisplayDirectory(
         return expanded
     }
 
+    /** Dismantle only installed panels; preserve each published tile, never private frames or shared names. */
+    fun split(id: UUID): List<DisplaySurface> {
+        val old = requireNotNull(surfaces[id]) { "Display was deleted" }
+        check(surfaces.size - 1 + old.panels.size <= MAXIMUM_SCREENS) { "Display count limit reached" }
+        val replacements =
+            old.panels.map { panel ->
+                val dx =
+                    when (old.facing) {
+                        0 -> -panel.column
+                        1 -> panel.column
+                        else -> 0
+                    }
+                val dz =
+                    when (old.facing) {
+                        2 -> panel.column
+                        3 -> -panel.column
+                        else -> 0
+                    }
+                val canvas = DisplayCanvas(1, 1, old.canvas.mode, changed)
+                canvas.restoreRgb(old.canvas.mode, old.canvas.tile(panel.column, panel.row))
+                DisplaySurface(
+                    UUID.randomUUID(),
+                    old.originX + dx,
+                    old.originY - panel.row,
+                    old.originZ + dz,
+                    old.facing,
+                    canvas,
+                    listOf(DisplayPanel(0, 0, panel.instance)),
+                )
+            }
+        surfaces.remove(id)
+        replacements.forEach { surface ->
+            surfaces[surface.id] = surface
+            surface.panels.forEach { memberships[it.instance] = surface.id }
+        }
+        old.canvas.retire()
+        changed()
+        return replacements
+    }
+
     fun join(
         id: UUID,
         panel: DisplayPanel,
@@ -160,7 +200,10 @@ class DisplayDirectory(
         val id = memberships.remove(instance) ?: return false
         val surface = surfaces.getValue(id)
         surface.members.removeAll { it.instance == instance }
-        if (surface.members.isEmpty()) surfaces.remove(id)
+        if (surface.members.isEmpty()) {
+            surfaces.remove(id)
+            surface.canvas.retire()
+        }
         changed()
         return true
     }

@@ -34,10 +34,18 @@ object DisplayAssembly {
             val first = read(CORNER_KEY).takeIf(String::isNotEmpty)?.toLong()?.let(BlockPos::of)
             if (player.isShiftKeyDown) {
                 val surface = requireNotNull(DisplayWorldAccess.surface(level, entity))
-                write(SCREEN_KEY, surface.id.toString())
-                write(CORNER_KEY, null)
-                write(DIMENSION_KEY, level.dimension().toString())
-                "selected"
+                if (selected == surface.id && first == null && read(DIMENSION_KEY) == level.dimension().toString() &&
+                    surface.canvas.columns * surface.canvas.rows > 1
+                ) {
+                    DisplayWorldAccess.split(level, surface.id)
+                    SELECTION_KEYS.forEach { write(it, null) }
+                    "split"
+                } else {
+                    write(SCREEN_KEY, surface.id.toString())
+                    write(CORNER_KEY, null)
+                    write(DIMENSION_KEY, level.dimension().toString())
+                    "selected"
+                }
             } else if (selected != null && first == null) {
                 require(read(DIMENSION_KEY) == level.dimension().toString())
                 DisplayWorldAccess.join(level, selected, entity)

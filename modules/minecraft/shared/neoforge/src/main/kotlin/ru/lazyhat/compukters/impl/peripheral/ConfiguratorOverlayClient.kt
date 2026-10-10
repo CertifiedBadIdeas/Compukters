@@ -145,11 +145,26 @@ internal object ConfiguratorOverlayClient {
 
                     2 -> {
                         when {
-                            hover == null || level?.getBlockState(hover)?.block !is DisplayBlock -> "display_only"
-                            selectedCorner != null -> "second_corner"
-                            selectedScreen != null && device.screen == selectedScreen -> "member"
-                            selectedScreen != null -> "join"
-                            else -> "first_corner"
+                            hover == null || level?.getBlockState(hover)?.block !is DisplayBlock -> {
+                                "display_only"
+                            }
+
+                            selectedCorner != null -> {
+                                "second_corner"
+                            }
+
+                            selectedScreen != null && device.screen == selectedScreen -> {
+                                if (screen != null && screen.columns * screen.rows > 1) "split" else "member"
+                            }
+
+                            selectedScreen != null -> {
+                                val selected = snapshot.screens.firstOrNull { it.id == selectedScreen }
+                                if (selected != null && hover !in selected.cells()) "extend" else "join"
+                            }
+
+                            else -> {
+                                "first_corner"
+                            }
                         }
                     }
 

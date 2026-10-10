@@ -86,7 +86,13 @@ A dimension-owned `DisplayStorage` SavedData contains a bounded `DisplayDirector
 plane and fixed rectangular geometry, actual panel UUIDs, a shared name, density and packed published RGB bytes.
 Missing panels are holes in the logical image. Last-panel destruction removes the record; chunk unload does not.
 Panel block entities persist only their instance identity, never duplicate the authoritative canvas. The configurator
-assembles at most 8x8 blocks, selects existing screens and joins replacement panels into holes.
+assembles at most 8x8 blocks, selects existing screens, expands to include standalone panels and splits into 1x1 canvases.
+New exact block instances automatically join a same-facing hole only when one saved screen claims that slot; exterior
+placement never merges screens. Multiple matching holes leave the panel separate for explicit selection. Expansion
+copies published pixels to preserve their physical locations, with black new area and stable canvas UUID/name/density.
+Replacing geometry retires old leases/private frames and invalidates existing endpoints through surface identity.
+Split crops only installed tiles, preserves density and removes the shared name/old rectangle. Quotas and loaded exact
+panels are checked before splitting; the matching network member becomes one member per new independent screen.
 
 `DisplayNetworkAccess` stores one network member under the canvas UUID, retaining the existing display provider and
 `text` device key. A physical panel is only an address hint; discovery and availability validate any loaded exact
