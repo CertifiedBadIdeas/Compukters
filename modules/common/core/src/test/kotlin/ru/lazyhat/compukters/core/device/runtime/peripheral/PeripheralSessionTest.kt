@@ -71,6 +71,16 @@ class PeripheralSessionTest {
     }
 
     @Test
+    fun `several contacts resolving to one logical device appear once in discovery`() {
+        val world = World()
+        world.devices[7] = world.devices.getValue(3)
+        val session = world.session()
+        val snapshot = session.openSnapshot(world.speed.id)
+        assertEquals(1, session.snapshotSize(snapshot))
+        assertSame(world.devices[3], session.endpoint(world.speed, session.snapshotGet(snapshot, 0)))
+    }
+
+    @Test
     fun `checkpoint restores exact handles discovery order and token high water marks`() {
         val world = World()
         val original = world.session()
