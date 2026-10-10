@@ -45,7 +45,7 @@ loader, filename, byte length and SHA-256/SHA-512. Their packaged mod identity,
 Guest bundle and bounded Compukters dependency are verified before staging.
 The `development` entry records the SDK version, archive filename, byte length and hashes.
 The SDK ZIP contains a file Maven repository with the plugin marker, plugin, compiler tooling, platform bundle,
-host contracts, both adapters and both development mod JARs, plus metadata and licenses.
+host contracts, both adapters and both development mod JARs, plus metadata, licenses and shared tag-only addon release tools.
 GitHub receives the addons and SDK; Modrinth receives only the two base-mod artifacts.
 Readers accept schema 3 without development assets, schema 1 without addons and schema 2 without a native component identity
 for recovery of previously staged releases. All schemas deliberately admit only the

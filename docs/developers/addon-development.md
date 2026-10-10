@@ -54,12 +54,15 @@ For existing local first-party builds, `:addon-gradle-plugin:publishAddonSdkToMa
 The common API and target adapters are compile-only dependencies and carry the SDK version. Isolated TestKit
 verification creates its own temporary Maven layout directly from the built SDK artifacts.
 
-The first-party Create addon under `addons/create` is itself a separate Gradle root and serves as the complete example.
-It owns its Gradle wrapper and includes the adjacent Compukters checkout as a composite build for local co-development.
+Create, Sable and Propulsion live in separate repositories, pinned as submodules under `addons/create`,
+`addons/sable` and `addons/propulsion`. Initialize them with `git submodule update --init --recursive`.
+The first-party Create addon is itself a separate Gradle root and serves as the complete example.
+It owns its Gradle wrapper and explicitly includes the configured Compukters checkout as a composite build for
+local co-development.
 Public SDK coordinates remain in the addon build, and explicit substitutions select the matching local projects. The
 runtime uses the adjacent checkout's self-contained development JAR and carries its included-build task dependency, so
 Gradle rebuilds it before `runClient` without publishing it to Maven Local or passing it through Loom's mod remap cache.
-After publishing the Gradle plugin and tooling SDK, run `check`,
+After staging the local SDK, run `check`,
 `buildProductionJar`, or `runClient` from `addons/create`. The Compukters root remains unaware of the addon and does not
 own or invoke its tasks. First-party addons use the two-part release policy below, independently of the SDK version.
 
@@ -77,8 +80,8 @@ compukters-create-1.21.1-neoforge-0.5-2.0.jar
 ```
 
 Here `0.5` is the target Compukters major/minor line and `2.0` is the Create addon's own API/update version. The
-`addonVersion` property in each first-party addon's `gradle.properties` owns its `x.y` value. The shared
-`addons/gradle/addon-versioning.gradle.kts` derives the target line from the adjacent Compukters checkout and expands
+`addonVersion` property in each first-party addon's `gradle.properties` owns its `x.y` value. Each repository owns
+`gradle/addon-versioning.gradle.kts`, which derives the target line from the selected SDK and expands
 the required base-mod dependency. The lower bound is the workspace version used to build the addon; the upper bound
 is the next minor line. A build against Compukters `0.5.0` therefore requires `[0.5.0,0.6.0)`. A build against `0.5.3`
 requires `[0.5.3,0.6.0)` even though its filename still contains `0.5`; use the declared dependency for the exact minimum.
@@ -250,9 +253,9 @@ The consumable `compuktersAddonBundle` configuration is also available to custom
 ## Joint development runs
 
 [`addons/dev`](https://github.com/CertifiedBadIdeas/Compukters/tree/dev/addons/dev) composes the main mod and the
-independent Create and Sable builds, with Aeronautics 1.3.1 (including Simulated/Offroad) and Propulsion: Simulated 1.1.5
+independent Create, Sable and Propulsion builds, with Aeronautics 1.3.1 (including Simulated/Offroad) and Propulsion: Simulated 1.1.5
 on the runtime classpath. From that directory, run `./gradlew-sandbox-dev-parallel-summary verifyAddons`
-for both addon checks, or `./gradlew-sandbox-dev-parallel runGameTestServer` for their shared real NeoForge scenarios.
+for all three addon checks, or `./gradlew-sandbox-dev-parallel runGameTestServer` for their shared real NeoForge scenarios.
 `runClient` and `runServer` use the same upstream dependency pins and ordinary development archives. This build
 produces no distributable umbrella mod; adding another addon does not introduce a dependency between existing addons.
 
@@ -273,7 +276,7 @@ records require Runtime ABI 1.13; runtime transports require C ABI 20.
 Limits are 8 nesting levels, 32 record/String nodes, 64 expanded fields, 4096 aggregate UTF-16 code units and a 64 KiB
 response. The native boundary validates and copies caller-owned responses. Normal VM advancement allocates rooted
 objects and Strings in slices, then publishes the root atomically. The host does not execute Guest construction code.
-See [the Sable addon](https://github.com/CertifiedBadIdeas/Compukters/tree/dev/addons/sable) for a complete nested record
+See [the Sable addon](https://github.com/CertifiedBadIdeas/Compukters-sable/tree/main) for a complete nested record
 API and its real assembly/return GameTest.
 
 Addon hosts are created separately for each live Guest program when it first calls an addon. A suspended parent

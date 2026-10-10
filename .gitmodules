@@ -2,3 +2,12 @@
 	path = host/compukter-vm
 	url = git@github.com:CertifiedBadIdeas/Compukter-VM.git
 	branch = main
+[submodule "addons/create"]
+	path = addons/create
+	url = https://github.com/CertifiedBadIdeas/Compukers-create.git
+[submodule "addons/sable"]
+	path = addons/sable
+	url = https://github.com/CertifiedBadIdeas/Compukters-sable.git
+[submodule "addons/propulsion"]
+	path = addons/propulsion
+	url = https://github.com/CertifiedBadIdeas/Compukers-propulsion.git
