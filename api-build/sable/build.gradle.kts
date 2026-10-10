@@ -13,6 +13,9 @@ repositories {
 }
 
 val sableSources = rootProject.layout.projectDirectory.dir("../addons/sable/src/compuktersAddon/kotlin")
+val addonRevision = providers.exec {
+    commandLine("git", "-C", rootProject.file("../addons/sable"), "rev-parse", "HEAD")
+}.standardOutput.asText.map { it.trim() }
 val addonVersion = providers.fileContents(rootProject.layout.projectDirectory.file("../addons/sable/gradle.properties")).asText.map { properties ->
     Regex("(?m)^addonVersion\\s*=\\s*(\\S+)").find(properties)?.groupValues?.get(1)
         ?: error("Missing addonVersion in addons/sable/gradle.properties")
@@ -28,7 +31,7 @@ dokka {
         enableJdkDocumentationLink.set(false)
         sourceLink {
             localDirectory.set(sableSources.asFile)
-            remoteUrl("https://github.com/CertifiedBadIdeas/Compukters/blob/dev/addons/sable/src/compuktersAddon/kotlin")
+            remoteUrl("https://github.com/CertifiedBadIdeas/Compukters-sable/blob/${addonRevision.get()}/src/compuktersAddon/kotlin")
             remoteLineSuffix.set("#L")
         }
     }

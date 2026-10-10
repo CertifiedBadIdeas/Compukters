@@ -13,6 +13,9 @@ repositories {
 }
 
 val createSources = rootProject.layout.projectDirectory.dir("../addons/create/src/compuktersAddon/kotlin")
+val addonRevision = providers.exec {
+    commandLine("git", "-C", rootProject.file("../addons/create"), "rev-parse", "HEAD")
+}.standardOutput.asText.map { it.trim() }
 val addonVersion = providers.fileContents(rootProject.layout.projectDirectory.file("../addons/create/gradle.properties")).asText.map { properties ->
     Regex("(?m)^addonVersion\\s*=\\s*(\\S+)").find(properties)?.groupValues?.get(1)
         ?: error("Missing addonVersion in addons/create/gradle.properties")
@@ -28,7 +31,7 @@ dokka {
         enableJdkDocumentationLink.set(false)
         sourceLink {
             localDirectory.set(createSources.asFile)
-            remoteUrl("https://github.com/CertifiedBadIdeas/Compukters/blob/dev/addons/create/src/compuktersAddon/kotlin")
+            remoteUrl("https://github.com/CertifiedBadIdeas/Compukers-create/blob/${addonRevision.get()}/src/compuktersAddon/kotlin")
             remoteLineSuffix.set("#L")
         }
     }

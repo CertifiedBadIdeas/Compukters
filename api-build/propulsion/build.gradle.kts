@@ -13,6 +13,9 @@ repositories {
 }
 
 val propulsionSources = rootProject.layout.projectDirectory.dir("../addons/propulsion/src/compuktersAddon/kotlin")
+val addonRevision = providers.exec {
+    commandLine("git", "-C", rootProject.file("../addons/propulsion"), "rev-parse", "HEAD")
+}.standardOutput.asText.map { it.trim() }
 val addonVersion = providers.fileContents(rootProject.layout.projectDirectory.file("../addons/propulsion/gradle.properties")).asText.map { properties ->
     Regex("(?m)^addonVersion\\s*=\\s*(\\S+)").find(properties)?.groupValues?.get(1)
         ?: error("Missing addonVersion in addons/propulsion/gradle.properties")
@@ -28,7 +31,7 @@ dokka {
         enableJdkDocumentationLink.set(false)
         sourceLink {
             localDirectory.set(propulsionSources.asFile)
-            remoteUrl("https://github.com/CertifiedBadIdeas/Compukters/blob/dev/addons/propulsion/src/compuktersAddon/kotlin")
+            remoteUrl("https://github.com/CertifiedBadIdeas/Compukers-propulsion/blob/${addonRevision.get()}/src/compuktersAddon/kotlin")
             remoteLineSuffix.set("#L")
         }
     }
