@@ -31,13 +31,13 @@ Use [Compukers-addon-template](https://github.com/CertifiedBadIdeas/Compukers-ad
 1.21.1 addon. It includes a Guest greeting API, generated host handler, ABI lock, wrapper and a sample IDE project.
 Gradle runs on JDK 25; the addon targets Java 21.
 
-Tagged Compukters releases starting with 0.6.0 include `compukters-addon-development-X.Y.Z.zip` on GitHub Releases.
+Tagged Compukters releases starting with 0.5.1 include `compukters-addon-development-X.Y.Z.zip` on GitHub Releases.
 The template downloads this exact archive and verifies it against the release's `checksums.sha256`; no GitHub token
 is needed for public assets. The archive contains a local file Maven repository, so the public SDK coordinates and
 plugin DSL remain unchanged. There is no separate hosted Maven repository for Compukters dependencies.
 Kotlin, NeoForge and other upstream build dependencies still use their normal repositories.
 
-The template defaults to `compuktersRelease=0.6.0`. Until that release is published, use local mode explicitly:
+The template defaults to `compuktersRelease=0.5.1`. Until that release is published, use local mode explicitly:
 
 ```shell
 # In the Compukters checkout:
