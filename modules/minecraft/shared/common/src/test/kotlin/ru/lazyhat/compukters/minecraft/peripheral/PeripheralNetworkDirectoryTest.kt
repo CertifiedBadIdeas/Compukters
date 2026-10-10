@@ -196,6 +196,22 @@ class PeripheralNetworkDirectoryTest {
         assertEquals(network.id, directory.networkOf(screen.instance)?.id)
     }
 
+    @Test
+    fun `splitting preserves network membership for each independent panel and rejects overflow atomically`() {
+        val directory = PeripheralNetworkDirectory()
+        val screen = member(0)
+        val network = directory.createFor(screen)
+        val panels = listOf(member(0), member(1))
+        directory.replace(screen.instance, panels)
+        assertNull(directory.networkOf(screen.instance))
+        assertEquals(panels, directory.get(network.id)!!.members)
+        panels.forEach { assertEquals(network.id, directory.networkOf(it.instance)?.id) }
+        repeat(PeripheralNetworkDirectory.MAXIMUM_MEMBERS - panels.size) { directory.bind(network.id, member(it + 10)) }
+        val before = directory.snapshot()
+        assertFailsWith<IllegalStateException> { directory.replace(panels.first().instance, listOf(member(0), member(1))) }
+        assertEquals(before, directory.snapshot())
+    }
+
     private fun member(
         x: Int,
         provider: String = "display",

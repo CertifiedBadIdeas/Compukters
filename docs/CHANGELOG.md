@@ -31,8 +31,10 @@ headings so this page has one stable URL that can be shared outside the reposito
 - Holding the Peripheral Configurator reveals nearby devices, networks and screens with animated outlines hidden
   behind walls. Screen holes, unjoined replacement panels, selected groups and assembly previews are visible,
   with context and action hints beside the crosshair.
-- The Peripheral Configurator assembles planar screens up to 8×8 blocks, including holes. Replacing a missing panel
-  restores its portion of the image; removing the last panel deletes the screen. Programs select 16×16, 32×32, 64×64
+- The Peripheral Configurator assembles and expands planar screens up to 8×8 blocks, including holes. Matching
+  replacement panels automatically rejoin and restore their image and network; removing the last panel deletes the
+  screen. Selecting a screen and Shift-clicking it again splits it into separate panels, preserving their images,
+  resolution and network while removing the shared name. Programs select 16×16, 32×32, 64×64
   or 128×128 pixels per block. A screen has one network binding shared by all panels. Assembly inherits a single
   existing network or clears conflicting bindings; any surviving panel keeps the screen reachable. Existing
   `TextDisplay` programs use the same persistent canvas, with their text grid spanning the entire composite screen.
