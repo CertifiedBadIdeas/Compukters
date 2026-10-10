@@ -125,7 +125,7 @@ class ComputerBlockResourceTest {
         assertEquals("compukters:peripheral_cable", entry["name"].asString)
 
         val translations = resourceJson("/assets/compukters/lang/en_us.json")
-        assertEquals("Peripheral Cable", translations["block.compukters.peripheral_cable"].asString)
+        assertEquals("Computer Cable", translations["block.compukters.peripheral_cable"].asString)
     }
 
     @Test
