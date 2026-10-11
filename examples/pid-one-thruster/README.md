@@ -43,8 +43,8 @@ reduce `POSITION_P` if it repeatedly overshoots, and increase `POSITION_D` cauti
 `POSITION_I` last. Gains depend on the engine's lever arm, construction inertia, nozzle smoothing and actual API latency.
 
 The example assumes gravity of `9.81 m/s²`; change the value in `steer` if the world uses another setting. It uses
-bounded arithmetic helpers because Guest `kotlin.math` is currently unavailable. Physics observations are asynchronous:
-the loop uses elapsed server ticks instead of assuming that each iteration takes one tick. Velocity is estimated from
+bounded arithmetic helpers for its controller calculations; portable Guest `kotlin.math` is also available. Physics
+observations are asynchronous: the loop uses elapsed server ticks instead of assuming that each iteration takes one tick. Velocity is estimated from
 successive rotation-point positions, with a low-pass filter. Repeated snapshots do not advance the controller;
 paused snapshots or gaps over ten ticks reset integral and velocity history. Integral is disabled for the first
 100 ticks and frozen after saturated commands.
@@ -56,8 +56,12 @@ projection of the commanded nozzle direction; the actual nozzle approaches its t
 
 The program stops if tilt exceeds 60° or thrust cannot provide a usable upward component. Ctrl+C also stops it.
 Closing the handle or terminating the program releases overrides and returns control to the engine's current
-redstone/link inputs and saved settings; it does not latch the engine off. Stateful Propulsion handles currently
-prevent this program from resuming through hibernation.
+redstone/link inputs and saved settings; it does not latch the engine off.
+
+Computer or construction unload/reload and orderly world shutdown preserve the program's target, PID state and engine
+handle. Propulsion restores owned steering, throttle and thrust commands before execution continues. A missing or
+replaced engine leaves the old handle stale; an ownership conflict selects a fresh boot. Thrust may lapse during
+unload or restoration while construction physics continues, so resumption does not guarantee uninterrupted flight.
 
 ## Verification
 

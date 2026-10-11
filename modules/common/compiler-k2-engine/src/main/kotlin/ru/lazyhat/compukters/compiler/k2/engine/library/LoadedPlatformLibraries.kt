@@ -44,6 +44,7 @@ fun loadPlatformLibraries(modules: List<PlatformModule>): LoadedPlatformLibrarie
                 module to symbolicLibraryArtifact(ArtifactReader.read(fragment.artifact.toByteArray()))
             }
         }
+    val aliases = PlatformSignatureAliases(modules)
     val functions = mutableListOf<PlatformFunctionLink>()
     val types = mutableListOf<PlatformTypeLink>()
     val fields = mutableListOf<PlatformFieldLink>()
@@ -97,21 +98,22 @@ fun loadPlatformLibraries(modules: List<PlatformModule>): LoadedPlatformLibrarie
                     !declaration.trustedExternal && declaration.signature.startsWith("fun(") &&
                         declaration.identity !in platformModule.sourceDeclarations
                 }.map { declaration ->
+                    val signature = aliases.expand(declaration.signature, declaration.symbol)
                     val simpleName = declaration.symbol.substringAfterLast('.')
                     val candidates =
                         library.exports.filter { export ->
                             export.kind == SymbolKind.FUNCTION &&
                                 library.strings[export.name.value.toInt()].toString().let { name ->
-                                    name == simpleName || name.startsWith("$simpleName#")
+                                    name == simpleName || name.startsWith("$simpleName#") || name.startsWith("${declaration.symbol}#")
                                 }
                         }
                     val matching =
                         candidates.filter { export ->
-                            library.functionSignature(export.signature).shortTypeNames() == declaration.signature.shortTypeNames()
+                            library.functionSignature(export.signature).shortTypeNames() == signature.shortTypeNames()
                         }
                     val exactName = candidates.filter { export -> library.strings[export.name.value.toInt()].toString() == simpleName }
                     val sourceShape =
-                        declaration.signature
+                        signature
                             .removePrefix("fun")
                             .replaceFirst(":", "->")
                             .shortTypeNames()
@@ -128,7 +130,7 @@ fun loadPlatformLibraries(modules: List<PlatformModule>): LoadedPlatformLibrarie
                         library.exports.singleOrNull { export ->
                             export.kind == SymbolKind.FUNCTION &&
                                 library.strings[export.name.value.toInt()].toString() ==
-                                platformFunctionExportName(declaration.symbol, declaration.signature)
+                                platformFunctionExportName(declaration.symbol, signature)
                         }
                     val export =
                         exactDeclaration ?: mangled.singleOrNull() ?: matching.singleOrNull() ?: exactName.singleOrNull()
@@ -139,7 +141,7 @@ fun loadPlatformLibraries(modules: List<PlatformModule>): LoadedPlatformLibrarie
                             )
                     PlatformFunctionLink(
                         declaration.symbol,
-                        declaration.signature,
+                        signature,
                         library.strings[export.name.value.toInt()].toString(),
                         moduleHash.copyOf(),
                         declaration.defaultArguments,

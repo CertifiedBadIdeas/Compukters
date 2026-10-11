@@ -58,6 +58,8 @@ Read compiler diagnostics before deployment and inspect the target terminal for 
 stacks. Use **Ctrl+T** in the terminal or IDE target terminal to stop the foreground command and its nested work and
 return to the shell. Release device control before exiting when a device API exposes `close()`.
 
-Files in `/home` survive ordinary world saves and reloads. Program memory and tasks currently do not survive VM
-recreation: transparent execution hibernation is under design. Treat persistence of files and continuation of execution
-as separate guarantees.
+Files in `/home` survive ordinary world saves and reloads. Running programs also retain memory, tasks and unsaved
+editor state through carrier unload/reload and orderly server shutdown when their addon resources support hibernation.
+The base runtime, Sable observations and Propulsion engine controls support this continuation; active Create resources
+do not yet support capture. Failed capture or restoration selects a fresh boot while retaining `/home` and the computer
+identity. See [Unload, resume and restart]({{ '/GETTING-STARTED/' | relative_url }}#unload-resume-and-restart) for details.
