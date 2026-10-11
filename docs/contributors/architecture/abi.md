@@ -62,6 +62,15 @@ platform, artifact, codegen and native ABI contracts are unchanged. Both operati
 queue capacity and deadlines. Queued preparation yields to explicit compilation; an active preparation completes
 before the next request. No project FIR or IR enters the retained library cache.
 
+## Guest geometry module identity
+
+`stdlib:core` 1.13.0 adds reusable 2D/3D Int/Float value-class vectors, Position/Size aliases and 2D rectangles.
+Source metadata retains alias spellings; the library loader expands admitted aliases when matching canonical
+compiled signatures, preserving the underlying nominal type and default arguments. Value-class initializer
+literals participate in the artifact constant pool. Bundle format 9, module format 5, platform ABI 3,
+metadata format 6 and native ABI 22 remain unchanged. Dependent libraries resolve the matching module content
+identities; geometry uses existing value-class and math execution instructions.
+
 ## Guest hash collection module identities
 
 Guest hash collections introduce public Set/Map contracts in `kotlin:builtins` 1.9.0 and ordinary source

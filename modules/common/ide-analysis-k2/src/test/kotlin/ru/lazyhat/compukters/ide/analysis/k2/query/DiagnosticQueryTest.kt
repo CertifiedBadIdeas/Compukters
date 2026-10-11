@@ -91,6 +91,43 @@ class DiagnosticQueryTest {
     }
 
     @Test
+    fun `stdlib geometry aliases and vector methods resolve with source and metadata inputs`() {
+        for (attachedSources in listOf(false, true)) {
+            val source =
+                """
+                import kotlin.math.*
+                fun main() {
+                    val point: Position2i = 10 xy 20
+                    val size: Size2i = 80 by 24
+                    val bounds: Rect2i = point sized size
+                    val fractional: Vector2f = (3f xy 4f).normalized()
+                    val volume: Position3i = Vector3i(1, 2, 3)
+                    check(point in bounds && volume.z == 3)
+                    check(fractional.x > 0f)
+                }
+                """.trimIndent()
+            K2QueryFixture.sourceWithGuestApi(attachedSources, "main.kt" to source).use { fixture ->
+                val result = fixture.execute(fixture.presentation()) as AnalysisResult.Presentation
+                val active = result.value.accept(fixture.identity) as SnapshotPresentationAcceptance.Active
+                assertTrue(active.diagnostics.none { it.severity == EditorDiagnosticSeverity.Error }, active.diagnostics.toString())
+                val completion =
+                    fixture.execute(
+                        AnalysisQuery.Completion(
+                            fixture.identity,
+                            ru.lazyhat.compukters.compiler.worker.protocol.VirtualSourcePath
+                                .kotlin("main.kt"),
+                            source.lastIndexOf("fractional.x") + "fractional.".length,
+                            ru.lazyhat.compukters.ide.analysis.CompletionTrigger.Manual,
+                        ),
+                    ) as AnalysisResult.Completion
+                for (name in listOf("x", "y", "length", "normalized", "roundToInt", "floorToInt", "ceilToInt", "dot", "cross", "lerp")) {
+                    assertTrue(completion.items.any { it.insertText == name }, completion.items.toString())
+                }
+            }
+        }
+    }
+
+    @Test
     fun `native MFVC analysis preserves source and addon nominal types and members`() {
         for (attachedSources in listOf(false, true)) {
             val source =

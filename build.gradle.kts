@@ -323,6 +323,16 @@ fun registerKotlinVmConformance(
 }
 
 registerKotlinVmConformance(
+    taskName = "testKotlinGeometryVmConformance",
+    taskDescription = "Executes Guest vectors, aliases, geometry bounds and numerical edge cases.",
+    artifactTask = ":compiler-k2:generateGeometryConformanceArtifact",
+    artifact = project(":compiler-k2").layout.buildDirectory.file("generated/conformance/kotlin-geometry.cpkt"),
+    cargoTargetDirectory = ".toolchain/build/cargo/compiler-k2-math-conformance",
+    artifactEnvironmentVariable = "COMPUKTER_KOTLIN_GEOMETRY_ARTIFACT",
+    conformanceScenario = "geometry",
+)
+
+registerKotlinVmConformance(
     taskName = "testKotlinMathVmConformance",
     taskDescription = "Executes portable Guest math, numerical edge cases and callable references.",
     artifactTask = ":compiler-k2:generateMathConformanceArtifact",
