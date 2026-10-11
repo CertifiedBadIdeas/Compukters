@@ -24,8 +24,10 @@ headings so this page has one stable URL that can be shared outside the reposito
   geometry for cursor/drawing operations, terminal size observations and named palette colors. The old public
   raw event protocol is replaced; built-in shell, editor and benchmark agent use the new API.
 
-- Contributors can opt into Gradle Configuration Cache for built-in program generation, Minecraft classes and
-  shared tooling assembly. Independent built-in compiler tasks can run in parallel within the same project;
+- Contributors can opt into Gradle Configuration Cache for built-in program generation, Minecraft classes,
+  shared tooling assembly and the global `build` and `verifyLocalFull` task graphs. Dependency isolation, archive and license
+  checks remain active on replay, including detection of newly added media files. Independent built-in compiler tasks
+  can run in parallel within the same project;
   cached build-version selection tracks Git tags on `HEAD`. Minecraft builds use Loom directly for common
   module packaging and development runs, without the Architectury Plugin transformer or Java agent.
 
