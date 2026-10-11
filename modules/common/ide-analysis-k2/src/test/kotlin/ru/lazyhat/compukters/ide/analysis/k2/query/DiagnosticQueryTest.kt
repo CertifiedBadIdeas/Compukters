@@ -72,6 +72,38 @@ class DiagnosticQueryTest {
     }
 
     @Test
+    fun `reference array loops resolve nullable generic and value class elements with source and metadata inputs`() {
+        val source =
+            """
+            import kotlin.math.Vector3f
+            class Node(val value: Int)
+            fun <T> last(values: Array<T>, fallback: T): T {
+                var result = fallback
+                for (value in values) result = value
+                return result
+            }
+            fun main() {
+                outer@ for (node in arrayOf<Node?>(Node(1), null)) {
+                    try {
+                        for (point in Array(3) { Vector3f(it.toFloat(), 0f, 0f) }) {
+                            if (point.x == 1f) continue@outer
+                            check(node?.value == 1)
+                        }
+                    } finally { check(true) }
+                }
+                check(last(arrayOf<Int?>(1, null), null) == null)
+            }
+            """.trimIndent()
+        for (attachedSources in listOf(false, true)) {
+            K2QueryFixture.sourceWithGuestApi(attachedSources, "main.kt" to source).use { fixture ->
+                val result = fixture.execute(fixture.presentation()) as AnalysisResult.Presentation
+                val active = result.value.accept(fixture.identity) as SnapshotPresentationAcceptance.Active
+                assertTrue(active.diagnostics.none { it.severity == EditorDiagnosticSeverity.Error }, active.diagnostics.toString())
+            }
+        }
+    }
+
+    @Test
     fun `do while analysis admits body scoped conditions and local cleanup jumps`() {
         val source =
             """

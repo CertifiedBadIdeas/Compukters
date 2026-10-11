@@ -5434,6 +5434,152 @@ class MinimalScriptLoweringTest {
         }
 
     @Test
+    fun `reference array loops preserve specialized elements source identity and cleanup for vm execution`() =
+        withAdapter { adapter ->
+            val source =
+                """
+                import kotlin.math.Vector3f
+                class Node(val value: Int)
+                class Cell<T>(val value: T)
+                class Source(var calls: Int, var values: Array<Node>)
+                value class Id(val value: Int)
+                value class Label(val value: String)
+                fun selected(source: Source): Array<Node> { source.calls += 1; return source.values }
+                fun <T> last(values: Array<T>, fallback: T): T {
+                    var result = fallback
+                    for (value in values) result = value
+                    return result
+                }
+                fun main() {
+                    val first = Node(1)
+                    val original = arrayOf(first, Node(2), Node(3))
+                    val source = Source(0, original)
+                    var sum = 0
+                    for (node in selected(source)) {
+                        source.values = arrayOf(Node(100))
+                        original[1] = Node(7)
+                        sum += node.value
+                    }
+                    check(source.calls == 1 && sum == 11 && original[0] === first)
+                    check(last(original, first).value == 3)
+                    check(last(emptyArray<Node>(), first) === first)
+                    var empty = 0
+                    for (node in emptyArray<Node>()) empty += node.value
+                    check(empty == 0)
+
+                    var text = ""
+                    for (value in arrayOf("a", "b", "c")) text += value
+                    check(text == "abc")
+                    check(last(arrayOf("a", "b"), "") == "b")
+                    var nullableSum = 0
+                    for (node in arrayOf<Node?>(first, null, Node(4))) nullableSum += node?.value ?: 0
+                    check(nullableSum == 5)
+                    for (value in arrayOf<Int?>(2, null, 3)) nullableSum += value ?: 0
+                    check(nullableSum == 10)
+                    check(last(arrayOf<Int?>(2, null, 9), null) == 9)
+                    var doubles = 0.0
+                    for (value in arrayOf<Double?>(1.5, null, 2.5)) doubles += value ?: 0.0
+                    check(doubles == 4.0)
+                    for (cell in arrayOf(Cell("x"), Cell("y"))) text += cell.value
+                    check(text == "abcxy")
+                    check(last(arrayOf(Cell(6), Cell(7)), Cell(0)).value == 7)
+
+                    var ids = 0
+                    for (id in arrayOf(Id(3), Id(4))) ids += id.value
+                    check(ids == 7 && last(arrayOf(Id(5)), Id(0)).value == 5)
+                    for (id in arrayOf<Id?>(Id(8), null)) ids += id?.value ?: 0
+                    check(ids == 15)
+                    for (label in arrayOf(Label("z"))) text += label.value
+                    check(text == "abcxyz")
+                    var x = 0f
+                    for (point in Array(4) { Vector3f(it.toFloat(), 1f, -1f) }) x += point.x
+                    check(x == 6f)
+                    check(last(arrayOf(Vector3f(4f, 5f, 6f)), Vector3f(0f, 0f, 0f)).z == 6f)
+                    for (point in arrayOf<Vector3f?>(Vector3f(2f, 0f, 0f), null)) x += point?.x ?: 0f
+                    check(x == 8f)
+
+                    var objects = 0
+                    for (value in arrayOf<Any>(first, "word", 7, Id(9))) {
+                        if (value is Node) { check(value === first); objects += value.value }
+                        if (value is String) objects += value.length
+                        if (value is Int) objects += value
+                        if (value is Id) objects += value.value
+                    }
+                    check(objects == 21)
+
+                    var visited = 0
+                    var cleaned = 0
+                    var enclosing = 0
+                    try {
+                        outer@ for (node in Array(5) { Node(it) }) {
+                            do {
+                                try {
+                                    visited += 1
+                                    if (node.value == 1) continue@outer
+                                    if (node.value == 3) break@outer
+                                    sum += node.value
+                                    continue@outer
+                                } finally { cleaned += 1 }
+                            } while (true)
+                        }
+                        check(visited == 4 && cleaned == 4 && enclosing == 0 && sum == 13)
+                    } finally { enclosing += 1 }
+                    check(enclosing == 1)
+                    var local = 0
+                    for (node in original) {
+                        if (node.value == 1) continue
+                        local += node.value
+                        break
+                    }
+                    check(local == 7)
+                    var skipped = 0
+                    target@ for (value in 1..3) {
+                        for (node in original) { skipped += node.value; continue@target }
+                    }
+                    check(skipped == 3)
+
+                    var caught = 0
+                    try {
+                        for (node in original) {
+                            try { error("body") } finally { cleaned += 1 }
+                        }
+                    } catch (failure: IllegalStateException) { caught += 1 }
+                    check(caught == 1 && cleaned == 5)
+                    var churn = 0
+                    for (node in Array(8) { Node(it) }) {
+                        var allocations = 0
+                        while (allocations < 3000) { Node(allocations); allocations += 1 }
+                        churn += node.value
+                    }
+                    check(churn == 28 && original[0] === first)
+                    var quota = 0
+                    for (node in Array(1000) { Node(it) }) { quota += 1 }
+                    check(quota == 1000)
+                }
+                """.trimIndent()
+            val first = adapter.compile(request(source))
+            val second = adapter.compile(request(source))
+            val artifact = assertNotNull(first.artifact, first.diagnostics.joinToString()).toByteArray()
+            assertContentEquals(artifact, assertNotNull(second.artifact, second.diagnostics.joinToString()).toByteArray())
+            System.getProperty("compukter.vm.referenceArrayArtifact")?.let { output ->
+                Path.of("$output.loops.cpkt").also { it.parent.createDirectories() }.writeBytes(artifact)
+            }
+        }
+
+    @Test
+    fun `reference array loops reject unsupported storage and stored iterators`() =
+        withAdapter { adapter ->
+            for (source in listOf(
+                "fun main() { for (value in arrayOf(1)) { check(value > 0) } }",
+                "fun main() { val iterator = arrayOf(\"a\").iterator(); check(iterator.hasNext()) }",
+            )) {
+                val result = adapter.compile(request(source))
+                assertNull(result.artifact, source)
+                assertTrue(result.hasErrors, result.diagnostics.toString())
+            }
+        }
+
+    @Test
     fun `reference arrays reject unsupported element representations`() =
         withAdapter { adapter ->
             listOf(
@@ -7837,19 +7983,6 @@ class MinimalScriptLoweringTest {
             assertTrue(first.diagnostics.none { it.severity.name == "ERROR" }, first.diagnostics.toString())
             System.getProperty("compukter.vm.intLoopsArtifact")?.let { output ->
                 Path.of(output).also { it.parent.createDirectories() }.writeBytes(artifact)
-            }
-        }
-
-    @Test
-    fun `unsupported loop forms publish no artifact`() =
-        withAdapter { adapter ->
-            listOf(
-                "fun main() { for (value in arrayOf(1)) { value + 1 } }",
-            ).forEach { source ->
-                val result = adapter.compile(request(source))
-
-                assertNull(result.artifact, source)
-                assertTrue(result.hasErrors, source)
             }
         }
 
