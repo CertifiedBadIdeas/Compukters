@@ -883,6 +883,11 @@ object IdeRenderer {
                 hitTargets
                     .asReversed()
                     .firstOrNull { it.tooltip != null && it.bounds.contains(pointerX, pointerY) } ?: return
+            val diagnosticTargets = hitTargets.filter { it.diagnostic != null && it.bounds.contains(pointerX, pointerY) }
+            if (diagnosticTargets.isNotEmpty()) {
+                IdeDiagnosticTooltip.draw(this, geometry, diagnosticTargets)
+                return
+            }
             val value = checkNotNull(target.tooltip)
             val maximumWidth = (geometry.panel.width - TOOLTIP_MARGIN * 2).coerceAtLeast(1)
             val width = minOf(value.length * 6 + TOOLTIP_HORIZONTAL_PADDING * 2, maximumWidth)

@@ -94,6 +94,99 @@ import kotlin.test.assertTrue
 
 class IdeRendererStateTest {
     @Test
+    fun `long argument hints keep the active parameter visible with wrapped source-safe ranges`() {
+        val source = "fun main() { send(1) }"
+        val signature = "send(" + (0..99).joinToString(", ") { "parameter$it: List<String?>" } + ", selected: Int): Unit"
+        val start = signature.indexOf("selected")
+        val editor =
+            semanticEditor(source, caretUtf16 = source.indexOf('1'), parameterInfo = { identity, path ->
+                IdeParameterInfoState(
+                    identity,
+                    path,
+                    0,
+                    source.indexOf('1'),
+                    EditorRange(source.indexOf("send"), source.indexOf(')', source.indexOf("send")) + 1),
+                    listOf(ParameterInfoItem(signature, EditorRange(start, start + "selected: Int".length), true)),
+                    32,
+                )
+            }) { _, _ -> IdeSemanticInteraction.None }
+        val model = IdeRenderer.extract(workspaceState(editor, IdeBuildState.Idle), geometry())
+        val highlighted = model.text.filter { it.kind == IdeTextKind.ParameterInfo && it.color == IdeColors.ACCENT }
+        assertTrue(highlighted.joinToString("") { it.value }.contains("selected: Int"))
+        assertTrue(model.text.any { it.kind == IdeTextKind.ParameterInfo && it.value == "… " })
+        val popup = model.panels.single { it.kind == IdePanelKind.Dialog }.bounds
+        assertTrue(geometry().editor.contains(popup))
+        assertTrue(model.fills.filter { it.kind == IdeFillKind.ParameterInfoActive }.all { popup.contains(it.bounds) })
+        assertTrue(
+            model.text.filter { it.kind == IdeTextKind.ParameterInfo }.all { run ->
+                run.x >= popup.left && run.x + visualColumnsForTest(run.value) * IdeCodeFontProfile.DEFAULT.cellWidth <= popup.right
+            },
+        )
+    }
+
+    private fun visualColumnsForTest(value: String): Int = value.codePointCount(0, value.length)
+
+    @Test
+    fun `diagnostic tokens retain exact styles clipped waves and grouped noninteractive hover`() {
+        val source = "\t😀 missingSymbol; other"
+        val start = source.indexOf("missingSymbol")
+        val range = EditorRange(start, start + "missingSymbol".length)
+        val path = VirtualSourcePath.kotlin("src/main.kt")
+        val error =
+            IdeDiagnosticRow(
+                EditorDiagnostic(
+                    EditorDiagnosticSeverity.Error,
+                    "Unknown symbol",
+                    path,
+                    range,
+                    ru.lazyhat.compukters.ide.analysis.EditorDiagnosticHighlight.UnresolvedReference,
+                ),
+                source,
+            )
+        val warning = IdeDiagnosticRow(EditorDiagnostic(EditorDiagnosticSeverity.Warning, "Second problem", path, range), source)
+        val otherStart = source.indexOf("other")
+        val other =
+            IdeDiagnosticRow(
+                EditorDiagnostic(
+                    EditorDiagnosticSeverity.Error,
+                    "Type mismatch",
+                    path,
+                    EditorRange(otherStart, source.length),
+                ),
+                source,
+            )
+        val stale =
+            IdeDiagnosticRow(
+                EditorDiagnostic(EditorDiagnosticSeverity.Error, "Old problem", path, range),
+                source.replace("missingSymbol", "differentName"),
+            )
+        val editor = semanticEditor(source, firstVisibleColumn = 8) { _, _ -> IdeSemanticInteraction.None }
+        val base = workspaceState(editor, IdeBuildState.Idle)
+        val workspace = (base.page as IdePageState.Workspace).value
+        val state =
+            base.copy(
+                page = IdePageState.Workspace(workspace.copy(diagnostics = IdeDiagnostics(listOf(error, warning, other, stale)))),
+            )
+        val model = IdeRenderer.extract(state, geometry())
+        assertEquals(IdeColors.ERROR, model.text.single { it.value == "missingSymbol" }.color)
+        assertTrue(model.text.single { it.value == "other" }.color != IdeColors.ERROR)
+        val waves = model.fills.filter { it.kind == IdeFillKind.DiagnosticUnderline }
+        assertTrue(waves.isNotEmpty())
+        val code = IdeSourceGeometry(editor, geometry()).codeBounds
+        assertTrue(waves.all { code.contains(it.bounds) })
+        val tokenHits = model.hitTargets.filter { it.diagnostic != null && !it.enabled }
+        assertTrue(tokenHits.none { it.diagnostic == stale })
+        assertTrue(tokenHits.all { code.contains(it.bounds) })
+        val hit = tokenHits.first { it.diagnostic == error }
+        val hovered = IdeRenderer.extract(state, geometry(), pointerX = hit.bounds.left + 1, pointerY = hit.bounds.top + 1)
+        val text = hovered.text.filter { it.kind == IdeTextKind.Tooltip }
+        assertTrue(text.any { it.value == "Unknown symbol" })
+        assertTrue(text.any { it.value == "Second problem" })
+        assertTrue(text.none { it.value == "Old problem" })
+        assertTrue(text.all { requireNotNull(it.clip).contains(IdeRect(it.x, it.y, it.x + 1, it.y + 1)) })
+    }
+
+    @Test
     fun `horizontal source scrolling keeps text selection and hidden caret out of the gutter`() {
         val text = "val name = \"" + "a".repeat(100) + "\""
         val editor =
@@ -881,7 +974,7 @@ class IdeRendererStateTest {
                 .startsWith("2 errors · 1 warning"),
         )
         val targets = model.hitTargets.filter { it.action == IdeHitAction.DiagnosticChoice }
-        val gutter = targets.single { it.bounds.top == bounds.editor.top }
+        val gutter = targets.single { it.enabled && it.bounds.top == bounds.editor.top }
         assertEquals(error, gutter.diagnostic)
         assertFalse(targets.single { it.diagnostic == stale }.enabled)
         val commands = mutableListOf<ru.lazyhat.compukters.ide.client.state.IdeCommand>()
@@ -2099,6 +2192,7 @@ class IdeRendererStateTest {
         gitLineChanges: List<ru.lazyhat.compukters.ide.git.GitLineChange> = emptyList(),
         firstVisibleColumn: Int = 0,
         selection: EditorRange? = null,
+        parameterInfo: ((AnalysisSnapshotIdentity, VirtualSourcePath) -> IdeParameterInfoState)? = null,
         interaction: (AnalysisSnapshotIdentity, VirtualSourcePath) -> IdeSemanticInteraction,
     ): IdeEditorView.Text {
         val document = EditorDocument(source)
@@ -2131,6 +2225,7 @@ class IdeRendererStateTest {
                     0,
                     IdeAnalysisPresentation.of(emptyList(), emptyList(), methodUsages),
                     completion = completion?.invoke(identity, virtualPath),
+                    parameterInfo = parameterInfo?.invoke(identity, virtualPath),
                     interaction = interaction(identity, virtualPath),
                 ),
         )

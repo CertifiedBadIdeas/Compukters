@@ -94,6 +94,12 @@ hover waits 400 ms. These delays share the visible response budget with K2 proce
 the next rendered frame. Manual completion enqueues immediately for an admitted snapshot and is retained while
 preparation is pending. Newer edits cancel obsolete work before their replacement snapshot is prepared.
 
+Analysis protocol v16 carries a validated diagnostic highlight kind alongside severity and exact source ranges.
+K2 factory identities and compiler diagnostic codes classify unresolved references; presentation never parses
+message text. Hover types and declarations use K2 short-name renderers, preserving generic, nullable and
+function-type structure without package prefixes. Qualified declaration identities remain available to
+navigation and binding checks.
+
 Analysis protocol v15 adds a peripheral-provider role to semantic tokens and completion kinds. The worker identifies providers through inheritance of `PeripheralProvider`, including companion values; type references retain their ordinary class role. The editor renders provider values in the dedicated palette color with a `P` completion badge.
 
 The protocol also carries explicit Kotlin format, rename-admission, and parameter-information requests.
@@ -141,7 +147,9 @@ responses remain rejected. The previous worker protocol is intentionally incompa
 Parameter information
 resolves the innermost call at a UTF-16 caret into a bounded, deterministically ordered set of K2-substituted callable
 signatures with active-parameter spans; client-side snapshot, revision, path, caret, and call-range checks reject stale
-popup results. The format request includes the exact editor text and
+popup results. Typing an opening parenthesis requests the same query after lexical context excludes strings and
+comments; Ctrl+P remains available. Shared popup wrapping preserves UTF-16 parameter spans and selects a bounded
+window containing the current parameter for long signatures. The format request includes the exact editor text and
 UTF-16 caret captured by the Reformat Code action, so formatting does not depend on whether the semantic snapshot has
 caught up. The worker runs ktlint standard rules from a compiler-free nested runtime whose shaded IntelliJ references
 are relocated back to the ordinary namespace. Its child classloader reloads the worker's existing Kotlin compiler JAR
@@ -274,7 +282,10 @@ without losing the captured contents.
 shared gutter, row, caret, source anchor and pointer mapping. Its code bounds exclude line numbers; source text,
 selection, carets and underlines stay inside those bounds when horizontally scrolled. Styled fragments expand tabs from the line's actual
 column. `IdeEditorRenderer` owns source, selection, highlights and gutter indicators; `IdeFindRenderer` owns search
-controls; `IdeEditorPopups` owns hover, declaration chooser, completion and parameter information. These components
+controls; `IdeEditorPopups` owns hover, declaration chooser, completion and parameter information.
+`IdePopupText` wraps source slices without changing UTF-16 offsets; `IdeDiagnosticRenderer` clips source-evidenced
+diagnostic spans and `IdeDiagnosticTooltip` groups their messages. Disabled token tooltip targets preserve normal
+source clicks. These components
 emit directly into the existing frame collector and use the same source geometry for anchors.
 
 `IdeEditorInputRouter` owns search, semantic navigation and ordinary editor keys and characters. Local screen overlays
