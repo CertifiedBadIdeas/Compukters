@@ -201,6 +201,47 @@ class DiagnosticQueryTest {
     }
 
     @Test
+    fun `stdlib matrix factories and members resolve with source and metadata inputs`() {
+        for (attachedSources in listOf(false, true)) {
+            val source =
+                """
+                import kotlin.math.*
+                fun main() {
+                    val projection = Matrix4f.perspective(1f, 1f, 0.1f, 100f)
+                    val model = Matrix4f.translation(Vector3f(0f, 0f, -5f)) * Matrix4f.rotationY(1f)
+                    val matrix = projection * model * Matrix4f.scale(2f)
+                    val clip: Vector4f = matrix * Vector3f(1f, 2f, 3f)
+                    val direction = model.transformDirection(Vector3f(1f, 0f, 0f))
+                    val transform: (Vector3f) -> Vector4f = matrix::transformPoint
+                    val factory: (Float, Float, Float, Float) -> Matrix4f = Matrix4f::perspective
+                    val identity = Matrix4f.identity().transposed()
+                    val ortho = Matrix4f.orthographic(-1f, 1f, -1f, 1f, 0f, 10f)
+                    if (clip.isInsideClipVolume) println(clip.perspectiveDivide().x)
+                    check(matrix.m00 == matrix[0, 0])
+                }
+                """.trimIndent()
+            K2QueryFixture.sourceWithGuestApi(attachedSources, "main.kt" to source).use { fixture ->
+                val result = fixture.execute(fixture.presentation()) as AnalysisResult.Presentation
+                val active = result.value.accept(fixture.identity) as SnapshotPresentationAcceptance.Active
+                assertTrue(active.diagnostics.none { it.severity == EditorDiagnosticSeverity.Error }, active.diagnostics.toString())
+                val completion =
+                    fixture.execute(
+                        AnalysisQuery.Completion(
+                            fixture.identity,
+                            ru.lazyhat.compukters.compiler.worker.protocol.VirtualSourcePath
+                                .kotlin("main.kt"),
+                            source.lastIndexOf("matrix.m00") + "matrix.".length,
+                            ru.lazyhat.compukters.ide.analysis.CompletionTrigger.Manual,
+                        ),
+                    ) as AnalysisResult.Completion
+                for (name in listOf("m00", "m33", "transposed", "transformPoint", "transformDirection", "times", "get")) {
+                    assertTrue(completion.items.any { it.insertText == name }, completion.items.toString())
+                }
+            }
+        }
+    }
+
+    @Test
     fun `native MFVC analysis preserves source and addon nominal types and members`() {
         for (attachedSources in listOf(false, true)) {
             val source =
