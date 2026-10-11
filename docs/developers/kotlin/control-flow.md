@@ -143,7 +143,7 @@ see the [array library](../stdlib/arrays-ranges.md) for storage boundaries.
 tests `reference array loops preserve specialized elements source
 identity and cleanup for vm execution` (deterministic artifact) and `reference array loops reject unsupported
 storage and stored iterators`. `testKotlinReferenceArrayVmConformance` requires this loop artifact and executes
-its assertions at budgets 64 and 512, including allocation pressure and retained references.
+its assertions at budgets 64 and 512 with a 256 KiB heap, including allocation pressure and retained references.
 `DiagnosticQueryTest`, test `reference array loops resolve nullable generic and value class elements with
 source and metadata inputs`, checks both IDE input forms.
 
