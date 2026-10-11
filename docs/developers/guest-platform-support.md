@@ -294,6 +294,9 @@ tests `positional_patch_and_fill_do_not_move_the_stream_cursor` and
 
 `compukter.filesystem.Path` is a pure lexical String-backed value class; the explicitly imported
 `compukter.filesystem.toPath` extension converts a String with the same syntax validation and no storage access.
+Dot components are retained lexically;
+`Path.normalize()` removes them and clamps ascent at root. FileSystem normalizes inputs before native
+submission; Rust rejects noncanonical native paths and checks the target mount and permissions independently.
 `FileSystem` provides typed metadata and errors, binary I/O, strict UTF-8 text,
 immutable read snapshots, sorted directory snapshots, directory operations and atomic replacement drafts.
 Transfers are bounded independently of file size. Resources belong to each foreground program and survive
@@ -304,7 +307,7 @@ See [Guest filesystem]({{ '/FILESYSTEM/' | relative_url }}) for limits, cleanup 
 **Evidence:**
 [`MinimalScriptLoweringTest`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/compiler-k2/src/test/kotlin/ru/lazyhat/compukters/compiler/worker/k2/MinimalScriptLoweringTest.kt),
 tests `portable filesystem API executes binary text snapshots and atomic drafts`,
-`lexical Guest paths need no filesystem capability` (including constructor validation, nullable/Any/array/list
+`lexical Guest paths need no filesystem capability` (including dot normalization/root clamping, constructor validation, nullable/Any/array/list
 and hash-key boundaries), `Path value class rejects data class conveniences and reference equality`,
 and `Path storage conveniences require explicit extension imports`, and
 [`ProgramRuntimeHostIntegrationTest`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/core/src/nativeIntegrationTest/kotlin/ru/lazyhat/compukters/core/device/runtime/program/integration/ProgramRuntimeHostIntegrationTest.kt),

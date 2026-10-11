@@ -38,8 +38,10 @@ public object FileSystem {
     public fun openWrite(path: Path): AtomicFileWriter =
         AtomicFileWriter(path, check(FileSystemBindings.openWrite(checkedPath(path, "openWrite")), path.value, "openWrite"))
 
-    public fun openDirectory(path: Path): DirectoryReader =
-        DirectoryReader(path, check(FileSystemBindings.openDirectory(checkedPath(path, "openDirectory")), path.value, "openDirectory"))
+    public fun openDirectory(path: Path): DirectoryReader {
+        val canonical = checkedPath(path, "openDirectory")
+        return DirectoryReader(Path(canonical), check(FileSystemBindings.openDirectory(canonical), path.value, "openDirectory"))
+    }
 
     public fun readBytes(
         path: Path,
@@ -117,13 +119,18 @@ public object FileSystem {
 
     /** Creates missing ancestors. Each directory creation is a separate atomic operation. */
     public fun createDirectories(path: Path) {
+        val canonical = Path(checkedPath(path, "createDirectories"))
+        createCanonicalDirectories(canonical)
+    }
+
+    private fun createCanonicalDirectories(path: Path) {
         val info = statOrNull(path)
         if (info != null) {
             if (info.kind != FileKind.DIRECTORY) fail(FileSystemError.NOT_DIRECTORY, path.value, "createDirectories")
             return
         }
         val parent = path.parent
-        if (parent != null) createDirectories(parent)
+        if (parent != null) createCanonicalDirectories(parent)
         try {
             createDirectory(path)
         } catch (failure: FileSystemException) {
@@ -157,10 +164,10 @@ public object FileSystem {
         destination: Path,
         replaceExisting: Boolean,
     ) {
-        checkedPath(destination, "move")
+        val canonicalDestination = checkedPath(destination, "move")
         val handle = check(FileSystemBindings.openMove(checkedPath(source, "move")), source.value, "move")
         try {
-            check(FileSystemBindings.move(handle, checkedPath(destination, "move"), replaceExisting), source.value, "move")
+            check(FileSystemBindings.move(handle, canonicalDestination, replaceExisting), source.value, "move")
         } finally {
             check(FileSystemBindings.close(handle), source.value, "close")
         }
@@ -569,5 +576,5 @@ private fun checkedPath(
     operation: String,
 ): String {
     if (path.value.length > 4096) fail(FileSystemError.INVALID_PATH, path.value, operation)
-    return path.value
+    return path.normalize().value
 }

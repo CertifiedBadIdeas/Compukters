@@ -55,7 +55,7 @@ val verifyGradleSandbox by tasks.registering(Exec::class) {
 
 val verifyWorktreeSetup by tasks.registering(Exec::class) {
     group = "verification"
-    description = "Verify task worktree setup with pinned submodules and independent checkout state."
+    description = "Verify task worktree setup, diagnostics and safe completion."
     workingDir(rootDir.parentFile)
     commandLine("python3", "-m", "unittest", "discover", "-s", "tools/worktrees", "-p", "test_*.py", "-v")
 }

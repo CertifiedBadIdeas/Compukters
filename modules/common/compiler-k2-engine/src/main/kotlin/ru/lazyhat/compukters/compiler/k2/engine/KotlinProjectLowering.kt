@@ -45,6 +45,7 @@ import org.jetbrains.kotlin.ir.expressions.IrConst
 import org.jetbrains.kotlin.ir.expressions.IrConstructorCall
 import org.jetbrains.kotlin.ir.expressions.IrContinue
 import org.jetbrains.kotlin.ir.expressions.IrDelegatingConstructorCall
+import org.jetbrains.kotlin.ir.expressions.IrDoWhileLoop
 import org.jetbrains.kotlin.ir.expressions.IrExpression
 import org.jetbrains.kotlin.ir.expressions.IrFunctionExpression
 import org.jetbrains.kotlin.ir.expressions.IrFunctionReference
@@ -5201,6 +5202,10 @@ private class FunctionCompiler(
                 compileWhile(statement)
             }
 
+            is IrDoWhileLoop -> {
+                compileDoWhile(statement)
+            }
+
             is IrBlock -> {
                 if (statement.origin?.toString() == "FOR_LOOP") {
                     compileForLoop(statement)
@@ -8557,6 +8562,40 @@ private class FunctionCompiler(
             requireTrue(equal)
         }
         returnBool(true)
+    }
+
+    private fun compileDoWhile(loop: IrDoWhileLoop) {
+        val body = createBlock(loopHeader = true)
+        jumpTo(body)
+        currentBlock = body
+        val context = LoopContext(loop, continueTarget = null, placeholderTarget = body, finallyDepth = finallyContexts.size)
+        var conditionBranch: Pair<Int, RegisterId>? = null
+        withLoopContext(context) {
+            loop.body?.let(::compileStatement)
+            val fallsThrough = !isTerminated()
+            if (fallsThrough || context.continueBlocks.isNotEmpty()) {
+                val conditionBlock = createBlock()
+                if (fallsThrough) jumpTo(conditionBlock)
+                context.continueBlocks.forEach { patchJumpTarget(it, conditionBlock) }
+                currentBlock = conditionBlock
+                if (loop.condition.type.isNothing()) {
+                    compileStatement(loop.condition)
+                } else {
+                    val condition = compileExpression(loop.condition)
+                    if (!isTerminated()) {
+                        conditionBranch = currentBlock to condition
+                        emit(Instruction.Branch(condition, blockId(body), blockId(body)))
+                    }
+                }
+            }
+        }
+        if (conditionBranch == null && context.breakBlocks.isEmpty()) return
+        val exit = createBlock()
+        conditionBranch?.let { (block, condition) ->
+            blocks[block].instructions[blocks[block].instructions.lastIndex] = Instruction.Branch(condition, blockId(body), blockId(exit))
+        }
+        context.breakBlocks.forEach { patchJumpTarget(it, exit) }
+        currentBlock = exit
     }
 
     private fun compileWhile(loop: IrWhileLoop) {
