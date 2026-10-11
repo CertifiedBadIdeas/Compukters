@@ -7583,14 +7583,18 @@ class MinimalScriptLoweringTest {
             val source =
                 """
                 import compukter.filesystem.Path
+                import compukter.filesystem.toPath
 
                 fun invalid(value: String) {
-                    try { Path(value); error("invalid syntax accepted") }
+                    try { value.toPath(); error("invalid syntax accepted") }
                     catch (failure: IllegalArgumentException) { }
                 }
 
                 fun main() {
-                    val home = Path("/home")
+                    val home = "/home".toPath()
+                    require(home == Path("/home"))
+                    require("/".toPath() == Path("/"))
+                    require("/home/absent/😀".toPath() == home.resolve("absent/😀"))
                     val missing = home.resolve("absent/😀")
                     require(missing.value == "/home/absent/😀")
                     require(missing.name == "😀" && missing.parent == Path("/home/absent"))
@@ -7598,6 +7602,8 @@ class MinimalScriptLoweringTest {
                     require(home.resolve("") == home)
                     val long = String(CharArray(5000) { 'a' }, 0, 5000)
                     require(home.resolve(long).name == long)
+                    require(("/home/" + long).toPath() == home.resolve(long))
+                    invalid("")
                     invalid("relative")
                     invalid("/home/")
                     invalid("/home//a")

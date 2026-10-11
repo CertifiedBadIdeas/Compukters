@@ -34,6 +34,9 @@ public data class Path(
     override fun toString(): String = value
 }
 
+/** Converts an absolute path string to a lexical value without accessing storage. */
+public fun String.toPath(): Path = Path(this)
+
 private fun validatePathSyntax(value: String) {
     requirePathSyntax(value.startsWith("/"), "path must be absolute")
     var index = 0

@@ -13,7 +13,9 @@ This reference groups versioned representation boundaries by the version that in
 
 ## Portable Guest filesystem
 
-`compukter:core` 4.0.0 replaces the old string/status FileSystem source facade with Compukters-owned Path,
+`compukter:core` 4.1.0 adds the pure `String.toPath()` extension in `compukter.filesystem`. This additive
+source API change leaves platform encoding, filesystem capability ABI and Runtime ABI unchanged.
+Version 4.0.0 replaces the old string/status FileSystem source facade with Compukters-owned Path,
 pure lexical paths and an explicit FileSystem facade with metadata, typed exceptions, immutable
 read/directory snapshots and guarded atomic replacement drafts. Path has no storage members or native
 construction request; optional compukter.io.path extensions delegate to FileSystem. Native limits are

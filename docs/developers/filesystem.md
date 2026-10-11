@@ -32,6 +32,14 @@ fun main() {
 }
 ```
 
+`String.toPath()` is available with an explicit `import compukter.filesystem.toPath`:
+
+```kotlin
+val note = "/home/notes/hello.txt".toPath()
+```
+
+It delegates to `Path(this)`, uses the same syntax validation and never accesses storage.
+
 Paths are exact and absolute. Empty components, trailing slashes except `/`, `.` and `..`, NUL, malformed
 Unicode are rejected with `IllegalArgumentException` by pure Guest syntax validation. `resolve` accepts
 a relative name against an explicit base; it does not normalize dot traversal. `name` and `parent` are null
