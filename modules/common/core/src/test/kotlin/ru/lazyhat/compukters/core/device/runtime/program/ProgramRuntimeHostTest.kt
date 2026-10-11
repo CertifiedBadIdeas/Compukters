@@ -815,7 +815,7 @@ class ProgramRuntimeHostTest {
             )
         host.start(byteArrayOf(1))
         assertEquals(ProgramRuntimeState.WaitingForCompiler, host.serverTick())
-        assertTrue(host.sendTerminalKey(TerminalKey.T, TerminalKeyAction.PRESS, setOf(TerminalModifier.CONTROL)))
+        assertTrue(host.sendTerminalKey(TerminalKey.C, TerminalKeyAction.PRESS, setOf(TerminalModifier.CONTROL)))
         assertEquals(listOf(compiler.submissions.single().address), compiler.cancellations)
         assertEquals(ProgramRuntimeState.WaitingForInput, host.serverTick())
         assertTrue(ProgramAddonAction.Stopped(1) in actions)

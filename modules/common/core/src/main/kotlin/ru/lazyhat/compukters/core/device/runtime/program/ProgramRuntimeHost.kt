@@ -604,7 +604,7 @@ class ProgramRuntimeHost internal constructor(
         modifiers: Set<TerminalModifier> = emptySet(),
     ): Boolean {
         val accepted = terminalInput { sendTerminalKey(key, action, modifiers) }
-        if (accepted && key == TerminalKey.T && action == TerminalKeyAction.PRESS &&
+        if (accepted && key == TerminalKey.C && action == TerminalKeyAction.PRESS &&
             TerminalModifier.CONTROL in modifiers && programScopes.size > 1
         ) {
             preparedRestoration = null
