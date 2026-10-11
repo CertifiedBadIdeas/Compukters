@@ -26,7 +26,8 @@ headings so this page has one stable URL that can be shared outside the reposito
   elements, reusable vector value classes and generic container elements. Initializers run once per
   ascending index and preserve managed exception behavior.
 
-- Guest paths are pure portable values. A separate `FileSystem` API provides typed metadata/errors,
+- Guest paths are pure portable values, constructed with `Path(...)` or the explicitly imported
+  `String.toPath()` extension. A separate `FileSystem` API provides typed metadata/errors,
   binary I/O, strict UTF-8 text, directory snapshots and ordinary create/delete/move operations. Sequential readers pin their file contents;
   writers stage bounded chunks and publish only through a guarded atomic commit. Program exit aborts drafts,
   and hibernation preserves resources and their positions. The old string/status `FileSystem` source facade

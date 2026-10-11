@@ -292,8 +292,9 @@ tests `positional_patch_and_fill_do_not_move_the_stream_cursor` and
 
 **Status:** Supported within the documented portable API.
 
-`compukter.filesystem.Path` is a pure lexical value. `FileSystem` provides typed metadata and errors,
-binary I/O, strict UTF-8 text,
+`compukter.filesystem.Path` is a pure lexical value; the explicitly imported
+`compukter.filesystem.toPath` extension converts a String with the same syntax validation and no storage access.
+`FileSystem` provides typed metadata and errors, binary I/O, strict UTF-8 text,
 immutable read snapshots, sorted directory snapshots, directory operations and atomic replacement drafts.
 Transfers are bounded independently of file size. Resources belong to each foreground program and survive
 hibernation with their positions and revision guards; terminal program outcomes release them.
