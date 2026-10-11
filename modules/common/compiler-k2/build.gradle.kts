@@ -1466,12 +1466,15 @@ val generateFilesystemArtifact = tasks.register<Test>("generateFilesystemArtifac
     testClassesDirs = sourceSets.test.get().output.classesDirs
     classpath = sourceSets.test.get().runtimeClasspath
     filter.includeTestsMatching("*portable filesystem API executes binary text snapshots and atomic drafts*")
+    filter.includeTestsMatching("*lexical Guest paths need no filesystem capability*")
     inputs.file(workerJar)
     val artifact = layout.buildDirectory.file("generated/conformance/filesystem.cpkt")
-    outputs.file(artifact)
+    val lexicalArtifact = layout.buildDirectory.file("generated/conformance/lexical-path.cpkt")
+    outputs.files(artifact, lexicalArtifact)
     doFirst {
         systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
         systemProperty("compukters.filesystem.artifact", artifact.get().asFile.absolutePath)
+        systemProperty("compukters.lexicalPath.artifact", lexicalArtifact.get().asFile.absolutePath)
     }
 }
 

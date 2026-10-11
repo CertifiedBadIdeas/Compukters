@@ -19,6 +19,7 @@
 package compukter.system.edit
 
 import compukter.filesystem.FileKind
+import compukter.filesystem.FileSystem
 import compukter.filesystem.FileSystemException
 import compukter.filesystem.Path
 import compukter.io.Stderr
@@ -40,14 +41,17 @@ fun main(args: Array<String>) {
     val source =
         try {
             val file = Path(path)
-            val info = file.statOrNull()
+            val info = FileSystem.statOrNull(file)
             if (info != null && info.kind == FileKind.DIRECTORY) {
                 Stderr.write("edit: is a directory: $path\n")
                 return
             }
-            if (info == null) "" else file.readText(16384)
+            if (info == null) "" else FileSystem.readText(file, 16384)
         } catch (failure: FileSystemException) {
             Stderr.write("edit: ${failure.message ?: "filesystem error"}\n")
+            return
+        } catch (failure: IllegalArgumentException) {
+            Stderr.write("edit: invalid path: $path\n")
             return
         }
 
@@ -576,10 +580,12 @@ private fun editSave(
     path: String,
 ): String =
     try {
-        Path(path).writeText(editText(buffer, state))
+        FileSystem.writeText(Path(path), editText(buffer, state))
         ""
     } catch (failure: FileSystemException) {
         failure.message ?: "filesystem error"
+    } catch (failure: IllegalArgumentException) {
+        "invalid path: $path"
     }
 
 private fun editStartsWith(

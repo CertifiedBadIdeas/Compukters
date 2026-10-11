@@ -26,11 +26,12 @@ headings so this page has one stable URL that can be shared outside the reposito
   elements, reusable vector value classes and generic container elements. Initializers run once per
   ascending index and preserve managed exception behavior.
 
-- Guest files use a portable `Path` API with typed metadata/errors, binary I/O, strict UTF-8 text,
-  directory snapshots and ordinary create/delete/move operations. Sequential readers pin their file contents;
+- Guest paths are pure portable values. A separate `FileSystem` API provides typed metadata/errors,
+  binary I/O, strict UTF-8 text, directory snapshots and ordinary create/delete/move operations. Sequential readers pin their file contents;
   writers stage bounded chunks and publish only through a guarded atomic commit. Program exit aborts drafts,
   and hibernation preserves resources and their positions. The old string/status `FileSystem` source facade
-  is replaced without compatibility wrappers.
+  is replaced without compatibility wrappers. Optional separately imported extensions in `compukter.io.path`
+  add convenient Path calls without coupling the path type to storage.
 
 - The bundled terminal editor atomically saves its complete buffer and preserves the cursor when saving.
   Pasted text either fits in full, including expanded tabs and automatic indentation, or leaves the document unchanged with a `Buffer full` message.
