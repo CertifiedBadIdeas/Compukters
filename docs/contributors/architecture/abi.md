@@ -13,7 +13,13 @@ This reference groups versioned representation boundaries by the version that in
 
 ## Portable Guest filesystem
 
-`compukter:core` 5.0.0 exports Path as a String-backed inline value class instead of a managed data class.
+`compukter:core` 5.1.0 permits dot components in lexical Path values and adds pure normalization,
+with ascent above root clamped at root. FileSystem sends canonical paths; Rust retains its independent
+canonical-path parser and component-based rights checks. Original Guest inputs retain the 4096-UTF-16-unit
+transport bound; native limits apply to the normalized target. No capability, platform encoding or Runtime
+ABI changes are required.
+
+Version 5.0.0 exports Path as a String-backed inline value class instead of a managed data class.
 Nullable/Any/collection boundaries use its canonical nominal box. The representation change and removal
 of generated `copy()` / `component1()` members require dependent platform/addon source libraries to rebuild.
 Existing standalone executables remain admitted; filesystem capability ABI 2, native ABI 23 and

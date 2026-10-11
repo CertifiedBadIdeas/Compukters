@@ -621,6 +621,11 @@ registerKotlinVmConformance(
     cargoTargetDirectory = ".toolchain/build/cargo/compiler-k2-int-loops-conformance",
     artifactEnvironmentVariable = "COMPUKTER_KOTLIN_INT_LOOPS_ARTIFACT",
     conformanceScenario = "int-loops",
+    additionalArtifacts =
+        mapOf(
+            "COMPUKTER_KOTLIN_DO_WHILE_ARTIFACT" to
+                project(":compiler-k2").layout.buildDirectory.file("generated/conformance/kotlin-int-loops.cpkt.do-while.cpkt"),
+        ),
 )
 registerKotlinVmConformance(
     taskName = "testKotlinIntArrayVmConformance",

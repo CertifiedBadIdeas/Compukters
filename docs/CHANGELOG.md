@@ -18,8 +18,12 @@ headings so this page has one stable URL that can be shared outside the reposito
   Hovering a marked token shows its problems together, preserving source editing and horizontal scrolling.
   Argument hints open when typing a call or pressing Ctrl+P, wrap long signatures and emphasize the current parameter.
 
-- Contributors can create task worktrees with `worktree-task`: local `dev`/`main` bases, pinned VM and optional
-  addon initialization, reuse of available local Git objects and automatic independent Gradle-cache preparation.
+- Guest Kotlin supports `do-while` loops, including local `break` and `continue`, body-local variables in
+  the condition, and managed exception and `finally` cleanup across VM instruction slices.
+
+- Contributors can create, diagnose and safely complete task worktrees with `worktree-task`: local `dev`/`main` bases,
+  readiness diagnostics, integration checks and cleanup with archived evidence, pinned VM and optional addon
+  initialization, reuse of available local Git objects and automatic independent Gradle-cache preparation.
   Interrupted setup can resume in a clean checkout without resetting its branch.
 
 - Agent Gradle worktrees initialize independent writable caches from a workspace template using reflinks,
@@ -32,7 +36,9 @@ headings so this page has one stable URL that can be shared outside the reposito
   ascending index and preserve managed exception behavior.
 
 - Guest paths are pure portable String-backed value classes, constructed with `Path(...)` or the explicitly imported
-  `String.toPath()` extension. A separate `FileSystem` API provides typed metadata/errors,
+  `String.toPath()` extension. Paths support `.` / `..` and pure `normalize()`, with ascent clamped at root;
+  filesystem operations use canonical virtual targets checked independently by the native boundary.
+  A separate `FileSystem` API provides typed metadata/errors,
   binary I/O, strict UTF-8 text, directory snapshots and ordinary create/delete/move operations. Sequential readers pin their file contents;
   writers stage bounded chunks and publish only through a guarded atomic commit. Program exit aborts drafts,
   and hibernation preserves resources and their positions. The old string/status `FileSystem` source facade

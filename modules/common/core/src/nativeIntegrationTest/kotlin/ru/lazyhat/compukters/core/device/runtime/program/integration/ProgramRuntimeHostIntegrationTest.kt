@@ -509,7 +509,8 @@ class ProgramRuntimeHostIntegrationTest {
 
         submit(host, "stat /home/../escape")
         pressEnter(host)
-        assertTrue(terminalText(requireNotNull(host.terminalFullState())).endsWith("invalid path: /home/../escape\n>\n"))
+        val traversalOutput = terminalText(requireNotNull(host.terminalFullState()))
+        assertTrue(traversalOutput.endsWith("stat: permission denied: /home/../escape\n>\n"), traversalOutput)
 
         submit(host, "stat missing")
         pressEnter(host)

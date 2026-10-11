@@ -48,7 +48,7 @@ test `when range and alternative branches accept Unit statements`.
 
 These forms compile and are used by the checked-in shell, including nested loops and reassignment. `break` and
 `continue` targeting the current innermost `while` lower directly; jumps to an outer loop are rejected. There
-is no source-level conformance suite covering every expression/result shape or ordinary `do-while`.
+is no source-level conformance suite covering every expression/result shape.
 
 **Evidence:**
 [`MinimalScriptLoweringTest`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/compiler-k2/src/test/kotlin/ru/lazyhat/compukters/compiler/worker/k2/MinimalScriptLoweringTest.kt),
@@ -84,12 +84,29 @@ test `k2_int_loops_execute_across_quota_slices_without_host_io`.
 Stored ranges, progression iterators and membership execute through the [range library]({{ '/STDLIB-SUPPORT/arrays-ranges/#ranges-and-progressions' | relative_url }}). Direct `Int` loops retain the
 allocation-free lowering described above.
 
+## Post-test `do-while` loops
+
+**Status:** Supported.
+
+Ordinary `do-while` executes its body before testing the condition. Each local `continue` runs intervening
+`finally` cleanup and reaches the condition; local `break` and function return run cleanup and skip the
+condition. Body-local declarations retain Kotlin's condition scope. Nested loops select their own local
+targets. Exceptions from the body or condition use ordinary managed handlers, and loop execution resumes
+across instruction-budget slices. Labeled jumps to outer loops remain unsupported.
+
+**Evidence:** `MinimalScriptLoweringTest`, test `do while loops preserve post test order jumps cleanup and
+exceptions for vm execution`, executed by `testKotlinIntLoopsVmConformance` with instruction budgets of 64
+and 512. `DiagnosticQueryTest`, test `do while analysis admits body scoped conditions and local cleanup jumps`,
+checks source-attached and metadata-only IDE sessions.
+
+**Related work:** [#737](https://github.com/CertifiedBadIdeas/Compukters/issues/737)
+
 ## Remaining loop forms
 
 **Status:** Partial.
 
-Direct primitive-array and supported iterable loops execute. Ordinary source `do-while`, reference-array
-iteration, and labeled jumps to an outer loop remain unavailable.
+Direct primitive-array and supported iterable loops execute. Reference-array iteration and labeled jumps
+to an outer loop remain unavailable.
 
 **Evidence:** `unsupported loop forms publish no artifact`.
 

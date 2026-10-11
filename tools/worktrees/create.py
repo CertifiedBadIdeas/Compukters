@@ -4,6 +4,8 @@
 """Create an isolated task checkout, initialize pinned submodules and prepare its cache."""
 
 import argparse
+import hashlib
+import json
 import os
 from pathlib import Path
 import re
@@ -80,6 +82,23 @@ def initialize_module(checkout, source, path, url):
         raise RuntimeError(f"Submodule {path} does not match its pinned revision {revision}")
 
 
+def task_record(repository, branch):
+    return common_directory(repository) / 'worktree-tasks' / (hashlib.sha256(branch.encode()).hexdigest() + '.json')
+
+
+def record_task(repository, checkout, branch, base):
+    path = task_record(repository, branch)
+    if path.exists():
+        record = json.loads(path.read_text())
+        if record['checkout'] != str(checkout) or record['base'] != base:
+            raise RuntimeError('Task record does not match checkout/base; preserve it and inspect the conflict')
+        return
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open('x') as handle:
+        json.dump(dict(checkout=str(checkout), branch=branch, base=base,
+                       starting_commit=git(checkout, 'rev-parse', 'HEAD').strip()), handle, indent=2)
+
+
 def create(arguments):
     workspace = Path(git(arguments.workspace, "rev-parse", "--show-toplevel").strip())
     main_workspace = main_checkout(workspace)
@@ -121,6 +140,7 @@ def create(arguments):
             raise RuntimeError(f"Branch already exists: {arguments.branch}; choose a new task branch")
         checkout.parent.mkdir(parents=True, exist_ok=True)
         git(repository, "worktree", "add", "-b", arguments.branch, checkout, f"refs/heads/{base}", capture=False)
+    record_task(repository, checkout, arguments.branch, base)
     try:
         available = modules(checkout)
         selected = list(available) if arguments.all_submodules else list(arguments.submodule)
@@ -128,6 +148,12 @@ def create(arguments):
             selected.insert(0, "host/compukter-vm")
         if arguments.no_submodules:
             selected = []
+        record_path = task_record(repository, arguments.branch)
+        record = json.loads(record_path.read_text())
+        record['submodules'] = list(dict.fromkeys(selected))
+        replacement = record_path.with_suffix('.tmp')
+        replacement.write_text(json.dumps(record, indent=2))
+        os.replace(replacement, record_path)
         for path in dict.fromkeys(selected):
             if path not in available:
                 raise RuntimeError(f"Unknown submodule: {path}; available: {', '.join(available)}")
@@ -148,7 +174,10 @@ def create(arguments):
 
 
 def main():
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = argparse.ArgumentParser(description=__doc__, epilog=(
+        'Additional commands: worktree-task doctor [--path <checkout>]; '
+        'worktree-task finish <branch> [--repo <module>] [--evidence <path>]. '
+        'Use doctor --help or finish --help for details.'))
     parser.add_argument("--workspace", type=Path, default=Path(__file__).resolve().parents[2])
     parser.add_argument("branch", help="new task branch, for example feat/display-api")
     parser.add_argument("--repo", type=Path, help="repository/submodule to work on, relative to the main workspace")
