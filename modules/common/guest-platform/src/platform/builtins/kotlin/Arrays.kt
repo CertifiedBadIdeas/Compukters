@@ -8,7 +8,10 @@ package kotlin
 
 import kotlin.collections.*
 
-public class Array<T> private constructor() {
+public class Array<T> {
+    /** Creates an array by invoking [init] once for each index in ascending order. */
+    public external constructor(size: Int, init: (Int) -> T)
+
     public external val size: Int
 
     public external operator fun get(index: Int): T

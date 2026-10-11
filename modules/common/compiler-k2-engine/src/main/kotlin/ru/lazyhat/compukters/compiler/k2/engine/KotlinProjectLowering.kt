@@ -2403,6 +2403,7 @@ internal object KotlinProjectLowering {
                 platformScalars,
                 entry,
                 shapeInterfaceTypes,
+                classInstanceTypeIds = classInstanceTypeIds,
             )
         }
         functionShapes.forEach { shape ->
@@ -5780,6 +5781,9 @@ private class FunctionCompiler(
         GuestPrimitive.array(resolvedType(call.type))?.let { primitive ->
             return compilePrimitiveArrayConstructor(call, primitive)
         }
+        if (isSupportedReferenceArray(call.type)) {
+            return compileReferenceArrayConstructor(call)
+        }
         if (call.type == kotlinStringType &&
             arguments.size == 3 &&
             arguments[0].type.isExactClass(kotlinCharArrayClass) &&
@@ -5829,9 +5833,38 @@ private class FunctionCompiler(
         val array = allocate(arrayType)
         emit(Instruction.NewArray(array, arrayType.type, length))
         if (initializer == null) return array
+        return compileArrayInitializer(call, array, length, initializer, shape, primitive.scalar)
+    }
+
+    private fun compileReferenceArrayConstructor(call: IrConstructorCall): RegisterId {
+        val arguments = call.arguments.filterNotNull()
+        if (arguments.size != 2 || valueType(arguments[0].type, call) != ValueType.I32) {
+            throw UnsupportedKotlinIr(call, "reference array constructor requires an Int size and initializer")
+        }
+        val length = compileExpression(arguments[0])
+        val initializer = compileExpression(arguments[1])
+        val shape = resolvedType(arguments[1].type).guestFunctionShape()
+        prepareAllocationBlock()
+        val arrayType = valueType(call.type, call) as ValueType.Ref
+        val array = allocate(arrayType)
+        emit(Instruction.NewArray(array, arrayType.type, length))
+        val resultType =
+            shape?.result?.let { valueType(it, call) }
+                ?: throw UnsupportedKotlinIr(call, "reference array initializer has an unsupported function signature")
+        return compileArrayInitializer(call, array, length, initializer, shape, resultType)
+    }
+
+    private fun compileArrayInitializer(
+        call: IrConstructorCall,
+        array: RegisterId,
+        length: RegisterId,
+        initializer: RegisterId,
+        shape: GuestFunctionShape?,
+        resultType: ValueType,
+    ): RegisterId {
         val invoke =
             shape?.let(invokeFunctionIds::get)
-                ?: throw UnsupportedKotlinIr(call, "primitive array initializer has an unsupported function signature")
+                ?: throw UnsupportedKotlinIr(call, "array initializer has an unsupported function signature")
         val index = allocate(ValueType.I32).also { emit(Instruction.Move(it, emitI32Constant(0, call))) }
         val condition = createBlock(loopHeader = true)
         val body = createBlock()
@@ -5841,9 +5874,16 @@ private class FunctionCompiler(
         val hasNext = allocate(ValueType.Bool).also { emit(Instruction.Less(OrderedScalarValueType.I32, it, index, length)) }
         emit(Instruction.Branch(hasNext, blockId(body), blockId(exit)))
         currentBlock = body
-        val element = allocate(primitive.scalar)
+        val element = allocate(resultType)
         emit(Instruction.CallInterface(Destination.Register(element), FunctionRef.Local(invoke), listOf(initializer, index)))
-        emit(Instruction.ArrayStore(array, index, element))
+        val box = guestTypes.arrayElement(resolvedType(call.type))?.let(guestTypes::valueClassBox)
+        val stored =
+            if (box != null && resultType !is ValueType.Ref) {
+                boxValue(element, shape.result, ValueType.Ref(false, box.type))
+            } else {
+                element
+            }
+        emit(Instruction.ArrayStore(array, index, stored))
         emit(Instruction.Add(index, index, emitI32Constant(1, call)))
         jumpTo(condition)
         currentBlock = exit
