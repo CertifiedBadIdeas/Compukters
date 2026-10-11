@@ -103,7 +103,7 @@ The [Compukters API reference]({{ '/guest-api/' | relative_url }}) is generated 
 [Propulsion addon]({{ '/guest-api/propulsion/' | relative_url }}) modules. The publication and source-set target are named
 `Compukters`. Addon signatures link to types from the core mod;
 each addon module links to its own repository at the checked-out revision. Pages CI initializes
-the three addon submodules and rebuilds when their pinned revisions change. For local preview, first run
+the three addon submodules at each documentation version's pinned revisions. For an unversioned local preview, first run
 `git submodule update --init addons/create addons/sable addons/propulsion`, then
 `./gradlew-sandbox-dev-parallel-summary -p api-build dokkaGeneratePublicationHtml`, then
 `python3 docs/_tools/build_guest_api.py`, `python3 docs/_tools/build_ide_palette.py`, then
@@ -112,8 +112,43 @@ The generated `docs/guest-api/` directory is ignored
 by Git; `python3 docs/_tools/build_guest_api.py --check` verifies its files against the Dokka output.
 The Wiki's syntax palette is generated from the in-game `IdeColors.kt` and committed as
 `docs/_data/ide_palette.json`; `python3 docs/_tools/build_ide_palette.py --check` detects a stale projection.
-Documentation CI regenerates it and also runs when the IDE color source changes. The browser uses ordinary CSS;
-Rouge supplies lexical token classes during the Jekyll build.
+Documentation CI regenerates it for each checkout. The browser uses ordinary CSS; Rouge supplies lexical token
+classes during the Jekyll build.
+
+### Release and nightly versions
+
+The documentation selector offers `0.5.1` at `/Compukters/0.5.1/` and `Nightly` at `/Compukters/nightly/` on both guides
+and generated API pages. The release site uses the exact `v0.5.1` checkout, including its addon revisions and API
+sources. Nightly uses the current `dev` commit and displays a link to that commit. The Pages workflow runs on every
+`dev` push and on manual dispatch; both versions are published together in one artifact.
+
+Switching versions opens the same page when present, retaining its fragment with JavaScript enabled. If the page is
+absent, the selector opens the chosen version's home. The links work without JavaScript. Existing unversioned URLs
+redirect to `0.5.1`; pages available only in nightly redirect there. Redirects preserve query strings and fragments
+with JavaScript enabled. A failed build prevents publication of either version.
+
+For a full local preview, use a separate `v0.5.1` checkout and initialize its pinned addon submodules. Generate and
+stage Dokka output and the syntax palette in **both** checkouts using their own build commands above. Then run the
+current documentation tooling from the nightly checkout (`/path/to/release-checkout` is the separate tag checkout):
+
+```sh
+python3 -m unittest discover -s docs/_tools -p 'test_versioned_docs.py'
+python3 docs/_tools/build_versioned_docs.py prepare --checkout . --version nightly --output build/docs-sources/nightly
+python3 docs/_tools/build_versioned_docs.py prepare --checkout /path/to/release-checkout --version 0.5.1 --output build/docs-sources/0.5.1
+jekyll build --source build/docs-sources/0.5.1 --config build/docs-sources/0.5.1/_config.yml --destination build/docs-sites/0.5.1
+jekyll build --source build/docs-sources/nightly --config build/docs-sources/nightly/_config.yml --destination build/docs-sites/nightly
+python3 docs/_tools/build_versioned_docs.py compose --release-source build/docs-sources/0.5.1 --release-site build/docs-sites/0.5.1 --nightly-source build/docs-sources/nightly --nightly-site build/docs-sites/nightly --output build/docs-published
+```
+
+Use fresh staging and composition output directories for each run; the tooling refuses to overwrite existing ones.
+Serve the composed directory at `/Compukters/` to match its base URL. `prepare --baseurl` supports another deployment
+prefix. Each version includes `version.json` with its source revision. The composition step uses the actual rendered
+page inventories, rewrites hardcoded site links and source links to their version, and checks that both APIs exist.
+It leaves tagged Markdown and Kotlin sources unchanged.
+
+When adding a published documentation version, update `VERSIONS` in `docs/_tools/build_versioned_docs.py`, the release
+checkout and build steps in `.github/workflows/pages.yml`, and the routing tests together. Never substitute current
+`dev` content for a release checkout.
 
 ## Verification levels
 
