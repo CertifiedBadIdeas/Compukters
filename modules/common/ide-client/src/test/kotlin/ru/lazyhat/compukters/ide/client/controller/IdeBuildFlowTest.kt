@@ -88,17 +88,61 @@ class IdeBuildFlowTest {
     }
 
     @Test
-    fun `unresolved project skips preparation and resolve schedules it quietly`() {
+    fun `opening an unresolved project prepares local tooling without saving dirty sources`() {
         val compilation = FlowCompilationService()
         val fixture = fixture(compilation)
         fixture.startAndTick()
-        repeat(5) { fixture.controller.tick() }
-        assertTrue(compilation.preparations.isEmpty())
-        assertIs<IdeBuildState.Idle>(fixture.workspaceView().build)
-        fixture.controller.dispatch(IdeCommand.Resolve)
+        fixture.controller.dispatch(IdeCommand.Edit(IdeEditorInput.Type("// unsaved")))
         fixture.tickUntil { compilation.preparations.isNotEmpty() }
+        assertIs<IdeBuildState.Idle>(fixture.workspaceView().build)
+        assertEquals(0, fixture.workspace.buildInputRequests)
+        assertTrue(fixture.workspace.saveRequests.isEmpty())
         assertTrue(compilation.inputs.isEmpty())
         assertEquals("Created compukter.lock", fixture.workspaceView().status?.message)
+        fixture.controller.close()
+    }
+
+    @Test
+    fun `build requested during local setup uses the newly created lock without a target`() {
+        val compilation = FlowCompilationService()
+        val fixture = fixture(compilation)
+        val configuration = CompletableFuture<ru.lazyhat.compukters.ide.client.workspace.IdeProjectConfiguration>()
+        fixture.workspace.configurationBarrier = configuration
+        fixture.startAndTick()
+        fixture.controller.dispatch(IdeCommand.Build)
+        assertEquals(0, fixture.workspace.buildInputRequests)
+        fixture.workspace.configurationBarrier = null
+        val root = fixture.workspace.descriptor.handle.canonicalPath
+        configuration.complete(
+            ru.lazyhat.compukters.ide.client.workspace.IdeProjectConfiguration(
+                fixture.workspace.descriptor.handle,
+                root.resolve("compukter.toml").toFile().readBytes(),
+                null,
+            ),
+        )
+        fixture.tickUntil { compilation.inputs.isNotEmpty() }
+        assertTrue(root.resolve("compukter.lock").toFile().exists())
+        assertEquals(1, fixture.workspace.buildInputRequests)
+        fixture.controller.close()
+    }
+
+    @Test
+    fun `opening a project preserves an existing incompatible lock`() {
+        val compilation = FlowCompilationService()
+        val fixture = fixture(compilation)
+        val stale = ProjectLockCodec.encode(ProjectLock.of(toolchain().copy(compilerVersion = "old"), emptyList())).encodeToByteArray()
+        fixture.workspace.installLock(stale)
+        fixture.startAndTick()
+        fixture.controller.dispatch(IdeCommand.Build)
+        fixture.tickUntil { fixture.workspaceView().build is IdeBuildState.Failed }
+        assertContentEquals(
+            stale,
+            fixture.workspace.descriptor.handle.canonicalPath
+                .resolve("compukter.lock")
+                .toFile()
+                .readBytes(),
+        )
+        assertTrue(compilation.inputs.isEmpty())
         fixture.controller.close()
     }
 
@@ -159,12 +203,11 @@ class IdeBuildFlowTest {
     }
 
     @Test
-    fun `resolve creates missing lock and confirms replacement of existing lock`() {
+    fun `local preparation creates missing lock and explicit resolve confirms replacement`() {
         val compilation = FlowCompilationService()
         val fixture = fixture(compilation)
         fixture.startAndTick()
 
-        fixture.controller.dispatch(IdeCommand.Resolve)
         fixture.tickUntil {
             fixture.workspace.descriptor.handle.canonicalPath
                 .resolve("compukter.lock")

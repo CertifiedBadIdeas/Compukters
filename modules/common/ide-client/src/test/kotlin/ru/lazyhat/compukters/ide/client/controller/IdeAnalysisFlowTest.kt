@@ -61,6 +61,8 @@ import ru.lazyhat.compukters.ide.compiler.profile.CompileProfile
 import ru.lazyhat.compukters.ide.compiler.profile.CompileProfileResolver
 import ru.lazyhat.compukters.ide.editor.EditorRange
 import ru.lazyhat.compukters.ide.project.ModuleId
+import ru.lazyhat.compukters.ide.project.ProjectLock
+import ru.lazyhat.compukters.ide.project.ProjectLockCodec
 import ru.lazyhat.compukters.ide.project.ProjectLockService
 import ru.lazyhat.compukters.ide.project.ProjectManifestCodec
 import java.util.concurrent.CompletableFuture
@@ -72,6 +74,55 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class IdeAnalysisFlowTest {
+    @Test
+    fun `local lock creation restores analysis without reopening or attaching a computer`() {
+        val requests = FlowAnalysisRequests()
+        val configuration = CompletableFuture<ru.lazyhat.compukters.ide.client.workspace.IdeProjectConfiguration>()
+        val fixture =
+            ControllerFixture(
+                preferences("demo", "src/main.kt"),
+                analysisCoordinatorFactory = { workspace ->
+                    IdeAnalysisCoordinator(
+                        IdeAnalysisInputLoader(workspace::buildInput),
+                        IdeAnalysisSnapshotFactory { input, path, text, _ ->
+                            checkNotNull(input.lockBytes) { "resolve compukter.lock before analysis" }
+                            analysisSnapshot(input.sources, path, text)
+                        },
+                        IdeAnalysisRequestFactory { sink -> requests.apply { this.sink = sink } },
+                        platformCatalog = TEST_PLATFORM_CATALOG,
+                        preparationScheduler = ru.lazyhat.compukters.ide.client.analysis.ImmediateAnalysisTaskScheduler,
+                    )
+                },
+                buildCoordinatorFactory = { _, clock ->
+                    IdeBuildCoordinator(
+                        IdeBuildServices(
+                            TEST_PROJECT_RESOLUTION,
+                            CompileProfileResolver(TEST_TOOLCHAIN, TEST_PLATFORM_CATALOG, WorkerLimits()),
+                            { project -> ProjectLockService(project.lockFileWriter()) },
+                            NoopCompilationService,
+                        ),
+                        clock,
+                    )
+                },
+            )
+        fixture.workspace.configurationBarrier = configuration
+        fixture.startAndTick()
+        assertIs<IdeAnalysisState.Unavailable>(fixture.textEditor().analysis)
+        fixture.workspace.configurationBarrier = null
+        val root = fixture.workspace.descriptor.handle.canonicalPath
+        configuration.complete(
+            ru.lazyhat.compukters.ide.client.workspace.IdeProjectConfiguration(
+                fixture.workspace.descriptor.handle,
+                root.resolve("compukter.toml").toFile().readBytes(),
+                null,
+            ),
+        )
+        fixture.tickUntil { fixture.textEditor().analysis is IdeAnalysisState.Active }
+        assertTrue(root.resolve("compukter.lock").toFile().exists())
+        assertTrue(fixture.workspace.saveRequests.isEmpty())
+        fixture.controller.close()
+    }
+
     @Test
     fun `polling manifest changes disables and restores analysis without reopening the project`() {
         val requests = FlowAnalysisRequests()
@@ -414,6 +465,8 @@ class IdeAnalysisFlowTest {
                     )
                 },
             )
+        val lock = ProjectLockCodec.encode(ProjectLock.of(TEST_TOOLCHAIN, emptyList())).encodeToByteArray()
+        fixture.workspace.installLock(lock)
         fixture.startAndTick()
         fixture.controller.dispatch(IdeCommand.Edit(IdeEditorInput.SelectAll))
         fixture.controller.dispatch(IdeCommand.Edit(IdeEditorInput.Type("fun main() { Re }")))
@@ -455,12 +508,12 @@ class IdeAnalysisFlowTest {
                     .readText(),
             )
         assertTrue(manifest.addons.isEmpty())
-        assertTrue(
+        kotlin.test.assertContentEquals(
+            lock,
             fixture.workspace.descriptor.handle.canonicalPath
                 .resolve("compukter.lock")
                 .toFile()
-                .exists()
-                .not(),
+                .readBytes(),
         )
         fixture.controller.close()
     }

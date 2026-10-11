@@ -155,6 +155,8 @@ class IdeClientController(
         )
     private var buildCoordinator = buildCoordinator
     private var libraryPreparation: CompletableFuture<*>? = null
+    private var localConfigurationPending = false
+    private var deferredLocalAction: IdeBuildAction? = null
     private var latestLibraryPreparation = 0L
     private var preparationTarget: TargetCompileProfile? = null
     private var analysisCoordinator = analysisCoordinator
@@ -1826,6 +1828,14 @@ class IdeClientController(
     private fun requestBuildAction(action: IdeBuildAction) {
         if (IdeBusyOperation.Git in state.busy) return
         val selected = project ?: return
+        if (localConfigurationPending) {
+            if (action == IdeBuildAction.Resolve || action == IdeBuildAction.UpdateLock) {
+                cancelLibraryPreparation()
+            } else {
+                deferredLocalAction = action
+                return
+            }
+        }
         if (buildCoordinator == null) {
             buildState = IdeBuildState.Failed(IdeBuildFailureKind.Platform, "local compiler is unavailable")
             publishWorkspace()
@@ -2066,7 +2076,58 @@ class IdeClientController(
                 ) {
                     return
                 }
-                libraryPreparation = buildCoordinator?.prepareLibraries(event.input, event.target?.compileProfile)
+                if (event.target == null && event.input.lockBytes == null) {
+                    val resolution = buildCoordinator?.resolveConfiguration(event.input)
+                    libraryPreparation = resolution
+                    resolution?.whenComplete { result, failure ->
+                        if (acceptsTooling.get()) {
+                            events.offer(
+                                IdeEvent.LocalConfigurationResolved(
+                                    event.generation,
+                                    event.operationId,
+                                    event.input.project,
+                                    result ?: IdeResolveResult.Failed(failure?.message ?: "local configuration failed"),
+                                ),
+                            )
+                        }
+                    }
+                } else {
+                    localConfigurationPending = false
+                    libraryPreparation = buildCoordinator?.prepareLibraries(event.input, event.target?.compileProfile)
+                    resumeLocalAction()
+                }
+            }
+
+            is IdeEvent.LocalConfigurationResolved -> {
+                if (event.operationId != latestLibraryPreparation || project?.handle !== event.project ||
+                    targetCoordinator?.attachedTarget() != null
+                ) {
+                    return
+                }
+                localConfigurationPending = false
+                val action = deferredLocalAction
+                deferredLocalAction = null
+                when (val result = event.result) {
+                    IdeResolveResult.Created, IdeResolveResult.UpToDate -> {
+                        publishStatus("Created compukter.lock", IdeProblemSeverity.Info)
+                        requestPoll()
+                        analysisCoordinator?.reload()
+                        requestLibraryPreparation()
+                    }
+
+                    is IdeResolveResult.Failed -> {
+                        publishStatus(result.detail, IdeProblemSeverity.Error)
+                    }
+
+                    else -> {
+                        Unit
+                    }
+                }
+                if (action != null) {
+                    deferredLocalAction = action
+                    if (!localConfigurationPending) resumeLocalAction()
+                }
+                publishWorkspace()
             }
 
             is IdeEvent.BuildInputLoaded -> {
@@ -2167,23 +2228,43 @@ class IdeClientController(
         }
     }
 
+    private fun resumeLocalAction() {
+        val action = deferredLocalAction ?: return
+        deferredLocalAction = null
+        requestBuildAction(action)
+    }
+
     private fun cancelLibraryPreparation() {
+        localConfigurationPending = false
+        deferredLocalAction = null
         latestLibraryPreparation = nextOperationId++
         libraryPreparation?.cancel(false)
         libraryPreparation = null
     }
 
     private fun requestLibraryPreparation() {
+        val action = deferredLocalAction
         cancelLibraryPreparation()
+        deferredLocalAction = action
         if (closed || buildCoordinator == null) return
         val selected = project?.handle ?: return
         val operationId = latestLibraryPreparation
         val capturedGeneration = generation
         val target = targetCoordinator?.attachedTarget()
         preparationTarget = target?.compileProfile
+        localConfigurationPending = target == null
         workspace.projectConfiguration(selected).whenComplete { input, failure ->
             if (failure == null && input != null && acceptsTooling.get()) {
                 events.offer(IdeEvent.LibraryConfigurationLoaded(capturedGeneration, operationId, input, target))
+            } else if (target == null && acceptsTooling.get()) {
+                events.offer(
+                    IdeEvent.LocalConfigurationResolved(
+                        capturedGeneration,
+                        operationId,
+                        selected,
+                        IdeResolveResult.Failed(failure?.message ?: "local configuration unavailable"),
+                    ),
+                )
             }
         }
     }
@@ -4257,6 +4338,8 @@ private fun IdeEvent.generationOrNull(): Long? =
         is IdeEvent.ProjectCatalogLoaded -> generation
 
         is IdeEvent.LibraryConfigurationLoaded -> generation
+
+        is IdeEvent.LocalConfigurationResolved -> generation
 
         is IdeEvent.BuildInputLoaded -> generation
 

@@ -33,7 +33,9 @@ The start page and project menu show each folder path and distinguish IDE folder
 Scroll the list to reach additional projects. An external path is remembered across IDE and Minecraft restarts, so
 you only need to enter it once. Listing saved folders does not read their manifests; a missing or invalid
 `compukter.toml` does not hide other projects or prevent opening files. Such a project stays editable, with analysis
-and compilation unavailable until its manifest is repaired and saved. Analysis also requires a resolved `compukter.lock`.
+and compilation unavailable until its manifest is repaired and saved. When opened without a computer, a project with no `compukter.lock` resolves its local dependencies automatically.
+This prepares Kotlin analysis without saving unsaved source edits. An existing lock is preserved; use **Resolve**
+to review dependency updates.
 Saved changes to the manifest and lock refresh analysis without reopening the project.
 Modified buffers are saved before a project transition. A failed create/open/clone keeps the current project available.
 
@@ -186,6 +188,7 @@ have independent bounds. The repository storage check runs after transfers; it i
 
 ## Run the project
 
-Use **Build**, **Deploy** or **Run** with the attached computer. Deployment sends the built executable through the existing
+Kotlin analysis and **Build** work with the IDE opened in the air, without a computer.
+Attach a computer for **Deploy** or **Run**. Deployment sends the built executable through the existing
 target interface. The local `.git` directory, source repository and credentials stay on the client.
 See [Getting started]({{ '/GETTING-STARTED/' | relative_url }}) for the first build and execution walkthrough.
