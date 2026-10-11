@@ -146,9 +146,13 @@ val verifyToolingRuntimeLicenses =
         inputs.dir(toolingBundleDirectory)
         inputs.file(toolingRuntimeBundleFile)
         inputs.file(rootProject.layout.projectDirectory.file("licenses/distribution-components.tsv"))
+        val actionToolingBundleDirectory = toolingBundleDirectory
+        val actionToolingRuntimeBundleFile = toolingRuntimeBundleFile
+        val inventoryFile = rootProject.file("licenses/distribution-components.tsv")
+        val licenseSlf4JVersion = libs.versions.slf4j.get()
         doLast {
-            val archive = toolingRuntimeBundleFile.get().asFile
-            val content = toolingBundleDirectory.get().asFile.toPath()
+            val archive = actionToolingRuntimeBundleFile.get().asFile
+            val content = actionToolingBundleDirectory.get().asFile.toPath()
             val entries =
                 Files.walk(content).use { paths ->
                     paths
@@ -162,7 +166,7 @@ val verifyToolingRuntimeLicenses =
                 "manifests/analysis.payload",
                 "META-INF/licenses/Compukters-Apache-2.0.txt",
                 "META-INF/licenses/jvm/ktlint-1.8.0-MIT.txt",
-                "META-INF/licenses/jvm/slf4j-${libs.versions.slf4j.get()}-MIT.txt",
+                "META-INF/licenses/jvm/slf4j-${licenseSlf4JVersion}-MIT.txt",
                 "META-INF/NOTICE.txt",
                 "META-INF/THIRD-PARTY-NOTICES.md",
             ).forEach { required ->
@@ -171,8 +175,7 @@ val verifyToolingRuntimeLicenses =
                 }
             }
             val expectedExternal =
-                rootProject
-                    .file("licenses/distribution-components.tsv")
+                inventoryFile
                     .readLines()
                     .drop(1)
                     .filter { it.isNotBlank() }

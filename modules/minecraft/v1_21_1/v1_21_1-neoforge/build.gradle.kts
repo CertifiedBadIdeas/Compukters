@@ -147,8 +147,16 @@ val verifyProductionJar =
         description = "Checks the remapped NeoForge 1.21.1 archive, Java 21 JNI runtime, and system resources."
         dependsOn(productionJar)
         inputs.file(productionJar.flatMap { it.archiveFile })
+        val actionExpectedMetadata = expectedMetadata
+        val actionExpectedPackagedNativeResources = expectedPackagedNativeResources
+        val actionProductionJar = productionJar.flatMap { it.archiveFile }
+        val licenseCommonsCodecVersion = libs.versions.commons.codec.get()
+        val licenseJavaewahVersion = libs.versions.javaewah.get()
+        val licenseJgitVersion = libs.versions.jgit.get()
+        val metadataVersion = rootProject.effectiveBuildVersion()
+        inputs.property("metadataVersion", metadataVersion)
         doLast {
-            val archive = productionJar.get().archiveFile.get().asFile
+            val archive = actionProductionJar.get().asFile
             val entries =
                 ZipFile(archive).use { zip ->
                     zip.entries().asSequence().filterNot { it.isDirectory }.map { it.name }.toList()
@@ -196,18 +204,18 @@ val verifyProductionJar =
             validateRelocatedProjectMetadataLibraries(entries, archive.name)
             verifyRelocatedProjectMetadataRuntime(archive)
             listOf(
-                "META-INF/licenses/jvm/jgit-${libs.versions.jgit.get()}-EDL-1.0.html",
-                "META-INF/licenses/jvm/javaewah-${libs.versions.javaewah.get()}-Apache-2.0.txt",
-                "META-INF/licenses/jvm/javaewah-${libs.versions.javaewah.get()}-PROVENANCE.txt",
-                "META-INF/licenses/jvm/commons-codec-${libs.versions.commons.codec.get()}-Apache-2.0.txt",
-                "META-INF/licenses/jvm/commons-codec-${libs.versions.commons.codec.get()}-NOTICE.txt",
+                "META-INF/licenses/jvm/jgit-${licenseJgitVersion}-EDL-1.0.html",
+                "META-INF/licenses/jvm/javaewah-${licenseJavaewahVersion}-Apache-2.0.txt",
+                "META-INF/licenses/jvm/javaewah-${licenseJavaewahVersion}-PROVENANCE.txt",
+                "META-INF/licenses/jvm/commons-codec-${licenseCommonsCodecVersion}-Apache-2.0.txt",
+                "META-INF/licenses/jvm/commons-codec-${licenseCommonsCodecVersion}-NOTICE.txt",
             ).forEach { required ->
                 check(entries.count { it == required } == 1) { "$required is missing or duplicated in ${archive.name}" }
             }
             validateRelocatedGitLibraries(entries, archive.name)
             verifyRelocatedGitRuntime(archive)
             val nativeEntries = entries.filter { it.startsWith("META-INF/natives/") }
-            validateNativeResources(nativeEntries, expectedPackagedNativeResources)
+            validateNativeResources(nativeEntries, actionExpectedPackagedNativeResources)
             check(entries.none { "compukter_ffi" in it || it.endsWith("/FfmRuntimeBackend.class") }) {
                 "Java 25 FFM runtime content leaked into ${archive.name}"
             }
@@ -258,11 +266,11 @@ val verifyProductionJar =
             }
             val metadata = ZipFile(archive).use { it.getInputStream(it.getEntry("META-INF/neoforge.mods.toml")).reader().readText() }
             check("${'$'}{" !in metadata) { "unexpanded metadata placeholder in ${archive.name}" }
-            check("version=\"${rootProject.effectiveBuildVersion()}\"" in metadata) {
+            check("version=\"${metadataVersion}\"" in metadata) {
                 "wrong Compukters product version in ${archive.name}"
             }
             listOf("minecraft_version_range", "neoforge_mod_version_range").forEach { property ->
-                check("versionRange=\"${expectedMetadata.getValue(property)}\"" in metadata) {
+                check("versionRange=\"${actionExpectedMetadata.getValue(property)}\"" in metadata) {
                     "wrong $property in ${archive.name}"
                 }
             }

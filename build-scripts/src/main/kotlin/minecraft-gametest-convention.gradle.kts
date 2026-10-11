@@ -108,20 +108,21 @@ val verifyGameTestRunIsolation =
     tasks.register("verifyGameTestRunIsolation") {
         group = "verification"
         description = "Checks that GameTest classes are visible only to the GameTest run."
+        val gameTestOutput = objects.fileCollection().from(gameTest.output)
+        val runNames = listOf("client", "client2", "client3", "server", "gameTestServer")
+        val runModFiles = runNames.associateWith { runName ->
+            val run = loom.runs.named(runName).get()
+            val mods = if (run.mods.isEmpty()) loom.mods else run.mods
+            objects.fileCollection().from(mods.map { it.modFiles })
+        }
+        inputs.files(gameTestOutput, runModFiles.values)
         doLast {
-            val gameTestFiles = gameTest.output.files.map(File::getCanonicalFile).toSet()
-
-            fun effectiveModFiles(runName: String): Set<File> {
-                val run = loom.runs.named(runName).get()
-                val mods = if (run.mods.isEmpty()) loom.mods else run.mods
-                return mods.flatMap { it.modFiles.files }.map(File::getCanonicalFile).toSet()
-            }
-
-            listOf("client", "client2", "client3", "server").forEach { runName ->
-                val leaked = effectiveModFiles(runName).intersect(gameTestFiles)
+            val gameTestFiles = gameTestOutput.files.map(File::getCanonicalFile).toSet()
+            runModFiles.filterKeys { it != "gameTestServer" }.forEach { (runName, files) ->
+                val leaked = files.files.map(File::getCanonicalFile).toSet().intersect(gameTestFiles)
                 check(leaked.isEmpty()) { "GameTest output leaked into $runName: $leaked" }
             }
-            check(effectiveModFiles("gameTestServer").intersect(gameTestFiles).isNotEmpty()) {
+            check(runModFiles.getValue("gameTestServer").files.map(File::getCanonicalFile).toSet().intersect(gameTestFiles).isNotEmpty()) {
                 "GameTest output is missing from gameTestServer"
             }
         }

@@ -63,10 +63,8 @@ tasks.named<JavaExec>("run") {
     workingDir(rootProject.projectDir)
     standardInput = System.`in`
     jvmArgs("--enable-native-access=ALL-UNNAMED", "--illegal-native-access=deny")
-    doFirst {
-        systemProperty("compukters.worker.payload", workerPayload.get().asFile.absolutePath)
-        systemProperty("compukters.ffi.library", compukterFfiLibrary.absolutePath)
-    }
+    systemProperty("compukters.worker.payload", workerPayload.get().asFile.absolutePath)
+    systemProperty("compukters.ffi.library", compukterFfiLibrary.absolutePath)
 }
 
 val endToEndTest =
@@ -82,11 +80,9 @@ val endToEndTest =
         inputs.dir(workerPayload)
         inputs.file(compukterFfiLibrary)
         inputs.dir(repositoryRoot.dir("examples/hello"))
-        doFirst {
-            systemProperty("compukters.worker.payload", workerPayload.get().asFile.absolutePath)
-            systemProperty("compukters.ffi.library", compukterFfiLibrary.absolutePath)
-            systemProperty("compukters.project.root", repositoryRoot.asFile.absolutePath)
-        }
+        systemProperty("compukters.worker.payload", workerPayload.get().asFile.absolutePath)
+        systemProperty("compukters.ffi.library", compukterFfiLibrary.absolutePath)
+        systemProperty("compukters.project.root", repositoryRoot.asFile.absolutePath)
     }
 
 tasks.check {

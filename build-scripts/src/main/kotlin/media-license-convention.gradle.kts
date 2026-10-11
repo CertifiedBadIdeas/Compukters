@@ -68,18 +68,21 @@ val verifyMediaLicenseInventory =
         inputs.files(repositoryMedia)
         inputs.files(mediaProvenance)
 
+        val inventory = inventoryFile
+        val root = repositoryRoot
+        val mediaFiles = objects.fileCollection().from(repositoryMedia)
         doLast {
-            check(inventoryFile.isFile) {
-                "media license inventory is missing: ${inventoryFile.relativeTo(repositoryRoot)}"
+            check(inventory.isFile) {
+                "media license inventory is missing: ${inventory.relativeTo(root)}"
             }
-            val records = MediaLicenseInventory.parse(inventoryFile.readText())
+            val records = MediaLicenseInventory.parse(inventory.readText())
             val discoveredPaths =
-                discoverRepositoryMedia()
-                    .mapTo(mutableSetOf()) { file -> file.relativeTo(repositoryRoot).invariantSeparatorsPath }
+                mediaFiles.files
+                    .mapTo(mutableSetOf()) { file -> file.relativeTo(root).invariantSeparatorsPath }
             val referencedPaths = records.flatMap { record -> listOf(record.path, record.provenance) }.toSet()
             val existingPaths =
                 referencedPaths
-                    .filterTo(mutableSetOf()) { path -> repositoryRoot.resolve(path).isFile }
+                    .filterTo(mutableSetOf()) { path -> root.resolve(path).isFile }
 
             MediaLicenseInventory.verify(records, discoveredPaths, existingPaths)
             logger.lifecycle("Verified ${records.size} classified media assets.")

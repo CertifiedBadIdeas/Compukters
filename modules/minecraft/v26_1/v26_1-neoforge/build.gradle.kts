@@ -19,8 +19,6 @@
 @file:Suppress("PropertyName")
 
 import com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar
-import org.gradle.api.artifacts.component.ModuleComponentIdentifier
-import org.gradle.api.artifacts.component.ProjectComponentIdentifier
 import org.tukaani.xz.XZInputStream
 import java.net.URLClassLoader
 import java.util.Locale
@@ -130,8 +128,17 @@ val verifyPackagedCompukterFfi =
         dependsOn(productionJar)
         inputs.file(productionJar.flatMap { it.archiveFile })
         inputs.property("expectedNativeResources", expectedPackagedNativeResources)
+        val actionExpectedPackagedNativeResources = expectedPackagedNativeResources
+        val actionProductionJar = productionJar.flatMap { it.archiveFile }
+        val inventoryFile = rootProject.file("licenses/distribution-components.tsv")
+        val licenseCommonsCodecVersion = libs.versions.commons.codec.get()
+        val licenseJavaewahVersion = libs.versions.javaewah.get()
+        val licenseJgitVersion = libs.versions.jgit.get()
+        val licenseXzVersion = libs.versions.xz.get()
+        val metadataVersion = rootProject.effectiveBuildVersion()
+        inputs.property("metadataVersion", metadataVersion)
         doLast {
-            val archive = productionJar.get().archiveFile.get().asFile
+            val archive = actionProductionJar.get().asFile
             val entries =
                 ZipFile(archive).use { zip ->
                     zip
@@ -144,25 +151,25 @@ val verifyPackagedCompukterFfi =
             validateRelocatedProjectMetadataLibraries(entries, archive.name)
             verifyRelocatedProjectMetadataRuntime(archive)
             listOf(
-                "META-INF/licenses/jvm/jgit-${libs.versions.jgit.get()}-EDL-1.0.html",
-                "META-INF/licenses/jvm/javaewah-${libs.versions.javaewah.get()}-Apache-2.0.txt",
-                "META-INF/licenses/jvm/javaewah-${libs.versions.javaewah.get()}-PROVENANCE.txt",
-                "META-INF/licenses/jvm/commons-codec-${libs.versions.commons.codec.get()}-Apache-2.0.txt",
-                "META-INF/licenses/jvm/commons-codec-${libs.versions.commons.codec.get()}-NOTICE.txt",
+                "META-INF/licenses/jvm/jgit-${licenseJgitVersion}-EDL-1.0.html",
+                "META-INF/licenses/jvm/javaewah-${licenseJavaewahVersion}-Apache-2.0.txt",
+                "META-INF/licenses/jvm/javaewah-${licenseJavaewahVersion}-PROVENANCE.txt",
+                "META-INF/licenses/jvm/commons-codec-${licenseCommonsCodecVersion}-Apache-2.0.txt",
+                "META-INF/licenses/jvm/commons-codec-${licenseCommonsCodecVersion}-NOTICE.txt",
             ).forEach { required ->
                 check(entries.count { it == required } == 1) { "$required is missing or duplicated in ${archive.name}" }
             }
             validateRelocatedGitLibraries(entries, archive.name)
             verifyRelocatedGitRuntime(archive)
             val nativeEntries = entries.filter { it.startsWith("META-INF/natives/") }
-            validateNativeResources(nativeEntries, expectedPackagedNativeResources)
+            validateNativeResources(nativeEntries, actionExpectedPackagedNativeResources)
             check(entries.count { it == "META-INF/neoforge.mods.toml" } == 1) {
                 "expected exactly one META-INF/neoforge.mods.toml in ${archive.name}"
             }
             val metadata = ZipFile(archive).use { zip ->
                 zip.getInputStream(zip.getEntry("META-INF/neoforge.mods.toml")).bufferedReader().use { it.readText() }
             }
-            check("version=\"${rootProject.effectiveBuildVersion()}\"" in metadata) {
+            check("version=\"${metadataVersion}\"" in metadata) {
                 "wrong Compukters product version in ${archive.name}"
             }
             listOf(
@@ -194,7 +201,7 @@ val verifyPackagedCompukterFfi =
                 "META-INF/licenses/Material-Symbols-Apache-2.0.txt",
                 "META-INF/licenses/Material-Symbols-PROVENANCE.txt",
                 "META-INF/licenses/jvm/antlr4-runtime-4.13.2-BSD-3-Clause.txt",
-                "META-INF/licenses/jvm/xz-java-${libs.versions.xz.get()}-0BSD.txt",
+                "META-INF/licenses/jvm/xz-java-${licenseXzVersion}-0BSD.txt",
                 "META-INF/NOTICE.txt",
                 "META-INF/THIRD-PARTY-NOTICES.md",
             ).forEach { required ->
@@ -264,7 +271,7 @@ val verifyPackagedCompukterFfi =
             check(manifestRuntimeFiles == nestedRuntimeFiles) {
                 "shared tooling manifest runtime inventory does not match its archive"
             }
-            val inventory = rootProject.file("licenses/distribution-components.tsv")
+            val inventory = inventoryFile
             check(inventory.isFile) { "distribution component inventory is missing: $inventory" }
             val expectedNestedLibraries =
                 inventory
@@ -516,34 +523,25 @@ val verifyNeoForgeRuntimeDependencies =
         group = "verification"
         val runtimeClasspath = configurations.named("runtimeClasspath")
         inputs.files(runtimeClasspath)
+        val runtimeComponents = runtimeClasspath.get().runtimeComponentNames(project.path)
+        inputs.property("runtimeComponents", runtimeComponents)
         doLast {
             val forbidden =
-                runtimeClasspath
-                    .get()
-                    .incoming
-                    .resolutionResult
-                    .allComponents
-                    .mapNotNull { component ->
-                        when (val id = component.id) {
-                            is ModuleComponentIdentifier -> "${id.group}:${id.module}"
-                            is ProjectComponentIdentifier -> id.projectPath
-                            else -> null
-                        }
-                    }.filter { component ->
-                        val normalized = component.lowercase(Locale.ROOT)
-                        (normalized.startsWith("dev.architectury:") &&
-                            !normalized.contains("architectury-transformer")) ||
-                            listOf(
-                                ":ide-analysis-k2",
-                                "analysis-api",
-                                "intellij",
-                                "kotlin-compiler",
-                                "kotlin-fir",
-                                "kotlin-psi",
-                                "low-level-api-fir",
-                                "symbol-light-classes",
-                            ).any(normalized::contains)
-                    }.sorted()
+                runtimeComponents.get().filter { component ->
+                    val normalized = component.lowercase(Locale.ROOT)
+                    (normalized.startsWith("dev.architectury:") &&
+                        !normalized.contains("architectury-transformer")) ||
+                        listOf(
+                            ":ide-analysis-k2",
+                            "analysis-api",
+                            "intellij",
+                            "kotlin-compiler",
+                            "kotlin-fir",
+                            "kotlin-psi",
+                            "low-level-api-fir",
+                            "symbol-light-classes",
+                        ).any(normalized::contains)
+                }.sorted()
             check(forbidden.isEmpty()) {
                 "forbidden NeoForge runtime dependencies: ${forbidden.joinToString()}"
             }
@@ -555,11 +553,12 @@ val verifyIdeWorkerClassIsolation =
         description = "Checks that K2 worker entry points are not loadable from the Minecraft application classpath."
         group = "verification"
         dependsOn(tasks.classes)
-        val applicationClasspath = configurations.named("runtimeClasspath")
-        inputs.files(applicationClasspath, sourceSets.main.get().output)
+        val applicationClasspath = objects.fileCollection().from(configurations.named("runtimeClasspath"))
+        val applicationOutput = objects.fileCollection().from(sourceSets.main.get().output)
+        inputs.files(applicationClasspath, applicationOutput)
         doLast {
             val urls =
-                (applicationClasspath.get().files + sourceSets.main.get().output.files)
+                (applicationClasspath.files + applicationOutput.files)
                     .map { it.toURI().toURL() }
                     .toTypedArray()
             URLClassLoader(urls, ClassLoader.getPlatformClassLoader()).use { loader ->

@@ -58,22 +58,16 @@ val assembleAddonGuestApiBundle = tasks.register<JavaExec>("assembleAddonGuestAp
     inputs.file(guestApiAbiLock)
     outputs.file(addonGuestApiBundleFile)
     outputs.file(generatedAddonHostSource)
-    doFirst {
-        args(
-            "--platform-input",
-            platformBundleFile.get().absolutePath,
-            "--sources",
-            guestApiSourceRoot.asFile.absolutePath,
-            "--descriptor",
-            guestApiDescriptor.asFile.absolutePath,
-            "--abi-lock",
-            guestApiAbiLock.asFile.absolutePath,
-            "--output",
-            addonGuestApiBundleFile.get().asFile.absolutePath,
-            "--host-output",
-            generatedAddonHostSource.get().asFile.absolutePath,
-        )
-    }
+    argumentProviders.add(
+        fileOptionArguments(
+            "--platform-input" to platformBundleFile,
+            "--sources" to guestApiSourceRoot,
+            "--descriptor" to guestApiDescriptor,
+            "--abi-lock" to guestApiAbiLock,
+            "--output" to addonGuestApiBundleFile,
+            "--host-output" to generatedAddonHostSource,
+        ),
+    )
 }
 
 kotlin.sourceSets.named("main") {
@@ -95,22 +89,16 @@ val updateAddonGuestApiAbiLock = tasks.register<JavaExec>("updateAddonGuestApiAb
     outputs.file(guestApiAbiLock)
     val validationBundle = layout.buildDirectory.file("addon-guest-api/${project.name}-abi-lock-update.cagb")
     outputs.file(validationBundle)
-    doFirst {
-        args(
-            "--platform-input",
-            platformBundleFile.get().absolutePath,
-            "--sources",
-            guestApiSourceRoot.asFile.absolutePath,
-            "--descriptor",
-            guestApiDescriptor.asFile.absolutePath,
-            "--abi-lock",
-            guestApiAbiLock.asFile.absolutePath,
-            "--update-abi-lock",
-            "true",
-            "--output",
-            validationBundle.get().asFile.absolutePath,
-        )
-    }
+    args("--update-abi-lock", "true")
+    argumentProviders.add(
+        fileOptionArguments(
+            "--platform-input" to platformBundleFile,
+            "--sources" to guestApiSourceRoot,
+            "--descriptor" to guestApiDescriptor,
+            "--abi-lock" to guestApiAbiLock,
+            "--output" to validationBundle,
+        ),
+    )
 }
 
 val addonGuestApiBundle = configurations.create("addonGuestApiBundle") {
