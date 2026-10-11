@@ -8666,6 +8666,15 @@ private class FunctionCompiler(
             compileStatement(plan.canonical.body)
         }
 
+        if (isTerminated() && context.continueBlocks.isEmpty()) {
+            val exit = createBlock()
+            blocks[initialBranchBlock].instructions[initialBranchIndex] =
+                Instruction.Branch(initialHasNext, blockId(body), blockId(exit))
+            context.breakBlocks.forEach { patchJumpTarget(it, exit) }
+            currentBlock = exit
+            return
+        }
+
         val condition = createBlock()
         if (!isTerminated()) jumpTo(condition)
         context.continueBlocks.forEach { patchJumpTarget(it, condition) }
@@ -8717,6 +8726,15 @@ private class FunctionCompiler(
         val context = LoopContext(plan.loop, continueTarget = null, placeholderTarget = body, finallyDepth = finallyContexts.size)
         withLoopContext(context) {
             compileStatement(plan.body)
+        }
+
+        if (isTerminated() && context.continueBlocks.isEmpty()) {
+            val exit = createBlock()
+            blocks[initialBranchBlock].instructions[initialBranchIndex] =
+                Instruction.Branch(initialCondition, blockId(body), blockId(exit))
+            context.breakBlocks.forEach { patchJumpTarget(it, exit) }
+            currentBlock = exit
+            return
         }
 
         val condition = createBlock()
@@ -8846,10 +8864,9 @@ private class FunctionCompiler(
         jump: IrBreakContinue,
         breakJump: Boolean,
     ) {
-        val context = loopContexts.lastOrNull()
-        if (context == null || jump.loop !== context.loop) {
-            throw UnsupportedKotlinIr(jump, "outer loop jump is not supported")
-        }
+        val context =
+            loopContexts.lastOrNull { it.loop === jump.loop }
+                ?: throw UnsupportedKotlinIr(jump, "loop jump target is not active in this function")
         emitNonlocalExit(context.finallyDepth, jump) {
             if (breakJump) {
                 context.breakBlocks += currentBlock

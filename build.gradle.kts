@@ -625,6 +625,8 @@ registerKotlinVmConformance(
         mapOf(
             "COMPUKTER_KOTLIN_DO_WHILE_ARTIFACT" to
                 project(":compiler-k2").layout.buildDirectory.file("generated/conformance/kotlin-int-loops.cpkt.do-while.cpkt"),
+            "COMPUKTER_KOTLIN_LABELED_LOOPS_ARTIFACT" to
+                project(":compiler-k2").layout.buildDirectory.file("generated/conformance/kotlin-int-loops.cpkt.labeled-loops.cpkt"),
         ),
 )
 registerKotlinVmConformance(
