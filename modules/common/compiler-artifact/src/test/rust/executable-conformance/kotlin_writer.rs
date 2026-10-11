@@ -1444,7 +1444,7 @@ fn k2_reference_arrays_retain_typed_guest_objects() {
     k2_expected_prints_with_budget("COMPUKTER_KOTLIN_REFERENCE_ARRAY_ARTIFACT", [], 128);
     let loops_path = std::env::var("COMPUKTER_KOTLIN_REFERENCE_ARRAY_LOOPS_ARTIFACT")
         .expect("COMPUKTER_KOTLIN_REFERENCE_ARRAY_LOOPS_ARTIFACT must be set for this conformance test");
-    k2_loop_control_executes_across_quota_slices(std::path::Path::new(&loops_path));
+    k2_loop_control_executes_across_quota_slices(std::path::Path::new(&loops_path), 256 * 1024);
 }
 
 fn k2_nullable_references_preserve_branch_and_call_semantics() {
@@ -1764,11 +1764,13 @@ fn entry_argument_limits() -> EntryArgumentLimits {
     }
 }
 
-fn k2_loop_control_executes_across_quota_slices(path: &std::path::Path) {
+fn k2_loop_control_executes_across_quota_slices(path: &std::path::Path, heap_bytes: u32) {
     let verified = verify_artifact(Arc::from(fs::read(path).expect("K2 loop-control output must exist")), ArtifactLimits::default())
         .expect("pinned VM must verify K2 loop-control output");
     for budget in [64, 512] {
-        let mut session = Session::admit(verified.clone(), list_no_io_profile(), &[]).expect("loop-control program must admit");
+        let mut profile = list_no_io_profile();
+        profile.heap_bytes = heap_bytes;
+        let mut session = Session::admit(verified.clone(), profile, &[]).expect("loop-control program must admit");
         session.start(&[]).expect("loop-control program must start");
         let mut halted = false;
         let mut exhausted_slices = 0;
@@ -1791,10 +1793,10 @@ fn k2_int_loops_execute_across_quota_slices_without_host_io() {
     execute_primitive_program(std::path::Path::new(&format!("{path}.ranges.cpkt")));
     let do_while_path = std::env::var("COMPUKTER_KOTLIN_DO_WHILE_ARTIFACT")
         .expect("COMPUKTER_KOTLIN_DO_WHILE_ARTIFACT must be set for this conformance test");
-    k2_loop_control_executes_across_quota_slices(std::path::Path::new(&do_while_path));
+    k2_loop_control_executes_across_quota_slices(std::path::Path::new(&do_while_path), 1024 * 1024);
     let labeled_path = std::env::var("COMPUKTER_KOTLIN_LABELED_LOOPS_ARTIFACT")
         .expect("COMPUKTER_KOTLIN_LABELED_LOOPS_ARTIFACT must be set for this conformance test");
-    k2_loop_control_executes_across_quota_slices(std::path::Path::new(&labeled_path));
+    k2_loop_control_executes_across_quota_slices(std::path::Path::new(&labeled_path), 1024 * 1024);
     let bytes = fs::read(path).expect("K2 Int loops output must exist");
     let verified = verify_artifact(Arc::from(bytes), ArtifactLimits::default())
         .expect("pinned VM must verify K2 Int loops output");
