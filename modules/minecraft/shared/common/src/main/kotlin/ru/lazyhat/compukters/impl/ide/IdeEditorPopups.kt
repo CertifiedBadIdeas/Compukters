@@ -309,40 +309,94 @@ internal class IdeEditorPopups(
     }
 
     private fun parameterInfo(info: IdeParameterInfoState) {
-        val caret = source.caret() ?: return
-        val visibleItems = info.items.take(PARAMETER_INFO_VISIBLE_ROWS)
-        val contentWidth = visibleItems.maxOf { visualColumns(it.signature) } * font.cellWidth + POPUP_HORIZONTAL_PADDING
-        val popup =
-            geometry.anchoredPopup(
-                caret,
-                maxOf(SEMANTIC_POPUP_MINIMUM_WIDTH, contentWidth),
-                visibleItems.size * UI_LINE_HEIGHT + POPUP_VERTICAL_PADDING,
+        val anchor =
+            source.anchor(
+                ru.lazyhat.compukters.ide.editor
+                    .EditorRange(info.callRange.startUtf16, info.callRange.startUtf16),
             )
+                ?: source.caret() ?: return
+        val availableHeight = maxOf(anchor.top - geometry.editor.top, geometry.editor.bottom - anchor.bottom)
+        val maximumRows = minOf(20, (availableHeight - 12) / font.cellHeight)
+        if (maximumRows < 2) return
+        val columns = minOf(80, ((geometry.editor.width - 24) / font.cellWidth).coerceAtLeast(1))
+        val items = info.items.sortedByDescending { it.bestCandidate }.take(minOf(PARAMETER_INFO_VISIBLE_ROWS, maximumRows - 1))
+        val rowsPerItem = ((maximumRows - 1) / items.size).coerceAtLeast(1)
+        val lines =
+            items.flatMap { item ->
+                val wrapped = IdePopupText.wrap(item.signature, columns, item.signature.length)
+                val activeRow = wrapped.indexOfFirst { range -> item.activeParameter?.intersects(range) == true }.coerceAtLeast(0)
+                val first = (activeRow - rowsPerItem + 1).coerceAtLeast(0)
+                wrapped.drop(first).take(rowsPerItem).mapIndexed { index, range ->
+                    ParameterLine(item, range, first > 0 && index == 0)
+                }
+            }
+        val header = "Parameters · Ctrl+P" + if (info.items.size > 1) " · ${info.items.size} signatures" else ""
+        val width =
+            maxOf(
+                SEMANTIC_POPUP_MINIMUM_WIDTH,
+                maxOf(visualColumns(header), lines.maxOf { visualColumns(it.text) + if (it.truncated) 2 else 0 }) * font.cellWidth + 12,
+            )
+        val popup = geometry.anchoredPopup(anchor, width, (lines.size + 1) * font.cellHeight + 12)
         semanticPopupPanel(popup.bounds)
-        visibleItems.forEachIndexed { index, item ->
-            val y = popup.bounds.top + 3 + index * UI_LINE_HEIGHT
-            val x = popup.bounds.left + 4
-            val activeParameter = item.activeParameter
-            if (activeParameter == null) {
-                output.ui(IdeTextKind.ParameterInfo, item.signature, x, y, IdeColors.TEXT, popup.bounds, Z_POPUP_TEXT)
+        output.code(
+            IdeTextKind.ParameterInfoHeader,
+            header,
+            popup.bounds.left + 6,
+            popup.bounds.top + 6 + font.glyphDrawOffsetY,
+            IdeColors.MUTED,
+            popup.bounds,
+            z = Z_POPUP_TEXT,
+        )
+        lines.forEachIndexed { index, line ->
+            val item = line.item
+            val y = popup.bounds.top + 6 + font.glyphDrawOffsetY + (index + 1) * font.cellHeight
+            var x = popup.bounds.left + 6
+            if (line.truncated) {
+                output.code(IdeTextKind.ParameterInfo, "… ", x, y, IdeColors.MUTED, popup.bounds, z = Z_POPUP_TEXT)
+                x += 2 * font.cellWidth
+            }
+            val color = if (item.bestCandidate) IdeColors.TEXT else IdeColors.MUTED
+            val parameter = item.activeParameter?.takeIf { it.intersects(line.range) }
+            if (parameter == null) {
+                output.code(IdeTextKind.ParameterInfo, line.text, x, y, color, popup.bounds, z = Z_POPUP_TEXT)
             } else {
-                val prefix = item.signature.substring(0, activeParameter.startUtf16)
-                val active = item.signature.substring(activeParameter.startUtf16, activeParameter.endUtf16)
-                val suffix = item.signature.substring(activeParameter.endUtf16)
-                output.ui(IdeTextKind.ParameterInfo, prefix, x, y, IdeColors.TEXT, popup.bounds, Z_POPUP_TEXT)
+                val start = maxOf(parameter.startUtf16, line.range.startUtf16) - line.range.startUtf16
+                val end = minOf(parameter.endUtf16, line.range.endUtf16) - line.range.startUtf16
+                val prefix = line.text.substring(0, start)
+                val active = line.text.substring(start, end)
+                val suffix = line.text.substring(end)
                 val activeX = x + visualColumns(prefix) * font.cellWidth
-                output.ui(IdeTextKind.ParameterInfo, active, activeX, y, IdeColors.ACCENT, popup.bounds, Z_POPUP_TEXT)
-                output.ui(
+                val activeBounds =
+                    IdeRect(
+                        activeX,
+                        y - font.glyphDrawOffsetY,
+                        minOf(popup.bounds.right - 4, activeX + visualColumns(active) * font.cellWidth),
+                        y - font.glyphDrawOffsetY + font.cellHeight,
+                    )
+                if (activeBounds.width > 0) {
+                    output.fill(IdeFillDraw(IdeFillKind.ParameterInfoActive, activeBounds, IdeColors.SELECTION, Z_POPUP + 1))
+                }
+                output.code(IdeTextKind.ParameterInfo, prefix, x, y, color, popup.bounds, z = Z_POPUP_TEXT)
+                output.code(IdeTextKind.ParameterInfo, active, activeX, y, IdeColors.ACCENT, popup.bounds, z = Z_POPUP_TEXT)
+                output.code(
                     IdeTextKind.ParameterInfo,
                     suffix,
                     activeX + visualColumns(active) * font.cellWidth,
                     y,
-                    IdeColors.TEXT,
+                    color,
                     popup.bounds,
-                    Z_POPUP_TEXT,
+                    z = Z_POPUP_TEXT,
                 )
             }
         }
+    }
+
+    private data class ParameterLine(
+        val item: ru.lazyhat.compukters.ide.analysis.ParameterInfoItem,
+        val range: ru.lazyhat.compukters.ide.editor.EditorRange,
+        val truncated: Boolean,
+    ) {
+        val text: String get() = item.signature.substring(range.startUtf16, range.endUtf16)
     }
 
     private fun completionRow(entry: ru.lazyhat.compukters.ide.client.analysis.IdeCompletionEntry): String =

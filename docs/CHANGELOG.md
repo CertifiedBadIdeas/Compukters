@@ -16,6 +16,7 @@ headings so this page has one stable URL that can be shared outside the reposito
 - IDE hover displays short Kotlin types with distinct signature, type, origin and wrapped documentation.
   Unknown references color their complete identifier; errors and warnings underline their exact source ranges.
   Hovering a marked token shows its problems together, preserving source editing and horizontal scrolling.
+  Argument hints open when typing a call or pressing Ctrl+P, wrap long signatures and emphasize the current parameter.
 
 - Contributors can create task worktrees with `worktree-task`: local `dev`/`main` bases, pinned VM and optional
   addon initialization, reuse of available local Git objects and automatic independent Gradle-cache preparation.

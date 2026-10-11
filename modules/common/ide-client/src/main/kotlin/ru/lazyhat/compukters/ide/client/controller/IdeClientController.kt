@@ -3777,6 +3777,17 @@ class IdeClientController(
             change,
             sourceOverlays(),
         )
+        val opening = active.document.caretOffset - 1
+        if (insertedText?.contains('(') == true && opening >= 0 && active.document.charAt(opening) == '(' &&
+            ru.lazyhat.compukters.ide.client.search
+                .lexicalTokenAt(
+                    active.document,
+                    active.highlighter.snapshot(),
+                    opening,
+                )?.second == ru.lazyhat.compukters.ide.highlight.KotlinLexicalKind.Operator
+        ) {
+            analysisCoordinator?.showParameterInfo()
+        }
         refreshAnalysisState()
     }
 
