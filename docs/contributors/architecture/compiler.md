@@ -89,7 +89,10 @@ The retained entry owns a library-only compiler environment. Each request create
 source session over the same admitted metadata symbols, preserving built-in type identity across module boundaries.
 FIR-to-IR uses K2's reusable-FIR configuration when source libraries participate: ordinary KLIB conversion clears
 resolved declaration bodies and cannot safely consume the same FIR twice. IR, lowering/specialization state, source
-snapshots and request limits remain specific to each compilation. The worker closes the retained environment on
+snapshots and request limits remain specific to each compilation. Canonical intrinsic registries index admitted
+handlers by full callable name and signature once; lookup still filters by source-module ownership or selected
+modules and rejects ambiguous matches. Each compilation session snapshots platform function links and indexes
+all overloads by symbol. These indexes contain immutable declaration metadata, not project IR or resolved calls. The worker closes the retained environment on
 shutdown. `K2CompilerAdapterTest` compares fresh and reused artifacts while alternating project declarations and
 generic specializations, including an unresolved reference to a previous project's function and subsequent recovery.
 
