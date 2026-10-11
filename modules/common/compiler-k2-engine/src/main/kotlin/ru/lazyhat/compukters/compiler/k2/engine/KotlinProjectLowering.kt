@@ -6731,9 +6731,16 @@ private class FunctionCompiler(
                     }.singleOrNull()
                     ?: throw UnsupportedKotlinIr(call, "platform property getter receiver is missing")
             val receiver = compileExpression(receiverExpression)
-            return allocate(valueType(call.type, call)).also { destination ->
-                emit(Instruction.FieldGet(destination, receiver, FieldRef.Imported(field.importId)))
-            }
+            val storage =
+                guestTypes
+                    .valueClassBox(resolvedType(call.type))
+                    ?.let { box -> ValueType.Ref(call.type.isNullable(), box.type) }
+                    ?: valueType(call.type, call)
+            val stored =
+                allocate(storage).also { destination ->
+                    emit(Instruction.FieldGet(destination, receiver, FieldRef.Imported(field.importId)))
+                }
+            return loadedValue(stored, call.type, call)
         }
         if (target.name.asString() == "equals" && target.parameters.any { it.kind == IrParameterKind.DispatchReceiver } &&
             target.parameters
@@ -10091,7 +10098,7 @@ private fun capabilityShape(
                 "compukter" to "stdio" -> 3u
                 "compukter" to "process" -> 3u
                 "compukter" to "filesystem" -> 15u
-                "compukter" to "compiler" -> 2u
+                "compukter" to "compiler" -> 1u
                 "compukter" to "redstone" -> 8u
                 "compukters" to "peripheral" -> 6u
                 "compukter" to "sound" -> 1u

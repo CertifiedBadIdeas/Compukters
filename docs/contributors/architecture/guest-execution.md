@@ -17,7 +17,7 @@ Shell owns line editing, authoritative echo, prompts, and direct built-ins. A no
 first to `/home/<name>` and, only when that path is absent, falls back to `/rom/<name>`; an absolute command is used as
 given.
 
-`Process.run(path)` and `Process.run(path, args)` execute one verified extensionless artifact as a foreground child and
+`Process.run(path: Path)` and `Process.run(path: Path, args)` execute one verified extensionless artifact as a foreground child and
 return `ProcessResult.Exited(code)` or `ProcessResult.Failed(reason, diagnostic)`. `Process.exit(code)` terminates the
 current process. Guest code does not select an explicit capability mask when starting a child.
 
@@ -120,7 +120,11 @@ the same dispatch path.
 
 `/rom/kotlinc source.kt [-o output]` accepts exactly one source file today; its default output is the source basename
 without `.kt`. This single-file in-computer command is distinct from the IDE and compiler protocol, which support
-bounded multi-file project snapshots.
+bounded multi-file project snapshots. It converts explicit or `/home`-relative command arguments to lexical
+Path values; Compiler normalizes them before the native transaction. `Compiler.compile(source: Path, output: Path)`
+returns a typed result containing the canonical successful output or a failure reason and its own diagnostics.
+Compiler capability ABI 2 returns status and diagnostics together, so other cooperative tasks cannot replace
+that result's diagnostic. Rust checks source and output revisions and rights before atomic executable installation.
 
 `/rom/edit <path>` is a nano-like 51x19 editor backed by one managed 4096-unit `CharArray` gap buffer. Cursor motion and
 deletion preserve UTF-16 surrogate pairs, CRLF input is normalized to LF, Tab inserts four spaces, Enter inherits

@@ -11,6 +11,27 @@ permalink: /ARCHITECTURE/abi/
 
 This reference groups versioned representation boundaries by the version that introduced them. Those versions are minimum feature requirements, not a claim that older Runtime distributions implement today’s platform. The source owners below define the active contract. Before changing a wire format, inspect each producer, consumer and verifier. Runtime release pins in `build-scripts/src/main/kotlin/RuntimeBundleSupport.kt` describe published bundles separately from the local VM checkout.
 
+## Typed Guest compilation and process paths
+
+`compukter:core` 6.0.0 replaces String-based `Compiler.compile` and `Process.run` with Path-based
+facades. Compiler returns `CompilationResult.Success(output: Path)` or `Failed(reason, diagnostics)`;
+`Compiler.diagnostics()` is removed. Paths normalize before native calls. Original path lengths remain
+bounded at 4096 UTF-16 units, and combined canonical compilation paths must fit the same outbound limit.
+Process arguments and its canonical path also share this limit and report `LIMIT_EXCEEDED` before publication.
+
+The new compiler binding emits `compukter:compiler` ABI 2, selector 0: asynchronous
+`(String, String) -> String`. Its private reply starts with one status UTF-16 unit (0 success, 1 rejected,
+2 stale source/output, 3 invalid compiled artifact, 4 installation I/O failure), followed by diagnostics.
+The entire reply fits the inbound text limit; diagnostic truncation preserves Unicode scalar boundaries.
+Status and diagnostics belong to the same request, including across cooperative tasks and checkpoint restoration.
+ABI 1 remains admitted for historical executables; new source has no compatibility wrappers.
+
+Native C ABI 23, Runtime source version 0.23.0, CPKT 3.0, checkpoint envelope/schema 3 and the compiler worker
+protocol remain unchanged. Existing String transport carries the reply, and the pending admitted operation
+already retains its result representation in checkpoints. ABI 2 requires the updated local VM; published
+Runtime pins do not imply support for this new capability. Library consumers rebuild against the changed
+core module identity. Imported value-class fields are loaded through their nominal storage box before unboxing.
+
 ## Portable Guest filesystem
 
 `compukter:core` 5.1.0 permits dot components in lexical Path values and adds pure normalization,

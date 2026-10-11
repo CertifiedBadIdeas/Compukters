@@ -223,3 +223,39 @@ can return false for indeterminate access, and prechecks can become stale immedi
 [DirectoryStream](https://docs.oracle.com/en/java/javase/25/docs/api/java.base/java/nio/file/DirectoryStream.html)
 is unordered and weakly consistent; Guest directory cursors instead enumerate a sorted name snapshot.
 No provider SPI, symbolic links, watchers or asynchronous I/O are implied by this API.
+
+## Compilation and process launch
+
+Compiler and Process accept the same lexical Path values. Each facade normalizes dot components before
+native validation and checks the original input length. Permissions still apply to the normalized target.
+
+```kotlin
+import compukter.compiler.CompilationResult
+import compukter.compiler.Compiler
+import compukter.filesystem.toPath
+import compukter.process.Process
+import compukter.process.ProcessResult
+
+fun main() {
+    when (val compilation = Compiler.compile("/home/./demo.kt".toPath(), "/home/tmp/../demo".toPath())) {
+        is CompilationResult.Success -> when (val process = Process.run(compilation.output)) {
+            is ProcessResult.Exited -> println("exit: ${process.code}")
+            is ProcessResult.Failed -> println(process.diagnostic)
+        }
+        is CompilationResult.Failed -> println(compilation.diagnostics)
+    }
+}
+```
+
+`CompilationResult.Success.output` contains the canonical installed path. Failure reasons are `INVALID_PATH`
+(original input exceeds the path transport limit), `LIMIT_EXCEEDED` (the combined canonical paths exceed
+4096 UTF-16 units), `REJECTED` (invalid source/output, access denial or source compilation errors), `STALE`
+(source or output changed during compilation), `INVALID_ARTIFACT` (the compiler output failed native validation),
+and `IO_FAILURE` (executable installation failed). Diagnostics belong to that result and remain usable after
+later compilations. Failed compilation preserves any previously installed executable.
+
+`Process.run(path)` and `Process.run(path, args)` return ProcessResult and accept no String overload.
+The canonical path and encoded arguments share a 4096-unit outbound limit; exceeding it returns
+`ProcessFailureReason.LIMIT_EXCEEDED`. An oversized original path returns `INVALID_PATH` even when dot
+normalization would shorten it. Path syntax errors happen when constructing a Path, before either operation.
+Neither operation maps a virtual path to an operating-system path. Writing into `/rom` remains denied.

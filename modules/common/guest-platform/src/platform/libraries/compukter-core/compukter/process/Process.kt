@@ -6,11 +6,23 @@
 
 package compukter.process
 
-public object Process {
-    public fun run(path: String): ProcessResult = run(path, arrayOf<String>())
+import compukter.filesystem.Path
 
-    public fun run(path: String, args: Array<String>): ProcessResult {
-        val raw = ProcessBindings.run(path, encodeArgs(args))
+public object Process {
+    public fun run(path: Path): ProcessResult = run(path, arrayOf<String>())
+
+    public fun run(
+        path: Path,
+        args: Array<String>,
+    ): ProcessResult {
+        if (path.value.length > 4096) {
+            return ProcessResult.Failed(ProcessFailureReason.INVALID_PATH, "path exceeds the transport limit")
+        }
+        val canonicalPath = path.normalize().value
+        val encodedArgs =
+            encodeArgs(args, 4096 - canonicalPath.length)
+                ?: return ProcessResult.Failed(ProcessFailureReason.LIMIT_EXCEEDED, "process arguments exceed the transport limit")
+        val raw = ProcessBindings.run(canonicalPath, encodedArgs)
         if (raw >= 0) return ProcessResult.Exited(raw)
         return ProcessResult.Failed(failureReason(-raw), ProcessBindings.takeFailureDiagnostic())
     }
@@ -19,9 +31,14 @@ public object Process {
 }
 
 public sealed interface ProcessResult {
-    public data class Exited(val code: Int) : ProcessResult
+    public data class Exited(
+        val code: Int,
+    ) : ProcessResult
 
-    public data class Failed(val reason: ProcessFailureReason, val diagnostic: String) : ProcessResult
+    public data class Failed(
+        val reason: ProcessFailureReason,
+        val diagnostic: String,
+    ) : ProcessResult
 }
 
 public enum class ProcessFailureReason {
@@ -39,7 +56,10 @@ public enum class ProcessFailureReason {
 }
 
 private object ProcessBindings {
-    external fun run(path: String, encodedArgs: String): Int
+    external fun run(
+        path: String,
+        encodedArgs: String,
+    ): Int
 
     external fun takeFailureDiagnostic(): String
 
@@ -62,12 +82,16 @@ private fun failureReason(code: Int): ProcessFailureReason =
         else -> ProcessBindings.exit(-1)
     }
 
-private fun encodeArgs(args: Array<String>): String {
+private fun encodeArgs(
+    args: Array<String>,
+    maximumUnits: Int,
+): String? {
+    if (maximumUnits < 2) return null
     var size = 2
     var index = 0
     while (index < args.size) {
         val length = args[index].length
-        if (size > Int.MAX_VALUE - 2 - length) ProcessBindings.exit(-1)
+        if (length > maximumUnits - size - 2) return null
         size = size + 2 + length
         index = index + 1
     }
