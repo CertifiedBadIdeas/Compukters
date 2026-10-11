@@ -29,6 +29,22 @@ import kotlin.test.assertTrue
 
 class IdeFileTabBarTest {
     @Test
+    fun `active tab uses readable text and an underline while keeping conflict markers`() {
+        val files =
+            listOf(IdeFileTab(ProjectPath.file("src/main.kt"), dirty = true), IdeFileTab(ProjectPath.file("src/other.kt"), conflict = true))
+        val layout = IdeFileTabBar.layout(IdeRect(0, 0, 800, 24), files)
+        val draw = IdeFileTabBar.draw(layout, files.first().path, true)
+        val active = draw.controls.single { it.target.action == IdeHitAction.FileTab && it.target.selected }
+        assertEquals(IdeColors.EDITOR, active.panel.color)
+        assertTrue(draw.text.any { it.value == "main.kt •" && it.color == IdeColors.TEXT })
+        assertTrue(draw.text.any { it.value == "other.kt !" })
+        val underline = draw.fills.single()
+        assertEquals(IdeColors.ACCENT, underline.color)
+        assertTrue(active.target.bounds.contains(underline.bounds))
+        assertEquals(2, underline.bounds.height)
+    }
+
+    @Test
     fun `overflow reveals selected file and keeps controls inside the tab bar`() {
         val bounds = IdeRect(200, 46, 480, 70)
         val files = (0..9).map { IdeFileTab(ProjectPath.file("src/file$it.kt")) }

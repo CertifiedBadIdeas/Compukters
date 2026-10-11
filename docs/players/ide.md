@@ -39,8 +39,17 @@ Modified buffers are saved before a project transition. A failed create/open/clo
 
 ## Open-file tabs
 
+Press **Ctrl+Shift+N** to search the current project by filename or path. Wider windows also show an **Open file…**
+button in the toolbar.
+Search includes files in collapsed folders and shows full paths to distinguish duplicate names. It ignores case;
+separate fragments with spaces to narrow a path. An empty query puts the active and open files first.
+The picker shows up to 100 results; type more of the name or path to narrow a large project.
+Use **Up/Down** or **Page Up/Down** to select, **Enter** or a double click to open, and **Esc** to cancel.
+The query supports the same selection, clipboard and undo actions as dialog fields.
+
 Opening project files adds tabs above the editor. Click a tab to switch files while retaining its edits, caret,
-selection, scrolling and undo history. A **•** marks unsaved changes; **!** marks a save conflict.
+selection, scrolling and undo history. The active tab has a colored underline. A **•** marks unsaved changes;
+**!** marks a save conflict.
 When the tabs do not fit, use the arrows or scroll over the tab bar. Switching files reveals the active tab.
 
 Click **×** to close a file. A modified file stays open until saving succeeds. A failed save leaves it available;
