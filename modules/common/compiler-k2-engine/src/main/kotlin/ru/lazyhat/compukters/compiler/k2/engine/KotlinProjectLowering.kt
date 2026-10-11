@@ -1014,8 +1014,8 @@ private fun mapGuestValueType(
                 ValueType.Ref(nullable = false, type = TypeRef.Imported(ImportId.of(INT_ARRAY_RUNTIME_TYPE)))
             } else if (guestTypes.isStringArray(type)) {
                 stringArrayType
-            } else if (guestTypes.referenceArrayType(type) != null) {
-                requireNotNull(guestTypes.referenceArrayType(type))
+            } else if (guestTypes.guestArrayType(type) != null) {
+                requireNotNull(guestTypes.guestArrayType(type))
             } else if (functionTypes.forType(type) != null) {
                 ValueType.Ref(nullable = false, type = requireNotNull(functionTypes.forType(type)))
             } else if (type is IrSimpleType && type.classifier is IrClassSymbol) {
@@ -1552,25 +1552,25 @@ internal object KotlinProjectLowering {
                 ?.type
                 ?.let(::discoverValueClass)
         }
-        val referenceArrayUsage =
-            ReferenceArrayUsageCollector(
+        val guestArrayUsage =
+            GuestArrayUsageCollector(
                 guestTypes,
                 userClasses.associateBy { it.symbol },
                 classInstances.toSet(),
                 linkedSymbols.types.keys,
             )
         functionInstances.forEach { instance ->
-            referenceArrayUsage.consider(instance.declaration.returnType, instance::substitute)
+            guestArrayUsage.consider(instance.declaration.returnType, instance::substitute)
             loweredParameters(instance.declaration, session).forEach {
-                referenceArrayUsage.consider(it.type, instance::substitute)
+                guestArrayUsage.consider(it.type, instance::substitute)
             }
-            referenceArrayUsage.scan(instance.declaration, instance::substitute)
+            guestArrayUsage.scan(instance.declaration, instance::substitute)
         }
         classInstances.forEach { instance ->
-            referenceArrayUsage.scan(instance.declaration, instance::substitute)
+            guestArrayUsage.scan(instance.declaration, instance::substitute)
         }
-        topLevelProperties.forEach { referenceArrayUsage.scan(it.declaration) }
-        val referenceArrays = referenceArrayUsage.arrays.toSortedMap()
+        topLevelProperties.forEach { guestArrayUsage.scan(it.declaration) }
+        val guestArrays = guestArrayUsage.arrays.toSortedMap()
         val functionArtifactNames =
             functionInstances.associateWith { instance ->
                 val function = instance.declaration
@@ -1620,7 +1620,7 @@ internal object KotlinProjectLowering {
                     runtimeTypeNames +
                     runtimeMemberNames +
                     listOfNotNull("kotlin.Array".takeIf { usesStringArray }) +
-                    referenceArrays.keys +
+                    guestArrays.keys +
                     guestTypes.valueClassBoxes.keys +
                     guestTypes.valueClassBoxes.values.flatMap { box -> box.componentSourceTypes.indices.map(box::payloadExportName) } +
                     guestTypes.valueClassBoxes.keys.map { "$it.<inline-value>" } +
@@ -1801,7 +1801,7 @@ internal object KotlinProjectLowering {
                 syntheticClassCount +
                 stateTypeCount +
                 (if (usesStringArray) 1 else 0) +
-                referenceArrays.size
+                guestArrays.size
         val initializerTypeIds =
             initializerClasses.withIndex().associate { (index, declaration) ->
                 declaration.symbol to TypeId.of((initializerTypeBase + index).toUInt())
@@ -1904,14 +1904,14 @@ internal object KotlinProjectLowering {
                         ),
                     ),
             )
-        val referenceArrayTypeBase =
+        val guestArrayTypeBase =
             classTypeBase + classInstances.size + syntheticClassCount + stateTypeCount + (if (usesStringArray) 1 else 0)
-        val referenceArrayTypes =
-            referenceArrays.keys.withIndex().associate { (index, name) ->
+        val guestArrayTypes =
+            guestArrays.keys.withIndex().associate { (index, name) ->
                 name to
                     ValueType.Ref(
                         nullable = false,
-                        type = TypeRef.Local(TypeId.of((referenceArrayTypeBase + index).toUInt())),
+                        type = TypeRef.Local(TypeId.of((guestArrayTypeBase + index).toUInt())),
                     )
             }
         var localBoxTypeCount = 0
@@ -1980,7 +1980,7 @@ internal object KotlinProjectLowering {
         guestTypes.valueClassBoxes.values.forEach { box ->
             if (box.inlineType == null) box.componentTypes = listOf(box.scalar) else resolveInlineComponents(box)
         }
-        guestTypes.registerReferenceArrays(referenceArrayTypes)
+        guestTypes.registerGuestArrays(guestArrayTypes)
         functionInstances.forEach { instance ->
             validateFunction(
                 instance.declaration,
@@ -3410,32 +3410,49 @@ internal object KotlinProjectLowering {
                         } else {
                             emptyList()
                         } +
-                        referenceArrays.map { (name, element) ->
+                        guestArrays.map { (name, element) ->
                             NominalType.Array(
                                 name = requireNotNull(metadataIds[name]),
                                 superType = TypeRef.Imported(ImportId.of(ANY_RUNTIME_TYPE)),
+                                storage =
+                                    (element as? GuestArrayElement.Primitive)?.primitive?.arrayStorage
+                                        ?: ru.lazyhat.compukters.compiler.artifact.model.ArrayStorage.NATURAL,
                                 element =
-                                    ValueType.Ref(
-                                        nullable = element.nullable,
-                                        type =
-                                            when (element) {
-                                                is ReferenceArrayElement.ValueClass -> {
-                                                    element.box.type
-                                                }
+                                    when (element) {
+                                        is GuestArrayElement.Primitive -> {
+                                            element.primitive.scalar
+                                        }
 
-                                                is ReferenceArrayElement.Runtime -> {
-                                                    TypeRef.Imported(ImportId.of(element.runtimeType))
-                                                }
+                                        else -> {
+                                            ValueType.Ref(
+                                                nullable = element.nullable,
+                                                type =
+                                                    when (element) {
+                                                        is GuestArrayElement.ValueClass -> {
+                                                            element.box.type
+                                                        }
 
-                                                is ReferenceArrayElement.PlatformClass -> {
-                                                    requireNotNull(externalClassTypes[element.symbol])
-                                                }
+                                                        is GuestArrayElement.Runtime -> {
+                                                            TypeRef.Imported(ImportId.of(element.runtimeType))
+                                                        }
 
-                                                is ReferenceArrayElement.GuestClass -> {
-                                                    TypeRef.Local(requireNotNull(classInstanceTypeIds[element.instance]))
-                                                }
-                                            },
-                                    ),
+                                                        is GuestArrayElement.PlatformClass -> {
+                                                            requireNotNull(externalClassTypes[element.symbol])
+                                                        }
+
+                                                        is GuestArrayElement.GuestClass -> {
+                                                            TypeRef.Local(
+                                                                requireNotNull(classInstanceTypeIds[element.instance]),
+                                                            )
+                                                        }
+
+                                                        is GuestArrayElement.Primitive -> {
+                                                            error("primitive array element must use scalar storage")
+                                                        }
+                                                    },
+                                            )
+                                        }
+                                    },
                             )
                         } + initializerTypes + topLevelInitializerTypes + externalFunctionTypes +
                         NominalType.Function(
@@ -3942,7 +3959,7 @@ internal object KotlinProjectLowering {
                 type.isExactClass(pluginContext.irBuiltIns.intArray) ||
                 type.isExactClass(pluginContext.irBuiltIns.doubleArray) ||
                 guestTypes.isStringArray(type) ||
-                guestTypes.referenceArrayType(type) != null ||
+                guestTypes.guestArrayType(type) != null ||
                 (
                     !type.isNullable() &&
                         inlineValueClasses.contains((type as? IrSimpleType)?.classifier as? IrClassSymbol)
@@ -5793,8 +5810,8 @@ private class FunctionCompiler(
         GuestPrimitive.array(resolvedType(call.type))?.let { primitive ->
             return compilePrimitiveArrayConstructor(call, primitive)
         }
-        if (isSupportedReferenceArray(call.type)) {
-            return compileReferenceArrayConstructor(call)
+        if (isSupportedGuestArray(call.type)) {
+            return compileGuestArrayConstructor(call)
         }
         if (call.type == kotlinStringType &&
             arguments.size == 3 &&
@@ -5848,7 +5865,7 @@ private class FunctionCompiler(
         return compileArrayInitializer(call, array, length, initializer, shape, primitive.scalar)
     }
 
-    private fun compileReferenceArrayConstructor(call: IrConstructorCall): RegisterId {
+    private fun compileGuestArrayConstructor(call: IrConstructorCall): RegisterId {
         val arguments = call.arguments.filterNotNull()
         if (arguments.size != 2 || valueType(arguments[0].type, call) != ValueType.I32) {
             throw UnsupportedKotlinIr(call, "reference array constructor requires an Int size and initializer")
@@ -6208,7 +6225,7 @@ private class FunctionCompiler(
         }
     }
 
-    private fun compileReferenceArrayLoad(
+    private fun compileGuestArrayLoad(
         array: RegisterId,
         index: RegisterId,
         elementType: IrType,
@@ -6221,7 +6238,7 @@ private class FunctionCompiler(
         return if (box != null && !resolved.isNullable()) unboxValueClass(loaded, box) else loaded
     }
 
-    private fun compileReferenceArrayElement(
+    private fun compileGuestArrayElement(
         expression: IrExpression,
         elementType: IrType?,
     ): RegisterId {
@@ -6833,7 +6850,7 @@ private class FunctionCompiler(
             return allocate(stringType).also { emit(Instruction.StringConcat(it, left, right)) }
         }
         compilePrimitiveArrayFactory(call, target)?.let { return it }
-        compileReferenceArrayFactory(call, target)?.let { return it }
+        compileGuestArrayFactory(call, target)?.let { return it }
         trustedIntrinsic(target)?.let { intrinsic ->
             val arguments =
                 target.parameters
@@ -6918,7 +6935,7 @@ private class FunctionCompiler(
                 if (
                     target.name.asString() == "set" &&
                     argumentExpressions.size == 3 &&
-                    isSupportedReferenceArray(argumentExpressions[0].type)
+                    isSupportedGuestArray(argumentExpressions[0].type)
                 ) {
                     guestTypes.arrayElement(resolvedType(argumentExpressions[0].type))
                 } else {
@@ -6927,7 +6944,7 @@ private class FunctionCompiler(
             val arguments =
                 argumentExpressions.mapIndexed { index, argument ->
                     if (index == 2 && arrayStoreElementType != null) {
-                        compileReferenceArrayElement(argument, arrayStoreElementType)
+                        compileGuestArrayElement(argument, arrayStoreElementType)
                     } else if (argument is IrConst && argument.value == null) {
                         val other = argumentExpressions.firstOrNull { it !== argument && it.type != argument.type }
                         val reference = other?.let { valueType(it.type, it) as? ValueType.Ref }
@@ -7344,7 +7361,7 @@ private class FunctionCompiler(
     }
 
     @OptIn(UnsafeDuringIrConstructionAPI::class)
-    private fun compileReferenceArrayFactory(
+    private fun compileGuestArrayFactory(
         call: IrCall,
         target: IrSimpleFunction,
     ): RegisterId? {
@@ -7353,7 +7370,7 @@ private class FunctionCompiler(
             if (guestTypes.isStringArray(resolvedCallType)) {
                 stringArrayType
             } else {
-                guestTypes.referenceArrayType(resolvedCallType) ?: return null
+                guestTypes.guestArrayType(resolvedCallType) ?: return null
             }
         val fqName = target.fqNameWhenAvailable?.asString() ?: return null
         if (fqName == "kotlin.arrayOfNulls") {
@@ -7384,7 +7401,7 @@ private class FunctionCompiler(
                 }
             }
         val elementType = guestTypes.arrayElement(resolvedCallType)
-        return compileArrayElements(call, arrayType as ValueType.Ref, elements) { compileReferenceArrayElement(it, elementType) }
+        return compileArrayElements(call, arrayType as ValueType.Ref, elements) { compileGuestArrayElement(it, elementType) }
     }
 
     @OptIn(UnsafeDuringIrConstructionAPI::class)
@@ -7959,13 +7976,13 @@ private class FunctionCompiler(
             emit(Instruction.ArrayStore(arguments[0], arguments[1], arguments[2]))
             return null
         }
-        if (arguments.size == 1 && isSupportedReferenceArray(argumentExpressions[0].type) && name == "<get-size>") {
+        if (arguments.size == 1 && isSupportedGuestArray(argumentExpressions[0].type) && name == "<get-size>") {
             return result(ValueType.I32) { Instruction.ArrayLength(it, arguments[0]) }
         }
-        if (arguments.size == 2 && isSupportedReferenceArray(argumentExpressions[0].type) && name == "get") {
-            return compileReferenceArrayLoad(arguments[0], arguments[1], call.type, call)
+        if (arguments.size == 2 && isSupportedGuestArray(argumentExpressions[0].type) && name == "get") {
+            return compileGuestArrayLoad(arguments[0], arguments[1], call.type, call)
         }
-        if (arguments.size == 3 && isSupportedReferenceArray(argumentExpressions[0].type) && name == "set") {
+        if (arguments.size == 3 && isSupportedGuestArray(argumentExpressions[0].type) && name == "set") {
             emit(Instruction.ArrayStore(arguments[0], arguments[1], arguments[2]))
             return null
         }
@@ -8199,7 +8216,7 @@ private class FunctionCompiler(
         if (fqName !in setOf("kotlin.collections.copyOf", "kotlin.collections.copyInto") || !target.isExternal) return null
         val receiverExpression = call.arguments.firstOrNull() ?: return null
         val receiverType = resolvedType(receiverExpression.type)
-        if (GuestPrimitive.array(receiverType) == null && !isSupportedReferenceArray(receiverType)) {
+        if (GuestPrimitive.array(receiverType) == null && !isSupportedGuestArray(receiverType)) {
             return null
         }
         var owner = target.parent
@@ -8249,13 +8266,32 @@ private class FunctionCompiler(
         }
         val source = arguments[0]
         val zero = emitI32Constant(0, call)
+        val sourceElement = guestTypes.arrayElement(receiverType)
+        val sourcePrimitive = sourceElement?.takeUnless { it.isNullable() }?.let(GuestPrimitive::scalar)
+        val destinationElement = guestTypes.arrayElement(resolvedType(call.type))
+        val boxesElements =
+            sourcePrimitive != null && destinationElement != null &&
+                (destinationElement.isNullable() || GuestPrimitive.scalar(destinationElement) == null)
         if (fqName == "kotlin.collections.copyInto") {
             val destination = arguments[1]
             val destinationStart = arguments[2]
             val sourceStart = arguments[3]
             val end = arguments[4]
             val length = allocate(ValueType.I32).also { emit(Instruction.Subtract(it, end, sourceStart)) }
-            emit(Instruction.ArrayCopy(source, destination, sourceStart, destinationStart, length))
+            if (boxesElements) {
+                compileBoxingArrayCopy(
+                    call,
+                    source,
+                    destination,
+                    sourceStart,
+                    destinationStart,
+                    end,
+                    requireNotNull(sourcePrimitive),
+                    requireNotNull(destinationElement),
+                )
+            } else {
+                emit(Instruction.ArrayCopy(source, destination, sourceStart, destinationStart, length))
+            }
             return destination
         }
         val sourceSize = allocate(ValueType.I32).also { emit(Instruction.ArrayLength(it, source)) }
@@ -8276,8 +8312,89 @@ private class FunctionCompiler(
         emit(Instruction.Move(length, sourceSize))
         jumpTo(copy)
         currentBlock = copy
-        emit(Instruction.ArrayCopy(source, destination, zero, zero, length))
+        if (boxesElements) {
+            compileBoxingArrayCopy(
+                call,
+                source,
+                destination,
+                zero,
+                zero,
+                length,
+                requireNotNull(sourcePrimitive),
+                requireNotNull(destinationElement),
+            )
+        } else {
+            emit(Instruction.ArrayCopy(source, destination, zero, zero, length))
+        }
         return destination
+    }
+
+    private fun compileBoxingArrayCopy(
+        call: IrCall,
+        source: RegisterId,
+        destination: RegisterId,
+        sourceStart: RegisterId,
+        destinationStart: RegisterId,
+        end: RegisterId,
+        primitive: GuestPrimitive,
+        destinationElement: IrType,
+    ) {
+        // Validate the entire range before boxing or writing, including zero-length copies.
+        // Different scalar/reference layouts cannot alias, so forward traversal preserves overlap semantics.
+        val zero = emitI32Constant(0, call)
+        val sourceSize = allocate(ValueType.I32).also { emit(Instruction.ArrayLength(it, source)) }
+        val destinationSize = allocate(ValueType.I32).also { emit(Instruction.ArrayLength(it, destination)) }
+        val invalidRanges = mutableListOf<Int>()
+
+        fun requireAtMost(
+            left: RegisterId,
+            right: RegisterId,
+        ) {
+            val invalid = allocate(ValueType.Bool).also { emit(Instruction.Greater(OrderedScalarValueType.I32, it, left, right)) }
+            val next = createBlock()
+            invalidRanges += currentBlock
+            emit(Instruction.Branch(invalid, blockId(0), blockId(next)))
+            currentBlock = next
+        }
+        requireAtMost(zero, sourceStart)
+        requireAtMost(sourceStart, end)
+        requireAtMost(end, sourceSize)
+        requireAtMost(zero, destinationStart)
+        requireAtMost(destinationStart, destinationSize)
+        val length = allocate(ValueType.I32).also { emit(Instruction.Subtract(it, end, sourceStart)) }
+        val available = allocate(ValueType.I32).also { emit(Instruction.Subtract(it, destinationSize, destinationStart)) }
+        requireAtMost(length, available)
+        val index = allocate(ValueType.I32).also { emit(Instruction.Move(it, sourceStart)) }
+        val output = allocate(ValueType.I32).also { emit(Instruction.Move(it, destinationStart)) }
+        val failure = createBlock()
+        // Place shared failure after all guards: only loop headers may receive backward branches.
+        invalidRanges.forEach { block ->
+            val instructions = blocks[block].instructions
+            val branch = instructions.last() as Instruction.Branch
+            instructions[instructions.lastIndex] = branch.copy(trueTarget = blockId(failure))
+        }
+        val condition = createBlock(loopHeader = true)
+        val body = createBlock()
+        val exit = createBlock()
+        jumpTo(condition)
+        currentBlock = failure
+        prepareAllocationBlock()
+        val exceptionType = TypeRef.Imported(ImportId.of(12u))
+        val exception = allocate(ValueType.Ref(false, exceptionType))
+        emit(Instruction.NewObject(exception, exceptionType))
+        emit(Instruction.Throw(exception))
+        currentBlock = condition
+        val more = allocate(ValueType.Bool).also { emit(Instruction.Less(OrderedScalarValueType.I32, it, index, end)) }
+        emit(Instruction.Branch(more, blockId(body), blockId(exit)))
+        currentBlock = body
+        val value = allocate(primitive.scalar).also { emit(Instruction.ArrayLoad(it, source, index)) }
+        val boxed = boxScalar(value, valueType(destinationElement, call) as ValueType.Ref, primitive)
+        emit(Instruction.ArrayStore(destination, output, boxed))
+        val one = emitI32Constant(1, call)
+        emit(Instruction.Add(index, index, one))
+        emit(Instruction.Add(output, output, one))
+        jumpTo(condition)
+        currentBlock = exit
     }
 
     private fun compileStringArrayCopyOfRange(
@@ -8682,7 +8799,7 @@ private class FunctionCompiler(
             if (GuestPrimitive.array(resolvedType(plan.array.type)) != null) {
                 allocate(valueType(loopVariable.type, loopVariable)).also { emit(Instruction.ArrayLoad(it, array, index)) }
             } else {
-                compileReferenceArrayLoad(array, index, loopVariable.type, loopVariable)
+                compileGuestArrayLoad(array, index, loopVariable.type, loopVariable)
             }
         values[loopVariable.symbol] = loopValue
         val context = LoopContext(plan.canonical.loop, continueTarget = null, placeholderTarget = body, finallyDepth = finallyContexts.size)
@@ -8854,7 +8971,7 @@ private class FunctionCompiler(
                 if (iteratorCall.targetFqName() != "${primitive.arrayName}.iterator") return null
                 if (primitive.unsigned) "Iterator" else "${primitive.sourceName}Iterator"
             } else {
-                if (!isSupportedReferenceArray(array.type) || iteratorCall.targetFqName() != "kotlin.Array.iterator") return null
+                if (!isSupportedGuestArray(array.type) || iteratorCall.targetFqName() != "kotlin.Array.iterator") return null
                 "Iterator"
             }
         val loopBody = ((block.statements[1] as? IrWhileLoop)?.body as? IrBlock) ?: return null
@@ -9225,9 +9342,9 @@ private class FunctionCompiler(
             ?: currentInstance?.substitute(type)
             ?: type
 
-    private fun isSupportedReferenceArray(type: IrType): Boolean {
+    private fun isSupportedGuestArray(type: IrType): Boolean {
         val resolved = resolvedType(type)
-        return guestTypes.isStringArray(resolved) || guestTypes.referenceArrayType(resolved) != null
+        return guestTypes.isStringArray(resolved) || guestTypes.guestArrayType(resolved) != null
     }
 
     private fun valueType(
@@ -9945,37 +10062,43 @@ private class StringArrayUsageCollector(
     }
 }
 
-private sealed interface ReferenceArrayElement {
+private sealed interface GuestArrayElement {
     val nullable: Boolean
+
+    data class Primitive(
+        val primitive: GuestPrimitive,
+    ) : GuestArrayElement {
+        override val nullable: Boolean = false
+    }
 
     data class ValueClass(
         val box: GuestValueClassBox,
         override val nullable: Boolean,
-    ) : ReferenceArrayElement
+    ) : GuestArrayElement
 
     data class Runtime(
         val runtimeType: UInt,
         override val nullable: Boolean,
-    ) : ReferenceArrayElement
+    ) : GuestArrayElement
 
     data class PlatformClass(
         val symbol: IrClassSymbol,
         override val nullable: Boolean,
-    ) : ReferenceArrayElement
+    ) : GuestArrayElement
 
     data class GuestClass(
         val instance: GuestClassInstance,
         override val nullable: Boolean,
-    ) : ReferenceArrayElement
+    ) : GuestArrayElement
 }
 
-private class ReferenceArrayUsageCollector(
+private class GuestArrayUsageCollector(
     private val guestTypes: GuestTypeRegistry,
     private val classes: Map<IrClassSymbol, IrClass>,
     private val instances: Set<GuestClassInstance>,
     private val importedClasses: Set<IrClassSymbol>,
 ) {
-    val arrays = linkedMapOf<String, ReferenceArrayElement>()
+    val arrays = linkedMapOf<String, GuestArrayElement>()
 
     fun consider(
         type: IrType,
@@ -9983,8 +10106,14 @@ private class ReferenceArrayUsageCollector(
     ) {
         val resolved = substitute(type)
         val element = guestTypes.arrayElement(resolved) ?: return
+        if (!element.isNullable()) {
+            GuestPrimitive.scalar(element)?.let { primitive ->
+                arrays[resolved.specializationTypeIdentity()] = GuestArrayElement.Primitive(primitive)
+                return
+            }
+        }
         guestTypes.valueClassBox(element)?.let { box ->
-            arrays[resolved.specializationTypeIdentity()] = ReferenceArrayElement.ValueClass(box, element.isNullable())
+            arrays[resolved.specializationTypeIdentity()] = GuestArrayElement.ValueClass(box, element.isNullable())
             return
         }
         val runtimeType =
@@ -9999,18 +10128,18 @@ private class ReferenceArrayUsageCollector(
                 else -> null
             }
         if (runtimeType != null) {
-            arrays[resolved.specializationTypeIdentity()] = ReferenceArrayElement.Runtime(runtimeType, element.isNullable())
+            arrays[resolved.specializationTypeIdentity()] = GuestArrayElement.Runtime(runtimeType, element.isNullable())
             return
         }
         val symbol = (element as? IrSimpleType)?.classifier as? IrClassSymbol
         if (symbol in importedClasses && symbol?.owner?.typeParameters.isNullOrEmpty()) {
             arrays[resolved.specializationTypeIdentity()] =
-                ReferenceArrayElement.PlatformClass(requireNotNull(symbol), element.isNullable())
+                GuestArrayElement.PlatformClass(requireNotNull(symbol), element.isNullable())
             return
         }
         val instance = element.classInstance(classes) ?: return
         if (instance in instances) {
-            arrays[resolved.specializationTypeIdentity()] = ReferenceArrayElement.GuestClass(instance, element.isNullable())
+            arrays[resolved.specializationTypeIdentity()] = GuestArrayElement.GuestClass(instance, element.isNullable())
         }
     }
 

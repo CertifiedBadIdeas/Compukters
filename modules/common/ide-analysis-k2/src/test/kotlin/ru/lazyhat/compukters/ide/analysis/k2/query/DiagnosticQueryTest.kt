@@ -72,6 +72,33 @@ class DiagnosticQueryTest {
     }
 
     @Test
+    fun `primitive generic arrays resolve constructors copies and loops with source and metadata inputs`() {
+        val values = listOf("true", "1.toByte()", "1.toShort()", "'a'", "1", "1L", "1f", "1.0", "1.toUByte()", "1.toUShort()", "1u", "1uL")
+        val calls = values.joinToString("\n") { "exercise(arrayOf($it)); exercise(Array(2) { $it })" }
+        val source =
+            """
+            fun <T : Any> exercise(values: Array<T>) {
+                val copy = values.copyOf()
+                copy[0] = values[0]
+                val nullable = values.copyOf(3)
+                nullable[2] = null
+                values.copyInto(nullable)
+                val any = arrayOf<Any>("x", "y", "z")
+                values.copyInto(any)
+                for (value in copy) { check(value == values[0]) }
+            }
+            fun main() { $calls }
+            """.trimIndent()
+        for (attachedSources in listOf(false, true)) {
+            K2QueryFixture.sourceWithGuestApi(attachedSources, "main.kt" to source).use { fixture ->
+                val result = fixture.execute(fixture.presentation()) as AnalysisResult.Presentation
+                val active = result.value.accept(fixture.identity) as SnapshotPresentationAcceptance.Active
+                assertTrue(active.diagnostics.none { it.severity == EditorDiagnosticSeverity.Error }, active.diagnostics.toString())
+            }
+        }
+    }
+
+    @Test
     fun `reference array loops resolve nullable generic and value class elements with source and metadata inputs`() {
         val source =
             """

@@ -1441,6 +1441,9 @@ fn k2_generic_library_specializes_in_consumer() {
 }
 
 fn k2_reference_arrays_retain_typed_guest_objects() {
+    let packed_path = std::env::var("COMPUKTER_KOTLIN_PACKED_ARRAY_ARTIFACT")
+        .expect("COMPUKTER_KOTLIN_PACKED_ARRAY_ARTIFACT must be set for this conformance test");
+    k2_loop_control_executes_across_quota_slices(std::path::Path::new(&packed_path), 256 * 1024);
     k2_expected_prints_with_budget("COMPUKTER_KOTLIN_REFERENCE_ARRAY_ARTIFACT", [], 128);
     let loops_path = std::env::var("COMPUKTER_KOTLIN_REFERENCE_ARRAY_LOOPS_ARTIFACT")
         .expect("COMPUKTER_KOTLIN_REFERENCE_ARRAY_LOOPS_ARTIFACT must be set for this conformance test");

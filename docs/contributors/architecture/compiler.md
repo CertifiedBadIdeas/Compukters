@@ -74,6 +74,22 @@ Nullable `String` and supported Guest class source references use the artifact's
 `Null` instruction. K2's safe-call and Elvis branches lower through ordinary verified control flow, with reference
 casts when a non-null branch joins a nullable result. All twelve nullable primitives use their distinct nominal managed boxes or null. Safe casts and non-null assertions on value classes preserve their direct layout; see the [language contract](../../developers/kotlin/nullability.md) for the tested boundary.
 
+## Generic-array storage specialization
+
+Array discovery runs after concrete generic function/class substitution. Each admitted `Array<T>` has a
+nominal application array type; non-null primitive elements select the same `GuestPrimitive` scalar and
+storage width as dedicated primitive arrays. This preserves `Array<Int>` versus `IntArray` type identity
+while reusing allocation, indexed access, loops and bulk-copy instructions. Nullable and heterogeneous
+arrays retain nominal reference element storage. Array-to-`Any` transitions preserve the array reference;
+scalar-to-reference transitions use the existing primitive boxes.
+
+Copies retaining compatible storage use `ArrayCopy`. Resized generic copies return `Array<T?>`, so dense
+primitive sources use a charged scalar-load/box/store loop. The same conversion handles `copyInto` to
+nullable and `Any` destinations. Entire source/destination ranges are checked before writes with
+subtractions only after non-negative endpoint checks, avoiding overflow and preserving empty-range errors.
+Scalar/reference layouts cannot alias; compatible layouts keep VM overlap handling. Loop headers and
+allocations use ordinary safepoints and GC roots. Existing artifact encoding and runtime ABI are unchanged.
+
 ## Reference-array initialization
 
 The canonical `Array<T>(size, init)` constructor is lowered with the same existing allocation and charged
