@@ -1422,7 +1422,7 @@ class IdeClientControllerTest {
     }
 
     @Test
-    fun `bounded document cache releases clean inactive documents`() {
+    fun `bounded document cache releases closed clean tabs while preserving visible documents`() {
         val fixture =
             ControllerFixture(
                 preferences = preferences("demo", "src/main.kt"),
@@ -1433,8 +1433,10 @@ class IdeClientControllerTest {
         fixture.startAndTick()
         fixture.controller.dispatch(IdeCommand.OpenFile(ProjectPath.file("notes.txt")))
         fixture.controller.tick()
+        fixture.controller.dispatch(IdeCommand.CloseFileTab(ProjectPath.file("src/main.kt")))
         fixture.controller.dispatch(IdeCommand.OpenFile(ProjectPath.file("src/other.kt")))
         fixture.controller.tick()
+        fixture.controller.dispatch(IdeCommand.CloseFileTab(ProjectPath.file("notes.txt")))
         val opens = fixture.workspace.openRequests.size
         fixture.controller.dispatch(IdeCommand.OpenFile(ProjectPath.file("src/main.kt")))
         fixture.controller.tick()
@@ -2021,6 +2023,10 @@ internal class ControlledWorkspace(
         val request = saveRequests.last()
         val snapshot = DocumentSnapshot(request.path, request.text, revision(saveRequests.size + 1))
         pendingSaves.removeFirst().complete(DocumentSaveResult.Saved(snapshot))
+    }
+
+    fun completeSaveFailure() {
+        pendingSaves.removeFirst().completeExceptionally(java.io.IOException("Test disk failure"))
     }
 
     fun completeSaveConflict() {

@@ -91,14 +91,69 @@ class IdeScreenControllerTest {
         }
     }
 
+    @Test
+    fun `resizing reveals the active tab while explicit bar scrolling stays available`() {
+        Fixture().use { fixture ->
+            fixture.controller.dispatch(IdeCommand.CreateProject("demo"))
+            fixture.awaitWorkspace()
+            val main =
+                ru.lazyhat.compukters.ide.project.fs.ProjectPath
+                    .file("src/main.kt")
+            val other =
+                ru.lazyhat.compukters.ide.project.fs.ProjectPath
+                    .file("src/longFileNameForScrolling.kt")
+            val middle =
+                ru.lazyhat.compukters.ide.project.fs.ProjectPath
+                    .file("src/anotherLongFileName.kt")
+            fixture.controller.dispatch(IdeCommand.OpenFile(main))
+            fixture.awaitFile(main)
+            fixture.createFile(middle)
+            fixture.controller.dispatch(IdeCommand.OpenFile(middle))
+            fixture.awaitFile(middle)
+            fixture.createFile(other)
+            fixture.controller.dispatch(IdeCommand.OpenFile(other))
+            fixture.awaitFile(other)
+            fixture.ui.frame(0, 0)
+            fixture.host.pixelWidth = 1400
+            val tabs =
+                fixture.ui
+                    .frame(0, 0)
+                    .model.hitTargets
+                    .filter { it.action == IdeHitAction.FileTab }
+            assertTrue(tabs.any { it.filePath == other })
+            val bounds =
+                fixture.ui
+                    .frame(0, 0)
+                    .geometry.fileTabs!!
+            val viewport = fixture.host.viewport()
+            repeat(2) {
+                fixture.ui.mouseScrolled(viewport.toMinecraftX(bounds.left + 10.0), viewport.toMinecraftY(bounds.top + 5.0), 0.0, 1.0)
+            }
+            assertTrue(
+                fixture.ui
+                    .frame(0, 0)
+                    .model.hitTargets
+                    .any { it.action == IdeHitAction.FileTab && it.filePath == main },
+            )
+            fixture.host.pixelWidth = 1280
+            assertTrue(
+                fixture.ui
+                    .frame(0, 0)
+                    .model.hitTargets
+                    .any { it.action == IdeHitAction.FileTab && it.filePath == other },
+            )
+        }
+    }
+
     private class Host : IdeScreenHost {
         override var clipboard = ""
         var focusCleared = 0
         var restored = 0
         var abandoned = 0
         var closed = 0
+        var pixelWidth = 1920
 
-        override fun viewport() = CompuktersUiViewport.admitIde(1920, 1080, 3, IdeUiScale.TWO)
+        override fun viewport() = CompuktersUiViewport.admitIde(pixelWidth, 1080, 3, IdeUiScale.TWO)
 
         override fun clearFocus() {
             focusCleared++
@@ -144,6 +199,30 @@ class IdeScreenControllerTest {
                 Thread.sleep(1)
             }
             assertTrue(controller.viewState().page is IdePageState.Start)
+        }
+
+        fun createFile(path: ru.lazyhat.compukters.ide.project.fs.ProjectPath) {
+            root
+                .resolve("projects/demo")
+                .resolve(path.value)
+                .toFile()
+                .writeText("// Test file\n")
+        }
+
+        fun awaitWorkspace() = await { controller.viewState().page is IdePageState.Workspace }
+
+        fun awaitFile(path: ru.lazyhat.compukters.ide.project.fs.ProjectPath) =
+            await {
+                (controller.viewState().page as? IdePageState.Workspace)?.value?.activeFile == path
+            }
+
+        private fun await(condition: () -> Boolean) {
+            val deadline = System.nanoTime() + 5_000_000_000L
+            while (!condition() && System.nanoTime() < deadline) {
+                controller.tick()
+                Thread.sleep(1)
+            }
+            assertTrue(condition())
         }
 
         override fun close() {

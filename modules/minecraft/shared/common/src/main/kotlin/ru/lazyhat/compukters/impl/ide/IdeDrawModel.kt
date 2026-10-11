@@ -67,6 +67,7 @@ enum class IdeTextKind {
     ProjectAction,
     Tooltip,
     Find,
+    FileTab,
 }
 
 enum class IdeTextRotation { None, Clockwise90 }
@@ -97,6 +98,10 @@ enum class IdeHitAction {
     ScaleAuto,
     ScaleTwo,
     ScaleThree,
+    FileTab,
+    CloseFileTab,
+    PreviousFileTabs,
+    NextFileTabs,
     CreateProject,
     OpenProject,
     OpenExisting,
@@ -222,6 +227,7 @@ data class IdeHitTarget(
     val gitOperation: ru.lazyhat.compukters.ide.git.GitOperation? = null,
     val gitCommand: ru.lazyhat.compukters.ide.client.state.IdeCommand? = null,
     val gitTextRange: EditorRange? = null,
+    val filePath: ru.lazyhat.compukters.ide.project.fs.ProjectPath? = null,
 ) {
     val isProjectSwitcherControl: Boolean get() = focusGroup == IdeFocusGroup.ProjectSwitcher || action == IdeHitAction.ProjectSwitcher
 }

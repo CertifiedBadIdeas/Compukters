@@ -170,6 +170,9 @@ class IdeClientController(
     private var tree: ProjectTree? = null
     private var editor: EditorSession? = null
     private val documents = linkedMapOf<ProjectPath, EditorSession>()
+    private val openTabs = linkedSetOf<ProjectPath>()
+    private val binaryTabs = linkedMapOf<ProjectPath, IdeEditorView.Binary>()
+    private var pendingTabClose: ProjectPath? = null
     private val projectHistory = ProjectEditHistory()
     private val find = IdeFindSession()
     private val selectionOccurrences = IdeSelectionOccurrences()
@@ -491,6 +494,20 @@ class IdeClientController(
                 requestFileSwitch(command.path)
             }
 
+            is IdeCommand.SelectFileTab -> {
+                if (command.path in openTabs && state.dialog == null && pendingProjectDirectory == null && !closeRequested) {
+                    pendingFile = null
+                    pendingProjectNavigation = null
+                    pendingAttachedNavigation = null
+                    gitView = gitView.copy(visible = false, menu = null)
+                    openFile(command.path)
+                }
+            }
+
+            is IdeCommand.CloseFileTab -> {
+                requestTabClose(command.path)
+            }
+
             is IdeCommand.ExpandComputerDirectory -> {
                 computerFiles?.expand(command.path)
                 publishWorkspace()
@@ -785,6 +802,7 @@ class IdeClientController(
             return
         }
         events.drain().forEach(::accept)
+        continueTabClose()
         targetCoordinator?.tick()
         refreshTargetState()
         refreshComputerFiles()
@@ -1022,6 +1040,10 @@ class IdeClientController(
         navigation: PendingProjectNavigation? = null,
     ) {
         val selected = project ?: return
+        if (path !in openTabs && openTabs.size >= limits.projectDocuments) {
+            publishStatus("Open file limit reached; close a tab first", IdeProblemSeverity.Warning)
+            return
+        }
         closeComputerPreview()
         closeAttachedSourcePreview()
         val operationId = nextOperationId++
@@ -1029,6 +1051,14 @@ class IdeClientController(
         openingProjectNavigation = navigation
         documents[path]?.let { cached ->
             activateDocument(cached, navigation)
+            return
+        }
+        binaryTabs[path]?.let { cached ->
+            closeAnalysisFile()
+            editor = null
+            binary = cached
+            state = state.copy(busy = state.busy - IdeBusyOperation.Project)
+            publishWorkspace()
             return
         }
         state = state.copy(busy = state.busy + IdeBusyOperation.Project)
@@ -1040,6 +1070,51 @@ class IdeClientController(
                 enqueueFailure(requestGeneration, IdeBusyOperation.Project, failure)
             }
         }
+    }
+
+    private fun requestTabClose(path: ProjectPath) {
+        if (path !in openTabs || pendingTabClose != null || state.dialog != null || closeRequested ||
+            pendingProjectDirectory != null || pendingProjectCreation != null || pendingRename != null
+        ) {
+            return
+        }
+        pendingTabClose = path
+        continueTabClose()
+    }
+
+    private fun continueTabClose() {
+        val path = pendingTabClose ?: return
+        if (state.dialog != null || IdeBusyOperation.Project in state.busy) return
+        val session = documents[path]
+        if (session != null && (session.dirty || session.saveInFlight != null || session.formatInFlight != null)) {
+            saveDocument(session)
+            return
+        }
+        pendingTabClose = null
+        finishTabClose(path)
+    }
+
+    private fun finishTabClose(
+        path: ProjectPath,
+        discard: Boolean = false,
+    ) {
+        val index = openTabs.indexOf(path)
+        if (index < 0) return
+        val wasActive = editor?.path == path || binary?.path == path
+        openTabs.remove(path)
+        binaryTabs.remove(path)
+        if (discard) documents[path]?.let(::removeDocument)
+        if (wasActive) {
+            closeComputerPreview()
+            closeAttachedSourcePreview()
+            closeAnalysisFile()
+            editor = null
+            binary = null
+            val adjacent = openTabs.elementAtOrNull(index) ?: openTabs.lastOrNull()
+            if (adjacent != null) openFile(adjacent)
+        }
+        publishWorkspace()
+        persistPreferences(editor?.path ?: binary?.path)
     }
 
     private fun currentDocument(): EditorDocument? = attachedSourcePreview?.document ?: computerPreview?.document ?: editor?.document
@@ -1054,6 +1129,7 @@ class IdeClientController(
         }
         closeAnalysisFile()
         editor = session
+        openTabs += session.path
         binary = null
         openingProjectNavigation = null
         navigation?.let {
@@ -1073,6 +1149,9 @@ class IdeClientController(
         pendingRename = null
         documents.values.forEach(EditorSession::close)
         documents.clear()
+        openTabs.clear()
+        binaryTabs.clear()
+        pendingTabClose = null
         projectHistory.clear()
         invalidateUsages()
         pendingProjectCreation = null
@@ -1081,6 +1160,7 @@ class IdeClientController(
 
     private fun removeDocument(session: EditorSession) {
         documents.remove(session.path)
+        openTabs.remove(session.path)
         if (editor === session) editor = null
         session.close()
     }
@@ -1089,7 +1169,8 @@ class IdeClientController(
         if (documents.size < limits.projectDocuments) return true
         val disposable =
             documents.values.firstOrNull {
-                !it.dirty && it.saveInFlight == null && it.formatInFlight == null && !projectHistory.retains(it.document)
+                !it.dirty && it.path !in openTabs && it.saveInFlight == null && it.formatInFlight == null &&
+                    !projectHistory.retains(it.document)
             } ?: return false
         removeDocument(disposable)
         return true
@@ -1534,7 +1615,7 @@ class IdeClientController(
             return
         }
         if (active.conflict) {
-            showConflictDialog(closeRequested, active)
+            showConflictDialog(closeRequested || pendingTabClose == active.path, active)
             return
         }
         if (!active.dirty || documents.values.any { it.saveInFlight != null } || active.formatInFlight != null) return
@@ -2323,6 +2404,7 @@ class IdeClientController(
                         session.firstVisibleColumn = remembered.firstVisibleColumn
                     }
                 editor = session
+                openTabs += session.path
                 navigation?.let { pending ->
                     restoreCaret(document, pending.caretUtf16)
                     session.firstVisibleLine = pending.firstVisibleLine ?: document.lineContaining(document.caretOffset)
@@ -2333,6 +2415,8 @@ class IdeClientController(
 
             is ProjectFileOpenResult.Binary -> {
                 binary = IdeEditorView.Binary(result.path, result.bytes)
+                binaryTabs[result.path] = checkNotNull(binary)
+                openTabs += result.path
                 if (navigation != null) publishStatus("Declaration source is not text", IdeProblemSeverity.Warning)
             }
         }
@@ -2370,8 +2454,9 @@ class IdeClientController(
             }
         }
         publishWorkspace()
-        if (active.conflict) showConflictDialog(closeRequested, active)
+        if (active.conflict) showConflictDialog(closeRequested || pendingTabClose == active.path, active)
         continueClosing()
+        continueTabClose()
         continuePendingSave()
         continuePendingNavigation()
         continuePendingBuild()
@@ -2656,6 +2741,16 @@ class IdeClientController(
         target: ProjectPath,
     ) {
         invalidateUsages()
+        val renamedTabs = openTabs.map { if (it.isWithin(source)) it.rebase(source, target) else it }
+        openTabs.clear()
+        openTabs.addAll(renamedTabs)
+        pendingTabClose = pendingTabClose?.let { if (it.isWithin(source)) it.rebase(source, target) else it }
+        val renamedBinary =
+            binaryTabs.values.map {
+                if (it.path.isWithin(source)) IdeEditorView.Binary(it.path.rebase(source, target), it.bytes) else it
+            }
+        binaryTabs.clear()
+        renamedBinary.forEach { binaryTabs[it.path] = it }
         documents.values.filter { it.path.isWithin(source) }.forEach { active ->
             val wasKotlinSource = active.path.isKotlinSource
             documents.remove(active.path)
@@ -2685,10 +2780,16 @@ class IdeClientController(
             }
         }
         if (binary?.path?.isWithin(deleted) == true) binary = null
+        binaryTabs.keys.filter { it.isWithin(deleted) }.forEach {
+            binaryTabs.remove(it)
+            openTabs.remove(it)
+        }
+        if (editor == null && binary == null) openTabs.lastOrNull()?.let(::openFile)
     }
 
     private fun acceptFailure(event: IdeEvent.Failed) {
         if (event.operation == IdeBusyOperation.Save) {
+            pendingTabClose = null
             pendingGit = null
             documents.values.filter { it.saveInFlight != null }.forEach {
                 it.saveInFlight = null
@@ -2731,15 +2832,26 @@ class IdeClientController(
             IdeConflictAction.ReloadFromDisk -> {
                 state = state.copy(dialog = null)
                 closeRequested = false
-                removeDocument(active)
-                openFile(active.path)
+                val closeTab = pendingTabClose == active.path
+                pendingTabClose = null
+                if (closeTab) {
+                    finishTabClose(active.path, discard = true)
+                } else {
+                    removeDocument(active)
+                    openFile(active.path)
+                }
             }
 
             is IdeConflictAction.SaveAs -> {
-                if (documents[action.path]?.let { it !== active } == true) {
+                if (documents[action.path]?.let { it !== active } == true || action.path in binaryTabs) {
                     publishStatus("Destination is already open in the IDE", IdeProblemSeverity.Warning)
                     return
                 }
+                val original = active.path
+                val tabs = openTabs.map { if (it == original) action.path else it }
+                openTabs.clear()
+                openTabs.addAll(tabs)
+                if (pendingTabClose == original) pendingTabClose = action.path
                 documents.remove(active.path)
                 active.path = action.path
                 documents[active.path] = active
@@ -2750,13 +2862,18 @@ class IdeClientController(
             }
 
             IdeConflictAction.DiscardAndClose -> {
-                if (closeRequested) {
+                if (pendingTabClose == active.path) {
+                    state = state.copy(dialog = null)
+                    pendingTabClose = null
+                    finishTabClose(active.path, discard = true)
+                } else if (closeRequested) {
                     state = state.copy(dialog = null)
                     closeReady = true
                 }
             }
 
             IdeConflictAction.Cancel -> {
+                pendingTabClose = null
                 pendingGit = null
                 closeRequested = false
                 state = state.copy(dialog = null)
@@ -2907,6 +3024,13 @@ class IdeClientController(
                             currentDiagnostics(),
                             gitView.copy(draft = gitDraft.view()),
                             bottomPanel,
+                            openTabs.map { path ->
+                                ru.lazyhat.compukters.ide.client.state.IdeFileTab(
+                                    path,
+                                    documents[path]?.dirty == true,
+                                    documents[path]?.conflict == true,
+                                )
+                            },
                         ),
                     ),
             )

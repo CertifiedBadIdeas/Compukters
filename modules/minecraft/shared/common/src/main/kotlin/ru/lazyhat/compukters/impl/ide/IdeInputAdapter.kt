@@ -492,6 +492,19 @@ class IdeInputAdapter(
                     if ((target.action == IdeHitAction.ForgetExternalProject) != project.external) return false
                     return dispatch(IdeCommand.RequestRemoveProject(project.directoryName))
                 }
+                if (target.action == IdeHitAction.FileTab || target.action == IdeHitAction.CloseFileTab) {
+                    val path = target.filePath ?: return false
+                    pointerActivity()
+                    return dispatch(
+                        if (target.action ==
+                            IdeHitAction.FileTab
+                        ) {
+                            IdeCommand.SelectFileTab(path)
+                        } else {
+                            IdeCommand.CloseFileTab(path)
+                        },
+                    )
+                }
                 if (target.action == IdeHitAction.ProjectChoice) {
                     val index = target.choiceIndex
                     val project = index?.let(context.projects::getOrNull)
@@ -714,7 +727,13 @@ class IdeInputAdapter(
                 false
             }
 
-            IdeHitAction.ProjectChoice, IdeHitAction.DiagnosticChoice -> {
+            IdeHitAction.PreviousFileTabs, IdeHitAction.NextFileTabs -> {
+                return uiActions.activate(action)
+            }
+
+            IdeHitAction.FileTab, IdeHitAction.CloseFileTab,
+            IdeHitAction.ProjectChoice, IdeHitAction.DiagnosticChoice,
+            -> {
                 false
             }
         }

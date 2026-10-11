@@ -94,6 +94,37 @@ import kotlin.test.assertTrue
 
 class IdeRendererStateTest {
     @Test
+    fun `tabs render active and dirty state and become inert underneath a modal`() {
+        val main = ProjectPath.file("src/main.kt")
+        val other = ProjectPath.file("src/other.kt")
+        val state = workspaceState(IdeEditorView.Binary(main, 4), IdeBuildState.Idle)
+        val page = state.page as IdePageState.Workspace
+        val withTabs =
+            state.copy(
+                page =
+                    IdePageState.Workspace(
+                        page.value.copy(
+                            openFiles =
+                                listOf(
+                                    ru.lazyhat.compukters.ide.client.state
+                                        .IdeFileTab(main, dirty = true),
+                                    ru.lazyhat.compukters.ide.client.state
+                                        .IdeFileTab(other),
+                                ),
+                        ),
+                    ),
+            )
+        val geometry = IdeRenderGeometry.compute(960, 540, 180, 120, true, true, IdeCodeFontProfile.DEFAULT, tabsVisible = true)
+        val rendered = IdeRenderer.extract(withTabs, geometry)
+        assertTrue(rendered.hitTargets.single { it.action == IdeHitAction.FileTab && it.filePath == main }.selected)
+        assertTrue(rendered.text.any { it.kind == IdeTextKind.FileTab && it.value == "main.kt •" })
+        val modal = IdeRenderer.extract(withTabs.copy(dialog = IdeDialogState.Confirmation("Delete", "Permanent", 7)), geometry)
+        assertTrue(
+            modal.hitTargets.filter { it.action == IdeHitAction.FileTab || it.action == IdeHitAction.CloseFileTab }.all { !it.enabled },
+        )
+    }
+
+    @Test
     fun `opening page shows only a neutral background without project actions`() {
         val state = IdeViewState.startPage(emptyList()).copy(page = IdePageState.Opening)
         val model = IdeRenderer.extract(state, geometry())
