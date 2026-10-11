@@ -205,7 +205,8 @@ keywords outside unqualified Kotlin code`.
 
 **Status:** Supported.
 
-Hover-style queries render inferred local types, resolved signatures, and smart-cast types. Hover also renders
+Hover-style queries render inferred local types, resolved signatures, and smart-cast types using K2 short names,
+including generic, nullable and function types. The popup separates signature, type, origin and documentation. Hover also renders
 bounded plain-text KDoc from the exact resolved project declaration or its attached platform source, including
 declaration-name hovers. Documentation wraps within the editor and is truncated with an ellipsis when the
 bounded popup height is exhausted; it does not execute HTML, fetch external content or synthesize inherited
@@ -225,13 +226,29 @@ result alignment` and `hover documentation wraps unicode paragraphs and bounds l
 
 **Related work:** [#675](https://github.com/CertifiedBadIdeas/Compukters/issues/675).
 
+### Token diagnostic presentation
+
+**Status:** Supported.
+
+Analysis protocol 16 carries explicit diagnostic highlight kinds classified from K2 factory identities or compiler
+codes. Unknown references color their complete identifier; errors and warnings underline source ranges, including
+the initializer expression for a property type mismatch. Decorations require matching captured source text and
+share tab/Unicode geometry with the editor. Overlapping messages are grouped on hover without capturing source clicks.
+
+**Evidence:** `DiagnosticQueryTest`, test `unresolved identifiers carry a distinct highlight with their full token range`
+and `type error after supplementary character keeps UTF-16 range`; `AnalysisProtocolRoundTripTest`, test
+`diagnostic highlight round trips and rejects unknown kinds`; `IdeRendererStateTest`, test
+`diagnostic tokens retain exact styles clipped waves and grouped noninteractive hover`.
+
 ### Parameter information
 
 **Status:** Supported.
 
-Ctrl+P opens a caret-anchored popup for the innermost call, lists bounded and deterministic K2-resolved
+Typing `(` in code automatically opens argument information; strings and comments are excluded.
+Ctrl+P also opens a call-anchored popup for the innermost call, lists bounded and deterministic K2-resolved
 overload signatures, and highlights the active positional, named, or vararg parameter. The popup follows edits
-and caret movement, rejects stale snapshot results, and closes on Escape, focus loss, file changes, or when
+and caret movement, wraps long signatures while keeping the active parameter visible, rejects stale snapshot results,
+and closes on Escape, focus loss, file changes, or when
 the caret leaves a call.
 
 **Evidence:**

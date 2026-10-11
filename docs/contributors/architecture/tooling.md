@@ -147,7 +147,9 @@ responses remain rejected. The previous worker protocol is intentionally incompa
 Parameter information
 resolves the innermost call at a UTF-16 caret into a bounded, deterministically ordered set of K2-substituted callable
 signatures with active-parameter spans; client-side snapshot, revision, path, caret, and call-range checks reject stale
-popup results. The format request includes the exact editor text and
+popup results. Typing an opening parenthesis requests the same query after lexical context excludes strings and
+comments; Ctrl+P remains available. Shared popup wrapping preserves UTF-16 parameter spans and selects a bounded
+window containing the current parameter for long signatures. The format request includes the exact editor text and
 UTF-16 caret captured by the Reformat Code action, so formatting does not depend on whether the semantic snapshot has
 caught up. The worker runs ktlint standard rules from a compiler-free nested runtime whose shaded IntelliJ references
 are relocated back to the ordinary namespace. Its child classloader reloads the worker's existing Kotlin compiler JAR
@@ -280,7 +282,10 @@ without losing the captured contents.
 shared gutter, row, caret, source anchor and pointer mapping. Its code bounds exclude line numbers; source text,
 selection, carets and underlines stay inside those bounds when horizontally scrolled. Styled fragments expand tabs from the line's actual
 column. `IdeEditorRenderer` owns source, selection, highlights and gutter indicators; `IdeFindRenderer` owns search
-controls; `IdeEditorPopups` owns hover, declaration chooser, completion and parameter information. These components
+controls; `IdeEditorPopups` owns hover, declaration chooser, completion and parameter information.
+`IdePopupText` wraps source slices without changing UTF-16 offsets; `IdeDiagnosticRenderer` clips source-evidenced
+diagnostic spans and `IdeDiagnosticTooltip` groups their messages. Disabled token tooltip targets preserve normal
+source clicks. These components
 emit directly into the existing frame collector and use the same source geometry for anchors.
 
 `IdeEditorInputRouter` owns search, semantic navigation and ordinary editor keys and characters. Local screen overlays

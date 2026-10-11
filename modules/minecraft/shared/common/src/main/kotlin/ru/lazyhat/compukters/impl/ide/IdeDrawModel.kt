@@ -58,6 +58,7 @@ enum class IdeTextKind {
     CompletionBadge,
     CompletionReturnType,
     ParameterInfo,
+    ParameterInfoHeader,
     Hover,
     DeclarationChoice,
     ProjectChoice,
