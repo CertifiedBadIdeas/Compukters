@@ -11,6 +11,16 @@ permalink: /ARCHITECTURE/abi/
 
 This reference groups versioned representation boundaries by the version that introduced them. Those versions are minimum feature requirements, not a claim that older Runtime distributions implement today’s platform. The source owners below define the active contract. Before changing a wire format, inspect each producer, consumer and verifier. Runtime release pins in `build-scripts/src/main/kotlin/RuntimeBundleSupport.kt` describe published bundles separately from the local VM checkout.
 
+## Guest pseudorandom sources
+
+`stdlib:core` 1.16.0 adds `kotlin.random.Random` and signed/unsigned random extensions.
+Seeded sources use ordinary managed objects with wrapping Long state; the managed Default companion
+owns a fixed seed-0 source per program/session. Abstract library methods/accessors retain linkable
+virtual dispatch slots in platform compilation. Module identities and dependent metadata change;
+bundle/module encoding, worker protocol, CPKT instructions, Runtime ABI and native/checkpoint schemas
+are unchanged. Floating endpoint correction uses the existing Runtime ABI 1.16 math instructions.
+The [random support page](../../developers/stdlib/random.md) owns exact signatures and sequence semantics.
+
 ## Typed Guest terminal
 
 `compukter:core` 7.0.0 makes a clean source replacement: owned Text/Key event snapshots, typed keys/actions/modifiers,

@@ -13,6 +13,10 @@ headings so this page has one stable URL that can be shared outside the reposito
 
 ## 0.6.0 — In development
 
+- Guest Kotlin provides `kotlin.random.Random` with reproducible Int/Long seeds, a fixed-seed shared
+  default generator, signed and unsigned ranges, floating draws and byte-array filling. Generator
+  state survives instruction slices and computer checkpoints.
+
 - The built-in `cmatrix` program draws animated green terminal rain with bright stream heads,
   configurable tick delay and Ctrl+C return to the shell.
 

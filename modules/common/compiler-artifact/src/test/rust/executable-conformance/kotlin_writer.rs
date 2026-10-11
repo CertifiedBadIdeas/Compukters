@@ -6,6 +6,9 @@ use compukter_vm::{
     HostValueView, OperationSchema, RequestId, Session, TaskId,
 };
 
+#[path = "random.rs"]
+mod random;
+
 fn main() {
     let mut arguments = std::env::args().skip(1);
     let scenario = arguments
@@ -21,6 +24,7 @@ fn main() {
             let mut session = k2_stdio_session_with_heap("COMPUKTER_KOTLIN_GEOMETRY_ARTIFACT", 1, 256 * 1024);
             k2_assert_prints(&mut session, ["geometry ok\n"], 1024);
         },
+        "random" => random::execute(),
         "math" => {
             let mut session = k2_stdio_session_with_heap("COMPUKTER_KOTLIN_MATH_ARTIFACT", 1, 256 * 1024);
             k2_assert_prints(&mut session, ["math ok\n"], 1024);

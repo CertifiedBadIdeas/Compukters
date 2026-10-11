@@ -1813,6 +1813,24 @@ val generateEqualsConformanceArtifact = tasks.register<Test>("generateEqualsConf
     }
 }
 
+val randomConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-random.cpkt")
+tasks.register<Test>("generateRandomConformanceArtifact") {
+    description = "Compiles the Guest random generators and ranges for VM execution conformance."
+    group = "verification"
+    dependsOn(tasks.jar)
+    useJUnitPlatform()
+    testClassesDirs = sourceSets.test.get().output.classesDirs
+    classpath = sourceSets.test.get().runtimeClasspath
+    filter.includeTestsMatching("*random compiles reproducible generators ranges and stateful dispatch*")
+    inputs.file(workerJar)
+    inputs.file("src/test/resources/kotlin/random/main.kt")
+    outputs.file(randomConformanceArtifact)
+    doFirst {
+        systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
+        systemProperty("compukter.vm.randomArtifact", randomConformanceArtifact.get().asFile.absolutePath)
+    }
+}
+
 val mathConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-math.cpkt")
 tasks.register<Test>("generateMathConformanceArtifact") {
     description = "Compiles the portable Guest math surface for VM execution conformance."

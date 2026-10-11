@@ -114,6 +114,36 @@ class MinimalScriptLoweringTest {
         }
 
     @Test
+    fun `random compiles reproducible generators ranges and stateful dispatch`() =
+        withAdapter { adapter ->
+            val source = repositoryFile("modules/common/compiler-k2/src/test/resources/kotlin/random/main.kt").readText()
+            val result = adapter.compile(request(source))
+            val bytes = assertNotNull(result.artifact, result.diagnostics.toString()).toByteArray()
+            ArtifactReader.read(bytes)
+            val repeated = adapter.compile(request(source))
+            assertContentEquals(bytes, assertNotNull(repeated.artifact, repeated.diagnostics.toString()).toByteArray())
+            System.getProperty("compukter.vm.randomArtifact")?.let { output ->
+                Path.of(output).also { it.parent.createDirectories() }.writeBytes(bytes)
+            }
+        }
+
+    @Test
+    fun `random method references link without direct calls`() =
+        withAdapter { adapter ->
+            val source =
+                """
+                import kotlin.random.Random
+                fun main() {
+                    val random = Random(0)
+                    val draw: (Int) -> Int = random::nextInt
+                    check(draw(1) == 0)
+                }
+                """.trimIndent()
+            val result = adapter.compile(request(source))
+            ArtifactReader.read(assertNotNull(result.artifact, result.diagnostics.toString()).toByteArray())
+        }
+
+    @Test
     fun `portable math compiles both widths library bodies and callable references`() =
         withAdapter { adapter ->
             val source = repositoryFile("modules/common/compiler-k2/src/test/resources/kotlin/math/main.kt").readText()
