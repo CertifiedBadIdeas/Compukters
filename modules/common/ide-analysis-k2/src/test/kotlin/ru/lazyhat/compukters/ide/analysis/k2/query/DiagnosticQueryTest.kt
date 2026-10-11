@@ -57,6 +57,33 @@ class DiagnosticQueryTest {
     }
 
     @Test
+    fun `do while analysis admits body scoped conditions and local cleanup jumps`() {
+        val source =
+            """
+            fun main() {
+                var count = 0
+                do {
+                    val again = count < 4
+                    try {
+                        count += 1
+                        if (count == 2) continue
+                        if (count == 4) break
+                    } finally {
+                        check(count > 0)
+                    }
+                } while (again)
+            }
+            """.trimIndent()
+        for (attachedSources in listOf(false, true)) {
+            K2QueryFixture.sourceWithGuestApi(attachedSources, "main.kt" to source).use { fixture ->
+                val result = fixture.execute(fixture.presentation()) as AnalysisResult.Presentation
+                val active = result.value.accept(fixture.identity) as SnapshotPresentationAcceptance.Active
+                assertTrue(active.diagnostics.none { it.severity == EditorDiagnosticSeverity.Error }, active.diagnostics.toString())
+            }
+        }
+    }
+
+    @Test
     fun `math analysis admits typed overloads extensions and callable references`() {
         val source =
             """
