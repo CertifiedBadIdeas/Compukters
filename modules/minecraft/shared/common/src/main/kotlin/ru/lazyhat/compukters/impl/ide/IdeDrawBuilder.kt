@@ -90,6 +90,15 @@ internal open class IdeDrawBuilder(
         text += IdeTextDraw(kind, value, x, y + font.glyphDrawOffsetY, color, IdeTextStyle.Ui, font, clip, null, z, rotation)
     }
 
+    fun centeredUi(
+        kind: IdeTextKind,
+        value: String,
+        x: Int,
+        bounds: IdeRect,
+        color: Int = IdeColors.TEXT,
+        z: Int = Z_TEXT,
+    ) = ui(kind, value, x, font.centeredCellTop(bounds), color, bounds, z)
+
     fun code(
         kind: IdeTextKind,
         value: String,
@@ -130,7 +139,7 @@ internal open class IdeDrawBuilder(
         choiceIndex: Int? = null,
         gitOperation: GitOperation? = null,
         gitCommand: IdeCommand? = null,
-        style: IdeControlStyle = IdeControlStyle.Standard,
+        style: IdeControlStyle = IdeControlStyle.Neutral,
     ) {
         val control =
             IdeControls.target(
@@ -148,18 +157,13 @@ internal open class IdeDrawBuilder(
                 ),
                 style,
             )
-        panels += control.panel
-        if (style == IdeControlStyle.Neutral) {
-            val color = if (enabled) IdeColors.CONTROL_BORDER else IdeColors.BORDER
-            val borderZ = control.panel.zIndex + 1
-            listOf(
-                IdeRect(bounds.left, bounds.top, bounds.right, bounds.top + 1),
-                IdeRect(bounds.left, bounds.bottom - 1, bounds.right, bounds.bottom),
-                IdeRect(bounds.left, bounds.top, bounds.left + 1, bounds.bottom),
-                IdeRect(bounds.right - 1, bounds.top, bounds.right, bounds.bottom),
-            ).forEach { edge -> fills += IdeFillDraw(IdeFillKind.ControlBorder, edge, color, borderZ) }
-        }
-        hitTargets += control.target
+        control(control)
+    }
+
+    fun control(draw: IdeControlDraw) {
+        panels += draw.panel
+        fills += draw.fills
+        hitTargets += draw.target
     }
 
     fun build(): IdeDrawModel =

@@ -183,10 +183,10 @@ object IdeRenderer {
                     IdeColors.PANEL,
                     Z_POPUP - 1,
                 )
-            ui(IdeTextKind.Header, "Scale", first.left - 36, first.top + 4, z = Z_POPUP_TEXT)
+            ui(IdeTextKind.Header, "Scale", first.left - 36, font.centeredCellTop(first), z = Z_POPUP_TEXT)
             options.forEach { (mode, bounds) ->
                 target(mode.action, bounds, enabled, "IDE scale: ${mode.label}", z = Z_POPUP_TARGET, selected = mode == scale)
-                ui(IdeTextKind.Header, mode.label, bounds.left + 3, bounds.top + 4, clip = bounds, z = Z_POPUP_TEXT)
+                ui(IdeTextKind.Header, mode.label, bounds.left + 3, font.centeredCellTop(bounds), clip = bounds, z = Z_POPUP_TEXT)
             }
         }
 
@@ -195,7 +195,12 @@ object IdeRenderer {
             targetState: IdeTargetState,
             busy: Set<IdeBusyOperation>,
         ) {
-            ui(IdeTextKind.Header, "Compukters IDE · ${targetLabel(targetState)}", geometry.header.left + 6, geometry.header.top + 7)
+            ui(
+                IdeTextKind.Header,
+                "Compukters IDE · ${targetLabel(targetState)}",
+                geometry.header.left + 6,
+                font.centeredCellTop(geometry.header),
+            )
             val width = minOf(900, geometry.content.width - 8)
             val height = minOf(360, geometry.content.height - 4)
             val left = geometry.content.left + (geometry.content.width - width) / 2
@@ -223,7 +228,7 @@ object IdeRenderer {
                 val y = actionsTop + if (sideActions) index * 30 else index / 2 * 20
                 val actionBounds = IdeRect(x, y, x + actionsWidth, y + if (sideActions) 24 else 18)
                 target(action, actionBounds, busy.isEmpty() || action == IdeHitAction.GitCancel, label)
-                ui(IdeTextKind.ProjectAction, label, actionBounds.left + 4, actionBounds.top + 4, clip = actionBounds)
+                ui(IdeTextKind.ProjectAction, label, actionBounds.left + 4, font.centeredCellTop(actionBounds), clip = actionBounds)
             }
             val listTop = bounds.top + 24
             val listBottom = if (sideActions) bounds.bottom - 4 else actionsTop - 4
@@ -252,13 +257,20 @@ object IdeRenderer {
                     clip = IdeRect(bounds.left + 4, listTop, listRight, listBottom),
                 )
             }
-            if (busy.isNotEmpty()) ui(IdeTextKind.Status, "Opening project…", geometry.status.left + 6, geometry.status.top + 5)
+            if (busy.isNotEmpty()) {
+                ui(
+                    IdeTextKind.Status,
+                    "Opening project…",
+                    geometry.status.left + 6,
+                    font.centeredCellTop(geometry.status),
+                )
+            }
             page.error?.let {
                 ui(
                     IdeTextKind.Status,
                     it.message,
                     geometry.status.left + 6,
-                    geometry.status.top + 5,
+                    font.centeredCellTop(geometry.status),
                     problemColor(it.severity.name),
                 )
             }
@@ -320,10 +332,7 @@ object IdeRenderer {
             val active = workspace.activeFile.takeUnless { (workspace.editor as? IdeEditorView.Text)?.readOnly == true }
             val layout = IdeFileTabBar.layout(bounds, workspace.openFiles, fileTabFirstIndex)
             val component = IdeFileTabBar.draw(layout, active, IdeBusyOperation.Git !in busy && IdeBusyOperation.Project !in busy, font)
-            component.controls.forEach {
-                panels += it.panel
-                hitTargets += it.target
-            }
+            component.controls.forEach(::control)
             text += component.text
             fills += component.fills
         }
@@ -374,7 +383,7 @@ object IdeRenderer {
                 val top = bounds.top + 1 + visibleProjects.size * PROJECT_ROW_HEIGHT + index * PROJECT_ACTION_HEIGHT
                 val row = IdeRect(bounds.left + 1, top, bounds.right - 1, top + PROJECT_ACTION_HEIGHT)
                 target(action, row, true, focusGroup = IdeFocusGroup.ProjectSwitcher, z = Z_PROJECT_SWITCHER_TARGET)
-                ui(IdeTextKind.ProjectAction, label, row.left + 6, row.top + 5, clip = bounds, z = Z_PROJECT_SWITCHER_TEXT)
+                ui(IdeTextKind.ProjectAction, label, row.left + 6, font.centeredCellTop(row), clip = bounds, z = Z_PROJECT_SWITCHER_TEXT)
             }
         }
 
@@ -404,11 +413,19 @@ object IdeRenderer {
                 IdeTextKind.ProjectChoice,
                 if (project.external) "External · ${project.displayName}" else "${project.displayName} · IDE folder",
                 open.left + 5,
-                open.top + 4,
+                font.centeredCellTop(open, rows = 2),
                 clip = open,
                 z = textZ,
             )
-            ui(IdeTextKind.ProjectChoice, project.path, open.left + 5, open.top + 19, IdeColors.MUTED, clip = open, z = textZ)
+            ui(
+                IdeTextKind.ProjectChoice,
+                project.path,
+                open.left + 5,
+                font.centeredCellTop(open, rows = 2) + font.cellHeight,
+                IdeColors.MUTED,
+                clip = open,
+                z = textZ,
+            )
             var left = open.right + 4
             if (!project.external) {
                 val rename = IdeRect(left, row.top + 4, left + 60, row.bottom - 6)
@@ -421,7 +438,7 @@ object IdeRenderer {
                     z = targetZ,
                     choiceIndex = index,
                 )
-                ui(IdeTextKind.ProjectAction, "Rename…", rename.left + 4, rename.top + 5, clip = rename, z = textZ)
+                ui(IdeTextKind.ProjectAction, "Rename…", rename.left + 4, font.centeredCellTop(rename), clip = rename, z = textZ)
                 left = rename.right + 4
             }
             val remove = IdeRect(left, row.top + 4, row.right, row.bottom - 6)
@@ -435,7 +452,7 @@ object IdeRenderer {
                 z = targetZ,
                 choiceIndex = index,
             )
-            ui(IdeTextKind.ProjectAction, label, remove.left + 4, remove.top + 5, clip = remove, z = textZ)
+            ui(IdeTextKind.ProjectAction, label, remove.left + 4, font.centeredCellTop(remove), clip = remove, z = textZ)
         }
 
         private fun gitPanel(
@@ -468,7 +485,14 @@ object IdeRenderer {
                 val rect = IdeRect(x, y, x + width, y + 20)
                 if (bounds.contains(rect)) {
                     target(action, rect, enabled, label, selected = selected, gitOperation = operation, gitCommand = command)
-                    ui(IdeTextKind.Toolbar, label, rect.left + 6, rect.top + 6, if (enabled) IdeColors.TEXT else IdeColors.DISABLED, rect)
+                    ui(
+                        IdeTextKind.Toolbar,
+                        label,
+                        rect.left + 6,
+                        font.centeredCellTop(rect),
+                        if (enabled) IdeColors.TEXT else IdeColors.DISABLED,
+                        rect,
+                    )
                 }
                 x += width + 4
             }
@@ -573,7 +597,7 @@ object IdeRenderer {
                         IdeTextKind.Source,
                         "Changes (${view.checkedPaths.size}/${changes.size})",
                         heading.left + 26,
-                        heading.top + 5,
+                        font.centeredCellTop(heading),
                         clip = heading,
                     )
                 }
@@ -603,7 +627,7 @@ object IdeRenderer {
                         )
                         checkbox(check, change.path in view.checkedPaths, idle)
                         val color = IdeGitFileColors.color(change)
-                        ui(IdeTextKind.Source, change.path.value, row.left + 26, row.top + 5, color, row)
+                        ui(IdeTextKind.Source, change.path.value, row.left + 26, font.centeredCellTop(row), color, row)
                     }
                 }
                 val messageField = IdeRect(listLeft, formTop + 18, listRight, formTop + 66)
@@ -737,7 +761,7 @@ object IdeRenderer {
                         IdeTextKind.Dialog,
                         label,
                         rect.left + 6,
-                        rect.top + 6,
+                        font.centeredCellTop(rect),
                         if (enabled) IdeColors.TEXT else IdeColors.DISABLED,
                         rect,
                         Z_POPUP_TEXT,
@@ -911,7 +935,7 @@ object IdeRenderer {
                 IdeTextKind.Tooltip,
                 value.take(visibleCharacters),
                 bounds.left + TOOLTIP_HORIZONTAL_PADDING,
-                bounds.top + 5,
+                font.centeredCellTop(bounds),
                 clip = bounds,
                 z = Z_TOOLTIP_TEXT,
             )
@@ -1162,19 +1186,19 @@ object IdeRenderer {
                     selected = workspace.bottom.tab == value,
                     gitCommand = IdeCommand.BottomTab(value),
                 )
-                ui(IdeTextKind.ToolWindow, label, left + 6, header.top + 4, clip = rect)
+                ui(IdeTextKind.ToolWindow, label, left + 6, font.centeredCellTop(rect), clip = rect)
             }
             tab("Problems", header.left, header.left + 74, IdeBottomTab.Problems)
             tab("Git Log", header.left + 74, header.left + 140, IdeBottomTab.GitLog)
             val close = IdeRect(header.right - 22, header.top, header.right, header.bottom)
             target(IdeHitAction.GitOperation, close, true, "Hide tool window", gitCommand = IdeCommand.BottomTab(null))
-            ui(IdeTextKind.ToolWindow, "×", close.left + 6, close.top + 4)
+            ui(IdeTextKind.ToolWindow, "×", close.left + 6, font.centeredCellTop(close))
             val bounds = IdeRect(panelBounds.left, header.bottom, panelBounds.right, panelBounds.bottom)
             scissors += IdeScissorDraw(IdeScissorKind.Diagnostics, bounds, Z_CLIP)
             if (workspace.bottom.tab == IdeBottomTab.GitLog) {
                 val refresh = IdeRect(header.left + 146, header.top, header.left + 210, header.bottom)
                 target(IdeHitAction.GitOperation, refresh, true, "Refresh Git Log", gitCommand = IdeCommand.BottomTab(IdeBottomTab.GitLog))
-                ui(IdeTextKind.ToolWindow, "Refresh", refresh.left + 4, refresh.top + 4, clip = refresh)
+                ui(IdeTextKind.ToolWindow, "Refresh", refresh.left + 4, font.centeredCellTop(refresh), clip = refresh)
                 val commits = workspace.git.history
                 val count = ((bounds.height - UI_LINE_HEIGHT) / UI_LINE_HEIGHT).coerceAtLeast(0)
                 bottomScrollMaximum = (commits.size - count).coerceAtLeast(0)
@@ -1223,7 +1247,7 @@ object IdeRenderer {
                 )
                 val close = IdeRect(bounds.right - 24, bounds.top, bounds.right, bounds.top + UI_LINE_HEIGHT)
                 target(IdeHitAction.UsagesClose, close, true, "Close Find Usages")
-                ui(IdeTextKind.Diagnostic, "×", close.left + 6, close.top + 4, IdeColors.MUTED, bounds)
+                ui(IdeTextKind.Diagnostic, "×", close.left + 6, font.centeredCellTop(close), IdeColors.MUTED, bounds)
                 val count = ((bounds.height - UI_LINE_HEIGHT - 4) / UI_LINE_HEIGHT).coerceAtLeast(0)
                 val first = (usages.selectedIndex - count + 1).coerceAtLeast(0)
                 usages.rows.drop(first).take(count).forEachIndexed { visible, usage ->
@@ -1340,10 +1364,10 @@ object IdeRenderer {
                     "Confirm"
                 },
                 confirm.left + 9,
-                confirm.top + 5,
+                font.centeredCellTop(confirm),
                 z = Z_DIALOG_TEXT,
             )
-            ui(IdeTextKind.Dialog, "Cancel", dismiss.left + 12, dismiss.top + 5, z = Z_DIALOG_TEXT)
+            ui(IdeTextKind.Dialog, "Cancel", dismiss.left + 12, font.centeredCellTop(dismiss), z = Z_DIALOG_TEXT)
         }
 
         fun quickOpen(view: IdeQuickOpenView) {
@@ -1389,8 +1413,23 @@ object IdeRenderer {
                             Z_DIALOG + 3,
                         )
                 }
-                ui(IdeTextKind.Dialog, path.value.substringAfterLast('/'), row.left + 8, top + 4, clip = row, z = Z_DIALOG_TEXT)
-                ui(IdeTextKind.Dialog, path.value, row.left + 8, top + 17, IdeColors.MUTED, row, Z_DIALOG_TEXT)
+                ui(
+                    IdeTextKind.Dialog,
+                    path.value.substringAfterLast('/'),
+                    row.left + 8,
+                    font.centeredCellTop(row, rows = 2),
+                    clip = row,
+                    z = Z_DIALOG_TEXT,
+                )
+                ui(
+                    IdeTextKind.Dialog,
+                    path.value,
+                    row.left + 8,
+                    font.centeredCellTop(row, rows = 2) + font.cellHeight,
+                    IdeColors.MUTED,
+                    row,
+                    Z_DIALOG_TEXT,
+                )
             }
             ui(
                 IdeTextKind.Dialog,
@@ -1419,8 +1458,8 @@ object IdeRenderer {
             val confirm = IdeRect(dismiss.left - 76, dismiss.top, dismiss.left - 8, dismiss.bottom)
             target(IdeHitAction.Confirm, confirm, true, focusGroup = IdeFocusGroup.Dialog, z = Z_DIALOG_TARGET)
             target(IdeHitAction.Dismiss, dismiss, true, focusGroup = IdeFocusGroup.Dialog, z = Z_DIALOG_TARGET)
-            ui(IdeTextKind.Dialog, "Confirm", confirm.left + 9, confirm.top + 5, z = Z_DIALOG_TEXT)
-            ui(IdeTextKind.Dialog, "Cancel", dismiss.left + 12, dismiss.top + 5, z = Z_DIALOG_TEXT)
+            ui(IdeTextKind.Dialog, "Confirm", confirm.left + 9, font.centeredCellTop(confirm), z = Z_DIALOG_TEXT)
+            ui(IdeTextKind.Dialog, "Cancel", dismiss.left + 12, font.centeredCellTop(dismiss), z = Z_DIALOG_TEXT)
         }
 
         private fun checkbox(

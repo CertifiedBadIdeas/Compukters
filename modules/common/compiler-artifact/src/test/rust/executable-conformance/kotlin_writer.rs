@@ -1441,6 +1441,9 @@ fn k2_generic_library_specializes_in_consumer() {
 }
 
 fn k2_reference_arrays_retain_typed_guest_objects() {
+    let packed_path = std::env::var("COMPUKTER_KOTLIN_PACKED_ARRAY_ARTIFACT")
+        .expect("COMPUKTER_KOTLIN_PACKED_ARRAY_ARTIFACT must be set for this conformance test");
+    k2_loop_control_executes_across_quota_slices(std::path::Path::new(&packed_path), 256 * 1024);
     k2_expected_prints_with_budget("COMPUKTER_KOTLIN_REFERENCE_ARRAY_ARTIFACT", [], 128);
     let loops_path = std::env::var("COMPUKTER_KOTLIN_REFERENCE_ARRAY_LOOPS_ARTIFACT")
         .expect("COMPUKTER_KOTLIN_REFERENCE_ARRAY_LOOPS_ARTIFACT must be set for this conformance test");
@@ -1914,21 +1917,17 @@ fn k2_int_array_executes_specialized_storage_and_traps() {
     }
 }
 
-fn execute_int_array_artifact(bytes: &[u8], mode: i32) -> IntArrayExecution {
-    let verified = verify_artifact(Arc::from(bytes.to_vec()), ArtifactLimits::default())
-        .expect("pinned VM must verify K2 IntArray output");
-    let string_argument = [HostValueType::String];
-    let no_arguments = [];
-    let operations = [
-        OperationSchema::synchronous(&string_argument, HostValueType::Unit),
-        OperationSchema::synchronous(&no_arguments, HostValueType::Unit),
-        OperationSchema::synchronous(&no_arguments, HostValueType::Unit),
-        OperationSchema::asynchronous(&no_arguments, HostValueType::I32),
-        OperationSchema::synchronous(&no_arguments, HostValueType::String),
-        OperationSchema::synchronous(&no_arguments, HostValueType::I32),
-        OperationSchema::synchronous(&no_arguments, HostValueType::I32),
-        OperationSchema::synchronous(&no_arguments, HostValueType::I32),
-        OperationSchema::synchronous(&no_arguments, HostValueType::Unit),
+fn terminal_operations() -> [OperationSchema<'static>; 18] {
+    [
+        OperationSchema::synchronous(&[HostValueType::String], HostValueType::Unit),
+        OperationSchema::synchronous(&[], HostValueType::Unit),
+        OperationSchema::synchronous(&[], HostValueType::Unit),
+        OperationSchema::asynchronous(&[], HostValueType::I32),
+        OperationSchema::synchronous(&[], HostValueType::String),
+        OperationSchema::synchronous(&[], HostValueType::I32),
+        OperationSchema::synchronous(&[], HostValueType::I32),
+        OperationSchema::synchronous(&[], HostValueType::I32),
+        OperationSchema::synchronous(&[], HostValueType::Unit),
         OperationSchema::synchronous(
             &[HostValueType::I32, HostValueType::I32],
             HostValueType::Unit,
@@ -1956,8 +1955,31 @@ fn execute_int_array_artifact(bytes: &[u8], mode: i32) -> IntArrayExecution {
             ],
             HostValueType::Unit,
         ),
-    ];
-    let binding = CapabilityBinding::new("compukter", "terminal", 2, 0, &operations);
+        OperationSchema::synchronous(&[], HostValueType::I32),
+        OperationSchema::synchronous(&[], HostValueType::I32),
+        OperationSchema::synchronous(&[], HostValueType::I32),
+        OperationSchema::synchronous(&[], HostValueType::I32),
+    ]
+}
+
+fn resume_terminal_key_snapshot(session: &mut Session, key: i32) {
+    for (operation, value) in [(3, 2), (5, key), (6, 1), (7, 0)] {
+        let request = next_host_request(session, "typed key snapshot", operation, None);
+        session
+            .resume(request, HostResponse::Success(HostValueInput::I32(value)))
+            .expect("key snapshot field must resume");
+    }
+    let request = next_host_request(session, "finish key snapshot", 8, None);
+    session
+        .resume(request, HostResponse::Success(HostValueInput::Unit))
+        .expect("key snapshot must release event ownership");
+}
+
+fn execute_int_array_artifact(bytes: &[u8], mode: i32) -> IntArrayExecution {
+    let verified = verify_artifact(Arc::from(bytes.to_vec()), ArtifactLimits::default())
+        .expect("pinned VM must verify K2 IntArray output");
+    let operations = terminal_operations();
+    let binding = CapabilityBinding::new("compukter", "terminal", 2, 1, &operations);
     let profile = ExecutionProfile {
         heap_bytes: 1024 * 1024,
         frame_storage_bytes: 1024 * 1024,
@@ -1979,13 +2001,15 @@ fn execute_int_array_artifact(bytes: &[u8], mode: i32) -> IntArrayExecution {
     let mut session =
         Session::admit(verified.clone(), profile, &[binding]).expect("K2 IntArray program must admit");
     session.start(&[]).expect("K2 IntArray program must start");
-    let mode_request = next_host_request(&mut session, "eventKey", 5, None);
+    let mode_request = next_host_request(&mut session, "cursor X", 14, None);
     session
         .resume(
             mode_request,
             HostResponse::Success(HostValueInput::I32(mode)),
         )
-        .expect("eventKey must resume IntArray program");
+        .expect("cursor X must resume IntArray program");
+    let row_request = next_host_request(&mut session, "cursor Y", 15, None);
+    session.resume(row_request, HostResponse::Success(HostValueInput::I32(0))).expect("cursor Y must resume IntArray program");
 
     let mut writes = Vec::new();
     let mut exhausted_slices = 0;
@@ -2089,47 +2113,8 @@ fn k2_string_array_entry_executes_exact_utf16_arguments() {
     let bytes = fs::read(path).expect("K2 argv output must exist");
     let verified = verify_artifact(Arc::from(bytes), ArtifactLimits::default())
         .expect("pinned VM must verify K2 argv output");
-    let string_argument = [HostValueType::String];
-    let no_arguments = [];
-    let operations = [
-        OperationSchema::synchronous(&string_argument, HostValueType::Unit),
-        OperationSchema::synchronous(&no_arguments, HostValueType::Unit),
-        OperationSchema::synchronous(&no_arguments, HostValueType::Unit),
-        OperationSchema::synchronous(&no_arguments, HostValueType::Unit),
-        OperationSchema::synchronous(&no_arguments, HostValueType::Unit),
-        OperationSchema::synchronous(&no_arguments, HostValueType::Unit),
-        OperationSchema::synchronous(&no_arguments, HostValueType::Unit),
-        OperationSchema::synchronous(&no_arguments, HostValueType::Unit),
-        OperationSchema::synchronous(&no_arguments, HostValueType::Unit),
-        OperationSchema::synchronous(
-            &[HostValueType::I32, HostValueType::I32],
-            HostValueType::Unit,
-        ),
-        OperationSchema::synchronous(&[HostValueType::Bool], HostValueType::Unit),
-        OperationSchema::synchronous(
-            &[HostValueType::I32, HostValueType::I32],
-            HostValueType::Unit,
-        ),
-        OperationSchema::synchronous(
-            &[
-                HostValueType::I32,
-                HostValueType::I32,
-                HostValueType::String,
-            ],
-            HostValueType::Unit,
-        ),
-        OperationSchema::synchronous(
-            &[
-                HostValueType::I32,
-                HostValueType::I32,
-                HostValueType::I32,
-                HostValueType::I32,
-                HostValueType::Char,
-            ],
-            HostValueType::Unit,
-        ),
-    ];
-    let binding = CapabilityBinding::new("compukter", "terminal", 2, 0, &operations);
+    let operations = terminal_operations();
+    let binding = CapabilityBinding::new("compukter", "terminal", 2, 1, &operations);
     let profile = ExecutionProfile {
         heap_bytes: 1024 * 1024,
         frame_storage_bytes: 1024 * 1024,
@@ -2192,47 +2177,8 @@ fn k2_string_materialization_executes_char_arrays_and_scalar_templates() {
     let bytes = fs::read(path).expect("K2 subset output must exist");
     let verified = verify_artifact(Arc::from(bytes), ArtifactLimits::default())
         .expect("pinned VM must verify K2 subset output");
-    let string_argument = [HostValueType::String];
-    let no_arguments = [];
-    let operations = [
-        OperationSchema::synchronous(&string_argument, HostValueType::Unit),
-        OperationSchema::synchronous(&no_arguments, HostValueType::Unit),
-        OperationSchema::synchronous(&no_arguments, HostValueType::Unit),
-        OperationSchema::synchronous(&no_arguments, HostValueType::Unit),
-        OperationSchema::synchronous(&no_arguments, HostValueType::Unit),
-        OperationSchema::synchronous(&no_arguments, HostValueType::Unit),
-        OperationSchema::synchronous(&no_arguments, HostValueType::Unit),
-        OperationSchema::synchronous(&no_arguments, HostValueType::Unit),
-        OperationSchema::synchronous(&no_arguments, HostValueType::Unit),
-        OperationSchema::synchronous(
-            &[HostValueType::I32, HostValueType::I32],
-            HostValueType::Unit,
-        ),
-        OperationSchema::synchronous(&[HostValueType::Bool], HostValueType::Unit),
-        OperationSchema::synchronous(
-            &[HostValueType::I32, HostValueType::I32],
-            HostValueType::Unit,
-        ),
-        OperationSchema::synchronous(
-            &[
-                HostValueType::I32,
-                HostValueType::I32,
-                HostValueType::String,
-            ],
-            HostValueType::Unit,
-        ),
-        OperationSchema::synchronous(
-            &[
-                HostValueType::I32,
-                HostValueType::I32,
-                HostValueType::I32,
-                HostValueType::I32,
-                HostValueType::Char,
-            ],
-            HostValueType::Unit,
-        ),
-    ];
-    let binding = CapabilityBinding::new("compukter", "terminal", 2, 0, &operations);
+    let operations = terminal_operations();
+    let binding = CapabilityBinding::new("compukter", "terminal", 2, 1, &operations);
     let profile = ExecutionProfile {
         heap_bytes: 1024 * 1024,
         frame_storage_bytes: 1024 * 1024,
@@ -2302,47 +2248,8 @@ fn k2_ordinary_project_call_resumes_across_async_capability() {
     let bytes = fs::read(path).expect("K2 transparent-call output must exist");
     let verified = verify_artifact(Arc::from(bytes), ArtifactLimits::default())
         .expect("pinned VM must verify K2 transparent-call output");
-    let string_argument = [HostValueType::String];
-    let no_arguments = [];
-    let operations = [
-        OperationSchema::synchronous(&string_argument, HostValueType::Unit),
-        OperationSchema::synchronous(&no_arguments, HostValueType::Unit),
-        OperationSchema::synchronous(&no_arguments, HostValueType::Unit),
-        OperationSchema::asynchronous(&no_arguments, HostValueType::I32),
-        OperationSchema::synchronous(&no_arguments, HostValueType::String),
-        OperationSchema::synchronous(&no_arguments, HostValueType::I32),
-        OperationSchema::synchronous(&no_arguments, HostValueType::I32),
-        OperationSchema::synchronous(&no_arguments, HostValueType::I32),
-        OperationSchema::synchronous(&no_arguments, HostValueType::Unit),
-        OperationSchema::synchronous(
-            &[HostValueType::I32, HostValueType::I32],
-            HostValueType::Unit,
-        ),
-        OperationSchema::synchronous(&[HostValueType::Bool], HostValueType::Unit),
-        OperationSchema::synchronous(
-            &[HostValueType::I32, HostValueType::I32],
-            HostValueType::Unit,
-        ),
-        OperationSchema::synchronous(
-            &[
-                HostValueType::I32,
-                HostValueType::I32,
-                HostValueType::String,
-            ],
-            HostValueType::Unit,
-        ),
-        OperationSchema::synchronous(
-            &[
-                HostValueType::I32,
-                HostValueType::I32,
-                HostValueType::I32,
-                HostValueType::I32,
-                HostValueType::Char,
-            ],
-            HostValueType::Unit,
-        ),
-    ];
-    let binding = CapabilityBinding::new("compukter", "terminal", 2, 0, &operations);
+    let operations = terminal_operations();
+    let binding = CapabilityBinding::new("compukter", "terminal", 2, 1, &operations);
     let profile = ExecutionProfile {
         heap_bytes: 1024 * 1024,
         frame_storage_bytes: 1024 * 1024,
@@ -2367,15 +2274,7 @@ fn k2_ordinary_project_call_resumes_across_async_capability() {
         .start(&[])
         .expect("K2 transparent-call program must start");
 
-    let await_request = next_host_request(&mut session, "awaitEvent", 3, None);
-    session
-        .resume(await_request, HostResponse::Success(HostValueInput::I32(1)))
-        .expect("awaitEvent must resume");
-
-    let key_request = next_host_request(&mut session, "eventKey", 5, None);
-    session
-        .resume(key_request, HostResponse::Success(HostValueInput::I32(13)))
-        .expect("eventKey must resume");
+    resume_terminal_key_snapshot(&mut session, 13);
 
     let write_request = next_host_request(
         &mut session,
@@ -2411,47 +2310,8 @@ fn k2_bounded_when_selects_matched_and_fallback_branches() {
 fn execute_when_artifact(bytes: &[u8], key: i32) -> Vec<u16> {
     let verified = verify_artifact(Arc::from(bytes.to_vec()), ArtifactLimits::default())
         .expect("pinned VM must verify K2 when output");
-    let string_argument = [HostValueType::String];
-    let no_arguments = [];
-    let operations = [
-        OperationSchema::synchronous(&string_argument, HostValueType::Unit),
-        OperationSchema::synchronous(&no_arguments, HostValueType::Unit),
-        OperationSchema::synchronous(&no_arguments, HostValueType::Unit),
-        OperationSchema::asynchronous(&no_arguments, HostValueType::I32),
-        OperationSchema::synchronous(&no_arguments, HostValueType::String),
-        OperationSchema::synchronous(&no_arguments, HostValueType::I32),
-        OperationSchema::synchronous(&no_arguments, HostValueType::I32),
-        OperationSchema::synchronous(&no_arguments, HostValueType::I32),
-        OperationSchema::synchronous(&no_arguments, HostValueType::Unit),
-        OperationSchema::synchronous(
-            &[HostValueType::I32, HostValueType::I32],
-            HostValueType::Unit,
-        ),
-        OperationSchema::synchronous(&[HostValueType::Bool], HostValueType::Unit),
-        OperationSchema::synchronous(
-            &[HostValueType::I32, HostValueType::I32],
-            HostValueType::Unit,
-        ),
-        OperationSchema::synchronous(
-            &[
-                HostValueType::I32,
-                HostValueType::I32,
-                HostValueType::String,
-            ],
-            HostValueType::Unit,
-        ),
-        OperationSchema::synchronous(
-            &[
-                HostValueType::I32,
-                HostValueType::I32,
-                HostValueType::I32,
-                HostValueType::I32,
-                HostValueType::Char,
-            ],
-            HostValueType::Unit,
-        ),
-    ];
-    let binding = CapabilityBinding::new("compukter", "terminal", 2, 0, &operations);
+    let operations = terminal_operations();
+    let binding = CapabilityBinding::new("compukter", "terminal", 2, 1, &operations);
     let profile = ExecutionProfile {
         heap_bytes: 1024 * 1024,
         frame_storage_bytes: 1024 * 1024,
@@ -2474,14 +2334,7 @@ fn execute_when_artifact(bytes: &[u8], key: i32) -> Vec<u16> {
         Session::admit(verified, profile, &[binding]).expect("K2 when program must admit");
     session.start(&[]).expect("K2 when program must start");
 
-    let await_request = next_host_request(&mut session, "awaitEvent", 3, None);
-    session
-        .resume(await_request, HostResponse::Success(HostValueInput::I32(1)))
-        .expect("awaitEvent must resume");
-    let key_request = next_host_request(&mut session, "eventKey", 5, None);
-    session
-        .resume(key_request, HostResponse::Success(HostValueInput::I32(key)))
-        .expect("eventKey must resume");
+    resume_terminal_key_snapshot(&mut session, if key == 13 { 13 } else { 67 });
     let (write_request, output) = next_string_host_request(&mut session, "write", 0);
     session
         .resume(write_request, HostResponse::Success(HostValueInput::Unit))

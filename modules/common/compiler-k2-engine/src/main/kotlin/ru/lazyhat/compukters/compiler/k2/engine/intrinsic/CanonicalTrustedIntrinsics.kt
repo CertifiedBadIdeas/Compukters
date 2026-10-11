@@ -386,9 +386,22 @@ object CanonicalTrustedIntrinsics {
                     Triple("setColors", "fun(Int,Int):Unit", false),
                     Triple("writeAt", "fun(Int,Int,String):Unit", false),
                     Triple("fill", "fun(Int,Int,Int,Int,Char):Unit", false),
+                    Triple("cursorX", "fun():Int", false),
+                    Triple("cursorY", "fun():Int", false),
+                    Triple("width", "fun():Int", false),
+                    Triple("height", "fun():Int", false),
                 )
             terminalOperations.forEachIndexed { operation, (name, signature, blocking) ->
-                capability("compukter", "core", "compukter.terminal", "Terminal.$name", signature, terminal, operation.toUInt(), blocking)
+                capability(
+                    "compukter",
+                    "core",
+                    "compukter.terminal",
+                    "TerminalBindings.$name",
+                    signature,
+                    terminal,
+                    operation.toUInt(),
+                    blocking,
+                )
             }
             capability("compukter", "core", "kotlin.io", "readln", "fun():String", stdio, 0u, true)
         }

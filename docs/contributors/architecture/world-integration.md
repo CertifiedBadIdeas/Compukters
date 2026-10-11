@@ -32,8 +32,8 @@ The raw terminal is a synchronous Rust device: cell writes, positional writes, r
 changes, and input polling never cross into Minecraft. The authoritative fixed 51x19 cell grid and its replication
 journal live in the machine; Minecraft only renders full states or ordered deltas. Waiting for an absent input event
 and foreground process execution are explicit suspension points. Kotlin guests consume ordered raw Text and Key
-events; there is no compatibility line buffer or second input protocol. A program must finish its active event before
-starting an interactive child, so event ownership never leaks across foreground process frames. The server host never
+events; there is no compatibility line buffer or second input protocol. The Guest Terminal facade returns an owned event snapshot and finishes its native event before returning,
+so starting an interactive child cannot retain that event ownership. The server host never
 blocks the Minecraft thread.
 
 ## Redstone
@@ -129,16 +129,16 @@ are released when panels unload. Deterministic clipping and a 4M pixel-work/tick
 
 ## Foreground termination
 
-Ctrl+T is reserved in computer terminal input (key code 84, CONTROL modifier), including the IDE target terminal.
+Ctrl+C is reserved in computer terminal input (key code 67, CONTROL modifier), including the IDE target terminal.
 The native computer consumes it independently of Guest input polling and queue capacity. A press marks the foreground
 child below the nearest `/rom/shell` frame, or the first child of a standalone parent, for termination. An idle shell
-and a root without a parent are preserved. Successive native advances unwind its descendants with status 130 and
+and a root without a parent are preserved; an idle press reaches Guest input. Successive native advances unwind its descendants with status 130 and
 ordinary `ProcessExited` lifecycle events, allowing the existing host scope cleanup to release peripheral leases and
 reject stale completions. The host cancels pending compilation and wakes an input/compiler wait; native termination
 discards the corresponding compiler transaction. Queued input for the terminated command is discarded at the press. After unwinding, line-oriented output resumes
 below visible content without clearing the terminal; normal scrolling applies when the screen is full. Held-key repeats are consumed
 without scheduling another stop.
-Terminal key 84 extends the admitted key set compatibly: existing key values, payload layouts, artifact ABI and C ABI
+Terminal keys C (67) and U (85) extend the admitted key set compatibly: existing key values, payload layouts, artifact ABI and C ABI
 remain unchanged; both native transports use their existing terminal-key function.
 
 ## Typed peripheral discovery

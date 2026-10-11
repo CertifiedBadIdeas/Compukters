@@ -53,6 +53,12 @@ take a **Compukter**, or run:
 Place the block and use it with an empty hand. Its terminal opens and the built-in shell displays a `>` prompt after the
 computer boots. Run `help` to see the currently available shell commands.
 
+Use Left/Right, Home/End and Delete/Backspace to edit commands. Up/Down recall the last 32 commands;
+Down past the newest entry restores your unfinished draft and its cursor. History is bounded and belongs to the
+running shell session. Long commands scroll horizontally while editing; input is limited to 256 UTF-16 units.
+Ctrl+U clears the line. Ctrl+C cancels input at the prompt or stops the foreground program and its nested work,
+returning to the shell. Files already saved remain intact; interruption does not save an editor's unsaved buffer.
+
 Use `help <command>` for usage. Relative paths start at `/home`; quote names containing spaces. For example:
 
 ```text
