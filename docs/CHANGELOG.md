@@ -26,9 +26,12 @@ headings so this page has one stable URL that can be shared outside the reposito
   Unknown references color their complete identifier; errors and warnings underline their exact source ranges.
   Hovering a marked token shows its problems together, preserving source editing and horizontal scrolling.
   Argument hints open when typing a call or pressing Ctrl+P, wrap long signatures and emphasize the current parameter.
+  Attached addon sources have a separate bounded allowance, so bundled library sources do not exhaust it.
 
-- Guest Kotlin supports `do-while` loops, including local `break` and `continue`, body-local variables in
-  the condition, and managed exception and `finally` cleanup across VM instruction slices.
+- Guest Kotlin supports `do-while` loops with body-local variables in the condition, and labeled
+  `break@label` / `continue@label` across nested `while`, `do-while`, `Int` progression, primitive-array,
+  and supported iterable loops. Loop jumps preserve managed exception and `finally` cleanup across VM
+  instruction slices.
 
 - Contributors can create, diagnose and safely complete task worktrees with `worktree-task`: local `dev`/`main` bases,
   readiness diagnostics, integration checks and cleanup with archived evidence, pinned VM and optional addon
@@ -76,7 +79,9 @@ headings so this page has one stable URL that can be shared outside the reposito
 - Guest `kotlin.math` provides reusable `Vector2i`, `Vector2f`, `Vector3i` and `Vector3f` value classes,
   Position/Size aliases, arithmetic, dot/cross products, lengths, normalization, interpolation, explicit
   rounding and half-open 2D rectangles. Displays accept vectors and rectangles while retaining scalar
-  coordinate calls. Infix `xy`, `by` and `sized` provide compact geometry construction.
+  coordinate calls. Infix `xy`, `by` and `sized` provide compact geometry construction. Immutable `Matrix4f`
+  and homogeneous `Vector4f` add reusable 3D transformation composition, radians-based axis rotations,
+  perspective/orthographic projection and explicit perspective division with clip-volume checks.
 
 - Guest executables omit unused class and interface methods and their dependencies. Virtual dispatch keeps its
   required implementations; independently compiled libraries retain their exported method surface.

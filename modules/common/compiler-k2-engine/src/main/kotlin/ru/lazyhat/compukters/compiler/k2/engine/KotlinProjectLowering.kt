@@ -1301,7 +1301,7 @@ internal object KotlinProjectLowering {
                         it is IrConstructor || it is IrProperty || it is IrAnonymousInitializer
                     }
                 }
-        val closureSources = collectGuestClosures(closureRoots)
+        val closureSources = collectGuestClosures(closureRoots, session)
         val writtenValues = collectWrittenGuestValues(closureRoots)
         val captureCellDeclarations =
             closureSources
@@ -8666,6 +8666,15 @@ private class FunctionCompiler(
             compileStatement(plan.canonical.body)
         }
 
+        if (isTerminated() && context.continueBlocks.isEmpty()) {
+            val exit = createBlock()
+            blocks[initialBranchBlock].instructions[initialBranchIndex] =
+                Instruction.Branch(initialHasNext, blockId(body), blockId(exit))
+            context.breakBlocks.forEach { patchJumpTarget(it, exit) }
+            currentBlock = exit
+            return
+        }
+
         val condition = createBlock()
         if (!isTerminated()) jumpTo(condition)
         context.continueBlocks.forEach { patchJumpTarget(it, condition) }
@@ -8717,6 +8726,15 @@ private class FunctionCompiler(
         val context = LoopContext(plan.loop, continueTarget = null, placeholderTarget = body, finallyDepth = finallyContexts.size)
         withLoopContext(context) {
             compileStatement(plan.body)
+        }
+
+        if (isTerminated() && context.continueBlocks.isEmpty()) {
+            val exit = createBlock()
+            blocks[initialBranchBlock].instructions[initialBranchIndex] =
+                Instruction.Branch(initialCondition, blockId(body), blockId(exit))
+            context.breakBlocks.forEach { patchJumpTarget(it, exit) }
+            currentBlock = exit
+            return
         }
 
         val condition = createBlock()
@@ -8846,10 +8864,9 @@ private class FunctionCompiler(
         jump: IrBreakContinue,
         breakJump: Boolean,
     ) {
-        val context = loopContexts.lastOrNull()
-        if (context == null || jump.loop !== context.loop) {
-            throw UnsupportedKotlinIr(jump, "outer loop jump is not supported")
-        }
+        val context =
+            loopContexts.lastOrNull { it.loop === jump.loop }
+                ?: throw UnsupportedKotlinIr(jump, "loop jump target is not active in this function")
         emitNonlocalExit(context.finallyDepth, jump) {
             if (breakJump) {
                 context.breakBlocks += currentBlock
@@ -9479,7 +9496,10 @@ private fun collectWrittenGuestValues(roots: List<IrElement>): Set<IrValueSymbol
 }
 
 @OptIn(UnsafeDuringIrConstructionAPI::class)
-private fun collectGuestClosures(functions: List<IrElement>): List<GuestClosureSource> {
+private fun collectGuestClosures(
+    functions: List<IrElement>,
+    session: CompilationSession,
+): List<GuestClosureSource> {
     val expressions = mutableListOf<IrExpression>()
     val collector =
         object : IrVisitorVoid() {
@@ -9528,9 +9548,16 @@ private fun collectGuestClosures(functions: List<IrElement>): List<GuestClosureS
             }
         if (referenceTarget != null) {
             val shape = expression.type.guestFunctionShape()
-            val boundReceiver = expression.boundReferenceReceiver(referenceTarget)
-            val instanceMethod = referenceTarget.parent is IrClass
-            val dispatchReceiver = referenceTarget.parameters.singleOrNull { it.kind == IrParameterKind.DispatchReceiver }
+            val sourceReceiver = expression.boundReferenceReceiver(referenceTarget)
+            val dispatchReceiver = loweredParameters(referenceTarget, session).singleOrNull { it.kind == IrParameterKind.DispatchReceiver }
+            val erasedReceiver = dispatchReceiver == null && referenceTarget.parameters.any { it.kind == IrParameterKind.DispatchReceiver }
+            // Trusted stateless object methods are exported without a receiver. A reference must use
+            // the same signature as a direct call, rather than capture an object with no runtime type.
+            if (erasedReceiver && sourceReceiver != null && sourceReceiver !is IrGetObjectValue) {
+                throw UnsupportedKotlinIr(expression, "erased object function reference requires a singleton receiver")
+            }
+            val boundReceiver = sourceReceiver.takeUnless { erasedReceiver }
+            val instanceMethod = referenceTarget.parent is IrClass && !erasedReceiver
             val receiverType = boundReceiver?.type ?: shape?.parameters?.firstOrNull()
             val ownerInstance =
                 (receiverType as? IrSimpleType)?.let { receiver ->
