@@ -37,6 +37,7 @@ object IdeKeyCode {
     const val C = 67
     const val F = 70
     const val L = 76
+    const val N = 78
     const val P = 80
     const val S = 83
     const val V = 86

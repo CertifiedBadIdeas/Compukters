@@ -75,6 +75,7 @@ class IdeScreenController(
     private val host: IdeScreenHost,
 ) {
     private val prompt = IdePromptController()
+    private val quickOpen = IdeQuickOpen()
     private val input =
         IdeInputAdapter(
             controller::dispatch,
@@ -106,7 +107,9 @@ class IdeScreenController(
     ): Boolean {
         val viewport = viewport()
         val uiEvent = event.map(viewport)
-        if (uiEvent.button() == 0 && (!viewport.supported || (prompt.state == null && controller.viewState().dialog == null))) {
+        if (uiEvent.button() == 0 &&
+            (!viewport.supported || (!quickOpen.visible && prompt.state == null && controller.viewState().dialog == null))
+        ) {
             IdeUiScaleControl.hit(IdeRect(0, 0, viewport.width, viewport.height), uiEvent.x(), uiEvent.y())?.let { mode ->
                 preferences.saveUiScale(mode)
                 return true
@@ -115,6 +118,16 @@ class IdeScreenController(
         if (!viewport.supported) return true
         val geometry = geometry()
         val state = controller.viewState()
+        synchronizeQuickOpen()
+        if (quickOpen.visible) {
+            if (uiEvent.button() == 0) {
+                quickOpen
+                    .press(uiEvent.x(), uiEvent.y(), geometry.panel, uiEvent.modifiers() and IdeModifier.SHIFT != 0, doubleClick)
+                    ?.let(::openQuickFile)
+            }
+            host.clearFocus()
+            return true
+        }
         if (prompt.state != null) {
             if (uiEvent.button() == 0 &&
                 prompt.press(uiEvent.x(), uiEvent.y(), geometry.panel, uiEvent.modifiers() and IdeModifier.SHIFT != 0, doubleClick)
@@ -225,6 +238,11 @@ class IdeScreenController(
         if (!viewport.supported) return true
         val uiEvent = event.map(viewport)
         val geometry = geometry()
+        synchronizeQuickOpen()
+        if (quickOpen.visible) {
+            quickOpen.drag(uiEvent.x(), geometry.panel)
+            return true
+        }
         if (prompt.state != null) {
             prompt.drag(uiEvent.x(), geometry.panel)
             return true
@@ -248,6 +266,11 @@ class IdeScreenController(
         val viewport = viewport()
         if (!viewport.supported) return true
         val uiEvent = event.map(viewport)
+        synchronizeQuickOpen()
+        if (quickOpen.visible) {
+            quickOpen.release()
+            return true
+        }
         if (prompt.state != null) {
             prompt.release()
             return true
@@ -269,6 +292,12 @@ class IdeScreenController(
         val uiMouseX = viewport.toVirtualX(mouseX)
         val uiMouseY = viewport.toVirtualY(mouseY)
         val geometry = geometry()
+        synchronizeQuickOpen()
+        if (quickOpen.visible) {
+            val direction = if (scrollX != 0.0) scrollX else -scrollY
+            if (direction != 0.0) quickOpen.scroll(uiMouseX, uiMouseY, if (direction > 0) 1 else -1, geometry.panel)
+            return true
+        }
         if (prompt.state != null) {
             val direction = if (scrollX != 0.0) scrollX else -scrollY
             if (direction != 0.0) prompt.scroll(uiMouseX, uiMouseY, geometry.panel, if (direction > 0) 3 else -3)
@@ -297,6 +326,7 @@ class IdeScreenController(
             val uiY = viewport.toVirtualY(mouseY)
             pointerX = uiX
             pointerY = uiY
+            if (quickOpen.visible) return
             val modifiers = if (controlDown) IdeModifier.CONTROL else 0
             input.pointerMoved(
                 uiX,
@@ -315,6 +345,15 @@ class IdeScreenController(
             controlDown = true
         }
         if (!viewport().supported) return event.key != IdeKeyCode.ESCAPE
+        synchronizeQuickOpen()
+        if (quickOpen.visible) {
+            when (event.key) {
+                IdeKeyCode.ESCAPE -> quickOpen.close()
+                IdeKeyCode.ENTER -> quickOpen.takeSelected()?.let(::openQuickFile)
+                else -> quickOpen.key(event, { host.clipboard }, { host.clipboard = it }, geometry().panel)
+            }
+            return true
+        }
         if (prompt.state != null) {
             return when {
                 event.key == IdeKeyCode.ESCAPE -> prompt.cancel()
@@ -323,6 +362,12 @@ class IdeScreenController(
             }
         }
         if (controller.viewState().dialog != null) return input.keyPressed(event, focusState())
+        if (event.key == IdeKeyCode.N &&
+            event.modifiers and (IdeModifier.CONTROL or IdeModifier.SHIFT) == (IdeModifier.CONTROL or IdeModifier.SHIFT) &&
+            event.modifiers and IdeModifier.ALT == 0 && focusArea != IdeFocusArea.Terminal
+        ) {
+            return openQuickOpen()
+        }
         if (event.key == IdeKeyCode.ESCAPE && projectSwitcherOpen) {
             projectSwitcherOpen = false
             return true
@@ -346,6 +391,7 @@ class IdeScreenController(
     fun keyReleased(event: IdeKeyInput): Boolean {
         if (event.key == IdeKeyCode.LEFT_CONTROL || event.key == IdeKeyCode.RIGHT_CONTROL) controlDown = false
         if (!viewport().supported) return true
+        if (quickOpen.visible) return true
         val semanticHandled = input.keyReleased(event)
         if (focusArea == IdeFocusArea.Terminal && terminalOverlay.keyReleased(event.key)) return true
         return semanticHandled
@@ -353,6 +399,11 @@ class IdeScreenController(
 
     fun charTyped(event: IdeCharacterInput): Boolean {
         if (!viewport().supported) return true
+        synchronizeQuickOpen()
+        if (quickOpen.visible) {
+            quickOpen.type(event.text)
+            return true
+        }
         if (prompt.state != null) return prompt.type(event.text)
         val inputEvent = IdeCharacterInput(event.text)
         if (focusArea == IdeFocusArea.Terminal && terminalOverlay.charTyped(inputEvent)) return true
@@ -360,6 +411,7 @@ class IdeScreenController(
     }
 
     fun removed() {
+        quickOpen.close()
         prompt.cancel()
         input.cancelExplorerDrag()
         splitters.focusLost()
@@ -391,12 +443,14 @@ class IdeScreenController(
         val treeFirstRow = admittedTreeFirstRow(geometry)
         val state = controller.viewState()
         admitFileTabScroll(geometry)
+        synchronizeQuickOpen()
         prompt.admitLayout(geometry.panel)
         val model =
             IdeRenderer.extract(
                 state,
                 geometry,
                 prompt = prompt.state,
+                quickOpen = if (viewport().supported && geometry.supported) quickOpen.view(geometry.panel) else null,
                 treeFirstRow = treeFirstRow,
                 selectedTreePath = selectedTreePath,
                 terminalState = terminalOverlay.state().presentationStatus(),
@@ -404,7 +458,7 @@ class IdeScreenController(
                 explorerDrag = input.explorerDragVisual,
                 projectFirstRow = input.projectFirstRow,
                 fileTabFirstIndex = fileTabFirstIndex,
-                projectSwitcherOpen = projectSwitcherOpen && prompt.state == null && state.dialog == null,
+                projectSwitcherOpen = projectSwitcherOpen && !quickOpen.visible && prompt.state == null && state.dialog == null,
                 uiScale = preferences.uiScale(),
                 viewportSupported = viewport().supported,
                 pointerX = viewport.toVirtualX(mouseX.toDouble()).toInt(),
@@ -502,6 +556,7 @@ class IdeScreenController(
     }
 
     private fun pointerContext(geometry: IdeRenderGeometry): IdePointerContext {
+        synchronizeQuickOpen()
         prompt.admitLayout(geometry.panel)
         val state = controller.viewState()
         admitFileTabScroll(geometry)
@@ -511,6 +566,7 @@ class IdeScreenController(
                 state,
                 geometry,
                 prompt = prompt.state,
+                quickOpen = if (viewport().supported && geometry.supported) quickOpen.view(geometry.panel) else null,
                 treeFirstRow = treeFirstRow,
                 selectedTreePath = selectedTreePath,
                 terminalState = terminalOverlay.state().presentationStatus(),
@@ -518,7 +574,7 @@ class IdeScreenController(
                 explorerDrag = input.explorerDragVisual,
                 projectFirstRow = input.projectFirstRow,
                 fileTabFirstIndex = fileTabFirstIndex,
-                projectSwitcherOpen = projectSwitcherOpen && prompt.state == null && state.dialog == null,
+                projectSwitcherOpen = projectSwitcherOpen && !quickOpen.visible && prompt.state == null && state.dialog == null,
                 uiScale = preferences.uiScale(),
                 viewportSupported = viewport().supported,
             )
@@ -566,6 +622,10 @@ class IdeScreenController(
 
     private fun activateUiAction(action: IdeHitAction): Boolean {
         when (action) {
+            IdeHitAction.QuickOpen -> {
+                return openQuickOpen()
+            }
+
             IdeHitAction.PreviousFileTabs -> {
                 fileTabFirstIndex = (fileTabFirstIndex - 1).coerceAtLeast(0)
             }
@@ -721,6 +781,32 @@ class IdeScreenController(
         projectSwitcherOpen = false
         prompt.open(IdePromptKind.RenameProject(project.directoryName), project.displayName)
         return true
+    }
+
+    private fun synchronizeQuickOpen() {
+        val state = controller.viewState()
+        if (state.dialog != null || prompt.state != null) quickOpen.close()
+        quickOpen.synchronize((state.page as? IdePageState.Workspace)?.value)
+    }
+
+    private fun openQuickOpen(): Boolean {
+        val state = controller.viewState()
+        val workspace = (state.page as? IdePageState.Workspace)?.value ?: return false
+        if (prompt.state != null || state.dialog != null || state.busy.isNotEmpty() || splitters.captured) return false
+        projectSwitcherOpen = false
+        input.cancelExplorerDrag()
+        input.pointerActivity()
+        terminalOverlay.focusLost()
+        controller.dispatch(IdeCommand.EditorFocusLost)
+        quickOpen.open(workspace)
+        host.clearFocus()
+        return true
+    }
+
+    private fun openQuickFile(path: ProjectPath) {
+        controller.dispatch(IdeCommand.OpenFile(path))
+        focusArea = IdeFocusArea.Editor
+        host.clearFocus()
     }
 
     private fun confirmPrompt(): Boolean {

@@ -23,6 +23,7 @@ import ru.lazyhat.compukters.ide.client.controller.IdeClientController
 import ru.lazyhat.compukters.ide.client.controller.IdeControllerClock
 import ru.lazyhat.compukters.ide.client.state.BoundedIdeEventQueue
 import ru.lazyhat.compukters.ide.client.state.IdeCommand
+import ru.lazyhat.compukters.ide.client.state.IdeEditorView
 import ru.lazyhat.compukters.ide.client.state.IdePageState
 import ru.lazyhat.compukters.ide.client.workspace.DefaultIdeWorkspace
 import ru.lazyhat.compukters.impl.ide.target.IdeTargetTerminalClient
@@ -200,6 +201,128 @@ class IdeScreenControllerTest {
         }
     }
 
+    @Test
+    fun `quick open searches collapsed files consumes modal input and activates the selected path`() {
+        Fixture().use { fixture ->
+            val main =
+                ru.lazyhat.compukters.ide.project.fs.ProjectPath
+                    .file("src/main.kt")
+            val other =
+                ru.lazyhat.compukters.ide.project.fs.ProjectPath
+                    .file("src/other.kt")
+            fixture.controller.dispatch(IdeCommand.CreateProject("demo"))
+            fixture.awaitWorkspace()
+            fixture.controller.dispatch(IdeCommand.CreateText(other))
+            fixture.awaitTree(other)
+            fixture.controller.dispatch(IdeCommand.OpenFile(main))
+            fixture.awaitFile(main)
+            val before = (fixture.controller.viewState().page as IdePageState.Workspace).value.editor as IdeEditorView.Text
+            val ui = fixture.ui
+            assertTrue(ui.keyPressed(IdeKeyInput(IdeKeyCode.N, IdeModifier.CONTROL or IdeModifier.SHIFT)))
+            val modal = ui.frame(0, 0)
+            assertTrue(modal.model.hitTargets.none { it.enabled })
+            assertTrue(modal.model.text.any { it.kind == IdeTextKind.Dialog && it.value == other.value })
+            fixture.host.pixelWidth = 0
+            assertFalse(
+                ui
+                    .frame(0, 0)
+                    .model.panels
+                    .any { it.kind == IdePanelKind.Dialog },
+            )
+            fixture.host.pixelWidth = 1920
+            ui.charTyped(IdeCharacterInput("no-match"))
+            ui.keyPressed(IdeKeyInput(IdeKeyCode.ENTER))
+            assertTrue(
+                ui
+                    .frame(0, 0)
+                    .model.text
+                    .any { it.value == "No matching files" },
+            )
+            ui.mouseClicked(IdePointerInput(0.0, 0.0, 0, 0), false)
+            ui.keyPressed(IdeKeyInput(IdeKeyCode.ESCAPE))
+            val after = (fixture.controller.viewState().page as IdePageState.Workspace).value.editor as IdeEditorView.Text
+            assertEquals(before.path, after.path)
+            assertEquals(before.contentRevision, after.contentRevision)
+            assertEquals(before.visibleLines, after.visibleLines)
+            assertEquals(before.caretUtf16, after.caretUtf16)
+            assertFalse(
+                ui
+                    .frame(0, 0)
+                    .model.panels
+                    .any { it.kind == IdePanelKind.Dialog },
+            )
+            val button =
+                ui
+                    .frame(0, 0)
+                    .model.hitTargets
+                    .single { it.action == IdeHitAction.QuickOpen }
+            val viewport = fixture.host.viewport()
+            ui.mouseClicked(
+                IdePointerInput(viewport.toMinecraftX(button.bounds.left + 2.0), viewport.toMinecraftY(button.bounds.top + 2.0), 0, 0),
+                false,
+            )
+            ui.charTyped(IdeCharacterInput("OTHER"))
+            assertTrue(
+                ui
+                    .frame(0, 0)
+                    .model.text
+                    .any { it.kind == IdeTextKind.Dialog && it.value == other.value },
+            )
+            ui.keyPressed(IdeKeyInput(IdeKeyCode.ENTER))
+            fixture.awaitFile(other)
+            assertEquals(IdeFocusArea.Editor, ui.focusArea)
+            assertFalse(
+                ui
+                    .frame(0, 0)
+                    .model.panels
+                    .any { it.kind == IdePanelKind.Dialog },
+            )
+        }
+    }
+
+    @Test
+    fun `quick open pointer selection shares scaled row geometry and query supports clipboard undo`() {
+        Fixture().use { fixture ->
+            val main =
+                ru.lazyhat.compukters.ide.project.fs.ProjectPath
+                    .file("src/main.kt")
+            val other =
+                ru.lazyhat.compukters.ide.project.fs.ProjectPath
+                    .file("src/other.kt")
+            fixture.controller.dispatch(IdeCommand.CreateProject("demo"))
+            fixture.awaitWorkspace()
+            fixture.controller.dispatch(IdeCommand.CreateText(other))
+            fixture.awaitTree(other)
+            fixture.controller.dispatch(IdeCommand.OpenFile(main))
+            fixture.awaitFile(main)
+            val ui = fixture.ui
+            ui.keyPressed(IdeKeyInput(IdeKeyCode.N, IdeModifier.CONTROL or IdeModifier.SHIFT))
+            fixture.host.clipboard = "other"
+            ui.keyPressed(IdeKeyInput(IdeKeyCode.V, IdeModifier.CONTROL, paste = true))
+            assertTrue(
+                ui
+                    .frame(0, 0)
+                    .model.text
+                    .any { it.kind == IdeTextKind.Dialog && it.value == other.value },
+            )
+            ui.keyPressed(IdeKeyInput(IdeKeyCode.Z, IdeModifier.CONTROL))
+            val frame = ui.frame(0, 0)
+            val row =
+                frame.model.text
+                    .single { it.kind == IdeTextKind.Dialog && it.value == other.value }
+                    .clip!!
+            val viewport = fixture.host.viewport()
+            ui.mouseClicked(IdePointerInput(viewport.toMinecraftX(row.left + 10.0), viewport.toMinecraftY(row.top + 5.0), 0, 0), true)
+            fixture.awaitFile(other)
+            assertFalse(
+                ui
+                    .frame(0, 0)
+                    .model.panels
+                    .any { it.kind == IdePanelKind.Dialog },
+            )
+        }
+    }
+
     private class Host : IdeScreenHost {
         override var clipboard = ""
         var focusCleared = 0
@@ -265,6 +388,15 @@ class IdeScreenControllerTest {
         }
 
         fun awaitWorkspace() = await { controller.viewState().page is IdePageState.Workspace }
+
+        fun awaitTree(path: ru.lazyhat.compukters.ide.project.fs.ProjectPath) =
+            await {
+                (controller.viewState().page as? IdePageState.Workspace)
+                    ?.value
+                    ?.tree
+                    ?.flatten()
+                    ?.any { it.path == path } == true
+            }
 
         fun awaitFile(path: ru.lazyhat.compukters.ide.project.fs.ProjectPath) =
             await {
