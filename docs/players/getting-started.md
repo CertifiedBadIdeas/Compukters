@@ -114,8 +114,8 @@ kotlinc hello.kt
 The terminal editor holds up to 4096 UTF-16 code units. Saving preserves the cursor position. Pasted tabs expand
 to four spaces and newlines inherit the current indentation; if the expanded paste does not fit, the editor
 shows `Buffer full` and leaves the document unchanged.
-The filesystem call counts both the path and text toward its 4096-unit argument limit, so the maximum savable
-text is smaller than the buffer capacity; exceeding that call limit currently terminates the editor.
+Saving transfers UTF-8 bytes in bounded chunks and replaces the file atomically, including a completely full
+buffer. A failed save keeps the previous published file and leaves the document open with an error message.
 
 Without `-o`, `kotlinc` writes an extensionless executable with the source basename. Run it from the shell:
 
