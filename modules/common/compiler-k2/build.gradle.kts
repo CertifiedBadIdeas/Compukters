@@ -832,8 +832,10 @@ val generateReferenceArrayConformanceArtifact = tasks.register<Test>("generateRe
     testClassesDirs = sourceSets.test.get().output.classesDirs
     classpath = sourceSets.test.get().runtimeClasspath
     filter.includeTestsMatching("*reference arrays preserve Guest class elements and aliases*")
+    filter.includeTestsMatching("*reference array loops preserve specialized elements source identity and cleanup for vm execution*")
     inputs.file(workerJar)
     outputs.file(referenceArrayConformanceArtifact)
+    outputs.file(referenceArrayConformanceArtifact.map { it.asFile.resolveSibling("${it.asFile.name}.loops.cpkt") })
     doFirst {
         systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
         systemProperty("compukter.vm.referenceArrayArtifact", referenceArrayConformanceArtifact.get().asFile.absolutePath)

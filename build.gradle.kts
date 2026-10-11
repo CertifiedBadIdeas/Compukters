@@ -646,6 +646,11 @@ registerKotlinVmConformance(
     cargoTargetDirectory = ".toolchain/build/cargo/compiler-k2-reference-array-conformance",
     artifactEnvironmentVariable = "COMPUKTER_KOTLIN_REFERENCE_ARRAY_ARTIFACT",
     conformanceScenario = "reference-array",
+    additionalArtifacts =
+        mapOf(
+            "COMPUKTER_KOTLIN_REFERENCE_ARRAY_LOOPS_ARTIFACT" to
+                project(":compiler-k2").layout.buildDirectory.file("generated/conformance/kotlin-reference-array.cpkt.loops.cpkt"),
+        ),
 )
 registerKotlinVmConformance(
     taskName = "testKotlinNullableReferencesVmConformance",

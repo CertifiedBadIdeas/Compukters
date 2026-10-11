@@ -106,7 +106,7 @@ checks source-attached and metadata-only IDE sessions.
 **Status:** Supported.
 
 `break@label` and `continue@label` resolve to an active enclosing loop by K2 IR identity, including nested
-`while`, `do-while`, optimized `Int` progression loops, primitive-array loops, and admitted `Iterable` loops.
+`while`, `do-while`, optimized `Int` progression loops, primitive and reference-array loops, and admitted `Iterable` loops.
 A break exits that loop; a continue reaches its condition, progression increment, array index advancement,
 or iterator check. Reused label names resolve to the nearest matching loop according to Kotlin scope.
 
@@ -123,13 +123,31 @@ and metadata inputs`, checks both IDE input forms.
 
 **Related work:** [#738](https://github.com/CertifiedBadIdeas/Compukters/issues/738)
 
-## Remaining loop forms
+## Direct reference-array loops
 
-**Status:** Partial.
+**Status:** Supported for admitted element representations.
 
-Direct primitive-array and supported iterable loops execute. Reference-array iteration remains unavailable.
+`for (element in array)` traverses `Array<T>` in ascending index order without allocating an iterator.
+The source expression and array reference evaluate once; reassigning a source variable does not switch the
+traversed array. Writes to that array's later slots remain visible. An empty array does not execute the body.
 
-**Evidence:** `unsupported loop forms publish no artifact`.
+Elements use the same representations as indexed reads: strings, source/imported references, `Any`, value
+classes (including multi-field values), nullable elements and nullable primitive boxes, with concrete generic
+specialization. Non-null value classes unbox into local values; nullable ones retain their managed boxes.
+Local and labeled jumps, `finally` cleanup, managed exceptions and quota safepoints follow the other array
+loops. Stored array iterators and unsupported non-null primitive `Array<Int>` storage remain unavailable;
+see the [array library](../stdlib/arrays-ranges.md) for storage boundaries.
+
+**Evidence:**
+[`MinimalScriptLoweringTest`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/compiler-k2/src/test/kotlin/ru/lazyhat/compukters/compiler/worker/k2/MinimalScriptLoweringTest.kt),
+tests `reference array loops preserve specialized elements source
+identity and cleanup for vm execution` (deterministic artifact) and `reference array loops reject unsupported
+storage and stored iterators`. `testKotlinReferenceArrayVmConformance` requires this loop artifact and executes
+its assertions at budgets 64 and 512, including allocation pressure and retained references.
+`DiagnosticQueryTest`, test `reference array loops resolve nullable generic and value class elements with
+source and metadata inputs`, checks both IDE input forms.
+
+**Related work:** [#741](https://github.com/CertifiedBadIdeas/Compukters/issues/741)
 
 ## Destructuring
 
