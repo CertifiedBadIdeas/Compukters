@@ -22,11 +22,13 @@ import ru.lazyhat.compukters.compiler.artifact.model.Module
 import ru.lazyhat.compukters.compiler.artifact.write.ArtifactWriter
 import java.util.IdentityHashMap
 
-/** Reuses hashes of the same module instance within one linking operation. */
+/** Reuses prepared library hashes and retains every other module only within one linking operation. */
 internal class ModuleSemanticHashes(
+    private val prepared: PreparedLibraryModules? = null,
     private val calculate: (Module) -> ByteArray = { ArtifactWriter.moduleSemanticHash(it) },
 ) {
     private val hashes = IdentityHashMap<Module, ByteArray>()
 
-    operator fun get(module: Module): ByteArray = hashes.getOrPut(module) { calculate(module) }.copyOf()
+    operator fun get(module: Module): ByteArray =
+        prepared?.metadata(module)?.hash() ?: hashes.getOrPut(module) { calculate(module) }.copyOf()
 }

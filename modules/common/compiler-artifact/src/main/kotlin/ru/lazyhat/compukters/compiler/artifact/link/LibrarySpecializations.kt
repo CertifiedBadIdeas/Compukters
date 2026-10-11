@@ -128,6 +128,7 @@ object LibrarySpecializations {
         names: Set<String>,
         definitionModule: Int,
         hashes: ModuleSemanticHashes,
+        exports: ModuleExportIndexes = ModuleExportIndexes(),
     ): Artifact {
         if (names.isEmpty()) return application
         val modules =
@@ -148,8 +149,7 @@ object LibrarySpecializations {
             val name = source.text(type.name)
             if (name !in names) return@forEachIndexed
 
-            fun exportsVariant(module: Module): Boolean =
-                module.exports.any { it.kind == SymbolKind.TYPE && module.text(it.name) == typeName(name) }
+            fun exportsVariant(module: Module): Boolean = exports.find(module, SymbolKind.TYPE, typeName(name)).isNotEmpty()
             val directOwners = definingModules.filter(::exportsVariant)
             val candidates = directOwners.ifEmpty { modules.filter(::exportsVariant) }
             require(candidates.size <= 1) {
@@ -180,7 +180,7 @@ object LibrarySpecializations {
                 strings += text
             }
             val id = ImportId.of(imports.size.toUInt())
-            require(module.exports.count { it.kind == kind && module.text(it.name) == exportName } == 1) {
+            require(exports.find(module, kind, exportName).size == 1) {
                 "incomplete specialization export $kind $exportName"
             }
             imports +=
@@ -195,7 +195,7 @@ object LibrarySpecializations {
         }
         owners.forEach { (index, module) ->
             val name = source.text(source.types[index].name)
-            val exported = module.exports.single { it.kind == SymbolKind.TYPE && module.text(it.name) == typeName(name) }
+            val exported = exports.find(module, SymbolKind.TYPE, typeName(name)).single()
             val target = module.types[exported.localSymbol.toInt()]
             require(source.layout(source.types[index]) == module.layout(target)) {
                 "inconsistent specialization layout for $name: ${source.layout(source.types[index])} != ${module.layout(target)}"

@@ -93,8 +93,12 @@ snapshots and request limits remain specific to each compilation. The worker clo
 shutdown. `K2CompilerAdapterTest` compares fresh and reused artifacts while alternating project declarations and
 generic specializations, including an unresolved reference to a previous project's function and subsequent recovery.
 
-Within one linking operation, specialization ownership, reachability and relocation share semantic hashes of
-unchanged module instances. Pruned or relocated copies receive fresh hashes; the cache is discarded after linking.
+The prepared selection also owns `PreparedLibraryModules`: semantic hashes and export indexes keyed by module
+instance identity for its immutable library artifacts. Specialization lookup preserves duplicate exports and
+canonical defining-library precedence. Each link supplements this metadata with request-local caches for project,
+pruned and relocated modules; those caches never grow the retained library entry. Mutable project files and future
+user libraries cannot reuse library metadata without an explicit invalidation policy. Replacing or closing the
+prepared selection releases its frontend and linker metadata together.
 Hash-only encoding checks debug sizes and source coordinates without materializing debug sections. Full artifact
 encoding still includes those sections.
 
