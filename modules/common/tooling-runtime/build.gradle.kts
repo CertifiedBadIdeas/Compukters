@@ -64,14 +64,15 @@ val prepareToolingRuntimeBundle = tasks.register<JavaExec>("prepareToolingRuntim
     mainClass = application.mainClass
     inputs.files(compilerWorkerPayloadInput, analysisWorkerPayloadInput)
     outputs.dir(toolingBundleDirectory)
+    val destination = toolingBundleDirectory.get().asFile
+    args(
+        "assemble",
+        compilerWorkerPayloadInput.singleFile.absolutePath,
+        analysisWorkerPayloadInput.singleFile.absolutePath,
+        destination.absolutePath,
+    )
     doFirst {
-        delete(toolingBundleDirectory)
-        args(
-            "assemble",
-            compilerWorkerPayloadInput.singleFile.absolutePath,
-            analysisWorkerPayloadInput.singleFile.absolutePath,
-            toolingBundleDirectory.get().asFile.absolutePath,
-        )
+        check(destination.deleteRecursively()) { "Could not clear tooling bundle directory: $destination" }
     }
 }
 
@@ -94,10 +95,11 @@ val toolingRuntimeManifest = tasks.register("toolingRuntimeManifest") {
     description = "Publishes the external identity manifest for tooling cache admission."
     dependsOn(prepareToolingRuntimeBundle)
     val source = toolingBundleDirectory.map { it.file("tooling.bundle") }
+    val destination = toolingRuntimeManifestFile
     inputs.file(source)
-    outputs.file(toolingRuntimeManifestFile)
+    outputs.file(destination)
     doLast {
-        source.get().asFile.copyTo(toolingRuntimeManifestFile.get().asFile, overwrite = true)
+        source.get().asFile.copyTo(destination.get().asFile, overwrite = true)
     }
 }
 val toolingRuntimeBundle = tasks.register<JavaExec>("toolingRuntimeBundle") {
@@ -108,13 +110,11 @@ val toolingRuntimeBundle = tasks.register<JavaExec>("toolingRuntimeBundle") {
     mainClass = application.mainClass
     inputs.file(canonicalToolingRuntimeBundle.flatMap { it.archiveFile })
     outputs.file(toolingRuntimeBundleFile)
-    doFirst {
-        args(
-            "compress",
-            canonicalToolingRuntimeBundle.get().archiveFile.get().asFile.absolutePath,
-            toolingRuntimeBundleFile.get().asFile.absolutePath,
-        )
-    }
+    args(
+        "compress",
+        canonicalToolingRuntimeBundle.get().archiveFile.get().asFile.absolutePath,
+        toolingRuntimeBundleFile.get().asFile.absolutePath,
+    )
 }
 
 val verifyToolingRuntimeBundle = tasks.register<JavaExec>("verifyToolingRuntimeBundle") {
@@ -128,16 +128,14 @@ val verifyToolingRuntimeBundle = tasks.register<JavaExec>("verifyToolingRuntimeB
     inputs.file(toolingRuntimeManifestFile)
     val scratch = layout.buildDirectory.dir("tooling-bundle/verification")
     outputs.upToDateWhen { false }
-    doFirst {
-        args(
-            "verify",
-            compilerWorkerPayloadInput.singleFile.absolutePath,
-            analysisWorkerPayloadInput.singleFile.absolutePath,
-            toolingRuntimeManifestFile.get().asFile.absolutePath,
-            toolingRuntimeBundleFile.get().asFile.absolutePath,
-            scratch.get().asFile.absolutePath,
-        )
-    }
+    args(
+        "verify",
+        compilerWorkerPayloadInput.singleFile.absolutePath,
+        analysisWorkerPayloadInput.singleFile.absolutePath,
+        toolingRuntimeManifestFile.get().asFile.absolutePath,
+        toolingRuntimeBundleFile.get().asFile.absolutePath,
+        scratch.get().asFile.absolutePath,
+    )
 }
 
 val verifyToolingRuntimeLicenses =

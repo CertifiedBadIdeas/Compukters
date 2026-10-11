@@ -135,8 +135,12 @@ val prepareCompilerWorkerPayload = tasks.register<Sync>("prepareCompilerWorkerPa
         into("META-INF/licenses")
     }
 
+    val payloadDirectory = workerPayloadDirectory
+    val platformFile = platformBundleFile
+    val compilerVersion = pinnedKotlinVersion
+    val workerMainClass = application.mainClass.get()
     doLast {
-        val root = workerPayloadDirectory.get().asFile.toPath()
+        val root = payloadDirectory.get().asFile.toPath()
         val libraryDirectory = root.resolve("lib")
         val files =
             Files.list(libraryDirectory).use { paths ->
@@ -151,7 +155,7 @@ val prepareCompilerWorkerPayload = tasks.register<Sync>("prepareCompilerWorkerPa
             payloadDigest.update(ByteBuffer.allocate(4).order(ByteOrder.LITTLE_ENDIAN).putInt(bytes.size).array())
             payloadDigest.update(bytes)
         }
-        val platformBytes = Files.readAllBytes(platformBundleFile.get().toPath())
+        val platformBytes = Files.readAllBytes(platformFile.get().toPath())
         check(platformBytes.size >= 40) { "Compukters platform bundle is truncated" }
         check(platformBytes.copyOfRange(0, 4).contentEquals("CPBF".encodeToByteArray())) {
             "invalid Compukters platform bundle magic"
@@ -164,7 +168,7 @@ val prepareCompilerWorkerPayload = tasks.register<Sync>("prepareCompilerWorkerPa
             sortedMapOf(
                 "artifactWriter" to "1",
                 "codegenAbi" to "1",
-                "compiler" to pinnedKotlinVersion,
+                "compiler" to compilerVersion,
                 "language" to "2.4",
                 "platformAbi" to platformAbi,
             )
@@ -175,7 +179,7 @@ val prepareCompilerWorkerPayload = tasks.register<Sync>("prepareCompilerWorkerPa
             digestField(name)
             digestField(value)
         }
-        digestField(application.mainClass.get())
+        digestField(workerMainClass)
         files.forEach { (path, size, hash) ->
             digestField(path)
             payloadDigest.update(ByteBuffer.allocate(8).order(ByteOrder.LITTLE_ENDIAN).putLong(size).array())
@@ -187,7 +191,7 @@ val prepareCompilerWorkerPayload = tasks.register<Sync>("prepareCompilerWorkerPa
                 appendLine("format=1")
                 appendLine("kind=compiler")
                 identityProperties.forEach { (name, value) -> appendLine("identity.$name=$value") }
-                appendLine("mainClass=${application.mainClass.get()}")
+                appendLine("mainClass=$workerMainClass")
                 appendLine("payloadSha256=$payloadHash")
                 files.forEach { (path, size, hash) ->
                     append("file=").append(path).append('\t').append(size).append('\t')
