@@ -18,7 +18,9 @@
 
 package compukter.system.shell
 
-import compukter.filesystem.FileSystem
+import compukter.filesystem.FileKind
+import compukter.filesystem.FileSystemException
+import compukter.filesystem.Path
 import compukter.io.Stderr
 import compukter.process.Process
 import compukter.process.ProcessFailureReason
@@ -43,7 +45,10 @@ private fun dispatchWords(words: Array<String>) {
     if (words.size == 0) return
     val command = words[0]
     when (command) {
-        "help" -> println("help echo clear pwd ls stat kotlinc edit vmbench")
+        "help" -> {
+            println("help echo clear pwd ls stat kotlinc edit vmbench")
+        }
+
         "echo" -> {
             for (index in 1 until words.size) {
                 if (index > 1) print(" ")
@@ -51,23 +56,40 @@ private fun dispatchWords(words: Array<String>) {
             }
             println()
         }
+
         "clear" -> {
             if (words.size == 1) Terminal.clear() else Stderr.write("usage: clear\n")
         }
+
         "pwd" -> {
             if (words.size == 1) println("/home") else Stderr.write("usage: pwd\n")
         }
+
         "ls" -> {
-            if (words.size == 1) writeList("/home")
-            else if (words.size == 2 && words[1].isNotEmpty()) writeList(resolvePath(words[1]))
-            else Stderr.write("usage: ls [path]\n")
+            if (words.size == 1) {
+                writeList("/home")
+            } else if (words.size == 2 && words[1].isNotEmpty()) {
+                writeList(resolvePath(words[1]))
+            } else {
+                Stderr.write("usage: ls [path]\n")
+            }
         }
+
         "stat" -> {
-            if (words.size == 2 && words[1].isNotEmpty()) writeStat(resolvePath(words[1]))
-            else Stderr.write("usage: stat <path>\n")
+            if (words.size == 2 && words[1].isNotEmpty()) {
+                writeStat(resolvePath(words[1]))
+            } else {
+                Stderr.write("usage: stat <path>\n")
+            }
         }
-        "" -> Stderr.write("empty command\n")
-        else -> executeExternal(words)
+
+        "" -> {
+            Stderr.write("empty command\n")
+        }
+
+        else -> {
+            executeExternal(words)
+        }
     }
 }
 
@@ -99,49 +121,33 @@ fun shellFallbackPath(
 private fun resolvePath(path: String): String = if (path.startsWith("/")) path else "/home/" + path
 
 private fun writeList(path: String) {
-    val kind = FileSystem.stat(path)
-    if (kind == 1) {
-        println(path)
-    } else if (kind == 2) {
-        val names = FileSystem.list(path)
-        var start = 0
-        while (start < names.length) {
-            val separator = names.indexOf('\u0000', start)
-            val end = if (separator < 0) names.length else separator
-            if (end != start) println(names.substring(start, end))
-            start = end + 1
+    try {
+        val entry = Path(path)
+        if (entry.stat().kind == FileKind.FILE) {
+            println(path)
+        } else {
+            val directory = entry.openDirectory()
+            try {
+                while (true) {
+                    val child = directory.read() ?: break
+                    println(child.name ?: "")
+                }
+            } finally {
+                directory.close()
+            }
         }
-    } else {
-        Stderr.write(fileSystemDiagnostic(kind, path) + "\n")
+    } catch (failure: FileSystemException) {
+        Stderr.write((failure.message ?: "filesystem error") + "\n")
     }
 }
 
 private fun writeStat(path: String) {
-    val kind = FileSystem.stat(path)
-    if (kind == 1) println("file: " + path)
-    else if (kind == 2) println("directory: " + path)
-    else Stderr.write(fileSystemDiagnostic(kind, path) + "\n")
-}
-
-private fun fileSystemDiagnostic(
-    result: Int,
-    path: String,
-): String {
-    if (result == -1) return "invalid path: " + path
-    if (result == -2) return "not found: " + path
-    if (result == -3) return "already exists: " + path
-    if (result == -4) return "not a directory: " + path
-    if (result == -5) return "is a directory: " + path
-    if (result == -6) return "directory not empty: " + path
-    if (result == -7) return "read-only filesystem: " + path
-    if (result == -8) return "permission denied: " + path
-    if (result == -9) return "stale file handle: " + path
-    if (result == -10) return "filesystem quota exceeded"
-    if (result == -11) return "filesystem busy"
-    if (result == -12) return "filesystem unavailable"
-    if (result == -13) return "filesystem closed"
-    if (result == -14) return "not executable: " + path
-    return "filesystem error"
+    try {
+        val info = Path(path).stat()
+        println(if (info.kind == FileKind.FILE) "file: $path" else "directory: $path")
+    } catch (failure: FileSystemException) {
+        Stderr.write((failure.message ?: "filesystem error") + "\n")
+    }
 }
 
 fun shellProcessDiagnostic(
