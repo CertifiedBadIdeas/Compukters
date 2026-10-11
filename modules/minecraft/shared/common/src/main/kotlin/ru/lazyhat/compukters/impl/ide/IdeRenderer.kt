@@ -54,6 +54,28 @@ import ru.lazyhat.compukters.ide.editor.EditorRange
 import ru.lazyhat.compukters.ide.git.GitOperation
 import ru.lazyhat.compukters.ide.highlight.KotlinLexicalKind
 import ru.lazyhat.compukters.ide.project.fs.ProjectPath
+import ru.lazyhat.compukters.impl.ide.IdeDrawLayers.Z_BACKGROUND
+import ru.lazyhat.compukters.impl.ide.IdeDrawLayers.Z_CARET
+import ru.lazyhat.compukters.impl.ide.IdeDrawLayers.Z_CLIP
+import ru.lazyhat.compukters.impl.ide.IdeDrawLayers.Z_CONTENT
+import ru.lazyhat.compukters.impl.ide.IdeDrawLayers.Z_DIALOG
+import ru.lazyhat.compukters.impl.ide.IdeDrawLayers.Z_DIALOG_SCRIM
+import ru.lazyhat.compukters.impl.ide.IdeDrawLayers.Z_DIALOG_TARGET
+import ru.lazyhat.compukters.impl.ide.IdeDrawLayers.Z_DIALOG_TEXT
+import ru.lazyhat.compukters.impl.ide.IdeDrawLayers.Z_DRAG
+import ru.lazyhat.compukters.impl.ide.IdeDrawLayers.Z_PANEL
+import ru.lazyhat.compukters.impl.ide.IdeDrawLayers.Z_POPUP
+import ru.lazyhat.compukters.impl.ide.IdeDrawLayers.Z_POPUP_TARGET
+import ru.lazyhat.compukters.impl.ide.IdeDrawLayers.Z_POPUP_TEXT
+import ru.lazyhat.compukters.impl.ide.IdeDrawLayers.Z_PROJECT_SWITCHER
+import ru.lazyhat.compukters.impl.ide.IdeDrawLayers.Z_PROJECT_SWITCHER_SELECTION
+import ru.lazyhat.compukters.impl.ide.IdeDrawLayers.Z_PROJECT_SWITCHER_TARGET
+import ru.lazyhat.compukters.impl.ide.IdeDrawLayers.Z_PROJECT_SWITCHER_TEXT
+import ru.lazyhat.compukters.impl.ide.IdeDrawLayers.Z_SELECTION
+import ru.lazyhat.compukters.impl.ide.IdeDrawLayers.Z_TARGET
+import ru.lazyhat.compukters.impl.ide.IdeDrawLayers.Z_TEXT
+import ru.lazyhat.compukters.impl.ide.IdeDrawLayers.Z_TOOLTIP
+import ru.lazyhat.compukters.impl.ide.IdeDrawLayers.Z_TOOLTIP_TEXT
 
 object IdeRenderer {
     fun extract(
@@ -127,7 +149,7 @@ object IdeRenderer {
 
     private class Builder(
         private val geometry: IdeRenderGeometry,
-        private val font: IdeCodeFontProfile,
+        font: IdeCodeFontProfile,
         private val treeFirstRow: Int,
         private val selectedTreePath: ProjectPath?,
         private val terminalState: IdeTerminalStatus,
@@ -136,19 +158,7 @@ object IdeRenderer {
         private val projectSwitcherOpen: Boolean,
         private val projectFirstRow: Int,
         private val fileTabFirstIndex: Int,
-    ) {
-        private val panels = mutableListOf<IdePanelDraw>()
-        private val text = mutableListOf<IdeTextDraw>()
-        private val fills = mutableListOf<IdeFillDraw>()
-        private val scissors = mutableListOf<IdeScissorDraw>()
-        private val hitTargets = mutableListOf<IdeHitTarget>()
-        private val icons = mutableListOf<IdeIconDraw>()
-        private var gitScrollMaximum: Int? = null
-        private var gitPreviewScrollMaximum: Int? = null
-        private var gitPreviewBounds: IdeRect? = null
-        private val gitFieldFocusScroll = mutableMapOf<IdeGitField, Int>()
-        private var bottomScrollMaximum = 0
-
+    ) : IdeDrawBuilder(font) {
         fun background() {
             fills += IdeFillDraw(IdeFillKind.Background, geometry.viewport, IdeColors.DIM, Z_BACKGROUND)
         }
@@ -2392,94 +2402,6 @@ object IdeRenderer {
             }
         }
 
-        fun ui(
-            kind: IdeTextKind,
-            value: String,
-            x: Int,
-            y: Int,
-            color: Int = IdeColors.TEXT,
-            clip: IdeRect? = null,
-            z: Int = Z_TEXT,
-            rotation: IdeTextRotation = IdeTextRotation.None,
-        ) {
-            text += IdeTextDraw(kind, value, x, y + font.glyphDrawOffsetY, color, IdeTextStyle.Ui, font, clip, null, z, rotation)
-        }
-
-        private fun code(
-            kind: IdeTextKind,
-            value: String,
-            x: Int,
-            y: Int,
-            color: Int,
-            clip: IdeRect,
-            style: IdeTextStyle = IdeTextStyle.Plain,
-            sourceRange: EditorRange? = null,
-            z: Int = Z_TEXT,
-        ) {
-            text += IdeTextDraw(kind, value, x, y, color, style, font, clip, sourceRange, z)
-        }
-
-        private fun panel(
-            kind: IdePanelKind,
-            bounds: IdeRect,
-            color: Int,
-            z: Int = Z_CONTENT,
-        ) {
-            if (z >= Z_POPUP) {
-                for (spread in 6 downTo 1) {
-                    val shadow = IdeRect(bounds.left - spread, bounds.top - spread + 2, bounds.right + spread, bounds.bottom + spread + 2)
-                    fills += IdeFillDraw(IdeFillKind.Shadow, shadow, 0x08000000, z - 1)
-                }
-            }
-            panels += IdePanelDraw(kind, bounds, color, z)
-        }
-
-        private fun target(
-            action: IdeHitAction,
-            bounds: IdeRect,
-            enabled: Boolean,
-            tooltip: String? = null,
-            focusGroup: IdeFocusGroup = IdeFocusGroup.Page,
-            z: Int = Z_TARGET,
-            selected: Boolean = false,
-            choiceIndex: Int? = null,
-            gitOperation: GitOperation? = null,
-            gitCommand: IdeCommand? = null,
-        ) {
-            val control =
-                IdeControls.target(
-                    IdeHitTarget(
-                        action,
-                        bounds,
-                        enabled,
-                        tooltip,
-                        focusGroup,
-                        z,
-                        selected,
-                        choiceIndex,
-                        gitOperation = gitOperation,
-                        gitCommand = gitCommand,
-                    ),
-                )
-            panels += control.panel
-            hitTargets += control.target
-        }
-
-        fun build(): IdeDrawModel =
-            IdeDrawModel(
-                panels.toList(),
-                text.toList(),
-                fills.toList(),
-                scissors.toList(),
-                hitTargets.toList(),
-                icons.toList(),
-                bottomScrollMaximum = bottomScrollMaximum,
-                gitScrollMaximum = gitScrollMaximum,
-                gitPreviewScrollMaximum = gitPreviewScrollMaximum,
-                gitPreviewBounds = gitPreviewBounds,
-                gitFieldFocusScroll = gitFieldFocusScroll.toMap(),
-            )
-
         private fun projectGlyphs(source: String): String {
             val result = StringBuilder(source.length)
             var offset = 0
@@ -2698,29 +2620,6 @@ object IdeRenderer {
     private const val PARAMETER_INFO_VISIBLE_ROWS = 6
     private const val NO_TARGET = "No target attached"
     private const val TERMINAL_UNAVAILABLE = "Target terminal is unavailable"
-    private const val CONTROL_BACKGROUND_OFFSET = 20
-    private const val Z_BACKGROUND = 0
-    private const val Z_PANEL = 10
-    private const val Z_CONTENT = 20
-    private const val Z_SELECTION = 24
-    private const val Z_CLIP = 25
-    private const val Z_TEXT = 30
-    private const val Z_CARET = 35
-    private const val Z_TARGET = 40
-    private const val Z_POPUP = 50
-    private const val Z_POPUP_TARGET = Z_POPUP + CONTROL_BACKGROUND_OFFSET + 1
-    private const val Z_DRAG = 60
-    private const val Z_PROJECT_SWITCHER = 70
-    private const val Z_PROJECT_SWITCHER_SELECTION = 72
-    private const val Z_PROJECT_SWITCHER_TEXT = 75
-    private const val Z_PROJECT_SWITCHER_TARGET = 80
-    private const val Z_TOOLTIP = 82
-    private const val Z_TOOLTIP_TEXT = 85
-    private const val Z_POPUP_TEXT = 55
-    private const val Z_DIALOG_SCRIM = 90
-    private const val Z_DIALOG = 100
-    private const val Z_DIALOG_TEXT = 110
-    private const val Z_DIALOG_TARGET = 120
 }
 
 private fun SemanticCategory.contributesTextStyle(): Boolean =
