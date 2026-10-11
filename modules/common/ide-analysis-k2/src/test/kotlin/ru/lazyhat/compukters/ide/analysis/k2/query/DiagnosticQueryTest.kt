@@ -99,6 +99,33 @@ class DiagnosticQueryTest {
     }
 
     @Test
+    fun `labeled loop analysis resolves mixed targets with source and metadata inputs`() {
+        val source =
+            """
+            fun main() {
+                outer@ for (value in 1..4) {
+                    inner@ do {
+                        try {
+                            for (element in intArrayOf(1, 2)) {
+                                if (element == 1) continue@outer
+                                if (value == 4) break@outer
+                                break@inner
+                            }
+                        } finally { check(value > 0) }
+                    } while (true)
+                }
+            }
+            """.trimIndent()
+        for (attachedSources in listOf(false, true)) {
+            K2QueryFixture.sourceWithGuestApi(attachedSources, "main.kt" to source).use { fixture ->
+                val result = fixture.execute(fixture.presentation()) as AnalysisResult.Presentation
+                val active = result.value.accept(fixture.identity) as SnapshotPresentationAcceptance.Active
+                assertTrue(active.diagnostics.none { it.severity == EditorDiagnosticSeverity.Error }, active.diagnostics.toString())
+            }
+        }
+    }
+
+    @Test
     fun `math analysis admits typed overloads extensions and callable references`() {
         val source =
             """
