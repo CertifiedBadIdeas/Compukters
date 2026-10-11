@@ -1,0 +1,43 @@
+{
+  "compiler-artifact": {
+    "tests": 194,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0
+  },
+  "compiler-k2": {
+    "tests": 199,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 5
+  },
+  "vm_scenarios": [
+    "generic-library",
+    "generic-interface",
+    "dispatch",
+    "tasks",
+    "exceptions"
+  ],
+  "commands": [
+    {
+      "command": "JAVA_HOME=/usr/lib/jvm/java-25-openjdk ./gradlew-sandbox-dev-parallel-summary :compiler-artifact:test :tooling-runtime:prepareToolingRuntimeBundle --max-workers=2",
+      "log": "gradle-20261011T142723Z-579958.log",
+      "result": "BUILD SUCCESSFUL"
+    },
+    {
+      "command": "JAVA_HOME=/usr/lib/jvm/java-25-openjdk ./gradlew-sandbox-dev-parallel-summary :compiler-artifact:test --tests '*ValueLivenessTest' :compiler-artifact:formatKotlin --max-workers=2",
+      "log": "gradle-20261011T143017Z-584649.log",
+      "result": "BUILD SUCCESSFUL; 7 characterization tests on unchanged solver"
+    },
+    {
+      "command": "JAVA_HOME=/usr/lib/jvm/java-25-openjdk ./gradlew-sandbox-dev-parallel-summary :compiler-artifact:formatKotlin :compiler-artifact:test :compiler-artifact:lintKotlin :compiler-k2:test :tooling-runtime:prepareToolingRuntimeBundle --max-workers=2",
+      "log": "gradle-20261011T143158Z-586592.log",
+      "result": "BUILD SUCCESSFUL"
+    },
+    {
+      "command": "JAVA_HOME=/usr/lib/jvm/java-25-openjdk ./gradlew-sandbox-dev-parallel-summary -I /tmp/value-liveness-conformance.init.gradle testKotlinGenericLibraryVmConformance testKotlinGenericInterfaceVmConformance testKotlinDispatchVmConformance testKotlinTasksVmConformance testKotlinExceptionsVmConformance --max-workers=2",
+      "log": "gradle-20261011T143515Z-591913.log",
+      "result": "BUILD SUCCESSFUL; 5 real native scenario executions"
+    }
+  ]
+}

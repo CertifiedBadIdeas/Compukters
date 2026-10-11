@@ -1,0 +1,192 @@
+{
+  "macro_outputs": 240,
+  "profile_outputs": 140,
+  "native_verified": 380,
+  "paired_outputs_byte_identical": true,
+  "constant_edit_outputs_distinct": 9,
+  "workloads": {
+    "pid/cold": {
+      "outputs": 60,
+      "hashes_by_iteration": {
+        "1": {
+          "bytes": 152916,
+          "sha256": "bc01f4194e6f7c247ef71b9cccf16145f44bccd1e959d83c3f149530556027ee"
+        },
+        "2": {
+          "bytes": 152916,
+          "sha256": "bc01f4194e6f7c247ef71b9cccf16145f44bccd1e959d83c3f149530556027ee"
+        },
+        "3": {
+          "bytes": 152916,
+          "sha256": "bc01f4194e6f7c247ef71b9cccf16145f44bccd1e959d83c3f149530556027ee"
+        },
+        "4": {
+          "bytes": 152916,
+          "sha256": "bc01f4194e6f7c247ef71b9cccf16145f44bccd1e959d83c3f149530556027ee"
+        },
+        "5": {
+          "bytes": 152916,
+          "sha256": "bc01f4194e6f7c247ef71b9cccf16145f44bccd1e959d83c3f149530556027ee"
+        },
+        "6": {
+          "bytes": 152916,
+          "sha256": "bc01f4194e6f7c247ef71b9cccf16145f44bccd1e959d83c3f149530556027ee"
+        },
+        "7": {
+          "bytes": 152916,
+          "sha256": "bc01f4194e6f7c247ef71b9cccf16145f44bccd1e959d83c3f149530556027ee"
+        },
+        "8": {
+          "bytes": 152916,
+          "sha256": "bc01f4194e6f7c247ef71b9cccf16145f44bccd1e959d83c3f149530556027ee"
+        },
+        "9": {
+          "bytes": 152916,
+          "sha256": "bc01f4194e6f7c247ef71b9cccf16145f44bccd1e959d83c3f149530556027ee"
+        },
+        "10": {
+          "bytes": 152916,
+          "sha256": "bc01f4194e6f7c247ef71b9cccf16145f44bccd1e959d83c3f149530556027ee"
+        }
+      }
+    },
+    "pid/prepared": {
+      "outputs": 60,
+      "hashes_by_iteration": {
+        "1": {
+          "bytes": 152916,
+          "sha256": "bc01f4194e6f7c247ef71b9cccf16145f44bccd1e959d83c3f149530556027ee"
+        },
+        "2": {
+          "bytes": 152916,
+          "sha256": "2b3a3a443f4ef01225c95cdb9cecd84077736ea38182823636c49512b7e6a244"
+        },
+        "3": {
+          "bytes": 152916,
+          "sha256": "af7593f498cbb21e3e7a56f1e5cc0fed63825509f449601a97280afff4ae8e44"
+        },
+        "4": {
+          "bytes": 152916,
+          "sha256": "142f867b3daae34978fc98b03150f3f03e3e972ed20549d192d40a444f7b0723"
+        },
+        "5": {
+          "bytes": 152916,
+          "sha256": "e5bdb4e42924b31244e36ad302e542e4e6a97db7faff676c7de048b1e0305ab4"
+        },
+        "6": {
+          "bytes": 152916,
+          "sha256": "f62b2ff368a0cf50d221edbb94ab417c52433500f7f801078a8920c0ae4a893a"
+        },
+        "7": {
+          "bytes": 152916,
+          "sha256": "6ace185f924c35ee4df0f83c40727a2315a78233a1a182a429ebe267e6879c75"
+        },
+        "8": {
+          "bytes": 152916,
+          "sha256": "1e48a58966c6d295d4e9b15c92ff3273ab8516b684cede318145d9abbe7729c3"
+        },
+        "9": {
+          "bytes": 152916,
+          "sha256": "7ffc94d24d9fdce9bc7734dd05c033c09ac5e21580ea23999dcdde47acda944a"
+        },
+        "10": {
+          "bytes": 152916,
+          "sha256": "4d45db586e40d3db19c95e796bc1aa702860263cfeef7f0bfbcb83e87ecb3b53"
+        }
+      }
+    },
+    "edit/cold": {
+      "outputs": 60,
+      "hashes_by_iteration": {
+        "1": {
+          "bytes": 151112,
+          "sha256": "0874242b0a24e76ed3d386c9570f2bacb69a876c4c9a6692af1b031b6fd6e23b"
+        },
+        "2": {
+          "bytes": 151112,
+          "sha256": "0874242b0a24e76ed3d386c9570f2bacb69a876c4c9a6692af1b031b6fd6e23b"
+        },
+        "3": {
+          "bytes": 151112,
+          "sha256": "0874242b0a24e76ed3d386c9570f2bacb69a876c4c9a6692af1b031b6fd6e23b"
+        },
+        "4": {
+          "bytes": 151112,
+          "sha256": "0874242b0a24e76ed3d386c9570f2bacb69a876c4c9a6692af1b031b6fd6e23b"
+        },
+        "5": {
+          "bytes": 151112,
+          "sha256": "0874242b0a24e76ed3d386c9570f2bacb69a876c4c9a6692af1b031b6fd6e23b"
+        },
+        "6": {
+          "bytes": 151112,
+          "sha256": "0874242b0a24e76ed3d386c9570f2bacb69a876c4c9a6692af1b031b6fd6e23b"
+        },
+        "7": {
+          "bytes": 151112,
+          "sha256": "0874242b0a24e76ed3d386c9570f2bacb69a876c4c9a6692af1b031b6fd6e23b"
+        },
+        "8": {
+          "bytes": 151112,
+          "sha256": "0874242b0a24e76ed3d386c9570f2bacb69a876c4c9a6692af1b031b6fd6e23b"
+        },
+        "9": {
+          "bytes": 151112,
+          "sha256": "0874242b0a24e76ed3d386c9570f2bacb69a876c4c9a6692af1b031b6fd6e23b"
+        },
+        "10": {
+          "bytes": 151112,
+          "sha256": "0874242b0a24e76ed3d386c9570f2bacb69a876c4c9a6692af1b031b6fd6e23b"
+        }
+      }
+    },
+    "edit/prepared": {
+      "outputs": 60,
+      "hashes_by_iteration": {
+        "1": {
+          "bytes": 151112,
+          "sha256": "0874242b0a24e76ed3d386c9570f2bacb69a876c4c9a6692af1b031b6fd6e23b"
+        },
+        "2": {
+          "bytes": 151112,
+          "sha256": "0874242b0a24e76ed3d386c9570f2bacb69a876c4c9a6692af1b031b6fd6e23b"
+        },
+        "3": {
+          "bytes": 151112,
+          "sha256": "0874242b0a24e76ed3d386c9570f2bacb69a876c4c9a6692af1b031b6fd6e23b"
+        },
+        "4": {
+          "bytes": 151112,
+          "sha256": "0874242b0a24e76ed3d386c9570f2bacb69a876c4c9a6692af1b031b6fd6e23b"
+        },
+        "5": {
+          "bytes": 151112,
+          "sha256": "0874242b0a24e76ed3d386c9570f2bacb69a876c4c9a6692af1b031b6fd6e23b"
+        },
+        "6": {
+          "bytes": 151112,
+          "sha256": "0874242b0a24e76ed3d386c9570f2bacb69a876c4c9a6692af1b031b6fd6e23b"
+        },
+        "7": {
+          "bytes": 151112,
+          "sha256": "0874242b0a24e76ed3d386c9570f2bacb69a876c4c9a6692af1b031b6fd6e23b"
+        },
+        "8": {
+          "bytes": 151112,
+          "sha256": "0874242b0a24e76ed3d386c9570f2bacb69a876c4c9a6692af1b031b6fd6e23b"
+        },
+        "9": {
+          "bytes": 151112,
+          "sha256": "0874242b0a24e76ed3d386c9570f2bacb69a876c4c9a6692af1b031b6fd6e23b"
+        },
+        "10": {
+          "bytes": 151112,
+          "sha256": "0874242b0a24e76ed3d386c9570f2bacb69a876c4c9a6692af1b031b6fd6e23b"
+        }
+      }
+    }
+  },
+  "native_abi": 22,
+  "native_library_sha256": "c2ff8dbc822099b08e4bfa28dcc94b065626c20e2a0af0d83971b47edc5f0f61",
+  "scope": "stateless verification for benchmarks; execution covered by the five listed VM conformance scenarios, not PID flight"
+}
