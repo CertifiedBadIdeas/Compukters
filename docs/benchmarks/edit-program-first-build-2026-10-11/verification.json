@@ -1,0 +1,11 @@
+{
+  "edit_program_outputs": 45,
+  "byte_identical": true,
+  "bytes": 151112,
+  "sha256": "0874242b0a24e76ed3d386c9570f2bacb69a876c4c9a6692af1b031b6fd6e23b",
+  "native_verified_edit_program": 45,
+  "native_verified_warmup": 3,
+  "native_abi": 22,
+  "native_library_sha256": "c2ff8dbc822099b08e4bfa28dcc94b065626c20e2a0af0d83971b47edc5f0f61",
+  "scope": "stateless artifact verification, not terminal interaction or file editing"
+}

@@ -1,0 +1,23 @@
+{
+  "cold": {
+    "startup_median_ms": 242.133157,
+    "first_edit_program_median_ms": 3913.795882,
+    "samples_4_5_median_ms": 271.8613795,
+    "serial_total_to_first_compile_median_ms": 4166.001741
+  },
+  "prepared": {
+    "startup_median_ms": 238.741346,
+    "first_edit_program_median_ms": 943.692407,
+    "samples_4_5_median_ms": 261.2171115,
+    "serial_total_to_first_compile_median_ms": 3976.516595,
+    "preparationMillis": 2690.290821
+  },
+  "hello": {
+    "startup_median_ms": 233.341265,
+    "first_edit_program_median_ms": 553.655772,
+    "samples_4_5_median_ms": 257.436606,
+    "serial_total_to_first_compile_median_ms": 4086.804772,
+    "preparationMillis": 2645.209375,
+    "helloWarmupMillis": 648.997459
+  }
+}

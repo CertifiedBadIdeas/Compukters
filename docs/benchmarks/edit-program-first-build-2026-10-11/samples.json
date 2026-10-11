@@ -1,0 +1,317 @@
+[
+  {
+    "mode": "cold",
+    "trial": 1,
+    "phases": {
+      "startupMillis": 229.561382
+    },
+    "samples": [
+      {
+        "sample": 1,
+        "millis": 3587.269163,
+        "bytes": 151112
+      },
+      {
+        "sample": 2,
+        "millis": 439.851219,
+        "bytes": 151112
+      },
+      {
+        "sample": 3,
+        "millis": 342.449924,
+        "bytes": 151112
+      },
+      {
+        "sample": 4,
+        "millis": 268.876373,
+        "bytes": 151112
+      },
+      {
+        "sample": 5,
+        "millis": 243.708696,
+        "bytes": 151112
+      }
+    ]
+  },
+  {
+    "mode": "prepared",
+    "trial": 1,
+    "phases": {
+      "startupMillis": 228.291762,
+      "preparationMillis": 2652.131142
+    },
+    "samples": [
+      {
+        "sample": 1,
+        "millis": 943.692407,
+        "bytes": 151112
+      },
+      {
+        "sample": 2,
+        "millis": 412.893912,
+        "bytes": 151112
+      },
+      {
+        "sample": 3,
+        "millis": 289.207489,
+        "bytes": 151112
+      },
+      {
+        "sample": 4,
+        "millis": 260.657871,
+        "bytes": 151112
+      },
+      {
+        "sample": 5,
+        "millis": 261.776352,
+        "bytes": 151112
+      }
+    ]
+  },
+  {
+    "mode": "hello",
+    "trial": 1,
+    "phases": {
+      "startupMillis": 232.230354,
+      "preparationMillis": 2624.102347,
+      "helloWarmupMillis": 665.948672
+    },
+    "samples": [
+      {
+        "sample": 1,
+        "millis": 551.480461,
+        "bytes": 151112
+      },
+      {
+        "sample": 2,
+        "millis": 376.238143,
+        "bytes": 151112
+      },
+      {
+        "sample": 3,
+        "millis": 297.404301,
+        "bytes": 151112
+      },
+      {
+        "sample": 4,
+        "millis": 263.513642,
+        "bytes": 151112
+      },
+      {
+        "sample": 5,
+        "millis": 252.761989,
+        "bytes": 151112
+      }
+    ]
+  },
+  {
+    "mode": "cold",
+    "trial": 2,
+    "phases": {
+      "startupMillis": 252.205859
+    },
+    "samples": [
+      {
+        "sample": 1,
+        "millis": 3913.795882,
+        "bytes": 151112
+      },
+      {
+        "sample": 2,
+        "millis": 484.815834,
+        "bytes": 151112
+      },
+      {
+        "sample": 3,
+        "millis": 355.296238,
+        "bytes": 151112
+      },
+      {
+        "sample": 4,
+        "millis": 274.886606,
+        "bytes": 151112
+      },
+      {
+        "sample": 5,
+        "millis": 245.659808,
+        "bytes": 151112
+      }
+    ]
+  },
+  {
+    "mode": "prepared",
+    "trial": 2,
+    "phases": {
+      "startupMillis": 238.741346,
+      "preparationMillis": 2690.290821
+    },
+    "samples": [
+      {
+        "sample": 1,
+        "millis": 1047.484428,
+        "bytes": 151112
+      },
+      {
+        "sample": 2,
+        "millis": 478.245402,
+        "bytes": 151112
+      },
+      {
+        "sample": 3,
+        "millis": 306.407375,
+        "bytes": 151112
+      },
+      {
+        "sample": 4,
+        "millis": 256.940931,
+        "bytes": 151112
+      },
+      {
+        "sample": 5,
+        "millis": 288.425749,
+        "bytes": 151112
+      }
+    ]
+  },
+  {
+    "mode": "hello",
+    "trial": 2,
+    "phases": {
+      "startupMillis": 238.942166,
+      "preparationMillis": 2645.209375,
+      "helloWarmupMillis": 648.997459
+    },
+    "samples": [
+      {
+        "sample": 1,
+        "millis": 553.655772,
+        "bytes": 151112
+      },
+      {
+        "sample": 2,
+        "millis": 368.597751,
+        "bytes": 151112
+      },
+      {
+        "sample": 3,
+        "millis": 308.778625,
+        "bytes": 151112
+      },
+      {
+        "sample": 4,
+        "millis": 263.382042,
+        "bytes": 151112
+      },
+      {
+        "sample": 5,
+        "millis": 248.679459,
+        "bytes": 151112
+      }
+    ]
+  },
+  {
+    "mode": "cold",
+    "trial": 3,
+    "phases": {
+      "startupMillis": 242.133157
+    },
+    "samples": [
+      {
+        "sample": 1,
+        "millis": 4031.089948,
+        "bytes": 151112
+      },
+      {
+        "sample": 2,
+        "millis": 465.421199,
+        "bytes": 151112
+      },
+      {
+        "sample": 3,
+        "millis": 307.151386,
+        "bytes": 151112
+      },
+      {
+        "sample": 4,
+        "millis": 293.996591,
+        "bytes": 151112
+      },
+      {
+        "sample": 5,
+        "millis": 274.846386,
+        "bytes": 151112
+      }
+    ]
+  },
+  {
+    "mode": "prepared",
+    "trial": 3,
+    "phases": {
+      "startupMillis": 343.958625,
+      "preparationMillis": 2799.153859
+    },
+    "samples": [
+      {
+        "sample": 1,
+        "millis": 911.475224,
+        "bytes": 151112
+      },
+      {
+        "sample": 2,
+        "millis": 423.436108,
+        "bytes": 151112
+      },
+      {
+        "sample": 3,
+        "millis": 308.279376,
+        "bytes": 151112
+      },
+      {
+        "sample": 4,
+        "millis": 265.947435,
+        "bytes": 151112
+      },
+      {
+        "sample": 5,
+        "millis": 259.555862,
+        "bytes": 151112
+      }
+    ]
+  },
+  {
+    "mode": "hello",
+    "trial": 3,
+    "phases": {
+      "startupMillis": 233.341265,
+      "preparationMillis": 2724.675302,
+      "helloWarmupMillis": 636.578657
+    },
+    "samples": [
+      {
+        "sample": 1,
+        "millis": 607.322411,
+        "bytes": 151112
+      },
+      {
+        "sample": 2,
+        "millis": 355.42169,
+        "bytes": 151112
+      },
+      {
+        "sample": 3,
+        "millis": 308.585156,
+        "bytes": 151112
+      },
+      {
+        "sample": 4,
+        "millis": 247.554909,
+        "bytes": 151112
+      },
+      {
+        "sample": 5,
+        "millis": 262.111223,
+        "bytes": 151112
+      }
+    ]
+  }
+]
