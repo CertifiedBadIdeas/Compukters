@@ -257,7 +257,10 @@ reference register, so a dead register left after GC cannot invalidate a running
 
 After reachability pruning and relocation, the linker reuses temporary registers whose lifetimes do not overlap.
 Allocation uses the same control-flow analysis as GC roots, including loop back edges, exceptional edges and resume
-blocks. Only identical semantic types and physical shapes share a register; parameters, caught-exception destinations
+blocks. The analysis indexes instruction nodes and read/write sets once per function, propagates liveness
+with request-local bitsets, and materializes register sets only for the final boundaries. An exception destination
+is killed only on its exceptional edge; normal continuations and other handlers retain their own live inputs.
+Only identical semantic types and physical shapes share a register; parameters, caught-exception destinations
 and operands in unreachable code retain dedicated slots. Inputs and destinations remain distinct through an instruction,
 including allocation and suspended calls. Instruction order, debug boundaries and metered costs are unchanged. Root maps,
 linked module hashes and frame storage requirements are rebuilt after allocation. The artifact encoding and runtime

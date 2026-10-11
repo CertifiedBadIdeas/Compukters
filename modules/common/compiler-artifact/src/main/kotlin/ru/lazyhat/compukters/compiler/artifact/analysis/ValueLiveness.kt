@@ -26,6 +26,7 @@ import ru.lazyhat.compukters.compiler.artifact.model.Module
 import ru.lazyhat.compukters.compiler.artifact.model.RegisterId
 import ru.lazyhat.compukters.compiler.artifact.model.RuntimeExceptionKind
 import ru.lazyhat.compukters.compiler.artifact.model.ScalarValueType
+import java.util.BitSet
 
 internal data class LiveBoundary(
     val block: BlockId,
@@ -59,61 +60,129 @@ internal object ValueLiveness {
                     .map { instructionIndex -> Node(blockIndex, instructionIndex) }
             }
         if (nodes.isEmpty()) return emptyList()
-        val nodeSet = nodes.toSet()
-        val successors = nodes.associateWith { node -> successorEdges(module, node, exceptions).filter { it.target in nodeSet } }
-        val predecessors = mutableMapOf<Node, MutableSet<Node>>()
-        successors.forEach { (source, edges) ->
-            edges.forEach { edge -> predecessors.getOrPut(edge.target, ::mutableSetOf).add(source) }
-        }
-        val entry = Node(firstBlock, 0)
-        val reachable = mutableSetOf<Node>()
-        val reachabilityQueue = ArrayDeque<Node>().apply { if (entry in nodeSet) add(entry) }
-        while (reachabilityQueue.isNotEmpty()) {
-            val node = reachabilityQueue.removeFirst()
-            if (!reachable.add(node)) continue
-            successors.getValue(node).map(Edge::target).forEach(reachabilityQueue::addLast)
+        // Dense positions are local to this analysis, independent of physical register IDs or values.
+        // This also preserves analysis of sparse IDs before artifact validation diagnoses invalid models.
+        val registers = mutableListOf<RegisterId>()
+        val registerIndices = mutableMapOf<RegisterId, Int>()
+
+        fun registerIndex(register: RegisterId): Int = registerIndices.getOrPut(register) { registers.size.also { registers += register } }
+
+        val blockOffsets = IntArray(blockCount + 1)
+        for (index in 0 until blockCount) {
+            blockOffsets[index + 1] = blockOffsets[index] + module.blocks[firstBlock + index].instructions.size
         }
 
-        val liveBefore = nodes.associateWith { mutableSetOf<RegisterId>() }
-        val queue = ArrayDeque<Node>().apply { addAll(reachable.reversed()) }
-        val queued = reachable.toMutableSet()
-        while (queue.isNotEmpty()) {
-            val node = queue.removeFirst()
-            queued.remove(node)
-            val instruction = module.blocks[node.block].instructions[node.instruction]
-            val liveOut =
-                buildSet {
-                    successors.getValue(node).forEach { edge ->
-                        addAll(liveBefore.getValue(edge.target) - edge.definitions)
-                    }
+        fun nodeIndex(node: Node): Int? {
+            val block = node.block - firstBlock
+            if (block !in 0 until blockCount || node.instruction !in module.blocks[node.block].instructions.indices) return null
+            return blockOffsets[block] + node.instruction
+        }
+
+        val reads =
+            Array(nodes.size) { index ->
+                BitSet().apply {
+                    val node = nodes[index]
+                    module.blocks[node.block]
+                        .instructions[node.instruction]
+                        .readRegisters()
+                        .forEach { set(registerIndex(it)) }
                 }
-            val updated =
-                buildSet {
-                    addAll(instruction.readRegisters())
-                    addAll(liveOut - instruction.writtenRegisters().toSet())
+            }
+        val writes =
+            Array(nodes.size) { index ->
+                val node = nodes[index]
+                module.blocks[node.block]
+                    .instructions[node.instruction]
+                    .writtenRegisters()
+                    .map(::registerIndex)
+                    .toIntArray()
+            }
+        val successors =
+            Array(nodes.size) { index ->
+                successorEdges(module, nodes[index], exceptions).mapNotNull { edge ->
+                    nodeIndex(edge.target)?.let { target -> IndexedEdge(target, edge.definition?.let(::registerIndex) ?: -1) }
                 }
-            val current = liveBefore.getValue(node)
-            if (current != updated) {
-                current.clear()
-                current += updated
-                predecessors[node]
-                    .orEmpty()
-                    .filter { it in reachable && queued.add(it) }
-                    .forEach(queue::addLast)
+            }
+        val predecessorCounts = IntArray(nodes.size)
+        successors.forEach { edges -> edges.forEach { predecessorCounts[it.target]++ } }
+        val predecessors = Array(nodes.size) { IntArray(predecessorCounts[it]) }
+        successors.forEachIndexed { source, edges ->
+            edges.forEach { edge -> predecessors[edge.target][--predecessorCounts[edge.target]] = source }
+        }
+
+        val entry = nodeIndex(Node(firstBlock, 0)) ?: return emptyList()
+        val reachable = BooleanArray(nodes.size)
+        val reachableOrder = mutableListOf<Int>()
+        val queue = NodeQueue(nodes.size)
+        reachable[entry] = true
+        queue.add(entry)
+        while (!queue.isEmpty) {
+            val node = queue.remove()
+            reachableOrder += node
+            successors[node].forEach { edge ->
+                if (!reachable[edge.target]) {
+                    reachable[edge.target] = true
+                    queue.add(edge.target)
+                }
             }
         }
 
-        return nodes.filter { it in reachable }.map { node ->
+        val liveBefore = Array(nodes.size) { BitSet() }
+        val queued = BooleanArray(nodes.size)
+        reachableOrder.asReversed().forEach { node ->
+            queue.add(node)
+            queued[node] = true
+        }
+        val liveOut = BitSet()
+        val updated = BitSet()
+
+        fun collectLiveOut(node: Int) {
+            liveOut.clear()
+            successors[node].forEach { edge ->
+                // An exception register is defined only on this edge. Do not remove its liveness
+                // contributed by a normal edge or another handler when merging successors.
+                val alreadyLive = edge.definition >= 0 && liveOut[edge.definition]
+                liveOut.or(liveBefore[edge.target])
+                if (edge.definition >= 0 && !alreadyLive) liveOut.clear(edge.definition)
+            }
+        }
+        while (!queue.isEmpty) {
+            val node = queue.remove()
+            queued[node] = false
+            collectLiveOut(node)
+            updated.clear()
+            updated.or(liveOut)
+            writes[node].forEach(updated::clear)
+            updated.or(reads[node])
+            val current = liveBefore[node]
+            if (current != updated) {
+                current.clear()
+                current.or(updated)
+                predecessors[node].forEach { predecessor ->
+                    if (reachable[predecessor] && !queued[predecessor]) {
+                        queued[predecessor] = true
+                        queue.add(predecessor)
+                    }
+                }
+            }
+        }
+
+        fun snapshot(bits: BitSet): Set<RegisterId> =
+            buildSet {
+                var index = bits.nextSetBit(0)
+                while (index >= 0) {
+                    add(registers[index])
+                    index = bits.nextSetBit(index + 1)
+                }
+            }
+        return nodes.mapIndexedNotNull { index, node ->
+            if (!reachable[index]) return@mapIndexedNotNull null
+            collectLiveOut(index)
             LiveBoundary(
                 block = BlockId.of(node.block.toUInt()),
                 instruction = node.instruction.toUInt(),
-                before = liveBefore.getValue(node).toSet(),
-                after =
-                    buildSet {
-                        successors.getValue(node).forEach { edge ->
-                            addAll(liveBefore.getValue(edge.target) - edge.definitions)
-                        }
-                    },
+                before = snapshot(liveBefore[index]),
+                after = snapshot(liveOut),
             )
         }
     }
@@ -126,8 +195,42 @@ private data class Node(
 
 private data class Edge(
     val target: Node,
-    val definitions: Set<RegisterId> = emptySet(),
+    val definition: RegisterId? = null,
 )
+
+private data class IndexedEdge(
+    val target: Int,
+    val definition: Int,
+)
+
+/** Reachability and propagation enqueue each node at most once at a time. */
+private class NodeQueue(
+    capacity: Int,
+) {
+    private val values = IntArray(capacity)
+    private var head = 0
+    private var tail = 0
+    private var size = 0
+
+    val isEmpty: Boolean get() = size == 0
+
+    fun add(node: Int) {
+        check(size < values.size) { "liveness queue capacity exceeded" }
+        values[tail] = node
+        tail++
+        if (tail == values.size) tail = 0
+        size++
+    }
+
+    fun remove(): Int {
+        check(size > 0) { "liveness queue is empty" }
+        val node = values[head]
+        head++
+        if (head == values.size) head = 0
+        size--
+        return node
+    }
+}
 
 private fun successorEdges(
     module: Module,
@@ -161,7 +264,7 @@ private fun successorEdges(
                 ?.let {
                     Edge(
                         target = Node(exception.handlerBlock.value.toInt(), 0),
-                        definitions = setOf(exception.exceptionRegister),
+                        definition = exception.exceptionRegister,
                     )
                 }
         }
