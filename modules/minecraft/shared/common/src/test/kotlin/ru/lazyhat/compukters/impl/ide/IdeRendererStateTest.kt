@@ -1574,6 +1574,38 @@ class IdeRendererStateTest {
     }
 
     @Test
+    fun `toolbar centers labels and keeps enabled run neutral with visible button edges`() {
+        val geometry = geometry()
+        val model =
+            IdeRenderer.extract(
+                workspaceState(IdeEditorView.Empty, IdeBuildState.Idle, target = IdeTargetState.Attached(target())),
+                geometry,
+            )
+        val run = model.hitTargets.single { it.action == IdeHitAction.Run }
+        assertTrue(run.enabled)
+        assertEquals(IdeColors.CONTROL, model.panels.single { it.kind == IdePanelKind.Control && it.bounds == run.bounds }.color)
+        for (label in model.text.filter { it.kind == IdeTextKind.Toolbar }) {
+            val bounds =
+                model.hitTargets
+                    .single {
+                        it.action ==
+                            when (label.value) {
+                                "Build" -> IdeHitAction.Build
+                                "Run" -> IdeHitAction.Run
+                                else -> IdeHitAction.QuickOpen
+                            }
+                    }.bounds
+            assertEquals(bounds.top + (bounds.height - geometry.font.cellHeight) / 2 + geometry.font.glyphDrawOffsetY, label.y)
+        }
+        assertTrue(
+            model.fills.any {
+                it.kind == IdeFillKind.ControlBorder && it.color == IdeColors.CONTROL_BORDER &&
+                    run.bounds.contains(it.bounds)
+            },
+        )
+    }
+
+    @Test
     fun `workspace toolbar uses fixed icons in bounded action groups`() {
         val model = IdeRenderer.extract(workspaceState(IdeEditorView.Empty, IdeBuildState.Idle), geometry())
 

@@ -38,7 +38,7 @@ object IdeControls {
                 when {
                     style == IdeControlStyle.Primary && target.enabled -> IdeColors.SELECTION
                     style == IdeControlStyle.Neutral && target.selected -> IdeColors.SELECTION
-                    style == IdeControlStyle.Neutral -> IdeColors.PANEL_ALT
+                    style == IdeControlStyle.Neutral -> if (target.enabled) IdeColors.CONTROL else IdeColors.PANEL_ALT
                     target.selected -> IdeColors.ACCENT
                     target.enabled -> IdeColors.BORDER
                     else -> IdeColors.PANEL_ALT
