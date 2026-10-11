@@ -96,12 +96,17 @@ class DiagnosticQueryTest {
             val source =
                 """
                 import kotlin.math.*
+                import compukter.display.GraphicalDisplay
                 fun main() {
                     val point: Position2i = 10 xy 20
                     val size: Size2i = 80 by 24
                     val bounds: Rect2i = point sized size
                     val fractional: Vector2f = (3f xy 4f).normalized()
                     val volume: Position3i = Vector3i(1, 2, 3)
+                    val screen = GraphicalDisplay.named("panel")
+                    screen.fillRect(bounds, 0xFF0000)
+                    screen.text(point, "Ready", scale = 2)
+                    check(screen.size.x > 0)
                     check(point in bounds && volume.z == 3)
                     check(fractional.x > 0f)
                 }

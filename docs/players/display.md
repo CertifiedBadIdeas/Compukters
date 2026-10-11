@@ -116,6 +116,34 @@ finishes or disconnects. Discovery alone does not claim a lease. `GraphicalDispl
 throw; ambiguous names are errors. A handle belongs to that logical canvas. Losing every reachable loaded panel makes
 it stale; replacing or reconnecting a device does not revive a stale handle.
 
+## Geometry types
+
+The reusable types belong to the Guest standard library: `import kotlin.math.*`. `Vector2i` describes integer
+pixel positions and sizes; `Position2i` and `Size2i` are aliases, so either spelling accepts the same value.
+Vectors and rectangles also work without a display. The scalar coordinate overloads remain available.
+
+```kotlin
+val position = 10 xy 20
+val size = 80 by 24
+val bounds = position sized size
+
+screen.fillRect(bounds, Colors.BLUE)
+screen.rect(position, size, Colors.WHITE)
+screen.line(position, position + (20 xy 10), Colors.GREEN)
+screen.text(position, "Ready", scale = 2)
+val dimensions: Vector2i = screen.size
+```
+
+`pixel`, `line`, `fillRect`, `rect`, `text` and `image` accept vector positions; rectangles can also be passed
+to `fillRect` and `rect`. `image(position, size, pixels)` uses the same row-major RGB image contract. Floating
+coordinates require explicit `roundToInt()`, `floorToInt()` or `ceilToInt()` conversion before drawing.
+`TextDisplay.writeAt(position, text)` uses text-grid cells, rather than pixels.
+
+A `Rect2i` has nonnegative size and half-open bounds: its position is included, while right/bottom are excluded.
+`point in bounds`, intersection and bounding union follow those same bounds. Integer rectangle extents must
+fit Int. See [standard-library mathematics]({{ '/STDLIB-SUPPORT/math/' | relative_url }}) for all four vector
+types, their aliases, arithmetic, floating normalization/interpolation and rounding semantics.
+
 ## Existing text programs
 
 `TextDisplay` remains available with a character grid spanning the whole screen: 20 columns per block across and

@@ -8,6 +8,10 @@ package compukter.display
 
 import compukter.peripheral.Peripheral
 import compukter.peripheral.TypedPeripheralProvider
+import kotlin.math.Position2i
+import kotlin.math.Rect2i
+import kotlin.math.Size2i
+import kotlin.math.Vector2i
 
 /** A handle to one persistent canvas through the legacy text grid API. Coordinates are zero-based. */
 public value class TextDisplay internal constructor(private val handle: Int) : Peripheral {
@@ -19,6 +23,9 @@ public value class TextDisplay internal constructor(private val handle: Int) : P
     public fun writeAt(x: Int, y: Int, text: String) {
         DisplayBindings.writeAt(handle, x, y, text)
     }
+
+    /** Writes at a grid position, rather than pixel coordinates. */
+    public fun writeAt(position: Position2i, text: String) { writeAt(position.x, position.y, text) }
 
     public fun clear() {
         DisplayBindings.clear(handle)
@@ -81,6 +88,7 @@ public value class GraphicalDisplay internal constructor(private val handle: Int
 
     public val width: Int get() = DisplayBindings.width(handle)
     public val height: Int get() = DisplayBindings.height(handle)
+    public val size: Size2i get() = Vector2i(width, height)
     public val mode: DisplayMode
         get() = when (DisplayBindings.mode(handle)) {
             0 -> DisplayMode.ULTRA_LOW
@@ -148,6 +156,16 @@ public value class GraphicalDisplay internal constructor(private val handle: Int
             }
         }
     }
+
+    /** Typed pixel coordinates; floating vectors require an explicit rounding conversion. */
+    public fun pixel(position: Position2i, color: Int) { pixel(position.x, position.y, color) }
+    public fun line(start: Position2i, end: Position2i, color: Int) { line(start.x, start.y, end.x, end.y, color) }
+    public fun fillRect(position: Position2i, size: Size2i, color: Int) { fillRect(position.x, position.y, size.x, size.y, color) }
+    public fun fillRect(bounds: Rect2i, color: Int) { fillRect(bounds.position, bounds.size, color) }
+    public fun rect(position: Position2i, size: Size2i, color: Int) { rect(position.x, position.y, size.x, size.y, color) }
+    public fun rect(bounds: Rect2i, color: Int) { rect(bounds.position, bounds.size, color) }
+    public fun text(position: Position2i, text: String, color: Int = 0xFFFFFF, scale: Int = 1) { text(position.x, position.y, text, color, scale) }
+    public fun image(position: Position2i, size: Size2i, pixels: IntArray) { image(position.x, position.y, size.x, size.y, pixels) }
 
     @PublishedApi
     internal fun beginFrame() { DisplayBindings.beginFrame(handle) }

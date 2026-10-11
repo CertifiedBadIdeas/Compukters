@@ -68,7 +68,8 @@ before the next request. No project FIR or IR enters the retained library cache.
 Source metadata retains alias spellings; the library loader expands admitted aliases when matching canonical
 compiled signatures, preserving the underlying nominal type and default arguments. Value-class initializer
 literals participate in the artifact constant pool. Bundle format 9, module format 5, platform ABI 3,
-metadata format 6 and native ABI 22 remain unchanged. Dependent libraries resolve the matching module content
+metadata format 6 and native ABI 22 remain unchanged. `compukter:core` 2.3.0 adds typed display overloads
+and a vector size property, delegating the same scalar display capability operations. Dependent libraries resolve the matching module content
 identities; geometry uses existing value-class and math execution instructions.
 
 ## Guest hash collection module identities
