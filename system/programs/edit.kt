@@ -18,7 +18,9 @@
 
 package compukter.system.edit
 
-import compukter.filesystem.FileSystem
+import compukter.filesystem.FileKind
+import compukter.filesystem.FileSystemException
+import compukter.filesystem.Path
 import compukter.io.Stderr
 import compukter.terminal.Terminal
 import kotlin.collections.copyInto
@@ -35,17 +37,20 @@ fun main(args: Array<String>) {
         return
     }
     val path = editPath(args)
-    val kind = FileSystem.stat(path)
-    if (kind == 2) {
-        Stderr.write("edit: is a directory: " + path + "\n")
-        return
-    }
-    if (kind != 1 && kind != 0 - 2) {
-        Stderr.write("edit: " + editFileSystemError(kind) + "\n")
-        return
-    }
+    val source =
+        try {
+            val file = Path(path)
+            val info = file.statOrNull()
+            if (info != null && info.kind == FileKind.DIRECTORY) {
+                Stderr.write("edit: is a directory: $path\n")
+                return
+            }
+            if (info == null) "" else file.readText(16384)
+        } catch (failure: FileSystemException) {
+            Stderr.write("edit: ${failure.message ?: "filesystem error"}\n")
+            return
+        }
 
-    val source = if (kind == 1) FileSystem.readText(path) else ""
     val buffer = CharArray(4096)
     val initialState = editInsertDocument(buffer, editEmpty(buffer), source)
     if (initialState == null) {
@@ -85,9 +90,9 @@ fun main(args: Array<String>) {
             if (confirmExit) {
                 if (editStartsWith(text, 'y', 'Y')) {
                     val saved = editSave(buffer, state, path)
-                    if (saved == 0) running = false else status = editFileSystemError(saved)
-                    if (saved == 0) dirty = false
-                    confirmExit = saved != 0
+                    if (saved.isEmpty()) running = false else status = saved
+                    if (saved.isEmpty()) dirty = false
+                    confirmExit = saved.isNotEmpty()
                 } else if (editStartsWith(text, 'n', 'N')) {
                     running = false
                 }
@@ -108,11 +113,11 @@ fun main(args: Array<String>) {
                 if (key == 1 && action == 1) confirmExit = false
             } else if ((action == 1 || action == 2) && editHasControl(modifiers) && key == 83) {
                 val saved = editSave(buffer, state, path)
-                if (saved == 0) {
+                if (saved.isEmpty()) {
                     dirty = false
                     status = "Saved"
                 } else {
-                    status = editFileSystemError(saved)
+                    status = saved
                 }
             } else if ((action == 1 || action == 2) && editHasControl(modifiers) && key == 88) {
                 if (dirty) confirmExit = true else running = false
@@ -569,20 +574,13 @@ private fun editSave(
     buffer: CharArray,
     state: EditState,
     path: String,
-): Int = FileSystem.writeText(path, editText(buffer, state))
-
-private fun editFileSystemError(result: Int): String {
-    if (result == 0 - 1) return "invalid path"
-    if (result == 0 - 2) return "not found"
-    if (result == 0 - 5) return "is a directory"
-    if (result == 0 - 7) return "read-only filesystem"
-    if (result == 0 - 8) return "permission denied"
-    if (result == 0 - 10) return "filesystem quota exceeded"
-    if (result == 0 - 11) return "filesystem busy"
-    if (result == 0 - 12) return "filesystem unavailable"
-    if (result == 0 - 13) return "filesystem closed"
-    return "filesystem error"
-}
+): String =
+    try {
+        Path(path).writeText(editText(buffer, state))
+        ""
+    } catch (failure: FileSystemException) {
+        failure.message ?: "filesystem error"
+    }
 
 private fun editStartsWith(
     value: String,

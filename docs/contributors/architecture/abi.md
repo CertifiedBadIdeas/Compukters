@@ -11,6 +11,24 @@ permalink: /ARCHITECTURE/abi/
 
 This reference groups versioned representation boundaries by the version that introduced them. Those versions are minimum feature requirements, not a claim that older Runtime distributions implement today’s platform. The source owners below define the active contract. Before changing a wire format, inspect each producer, consumer and verifier. Runtime release pins in `build-scripts/src/main/kotlin/RuntimeBundleSupport.kt` describe published bundles separately from the local VM checkout.
 
+## Portable Guest filesystem
+
+`compukter:core` 3.0.0 replaces the old string/status FileSystem source facade with Compukters-owned Path,
+metadata, typed exceptions, immutable read/directory snapshots and guarded atomic replacement drafts.
+New source emits `compukter:filesystem` ABI 2 with 15 synchronous operations; historical ABI 1 remains
+admitted for existing artifacts without source wrappers. Private byte replies begin with an unsigned status
+byte (0 success, otherwise the existing filesystem error magnitude), with at most 4095 content bytes.
+Metadata adds kind, executable flag, little-endian u64 size and u64 revision. Directory replies contain one
+status UTF-16 unit followed by one sorted name; a status-only success means EOF. Move paths are sent in
+separate requests through a guarded source resource. See `src/computer_filesystem.rs` in the VM and the
+canonical `FileSystemBindings` registry for the exact operation schema.
+
+Process-owned resources preserve IDs, snapshot positions, pinned and draft bytes, revision guards and
+poisoned-write state through logical checkpoint envelope/schema 3. This requires native ABI 23 and
+Runtime 0.23.0; ABI 22 checkpoints cold boot while preserving published files. Native value tags, the
+49-export transport inventory, executable container 3 and platform codecs are unchanged. Runtime source
+consistency is verified locally; tagged release packaging still requires matching published bundles.
+
 ## ByteArray host values
 
 Native C ABI 22 adds direct ByteArray arguments and results to host capabilities. Kotlin `BYTE_ARRAY` and Rust
@@ -22,7 +40,7 @@ ByteArray values. The addon SDK signature parser and generated host contracts ac
 Requests and responses copy byte contents before returning control to their producer. Guest result allocation and
 outbound copying remain sliceable and charged, and checkpoint state preserves partial allocation and pending data.
 This changes the native checkpoint contract and Runtime identity; native ABI 21 checkpoints require a cold boot,
-while the filesystem remains persistent. The selected candidate is Runtime 0.22.0; tagged packaging requires its
+while the filesystem remains persistent. The selected candidate is Runtime 0.23.0; tagged packaging requires its
 published bundles. Executable container format 3 and existing Guest array representation remain unchanged.
 
 ## Boundary identities
@@ -30,7 +48,7 @@ published bundles. Executable container format 3 and existing Guest array repres
 | Boundary | Current representation | Owner |
 | --- | --- | --- |
 | Executable container | Format 3; floating math requires Runtime ABI 1.16 | `modules/common/compiler-artifact` and `host/compukter-vm/src/artifact/format.rs` |
-| Native session transport | C ABI 22, checked by both FFM and JNI | `host/compukter-vm/ffi/src/lib.rs` and `modules/common/native-runtime` |
+| Native session transport | C ABI 23, checked by both FFM and JNI | `host/compukter-vm/ffi/src/lib.rs` and `modules/common/native-runtime` |
 | Base platform | Bundle format 9, standalone module format 5, platform ABI 3 | `PlatformBundleCodec` in `modules/common/platform-bundle` |
 | Kotlin metadata carrier | Private format 6 | `platform-k2` |
 | Compiler worker | Protocol 5; explicit source-free library preparation | `compiler-client` and `compiler-k2` |
@@ -76,7 +94,7 @@ before the next request. No project FIR or IR enters the retained library cache.
 Source metadata retains alias spellings; the library loader expands admitted aliases when matching canonical
 compiled signatures, preserving the underlying nominal type and default arguments. Value-class initializer
 literals participate in the artifact constant pool. Bundle format 9, module format 5, platform ABI 3,
-metadata format 6 and native ABI 22 remain unchanged. `compukter:core` 2.3.0 adds typed display overloads
+metadata format 6 and native ABI 22 remain unchanged by geometry. `compukter:core` 2.3.0 adds typed display overloads
 and a vector size property, delegating the same scalar display capability operations. Dependent libraries resolve the matching module content
 identities; geometry uses existing value-class and math execution instructions.
 
@@ -84,7 +102,7 @@ identities; geometry uses existing value-class and math execution instructions.
 
 Guest hash collections introduce public Set/Map contracts in `kotlin:builtins` 1.9.0 and ordinary source
 implementations, Pair and populated factories in `stdlib:core` 1.11.0. Their module content identities change; bundle format 9, module
-format 5, platform ABI 3 and Runtime ABI 1.15 remain unchanged by hash collections. The current native C ABI is 22 for checkpoint transport. Programs and dependent
+format 5, platform ABI 3 and Runtime ABI 1.15 remain unchanged by hash collections. The current native C ABI is 23 for checkpoint transport. Programs and dependent
 platform/addon inputs must resolve the matching module identities. Hashing, generic equality, managed
 objects and specialization reuse existing instructions and representation rules.
 ## Computer network capability
@@ -109,7 +127,7 @@ standalone module 5 and private metadata carrier 6 remain unchanged; rebuild dep
 
 ## Execution checkpoint development
 
-The VM has a logical computer checkpoint envelope (format 2), owned by
+The VM has a logical computer checkpoint envelope (format 3), owned by
 `host/compukter-vm/src/checkpoint/envelope.rs`. Its version, native runtime/schema identity, computer ID,
 filesystem generation, payload lengths and SHA-256 cover the execution and host descriptor bytes together.
 Runtime identity hashes the logical schema, a zero byte and the little-endian u32 native C ABI. Runtime
@@ -118,10 +136,10 @@ checkpoint restore in both directions, filesystem state, executable admission an
 contract or codec changes require an ABI increment; a revision must preserve those contracts. The earlier
 unpublished development identity based on the full version is rejected without a fallback. CI exchanges a
 full-computer checkpoint between two real builds of adjacent revisions in both directions.
-FFM/JNI admission checks native ABI 22 without a package-revision constraint. Release selection is
+FFM/JNI admission checks native ABI 23 without a package-revision constraint. Release selection is
 separate: `config/runtime-release.properties` selects one compatible published revision and its exact
 release commit, independently of the development VM submodule. Alternate descriptors may select any
-`0.22.x`; packaging still verifies the selected archive identity, formats and hashes. Both mod archives
+`0.23.x`; packaging still verifies the selected archive identity, formats and hashes. Both mod archives
 and the release inventory record the actual selected native component for future external delivery.
 Production version preparation queries the latest complete stable GitHub Release. Revision and ABI requests
 are idempotent within a release cycle; an ABI request updates the native constant and version together.
@@ -210,15 +228,15 @@ All three sections count toward debug limits and are excluded from semantic hash
 into admitted artifact bytes; it does not expand repeated paths. The writer uses the pool only when aligned
 payload and directory costs decrease the physical artifact size.
 
-Compact debug paths retain container format 3.0 and semantic Runtime ABI 1.15; the current native C ABI is 22 for checkpoint transport. New readers accept
+Compact debug paths retain container format 3.0 and semantic Runtime ABI 1.15; the current native C ABI is 23 for checkpoint transport. New readers accept
 legacy artifacts; readers without DEBUG_PATHS support reject its critical section. This is a reader capability
-requirement independent of semantic ABI. The mod selects Runtime 0.22.0 with native C ABI 22, which includes
+requirement independent of semantic ABI. The development VM uses Runtime 0.23.0 with native C ABI 23, which includes
 this reader support. Release packaging admits the published bundles only when their version, ABI, formats,
 checksums and VM commit match the pin; a source-built native alone does not establish release compatibility.
 
 Native C ABI 17 appends a length-prefixed, bounded UTF-8 trace to terminal outcome tags 2 (OOM), 5 (Guest trap), and
 6 (VM fault), after their existing scalar payload. Empty text means unavailable diagnostic text. FFM and JNI validate
-ABI 22 before decoding; both retain typed failures and carry the trace through the runtime host. Other wire tags and
+ABI 23 before decoding; both retain typed failures and carry the trace through the runtime host. Other wire tags and
 guest capability schemas are unchanged.
 Native C ABI 19 adds `compukter_resume_value(handle, taskId, requestId, payload, payloadLength)`.
 The caller owns the byte buffer; native code validates and copies its contents before returning and retains no caller
@@ -255,8 +273,8 @@ Module semantic identity remains the canonical **expanded legacy** encoding: for
 the native verifier streams the original indexed envelope, offsets, padding and per-boundary records into the
 existing module hash. Other semantic sections retain raw-payload hashing; the range marker is excluded. Imports,
 precompiled module identities and source diagnostics therefore keep their hashes. Container 3.0, semantic
-Runtime ABI 1.15 remain unchanged by root ranges; the current native C ABI is 22 for checkpoint transport. Readers predating the marker reject it as unknown critical.
-The mod's Runtime 0.22.0 candidate includes this reader capability; the release gate validates the published bundles
+Runtime ABI 1.15 remain unchanged by root ranges; the current native C ABI is 23 for checkpoint transport. Readers predating the marker reject it as unknown critical.
+The mod's Runtime 0.23.0 candidate includes this reader capability; the release gate validates the published bundles
 against their exact pinned VM commit before packaging.
 
 

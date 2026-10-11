@@ -97,6 +97,9 @@
         - title: Guest platform support
           url: /GUEST-PLATFORM-SUPPORT/
           description: Executable core and device contracts with their evidence.
+        - title: Guest filesystem
+          url: /FILESYSTEM/
+          description: Portable paths, binary I/O, snapshots and atomic writes.
         - title: API reference
           url: /API/
           description: Browse generated signatures for core and every addon.
