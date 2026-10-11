@@ -30,6 +30,17 @@ class ShellEditor {
     private val history = Array(32) { "" }
     private var count = 0
 
+    private fun remember(line: String) {
+        if (line.isNotBlank() && (count == 0 || history[count - 1] != line)) {
+            if (count == history.size) {
+                for (index in 1 until count) history[index - 1] = history[index]
+                count--
+            }
+            history[count] = line
+            count++
+        }
+    }
+
     fun readCommand(): String? {
         if (Terminal.cursor.x != 0) println()
         print("> ")
@@ -43,11 +54,20 @@ class ShellEditor {
         var draftCursor = 0
         while (true) {
             offset = shellRenderLine(line, cursor, offset, row, width)
-            when (val event = Terminal.readEvent()) {
+            when (val event = Terminal.readEvent(if (line.isEmpty()) 256 else 0)) {
                 is TerminalEvent.Text -> {
                     val inserted = shellInputText(event.text, 256 - line.length)
                     line = line.substring(0, cursor) + inserted + line.substring(cursor, line.length)
                     cursor += inserted.length
+                }
+
+                is TerminalEvent.SubmittedLine -> {
+                    line = event.text
+                    Terminal.fill(Rect2i(Vector2i(0, row), Vector2i(width, 1)))
+                    Terminal.setCursor(Vector2i(0, row))
+                    print("> " + line + "\n")
+                    remember(line)
+                    return line
                 }
 
                 is TerminalEvent.Key -> {
@@ -67,14 +87,7 @@ class ShellEditor {
                                     Terminal.fill(Rect2i(Vector2i(0, row), Vector2i(width, 1)))
                                     Terminal.setCursor(Vector2i(0, row))
                                     print("> " + line + "\n")
-                                    if (line.isNotBlank() && (count == 0 || history[count - 1] != line)) {
-                                        if (count == history.size) {
-                                            for (index in 1 until count) history[index - 1] = history[index]
-                                            count--
-                                        }
-                                        history[count] = line
-                                        count++
-                                    }
+                                    remember(line)
                                     return line
                                 }
                             }

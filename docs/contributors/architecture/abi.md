@@ -24,6 +24,17 @@ the native binding continues admitting ABI 2.0 artifacts. The public facade owns
 native event ownership before publishing its immutable snapshot. Standard-library vectors/rectangles retain their
 existing value representation; no new CPKT or native transport layout is required.
 
+`compukter:core` 7.1.0 adds owned `TerminalEvent.SubmittedLine` and opt-in
+`readEvent(submittedLineLimit: Int)`. Terminal ABI 2.2 adds selector 18, asynchronous `(I32) -> I32`:
+the argument is the maximum accepted submitted-line length (zero marks a busy draft); the result
+is the existing event kind or 3 for a complete submitted line. Artifacts declare 19 operations;
+ABI 2.0/2.1 remain admitted. Existing event-text and finish selectors carry/release the owned line.
+The host's existing canonical-line submission resumes the exact opted-in task/request, validates
+length, controls and Unicode, and rejects queued/active input. Ordinary raw waits reject submissions;
+canonical `readln()` keeps its existing contract. The pending operation/limit and kind-3 continuation
+are already represented in session checkpoints; text uses existing active-event storage. Native C ABI,
+checkpoint schema and encoding stay unchanged.
+
 Terminal keys C (67) and U (85) extend the admitted wire key set. Ctrl+C replaces Ctrl+T as the reserved foreground
 interruption; it reuses status 130 and existing ProcessExited lifecycle events. At an idle prompt the press reaches
 Guest code; repeated controls are consumed without killing a subsequent command. Native C ABI 23, Runtime source
