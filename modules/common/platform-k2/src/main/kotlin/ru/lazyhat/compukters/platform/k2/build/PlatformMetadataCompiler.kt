@@ -170,7 +170,7 @@ class PlatformMetadataCompiler {
             libraryDeclarations =
                 declarations
                     .filter { parsed ->
-                        parsed.hasBody ||
+                        parsed.hasBody || parsed.abstractMember ||
                             (
                                 !parsed.private &&
                                     parsed.libraryKind in
@@ -497,7 +497,7 @@ class PlatformMetadataCompiler {
         val name =
             when {
                 declaration is KtConstructor<*> -> "<init>"
-                declaration is KtObjectDeclaration && declaration.isCompanion() -> "Companion"
+                declaration is KtObjectDeclaration && declaration.isCompanion() -> named.name ?: "Companion"
                 else -> named.name ?: return emptyList()
             }
         val symbol = (listOf(packageName).filter(String::isNotEmpty) + owners + name).joinToString(".")
@@ -574,6 +574,12 @@ class PlatformMetadataCompiler {
                     else -> null
                 },
                 requiresSource,
+                abstractMember =
+                    declaration is KtNamedFunction && !external &&
+                        (
+                            declaration.hasModifier(KtTokens.ABSTRACT_KEYWORD) ||
+                                (declaration.parent.parent as? KtClass)?.isInterface() == true
+                        ),
             )
         val getter =
             (declaration as? KtProperty)
@@ -596,6 +602,9 @@ class PlatformMetadataCompiler {
                         hasBody = property.getter?.hasBody() == true,
                         libraryKind = PlatformLibraryDeclarationKind.FUNCTION,
                         requiresSource = requiresSource,
+                        abstractMember =
+                            property.hasModifier(KtTokens.ABSTRACT_KEYWORD) ||
+                                (property.parent.parent as? KtClass)?.isInterface() == true,
                     )
                 }
         val singleton =
@@ -752,6 +761,7 @@ class PlatformMetadataCompiler {
         val hasBody: Boolean,
         val libraryKind: PlatformLibraryDeclarationKind?,
         val requiresSource: Boolean = false,
+        val abstractMember: Boolean = false,
     )
 
     private data class ParsedPlatform(
