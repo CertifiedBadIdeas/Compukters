@@ -1,0 +1,7 @@
+{
+  "compilations": 120,
+  "native_verifications": 120,
+  "native_abi": 22,
+  "library_sha256": "c2ff8dbc822099b08e4bfa28dcc94b065626c20e2a0af0d83971b47edc5f0f61",
+  "all_output_sha256_equal_to_reference": true
+}

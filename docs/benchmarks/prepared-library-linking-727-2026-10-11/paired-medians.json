@@ -1,0 +1,44 @@
+[
+  {
+    "pair": 0,
+    "input": "pid",
+    "before_ms": 432.101977,
+    "after_ms": 373.568859,
+    "saving_ms": 58.533118
+  },
+  {
+    "pair": 0,
+    "input": "hello",
+    "before_ms": 270.094624,
+    "after_ms": 213.849013,
+    "saving_ms": 56.245611
+  },
+  {
+    "pair": 1,
+    "input": "pid",
+    "before_ms": 489.507694,
+    "after_ms": 381.671079,
+    "saving_ms": 107.836615
+  },
+  {
+    "pair": 1,
+    "input": "hello",
+    "before_ms": 260.301177,
+    "after_ms": 203.51939,
+    "saving_ms": 56.78178700000001
+  },
+  {
+    "pair": 2,
+    "input": "pid",
+    "before_ms": 464.672882,
+    "after_ms": 412.273789,
+    "saving_ms": 52.39909299999999
+  },
+  {
+    "pair": 2,
+    "input": "hello",
+    "before_ms": 291.527916,
+    "after_ms": 242.212912,
+    "saving_ms": 49.315004000000016
+  }
+]
