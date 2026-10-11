@@ -791,9 +791,11 @@ val generateIntLoopsConformanceArtifact = tasks.register<Test>("generateIntLoops
     classpath = sourceSets.test.get().runtimeClasspath
     filter.includeTestsMatching("*allocation free Int loops lower deterministically for vm execution*")
     filter.includeTestsMatching("*primitive ranges preserve bounds steps termination and floating membership*")
+    filter.includeTestsMatching("*do while loops preserve post test order jumps cleanup and exceptions for vm execution*")
     inputs.file(workerJar)
     outputs.file(intLoopsConformanceArtifact)
     outputs.file(intLoopsConformanceArtifact.map { it.asFile.resolveSibling("${it.asFile.name}.ranges.cpkt") })
+    outputs.file(intLoopsConformanceArtifact.map { it.asFile.resolveSibling("${it.asFile.name}.do-while.cpkt") })
     doFirst {
         systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
         systemProperty("compukter.vm.intLoopsArtifact", intLoopsConformanceArtifact.get().asFile.absolutePath)
