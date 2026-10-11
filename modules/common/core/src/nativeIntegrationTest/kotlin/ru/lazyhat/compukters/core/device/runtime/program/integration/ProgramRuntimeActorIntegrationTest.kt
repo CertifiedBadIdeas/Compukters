@@ -58,7 +58,8 @@ class ProgramRuntimeActorIntegrationTest {
                 resultCapacityPerWorker = 8,
             ),
         ).use { scheduler ->
-            assertEquals(true, scheduler.registerStandalone(endpoint, ProgramTickBudget(64, 64, 4)))
+            // Path constructor validation gives the shell a minimum slice above 64.
+            assertEquals(true, scheduler.registerStandalone(endpoint, ProgramTickBudget(128, 64, 4)))
             val started =
                 scheduler.awaitRequest(
                     endpoint,
