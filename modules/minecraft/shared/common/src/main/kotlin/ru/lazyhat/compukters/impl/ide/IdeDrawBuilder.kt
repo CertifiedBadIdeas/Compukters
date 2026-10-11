@@ -149,6 +149,16 @@ internal open class IdeDrawBuilder(
                 style,
             )
         panels += control.panel
+        if (style == IdeControlStyle.Neutral) {
+            val color = if (enabled) IdeColors.CONTROL_BORDER else IdeColors.BORDER
+            val borderZ = control.panel.zIndex + 1
+            listOf(
+                IdeRect(bounds.left, bounds.top, bounds.right, bounds.top + 1),
+                IdeRect(bounds.left, bounds.bottom - 1, bounds.right, bounds.bottom),
+                IdeRect(bounds.left, bounds.top, bounds.left + 1, bounds.bottom),
+                IdeRect(bounds.right - 1, bounds.top, bounds.right, bounds.bottom),
+            ).forEach { edge -> fills += IdeFillDraw(IdeFillKind.ControlBorder, edge, color, borderZ) }
+        }
         hitTargets += control.target
     }
 

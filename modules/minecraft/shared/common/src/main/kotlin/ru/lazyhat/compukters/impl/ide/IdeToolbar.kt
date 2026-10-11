@@ -60,21 +60,30 @@ internal object IdeToolbar {
             val width = label?.let { uiWidth(it) + 34 } ?: TOOLBAR_ICON_CONTROL_WIDTH
             val bounds = IdeRect(left, geometry.toolbar.top + 3, left + width, geometry.toolbar.bottom - 3)
             if (!geometry.toolbar.contains(bounds)) return
-            val style = if (action == IdeHitAction.Run) IdeControlStyle.Primary else IdeControlStyle.Neutral
+            val style = IdeControlStyle.Neutral
             target(action, bounds, enabled, tooltip, selected = selected, style = style)
             val color =
                 if (!enabled) {
                     IdeColors.DISABLED
-                } else if (selected ||
-                    action == IdeHitAction.Run
-                ) {
+                } else if (selected) {
                     IdeColors.ACCENT
                 } else {
                     IdeColors.TEXT
                 }
             val iconBounds = if (label == null) bounds else IdeRect(bounds.left + 2, bounds.top, bounds.left + 24, bounds.bottom)
             output.icon(IdeIconDraw(icon, iconBounds, color, Z_TEXT))
-            if (label != null) ui(IdeTextKind.Toolbar, label, bounds.left + 28, bounds.top + 5, color, bounds)
+            if (label !=
+                null
+            ) {
+                ui(
+                    IdeTextKind.Toolbar,
+                    label,
+                    bounds.left + 28,
+                    bounds.top + (bounds.height - geometry.font.cellHeight) / 2,
+                    color,
+                    bounds,
+                )
+            }
             left = bounds.right + 4
         }
 
@@ -141,7 +150,7 @@ internal object IdeToolbar {
         val bounds = IdeRect(left + 4, geometry.toolbar.top + 3, left + 88, geometry.toolbar.bottom - 3)
         if (geometry.toolbar.contains(bounds)) {
             target(IdeHitAction.QuickOpen, bounds, busy.isEmpty(), "Open file (Ctrl+Shift+N)", style = IdeControlStyle.Neutral)
-            ui(IdeTextKind.Toolbar, "Open file…", bounds.left + 8, bounds.top + 5)
+            ui(IdeTextKind.Toolbar, "Open file…", bounds.left + 8, bounds.top + (bounds.height - geometry.font.cellHeight) / 2)
         }
     }
 
