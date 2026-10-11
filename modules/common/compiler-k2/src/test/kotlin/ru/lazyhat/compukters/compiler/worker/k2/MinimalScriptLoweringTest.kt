@@ -8952,6 +8952,22 @@ class MinimalScriptLoweringTest {
         }
 
     @Test
+    fun `checked in cmatrix program compiles deterministically`() =
+        withAdapter { adapter ->
+            val source = repositoryFile("system/programs/cmatrix.kt").readText()
+            val first = adapter.compile(request("system/programs/cmatrix.kt" to source))
+            val second = adapter.compile(request("system/programs/cmatrix.kt" to source))
+
+            val artifact = assertNotNull(first.artifact, first.diagnostics.joinToString()).toByteArray()
+            assertContentEquals(artifact, assertNotNull(second.artifact).toByteArray())
+            assertOrdinaryEntry(artifact)
+            assertTrue(first.diagnostics.none { it.severity.name == "ERROR" }, first.diagnostics.toString())
+            System.getProperty("compukters.cmatrix.artifact")?.let { output ->
+                Path.of(output).also { it.parent.createDirectories() }.writeBytes(artifact)
+            }
+        }
+
+    @Test
     fun `same-named guest function remains an ordinary project call`() =
         withAdapter { adapter ->
             val result =
