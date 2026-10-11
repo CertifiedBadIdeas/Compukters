@@ -70,6 +70,38 @@ import kotlin.test.assertTrue
 
 class MinimalScriptLoweringTest {
     @Test
+    fun `value class initializer literals are retained without an ordinary constructor body`() =
+        withAdapter { adapter ->
+            val source =
+                """
+                value class Checked(val x: Int, val y: Int) {
+                    init { if (x < 0) throw IllegalArgumentException("negative vector component") }
+                }
+                fun main() { check(Checked(1, 2).x == 1) }
+                """.trimIndent()
+            val result = adapter.compile(request(source))
+            val bytes = assertNotNull(result.artifact, result.diagnostics.toString()).toByteArray()
+            ArtifactReader.read(bytes)
+        }
+
+    @Test
+    fun `stdlib geometry executes vector aliases arithmetic rectangles and rounding`() =
+        withAdapter { adapter ->
+            val source = repositoryFile("modules/common/compiler-k2/src/test/resources/kotlin/geometry/main.kt").readText()
+            val result = adapter.compile(request(source))
+            val bytes = assertNotNull(result.artifact, result.diagnostics.toString()).toByteArray()
+            ArtifactReader.read(bytes)
+            System.getProperty("compukter.vm.geometryArtifact")?.let { output ->
+                java.nio.file.Files
+                    .write(
+                        java.nio.file.Path
+                            .of(output),
+                        bytes,
+                    )
+            }
+        }
+
+    @Test
     fun `portable math compiles both widths library bodies and callable references`() =
         withAdapter { adapter ->
             val source = repositoryFile("modules/common/compiler-k2/src/test/resources/kotlin/math/main.kt").readText()
@@ -1685,22 +1717,27 @@ class MinimalScriptLoweringTest {
                 import compukter.display.Colors
                 import compukter.display.rgb
                 import compukter.display.frame
+                import kotlin.math.*
 
                 fun main() {
                     val screen = GraphicalDisplay.named("panel")
                     screen.setMode(DisplayMode.HIGH)
                     require(screen.width > 0)
+                    val dimensions: Any = screen.size
+                    require(dimensions is Vector2i && dimensions == Vector2i(screen.width, screen.height))
                     screen.setMode(DisplayMode.NORMAL)
                     screen.setMode(DisplayMode.LOW)
                     screen.setMode(DisplayMode.ULTRA_LOW)
                     screen.clear(rgb(16, 24, 32))
-                    screen.pixel(-1, 0, Colors.RED)
-                    screen.line(0, 0, screen.width - 1, screen.height - 1, Colors.GREEN)
-                    screen.fillRect(0, 0, 4, 3, Colors.BLUE)
-                    screen.rect(0, 0, 6, 5, Colors.WHITE)
-                    screen.text(0, 0, "Ready", scale = 1)
-                    screen.image(2, 2, 2, 1, intArrayOf(Colors.RED, Colors.BLUE))
-                    screen.frame { pixel(0, 0, Colors.YELLOW) }
+                    screen.pixel(-1 xy 0, Colors.RED)
+                    screen.line(0 xy 0, (screen.width - 1) xy (screen.height - 1), Colors.GREEN)
+                    screen.fillRect(0 xy 0, 4 by 3, Colors.BLUE)
+                    screen.fillRect((0 xy 0) sized (4 by 3), Colors.BLUE)
+                    screen.rect(0 xy 0, 6 by 5, Colors.WHITE)
+                    screen.rect((0 xy 0) sized (6 by 5), Colors.WHITE)
+                    screen.text(0 xy 0, "Ready", scale = 1)
+                    screen.image(2 xy 2, 2 by 1, intArrayOf(Colors.RED, Colors.BLUE))
+                    screen.frame { pixel(0 xy 0, Colors.YELLOW) }
                     try { screen.frame { pixel(1, 0, Colors.CYAN); throw IllegalArgumentException("abort") } }
                     catch (error: IllegalArgumentException) { screen.pixel(1, 0, Colors.MAGENTA) }
                 }
@@ -1783,6 +1820,7 @@ class MinimalScriptLoweringTest {
                 import compukter.concurrent.Tasks
                 import compukter.display.TextDisplay
                 import compukter.peripheral.Side
+                import kotlin.math.xy
 
                 fun main() {
                     val screen = TextDisplay.first()
@@ -1801,7 +1839,7 @@ class MinimalScriptLoweringTest {
                     try { TextDisplay.first { error("predicate failed") }; error("unreachable") }
                     catch (failure: IllegalStateException) { require(failure.message == "predicate failed") }
                     require(TextDisplay.all().size == 1)
-                    screen.writeAt(0, 0, "Ready")
+                    screen.writeAt(0 xy 0, "Ready")
                     while (true) {
                         Tasks.sleepTicks(20)
                     }

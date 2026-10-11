@@ -249,3 +249,11 @@ subset. `@JvmInline` is deliberately rejected as JVM syntax.
 
 See [value text and hashing]({{ '/STDLIB-SUPPORT/core-text/#value-text-and-hashing' | relative_url }}) for
 `toString`, `hashCode`, and generated-property rules.
+
+### Value-class initializer dependencies
+
+Value-class initializers retain their literal pool entries and admitted platform calls, including exception
+constructors. This applies to direct construction and constructor references. Execution evidence:
+`testKotlinGeometryVmConformance` exercises source and precompiled rectangle validation; the focused
+`MinimalScriptLoweringTest` case `value class initializer literals are retained without an ordinary constructor body`
+protects initializer-only strings and exception imports.
