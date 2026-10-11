@@ -10,7 +10,9 @@ package kotlin.collections
  * A hash table charged to the ordinary Guest heap and instruction budgets.
  * Keys must retain stable equality and hash codes while stored. Iteration order is unspecified.
  */
-public class HashMap<K, V>(initialCapacity: Int = 16) : MutableMap<K, V> {
+public class HashMap<K, V>(
+    initialCapacity: Int = 16,
+) : MutableMap<K, V> {
     private var buckets: ArrayList<HashMapNode<K, V>?> = hashMapBuckets<K, V>(initialCapacity)
     public override var size: Int = 0
         private set
@@ -18,7 +20,9 @@ public class HashMap<K, V>(initialCapacity: Int = 16) : MutableMap<K, V> {
         private set
 
     public override fun isEmpty(): Boolean = size == 0
+
     public override fun containsKey(key: K): Boolean = find(key) != null
+
     public override fun get(key: K): V? = find(key)?.value
 
     public override fun containsValue(value: V): Boolean {
@@ -29,7 +33,10 @@ public class HashMap<K, V>(initialCapacity: Int = 16) : MutableMap<K, V> {
         return false
     }
 
-    public override fun put(key: K, value: V): V? {
+    public override fun put(
+        key: K,
+        value: V,
+    ): V? {
         val hash = keyHash(key)
         var index = bucketIndex(hash)
         var node = buckets[index]
@@ -66,7 +73,7 @@ public class HashMap<K, V>(initialCapacity: Int = 16) : MutableMap<K, V> {
         return null
     }
 
-    public override fun clear(): Unit {
+    public override fun clear() {
         if (size == 0) return
         var index = 0
         while (index < buckets.size) {
@@ -105,7 +112,7 @@ public class HashMap<K, V>(initialCapacity: Int = 16) : MutableMap<K, V> {
         return null
     }
 
-    private fun grow(): Unit {
+    private fun grow() {
         require(buckets.size < 1073741824)
         val replacement = hashMapBuckets<K, V>(buckets.size * 2)
         var index = 0
@@ -123,14 +130,18 @@ public class HashMap<K, V>(initialCapacity: Int = 16) : MutableMap<K, V> {
         buckets = replacement
     }
 
-    private fun unlink(index: Int, previous: HashMapNode<K, V>?, node: HashMapNode<K, V>): Unit {
+    private fun unlink(
+        index: Int,
+        previous: HashMapNode<K, V>?,
+        node: HashMapNode<K, V>,
+    ) {
         if (previous == null) buckets[index] = node.next else previous.next = node.next
         node.next = null
         size -= 1
         modificationCount += 1
     }
 
-    internal fun removeNode(target: HashMapNode<K, V>): Unit {
+    internal fun removeNode(target: HashMapNode<K, V>) {
         val index = bucketIndex(target.hash)
         var previous: HashMapNode<K, V>? = null
         var node = buckets[index]
@@ -146,7 +157,9 @@ public class HashMap<K, V>(initialCapacity: Int = 16) : MutableMap<K, V> {
     }
 
     internal fun nodeIterator(): MutableIterator<HashMapNode<K, V>> = HashMapIterator(this)
+
     internal fun bucketCount(): Int = buckets.size
+
     internal fun bucketAt(index: Int): HashMapNode<K, V>? = buckets[index]
 }
 
@@ -179,13 +192,15 @@ internal class HashMapNode<K, V>(
     }
 }
 
-internal class HashMapIterator<K, V>(private val map: HashMap<K, V>) : MutableIterator<HashMapNode<K, V>> {
+internal class HashMapIterator<K, V>(
+    private val map: HashMap<K, V>,
+) : MutableIterator<HashMapNode<K, V>> {
     private var bucket: Int = 0
     private var upcoming: HashMapNode<K, V>? = null
     private var returned: HashMapNode<K, V>? = null
     private var expectedModificationCount: Int = map.modificationCount
 
-    private fun prepare(): Unit {
+    private fun prepare() {
         while (upcoming == null && bucket < map.bucketCount()) {
             upcoming = map.bucketAt(bucket)
             bucket += 1
@@ -206,7 +221,7 @@ internal class HashMapIterator<K, V>(private val map: HashMap<K, V>) : MutableIt
         return node
     }
 
-    public override fun remove(): Unit {
+    public override fun remove() {
         check(expectedModificationCount == map.modificationCount)
         val node = returned ?: throw IllegalStateException("Call next before remove")
         map.removeNode(node)
@@ -215,46 +230,75 @@ internal class HashMapIterator<K, V>(private val map: HashMap<K, V>) : MutableIt
     }
 }
 
-internal class HashMapKeys<K, V>(private val map: HashMap<K, V>) : Set<K> {
+internal class HashMapKeys<K, V>(
+    private val map: HashMap<K, V>,
+) : Set<K> {
     public override val size: Int get() = map.size
+
     public override fun isEmpty(): Boolean = map.isEmpty()
+
     public override fun contains(element: K): Boolean = map.containsKey(element)
+
     public override fun iterator(): Iterator<K> = HashMapKeyIterator(map.nodeIterator())
 }
 
-internal class HashMapKeyIterator<K, V>(private val iterator: MutableIterator<HashMapNode<K, V>>) : MutableIterator<K> {
+internal class HashMapKeyIterator<K, V>(
+    private val iterator: MutableIterator<HashMapNode<K, V>>,
+) : MutableIterator<K> {
     public override fun hasNext(): Boolean = iterator.hasNext()
+
     public override fun next(): K = iterator.next().key
+
     public override fun remove(): Unit = iterator.remove()
 }
 
-internal class HashMapValues<K, V>(private val map: HashMap<K, V>) : Collection<V> {
+internal class HashMapValues<K, V>(
+    private val map: HashMap<K, V>,
+) : Collection<V> {
     public override val size: Int get() = map.size
+
     public override fun isEmpty(): Boolean = map.isEmpty()
+
     public override fun contains(element: V): Boolean = map.containsValue(element)
+
     public override fun iterator(): Iterator<V> = HashMapValueIterator(map.nodeIterator())
 }
 
-internal class HashMapValueIterator<K, V>(private val iterator: MutableIterator<HashMapNode<K, V>>) : Iterator<V> {
+internal class HashMapValueIterator<K, V>(
+    private val iterator: MutableIterator<HashMapNode<K, V>>,
+) : Iterator<V> {
     public override fun hasNext(): Boolean = iterator.hasNext()
+
     public override fun next(): V = iterator.next().value
 }
 
-internal class HashMapEntries<K, V>(private val map: HashMap<K, V>) : Set<Map.Entry<K, V>> {
+internal class HashMapEntries<K, V>(
+    private val map: HashMap<K, V>,
+) : Set<Map.Entry<K, V>> {
     public override val size: Int get() = map.size
+
     public override fun isEmpty(): Boolean = map.isEmpty()
-    public override fun contains(element: Map.Entry<K, V>): Boolean =
-        map.containsKey(element.key) && map[element.key] == element.value
+
+    public override fun contains(element: Map.Entry<K, V>): Boolean = map.containsKey(element.key) && map[element.key] == element.value
+
     public override fun iterator(): Iterator<Map.Entry<K, V>> = HashMapEntryIterator(map.nodeIterator())
 }
 
-internal class HashMapEntryIterator<K, V>(private val iterator: MutableIterator<HashMapNode<K, V>>) : Iterator<Map.Entry<K, V>> {
+internal class HashMapEntryIterator<K, V>(
+    private val iterator: MutableIterator<HashMapNode<K, V>>,
+) : Iterator<Map.Entry<K, V>> {
     public override fun hasNext(): Boolean = iterator.hasNext()
+
     public override fun next(): Map.Entry<K, V> = iterator.next()
 }
 
 /** Replaces a value, returning the previous value or null when the key was absent. */
-public operator fun <K, V> MutableMap<K, V>.set(key: K, value: V): Unit { put(key, value) }
+public operator fun <K, V> MutableMap<K, V>.set(
+    key: K,
+    value: V,
+) {
+    put(key, value)
+}
 
 public operator fun <K, V> Map<K, V>.contains(key: K): Boolean = containsKey(key)
 
@@ -276,7 +320,10 @@ public external fun <K, V> mapOf(vararg pairs: Pair<K, V>): Map<K, V>
 public external fun <K, V> mutableMapOf(vararg pairs: Pair<K, V>): MutableMap<K, V>
 
 /** Returns a non-null stored value, or computes and stores a default for an absent or null value. */
-public inline fun <K, V> MutableMap<K, V>.getOrPut(key: K, defaultValue: () -> V): V {
+public inline fun <K, V> MutableMap<K, V>.getOrPut(
+    key: K,
+    defaultValue: () -> V,
+): V {
     val value = get(key)
     if (value != null) return value
     val answer = defaultValue()
