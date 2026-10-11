@@ -29,8 +29,8 @@ headings so this page has one stable URL that can be shared outside the reposito
   Attached addon sources have a separate bounded allowance, so bundled library sources do not exhaust it.
 
 - Guest Kotlin supports `do-while` loops with body-local variables in the condition, and labeled
-  `break@label` / `continue@label` across nested `while`, `do-while`, `Int` progression, primitive-array,
-  and supported iterable loops. Loop jumps preserve managed exception and `finally` cleanup across VM
+  `break@label` / `continue@label` across nested `while`, `do-while`, `Int` progression, primitive and
+  reference-array, and supported iterable loops. Loop jumps preserve managed exception and `finally` cleanup across VM
   instruction slices.
 
 - Contributors can create, diagnose and safely complete task worktrees with `worktree-task`: local `dev`/`main` bases,
@@ -43,8 +43,8 @@ headings so this page has one stable URL that can be shared outside the reposito
   caches or a successful first build, including after cache deletion. Template refresh preserves existing homes
   and rejects active managed sources; unsupported filesystems never silently allocate full cache copies.
 
-- Guest reference arrays support `Array(size) { index -> value }`, including strings, objects, nullable
-  elements, reusable vector value classes and generic container elements. Initializers run once per
+- Guest reference arrays support direct `for` loops and `Array(size) { index -> value }`, including strings,
+  objects, nullable elements, reusable vector value classes and generic container elements. Initializers run once per
   ascending index and preserve managed exception behavior.
 
 - Guest paths are pure portable String-backed value classes, constructed with `Path(...)` or the explicitly imported
