@@ -56,6 +56,8 @@ val bootRuntimeArtifact =
     project(":compiler-k2").layout.buildDirectory.file("generated/system/boot.cpkt")
 val kotlincRuntimeArtifact =
     project(":compiler-k2").layout.buildDirectory.file("generated/system/kotlinc.cpkt")
+val filesystemRuntimeArtifact =
+    project(":compiler-k2").layout.buildDirectory.file("generated/conformance/filesystem.cpkt")
 val editRuntimeArtifact =
     project(":compiler-k2").layout.buildDirectory.file("generated/system/edit.cpkt")
 val vmbenchAgentRuntimeArtifact =
@@ -82,6 +84,7 @@ val programRuntimeIntegrationTest =
             ":compiler-k2:generateKotlincArtifact",
             ":compiler-k2:generateShellArtifact",
             ":compiler-k2:generateEditArtifact",
+            ":compiler-k2:generateFilesystemArtifact",
             ":compiler-k2:generateVmbenchAgentArtifact",
             ":tooling-runtime:toolingRuntimeBundle",
             ":tooling-runtime:toolingRuntimeManifest",
@@ -103,6 +106,7 @@ val programRuntimeIntegrationTest =
         inputs.file(bootRuntimeArtifact)
         inputs.file(kotlincRuntimeArtifact)
         inputs.file(editRuntimeArtifact)
+        inputs.file(filesystemRuntimeArtifact)
         inputs.file(vmbenchAgentRuntimeArtifact)
         inputs.file(compilerWorkerPayload)
         inputs.file(compilerWorkerManifest)
@@ -113,6 +117,7 @@ val programRuntimeIntegrationTest =
             systemProperty("compukters.programRuntime.artifact", programRuntimeArtifact.get().asFile.absolutePath)
             systemProperty("compukters.bootRuntime.artifact", bootRuntimeArtifact.get().asFile.absolutePath)
             systemProperty("compukters.kotlincRuntime.artifact", kotlincRuntimeArtifact.get().asFile.absolutePath)
+            systemProperty("compukters.filesystemRuntime.artifact", filesystemRuntimeArtifact.get().asFile.absolutePath)
             systemProperty("compukters.editRuntime.artifact", editRuntimeArtifact.get().asFile.absolutePath)
             systemProperty("compukters.vmbenchAgentRuntime.artifact", vmbenchAgentRuntimeArtifact.get().asFile.absolutePath)
             systemProperty("compukters.compilerWorker.payload", compilerWorkerPayload.get().asFile.absolutePath)
