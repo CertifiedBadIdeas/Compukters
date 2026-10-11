@@ -15,6 +15,67 @@ For long runs where console volume is undesirable, use `./gradlew-sandbox-dev-pa
 the complete combined log under `build/agent-logs/`, prints only the final Gradle summary on success, and emits a
 bounded diagnostic summary and log tail on failure without changing the command's exit code.
 
+## Gradle caches in agent worktrees
+
+The sandbox wrappers keep each checkout's writable Gradle home in `.gradle-sandbox`. New homes are automatically
+initialized from one workspace template with `cp --reflink=always`: cache files have separate inodes and locks, while
+unchanged disk extents remain shared. Build outputs and project `.gradle` directories also remain local. Gradle runs
+in different worktrees can proceed independently; competing runs in the same checkout still use Gradle's normal
+project locks. Parallel builds also compete for the host's CPU and memory.
+
+The wrappers require Python 3, GNU `cp`, `flock`, and a filesystem supporting reflinks between the template and
+checkout, such as Btrfs. They never fall back to full copies or hard links when cloning fails. The default template
+is `.toolchain/gradle-cache/template` in the main Git checkout, discovered through Git's common directory even from
+a linked worktree. Set `COMPUKTERS_GRADLE_CACHE_TEMPLATE` to use another template location on the same filesystem.
+
+No manual cache preparation is required. If the template is missing, the first wrapper invocation looks for idle
+populated homes in the workspace's existing worktrees and `~/.gradle`, preferring those with Minecraft caches. It
+publishes a template through reflinks and initializes the new home. If no source is available, the first build starts
+with an empty home and publishes the downloaded cache after success. Deleting a worktree home causes the next run
+to recreate it from the template; deleting the template causes automatic bootstrap again. With no caches anywhere,
+the first build must download its dependencies and distribution.
+
+To select bootstrap sources explicitly, set `COMPUKTERS_GRADLE_CACHE_SOURCES` to a colon-separated list of Gradle
+homes. An empty value disables discovery, which is useful for checking a genuinely cold first build.
+
+You can also publish or refresh the template explicitly from an **idle** populated Gradle home:
+
+```sh
+./gradlew-sandbox-cache seed /path/to/populated-worktree/.gradle-sandbox
+```
+
+An idle `~/.gradle` can also serve as the source if it is on the same filesystem. The command clones `caches/` and
+`wrapper/`, including Minecraft plugin caches and Gradle distributions. It excludes process locks, temporary files,
+the access journal, daemons, local init scripts and user credentials/configuration. Symlinked cache content is rejected
+to preserve isolation. Managed wrappers hold a per-home shared guard throughout each build; publication requires
+that guard exclusively and rejects busy sources instead of waiting. Native Gradle locks provide an additional check
+for direct invocations, but an unmanaged source must stay idle for the entire operation. Do not start an IDE Gradle
+sync or direct `gradlew` against that source while seeding.
+
+Template publication replaces an immutable generation atomically; readers see a complete generation. After a
+successful build, a home based on the current generation automatically refreshes the template. A home based on an
+older generation preserves its local additions without replacing a newer template published by another build.
+The explicit seed command can publish such a home when needed. Template maintenance failure is reported without
+changing the build's exit status. Existing writable homes are preserved; only subsequently initialized homes use
+the new template. Old template generations are removed after readers finish cloning. Existing caches are not
+deleted or migrated automatically.
+
+Without a template, the wrapper announces an empty home and Gradle populates it normally. Internet access is needed
+for missing distributions and dependencies; seeding from a sufficiently populated home avoids those downloads.
+Gradle's `--offline` applies to dependency resolution and does not prevent the wrapper downloading a missing
+distribution. New or modified cache files consume additional space independently in each worktree.
+
+Ordinary `du` sums reflink files as though their data were separate. On Btrfs, inspect shared and exclusive extents:
+
+```sh
+btrfs filesystem du -s .gradle-sandbox /path/to/main-checkout/.toolchain/gradle-cache/template
+```
+
+Use `df` to measure total filesystem allocation; do not estimate it by multiplying a home's apparent size by the
+number of worktrees. Wrapper regression checks run with the build-script tests, or directly with
+`python3 -m unittest discover -s tools/gradle -p 'test_*.py' -v`. Reflink-dependent cases skip on unsupported test
+filesystems; the unsupported-clone failure path remains separately covered on a reflink-capable checkout.
+
 ## Evidence contract
 
 A successful command proves only the checks that actually belong to its task graph and executed with their required

@@ -13,6 +13,11 @@ headings so this page has one stable URL that can be shared outside the reposito
 
 ## 0.6.0 — In development
 
+- Agent Gradle worktrees initialize independent writable caches from a workspace template using reflinks,
+  sharing unchanged disk data while keeping build locks separate. Missing templates bootstrap from idle local
+  caches or a successful first build, including after cache deletion. Template refresh preserves existing homes
+  and rejects active managed sources; unsupported filesystems never silently allocate full cache copies.
+
 - Guest reference arrays support `Array(size) { index -> value }`, including strings, objects, nullable
   elements, reusable vector value classes and generic container elements. Initializers run once per
   ascending index and preserve managed exception behavior.

@@ -46,8 +46,16 @@ dependencies {
     testRuntimeOnly("org.junit.platform:junit-platform-launcher:6.1.3")
 }
 
+val verifyGradleSandbox by tasks.registering(Exec::class) {
+    group = "verification"
+    description = "Verify isolated reflink Gradle homes and sandbox wrapper behavior."
+    workingDir(rootDir.parentFile)
+    commandLine("python3", "-m", "unittest", "discover", "-s", "tools/gradle", "-p", "test_*.py", "-v")
+}
+
 tasks.test {
     useJUnitPlatform()
+    dependsOn(verifyGradleSandbox)
 }
 
 fun DependencyHandlerScope.plugin(plugin: Provider<PluginDependency>): Provider<String> =
