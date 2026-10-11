@@ -1160,13 +1160,10 @@ object IdeRenderer {
             val bounds = geometry.editor
             editor.find?.let { findBar(it) }
             scissors += IdeScissorDraw(IdeScissorKind.Editor, bounds, Z_CLIP)
-            val rows = minOf(geometry.codeRows, editor.visibleLines.size)
-            val gutterDigits =
-                editor.totalLines
-                    .toString()
-                    .length
-                    .coerceAtLeast(2)
-            val codeLeft = bounds.left + (gutterDigits + 2) * font.cellWidth
+            val source = IdeSourceGeometry(editor, geometry)
+            val rows = source.visibleRows
+            val gutterDigits = source.gutterDigits
+            val codeLeft = source.codeLeft
             val counts = (editor.analysis as? IdeAnalysisState.Active)?.presentation?.methodUsages.orEmpty()
             val completion = (editor.analysis as? IdeAnalysisState.Active)?.completion
             var usageIndex = 0
@@ -1174,7 +1171,7 @@ object IdeRenderer {
                 val lineNumber = editor.firstVisibleLine + visibleIndex
                 val line = editor.visibleLines[visibleIndex]
                 val lineStart = editor.visibleLineStartsUtf16[visibleIndex]
-                val rowTop = bounds.top + visibleIndex * font.cellHeight
+                val rowTop = source.rowTop(visibleIndex)
                 val y = rowTop + font.glyphDrawOffsetY
                 val completionRange =
                     completion?.replacement?.let { range ->
@@ -1283,7 +1280,7 @@ object IdeRenderer {
                 }
                 if (caretVisible && caretBelongsToLine) {
                     val local = (editor.caretUtf16 - lineStart).coerceAtMost(line.length)
-                    val x = codeLeft + (visualColumns(line.substring(0, local)) - editor.firstVisibleColumn) * font.cellWidth
+                    val x = source.xAt(line, local)
                     fills += IdeFillDraw(IdeFillKind.Caret, IdeRect(x, rowTop, x + 1, rowTop + font.cellHeight), IdeColors.CARET, Z_CARET)
                 }
             }
@@ -1319,8 +1316,8 @@ object IdeRenderer {
             val localStart = (start - lineStart).coerceIn(0, line.length)
             val localEnd = (end - lineStart).coerceIn(0, line.length)
             if (localEnd <= localStart) return
-            val left = codeLeft + (visualColumns(line.substring(0, localStart)) - editor.firstVisibleColumn) * font.cellWidth
-            val right = codeLeft + (visualColumns(line.substring(0, localEnd)) - editor.firstVisibleColumn) * font.cellWidth
+            val left = IdeSourceGeometry(editor, geometry).xAt(line, localStart)
+            val right = IdeSourceGeometry(editor, geometry).xAt(line, localEnd)
             fills +=
                 IdeFillDraw(
                     IdeFillKind.Selection,
@@ -1409,22 +1406,9 @@ object IdeRenderer {
                 val match = matches[index++]
                 val start = (match.startUtf16 - lineStart).coerceIn(0, line.length)
                 val end = (match.endUtf16 - lineStart).coerceIn(start, line.length)
-                val left =
-                    (
-                        codeLeft + (
-                            visualColumns(
-                                line.substring(0, start),
-                            ) - editor.firstVisibleColumn
-                        ) * font.cellWidth
-                    ).coerceIn(codeLeft, geometry.editor.right)
-                val right =
-                    (
-                        codeLeft + (
-                            visualColumns(
-                                line.substring(0, end),
-                            ) - editor.firstVisibleColumn
-                        ) * font.cellWidth
-                    ).coerceIn(left, geometry.editor.right)
+                val source = IdeSourceGeometry(editor, geometry)
+                val left = source.xAt(line, start).coerceIn(codeLeft, geometry.editor.right)
+                val right = source.xAt(line, end).coerceIn(left, geometry.editor.right)
                 fills +=
                     IdeFillDraw(
                         if (searching) IdeFillKind.SearchMatch else IdeFillKind.WordOccurrence,
@@ -1484,13 +1468,13 @@ object IdeRenderer {
                     semanticToken?.let { IdeTextStyle.Semantic(it.category, it.isMutable) }
                         ?: lexicalKind?.let(IdeTextStyle::Lexical)
                         ?: IdeTextStyle.Plain
-                val x = codeLeft + (visualColumns(line.substring(0, start)) - editor.firstVisibleColumn) * font.cellWidth
+                val x = IdeSourceGeometry(editor, geometry).xAt(line, start)
                 val absoluteRange = EditorRange(lineStart + start, lineStart + end)
                 val linked =
                     link?.tokenRange?.let { absoluteRange.startUtf16 >= it.startUtf16 && absoluteRange.endUtf16 <= it.endUtf16 } == true
                 code(
                     IdeTextKind.Source,
-                    projectGlyphs(line.substring(start, end)),
+                    IdeSourceColumns.glyphs(line.substring(start, end), IdeSourceColumns.columnAt(line, start)),
                     x,
                     y,
                     if (linked) IdeColors.HYPERLINK else styleColor(resolved),
@@ -1499,9 +1483,21 @@ object IdeRenderer {
                     absoluteRange,
                 )
                 if (linked) {
-                    underline(IdeFillKind.HyperlinkUnderline, x, line.substring(start, end), y, IdeColors.HYPERLINK)
+                    underline(
+                        IdeFillKind.HyperlinkUnderline,
+                        x,
+                        IdeSourceColumns.columnAt(line, end) - IdeSourceColumns.columnAt(line, start),
+                        y,
+                        IdeColors.HYPERLINK,
+                    )
                 } else if ((resolved as? IdeTextStyle.Semantic)?.isMutable == true) {
-                    underline(IdeFillKind.MutableUnderline, x, line.substring(start, end), y, IdeColors.MUTABLE_UNDERLINE)
+                    underline(
+                        IdeFillKind.MutableUnderline,
+                        x,
+                        IdeSourceColumns.columnAt(line, end) - IdeSourceColumns.columnAt(line, start),
+                        y,
+                        IdeColors.MUTABLE_UNDERLINE,
+                    )
                 }
             }
         }
@@ -1509,12 +1505,12 @@ object IdeRenderer {
         private fun underline(
             kind: IdeFillKind,
             x: Int,
-            value: String,
+            columns: Int,
             textY: Int,
             color: Int,
         ) {
             val left = maxOf(x, geometry.editor.left)
-            val right = minOf(x + visualColumns(value) * font.cellWidth, geometry.editor.right)
+            val right = minOf(x + columns * font.cellWidth, geometry.editor.right)
             if (right <= left) return
             val top = (textY - font.glyphDrawOffsetY + font.cellHeight - 1).coerceIn(geometry.editor.top, geometry.editor.bottom - 1)
             fills +=
@@ -1642,23 +1638,7 @@ object IdeRenderer {
             editor: IdeEditorView.Text,
             codeLeft: Int,
             anchor: IdeSemanticAnchor,
-        ): IdeRect? {
-            val visibleIndex = editor.visibleLineStartsUtf16.indexOfLast { it <= anchor.tokenRange.startUtf16 }
-            if (visibleIndex !in editor.visibleLines.indices) return null
-            val line = editor.visibleLines[visibleIndex]
-            val lineStart = editor.visibleLineStartsUtf16[visibleIndex]
-            val localStart = anchor.tokenRange.startUtf16 - lineStart
-            if (localStart !in 0..line.length) return null
-            val localEnd = (anchor.tokenRange.endUtf16 - lineStart).coerceIn(localStart, line.length)
-            val left = codeLeft + (visualColumns(line.substring(0, localStart)) - editor.firstVisibleColumn) * font.cellWidth
-            val right =
-                maxOf(
-                    left + font.cellWidth,
-                    codeLeft + (visualColumns(line.substring(0, localEnd)) - editor.firstVisibleColumn) * font.cellWidth,
-                )
-            val top = geometry.editor.top + visibleIndex * font.cellHeight
-            return IdeRect(left, top, right, top + font.cellHeight)
-        }
+        ): IdeRect? = IdeSourceGeometry(editor, geometry).anchor(anchor.tokenRange)
 
         private fun declarationLabel(target: IdeDeclarationTarget): String =
             when (target) {
@@ -1859,18 +1839,7 @@ object IdeRenderer {
         private fun caretBounds(
             editor: IdeEditorView.Text,
             codeLeft: Int,
-        ): IdeRect? {
-            val visibleIndex = editor.visibleLineStartsUtf16.indexOfLast { it <= editor.caretUtf16 }
-            if (visibleIndex !in editor.visibleLines.indices) return null
-            val line = editor.visibleLines[visibleIndex]
-            val local = (editor.caretUtf16 - editor.visibleLineStartsUtf16[visibleIndex]).coerceIn(0, line.length)
-            return IdeRect(
-                codeLeft + (visualColumns(line.substring(0, local)) - editor.firstVisibleColumn) * font.cellWidth,
-                geometry.editor.top + visibleIndex * font.cellHeight,
-                codeLeft + (visualColumns(line.substring(0, local)) - editor.firstVisibleColumn) * font.cellWidth + font.cellWidth,
-                geometry.editor.top + (visibleIndex + 1) * font.cellHeight,
-            )
-        }
+        ): IdeRect? = IdeSourceGeometry(editor, geometry).caret()
 
         private fun completionRow(entry: ru.lazyhat.compukters.ide.client.analysis.IdeCompletionEntry): String =
             buildString {
@@ -2226,40 +2195,9 @@ object IdeRenderer {
             }
         }
 
-        private fun projectGlyphs(source: String): String {
-            val result = StringBuilder(source.length)
-            var offset = 0
-            var columns = 0
-            while (offset < source.length) {
-                val codePoint = source.codePointAt(offset)
-                if (codePoint == '\t'.code) {
-                    val spaces = TAB_WIDTH - columns % TAB_WIDTH
-                    repeat(spaces) { result.append(' ') }
-                    columns += spaces
-                } else {
-                    result.appendCodePoint(codePoint)
-                    columns++
-                }
-                offset += Character.charCount(codePoint)
-            }
-            return result.toString()
-        }
+        private fun projectGlyphs(source: String): String = IdeSourceColumns.glyphs(source)
 
-        private fun visualColumns(value: String): Int {
-            var columns = 0
-            var offset = 0
-            while (offset < value.length) {
-                val codePoint = value.codePointAt(offset)
-                columns =
-                    if (codePoint == '\t'.code) {
-                        columns + TAB_WIDTH - columns % TAB_WIDTH
-                    } else {
-                        columns + 1
-                    }
-                offset += Character.charCount(codePoint)
-            }
-            return columns
-        }
+        private fun visualColumns(value: String): Int = IdeSourceColumns.columnAt(value)
     }
 
     private fun expand(
@@ -2348,7 +2286,6 @@ object IdeRenderer {
             else -> IdeColors.INFO
         }
 
-    private const val TAB_WIDTH = 4
     private const val UI_LINE_HEIGHT = 12
     private const val PROJECT_SWITCHER_WIDTH = 540
     private const val PROJECT_ROW_HEIGHT = 40
