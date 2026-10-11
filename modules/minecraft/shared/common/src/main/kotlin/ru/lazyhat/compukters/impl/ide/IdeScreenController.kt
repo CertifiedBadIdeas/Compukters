@@ -19,13 +19,12 @@
 package ru.lazyhat.compukters.impl.ide
 
 import ru.lazyhat.compukters.ide.client.IdeClientLimits
-import ru.lazyhat.compukters.ide.client.analysis.IdeAnalysisState
-import ru.lazyhat.compukters.ide.client.analysis.IdeSemanticInteraction
 import ru.lazyhat.compukters.ide.client.analysis.IdeVisibleLatencyTrace
 import ru.lazyhat.compukters.ide.client.controller.IdeClientController
 import ru.lazyhat.compukters.ide.client.state.IdeCommand
 import ru.lazyhat.compukters.ide.client.state.IdeEditorView
 import ru.lazyhat.compukters.ide.client.state.IdePageState
+import ru.lazyhat.compukters.ide.client.state.IdeViewState
 import ru.lazyhat.compukters.ide.client.target.IdeAttachedTarget
 import ru.lazyhat.compukters.ide.client.target.IdeTargetState
 import ru.lazyhat.compukters.ide.project.fs.ProjectPath
@@ -440,30 +439,15 @@ class IdeScreenController(
     ): IdeScreenFrame {
         val viewport = viewport()
         val geometry = geometry(viewport)
-        val treeFirstRow = admittedTreeFirstRow(geometry)
-        val state = controller.viewState()
-        admitFileTabScroll(geometry)
-        synchronizeQuickOpen()
-        prompt.admitLayout(geometry.panel)
-        val model =
-            IdeRenderer.extract(
-                state,
+        val snapshot =
+            presentation(
                 geometry,
-                prompt = prompt.state,
-                quickOpen = if (viewport().supported && geometry.supported) quickOpen.view(geometry.panel) else null,
-                treeFirstRow = treeFirstRow,
-                selectedTreePath = selectedTreePath,
-                terminalState = terminalOverlay.state().presentationStatus(),
-                terminalVisible = terminalOverlay.visible,
-                explorerDrag = input.explorerDragVisual,
-                projectFirstRow = input.projectFirstRow,
-                fileTabFirstIndex = fileTabFirstIndex,
-                projectSwitcherOpen = projectSwitcherOpen && !quickOpen.visible && prompt.state == null && state.dialog == null,
-                uiScale = preferences.uiScale(),
-                viewportSupported = viewport().supported,
-                pointerX = viewport.toVirtualX(mouseX.toDouble()).toInt(),
-                pointerY = viewport.toVirtualY(mouseY.toDouble()).toInt(),
+                viewport,
+                viewport.toVirtualX(mouseX.toDouble()).toInt(),
+                viewport.toVirtualY(mouseY.toDouble()).toInt(),
             )
+        val state = snapshot.state
+        val model = snapshot.model
         IdeVisibleFrameEvidence.from(state, model)?.let { evidence ->
             visibleLatency.frameExtracted(
                 evidence.documentRevision,
@@ -502,8 +486,11 @@ class IdeScreenController(
 
     private fun viewport(): CompuktersUiViewport = host.viewport()
 
-    private fun admitFileTabScroll(geometry: IdeRenderGeometry) {
-        val workspace = (controller.viewState().page as? IdePageState.Workspace)?.value
+    private fun admitFileTabScroll(
+        geometry: IdeRenderGeometry,
+        state: IdeViewState,
+    ) {
+        val workspace = (state.page as? IdePageState.Workspace)?.value
         val active = workspace?.activeFile
         val bounds = geometry.fileTabs
         if (workspace != null && bounds != null) {
@@ -526,47 +513,27 @@ class IdeScreenController(
         lastFileTabWidth = bounds?.width ?: 0
     }
 
-    private fun focusState(): IdeFocusState {
-        val state = controller.viewState()
-        val editor = ((state.page as? IdePageState.Workspace)?.value?.editor as? IdeEditorView.Text)
-        val analysis = editor?.analysis as? IdeAnalysisState.Active
-        val completion = analysis?.completion != null
-        val chooser =
-            (analysis?.interaction as? IdeSemanticInteraction.Chooser) != null
-        return IdeFocusState(
-            if ((state.page as? IdePageState.Workspace)?.value?.git?.visible == true) IdeFocusArea.Editor else focusArea,
-            completion,
-            chooser,
-            state.dialog,
-            geometry().codeRows.coerceAtLeast(1),
-            analysis?.parameterInfo != null,
-            gitVisible = (state.page as? IdePageState.Workspace)?.value?.git?.visible == true,
-            gitScrollMaximum = pointerContext(geometry()).gitScrollMaximum,
-            gitFieldFocusScroll = pointerContext(geometry()).gitFieldFocusScroll,
-            gitDraft = (state.page as? IdePageState.Workspace)?.value?.git?.draft,
-            gitMenu = (state.page as? IdePageState.Workspace)?.value?.git?.menu,
-            findVisible = editor?.find != null,
-            usagesFocused =
-                (state.page as? IdePageState.Workspace)?.value?.let {
-                    it.bottom.tab == ru.lazyhat.compukters.ide.client.state.IdeBottomTab.Problems && it.usages?.focused == true
-                } == true,
-            findFocused = editor?.find?.focused == true,
-            findSelectedText = editor?.find?.let { find -> find.querySelection?.let { find.query.substring(it.startUtf16, it.endUtf16) } },
-        )
-    }
+    private fun focusState(): IdeFocusState = presentation(geometry()).focus(focusArea)
 
-    private fun pointerContext(geometry: IdeRenderGeometry): IdePointerContext {
-        synchronizeQuickOpen()
-        prompt.admitLayout(geometry.panel)
+    private fun pointerContext(geometry: IdeRenderGeometry): IdePointerContext = presentation(geometry).pointer
+
+    private fun presentation(
+        geometry: IdeRenderGeometry,
+        viewport: CompuktersUiViewport = viewport(),
+        pointerX: Int? = null,
+        pointerY: Int? = null,
+    ): IdePresentationSnapshot {
         val state = controller.viewState()
-        admitFileTabScroll(geometry)
-        val treeFirstRow = admittedTreeFirstRow(geometry)
+        synchronizeQuickOpen(state)
+        prompt.admitLayout(geometry.panel)
+        admitFileTabScroll(geometry, state)
+        val treeFirstRow = admittedTreeFirstRow(geometry, state)
         val model =
             IdeRenderer.extract(
                 state,
                 geometry,
                 prompt = prompt.state,
-                quickOpen = if (viewport().supported && geometry.supported) quickOpen.view(geometry.panel) else null,
+                quickOpen = if (viewport.supported && geometry.supported) quickOpen.view(geometry.panel) else null,
                 treeFirstRow = treeFirstRow,
                 selectedTreePath = selectedTreePath,
                 terminalState = terminalOverlay.state().presentationStatus(),
@@ -576,48 +543,11 @@ class IdeScreenController(
                 fileTabFirstIndex = fileTabFirstIndex,
                 projectSwitcherOpen = projectSwitcherOpen && !quickOpen.visible && prompt.state == null && state.dialog == null,
                 uiScale = preferences.uiScale(),
-                viewportSupported = viewport().supported,
+                viewportSupported = viewport.supported,
+                pointerX = pointerX,
+                pointerY = pointerY,
             )
-        return when (val page = state.page) {
-            IdePageState.Opening -> {
-                IdePointerContext(geometry)
-            }
-
-            is IdePageState.Start -> {
-                IdePointerContext(
-                    geometry,
-                    projects = page.projects,
-                    hitTargets = model.hitTargets,
-                    dialog = state.dialog,
-                )
-            }
-
-            is IdePageState.Workspace -> {
-                IdePointerContext(
-                    geometry,
-                    editor = (page.value.editor as? IdeEditorView.Text).takeUnless { page.value.git.visible },
-                    gitVisible = page.value.git.visible,
-                    gitScrollMaximum = model.gitScrollMaximum ?: 0,
-                    gitDraft = page.value.git.draft,
-                    gitPreviewScrollMaximum = model.gitPreviewScrollMaximum ?: 0,
-                    gitPreviewBounds = model.gitPreviewBounds,
-                    bottomTab = page.value.bottom.tab,
-                    bottomScrollMaximum = model.bottomScrollMaximum,
-                    gitFieldFocusScroll = model.gitFieldFocusScroll,
-                    usages =
-                        page.value.usages.takeIf {
-                            page.value.bottom.tab ==
-                                ru.lazyhat.compukters.ide.client.state.IdeBottomTab.Problems
-                        },
-                    projects = page.value.projects,
-                    tree = page.value.tree.flatten(),
-                    explorer = page.value.explorerRows(),
-                    treeFirstRow = treeFirstRow,
-                    hitTargets = model.hitTargets,
-                    dialog = state.dialog,
-                )
-            }
-        }
+        return IdePresentationSnapshot(state, geometry, model, treeFirstRow)
     }
 
     private fun activateUiAction(action: IdeHitAction): Boolean {
@@ -783,8 +713,7 @@ class IdeScreenController(
         return true
     }
 
-    private fun synchronizeQuickOpen() {
-        val state = controller.viewState()
+    private fun synchronizeQuickOpen(state: IdeViewState = controller.viewState()) {
         if (state.dialog != null || prompt.state != null) quickOpen.close()
         quickOpen.synchronize((state.page as? IdePageState.Workspace)?.value)
     }
@@ -829,8 +758,11 @@ class IdeScreenController(
 
     private fun activeFile(): ProjectPath? = ((controller.viewState().page as? IdePageState.Workspace)?.value?.activeFile)
 
-    private fun admittedTreeFirstRow(geometry: IdeRenderGeometry): Int {
-        val entries = (controller.viewState().page as? IdePageState.Workspace)?.value?.explorerRows()?.size ?: 0
+    private fun admittedTreeFirstRow(
+        geometry: IdeRenderGeometry,
+        state: IdeViewState,
+    ): Int {
+        val entries = (state.page as? IdePageState.Workspace)?.value?.explorerRows()?.size ?: 0
         return input.clampTree(entries, geometry.tree?.height ?: 0)
     }
 

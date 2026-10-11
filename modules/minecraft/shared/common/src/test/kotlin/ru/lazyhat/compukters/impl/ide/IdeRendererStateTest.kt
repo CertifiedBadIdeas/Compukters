@@ -94,6 +94,25 @@ import kotlin.test.assertTrue
 
 class IdeRendererStateTest {
     @Test
+    fun `presentation shares admitted Git scrolling between drawing focus and pointer input`() {
+        val initial = workspaceState(IdeEditorView.Empty, IdeBuildState.Idle)
+        val workspace = (initial.page as IdePageState.Workspace).value
+        val state = initial.copy(page = IdePageState.Workspace(workspace.copy(git = workspace.git.copy(visible = true))))
+        val geometry = IdeRenderGeometry.compute(300, 200, 96, 64, true, true, IdeCodeFontProfile.DEFAULT)
+        val model = IdeRenderer.extract(state, geometry)
+        val snapshot = IdePresentationSnapshot(state, geometry, model, treeFirstRow = 2)
+        val focus = snapshot.focus(IdeFocusArea.Tree)
+        assertEquals(IdeFocusArea.Editor, focus.area)
+        assertTrue(focus.gitVisible)
+        assertEquals(model.gitScrollMaximum, focus.gitScrollMaximum)
+        assertEquals(model.gitFieldFocusScroll, focus.gitFieldFocusScroll)
+        assertEquals(focus.gitScrollMaximum, snapshot.pointer.gitScrollMaximum)
+        assertEquals(model.gitPreviewBounds, snapshot.pointer.gitPreviewBounds)
+        assertEquals(model.hitTargets, snapshot.pointer.hitTargets)
+        assertEquals(2, snapshot.pointer.treeFirstRow)
+    }
+
+    @Test
     fun `tabs render active and dirty state and become inert underneath a modal`() {
         val main = ProjectPath.file("src/main.kt")
         val other = ProjectPath.file("src/other.kt")
