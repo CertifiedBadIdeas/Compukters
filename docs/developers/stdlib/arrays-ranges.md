@@ -34,10 +34,13 @@ test `k2_char_array_program_executes_exact_utf16_materialization`.
 
 **Status:** Supported.
 
-All twelve primitive array families and admitted reference `Array<T>` support public `copyOf()`,
+All twelve primitive array families and admitted generic `Array<T>` support public `copyOf()`,
 `copyOf(newSize)`, and `copyInto(destination, destinationOffset = 0, startIndex = 0, endIndex = size)`. Copies
-preserve reference identity, overlap, empty ranges, truncation, and zero/null padding. Resized reference
-copies return `Array<T?>`; `copyInto` admits assignable reference elements through an `Array<out T>` source.
+preserve element values/reference identity, overlap, empty ranges, truncation, and zero/null padding.
+Resized generic-array copies return `Array<T?>`; `copyInto` admits assignable elements through an
+`Array<out T>` source. Dense primitive `Array<T>` copies retain scalar storage when the element type stays
+non-null; copies into nullable or `Any` storage box each scalar in a metered index loop. The full range is
+validated before any destination writes, including empty ranges.
 Receivers and explicit arguments evaluate once. Native copying is bounded by the Guest budget without
 temporary buffers; `ArrayList` growth uses these APIs. Negative sizes and invalid ranges throw typed catchable
 exceptions through the shared [operation-error mechanism](../kotlin/nullability.md).
@@ -62,15 +65,15 @@ Direct iteration snapshots the array reference once, observes subsequent element
 boxes, including generic specializations; negative sizes throw catchable `NegativeArraySizeException`.
 
 **Evidence:** `testKotlinMutableListVmConformance`. `copyOfRange` is available only for `Array<String>`.
-Non-null primitive `Array<Int>`/`Array<Long>` and other primitive element arrays, spread arguments, stored iterators, and
-higher-order operations are unavailable.
+Non-null primitive elements use dense specialized storage, described below. Spread arguments, stored
+iterators, nested-array element storage, and higher-order operations remain unavailable.
 
 **Evidence:**
 [`MinimalScriptLoweringTest`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/compiler-k2/src/test/kotlin/ru/lazyhat/compukters/compiler/worker/k2/MinimalScriptLoweringTest.kt),
 tests `string arrays can be constructed read and written` and `string arrays support copyOfRange and supported
 default arguments`, plus `nullable Int and collection elements preserve values and nulls`
 (`testKotlinNullableCollectionsVmConformance`), `reference arrays preserve Guest class elements and aliases`
-and `reference arrays reject unsupported element representations`, paired with
+and `guest arrays reject stored iterators spread and nested storage`, paired with
 `testKotlinReferenceArrayVmConformance` and
 [`gc_tests.rs`](https://github.com/CertifiedBadIdeas/Compukter-VM/blob/main/src/execution/gc_tests.rs), test
 `collector_scans_reference_arrays`.
@@ -88,9 +91,9 @@ scenario in `:v26_1-neoforge:runGameTestServer` with `TextDisplay.all()` and typ
 
 **Status:** Supported.
 
-`Array(size) { index -> value }` and `Array(size, initializer)` create arrays of admitted reference elements:
-`String`, `Any`, source/imported class references, value classes (including `Vector3f`), nullable elements and
-nullable primitive boxes. Generic container elements such as `Array<Cell<T>>` work after concrete specialization. A bare `Array<T>`
+`Array(size) { index -> value }` and `Array(size, initializer)` create arrays of admitted elements:
+all twelve non-null primitive families, `String`, `Any`, source/imported class references, value classes
+(including `Vector3f`), nullable elements and nullable primitive boxes. Generic container elements such as `Array<Cell<T>>` work after concrete specialization. A bare `Array<T>`
 constructor in a non-reified generic function is rejected by K2; reified inline functions remain unsupported. The initializer may be a
 capturing lambda, a stored function or a supported callable reference.
 
@@ -99,17 +102,45 @@ ascending index exactly once; zero size calls it zero times. A negative size rai
 `NegativeArraySizeException` without invoking the callback body, while preserving initializer-expression side
 effects. An exception from a callback propagates immediately and preserves completed side effects. Value-class
 results use the same nominal managed boxes as `arrayOf`; generated loops and allocation use existing metered
-VM instructions and ordinary GC roots. This does not add non-null primitive `Array<Int>` storage or array
-covariance; use `IntArray(size) { ... }` for unboxed primitives.
+VM instructions and ordinary GC roots. Non-null primitives use dense scalar storage, without element
+boxes. General array covariance remains outside the admitted subset.
 
 **Evidence:** `reference arrays preserve Guest class elements and aliases` in
 [`MinimalScriptLoweringTest`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/compiler-k2/src/test/kotlin/ru/lazyhat/compukters/compiler/worker/k2/MinimalScriptLoweringTest.kt),
 executed by `testKotlinReferenceArrayVmConformance` under small execution budgets and allocation pressure.
-The `reference arrays reject unsupported element representations` case protects rejection of primitive
-`Array<Int>` constructor results. IDE test `array initializer constructors resolve with source and metadata
+The `primitive generic arrays specialize dense storage and reference boundary copies for vm execution`
+case covers all twelve primitive constructor results; `guest arrays reject stored iterators spread and nested
+storage` protects the remaining unsupported forms. IDE test `array initializer constructors resolve with source and metadata
 inputs` checks both source-attached and metadata-only sessions.
 
 **Related work:** [#730](https://github.com/CertifiedBadIdeas/Compukters/issues/730)
+
+### Dense primitive `Array<T>` specialization
+
+**Status:** Supported.
+
+`Array<Boolean>`, `Array<Byte>`, `Array<Short>`, `Array<Char>`, `Array<Int>`, `Array<Long>`, `Array<Float>`,
+`Array<Double>`, `Array<UByte>`, `Array<UShort>`, `Array<UInt>` and `Array<ULong>` store non-null elements
+as packed scalars. Byte/short families use one/two bytes per element; the other families reuse their primitive
+array widths. `arrayOf`, `emptyArray`, initializer constructors, indexed get/set, `size`, direct `for` loops,
+`copyOf` and `copyInto` work through concrete generic function/class specialization.
+
+Each remains a distinct nominal generic-array type, rather than an alias of `IntArray` or another primitive
+array. Passing the array through `Any` preserves its identity and layout; extracting a scalar into `Any`
+uses its nominal primitive box. Nullable primitive arrays and `Array<Any>` retain reference storage.
+`copyOf(newSize)` returns nullable elements, boxes copied values and pads with null, even when shrinking.
+No-argument `copyOf()` and copies between matching non-null specializations preserve dense storage.
+Narrow signed/unsigned values, full unsigned magnitude and floating IEEE values retain their scalar contracts.
+
+**Evidence:** `primitive generic arrays specialize dense storage and reference boundary copies for vm execution`
+in `MinimalScriptLoweringTest` checks deterministic nominal scalar/storage layouts and emits the mandatory
+`.packed.cpkt` sidecar for `testKotlinReferenceArrayVmConformance`. It executes all twelve families, generic
+functions/classes, copying into nullable/Any arrays, bounds/size errors, identity, casts, floating edges,
+initializer exceptions and GC pressure with a 256 KiB heap at execution budgets 64 and 512.
+IDE test `primitive generic arrays resolve constructors copies and loops with source and metadata inputs`
+checks both platform input modes.
+
+**Related work:** [#743](https://github.com/CertifiedBadIdeas/Compukters/issues/743)
 
 ### All twelve primitive array families
 
