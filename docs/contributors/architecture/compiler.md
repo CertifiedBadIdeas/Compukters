@@ -37,6 +37,11 @@ Direct primitive-array `for` loops follow the same canonical-shape rule: the com
 its length, and reads each element with existing array instructions at the current index. The loop header retains its
 quota safepoint; no iterator object is created. A source variable may be reassigned without changing the traversed
 array, while writes to that array's elements remain visible to later iterations.
+Loop jumps select an active loop by K2 IR identity, so labels also work across different loop forms. The target
+records its enclosing `finally` depth and condition or advancement point. Only cleanup scopes crossed by the
+jump execute; cleanup can replace it with another exit. Optimized `for` loops emit an advancement block only
+when the body can fall through or has a continue targeting that loop.
+
 
 ## Value representations
 
@@ -56,6 +61,9 @@ and export every payload field. Consumers import both identities, including conc
 signature matching resolves nominal inline identities across modules. Bound method references store the
 boxed receiver in their closure environment and reconstruct its direct layout before static invocation.
 Constructor references reuse constructor lowering, including argument layout and initializer execution.
+References to stateless trusted platform object methods use the same receiver-free signature as direct calls,
+so factories such as `Matrix4f::perspective` do not capture an absent runtime companion instance. Managed
+object and companion methods retain their ordinary receiver capture.
 Compiler and IDE sessions share `CompuktersLanguageVersionSettings` so native multi-field declarations
 receive consistent frontend analysis.
 
