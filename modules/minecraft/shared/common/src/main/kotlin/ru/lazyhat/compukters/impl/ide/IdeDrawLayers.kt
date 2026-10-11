@@ -20,7 +20,7 @@ package ru.lazyhat.compukters.impl.ide
 
 /** Shared painter ordering for all IDE presentation components. */
 internal object IdeDrawLayers {
-    const val CONTROL_BACKGROUND_OFFSET = 20
+    const val CONTROL_BACKGROUND_OFFSET = IdeControls.BACKGROUND_OFFSET
     const val Z_BACKGROUND = 0
     const val Z_PANEL = 10
     const val Z_CONTENT = 20

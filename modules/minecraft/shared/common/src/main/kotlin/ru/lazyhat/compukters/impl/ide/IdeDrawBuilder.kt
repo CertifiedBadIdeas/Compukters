@@ -43,6 +43,32 @@ internal open class IdeDrawBuilder(
     protected val gitFieldFocusScroll = mutableMapOf<IdeGitField, Int>()
     protected var bottomScrollMaximum = 0
 
+    fun disableTargets() {
+        for (index in hitTargets.indices) hitTargets[index] = hitTargets[index].copy(enabled = false)
+    }
+
+    fun icon(draw: IdeIconDraw) {
+        icons += draw
+    }
+
+    fun fill(draw: IdeFillDraw) {
+        fills += draw
+    }
+
+    fun uiWidth(value: String): Int = value.codePointCount(0, value.length) * font.cellWidth
+
+    /** Bound fitting work by the visible code-point budget, matching the font used for drawing. */
+    fun fitUi(
+        value: String,
+        width: Int,
+    ): String {
+        val columns = (width / font.cellWidth).coerceAtLeast(0)
+        val points = value.codePoints().limit(columns.toLong() + 1).toArray()
+        if (points.size <= columns) return value
+        if (columns == 0) return ""
+        return String(points, 0, columns - 1) + "…"
+    }
+
     fun ui(
         kind: IdeTextKind,
         value: String,
@@ -96,6 +122,7 @@ internal open class IdeDrawBuilder(
         choiceIndex: Int? = null,
         gitOperation: GitOperation? = null,
         gitCommand: IdeCommand? = null,
+        style: IdeControlStyle = IdeControlStyle.Standard,
     ) {
         val control =
             IdeControls.target(
@@ -111,6 +138,7 @@ internal open class IdeDrawBuilder(
                     gitOperation = gitOperation,
                     gitCommand = gitCommand,
                 ),
+                style,
             )
         panels += control.panel
         hitTargets += control.target
