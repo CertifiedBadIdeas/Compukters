@@ -50,6 +50,7 @@ object CanonicalTrustedIntrinsics {
             primitive("kotlin", "builtins", "kotlin", "Array.<init>", "constructor(Int,(Int)->T)")
             primitive("kotlin", "builtins", "kotlin", "Array.get", "fun(Int):T")
             primitive("kotlin", "builtins", "kotlin", "Array.set", "fun(Int,T):Unit")
+            primitive("kotlin", "builtins", "kotlin", "Array.iterator", "fun():Iterator<T>")
             primitive("kotlin", "builtins", "kotlin", "Array.size", "val():Int")
             primitive("kotlin", "builtins", "kotlin", "Boolean.compareTo", "fun(Boolean):Int")
             primitive("kotlin", "builtins", "kotlin", "Boolean.not", "fun():Boolean")
