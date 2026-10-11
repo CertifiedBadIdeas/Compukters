@@ -11,7 +11,7 @@ push without authorization. For this workspace, verified task changes have stand
 `dev` (submodule changes into `main`) and then remove that task's worktree. Preserve unrelated worktrees and never
 force-remove a dirty checkout. Before removal, retain verification evidence outside the task worktree.
 
-Prefer `./worktree-task <task-branch>` to create a parent task checkout: it starts from local `dev`, initializes the
+Use `./worktree-task <task-branch>` by default to create a parent task checkout: it starts from local `dev`, initializes the
 pinned VM and prepares an independent Gradle cache. Add `--submodule addons/create` (repeatable), or
 `--all-submodules`, for addon work. Use `--repo host/compukter-vm` or `--repo addons/<name>` to create a task checkout
 inside an initialized submodule repository from local `main`. The default location is the main workspace's
@@ -24,6 +24,17 @@ Do not spawn sub-agents or delegate work to other agents unless the user explici
 parallel-agent involvement for a specific task.
 
 When work touches `host/compukter-vm`, check for `host/compukter-vm/AGENTS.md` and read it completely if it exists.
+
+Use `./worktree-task doctor` (or `doctor --path <checkout>`) to diagnose the checkout, selected JDK, pinned
+submodules and Gradle cache prerequisites. Cold caches are reported without claiming offline readiness.
+After committing, merging and verifying the integrated change, run `./worktree-task finish <task-branch>`
+(with `--repo <submodule-path>` for a submodule task). It requires a helper task record, a clean integrated
+checkout and verification evidence in `build/agent-logs` or supplied through repeatable `--evidence <path>`.
+It archives evidence and ignored non-build files under the main workspace's `build/agent-logs/worktree-completion/`,
+then removes only that task checkout and keeps its branch. It refuses active managed Gradle builds, dirty
+submodules, unpublished submodule branch/tag commits and modules with additional worktrees. Git's required
+`--force` for clean submodule-containing worktrees is used only after these checks; dirty checkouts are never
+force-removed. For older helper checkouts, register them explicitly with setup `--resume` while clean first.
 
 ## Project Structure & Module Organization
 
