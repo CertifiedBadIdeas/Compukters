@@ -53,9 +53,17 @@ val verifyGradleSandbox by tasks.registering(Exec::class) {
     commandLine("python3", "-m", "unittest", "discover", "-s", "tools/gradle", "-p", "test_*.py", "-v")
 }
 
+val verifyWorktreeSetup by tasks.registering(Exec::class) {
+    group = "verification"
+    description = "Verify task worktree setup with pinned submodules and independent checkout state."
+    workingDir(rootDir.parentFile)
+    commandLine("python3", "-m", "unittest", "discover", "-s", "tools/worktrees", "-p", "test_*.py", "-v")
+}
+
 tasks.test {
     useJUnitPlatform()
     dependsOn(verifyGradleSandbox)
+    dependsOn(verifyWorktreeSetup)
 }
 
 fun DependencyHandlerScope.plugin(plugin: Provider<PluginDependency>): Provider<String> =
