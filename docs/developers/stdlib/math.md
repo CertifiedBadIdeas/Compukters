@@ -9,7 +9,7 @@ permalink: /STDLIB-SUPPORT/math/
 
 [← Guest standard library support]({{ '/STDLIB-SUPPORT/' | relative_url }})
 
-**Status:** Supported in the current checkout. Import `kotlin.math.*`; the API belongs to `stdlib:core` 1.14.0.
+**Status:** Supported in the current checkout. Import `kotlin.math.*`; the API belongs to `stdlib:core` 1.15.0.
 The [Guest API reference]({{ '/guest-api/' | relative_url }}) owns exact signatures. These functions operate
 on Guest scalars and execute in the VM, including calls from compiled library bodies and callable references.
 They require no peripheral, JVM classpath or host capability. Programs retaining floating math instructions
@@ -93,6 +93,13 @@ and math instructions execute the implementation.
 hashing and managed collection storage. Construct a matrix from sixteen components in row-major order;
 `m00` through `m33` name row and column, and `matrix[row, column]` reads indexes 0..3.
 An invalid index throws catchable `IndexOutOfBoundsException`. Use `Matrix4f.identity()` for identity.
+
+Matrix/matrix and matrix/vector products, point/direction transforms and transposition execute as
+allocation-free VM kernels (Runtime ABI 1.17) with the same immutable API. Dot products preserve scalar
+Float rounding and left-to-right addition, without fused multiply-add. Transposition preserves component
+bits. Factories remain compiled library code; their trigonometric functions use existing math intrinsics.
+Rebuild dependent libraries and resolve project dependencies after upgrading the stdlib module.
+
 
 Matrices multiply column vectors. `a * b * point` applies `b` first, then `a`; matrix multiplication is
 not commutative. `transposed()` exchanges rows and columns. Factories provide `translation(Vector3f)`,

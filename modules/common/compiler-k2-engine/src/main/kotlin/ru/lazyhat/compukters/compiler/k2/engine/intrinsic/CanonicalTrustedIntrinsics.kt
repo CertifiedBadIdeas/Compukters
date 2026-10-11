@@ -180,6 +180,11 @@ object CanonicalTrustedIntrinsics {
                 "fun(CharArray.Int,Int):String",
             )
             primitive("stdlib", "core", "kotlin", "emptyArray", "fun():Array<T>")
+            primitive("stdlib", "core", "kotlin.math", "matrixTransposePrimitive", "fun(Matrix4f):Matrix4f")
+            primitive("stdlib", "core", "kotlin.math", "matrixMultiplyPrimitive", "fun(Matrix4f,Matrix4f):Matrix4f")
+            primitive("stdlib", "core", "kotlin.math", "matrixVectorPrimitive", "fun(Matrix4f,Vector4f):Vector4f")
+            primitive("stdlib", "core", "kotlin.math", "matrixPointPrimitive", "fun(Matrix4f,Vector3f):Vector4f")
+            primitive("stdlib", "core", "kotlin.math", "matrixDirectionPrimitive", "fun(Matrix4f,Vector3f):Vector4f")
             listOf("Float", "Double").forEach { type ->
                 listOf(
                     "sin",

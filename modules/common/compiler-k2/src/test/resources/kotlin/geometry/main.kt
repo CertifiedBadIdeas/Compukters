@@ -170,6 +170,20 @@ fun verifyMatrices() {
 
     val dense = Matrix4f(1f, 2f, 3f, 4f, 5f, 6f, 7f, 8f, 9f, 10f, 11f, 12f, 13f, 14f, 15f, 16f)
     val other = Matrix4f(16f, 15f, 14f, 13f, 12f, 11f, 10f, 9f, 8f, 7f, 6f, 5f, 4f, 3f, 2f, 1f)
+    val multiply: (Matrix4f) -> Matrix4f = dense::times
+    val vectorMultiply: (Vector4f) -> Vector4f = dense::times
+    val transpose: () -> Matrix4f = dense::transposed
+    val direction: (Vector3f) -> Vector4f = translation::transformDirection
+    check(multiply(other) == dense * other)
+    check(vectorMultiply(Vector4f(1f, 2f, 3f, 4f)) == dense * Vector4f(1f, 2f, 3f, 4f))
+    check(transpose() == dense.transposed())
+    check(direction(point) == translation.transformDirection(point))
+    val infiniteTranslation = Matrix4f(1f, 0f, 0f, Float.POSITIVE_INFINITY, 0f, 1f, 0f, 0f, 0f, 0f, 1f, 0f, 0f, 0f, 0f, 1f)
+    val nanDirection = infiniteTranslation.transformDirection(point).x
+    check(nanDirection != nanDirection)
+    check(infiniteTranslation.transformPoint(point).x == Float.POSITIVE_INFINITY)
+    val cancellation = Matrix4f(16777216f, 1f, -16777216f, 1f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f)
+    check((cancellation * Vector4f(1f, 1f, 1f, 1f)).x == 1f)
     val product = dense * other
     for (row in 0..3) {
         for (column in 0..3) {
