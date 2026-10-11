@@ -1274,10 +1274,7 @@ internal object KotlinProjectLowering {
                         session.trustedPlatformModule(function.file.fileEntry.name) != null
                 }.filterNot { function ->
                     !includeTrustedPlatformBodies &&
-                        session.platformFunctions.any { link ->
-                            link.symbol == function.fqNameWhenAvailable?.asString() &&
-                                link.signature == function.canonicalPlatformSignature()
-                        }
+                        isLinkedPlatformFunction(function, session)
                 }
         val userFunctions =
             playerFunctions.sortedWith(
@@ -1393,7 +1390,7 @@ internal object KotlinProjectLowering {
                 classes.distinctBy { it.symbol }.mapNotNull { declaration ->
                     val name = declaration.fqNameWhenAvailable?.asString()
                     if (declaration.runtimeExceptionType() == null || name == "kotlin.Throwable") return@mapNotNull null
-                    if (session.platformFunctions.any { it.symbol == "$name.<init>" }) return@mapNotNull null
+                    if (session.platformFunctionsFor("$name.<init>").isNotEmpty()) return@mapNotNull null
                     GuestClassInstance(declaration, emptyList())
                 }
         val initializerClasses =
@@ -2403,6 +2400,7 @@ internal object KotlinProjectLowering {
                 platformScalars,
                 entry,
                 shapeInterfaceTypes,
+                classInstanceTypeIds = classInstanceTypeIds,
             )
         }
         functionShapes.forEach { shape ->
@@ -5780,6 +5778,9 @@ private class FunctionCompiler(
         GuestPrimitive.array(resolvedType(call.type))?.let { primitive ->
             return compilePrimitiveArrayConstructor(call, primitive)
         }
+        if (isSupportedReferenceArray(call.type)) {
+            return compileReferenceArrayConstructor(call)
+        }
         if (call.type == kotlinStringType &&
             arguments.size == 3 &&
             arguments[0].type.isExactClass(kotlinCharArrayClass) &&
@@ -5829,9 +5830,38 @@ private class FunctionCompiler(
         val array = allocate(arrayType)
         emit(Instruction.NewArray(array, arrayType.type, length))
         if (initializer == null) return array
+        return compileArrayInitializer(call, array, length, initializer, shape, primitive.scalar)
+    }
+
+    private fun compileReferenceArrayConstructor(call: IrConstructorCall): RegisterId {
+        val arguments = call.arguments.filterNotNull()
+        if (arguments.size != 2 || valueType(arguments[0].type, call) != ValueType.I32) {
+            throw UnsupportedKotlinIr(call, "reference array constructor requires an Int size and initializer")
+        }
+        val length = compileExpression(arguments[0])
+        val initializer = compileExpression(arguments[1])
+        val shape = resolvedType(arguments[1].type).guestFunctionShape()
+        prepareAllocationBlock()
+        val arrayType = valueType(call.type, call) as ValueType.Ref
+        val array = allocate(arrayType)
+        emit(Instruction.NewArray(array, arrayType.type, length))
+        val resultType =
+            shape?.result?.let { valueType(it, call) }
+                ?: throw UnsupportedKotlinIr(call, "reference array initializer has an unsupported function signature")
+        return compileArrayInitializer(call, array, length, initializer, shape, resultType)
+    }
+
+    private fun compileArrayInitializer(
+        call: IrConstructorCall,
+        array: RegisterId,
+        length: RegisterId,
+        initializer: RegisterId,
+        shape: GuestFunctionShape?,
+        resultType: ValueType,
+    ): RegisterId {
         val invoke =
             shape?.let(invokeFunctionIds::get)
-                ?: throw UnsupportedKotlinIr(call, "primitive array initializer has an unsupported function signature")
+                ?: throw UnsupportedKotlinIr(call, "array initializer has an unsupported function signature")
         val index = allocate(ValueType.I32).also { emit(Instruction.Move(it, emitI32Constant(0, call))) }
         val condition = createBlock(loopHeader = true)
         val body = createBlock()
@@ -5841,9 +5871,16 @@ private class FunctionCompiler(
         val hasNext = allocate(ValueType.Bool).also { emit(Instruction.Less(OrderedScalarValueType.I32, it, index, length)) }
         emit(Instruction.Branch(hasNext, blockId(body), blockId(exit)))
         currentBlock = body
-        val element = allocate(primitive.scalar)
+        val element = allocate(resultType)
         emit(Instruction.CallInterface(Destination.Register(element), FunctionRef.Local(invoke), listOf(initializer, index)))
-        emit(Instruction.ArrayStore(array, index, element))
+        val box = guestTypes.arrayElement(resolvedType(call.type))?.let(guestTypes::valueClassBox)
+        val stored =
+            if (box != null && resultType !is ValueType.Ref) {
+                boxValue(element, shape.result, ValueType.Ref(false, box.type))
+            } else {
+                element
+            }
+        emit(Instruction.ArrayStore(array, index, stored))
         emit(Instruction.Add(index, index, emitI32Constant(1, call)))
         jumpTo(condition)
         currentBlock = exit
@@ -9639,6 +9676,16 @@ private val specializedCollectionInterfaces =
         "kotlin.collections.MutableMap.MutableEntry",
     )
 
+private fun isLinkedPlatformFunction(
+    function: IrSimpleFunction,
+    session: CompilationSession,
+): Boolean {
+    val candidates = session.platformFunctionsFor(function.fqNameWhenAvailable?.asString())
+    if (candidates.isEmpty()) return false
+    val signature = function.canonicalPlatformSignature()
+    return candidates.any { it.signature == signature }
+}
+
 private fun loweredParameters(
     function: IrFunction,
     session: CompilationSession,
@@ -9666,9 +9713,7 @@ private fun loweredParameters(
 ) {
     function.parameters
 } else if (
-    session.platformFunctions.any { link ->
-        link.symbol == function.fqNameWhenAvailable?.asString() && link.signature == function.canonicalPlatformSignature()
-    }
+    isLinkedPlatformFunction(function, session)
 ) {
     if ((function.parent as? IrClass)?.let { it.kind == ClassKind.OBJECT && !it.isManagedPlatformObject() } == true) {
         function.parameters.filter { it.kind != IrParameterKind.DispatchReceiver }
@@ -9914,13 +9959,7 @@ private fun resolveTrustedIntrinsic(
     val signature = function.canonicalPlatformSignature()
     val handler =
         session.canonicalIntrinsicRegistry
-            ?.handlers
-            ?.entries
-            ?.singleOrNull { (key, _) ->
-                (platformModule?.let { key.module == it } ?: (key.module in session.selectedPlatformModules)) &&
-                    key.callableId.asSingleFqName().asString() == fqName &&
-                    key.signature.value == signature
-            }?.value as? CapabilityOperationHandler ?: return null
+            ?.resolve(fqName, signature, platformModule, session.selectedPlatformModules) as? CapabilityOperationHandler ?: return null
     val capability = handler.requiredCapability
     return LoweredCapabilityOperation(
         LoweredCapabilityIdentity(

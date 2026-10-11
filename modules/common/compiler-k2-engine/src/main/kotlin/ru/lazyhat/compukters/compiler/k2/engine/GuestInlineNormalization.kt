@@ -107,14 +107,9 @@ internal object GuestInlineNormalization {
                 val signature = function.canonicalPlatformSignature()
                 val canonical =
                     (file == null || moduleId != null) && (
-                        session.platformFunctions.any { it.symbol == symbol && it.signature == signature } ||
-                            session.canonicalIntrinsicRegistry?.handlers?.keys.orEmpty().any {
-                                (
-                                    moduleId?.let { sourceModule -> it.module == sourceModule }
-                                        ?: (it.module in session.selectedPlatformModules)
-                                ) &&
-                                    it.callableId.asSingleFqName().asString() == symbol && it.signature.value == signature
-                            }
+                        session.platformFunctionsFor(symbol).any { it.signature == signature } ||
+                            session.canonicalIntrinsicRegistry?.hasHandler(symbol, signature, moduleId, session.selectedPlatformModules) ==
+                            true
                     )
                 if (canonical) return null
                 throw UnsupportedKotlinIr(location, "inline body is not from an admitted Guest source")
