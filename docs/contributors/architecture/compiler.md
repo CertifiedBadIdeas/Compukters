@@ -33,10 +33,13 @@ Canonical `IntRange` and `IntProgression` declarations let K2 resolve ascending,
 The compiler recognizes only their canonical `for` shape and evaluates start, end, and step once into scalar registers;
 no range or iterator object enters the VM. It validates a positive step before iteration, calculates the next index in
 `Long` to avoid `Int` overflow, and retains a loop-header quota safepoint. Stored progressions and non-Int range loops use ordinary Guest library classes and iterators; the allocation-free optimization is specific to the recognized direct `Int` shape.
-Direct primitive-array `for` loops follow the same canonical-shape rule: the compiler snapshots the array reference, loads
+Direct primitive and reference-array `for` loops follow the same canonical-shape rule: the compiler snapshots the array reference, loads
 its length, and reads each element with existing array instructions at the current index. The loop header retains its
 quota safepoint; no iterator object is created. A source variable may be reassigned without changing the traversed
 array, while writes to that array's elements remain visible to later iterations.
+Reference-array loops share the indexed-read path for concrete generic element types and nullable/value-class
+storage; non-null value-class elements unbox before the body. `Array.iterator` is a structural external
+declaration consumed by canonical-loop recognition; stored iterator calls remain unsupported.
 Loop jumps select an active loop by K2 IR identity, so labels also work across different loop forms. The target
 records its enclosing `finally` depth and condition or advancement point. Only cleanup scopes crossed by the
 jump execute; cleanup can replace it with another exit. Optimized `for` loops emit an advancement block only
