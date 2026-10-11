@@ -1,0 +1,42 @@
+[
+  {
+    "input": "pid",
+    "variant": "before",
+    "cold_median_ms": 4247.733092,
+    "warm_median_ms": 454.642194,
+    "cold_samples": 3,
+    "warm_samples": 21,
+    "bytes": 152916,
+    "sha256": "aa39457e2bc544d584a94bfa138dc6f3e8136a3832f188dc53d41d461bc4f21c"
+  },
+  {
+    "input": "pid",
+    "variant": "after",
+    "cold_median_ms": 4321.981468,
+    "warm_median_ms": 400.919727,
+    "cold_samples": 3,
+    "warm_samples": 21,
+    "bytes": 152916,
+    "sha256": "aa39457e2bc544d584a94bfa138dc6f3e8136a3832f188dc53d41d461bc4f21c"
+  },
+  {
+    "input": "hello",
+    "variant": "before",
+    "cold_median_ms": 4091.831895,
+    "warm_median_ms": 275.184137,
+    "cold_samples": 3,
+    "warm_samples": 21,
+    "bytes": 4632,
+    "sha256": "b8f3d9dd969b6654964cfecc453f166910a7e29b57e93ab11f42ccec3ef17b68"
+  },
+  {
+    "input": "hello",
+    "variant": "after",
+    "cold_median_ms": 3795.590974,
+    "warm_median_ms": 218.685993,
+    "cold_samples": 3,
+    "warm_samples": 21,
+    "bytes": 4632,
+    "sha256": "b8f3d9dd969b6654964cfecc453f166910a7e29b57e93ab11f42ccec3ef17b68"
+  }
+]

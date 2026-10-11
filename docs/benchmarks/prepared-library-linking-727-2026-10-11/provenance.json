@@ -1,0 +1,19 @@
+{
+  "head": "1ea6ba8253a482e0de94478e7ece999efa076821",
+  "platform": "Linux-7.2.9-zen1-1-zen-x86_64-with-glibc2.44",
+  "java": "openjdk version \"21.0.12.1\" 2026-08-18\nOpenJDK Runtime Environment (build 21.0.12.1+1)\nOpenJDK 64-Bit Server VM (build 21.0.12.1+1, mixed mode, sharing)\n",
+  "method": "3 alternating before/after JVM pairs per input; 10 compilations per JVM; sample 1 cold, samples 4-10 warm; direct adapter compilation without instrumentation or result cache; excludes JVM start and IPC",
+  "tooling_manifests": {
+    "before": "format=1\nkind=compiler\nidentity.artifactWriter=1\nidentity.codegenAbi=1\nidentity.compiler=2.4.10\nidentity.language=2.4\nidentity.platformAbi=a2f6626324ceb6e75c30e023dbfcd889a977d8d1b622414bc228aa7ac690eeee\nmainClass=ru.lazyhat.compukters.compiler.worker.server.CompilerWorkerMainKt\npayloadSha256=6171ed8a031149bf042040f56b891fe975c19b3dff7ea6d2ec8c3cddd4a19aee\nclasspath=common/lib/addon-guest-api-0.6.0.jar\nclasspath=compiler/lib/compiler-artifact-0.6.0.jar\nclasspath=common/lib/compiler-client-0.6.0.jar\nclasspath=compiler/lib/compiler-k2-0.6.0.jar\nclasspath=compiler/lib/compiler-k2-engine-0.6.0.jar\nclasspath=compiler/lib/guest-platform-0.6.0.jar\nclasspath=common/lib/kotlin-compiler-2.4.10.jar\nclasspath=common/lib/kotlin-stdlib-2.4.10.jar\nclasspath=common/lib/kotlin-stdlib-jdk7-2.4.10.jar\nclasspath=common/lib/kotlin-stdlib-jdk8-2.4.10.jar\nclasspath=compiler/lib/kotlinx-coroutines-core-jvm-1.8.0.jar\nclasspath=common/lib/platform-bundle-0.6.0.jar\nclasspath=common/lib/platform-k2-0.6.0.jar\nclasspath=common/lib/worker-client-0.6.0.jar\n",
+    "after": "format=1\nkind=compiler\nidentity.artifactWriter=1\nidentity.codegenAbi=1\nidentity.compiler=2.4.10\nidentity.language=2.4\nidentity.platformAbi=a2f6626324ceb6e75c30e023dbfcd889a977d8d1b622414bc228aa7ac690eeee\nmainClass=ru.lazyhat.compukters.compiler.worker.server.CompilerWorkerMainKt\npayloadSha256=2d7432bb0345c3c88bd513e37d0eb361c405030367a5b002825006e905a67689\nclasspath=common/lib/addon-guest-api-0.6.0.jar\nclasspath=compiler/lib/compiler-artifact-0.6.0.jar\nclasspath=common/lib/compiler-client-0.6.0.jar\nclasspath=compiler/lib/compiler-k2-0.6.0.jar\nclasspath=compiler/lib/compiler-k2-engine-0.6.0.jar\nclasspath=compiler/lib/guest-platform-0.6.0.jar\nclasspath=common/lib/kotlin-compiler-2.4.10.jar\nclasspath=common/lib/kotlin-stdlib-2.4.10.jar\nclasspath=common/lib/kotlin-stdlib-jdk7-2.4.10.jar\nclasspath=common/lib/kotlin-stdlib-jdk8-2.4.10.jar\nclasspath=compiler/lib/kotlinx-coroutines-core-jvm-1.8.0.jar\nclasspath=common/lib/platform-bundle-0.6.0.jar\nclasspath=common/lib/platform-k2-0.6.0.jar\nclasspath=common/lib/worker-client-0.6.0.jar\n"
+  },
+  "hashes": {
+    ".worktrees/prepared-library-linking/build/reports/benchmarks/prepared-library-727/probe.jar": "b4fab981bcdbabdbca9de2ac3e5c0abb810a9b9f681fcf7e7eee98fe8371c210",
+    ".worktrees/prepared-library-linking/build/reports/benchmarks/prepared-library-727/PhaseProbe.kt": "674a0cc4b7d14b3b17fa4d9ecac6c1e213443d6f240fefc20f1c3f76d902bdab",
+    ".worktrees/guest-binary-size/build/reports/benchmarks/guest-size-723/input/hello/src/main.kt": "19659ade8a2b1573242993e9945229cd6775c801dfd36118fba6dc8a753b64fb",
+    ".worktrees/guest-binary-size/build/reports/benchmarks/guest-size-723/input/pid/src/control.kt": "f900af29d5da98f6032e48c94daf5fd492c781f3864e490d0d48e92052f476ea",
+    ".worktrees/guest-binary-size/build/reports/benchmarks/guest-size-723/input/pid/src/main.kt": "f1f07b699799ed9a4a5e5fda81e7c6d1755d5d2509c97053e0103a07c32822d2",
+    ".worktrees/guest-binary-size/build/reports/benchmarks/guest-size-723/sable.cagb": "06a04f1c2eaa0745429bff8c78c36eb4b12a4b8cdba413d33f99da65fcda3cf6",
+    ".worktrees/guest-binary-size/build/reports/benchmarks/guest-size-723/propulsion.cagb": "b4e77fefc8ade67ebf12dd66aa0bb1343341e8ef9bbbae43064f9a12d721f791"
+  }
+}

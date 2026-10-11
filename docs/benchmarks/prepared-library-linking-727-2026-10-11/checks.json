@@ -1,0 +1,26 @@
+{
+  "compiler-artifact": {
+    "tests": 184,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0
+  },
+  "compiler-k2": {
+    "tests": 197,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 5
+  },
+  "native_scenarios": [
+    "generic-library",
+    "generic-interface",
+    "dispatch",
+    "exceptions"
+  ],
+  "lint": [
+    "compiler-artifact",
+    "compiler-k2"
+  ],
+  "implementation_head": "1ea6ba82",
+  "scope": "Focused JVM/compiler suites, library specialization and dispatch VM execution, no release/full-checkout claim"
+}
