@@ -13,6 +13,9 @@ headings so this page has one stable URL that can be shared outside the reposito
 
 ## 0.6.0 — In development
 
+- The built-in `cmatrix` program draws animated green terminal rain with bright stream heads,
+  configurable tick delay and Ctrl+C return to the shell.
+
 - The built-in shell supports cursor editing, Unicode-aware deletion, horizontal scrolling and a bounded
   32-command history that restores unfinished input. `Ctrl+U` clears the line; `Ctrl+C` cancels input or stops
   the foreground command tree and returns to the shell. IDE Run submits a complete command atomically

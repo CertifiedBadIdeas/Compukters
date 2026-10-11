@@ -32,6 +32,7 @@ val systemPrograms =
         "shell" to "generateShellArtifact",
         "kotlinc" to "generateKotlincArtifact",
         "edit" to "generateEditArtifact",
+        "cmatrix" to "generateCmatrixArtifact",
         "vmbench" to "generateVmbenchArtifact",
         "vmbench-agent" to "generateVmbenchAgentArtifact",
     )

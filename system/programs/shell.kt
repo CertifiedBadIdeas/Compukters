@@ -136,7 +136,7 @@ private fun resolvePath(path: String): String = if (path.startsWith("/")) path e
 private fun writeHelp(words: Array<String>) {
     if (words.size == 1) {
         println("help echo clear pwd ls stat cat mkdir mv rm")
-        println("kotlinc edit vmbench")
+        println("kotlinc edit vmbench cmatrix")
         println("help <command> for usage")
         println("Relative paths start at /home; quote spaces.")
         println("Arrows: edit/history; Ctrl+U: clear line")
@@ -169,6 +169,7 @@ private fun commandUsage(command: String): String =
         "rm" -> "rm <path> (file or empty directory)"
         "kotlinc" -> "kotlinc <source.kt> [-o output]"
         "edit" -> "edit <path>"
+        "cmatrix" -> "cmatrix [delay 1..20 ticks] (Ctrl+C exits)"
         "vmbench" -> "vmbench <cpu|redstone> <rounds 1..1000000>"
         else -> ""
     }

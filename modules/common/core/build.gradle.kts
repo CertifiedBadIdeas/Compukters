@@ -62,6 +62,8 @@ val compilationRuntimeArtifact =
     project(":compiler-k2").layout.buildDirectory.file("generated/conformance/compilation.cpkt")
 val lexicalPathRuntimeArtifact =
     project(":compiler-k2").layout.buildDirectory.file("generated/conformance/lexical-path.cpkt")
+val cmatrixRuntimeArtifact =
+    project(":compiler-k2").layout.buildDirectory.file("generated/system/cmatrix.cpkt")
 val editRuntimeArtifact =
     project(":compiler-k2").layout.buildDirectory.file("generated/system/edit.cpkt")
 val vmbenchAgentRuntimeArtifact =
@@ -88,6 +90,7 @@ val programRuntimeIntegrationTest =
             ":compiler-k2:generateKotlincArtifact",
             ":compiler-k2:generateShellArtifact",
             ":compiler-k2:generateEditArtifact",
+            ":compiler-k2:generateCmatrixArtifact",
             ":compiler-k2:generateFilesystemArtifact",
             ":compiler-k2:generateCompilationArtifact",
             ":compiler-k2:generateVmbenchAgentArtifact",
@@ -111,6 +114,7 @@ val programRuntimeIntegrationTest =
         inputs.file(bootRuntimeArtifact)
         inputs.file(kotlincRuntimeArtifact)
         inputs.file(editRuntimeArtifact)
+        inputs.file(cmatrixRuntimeArtifact)
         inputs.file(filesystemRuntimeArtifact)
         inputs.file(compilationRuntimeArtifact)
         inputs.file(lexicalPathRuntimeArtifact)
@@ -128,6 +132,7 @@ val programRuntimeIntegrationTest =
             systemProperty("compukters.filesystemRuntime.artifact", filesystemRuntimeArtifact.get().asFile.absolutePath)
             systemProperty("compukters.lexicalPathRuntime.artifact", lexicalPathRuntimeArtifact.get().asFile.absolutePath)
             systemProperty("compukters.editRuntime.artifact", editRuntimeArtifact.get().asFile.absolutePath)
+            systemProperty("compukters.cmatrixRuntime.artifact", cmatrixRuntimeArtifact.get().asFile.absolutePath)
             systemProperty("compukters.vmbenchAgentRuntime.artifact", vmbenchAgentRuntimeArtifact.get().asFile.absolutePath)
             systemProperty("compukters.compilerWorker.payload", compilerWorkerPayload.get().asFile.absolutePath)
             systemProperty("compukters.compilerWorker.manifest", compilerWorkerManifest.get().asFile.absolutePath)
