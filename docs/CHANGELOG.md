@@ -15,14 +15,16 @@ headings so this page has one stable URL that can be shared outside the reposito
 
 - The built-in shell supports cursor editing, Unicode-aware deletion, horizontal scrolling and a bounded
   32-command history that restores unfinished input. `Ctrl+U` clears the line; `Ctrl+C` cancels input or stops
-  the foreground command tree and returns to the shell.
-- Guest `Terminal` provides owned typed Text/Key events, named keys and modifiers, standard-library integer
+  the foreground command tree and returns to the shell. IDE Run submits a complete command atomically
+  at an empty prompt; unfinished input and running editors remain protected.
+- Guest `Terminal` provides owned typed Text/Key/SubmittedLine events, named keys and modifiers, standard-library integer
   geometry for cursor/drawing operations, terminal size observations and named palette colors. The old public
   raw event protocol is replaced; built-in shell, editor and benchmark agent use the new API.
 
 - Contributors can opt into Gradle Configuration Cache for built-in program generation, Minecraft classes and
   shared tooling assembly. Independent built-in compiler tasks can run in parallel within the same project;
-  cached build-version selection tracks Git tags on `HEAD`.
+  cached build-version selection tracks Git tags on `HEAD`. Minecraft builds use Loom directly for common
+  module packaging and development runs, without the Architectury Plugin transformer or Java agent.
 
 - Guest compilation and process launch accept lexical `Path` values and normalize dot components before native
   access. `Compiler.compile` returns a typed result with its own diagnostics and the canonical installed output;

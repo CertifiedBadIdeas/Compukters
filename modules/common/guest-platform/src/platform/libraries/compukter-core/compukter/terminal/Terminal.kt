@@ -17,6 +17,11 @@ public sealed interface TerminalEvent {
         val text: String,
     ) : TerminalEvent
 
+    /** An atomic complete line from the host, admitted only by an opted-in receiver. */
+    public data class SubmittedLine(
+        val text: String,
+    ) : TerminalEvent
+
     public data class Key(
         val key: TerminalKey,
         val action: TerminalKeyAction,
@@ -137,8 +142,19 @@ public object Terminal {
         if (!rectangle.isEmpty) TerminalBindings.fill(rectangle.left, rectangle.top, rectangle.size.x, rectangle.size.y, character)
     }
 
-    public fun readEvent(): TerminalEvent {
-        val kind = TerminalBindings.awaitEvent()
+    public fun readEvent(): TerminalEvent = decodeTerminalEvent(TerminalBindings.awaitEvent())
+
+    /**
+     * Also accepts an atomic host-submitted line, bounded in UTF-16 units.
+     * A zero limit marks a line editor with a draft; submissions are rejected.
+     * The caller must enable reception only when a complete line can be accepted.
+     */
+    public fun readEvent(submittedLineLimit: Int): TerminalEvent {
+        require(submittedLineLimit in 0..4096)
+        return decodeTerminalEvent(TerminalBindings.awaitSubmittedLineEvent(submittedLineLimit))
+    }
+
+    private fun decodeTerminalEvent(kind: Int): TerminalEvent {
         try {
             return when (kind) {
                 1 -> {
@@ -155,6 +171,10 @@ public object Terminal {
                         },
                         TerminalModifiers(TerminalBindings.eventModifiers()),
                     )
+                }
+
+                3 -> {
+                    TerminalEvent.SubmittedLine(TerminalBindings.eventText())
                 }
 
                 else -> {
@@ -231,6 +251,8 @@ private object TerminalBindings {
     external fun clear()
 
     external fun awaitEvent(): Int
+
+    external fun awaitSubmittedLineEvent(limit: Int): Int
 
     external fun eventText(): String
 

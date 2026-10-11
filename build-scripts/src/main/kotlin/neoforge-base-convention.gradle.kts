@@ -20,7 +20,6 @@ import net.fabricmc.loom.api.LoomGradleExtensionAPI
 
 plugins {
     id("kotlin-convention")
-    id("architectury-plugin")
     id("com.gradleup.shadow")
 }
 
@@ -29,11 +28,6 @@ val needsRemap = !pluginManager.hasPlugin("dev.architectury.loom-no-remap")
 
 setLoaderKind(LoaderKind.NEOFORGE)
 version = computeModArchiveVersion()
-
-architectury {
-    platformSetupLoomIde()
-    neoForge()
-}
 
 val common = configurations.create("common")
 val shadowBundle = configurations.create("shadowBundle")

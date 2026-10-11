@@ -19,7 +19,6 @@
 plugins {
     id("kotlin-convention")
     id("dev.architectury.loom")
-    id("architectury-plugin")
 }
 
 val libVersion = "v1211"
@@ -32,10 +31,6 @@ setBuildContext(
 )
 
 version = computeModVersion()
-
-architectury {
-    minecraft = minecraftVersion
-}
 
 dependencies {
     minecraft(libs.findLibrary("minecraft-$libVersion").get())

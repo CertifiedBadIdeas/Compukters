@@ -6958,6 +6958,7 @@ class MinimalScriptLoweringTest {
                     "Terminal.fill(kotlin.math.Rect2i(kotlin.math.Vector2i(0, 0), Terminal.size))",
                     "val event = Terminal.readEvent(); if (event is TerminalEvent.Key) { val modifiers = event.modifiers; if (modifiers.control) println(1) }",
                     "Terminal.setCursor(Terminal.cursor); println(Terminal.size.x)",
+                    "val event = Terminal.readEvent(256); if (event is TerminalEvent.SubmittedLine) println(event.text)",
                 )
             for (body in bodies) {
                 val result = adapter.compile(request("import compukter.terminal.*\nfun main() { $body }"))
@@ -6965,8 +6966,8 @@ class MinimalScriptLoweringTest {
                 val decoded = ArtifactReader.read(bytes)
                 val strings = decoded.modules.first().strings
                 val terminal = decoded.capabilities.single { strings[it.name.value.toInt()].toString() == "terminal" }
-                assertEquals(AbiVersion(2u, 1u), terminal.abi)
-                assertEquals(18u, terminal.operationCount)
+                assertEquals(AbiVersion(2u, 2u), terminal.abi)
+                assertEquals(19u, terminal.operationCount)
             }
             for (body in listOf(
                 "Terminal.awaitEvent()",
