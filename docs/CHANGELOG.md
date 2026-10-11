@@ -22,8 +22,14 @@ headings so this page has one stable URL that can be shared outside the reposito
   elements, reusable vector value classes and generic container elements. Initializers run once per
   ascending index and preserve managed exception behavior.
 
-- The bundled terminal editor preserves the cursor when saving. Pasted text either fits in full, including
-  expanded tabs and automatic indentation, or leaves the document unchanged with a `Buffer full` message.
+- Guest files use a portable `Path` API with typed metadata/errors, binary I/O, strict UTF-8 text,
+  directory snapshots and ordinary create/delete/move operations. Sequential readers pin their file contents;
+  writers stage bounded chunks and publish only through a guarded atomic commit. Program exit aborts drafts,
+  and hibernation preserves resources and their positions. The old string/status `FileSystem` source facade
+  is replaced without compatibility wrappers.
+
+- The bundled terminal editor atomically saves its complete buffer and preserves the cursor when saving.
+  Pasted text either fits in full, including expanded tabs and automatic indentation, or leaves the document unchanged with a `Buffer full` message.
 
 - The IDE has open-file tabs with retained edits, caret, selection, scrolling and undo history. Tabs show unsaved
   changes and save conflicts, scroll when space is limited, and save modified files before closing. Screen interaction,
@@ -63,7 +69,7 @@ headings so this page has one stable URL that can be shared outside the reposito
   compilation keeps its own source session and specialization state. Queued preparation yields to Build.
 
 - Host capabilities and addon SDK bindings exchange `ByteArray` directly, preserving arbitrary binary data within
-  a 4096-byte call limit. Runtime 0.22.0 / native ABI 22 replaces the previous native boundary; existing VM checkpoints
+  a 4096-byte call limit. Runtime 0.23.0 / native ABI 23 replaces the previous native boundary; existing VM checkpoints
   cold boot while retaining persistent files.
 
 - Existing Peripheral Cables become Computer Cables: one nonbranching physical line joins two computers, with one

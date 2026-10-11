@@ -74,6 +74,17 @@ class ProgramRuntimeHostIntegrationTest {
     }
 
     @Test
+    fun `portable Guest filesystem performs bounded atomic IO and typed failures`() {
+        val artifact = Path.of(requiredProperty("compukters.filesystemRuntime.artifact")).readBytes()
+        assertTrue(VmArtifactVerifier.verify(artifact))
+        ProgramRuntimeHost().use { host ->
+            assertEquals(ProgramStartResult.Started, host.start(artifact))
+            advanceUntil(host) { it is ProgramRuntimeState.Halted }
+            assertEquals("filesystem API ok\n", terminalText(requireNotNull(host.terminalFullState())))
+        }
+    }
+
+    @Test
     fun `headless benchmark preserves unsigned decimal argument validation`() {
         VmRuntime.loadNativeLibrary(Path.of(requiredProperty("compukters.ffi.library")))
         val artifact = Path.of(requiredProperty("compukters.vmbenchAgentRuntime.artifact")).readBytes()
@@ -172,6 +183,25 @@ class ProgramRuntimeHostIntegrationTest {
                 press(host, TerminalKey.RIGHT)
                 assertTrue(terminalText(requireNotNull(host.terminalFullState())).contains(position))
             }
+        }
+    }
+
+    @Test
+    fun `builtin editor saves its full Unicode buffer without moving the cursor`() {
+        withEditor { host ->
+            val content = "x".repeat(2047) + "😀" + "漢".repeat(2047)
+            assertEquals(4096, content.length)
+            submit(host, content)
+            press(host, TerminalKey.LEFT)
+            val cursor = requireNotNull(host.terminalFullState()).cursor
+            press(host, TerminalKey.S, setOf(TerminalModifier.CONTROL))
+            val screen = requireNotNull(host.terminalFullState())
+            assertEquals(cursor, screen.cursor, terminalText(screen))
+            assertTrue(terminalText(screen).contains("Saved"), terminalText(screen))
+            val generation = requireNotNull(host.filesystemGeneration())
+            val saved = requireNotNull(host.fileRead(VmVirtualPath.of("/home/regression.txt"), 0, 32768, generation))
+            assertTrue(saved.eof)
+            assertEquals(content, saved.bytes.decodeToString(throwOnInvalidSequence = true))
         }
     }
 
@@ -468,7 +498,7 @@ class ProgramRuntimeHostIntegrationTest {
 
         submit(host, "stat missing")
         pressEnter(host)
-        assertTrue(terminalText(requireNotNull(host.terminalFullState())).endsWith("> stat missing\nnot found: /home/missing\n>\n"))
+        assertTrue(terminalText(requireNotNull(host.terminalFullState())).endsWith("> stat missing\nstat: not found: /home/missing\n>\n"))
 
         submit(host, "ls")
         pressEnter(host)

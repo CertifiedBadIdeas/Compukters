@@ -290,19 +290,24 @@ tests `positional_patch_and_fill_do_not_move_the_stream_cursor` and
 
 ### Filesystem facade
 
-**Status:** Partial.
+**Status:** Supported within the documented portable API.
 
-`stat`, `list`, `readText`, and `writeText` have exact trusted signatures and bounded VM operations. Lowering
-coverage currently executes only at the compiler/VM sides separately.
+`compukter.filesystem.Path` provides typed metadata and errors, binary I/O, strict UTF-8 text,
+immutable read snapshots, sorted directory snapshots, directory operations and atomic replacement drafts.
+Transfers are bounded independently of file size. Resources belong to each foreground program and survive
+hibernation with their positions and revision guards; terminal program outcomes release them.
+See [Guest filesystem]({{ '/FILESYSTEM/' | relative_url }}) for limits, cleanup and the 0.6.0 source migration.
 
 **Evidence:**
 [`MinimalScriptLoweringTest`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/compiler-k2/src/test/kotlin/ru/lazyhat/compukters/compiler/worker/k2/MinimalScriptLoweringTest.kt),
-test `filesystem text facade lowers through exact trusted signatures`, and
-[`computer.rs`](https://github.com/CertifiedBadIdeas/Compukter-VM/blob/main/src/computer.rs), tests
-`filesystem_text_response_is_bounded_before_guest_materialization` and
-`filesystem_text_write_replaces_existing_bytes_through_the_machine`.
+test `portable filesystem API executes binary text snapshots and atomic drafts`, and
+[`ProgramRuntimeHostIntegrationTest`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/core/src/nativeIntegrationTest/kotlin/ru/lazyhat/compukters/core/device/runtime/program/integration/ProgramRuntimeHostIntegrationTest.kt),
+tests `portable Guest filesystem performs bounded atomic IO and typed failures` and
+`builtin editor saves its full Unicode buffer without moving the cursor`.
+Native lifecycle, quotas, guarded replacements and checkpoint rejection are exercised in
+[`computer_filesystem.rs`](https://github.com/CertifiedBadIdeas/Compukter-VM/blob/main/src/computer_filesystem.rs).
 
-**Related work:** not scheduled
+**Related work:** [#734](https://github.com/CertifiedBadIdeas/Compukters/issues/734)
 
 ### Process facade
 
@@ -362,7 +367,7 @@ addresses. A receive retains its task/request identity while waiting and complet
 The compiler fixture task `:compiler-k2:generateNetworkConformanceArtifacts` and both Minecraft versions' real
 `computer_network` GameTests cover all 256 byte values, empty messages and catchable interruption.
 
-Runtime native ABI 22 transports byte arrays directly through JNI and FFM. The outbound call has an aggregate 4096-byte
+Runtime native ABI 23 transports byte arrays directly through JNI and FFM. The outbound call has an aggregate 4096-byte
 array limit and the returned array has the same limit. Buffers are owned snapshots; a sender's later writes cannot alter
 queued data. Each computer's inbox is shared by its program scopes and holds up to 16 messages. Queues are volatile;
 cable mutation, endpoint replacement/reboot and participating chunk unload retire the connection and discard its data.
