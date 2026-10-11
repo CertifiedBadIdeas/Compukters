@@ -85,6 +85,23 @@ class MinimalScriptLoweringTest {
         }
 
     @Test
+    fun `stdlib geometry executes vector aliases arithmetic rectangles and rounding`() =
+        withAdapter { adapter ->
+            val source = repositoryFile("modules/common/compiler-k2/src/test/resources/kotlin/geometry/main.kt").readText()
+            val result = adapter.compile(request(source))
+            val bytes = assertNotNull(result.artifact, result.diagnostics.toString()).toByteArray()
+            ArtifactReader.read(bytes)
+            System.getProperty("compukter.vm.geometryArtifact")?.let { output ->
+                java.nio.file.Files
+                    .write(
+                        java.nio.file.Path
+                            .of(output),
+                        bytes,
+                    )
+            }
+        }
+
+    @Test
     fun `portable math compiles both widths library bodies and callable references`() =
         withAdapter { adapter ->
             val source = repositoryFile("modules/common/compiler-k2/src/test/resources/kotlin/math/main.kt").readText()

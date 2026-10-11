@@ -17,6 +17,10 @@ fn main() {
     );
 
     match scenario.as_str() {
+        "geometry" => {
+            let mut session = k2_stdio_session_with_heap("COMPUKTER_KOTLIN_GEOMETRY_ARTIFACT", 1, 256 * 1024);
+            k2_assert_prints(&mut session, ["geometry ok\n"], 1024);
+        },
         "math" => {
             let mut session = k2_stdio_session_with_heap("COMPUKTER_KOTLIN_MATH_ARTIFACT", 1, 256 * 1024);
             k2_assert_prints(&mut session, ["math ok\n"], 1024);
