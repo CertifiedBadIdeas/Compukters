@@ -20,6 +20,7 @@ package ru.lazyhat.compukters.compiler.worker.k2
 
 import ru.lazyhat.compukters.addon.api.AddonGuestApiBundleCodec
 import ru.lazyhat.compukters.compiler.artifact.model.AbiVersion
+import ru.lazyhat.compukters.compiler.artifact.model.ArrayStorage
 import ru.lazyhat.compukters.compiler.artifact.model.Block
 import ru.lazyhat.compukters.compiler.artifact.model.Constant
 import ru.lazyhat.compukters.compiler.artifact.model.Destination
@@ -5567,28 +5568,179 @@ class MinimalScriptLoweringTest {
         }
 
     @Test
-    fun `reference array loops reject unsupported storage and stored iterators`() =
+    fun `primitive generic arrays specialize dense storage and reference boundary copies for vm execution`() =
         withAdapter { adapter ->
-            for (source in listOf(
-                "fun main() { for (value in arrayOf(1)) { check(value > 0) } }",
-                "fun main() { val iterator = arrayOf(\"a\").iterator(); check(iterator.hasNext()) }",
-            )) {
-                val result = adapter.compile(request(source))
-                assertNull(result.artifact, source)
-                assertTrue(result.hasErrors, result.diagnostics.toString())
+            data class Case(
+                val name: String,
+                val first: String,
+                val last: String,
+                val scalar: ValueType,
+                val storage: ArrayStorage,
+            )
+            val cases =
+                listOf(
+                    Case("Boolean", "false", "true", ValueType.Bool, ArrayStorage.NATURAL),
+                    Case("Byte", "(-128).toByte()", "127.toByte()", ValueType.I32, ArrayStorage.I8),
+                    Case("Short", "(-32768).toShort()", "32767.toShort()", ValueType.I32, ArrayStorage.I16),
+                    Case("Char", "'\\u0000'", "'\\uffff'", ValueType.Char, ArrayStorage.NATURAL),
+                    Case("Int", "-2147483647 - 1", "2147483647", ValueType.I32, ArrayStorage.NATURAL),
+                    Case("Long", "-9223372036854775807L - 1L", "9223372036854775807L", ValueType.I64, ArrayStorage.NATURAL),
+                    Case("Float", "-1.25f", "2.5f", ValueType.F32, ArrayStorage.NATURAL),
+                    Case("Double", "-1.25", "2.5", ValueType.F64, ArrayStorage.NATURAL),
+                    Case("UByte", "0.toUByte()", "255.toUByte()", ValueType.I32, ArrayStorage.U8),
+                    Case("UShort", "0.toUShort()", "65535.toUShort()", ValueType.I32, ArrayStorage.U16),
+                    Case("UInt", "0u", "4294967295u", ValueType.I32, ArrayStorage.U32),
+                    Case("ULong", "0uL", "18446744073709551615uL", ValueType.I64, ArrayStorage.U64),
+                )
+            val calls =
+                cases.joinToString("\n") { case ->
+                    """
+                    exercise(arrayOf<${case.name}>(${case.first}, ${case.last}, ${case.last}), ${case.first}, ${case.last})
+                    var calls${case.name} = 0
+                    val initialized${case.name} = Array(3) { index -> calls${case.name} += 1; if (index == 0) ${case.first} else ${case.last} }
+                    check(calls${case.name} == 3)
+                    exercise(initialized${case.name}, ${case.first}, ${case.last})
+                    check(emptyArray<${case.name}>().size == 0)
+                    var negative${case.name} = false
+                    try { Array(-1) { calls${case.name} += 100; ${case.first} } } catch (e: NegativeArraySizeException) { negative${case.name} = true }
+                    check(negative${case.name} && calls${case.name} == 3)
+                    """.trimIndent()
+                }
+            val source =
+                """
+                class Store<T>(var values: Array<T>) {
+                    fun first(): T = values[0]
+                }
+                fun <T : Any> exercise(values: Array<T>, first: T, last: T) {
+                    check(values.size == 3 && values[0] == first && values[2] == last)
+                    val store = Store(values)
+                    check(store.first() == first)
+                    val opaque: Any = values
+                    check(opaque === values && (opaque is IntArray) == false)
+                    val scalar: Any = values[0] as Any
+                    check(scalar == first)
+                    val copy = values.copyOf()
+                    check(copy !== values && copy[0] == first && copy[2] == last)
+                    values.copyInto(copy, 1, 0, 2)
+                    check(copy[1] == first && copy[2] == last)
+                    copy.copyInto(copy, 0, 1, 3)
+                    check(copy[0] == first && copy[1] == last)
+                    copy[0] = last
+                    check(values[0] == first)
+                    var count = 0
+                    for (value in values) { check(value == first || value == last); count += 1 }
+                    check(count == 3)
+                    val nullable = values.copyOf(5)
+                    check(nullable.size == 5 && nullable[0] == first && nullable[2] == last && nullable[3] == null && nullable[4] == null)
+                    nullable[0] = null
+                    values.copyInto(nullable, 1, 0, 3)
+                    check(nullable[0] == null && nullable[1] == first && nullable[3] == last)
+                    val any = arrayOf<Any>("keep", "keep", "keep", "keep")
+                    values.copyInto(any, 1, 0, 3)
+                    check(any[0] == "keep" && any[1] == first && any[2] == last && any[3] == last)
+                    var failed = false
+                    try { values.copyInto(any, 2, 0, 3) } catch (e: IndexOutOfBoundsException) { failed = true }
+                    check(failed && any[0] == "keep" && any[1] == first && any[2] == last && any[3] == last)
+                    failed = false
+                    try { values.copyInto(any, 0, 3, 2) } catch (e: IndexOutOfBoundsException) { failed = true }
+                    check(failed)
+                    failed = false
+                    try { values.copyInto(any, 0, -1, 0) } catch (e: IndexOutOfBoundsException) { failed = true }
+                    check(failed)
+                    failed = false
+                    try { values.copyInto(any, 0, 0, 2147483647) } catch (e: IndexOutOfBoundsException) { failed = true }
+                    check(failed && any[0] == "keep" && any[1] == first && any[2] == last && any[3] == last)
+                    failed = false
+                    try { values.copyInto(any, 2147483647, 0, 1) } catch (e: IndexOutOfBoundsException) { failed = true }
+                    check(failed && any[0] == "keep")
+                    values.copyInto(any, 4, 3, 3)
+                    failed = false
+                    try { values.copyInto(any, 5, 3, 3) } catch (e: IndexOutOfBoundsException) { failed = true }
+                    check(failed)
+                    check(values.copyOf(1)[0] == first && values.copyOf(0).size == 0)
+                    failed = false
+                    try { values.copyOf(-1) } catch (e: NegativeArraySizeException) { failed = true }
+                    check(failed)
+                    failed = false
+                    try { values[3] } catch (e: IndexOutOfBoundsException) { failed = true }
+                    check(failed)
+                }
+                fun main() {
+                    $calls
+                    val original = arrayOf(1, 2, 3)
+                    val opaque: Any = original
+                    val recovered = opaque as Array<Int>
+                    recovered[0] = 7
+                    check(original[0] == 7)
+                    var invalidCast = false
+                    try { opaque as IntArray } catch (e: ClassCastException) { invalidCast = true }
+                    check(invalidCast)
+                    var cleanup = 0
+                    outer@ for (value in original) {
+                        try { for (other in original) { if (other == 2) continue@outer } }
+                        finally { cleanup += 1 }
+                    }
+                    check(cleanup == 3)
+                    var selected = original
+                    var sourceCalls = 0
+                    val select: () -> Array<Int> = { sourceCalls += 1; selected }
+                    var total = 0
+                    for (value in select()) { total += value; selected = arrayOf(99); original[2] = 8 }
+                    check(sourceCalls == 1 && total == 17)
+                    var callbackCalls = 0
+                    val init: (Int) -> Int = { index -> callbackCalls += 1; index + 10 }
+                    check(Array(2, init)[1] == 11 && callbackCalls == 2)
+                    try { Array(3) { if (it == 1) throw IllegalArgumentException("initializer"); callbackCalls += 1; it } }
+                    catch (e: IllegalArgumentException) { check(callbackCalls == 3) }
+                    val floats = arrayOf(-0.0f, Float.NaN, Float.POSITIVE_INFINITY)
+                    val doubles = arrayOf(-0.0, Double.NaN, Double.NEGATIVE_INFINITY)
+                    check(1f / floats.copyOf()[0] == Float.NEGATIVE_INFINITY)
+                    val nanFloat = floats.copyOf(4)[1]!!
+                    check(nanFloat != nanFloat && floats[2] == Float.POSITIVE_INFINITY)
+                    check(1.0 / doubles.copyOf()[0] == Double.NEGATIVE_INFINITY)
+                    val nanDouble = doubles.copyOf(4)[1]!!
+                    check(nanDouble != nanDouble && doubles[2] == Double.NEGATIVE_INFINITY)
+                    val retained = Array(4000) { it }
+                    for (iteration in 0..15) {
+                        val transient = retained.copyOf(4001)
+                        check(transient[3999] == 3999 && transient[4000] == null)
+                        check(retained[0] == 0 && retained[3999] == 3999)
+                    }
+                }
+                """.trimIndent()
+            val first = adapter.compile(request(source))
+            val second = adapter.compile(request(source))
+            assertFalse(first.hasErrors, first.diagnostics.joinToString())
+            val bytes = requireNotNull(first.artifact).toByteArray()
+            assertContentEquals(bytes, requireNotNull(second.artifact).toByteArray())
+            val artifact = ArtifactReader.read(bytes)
+            val app = artifact.modules.single { it.kind == ModuleKind.APPLICATION }
+            for (case in cases) {
+                val array =
+                    app.types.filterIsInstance<NominalType.Array>().single {
+                        app.strings[it.name.value.toInt()].toString() ==
+                            "Array<${case.name}>"
+                    }
+                assertEquals(case.scalar, array.element, case.name)
+                assertEquals(case.storage, array.storage, case.name)
+            }
+            System.getProperty("compukter.vm.referenceArrayArtifact")?.let { output ->
+                Path.of("$output.packed.cpkt").writeBytes(bytes)
             }
         }
 
     @Test
-    fun `reference arrays reject unsupported element representations`() =
+    fun `guest arrays reject stored iterators spread and nested storage`() =
         withAdapter { adapter ->
             listOf(
-                "fun main() { arrayOf(1, 2) }",
-                "fun main() { Array(2) { it } }",
+                "fun main() { val iterator = arrayOf(1).iterator(); check(iterator.hasNext()) }",
+                "fun main() { val iterator = arrayOf(\"a\").iterator(); check(iterator.hasNext()) }",
+                "fun main() { arrayOf(*arrayOf(1)) }",
+                "fun main() { Array(2) { arrayOf(it) } }",
             ).forEach { source ->
                 val result = adapter.compile(request(source))
-                assertNull(result.artifact, result.diagnostics.joinToString())
-                assertTrue(result.diagnostics.any { it.category == DiagnosticCategory.TARGET })
+                assertNull(result.artifact, source)
+                assertTrue(result.hasErrors, result.diagnostics.toString())
             }
         }
 
@@ -5824,7 +5976,6 @@ class MinimalScriptLoweringTest {
     fun `unsupported IntArray forms publish no artifact`() =
         withAdapter { adapter ->
             listOf(
-                "fun main() { arrayOf(1, 2) }",
                 "fun main() { val values = intArrayOf(1); values.iterator() }",
                 "fun main() { val values = intArrayOf(1); values.indices }",
                 "fun main() { val values = intArrayOf(1); intArrayOf(*values) }",

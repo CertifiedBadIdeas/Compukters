@@ -34,6 +34,10 @@ headings so this page has one stable URL that can be shared outside the reposito
   and status/search bars. Hover and completion popups reserve space around every text row.
   Attached addon sources have a separate bounded allowance, so bundled library sources do not exhaust it.
 
+- Guest Kotlin specializes `Array<T>` for all twelve non-null primitive families with dense, unboxed
+  element storage, including constructors, indexed access, direct loops and concrete generic functions/classes.
+  Copies preserve dense storage when types match and box elements when copying into nullable or `Any` arrays.
+
 - Guest Kotlin supports `do-while` loops with body-local variables in the condition, and labeled
   `break@label` / `continue@label` across nested `while`, `do-while`, `Int` progression, primitive and
   reference-array, and supported iterable loops. Loop jumps preserve managed exception and `finally` cleanup across VM

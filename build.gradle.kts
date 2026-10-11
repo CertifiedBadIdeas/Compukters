@@ -640,7 +640,7 @@ registerKotlinVmConformance(
 )
 registerKotlinVmConformance(
     taskName = "testKotlinReferenceArrayVmConformance",
-    taskDescription = "Executes typed Guest class reference arrays with the pinned Compukter VM.",
+    taskDescription = "Executes specialized primitive and typed reference Guest arrays with the pinned Compukter VM.",
     artifactTask = ":compiler-k2:generateReferenceArrayConformanceArtifact",
     artifact = project(":compiler-k2").layout.buildDirectory.file("generated/conformance/kotlin-reference-array.cpkt"),
     cargoTargetDirectory = ".toolchain/build/cargo/compiler-k2-reference-array-conformance",
@@ -648,6 +648,8 @@ registerKotlinVmConformance(
     conformanceScenario = "reference-array",
     additionalArtifacts =
         mapOf(
+            "COMPUKTER_KOTLIN_PACKED_ARRAY_ARTIFACT" to
+                project(":compiler-k2").layout.buildDirectory.file("generated/conformance/kotlin-reference-array.cpkt.packed.cpkt"),
             "COMPUKTER_KOTLIN_REFERENCE_ARRAY_LOOPS_ARTIFACT" to
                 project(":compiler-k2").layout.buildDirectory.file("generated/conformance/kotlin-reference-array.cpkt.loops.cpkt"),
         ),
