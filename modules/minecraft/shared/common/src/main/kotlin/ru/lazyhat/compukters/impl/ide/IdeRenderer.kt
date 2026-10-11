@@ -72,6 +72,7 @@ object IdeRenderer {
         uiScale: IdeUiScale = IdeUiScale.AUTO,
         viewportSupported: Boolean = true,
         projectFirstRow: Int = 0,
+        fileTabFirstIndex: Int = 0,
     ): IdeDrawModel {
         val output =
             Builder(
@@ -84,6 +85,7 @@ object IdeRenderer {
                 explorerDrag,
                 projectSwitcherOpen,
                 projectFirstRow,
+                fileTabFirstIndex,
             )
         if (state.page == IdePageState.Opening) {
             output.background()
@@ -130,6 +132,7 @@ object IdeRenderer {
         private val explorerDrag: IdeExplorerDragVisual?,
         private val projectSwitcherOpen: Boolean,
         private val projectFirstRow: Int,
+        private val fileTabFirstIndex: Int,
     ) {
         private val panels = mutableListOf<IdePanelDraw>()
         private val text = mutableListOf<IdeTextDraw>()
@@ -293,6 +296,7 @@ object IdeRenderer {
             toolbar(workspace, targetState, toolingState, busy, workspace.activeFile != null || selectedTreePath != null)
             toolWindows(workspace)
             tree(workspace)
+            fileTabs(workspace, busy)
             if (workspace.git.visible) {
                 gitPanel(workspace, busy)
             } else {
@@ -319,6 +323,21 @@ object IdeRenderer {
             diagnostics(workspace)
             status(workspace, targetState, toolingState, busy)
             if (projectSwitcherOpen) projectSwitcher(workspace, projectControl)
+        }
+
+        private fun fileTabs(
+            workspace: ru.lazyhat.compukters.ide.client.state.IdeWorkspaceView,
+            busy: Set<IdeBusyOperation>,
+        ) {
+            val bounds = geometry.fileTabs ?: return
+            val active = workspace.activeFile.takeUnless { (workspace.editor as? IdeEditorView.Text)?.readOnly == true }
+            val layout = IdeFileTabBar.layout(bounds, workspace.openFiles, fileTabFirstIndex)
+            val component = IdeFileTabBar.draw(layout, active, IdeBusyOperation.Git !in busy && IdeBusyOperation.Project !in busy, font)
+            component.controls.forEach {
+                panels += it.panel
+                hitTargets += it.target
+            }
+            text += component.text
         }
 
         private fun projectControl(displayName: String): IdeRect {
@@ -2228,7 +2247,7 @@ object IdeRenderer {
                     }
 
                     is IdeDialogState.FileConflict -> {
-                        "File conflict" to dialog.path.value
+                        "File conflict" to if (dialog.closing) "Discard changes to ${dialog.path.value} and close?" else dialog.path.value
                     }
 
                     is IdeDialogState.LockUpdate -> {
@@ -2249,7 +2268,17 @@ object IdeRenderer {
             val confirm = IdeRect(dismiss.left - 76, dismiss.top, dismiss.left - 8, dismiss.bottom)
             target(IdeHitAction.Confirm, confirm, true, focusGroup = IdeFocusGroup.Dialog, z = Z_DIALOG_TARGET)
             target(IdeHitAction.Dismiss, dismiss, true, focusGroup = IdeFocusGroup.Dialog, z = Z_DIALOG_TARGET)
-            ui(IdeTextKind.Dialog, "Confirm", confirm.left + 9, confirm.top + 5, z = Z_DIALOG_TEXT)
+            ui(
+                IdeTextKind.Dialog,
+                if (dialog is IdeDialogState.FileConflict) {
+                    if (dialog.closing) "Discard" else "Reload"
+                } else {
+                    "Confirm"
+                },
+                confirm.left + 9,
+                confirm.top + 5,
+                z = Z_DIALOG_TEXT,
+            )
             ui(IdeTextKind.Dialog, "Cancel", dismiss.left + 12, dismiss.top + 5, z = Z_DIALOG_TEXT)
         }
 
@@ -2371,30 +2400,23 @@ object IdeRenderer {
             gitOperation: GitOperation? = null,
             gitCommand: IdeCommand? = null,
         ) {
-            panels +=
-                IdePanelDraw(
-                    IdePanelKind.Control,
-                    bounds,
-                    when {
-                        selected -> IdeColors.ACCENT
-                        enabled -> IdeColors.BORDER
-                        else -> IdeColors.PANEL_ALT
-                    },
-                    z - CONTROL_BACKGROUND_OFFSET,
+            val control =
+                IdeControls.target(
+                    IdeHitTarget(
+                        action,
+                        bounds,
+                        enabled,
+                        tooltip,
+                        focusGroup,
+                        z,
+                        selected,
+                        choiceIndex,
+                        gitOperation = gitOperation,
+                        gitCommand = gitCommand,
+                    ),
                 )
-            hitTargets +=
-                IdeHitTarget(
-                    action,
-                    bounds,
-                    enabled,
-                    tooltip,
-                    focusGroup,
-                    z,
-                    selected,
-                    choiceIndex,
-                    gitOperation = gitOperation,
-                    gitCommand = gitCommand,
-                )
+            panels += control.panel
+            hitTargets += control.target
         }
 
         fun build(): IdeDrawModel =

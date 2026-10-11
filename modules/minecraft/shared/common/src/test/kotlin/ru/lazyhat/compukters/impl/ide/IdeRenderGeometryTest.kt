@@ -26,6 +26,43 @@ import kotlin.test.assertTrue
 
 class IdeRenderGeometryTest {
     @Test
+    fun `tabs and find reserve independent rows while preserving editor minimum and origin`() {
+        val original = geometry()
+        val tabs = IdeRenderGeometry.compute(960, 540, 180, 120, true, true, IdeCodeFontProfile.DEFAULT, tabsVisible = true)
+        val both =
+            IdeRenderGeometry.compute(
+                960,
+                540,
+                180,
+                120,
+                true,
+                true,
+                IdeCodeFontProfile.DEFAULT,
+                findVisible = true,
+                tabsVisible = true,
+            )
+        assertEquals(original.editor.top, tabs.fileTabs!!.top)
+        assertEquals(original.editor.top + IdeRenderGeometry.FILE_TABS_HEIGHT, tabs.editor.top)
+        assertEquals(both.fileTabs!!.bottom, both.findBar!!.top)
+        assertEquals(both.findBar.bottom, both.editor.top)
+        assertEquals(original.editor.bottom, both.editor.bottom)
+        val compact =
+            IdeRenderGeometry.compute(
+                500,
+                240,
+                96,
+                64,
+                true,
+                true,
+                IdeCodeFontProfile.DEFAULT,
+                findVisible = true,
+                tabsVisible = true,
+            )
+        assertTrue(compact.supported)
+        assertTrue(compact.editor.height >= IdeRenderGeometry.MINIMUM_EDITOR_HEIGHT)
+    }
+
+    @Test
     fun `find bar reserves space without changing source hit testing origin or minimum editor size`() {
         val normal = geometry()
         val searching = IdeRenderGeometry.compute(960, 540, 180, 120, true, true, IdeCodeFontProfile.DEFAULT, findVisible = true)

@@ -96,6 +96,9 @@ class IdeScreenController(
     private var pointerX: Double? = null
     private var pointerY: Double? = null
     private var projectSwitcherOpen = false
+    private var fileTabFirstIndex = 0
+    private var lastActiveTab: ProjectPath? = null
+    private var lastFileTabWidth = 0
 
     fun mouseClicked(
         event: IdePointerInput,
@@ -177,6 +180,10 @@ class IdeScreenController(
                             IdeHitAction.FindNext,
                             IdeHitAction.FindClose,
                             IdeHitAction.DiagnosticChoice,
+                            IdeHitAction.FileTab,
+                            IdeHitAction.CloseFileTab,
+                            IdeHitAction.PreviousFileTabs,
+                            IdeHitAction.NextFileTabs,
                         )
                     -> IdeFocusArea.Editor
 
@@ -241,7 +248,16 @@ class IdeScreenController(
         val uiMouseX = viewport.toVirtualX(mouseX)
         val uiMouseY = viewport.toVirtualY(mouseY)
         val geometry = geometry()
+        if (prompt.state != null || controller.viewState().dialog != null) return true
         if (terminalOverlay.visible && terminalOverlayGeometry(geometry).panel.contains(uiMouseX, uiMouseY)) return true
+        if (geometry.fileTabs?.contains(uiMouseX, uiMouseY) == true) {
+            if (scrollY != 0.0 ||
+                scrollX != 0.0
+            ) {
+                fileTabFirstIndex = (fileTabFirstIndex + if (scrollY < 0 || scrollX > 0) 1 else -1).coerceAtLeast(0)
+            }
+            return true
+        }
         return input.scroll(uiMouseX, uiMouseY, scrollX, scrollY, pointerContext(geometry))
     }
 
@@ -349,6 +365,7 @@ class IdeScreenController(
         val geometry = geometry(viewport)
         val treeFirstRow = admittedTreeFirstRow(geometry)
         val state = controller.viewState()
+        admitFileTabScroll(geometry)
         val model =
             IdeRenderer.extract(
                 state,
@@ -360,6 +377,7 @@ class IdeScreenController(
                 terminalVisible = terminalOverlay.visible,
                 explorerDrag = input.explorerDragVisual,
                 projectFirstRow = input.projectFirstRow,
+                fileTabFirstIndex = fileTabFirstIndex,
                 projectSwitcherOpen = projectSwitcherOpen && prompt.state == null && state.dialog == null,
                 uiScale = preferences.uiScale(),
                 viewportSupported = viewport().supported,
@@ -398,10 +416,35 @@ class IdeScreenController(
             IdeCodeFontProfile.DEFAULT,
             findVisible =
                 (workspace?.editor as? IdeEditorView.Text)?.find != null,
+            tabsVisible = workspace?.openFiles?.isNotEmpty() == true,
         )
     }
 
     private fun viewport(): CompuktersUiViewport = host.viewport()
+
+    private fun admitFileTabScroll(geometry: IdeRenderGeometry) {
+        val workspace = (controller.viewState().page as? IdePageState.Workspace)?.value
+        val active = workspace?.activeFile
+        val bounds = geometry.fileTabs
+        if (workspace != null && bounds != null) {
+            fileTabFirstIndex =
+                IdeFileTabBar
+                    .layout(
+                        bounds,
+                        workspace.openFiles,
+                        fileTabFirstIndex,
+                        if (active != lastActiveTab || bounds.width != lastFileTabWidth) {
+                            active
+                        } else {
+                            null
+                        },
+                    ).firstIndex
+        } else {
+            fileTabFirstIndex = 0
+        }
+        lastActiveTab = active
+        lastFileTabWidth = bounds?.width ?: 0
+    }
 
     private fun focusState(): IdeFocusState {
         val state = controller.viewState()
@@ -434,6 +477,7 @@ class IdeScreenController(
 
     private fun pointerContext(geometry: IdeRenderGeometry): IdePointerContext {
         val state = controller.viewState()
+        admitFileTabScroll(geometry)
         val treeFirstRow = admittedTreeFirstRow(geometry)
         val model =
             IdeRenderer.extract(
@@ -446,6 +490,7 @@ class IdeScreenController(
                 terminalVisible = terminalOverlay.visible,
                 explorerDrag = input.explorerDragVisual,
                 projectFirstRow = input.projectFirstRow,
+                fileTabFirstIndex = fileTabFirstIndex,
                 projectSwitcherOpen = projectSwitcherOpen && prompt.state == null && state.dialog == null,
                 uiScale = preferences.uiScale(),
                 viewportSupported = viewport().supported,
@@ -494,6 +539,14 @@ class IdeScreenController(
 
     private fun activateUiAction(action: IdeHitAction): Boolean {
         when (action) {
+            IdeHitAction.PreviousFileTabs -> {
+                fileTabFirstIndex = (fileTabFirstIndex - 1).coerceAtLeast(0)
+            }
+
+            IdeHitAction.NextFileTabs -> {
+                fileTabFirstIndex++
+            }
+
             IdeHitAction.ScaleAuto, IdeHitAction.ScaleTwo, IdeHitAction.ScaleThree -> {
                 preferences.saveUiScale(IdeUiScale.entries.single { it.action == action })
             }

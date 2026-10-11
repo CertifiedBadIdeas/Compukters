@@ -113,6 +113,14 @@ sealed interface IdeCommand {
         val path: ProjectPath,
     ) : IdeCommand
 
+    data class SelectFileTab(
+        val path: ProjectPath,
+    ) : IdeCommand
+
+    data class CloseFileTab(
+        val path: ProjectPath,
+    ) : IdeCommand
+
     data class ExpandComputerDirectory(
         val path: IdeTargetVirtualPath,
     ) : IdeCommand

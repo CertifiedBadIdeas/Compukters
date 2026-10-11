@@ -37,6 +37,18 @@ and compilation unavailable until its manifest is repaired and saved. Analysis a
 Saved changes to the manifest and lock refresh analysis without reopening the project.
 Modified buffers are saved before a project transition. A failed create/open/clone keeps the current project available.
 
+## Open-file tabs
+
+Opening project files adds tabs above the editor. Click a tab to switch files while retaining its edits, caret,
+selection, scrolling and undo history. A **•** marks unsaved changes; **!** marks a save conflict.
+When the tabs do not fit, use the arrows or scroll over the tab bar. Switching files reveals the active tab.
+
+Click **×** to close a file. A modified file stays open until saving succeeds. A failed save leaves it available;
+a conflict lets you cancel or discard its changes and close that file. Cancel to keep editing and use Save As if needed.
+Closing the last tab
+leaves an empty editor without closing the IDE. Renaming a file or folder updates its tabs, and switching projects
+starts a new tab list. The tab list lasts for the current IDE session.
+
 ## UI scale
 
 Choose **Auto**, **2** or **3** beside **Scale** in the IDE header. The selection takes effect immediately and is

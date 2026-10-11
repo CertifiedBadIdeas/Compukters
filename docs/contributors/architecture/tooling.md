@@ -257,3 +257,13 @@ Version-specific `IdeScreen` shells translate Minecraft input and implement draw
 pipelines, transforms and scissor semantics. Minecraft 1.21.1 converts logical clips to Minecraft GUI coordinates;
 26.1 applies transformed clips through its extractor. The input-rejecting Minecraft keyboard focus proxy remains
 version-specific. Screen presentation contracts do not expose Minecraft graphics/event types to shared logic.
+
+`ide-client` owns the ordered open-file list and safe pending tab closure. Text tabs reuse the existing editor sessions,
+including undo history and viewport state; binary tabs retain bounded metadata. Visible tabs cannot be silently evicted
+from the document cache. Closing a modified tab waits for its save or formatting operation, while a conflict keeps it
+open until a resolution. Rename, deletion and project transitions update the same list.
+
+`IdeControls` produces each control's drawing and hit target from one rectangle. `IdeFileTabBar` lays out the visible
+slice, active-file reveal, overflow controls, labels and close buttons. `IdeRenderer` composes these components; the shared
+screen controller owns tab-bar scrolling and passes the same model to drawing and input. New controls and screen
+interaction belong here; backend changes belong in the Minecraft version adapter only when its API requires them.

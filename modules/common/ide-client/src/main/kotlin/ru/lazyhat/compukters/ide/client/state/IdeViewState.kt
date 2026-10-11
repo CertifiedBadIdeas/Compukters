@@ -64,6 +64,12 @@ data class IdeBuildSummary(
     }
 }
 
+data class IdeFileTab(
+    val path: ProjectPath,
+    val dirty: Boolean = false,
+    val conflict: Boolean = false,
+)
+
 data class IdeWorkspaceView(
     val project: IdeProjectSummary,
     val tree: ProjectTree,
@@ -78,6 +84,7 @@ data class IdeWorkspaceView(
     val diagnostics: IdeDiagnostics = IdeDiagnostics.unlocated(editor, build),
     val git: IdeGitView = IdeGitView(),
     val bottom: IdeBottomPanelView = IdeBottomPanelView(),
+    val openFiles: List<IdeFileTab> = emptyList(),
 )
 
 sealed interface IdePageState {
