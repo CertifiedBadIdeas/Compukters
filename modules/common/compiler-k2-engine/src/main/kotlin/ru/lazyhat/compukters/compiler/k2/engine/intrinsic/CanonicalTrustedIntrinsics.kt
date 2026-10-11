@@ -28,7 +28,7 @@ object CanonicalTrustedIntrinsics {
     val terminal = PlatformCapabilityId("compukter", "terminal", 2)
     val stdio = PlatformCapabilityId("compukter", "stdio", 1)
     val process = PlatformCapabilityId("compukter", "process", 2)
-    val filesystem = PlatformCapabilityId("compukter", "filesystem", 1)
+    val filesystem = PlatformCapabilityId("compukter", "filesystem", 2)
     val compiler = PlatformCapabilityId("compukter", "compiler", 1)
     val redstone = PlatformCapabilityId("compukter", "redstone", 1)
     val sound = PlatformCapabilityId("compukter", "sound", 1)
@@ -340,12 +340,23 @@ object CanonicalTrustedIntrinsics {
             }
 
             listOf(
-                Triple("stat", "fun(String):Int", 0u),
-                Triple("list", "fun(String):String", 1u),
-                Triple("readText", "fun(String):String", 2u),
-                Triple("writeText", "fun(String,String):Int", 3u),
+                Triple("validate", "fun(String):Int", 0u),
+                Triple("stat", "fun(String):ByteArray", 1u),
+                Triple("openRead", "fun(String):Int", 2u),
+                Triple("read", "fun(Int,Int):ByteArray", 3u),
+                Triple("size", "fun(Int):Int", 4u),
+                Triple("openWrite", "fun(String):Int", 5u),
+                Triple("write", "fun(Int,ByteArray):Int", 6u),
+                Triple("commit", "fun(Int):Int", 7u),
+                Triple("close", "fun(Int):Int", 8u),
+                Triple("openDirectory", "fun(String):Int", 9u),
+                Triple("nextEntry", "fun(Int):String", 10u),
+                Triple("createDirectory", "fun(String):Int", 11u),
+                Triple("delete", "fun(String):Int", 12u),
+                Triple("openMove", "fun(String):Int", 13u),
+                Triple("move", "fun(Int,String,Boolean):Int", 14u),
             ).forEach { (name, signature, operation) ->
-                capability("compukter", "core", "compukter.filesystem", "FileSystem.$name", signature, filesystem, operation)
+                capability("compukter", "core", "compukter.filesystem", "FileSystemBindings.$name", signature, filesystem, operation)
             }
 
             capability("compukter", "core", "compukter.io", "Stderr.write", "fun(String):Unit", stdio, 2u)

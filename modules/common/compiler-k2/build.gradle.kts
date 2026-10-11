@@ -1458,6 +1458,23 @@ val generateKotlincArtifact = tasks.register<Test>("generateKotlincArtifact") {
     }
 }
 
+val generateFilesystemArtifact = tasks.register<Test>("generateFilesystemArtifact") {
+    description = "Compiles the portable filesystem Guest contract for native runtime integration."
+    group = "verification"
+    dependsOn(tasks.jar)
+    useJUnitPlatform()
+    testClassesDirs = sourceSets.test.get().output.classesDirs
+    classpath = sourceSets.test.get().runtimeClasspath
+    filter.includeTestsMatching("*portable filesystem API executes binary text snapshots and atomic drafts*")
+    inputs.file(workerJar)
+    val artifact = layout.buildDirectory.file("generated/conformance/filesystem.cpkt")
+    outputs.file(artifact)
+    doFirst {
+        systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
+        systemProperty("compukters.filesystem.artifact", artifact.get().asFile.absolutePath)
+    }
+}
+
 val generateEditArtifact = tasks.register<Test>("generateEditArtifact") {
     description = "Compiles the checked-in no-std Kotlin editor into a deterministic Compukter Artifact."
     group = "build"
