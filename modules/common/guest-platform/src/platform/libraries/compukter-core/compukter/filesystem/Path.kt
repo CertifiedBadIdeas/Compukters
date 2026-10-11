@@ -7,7 +7,7 @@
 package compukter.filesystem
 
 /** An immutable absolute lexical path, independent of storage and native capabilities. */
-public data class Path(
+public value class Path(
     public val value: String,
 ) {
     init {

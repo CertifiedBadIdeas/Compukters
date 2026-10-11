@@ -309,7 +309,8 @@ class ProgramRuntimeHostIntegrationTest {
                                 store = store,
                                 computerId = computerId,
                                 romImage = rom,
-                                tickBudget = ProgramTickBudget(64, 64, 4),
+                                // Value-class constructor validation raises the editor minimum slice above 64.
+                                tickBudget = ProgramTickBudget(128, 64, 4),
                                 compilerRouter = compiler.router,
                             )
                         computer.use {

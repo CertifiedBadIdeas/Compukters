@@ -292,7 +292,7 @@ tests `positional_patch_and_fill_do_not_move_the_stream_cursor` and
 
 **Status:** Supported within the documented portable API.
 
-`compukter.filesystem.Path` is a pure lexical value; the explicitly imported
+`compukter.filesystem.Path` is a pure lexical String-backed value class; the explicitly imported
 `compukter.filesystem.toPath` extension converts a String with the same syntax validation and no storage access.
 `FileSystem` provides typed metadata and errors, binary I/O, strict UTF-8 text,
 immutable read snapshots, sorted directory snapshots, directory operations and atomic replacement drafts.
@@ -304,8 +304,9 @@ See [Guest filesystem]({{ '/FILESYSTEM/' | relative_url }}) for limits, cleanup 
 **Evidence:**
 [`MinimalScriptLoweringTest`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/compiler-k2/src/test/kotlin/ru/lazyhat/compukters/compiler/worker/k2/MinimalScriptLoweringTest.kt),
 tests `portable filesystem API executes binary text snapshots and atomic drafts`,
-`lexical Guest paths need no filesystem capability` and
-`Path storage conveniences require explicit extension imports`, and
+`lexical Guest paths need no filesystem capability` (including constructor validation, nullable/Any/array/list
+and hash-key boundaries), `Path value class rejects data class conveniences and reference equality`,
+and `Path storage conveniences require explicit extension imports`, and
 [`ProgramRuntimeHostIntegrationTest`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/core/src/nativeIntegrationTest/kotlin/ru/lazyhat/compukters/core/device/runtime/program/integration/ProgramRuntimeHostIntegrationTest.kt),
 tests `lexical Guest paths execute without filesystem access`,
 `portable Guest filesystem performs bounded atomic IO and typed failures` and

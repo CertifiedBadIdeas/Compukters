@@ -13,7 +13,13 @@ This reference groups versioned representation boundaries by the version that in
 
 ## Portable Guest filesystem
 
-`compukter:core` 4.1.0 adds the pure `String.toPath()` extension in `compukter.filesystem`. This additive
+`compukter:core` 5.0.0 exports Path as a String-backed inline value class instead of a managed data class.
+Nullable/Any/collection boundaries use its canonical nominal box. The representation change and removal
+of generated `copy()` / `component1()` members require dependent platform/addon source libraries to rebuild.
+Existing standalone executables remain admitted; filesystem capability ABI 2, native ABI 23 and
+platform encoding are unchanged.
+
+Version 4.1.0 adds the pure `String.toPath()` extension in `compukter.filesystem`. This additive
 source API change leaves platform encoding, filesystem capability ABI and Runtime ABI unchanged.
 Version 4.0.0 replaces the old string/status FileSystem source facade with Compukters-owned Path,
 pure lexical paths and an explicit FileSystem facade with metadata, typed exceptions, immutable
