@@ -11,6 +11,15 @@ push without authorization. For this workspace, verified task changes have stand
 `dev` (submodule changes into `main`) and then remove that task's worktree. Preserve unrelated worktrees and never
 force-remove a dirty checkout. Before removal, retain verification evidence outside the task worktree.
 
+Prefer `./worktree-task <task-branch>` to create a parent task checkout: it starts from local `dev`, initializes the
+pinned VM and prepares an independent Gradle cache. Add `--submodule addons/create` (repeatable), or
+`--all-submodules`, for addon work. Use `--repo host/compukter-vm` or `--repo addons/<name>` to create a task checkout
+inside an initialized submodule repository from local `main`. The default location is the main workspace's
+`.worktrees/`; invocation from a linked checkout does not nest new worktrees there. Existing branches or destinations
+are preserved. Use `--resume` only to finish interrupted setup in its clean registered checkout. Local Git objects
+are reused when the pinned revision is available; missing objects may require remote access, so agent setup commands
+must run outside the sandbox when that is possible. See `docs/contributors/development.md`.
+
 Do not spawn sub-agents or delegate work to other agents unless the user explicitly requests sub-agent or
 parallel-agent involvement for a specific task.
 

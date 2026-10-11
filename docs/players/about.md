@@ -50,7 +50,7 @@ a stable `ComputerId`; the immutable packaged `/rom` and isolated persistent
 `/home` are mounted inside Rust. World data is rooted at
 `<world>/compukters/filesystems`, flushed on saves and shutdown, and moved to a
 recoverable tombstone when a player destroys the corresponding computer. Guest
-code has bounded `FileSystem.stat`, `FileSystem.list`, `FileSystem.readText` and `FileSystem.writeText`
+code uses portable `Path` metadata, directory snapshots, byte I/O and strict UTF-8 text conveniences
 operations. Compilation is requested by the Rust machine from an immutable
 source snapshot. The JVM service compiles or retrieves a verified artifact from
 `<world>/compukters/compiler-cache`, then Rust re-verifies and atomically

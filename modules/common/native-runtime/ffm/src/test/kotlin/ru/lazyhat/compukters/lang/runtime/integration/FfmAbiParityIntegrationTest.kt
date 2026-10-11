@@ -30,7 +30,7 @@ import kotlin.test.assertEquals
 
 class FfmAbiParityIntegrationTest {
     @Test
-    fun `built library resolves and safely invokes every ABI v22 descriptor`() {
+    fun `built library resolves and safely invokes every ABI v23 descriptor`() {
         Arena.ofConfined().use { arena ->
             val lookup = SymbolLookup.libraryLookup(Path.of(requiredProperty("compukter.ffi.library")), arena)
             val linker = Linker.nativeLinker()
@@ -60,7 +60,7 @@ class FfmAbiParityIntegrationTest {
                 }.toMutableList()
         return when (function) {
             FfmAbiFunction.ABI_VERSION -> {
-                Probe(arguments, 22)
+                Probe(arguments, 23)
             }
 
             FfmAbiFunction.MAXIMUM_OUTCOME_BYTES -> {

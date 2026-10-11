@@ -103,8 +103,10 @@ Server tick requests enter actor mailboxes with a deferred permit. After block e
 their requests, the NeoForge post-tick hook divides aggregate instruction capacity among the submitted runnable
 computers and releases their permits. World effects remain ahead of each permit, while later actor commands stay behind
 it. A deferred permit releases its worker token while waiting for the post-tick allocation.
-The guest filesystem facade exposes bounded `stat`, `list`, `readText`, and `writeText`; Rust validates paths, UTF-8, permissions,
-quotas, and atomic replacement while `/rom` remains immutable. The shell and editor map stable failures to user-facing
+The Guest `Path` facade exposes typed metadata, bounded byte transfers, strict UTF-8 conveniences, directory
+snapshots and guarded atomic replacement drafts. Rust validates paths, permissions and quotas while `/rom`
+remains immutable. Immutable read snapshots and unpublished drafts belong to each process and are retained
+in logical checkpoint schema 3 (native ABI 23); completion aborts unpublished work. The shell and editor map stable failures to user-facing
 diagnostics. Executable installation remains a Rust-owned filesystem transaction and never accepts a host path.
 
 ## IDE target operations

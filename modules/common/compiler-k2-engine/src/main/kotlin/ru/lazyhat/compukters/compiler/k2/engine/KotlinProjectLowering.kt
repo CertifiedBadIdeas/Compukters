@@ -5061,7 +5061,17 @@ private class FunctionCompiler(
             val body = function.body as? IrBlockBody ?: throw UnsupportedKotlinIr(function, "function body is not a block")
             body.statements.forEach(::compileStatement)
         }
-        if (blocks[currentBlock].instructions.lastOrNull()?.isTerminator() != true) emit(Instruction.Return(Destination.Unit))
+        if (blocks[currentBlock].instructions.lastOrNull()?.isTerminator() != true) {
+            // K2 can leave an unreachable fallthrough after an infinite loop or
+            // a finally continuation. A non-Unit function cannot return Unit.
+            emit(
+                if (function is IrConstructor || resolvedType(function.returnType) == unitType) {
+                    Instruction.Return(Destination.Unit)
+                } else {
+                    Instruction.Unreachable
+                },
+            )
+        }
         return CompiledFunction(
             localTypes.toList(),
             blocks.map { Block(functionId, it.loopHeaderSafepoint, it.instructions.toList()) },
@@ -10041,7 +10051,7 @@ private fun capabilityShape(
                 "compukter" to "terminal" -> 14u
                 "compukter" to "stdio" -> 3u
                 "compukter" to "process" -> 3u
-                "compukter" to "filesystem" -> 7u
+                "compukter" to "filesystem" -> 15u
                 "compukter" to "compiler" -> 2u
                 "compukter" to "redstone" -> 8u
                 "compukters" to "peripheral" -> 6u
