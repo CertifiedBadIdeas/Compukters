@@ -6744,11 +6744,9 @@ private class FunctionCompiler(
                     }.singleOrNull()
                     ?: throw UnsupportedKotlinIr(call, "platform property getter receiver is missing")
             val receiver = compileExpression(receiverExpression)
-            val storage =
-                guestTypes
-                    .valueClassBox(resolvedType(call.type))
-                    ?.let { box -> ValueType.Ref(call.type.isNullable(), box.type) }
-                    ?: valueType(call.type, call)
+            // Match the library field layout: multi-field values use their nominal box,
+            // while scalar-backed value classes retain their scalar field representation.
+            val storage = guestTypes.heapType(resolvedType(call.type), valueType(call.type, call))
             val stored =
                 allocate(storage).also { destination ->
                     emit(Instruction.FieldGet(destination, receiver, FieldRef.Imported(field.importId)))
@@ -10142,9 +10140,15 @@ private fun capabilityShape(
 ): PlatformCapabilityShape =
     session.capabilityShapes[capability]
         ?: PlatformCapabilityShape(
-            if (capability.namespace == "compukters" && capability.name == "display") 1 else 0,
+            if ((capability.namespace == "compukters" && capability.name == "display") ||
+                (capability.namespace == "compukter" && capability.name == "terminal")
+            ) {
+                1
+            } else {
+                0
+            },
             when (capability.namespace to capability.name) {
-                "compukter" to "terminal" -> 14u
+                "compukter" to "terminal" -> 18u
                 "compukter" to "stdio" -> 3u
                 "compukter" to "process" -> 3u
                 "compukter" to "filesystem" -> 15u

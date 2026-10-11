@@ -24,7 +24,13 @@ import compukter.filesystem.FileSystemException
 import compukter.filesystem.Path
 import compukter.io.Stderr
 import compukter.terminal.Terminal
+import compukter.terminal.TerminalColor
+import compukter.terminal.TerminalEvent
+import compukter.terminal.TerminalKey
+import compukter.terminal.TerminalKeyAction
 import kotlin.collections.copyInto
+import kotlin.math.Rect2i
+import kotlin.math.Vector2i
 
 value class EditState(
     val gapStart: Int,
@@ -88,9 +94,9 @@ fun main(args: Array<String>) {
         )
         status = ""
 
-        val event = Terminal.awaitEvent()
-        if (event == 1) {
-            val text = Terminal.eventText()
+        val event = Terminal.readEvent()
+        if (event is TerminalEvent.Text) {
+            val text = event.text
             if (confirmExit) {
                 if (editStartsWith(text, 'y', 'Y')) {
                     val saved = editSave(buffer, state, path)
@@ -109,13 +115,15 @@ fun main(args: Array<String>) {
                     dirty = true
                 }
             }
-        } else if (event == 2) {
-            val key = Terminal.eventKey()
-            val action = Terminal.eventAction()
-            val modifiers = Terminal.eventModifiers()
+        } else if (event is TerminalEvent.Key) {
+            val key = event.key
+            val action = event.action
+            val modifiers = event.modifiers
             if (confirmExit) {
-                if (key == 1 && action == 1) confirmExit = false
-            } else if ((action == 1 || action == 2) && editHasControl(modifiers) && key == 83) {
+                if (key == TerminalKey.ESCAPE && action == TerminalKeyAction.PRESS) confirmExit = false
+            } else if ((action == TerminalKeyAction.PRESS || action == TerminalKeyAction.REPEAT) && modifiers.control &&
+                key == TerminalKey.S
+            ) {
                 val saved = editSave(buffer, state, path)
                 if (saved.isEmpty()) {
                     dirty = false
@@ -123,31 +131,37 @@ fun main(args: Array<String>) {
                 } else {
                     status = saved
                 }
-            } else if ((action == 1 || action == 2) && editHasControl(modifiers) && key == 88) {
+            } else if ((action == TerminalKeyAction.PRESS || action == TerminalKeyAction.REPEAT) && modifiers.control &&
+                key == TerminalKey.X
+            ) {
                 if (dirty) confirmExit = true else running = false
-            } else if (action == 1 || action == 2) {
+            } else if (action == TerminalKeyAction.PRESS || action == TerminalKeyAction.REPEAT) {
                 val previous = state
                 state =
                     when (key) {
-                        8 -> editBackspace(buffer, state)
-                        9 -> editInsertTab(buffer, state)
-                        13 -> editInsertNewline(buffer, state)
-                        257 -> editDelete(buffer, state)
-                        258 -> editMoveHome(buffer, state)
-                        259 -> editMoveEnd(buffer, state)
-                        260 -> editMoveVertical(buffer, state, -16)
-                        261 -> editMoveVertical(buffer, state, 16)
-                        262 -> editMoveVertical(buffer, state, -1)
-                        263 -> editMoveLeft(buffer, state)
-                        264 -> editMoveVertical(buffer, state, 1)
-                        265 -> editMoveRight(buffer, state)
+                        TerminalKey.BACKSPACE -> editBackspace(buffer, state)
+                        TerminalKey.TAB -> editInsertTab(buffer, state)
+                        TerminalKey.ENTER -> editInsertNewline(buffer, state)
+                        TerminalKey.DELETE -> editDelete(buffer, state)
+                        TerminalKey.HOME -> editMoveHome(buffer, state)
+                        TerminalKey.END -> editMoveEnd(buffer, state)
+                        TerminalKey.PAGE_UP -> editMoveVertical(buffer, state, -16)
+                        TerminalKey.PAGE_DOWN -> editMoveVertical(buffer, state, 16)
+                        TerminalKey.UP -> editMoveVertical(buffer, state, -1)
+                        TerminalKey.LEFT -> editMoveLeft(buffer, state)
+                        TerminalKey.DOWN -> editMoveVertical(buffer, state, 1)
+                        TerminalKey.RIGHT -> editMoveRight(buffer, state)
                         else -> state
                     }
-                if (state != previous && (key == 8 || key == 9 || key == 13 || key == 257)) dirty = true
-                if (state == previous && (key == 9 || key == 13)) status = "Buffer full"
+                if (state != previous &&
+                    (key == TerminalKey.BACKSPACE || key == TerminalKey.TAB || key == TerminalKey.ENTER || key == TerminalKey.DELETE)
+                ) {
+                    dirty =
+                        true
+                }
+                if (state == previous && (key == TerminalKey.TAB || key == TerminalKey.ENTER)) status = "Buffer full"
             }
         }
-        Terminal.finishEvent()
     }
 }
 
@@ -523,12 +537,12 @@ private fun editRender(
     columnOffset: Int,
     rowBuffer: CharArray,
 ) {
-    Terminal.setColors(15, 0)
-    Terminal.fill(0, 0, 51, 19, ' ')
-    Terminal.writeAt(0, 0, "Compukters edit  " + path + if (dirty) " *" else "")
+    Terminal.setColors(TerminalColor.WHITE, TerminalColor.BLACK)
+    Terminal.fill(Rect2i(Vector2i(0, 0), Terminal.size))
+    Terminal.writeAt(Vector2i(0, 0), "Compukters edit  " + path + if (dirty) " *" else "")
     repeat(16) { row ->
         val text = editVisibleLine(buffer, state, rowOffset + row, columnOffset, rowBuffer)
-        if (text.isNotEmpty()) Terminal.writeAt(0, row + 1, text)
+        if (text.isNotEmpty()) Terminal.writeAt(Vector2i(0, row + 1), text)
     }
     val cursorLine = editCursorLine(buffer, state)
     val cursorColumn = editCursorColumn(buffer, state)
@@ -538,9 +552,9 @@ private fun editRender(
     } else if (message == "") {
         message = "Ln ${cursorLine + 1}, Col ${cursorColumn + 1}"
     }
-    Terminal.writeAt(0, 17, message)
-    Terminal.writeAt(0, 18, "^S Save  ^X Exit")
-    Terminal.setCursor(cursorColumn - columnOffset, cursorLine - rowOffset + 1)
+    Terminal.writeAt(Vector2i(0, 17), message)
+    Terminal.writeAt(Vector2i(0, 18), "^S Save  ^X Exit")
+    Terminal.setCursor(Vector2i(cursorColumn - columnOffset, cursorLine - rowOffset + 1))
     Terminal.setCursorVisible(!confirmExit)
 }
 
@@ -593,8 +607,6 @@ private fun editStartsWith(
     lower: Char,
     upper: Char,
 ): Boolean = value.isNotEmpty() && (value[0] == lower || value[0] == upper)
-
-private fun editHasControl(modifiers: Int): Boolean = modifiers % 4 >= 2
 
 private fun editScalarBefore(
     buffer: CharArray,

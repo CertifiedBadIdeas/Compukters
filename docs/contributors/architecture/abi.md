@@ -11,6 +11,25 @@ permalink: /ARCHITECTURE/abi/
 
 This reference groups versioned representation boundaries by the version that introduced them. Those versions are minimum feature requirements, not a claim that older Runtime distributions implement today’s platform. The source owners below define the active contract. Before changing a wire format, inspect each producer, consumer and verifier. Runtime release pins in `build-scripts/src/main/kotlin/RuntimeBundleSupport.kt` describe published bundles separately from the local VM checkout.
 
+## Typed Guest terminal
+
+`compukter:core` 7.0.0 makes a clean source replacement: owned Text/Key event snapshots, typed keys/actions/modifiers,
+standard-library Position2i/Size2i/Rect2i geometry and a typed palette. Primitive external operations live in private
+`TerminalBindings`; no public raw event getters or manual event completion remain. Other programs retain canonical
+`readln()` input.
+
+Terminal capability ABI 2.1 preserves selectors 0..13 and adds synchronous no-argument I32 observations:
+14 cursor X, 15 cursor Y, 16 width, 17 height. New artifacts require minor 1 and declare 18 operations;
+the native binding continues admitting ABI 2.0 artifacts. The public facade owns event decoding and always finishes
+native event ownership before publishing its immutable snapshot. Standard-library vectors/rectangles retain their
+existing value representation; no new CPKT or native transport layout is required.
+
+Terminal keys C (67) and U (85) extend the admitted wire key set. Ctrl+C replaces Ctrl+T as the reserved foreground
+interruption; it reuses status 130 and existing ProcessExited lifecycle events. At an idle prompt the press reaches
+Guest code; repeated controls are consumed without killing a subsequent command. Native C ABI 23, Runtime source
+0.23.0, checkpoint schema 3 and payload layouts are unchanged. Updated local VM support is required;
+published Runtime bundle pins do not establish support for these additions.
+
 ## Typed Guest compilation and process paths
 
 `compukter:core` 6.0.0 replaces String-based `Compiler.compile` and `Process.run` with Path-based

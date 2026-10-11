@@ -30,9 +30,10 @@ import compukter.process.ProcessResult
 import compukter.terminal.Terminal
 
 fun main() {
+    val editor = ShellEditor()
     while (true) {
-        print("> ")
-        dispatch(readln())
+        val command = editor.readCommand()
+        if (command != null) dispatch(command)
     }
 }
 
@@ -138,6 +139,8 @@ private fun writeHelp(words: Array<String>) {
         println("kotlinc edit vmbench")
         println("help <command> for usage")
         println("Relative paths start at /home; quote spaces.")
+        println("Arrows: edit/history; Ctrl+U: clear line")
+        println("Ctrl+C: cancel input or stop program")
         return
     }
     if (words.size != 2) {
@@ -249,6 +252,7 @@ fun shellProcessDiagnostic(
 ): String {
     if (result is ProcessResult.Exited) {
         if (result.code == 0) return ""
+        if (result.code == 130) return "^C"
         return path + ": exited with an error"
     }
     if (result is ProcessResult.Failed) {

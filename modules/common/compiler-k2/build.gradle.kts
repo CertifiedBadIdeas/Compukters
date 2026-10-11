@@ -1426,6 +1426,7 @@ val generateShellArtifact = tasks.register<Test>("generateShellArtifact") {
     filter.includeTestsMatching("*checked in shell compiles deterministically*")
     inputs.file(rootProject.file("system/programs/shell.kt"))
     inputs.file(rootProject.file("system/programs/shell/Lexer.kt"))
+    inputs.file(rootProject.file("system/programs/shell/ShellEditor.kt"))
     inputs.file(workerJar)
     outputs.file(shellArtifact)
     systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
