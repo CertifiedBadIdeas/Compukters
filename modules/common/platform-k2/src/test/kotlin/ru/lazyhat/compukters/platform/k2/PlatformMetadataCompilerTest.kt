@@ -169,6 +169,41 @@ class PlatformMetadataCompilerTest {
     }
 
     @Test
+    fun `abstract platform methods and accessors retain linkable dispatch slots`() {
+        val metadata =
+            PlatformMetadataCompiler().compile(
+                PlatformModuleId("sample", "sources"),
+                listOf(
+                    PlatformSource(
+                        "Source.kt",
+                        ImmutableBytes.of(
+                            """
+                            package sample
+                            abstract class Source {
+                                abstract fun nextBits(count: Int): Int
+                                abstract val count: Int
+                                companion object Default : Source() {
+                                    override fun nextBits(count: Int): Int = 0
+                                    override val count: Int get() = 0
+                                }
+                            }
+                            interface Reading { fun read(): Int }
+                            external fun intrinsic(): Int
+                            """.trimIndent().encodeToByteArray(),
+                        ),
+                    ),
+                ),
+            )
+        val functions = metadata.libraryDeclarations.filter { it.kind.name == "FUNCTION" }.map { it.symbol }
+        assertTrue("sample.Source.nextBits" in functions)
+        assertTrue("sample.Source.<get-count>" in functions)
+        assertTrue("sample.Reading.read" in functions)
+        assertFalse("sample.intrinsic" in functions)
+        assertTrue(metadata.libraryDeclarations.any { it.symbol == "sample.Source.Default.<instance>" })
+        assertFalse(metadata.libraryDeclarations.any { it.symbol.contains(".Companion.") })
+    }
+
+    @Test
     fun `public nominal types constructor properties and enum entries are linkable`() {
         val metadata =
             PlatformMetadataCompiler().compile(
