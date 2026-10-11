@@ -1,0 +1,62 @@
+{
+  "pid": {
+    "cold": {
+      "baseline": {
+        "first_median_ms": 4775.239761,
+        "warm_samples": 21,
+        "warm_median_ms": 311.532495
+      },
+      "optimized": {
+        "first_median_ms": 4278.72,
+        "warm_samples": 21,
+        "warm_median_ms": 280.101087
+      },
+      "warm_reduction_percent": 10.089287154458791
+    },
+    "prepared": {
+      "baseline": {
+        "first_median_ms": 1119.753502,
+        "warm_samples": 21,
+        "warm_median_ms": 315.266106,
+        "preparation_median_ms": 3805.740048
+      },
+      "optimized": {
+        "first_median_ms": 1070.122116,
+        "warm_samples": 21,
+        "warm_median_ms": 293.427417,
+        "preparation_median_ms": 3561.137648
+      },
+      "warm_reduction_percent": 6.92706529004421
+    }
+  },
+  "edit": {
+    "cold": {
+      "baseline": {
+        "first_median_ms": 3850.509744,
+        "warm_samples": 21,
+        "warm_median_ms": 235.355266
+      },
+      "optimized": {
+        "first_median_ms": 3662.09955,
+        "warm_samples": 21,
+        "warm_median_ms": 223.918383
+      },
+      "warm_reduction_percent": 4.859412408473577
+    },
+    "prepared": {
+      "baseline": {
+        "first_median_ms": 947.026527,
+        "warm_samples": 21,
+        "warm_median_ms": 246.739471,
+        "preparation_median_ms": 2691.574459
+      },
+      "optimized": {
+        "first_median_ms": 924.904865,
+        "warm_samples": 21,
+        "warm_median_ms": 211.585051,
+        "preparation_median_ms": 2532.357348
+      },
+      "warm_reduction_percent": 14.247586678176845
+    }
+  }
+}

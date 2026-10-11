@@ -1,0 +1,910 @@
+{
+  "baseline": {
+    "main_thread_allocation_bytes_median": 388212956.0,
+    "allocation_samples": [
+      {
+        "iteration": 11,
+        "allocated_bytes": 389355160
+      },
+      {
+        "iteration": 12,
+        "allocated_bytes": 389129256
+      },
+      {
+        "iteration": 13,
+        "allocated_bytes": 389043152
+      },
+      {
+        "iteration": 14,
+        "allocated_bytes": 388796144
+      },
+      {
+        "iteration": 15,
+        "allocated_bytes": 388917944
+      },
+      {
+        "iteration": 16,
+        "allocated_bytes": 388857088
+      },
+      {
+        "iteration": 17,
+        "allocated_bytes": 388811416
+      },
+      {
+        "iteration": 18,
+        "allocated_bytes": 388663080
+      },
+      {
+        "iteration": 19,
+        "allocated_bytes": 388650504
+      },
+      {
+        "iteration": 20,
+        "allocated_bytes": 388544736
+      },
+      {
+        "iteration": 21,
+        "allocated_bytes": 388490648
+      },
+      {
+        "iteration": 22,
+        "allocated_bytes": 388483112
+      },
+      {
+        "iteration": 23,
+        "allocated_bytes": 388475808
+      },
+      {
+        "iteration": 24,
+        "allocated_bytes": 388422832
+      },
+      {
+        "iteration": 25,
+        "allocated_bytes": 388412848
+      },
+      {
+        "iteration": 26,
+        "allocated_bytes": 388401448
+      },
+      {
+        "iteration": 27,
+        "allocated_bytes": 388369224
+      },
+      {
+        "iteration": 28,
+        "allocated_bytes": 388374320
+      },
+      {
+        "iteration": 29,
+        "allocated_bytes": 388364704
+      },
+      {
+        "iteration": 30,
+        "allocated_bytes": 388331872
+      },
+      {
+        "iteration": 31,
+        "allocated_bytes": 388317352
+      },
+      {
+        "iteration": 32,
+        "allocated_bytes": 388309200
+      },
+      {
+        "iteration": 33,
+        "allocated_bytes": 388301560
+      },
+      {
+        "iteration": 34,
+        "allocated_bytes": 388286728
+      },
+      {
+        "iteration": 35,
+        "allocated_bytes": 388276296
+      },
+      {
+        "iteration": 36,
+        "allocated_bytes": 388291096
+      },
+      {
+        "iteration": 37,
+        "allocated_bytes": 388267360
+      },
+      {
+        "iteration": 38,
+        "allocated_bytes": 388252248
+      },
+      {
+        "iteration": 39,
+        "allocated_bytes": 388256552
+      },
+      {
+        "iteration": 40,
+        "allocated_bytes": 388205480
+      },
+      {
+        "iteration": 41,
+        "allocated_bytes": 388220432
+      },
+      {
+        "iteration": 42,
+        "allocated_bytes": 388127064
+      },
+      {
+        "iteration": 43,
+        "allocated_bytes": 388148008
+      },
+      {
+        "iteration": 44,
+        "allocated_bytes": 388124584
+      },
+      {
+        "iteration": 45,
+        "allocated_bytes": 388070328
+      },
+      {
+        "iteration": 46,
+        "allocated_bytes": 388070920
+      },
+      {
+        "iteration": 47,
+        "allocated_bytes": 388049208
+      },
+      {
+        "iteration": 48,
+        "allocated_bytes": 388043104
+      },
+      {
+        "iteration": 49,
+        "allocated_bytes": 387988488
+      },
+      {
+        "iteration": 50,
+        "allocated_bytes": 387973776
+      },
+      {
+        "iteration": 51,
+        "allocated_bytes": 387975528
+      },
+      {
+        "iteration": 52,
+        "allocated_bytes": 387958856
+      },
+      {
+        "iteration": 53,
+        "allocated_bytes": 387953968
+      },
+      {
+        "iteration": 54,
+        "allocated_bytes": 387940312
+      },
+      {
+        "iteration": 55,
+        "allocated_bytes": 387926472
+      },
+      {
+        "iteration": 56,
+        "allocated_bytes": 387871264
+      },
+      {
+        "iteration": 57,
+        "allocated_bytes": 387820112
+      },
+      {
+        "iteration": 58,
+        "allocated_bytes": 387815200
+      },
+      {
+        "iteration": 59,
+        "allocated_bytes": 387810064
+      },
+      {
+        "iteration": 60,
+        "allocated_bytes": 387804448
+      },
+      {
+        "iteration": 61,
+        "allocated_bytes": 387801688
+      },
+      {
+        "iteration": 62,
+        "allocated_bytes": 387796984
+      },
+      {
+        "iteration": 63,
+        "allocated_bytes": 387786784
+      },
+      {
+        "iteration": 64,
+        "allocated_bytes": 387787760
+      },
+      {
+        "iteration": 65,
+        "allocated_bytes": 387779320
+      },
+      {
+        "iteration": 66,
+        "allocated_bytes": 387774080
+      },
+      {
+        "iteration": 67,
+        "allocated_bytes": 387773224
+      },
+      {
+        "iteration": 68,
+        "allocated_bytes": 387772552
+      },
+      {
+        "iteration": 69,
+        "allocated_bytes": 387755848
+      },
+      {
+        "iteration": 70,
+        "allocated_bytes": 387732064
+      }
+    ],
+    "main_thread_cpu_samples": 3372,
+    "nearest_value_liveness_samples": 232,
+    "nearest_value_liveness_percent": 6.880189798339265,
+    "nearest_own_cpu": [
+      [
+        "ru/lazyhat/compukters/compiler/k2/engine/KotlinProjectLowering.lower",
+        327
+      ],
+      [
+        "ru/lazyhat/compukters/compiler/artifact/analysis/ValueLiveness.derive",
+        232
+      ],
+      [
+        "ru/lazyhat/compukters/compiler/artifact/write/ArtifactValidatorKt.validateArtifact",
+        170
+      ],
+      [
+        "java/util/HashMap.putVal",
+        93
+      ],
+      [
+        "ru/lazyhat/compukters/compiler/k2/engine/KotlinProjectLoweringKt.mapGuestValueType",
+        67
+      ],
+      [
+        "ru/lazyhat/compukters/compiler/k2/engine/FunctionCompiler.compileCall-O3XtbcE",
+        65
+      ],
+      [
+        "kotlin/jvm/internal/Intrinsics.throwParameterIsNullNPE",
+        54
+      ],
+      [
+        "ru/lazyhat/compukters/compiler/k2/engine/KotlinProjectLoweringKt.linkedPlatformSymbols$considerTypeSymbol",
+        54
+      ],
+      [
+        "java/lang/AbstractStringBuilder.ensureCapacityInternal",
+        52
+      ],
+      [
+        "ru/lazyhat/compukters/compiler/k2/engine/FunctionCompiler.resolveClassInstance",
+        47
+      ],
+      [
+        "ru/lazyhat/compukters/compiler/artifact/link/ReachabilityGraph.visitInstruction",
+        46
+      ],
+      [
+        "kotlin/jvm/internal/Intrinsics.areEqual",
+        45
+      ],
+      [
+        "ru/lazyhat/compukters/compiler/artifact/analysis/ReferenceLivenessKt.referenceComponents",
+        40
+      ],
+      [
+        "ru/lazyhat/compukters/compiler/artifact/write/BinarySinkKt.encodeIndexed",
+        39
+      ],
+      [
+        "ru/lazyhat/compukters/compiler/artifact/write/BinarySink.writeU32-WZ4Q5Ns",
+        35
+      ],
+      [
+        "java/util/Arrays.copyOf",
+        34
+      ],
+      [
+        "ru/lazyhat/compukters/compiler/k2/engine/KotlinProjectLoweringKt$linkedPlatformFunctions$visitor$1.visitElement",
+        34
+      ],
+      [
+        "ru/lazyhat/compukters/compiler/artifact/link/LibrarySpecializations.reuse$ru_lazyhat_compukters_compiler_artifact",
+        32
+      ],
+      [
+        "org/jetbrains/kotlin/ir/util/DeepCopyTypeRemapper.remapTypeOrNull",
+        29
+      ],
+      [
+        "ru/lazyhat/compukters/compiler/artifact/analysis/TemporaryRegisters.compact",
+        29
+      ],
+      [
+        "java/util/HashMap$TreeNode.getTreeNode",
+        26
+      ],
+      [
+        "com/intellij/psi/impl/source/tree/SharedImplUtil.findFileElement",
+        25
+      ],
+      [
+        "java/util/HashMap.resize",
+        25
+      ],
+      [
+        "kotlin/collections/builders/MapBuilder.rehash",
+        23
+      ],
+      [
+        "java/util/HashMap$HashIterator.<init>",
+        23
+      ]
+    ],
+    "inclusive_own_cpu": [
+      [
+        "ru/lazyhat/compukters/compiler/worker/k2/K2CompilerAdapter.compile$lambda$4",
+        520
+      ],
+      [
+        "ru/lazyhat/compukters/compiler/k2/engine/KotlinProjectLowering.lower",
+        392
+      ],
+      [
+        "ru/lazyhat/compukters/compiler/k2/engine/KotlinProjectLowering.lower$default",
+        367
+      ],
+      [
+        "ru/lazyhat/compukters/compiler/k2/engine/MinimalScriptLowering.lower",
+        359
+      ],
+      [
+        "ru/lazyhat/compukters/compiler/k2/engine/CompuktersFir2IrPipeline.lowerGuest",
+        329
+      ],
+      [
+        "ru/lazyhat/compukters/compiler/artifact/analysis/ValueLiveness.derive",
+        264
+      ],
+      [
+        "ru/lazyhat/compukters/compiler/artifact/link/LibraryModuleLinker.linkAndWrite",
+        253
+      ],
+      [
+        "ru/lazyhat/compukters/compiler/artifact/write/ArtifactWriter.write",
+        222
+      ],
+      [
+        "ru/lazyhat/compukters/compiler/artifact/write/ArtifactValidatorKt.validateArtifact",
+        220
+      ],
+      [
+        "ru/lazyhat/compukters/compiler/artifact/link/LibraryModuleLinker.linkAndWrite$default",
+        217
+      ],
+      [
+        "ru/lazyhat/compukters/compiler/artifact/analysis/ReferenceLiveness.derive",
+        197
+      ],
+      [
+        "ru/lazyhat/compukters/compiler/k2/engine/FunctionCompiler.compileCall-O3XtbcE",
+        155
+      ],
+      [
+        "ru/lazyhat/compukters/compiler/artifact/write/SectionEncoderKt.encodeSemanticSections",
+        151
+      ],
+      [
+        "ru/lazyhat/compukters/compiler/artifact/link/LibraryModuleLinker.linkArtifacts",
+        145
+      ],
+      [
+        "ru/lazyhat/compukters/compiler/k2/engine/FunctionCompiler.compileRawExpression-ADkV91g",
+        126
+      ],
+      [
+        "ru/lazyhat/compukters/compiler/artifact/link/LibraryModuleLinker.linkInputs",
+        125
+      ],
+      [
+        "ru/lazyhat/compukters/compiler/artifact/write/SectionEncoderKt.encodeModuleSemanticHash",
+        124
+      ],
+      [
+        "ru/lazyhat/compukters/compiler/artifact/write/ArtifactWriter.moduleSemanticHash",
+        122
+      ],
+      [
+        "ru/lazyhat/compukters/compiler/k2/engine/FunctionCompiler.compileExpressionBody-ADkV91g",
+        110
+      ],
+      [
+        "ru/lazyhat/compukters/compiler/k2/engine/KotlinProjectLoweringKt.mapGuestValueType",
+        108
+      ],
+      [
+        "ru/lazyhat/compukters/compiler/k2/engine/KotlinProjectLoweringKt.mapGuestValueType$default",
+        92
+      ],
+      [
+        "ru/lazyhat/compukters/compiler/k2/engine/FunctionCompiler.compileExpression-ADkV91g",
+        78
+      ],
+      [
+        "ru/lazyhat/compukters/compiler/artifact/write/ArtifactWriter.moduleSemanticHash$default",
+        76
+      ],
+      [
+        "ru/lazyhat/compukters/compiler/artifact/analysis/TemporaryRegisters.compact",
+        65
+      ],
+      [
+        "ru/lazyhat/compukters/compiler/artifact/link/ReachabilityGraph.analyze",
+        60
+      ]
+    ],
+    "gc_count": 258,
+    "jfr_sha256": "8bec2f3c0d97e6d1dc734dbe0cac4507edfb8c5c13fb57a4e79ab9aab9d385b5"
+  },
+  "optimized": {
+    "main_thread_allocation_bytes_median": 321179860.0,
+    "allocation_samples": [
+      {
+        "iteration": 11,
+        "allocated_bytes": 322362176
+      },
+      {
+        "iteration": 12,
+        "allocated_bytes": 322199288
+      },
+      {
+        "iteration": 13,
+        "allocated_bytes": 322062344
+      },
+      {
+        "iteration": 14,
+        "allocated_bytes": 321995528
+      },
+      {
+        "iteration": 15,
+        "allocated_bytes": 321895656
+      },
+      {
+        "iteration": 16,
+        "allocated_bytes": 321846912
+      },
+      {
+        "iteration": 17,
+        "allocated_bytes": 321652800
+      },
+      {
+        "iteration": 18,
+        "allocated_bytes": 321647512
+      },
+      {
+        "iteration": 19,
+        "allocated_bytes": 321644384
+      },
+      {
+        "iteration": 20,
+        "allocated_bytes": 321486160
+      },
+      {
+        "iteration": 21,
+        "allocated_bytes": 321476120
+      },
+      {
+        "iteration": 22,
+        "allocated_bytes": 321439464
+      },
+      {
+        "iteration": 23,
+        "allocated_bytes": 321391984
+      },
+      {
+        "iteration": 24,
+        "allocated_bytes": 321353024
+      },
+      {
+        "iteration": 25,
+        "allocated_bytes": 321342048
+      },
+      {
+        "iteration": 26,
+        "allocated_bytes": 321332472
+      },
+      {
+        "iteration": 27,
+        "allocated_bytes": 321342616
+      },
+      {
+        "iteration": 28,
+        "allocated_bytes": 321348440
+      },
+      {
+        "iteration": 29,
+        "allocated_bytes": 321337208
+      },
+      {
+        "iteration": 30,
+        "allocated_bytes": 321310672
+      },
+      {
+        "iteration": 31,
+        "allocated_bytes": 321286264
+      },
+      {
+        "iteration": 32,
+        "allocated_bytes": 321278456
+      },
+      {
+        "iteration": 33,
+        "allocated_bytes": 321276416
+      },
+      {
+        "iteration": 34,
+        "allocated_bytes": 321261960
+      },
+      {
+        "iteration": 35,
+        "allocated_bytes": 321242344
+      },
+      {
+        "iteration": 36,
+        "allocated_bytes": 321263096
+      },
+      {
+        "iteration": 37,
+        "allocated_bytes": 321232632
+      },
+      {
+        "iteration": 38,
+        "allocated_bytes": 321219184
+      },
+      {
+        "iteration": 39,
+        "allocated_bytes": 321218560
+      },
+      {
+        "iteration": 40,
+        "allocated_bytes": 321171776
+      },
+      {
+        "iteration": 41,
+        "allocated_bytes": 321187944
+      },
+      {
+        "iteration": 42,
+        "allocated_bytes": 321097504
+      },
+      {
+        "iteration": 43,
+        "allocated_bytes": 321117112
+      },
+      {
+        "iteration": 44,
+        "allocated_bytes": 321097576
+      },
+      {
+        "iteration": 45,
+        "allocated_bytes": 321087992
+      },
+      {
+        "iteration": 46,
+        "allocated_bytes": 321090976
+      },
+      {
+        "iteration": 47,
+        "allocated_bytes": 321088624
+      },
+      {
+        "iteration": 48,
+        "allocated_bytes": 321079784
+      },
+      {
+        "iteration": 49,
+        "allocated_bytes": 321028112
+      },
+      {
+        "iteration": 50,
+        "allocated_bytes": 320977584
+      },
+      {
+        "iteration": 51,
+        "allocated_bytes": 320967376
+      },
+      {
+        "iteration": 52,
+        "allocated_bytes": 320952352
+      },
+      {
+        "iteration": 53,
+        "allocated_bytes": 320945280
+      },
+      {
+        "iteration": 54,
+        "allocated_bytes": 320928064
+      },
+      {
+        "iteration": 55,
+        "allocated_bytes": 320892896
+      },
+      {
+        "iteration": 56,
+        "allocated_bytes": 320855440
+      },
+      {
+        "iteration": 57,
+        "allocated_bytes": 320806040
+      },
+      {
+        "iteration": 58,
+        "allocated_bytes": 320798840
+      },
+      {
+        "iteration": 59,
+        "allocated_bytes": 320786360
+      },
+      {
+        "iteration": 60,
+        "allocated_bytes": 320768184
+      },
+      {
+        "iteration": 61,
+        "allocated_bytes": 320767608
+      },
+      {
+        "iteration": 62,
+        "allocated_bytes": 320760984
+      },
+      {
+        "iteration": 63,
+        "allocated_bytes": 320751128
+      },
+      {
+        "iteration": 64,
+        "allocated_bytes": 320764072
+      },
+      {
+        "iteration": 65,
+        "allocated_bytes": 320751232
+      },
+      {
+        "iteration": 66,
+        "allocated_bytes": 320744000
+      },
+      {
+        "iteration": 67,
+        "allocated_bytes": 320745848
+      },
+      {
+        "iteration": 68,
+        "allocated_bytes": 320742632
+      },
+      {
+        "iteration": 69,
+        "allocated_bytes": 320726016
+      },
+      {
+        "iteration": 70,
+        "allocated_bytes": 320700528
+      }
+    ],
+    "main_thread_cpu_samples": 2942,
+    "nearest_value_liveness_samples": 96,
+    "nearest_value_liveness_percent": 3.2630863358259687,
+    "nearest_own_cpu": [
+      [
+        "ru/lazyhat/compukters/compiler/k2/engine/KotlinProjectLowering.lower",
+        311
+      ],
+      [
+        "ru/lazyhat/compukters/compiler/artifact/write/ArtifactValidatorKt.validateArtifact",
+        187
+      ],
+      [
+        "ru/lazyhat/compukters/compiler/k2/engine/KotlinProjectLoweringKt.mapGuestValueType",
+        72
+      ],
+      [
+        "ru/lazyhat/compukters/compiler/k2/engine/FunctionCompiler.compileCall-O3XtbcE",
+        58
+      ],
+      [
+        "java/lang/AbstractStringBuilder.ensureCapacityInternal",
+        54
+      ],
+      [
+        "ru/lazyhat/compukters/compiler/k2/engine/FunctionCompiler.resolveClassInstance",
+        51
+      ],
+      [
+        "ru/lazyhat/compukters/compiler/artifact/analysis/ValueLiveness.derive",
+        50
+      ],
+      [
+        "ru/lazyhat/compukters/compiler/artifact/write/BinarySinkKt.encodeIndexed",
+        48
+      ],
+      [
+        "kotlin/jvm/internal/Intrinsics.throwParameterIsNullNPE",
+        45
+      ],
+      [
+        "ru/lazyhat/compukters/compiler/artifact/analysis/ReferenceLivenessKt.referenceComponents",
+        43
+      ],
+      [
+        "ru/lazyhat/compukters/compiler/k2/engine/KotlinProjectLoweringKt.linkedPlatformSymbols$considerTypeSymbol",
+        43
+      ],
+      [
+        "ru/lazyhat/compukters/compiler/artifact/analysis/ValueLiveness.derive$snapshot",
+        37
+      ],
+      [
+        "java/util/Arrays.copyOf",
+        36
+      ],
+      [
+        "ru/lazyhat/compukters/compiler/k2/engine/KotlinProjectLoweringKt$linkedPlatformSymbols$visitor$1.visitCall",
+        32
+      ],
+      [
+        "ru/lazyhat/compukters/compiler/artifact/link/LibrarySpecializations.reuse$ru_lazyhat_compukters_compiler_artifact",
+        30
+      ],
+      [
+        "ru/lazyhat/compukters/compiler/artifact/link/ReachabilityGraph.visitInstruction",
+        30
+      ],
+      [
+        "ru/lazyhat/compukters/compiler/k2/engine/GuestClassInstance.substitute",
+        29
+      ],
+      [
+        "ru/lazyhat/compukters/compiler/k2/engine/KotlinProjectLoweringKt$linkedPlatformFunctions$visitor$1.visitElement",
+        28
+      ],
+      [
+        "ru/lazyhat/compukters/compiler/artifact/analysis/TemporaryRegisters.compact",
+        28
+      ],
+      [
+        "ru/lazyhat/compukters/compiler/artifact/write/BinarySink.writeU32-WZ4Q5Ns",
+        27
+      ],
+      [
+        "org/jetbrains/kotlin/ir/util/DeepCopyTypeRemapper.remapTypeOrNull",
+        26
+      ],
+      [
+        "com/intellij/psi/impl/source/tree/SharedImplUtil.findFileElement",
+        25
+      ],
+      [
+        "java/util/HashMap.putVal",
+        25
+      ],
+      [
+        "ru/lazyhat/compukters/compiler/artifact/model/MetadataText.toString",
+        24
+      ],
+      [
+        "ru/lazyhat/compukters/compiler/k2/engine/GuestClassInstance.<init>",
+        20
+      ]
+    ],
+    "inclusive_own_cpu": [
+      [
+        "ru/lazyhat/compukters/compiler/worker/k2/K2CompilerAdapter.compile$lambda$4",
+        509
+      ],
+      [
+        "ru/lazyhat/compukters/compiler/k2/engine/KotlinProjectLowering.lower",
+        377
+      ],
+      [
+        "ru/lazyhat/compukters/compiler/k2/engine/KotlinProjectLowering.lower$default",
+        355
+      ],
+      [
+        "ru/lazyhat/compukters/compiler/k2/engine/MinimalScriptLowering.lower",
+        354
+      ],
+      [
+        "ru/lazyhat/compukters/compiler/k2/engine/CompuktersFir2IrPipeline.lowerGuest",
+        326
+      ],
+      [
+        "ru/lazyhat/compukters/compiler/artifact/link/LibraryModuleLinker.linkAndWrite",
+        269
+      ],
+      [
+        "ru/lazyhat/compukters/compiler/artifact/link/LibraryModuleLinker.linkAndWrite$default",
+        226
+      ],
+      [
+        "ru/lazyhat/compukters/compiler/artifact/write/ArtifactWriter.write",
+        222
+      ],
+      [
+        "ru/lazyhat/compukters/compiler/artifact/write/ArtifactValidatorKt.validateArtifact",
+        217
+      ],
+      [
+        "ru/lazyhat/compukters/compiler/k2/engine/FunctionCompiler.compileCall-O3XtbcE",
+        160
+      ],
+      [
+        "ru/lazyhat/compukters/compiler/artifact/write/SectionEncoderKt.encodeSemanticSections",
+        141
+      ],
+      [
+        "ru/lazyhat/compukters/compiler/artifact/link/LibraryModuleLinker.linkArtifacts",
+        140
+      ],
+      [
+        "ru/lazyhat/compukters/compiler/k2/engine/FunctionCompiler.compileRawExpression-ADkV91g",
+        123
+      ],
+      [
+        "ru/lazyhat/compukters/compiler/artifact/write/SectionEncoderKt.encodeModuleSemanticHash",
+        112
+      ],
+      [
+        "ru/lazyhat/compukters/compiler/artifact/write/ArtifactWriter.moduleSemanticHash",
+        111
+      ],
+      [
+        "ru/lazyhat/compukters/compiler/artifact/analysis/ValueLiveness.derive",
+        107
+      ],
+      [
+        "ru/lazyhat/compukters/compiler/artifact/link/LibraryModuleLinker.linkInputs",
+        106
+      ],
+      [
+        "ru/lazyhat/compukters/compiler/k2/engine/FunctionCompiler.compileExpressionBody-ADkV91g",
+        103
+      ],
+      [
+        "ru/lazyhat/compukters/compiler/k2/engine/KotlinProjectLoweringKt.mapGuestValueType",
+        103
+      ],
+      [
+        "ru/lazyhat/compukters/compiler/artifact/analysis/ReferenceLiveness.derive",
+        99
+      ],
+      [
+        "ru/lazyhat/compukters/compiler/k2/engine/KotlinProjectLoweringKt.mapGuestValueType$default",
+        89
+      ],
+      [
+        "ru/lazyhat/compukters/compiler/k2/engine/FunctionCompiler.compileExpression-ADkV91g",
+        73
+      ],
+      [
+        "ru/lazyhat/compukters/compiler/artifact/write/ArtifactWriter.moduleSemanticHash$default",
+        73
+      ],
+      [
+        "ru/lazyhat/compukters/compiler/artifact/link/LibrarySpecializations.reuse$ru_lazyhat_compukters_compiler_artifact",
+        68
+      ],
+      [
+        "ru/lazyhat/compukters/compiler/k2/engine/FunctionCompiler.valueTypeResolved",
+        65
+      ]
+    ],
+    "gc_count": 223,
+    "jfr_sha256": "bb2cd35624a294b97291d87eafcbf0d14ce623061c29c453ef3205203921892c"
+  }
+}
