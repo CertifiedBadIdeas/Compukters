@@ -27,6 +27,8 @@ internal object SystemProgramImage {
 
     fun edit(): ByteArray = load(EDIT_RESOURCE, "edit")
 
+    fun cmatrix(): ByteArray = load("/system/programs/cmatrix", "cmatrix")
+
     fun vmbench(): ByteArray = load(VMBENCH_RESOURCE, "vmbench")
 
     private fun load(

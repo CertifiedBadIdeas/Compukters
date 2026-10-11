@@ -59,6 +59,10 @@ running shell session. Long commands scroll horizontally while editing; input is
 Ctrl+U clears the line. Ctrl+C cancels input at the prompt or stops the foreground program and its nested work,
 returning to the shell. Files already saved remain intact; interruption does not save an editor's unsaved buffer.
 
+Run `cmatrix` for green terminal rain, or `cmatrix 1` for a shorter delay between animation frames.
+The optional delay is 1–20 server ticks (default 2), in addition to time spent drawing under the VM budget.
+Press **Ctrl+C** to stop the animation and return to the shell. `help cmatrix` shows the command usage.
+
 Use `help <command>` for usage. Relative paths start at `/home`; quote names containing spaces. For example:
 
 ```text
