@@ -275,7 +275,7 @@ class K2CompilerAdapter(
                         val linked =
                             LibraryModuleLinker.link(
                                 lowered,
-                                libraries.artifacts,
+                                prepared.linkerLibraries,
                                 specializationNames = session.materializedPlatformSpecializations,
                                 inferMinimumRuntimeAbi = true,
                             )

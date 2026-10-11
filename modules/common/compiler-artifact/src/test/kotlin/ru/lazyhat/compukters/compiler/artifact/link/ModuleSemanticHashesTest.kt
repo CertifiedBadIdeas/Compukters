@@ -18,8 +18,13 @@
 
 package ru.lazyhat.compukters.compiler.artifact.link
 
+import ru.lazyhat.compukters.compiler.artifact.model.Artifact
+import ru.lazyhat.compukters.compiler.artifact.model.EntryPoint
+import ru.lazyhat.compukters.compiler.artifact.model.FunctionId
+import ru.lazyhat.compukters.compiler.artifact.model.Manifest
 import ru.lazyhat.compukters.compiler.artifact.model.MetadataText
 import ru.lazyhat.compukters.compiler.artifact.model.Module
+import ru.lazyhat.compukters.compiler.artifact.model.ModuleId
 import ru.lazyhat.compukters.compiler.artifact.model.ModuleKind
 import ru.lazyhat.compukters.compiler.artifact.model.StringId
 import ru.lazyhat.compukters.compiler.artifact.write.ArtifactWriter
@@ -67,6 +72,41 @@ class ModuleSemanticHashesTest {
             }
         assertContentEquals(ArtifactWriter.moduleSemanticHash(original), another[original])
         assertEquals(4, calls)
+    }
+
+    @Test
+    fun `prepared libraries hash once across requests while changed and project modules stay fresh`() {
+        val library = module()
+        val descriptor = library.copy(kind = ModuleKind.APPLICATION)
+        val artifact =
+            Artifact(
+                manifest = Manifest.minimal(1u),
+                entry = EntryPoint(ModuleId.of(0u), FunctionId.of(0u)),
+                modules = listOf(descriptor, library, library),
+            )
+        var preparedCalls = 0
+        val prepared =
+            PreparedLibraryModules.prepare(listOf(artifact)) {
+                preparedCalls++
+                ArtifactWriter.moduleSemanticHash(it)
+            }
+        assertEquals(1, preparedCalls)
+        val changed = library.copy(strings = listOf(MetadataText.of("changed")))
+        repeat(2) {
+            var localCalls = 0
+            val hashes =
+                ModuleSemanticHashes(prepared) {
+                    localCalls++
+                    ArtifactWriter.moduleSemanticHash(it)
+                }
+            val returned = hashes[library]
+            returned.fill(0)
+            assertContentEquals(ArtifactWriter.moduleSemanticHash(library), hashes[library])
+            assertContentEquals(ArtifactWriter.moduleSemanticHash(changed), hashes[changed])
+            assertContentEquals(ArtifactWriter.moduleSemanticHash(descriptor), hashes[descriptor])
+            assertEquals(2, localCalls)
+        }
+        assertEquals(1, preparedCalls)
     }
 
     private fun module() = Module(StringId.of(0u), ModuleKind.LIBRARY, listOf(MetadataText.of("library")))

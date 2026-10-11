@@ -84,8 +84,26 @@ object LibraryModuleLinker {
         preserveLibraryExports: Boolean = false,
         specializationNames: Set<String> = emptySet(),
         inferMinimumRuntimeAbi: Boolean = false,
+    ): Artifact = linkArtifacts(application, libraryArtifacts, preserveLibraryExports, specializationNames, inferMinimumRuntimeAbi)
+
+    fun link(
+        application: Artifact,
+        libraries: PreparedLibraryModules,
+        preserveLibraryExports: Boolean = false,
+        specializationNames: Set<String> = emptySet(),
+        inferMinimumRuntimeAbi: Boolean = false,
+    ): Artifact =
+        linkArtifacts(application, libraries.artifacts, preserveLibraryExports, specializationNames, inferMinimumRuntimeAbi, libraries)
+
+    private fun linkArtifacts(
+        application: Artifact,
+        libraryArtifacts: List<Artifact>,
+        preserveLibraryExports: Boolean,
+        specializationNames: Set<String>,
+        inferMinimumRuntimeAbi: Boolean,
+        prepared: PreparedLibraryModules? = null,
     ): Artifact {
-        val hashes = ModuleSemanticHashes()
+        val hashes = ModuleSemanticHashes(prepared)
         val canonical =
             LibrarySpecializations.reuse(
                 application,
@@ -93,6 +111,7 @@ object LibraryModuleLinker {
                 specializationNames,
                 definitionModule = if (preserveLibraryExports) application.modules.indexOfFirst { it.kind == ModuleKind.LIBRARY } else 0,
                 hashes = hashes,
+                exports = ModuleExportIndexes(prepared),
             )
         val applicationModule = canonical.modules.single { it.kind == ModuleKind.APPLICATION }
         val applicationCapabilities =
