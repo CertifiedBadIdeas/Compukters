@@ -27,6 +27,12 @@ logo. CC BY 4.0 permits reuse of the copyrighted image under its terms, but it
 does not grant trademark rights or permission to imply official origin,
 sponsorship, or endorsement. See [TRADEMARKS.md](TRADEMARKS.md).
 
+## Configurator outline texture
+
+The single white pixel used by the configurator outline renderer is an original Compukters rendering resource
+covered by the Apache-2.0 contribution terms. Its [provenance record](licenses/media/Configurator-outline-PROVENANCE.md)
+identifies the introducing commit and the canonical license text.
+
 ## Boiler showcase screenshot
 
 The [boiler showcase screenshot](docs/assets/images/boiler_showcase.png) was captured by lazyhat for the documentation

@@ -65,8 +65,9 @@ val verifyAddonApiJar =
         description = "Checks that the public addon API JAR remains independent of Minecraft and product implementation."
         dependsOn(addonApiJar)
         inputs.file(addonApiJar.flatMap { it.archiveFile })
+        val actionAddonApiJar = addonApiJar.flatMap { it.archiveFile }
         doLast {
-            val archive = addonApiJar.get().archiveFile.get().asFile
+            val archive = actionAddonApiJar.get().asFile
             val entries = ZipFile(archive).use { zip -> zip.entries().asSequence().map { it.name }.toList() }
             val forbiddenPrefixes =
                 listOf(

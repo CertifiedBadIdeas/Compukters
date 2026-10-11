@@ -63,18 +63,16 @@ dependencies {
 tasks.test {
     val toolingPayload = project(":tooling-runtime").tasks.named("prepareToolingRuntimeBundle")
     dependsOn(toolingPayload)
-    doFirst {
-        systemProperty(
-            "compukters.ide.toolingPayload",
-            project(":tooling-runtime").layout.buildDirectory.dir("tooling-bundle/content").get().asFile.absolutePath,
-        )
-        systemProperty(
-            "compukters.ide.java",
-            javaToolchains.launcherFor {
-                languageVersion = JavaLanguageVersion.of(21)
-            }.get().executablePath.asFile.absolutePath,
-        )
-    }
+    systemProperty(
+        "compukters.ide.toolingPayload",
+        project(":tooling-runtime").layout.buildDirectory.dir("tooling-bundle/content").get().asFile.absolutePath,
+    )
+    systemProperty(
+        "compukters.ide.java",
+        javaToolchains.launcherFor {
+            languageVersion = JavaLanguageVersion.of(21)
+        }.get().executablePath.asFile.absolutePath,
+    )
 }
 
 val allowedIdeClientRuntimeModules =

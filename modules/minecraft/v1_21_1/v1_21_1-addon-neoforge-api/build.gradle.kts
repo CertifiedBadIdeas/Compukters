@@ -52,8 +52,9 @@ val verifyAddonNeoForgeApiJar =
         description = "Checks that the NeoForge 1.21.1 addon adapter JAR remains thin."
         dependsOn(tasks.jar)
         inputs.file(tasks.jar.flatMap { it.archiveFile })
+        val archiveFile = tasks.jar.flatMap { it.archiveFile }
         doLast {
-            val archive = tasks.jar.get().archiveFile.get().asFile
+            val archive = archiveFile.get().asFile
             val productClasses =
                 ZipFile(archive).use { zip ->
                     zip.entries().asSequence()

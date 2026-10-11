@@ -227,8 +227,10 @@ val verifyCompilerWorkerLicenses =
         dependsOn(compilerWorkerPayload)
         inputs.file(compilerWorkerPayload.flatMap { it.archiveFile })
         inputs.file(rootProject.layout.projectDirectory.file("licenses/distribution-components.tsv"))
+        val actionCompilerWorkerPayload = compilerWorkerPayload.flatMap { it.archiveFile }
+        val inventoryFile = rootProject.file("licenses/distribution-components.tsv")
         doLast {
-            val archive = compilerWorkerPayload.get().archiveFile.get().asFile
+            val archive = actionCompilerWorkerPayload.get().asFile
             val entries =
                 ZipFile(archive).use { zip ->
                     zip.entries().asSequence().filterNot { it.isDirectory }.map { it.name }.toList()
@@ -243,7 +245,7 @@ val verifyCompilerWorkerLicenses =
                 }
             }
 
-            val inventory = rootProject.file("licenses/distribution-components.tsv")
+            val inventory = inventoryFile
             check(inventory.isFile) { "distribution component inventory is missing: $inventory" }
             val expectedExternal =
                 inventory
@@ -295,10 +297,8 @@ tasks.test {
     filter.excludeTestsMatching("ru.lazyhat.compukters.compiler.worker.integration.*")
     inputs.file(workerJar)
     inputs.files(addonGuestApiFixtureBundle)
-    doFirst {
-        systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
-        systemProperty("compukters.addonGuestApiFixture", addonGuestApiFixtureBundle.singleFile.absolutePath)
-    }
+    systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
+    systemProperty("compukters.addonGuestApiFixture", addonGuestApiFixtureBundle.singleFile.absolutePath)
 }
 
 val kotlinSubsetConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-subset.cpkt")
@@ -375,10 +375,8 @@ val generateKotlinSubsetConformanceArtifact = tasks.register<Test>("generateKotl
     filter.includeTestsMatching("*primitive char array lowers deterministically for exact utf16 materialization*")
     inputs.file(workerJar)
     outputs.file(kotlinSubsetConformanceArtifact)
-    doFirst {
-        systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
-        systemProperty("compukter.vm.kotlinSubsetArtifact", kotlinSubsetConformanceArtifact.get().asFile.absolutePath)
-    }
+    systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
+    systemProperty("compukter.vm.kotlinSubsetArtifact", kotlinSubsetConformanceArtifact.get().asFile.absolutePath)
 }
 
 val generateNamedCallsConformanceArtifact = tasks.register<Test>("generateNamedCallsConformanceArtifact") {
@@ -391,10 +389,8 @@ val generateNamedCallsConformanceArtifact = tasks.register<Test>("generateNamedC
     filter.includeTestsMatching("*same-named guest calls preserve their resolved targets for vm conformance*")
     inputs.file(workerJar)
     outputs.file(namedCallsConformanceArtifact)
-    doFirst {
-        systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
-        systemProperty("compukter.vm.namedCallsArtifact", namedCallsConformanceArtifact.get().asFile.absolutePath)
-    }
+    systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
+    systemProperty("compukter.vm.namedCallsArtifact", namedCallsConformanceArtifact.get().asFile.absolutePath)
 }
 
 val generateDispatchConformanceArtifact = tasks.register<Test>("generateDispatchConformanceArtifact") {
@@ -407,10 +403,8 @@ val generateDispatchConformanceArtifact = tasks.register<Test>("generateDispatch
     filter.includeTestsMatching("*guest instance methods lower with deterministic owners flags and method ranges*")
     inputs.file(workerJar)
     outputs.file(dispatchConformanceArtifact)
-    doFirst {
-        systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
-        systemProperty("compukter.vm.dispatchArtifact", dispatchConformanceArtifact.get().asFile.absolutePath)
-    }
+    systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
+    systemProperty("compukter.vm.dispatchArtifact", dispatchConformanceArtifact.get().asFile.absolutePath)
 }
 
 val generateObjectModelConformanceArtifact = tasks.register<Test>("generateObjectModelConformanceArtifact") {
@@ -423,10 +417,8 @@ val generateObjectModelConformanceArtifact = tasks.register<Test>("generateObjec
     filter.includeTestsMatching("*guest object subset lowers sealed results data values enum identity and type branches*")
     inputs.file(workerJar)
     outputs.file(objectModelConformanceArtifact)
-    doFirst {
-        systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
-        systemProperty("compukter.vm.objectArtifact", objectModelConformanceArtifact.get().asFile.absolutePath)
-    }
+    systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
+    systemProperty("compukter.vm.objectArtifact", objectModelConformanceArtifact.get().asFile.absolutePath)
 }
 
 val generatePropertyAccessorsConformanceArtifact = tasks.register<Test>("generatePropertyAccessorsConformanceArtifact") {
@@ -439,10 +431,8 @@ val generatePropertyAccessorsConformanceArtifact = tasks.register<Test>("generat
     filter.includeTestsMatching("*computed and custom class accessors lower with backing fields and override dispatch*")
     inputs.file(workerJar)
     outputs.file(propertyAccessorsConformanceArtifact)
-    doFirst {
-        systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
-        systemProperty("compukter.vm.propertyAccessorsArtifact", propertyAccessorsConformanceArtifact.get().asFile.absolutePath)
-    }
+    systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
+    systemProperty("compukter.vm.propertyAccessorsArtifact", propertyAccessorsConformanceArtifact.get().asFile.absolutePath)
 }
 
 val generateAbstractPropertiesConformanceArtifact = tasks.register<Test>("generateAbstractPropertiesConformanceArtifact") {
@@ -455,10 +445,8 @@ val generateAbstractPropertiesConformanceArtifact = tasks.register<Test>("genera
     filter.includeTestsMatching("*abstract class and interface properties lower to dispatched accessors without fields*")
     inputs.file(workerJar)
     outputs.file(abstractPropertiesConformanceArtifact)
-    doFirst {
-        systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
-        systemProperty("compukter.vm.abstractPropertiesArtifact", abstractPropertiesConformanceArtifact.get().asFile.absolutePath)
-    }
+    systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
+    systemProperty("compukter.vm.abstractPropertiesArtifact", abstractPropertiesConformanceArtifact.get().asFile.absolutePath)
 }
 
 val generateInterfaceDefaultsConformanceArtifact = tasks.register<Test>("generateInterfaceDefaultsConformanceArtifact") {
@@ -471,10 +459,8 @@ val generateInterfaceDefaultsConformanceArtifact = tasks.register<Test>("generat
     filter.includeTestsMatching("*interface defaults lower to methods and computed accessors*")
     inputs.file(workerJar)
     outputs.file(interfaceDefaultsConformanceArtifact)
-    doFirst {
-        systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
-        systemProperty("compukter.vm.interfaceDefaultsArtifact", interfaceDefaultsConformanceArtifact.get().asFile.absolutePath)
-    }
+    systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
+    systemProperty("compukter.vm.interfaceDefaultsArtifact", interfaceDefaultsConformanceArtifact.get().asFile.absolutePath)
 }
 
 val generateInterfaceSuperConformanceArtifact = tasks.register<Test>("generateInterfaceSuperConformanceArtifact") {
@@ -487,10 +473,8 @@ val generateInterfaceSuperConformanceArtifact = tasks.register<Test>("generateIn
     filter.includeTestsMatching("*qualified interface super calls use direct default bodies*")
     inputs.file(workerJar)
     outputs.file(interfaceSuperConformanceArtifact)
-    doFirst {
-        systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
-        systemProperty("compukter.vm.interfaceSuperArtifact", interfaceSuperConformanceArtifact.get().asFile.absolutePath)
-    }
+    systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
+    systemProperty("compukter.vm.interfaceSuperArtifact", interfaceSuperConformanceArtifact.get().asFile.absolutePath)
 }
 
 val generateClassInitializationConformanceArtifact = tasks.register<Test>("generateClassInitializationConformanceArtifact") {
@@ -503,10 +487,8 @@ val generateClassInitializationConformanceArtifact = tasks.register<Test>("gener
     filter.includeTestsMatching("*class body properties and init blocks lower in construction order*")
     inputs.file(workerJar)
     outputs.file(classInitializationConformanceArtifact)
-    doFirst {
-        systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
-        systemProperty("compukter.vm.classInitializationArtifact", classInitializationConformanceArtifact.get().asFile.absolutePath)
-    }
+    systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
+    systemProperty("compukter.vm.classInitializationArtifact", classInitializationConformanceArtifact.get().asFile.absolutePath)
 }
 
 val generateConstructorDefaultsConformanceArtifact = tasks.register<Test>("generateConstructorDefaultsConformanceArtifact") {
@@ -519,10 +501,8 @@ val generateConstructorDefaultsConformanceArtifact = tasks.register<Test>("gener
     filter.includeTestsMatching("*primary constructor defaults preserve argument order and earlier parameters*")
     inputs.file(workerJar)
     outputs.file(constructorDefaultsConformanceArtifact)
-    doFirst {
-        systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
-        systemProperty("compukter.vm.constructorDefaultsArtifact", constructorDefaultsConformanceArtifact.get().asFile.absolutePath)
-    }
+    systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
+    systemProperty("compukter.vm.constructorDefaultsArtifact", constructorDefaultsConformanceArtifact.get().asFile.absolutePath)
 }
 
 val generateAdaptedConstructorsConformanceArtifact = tasks.register<Test>("generateAdaptedConstructorsConformanceArtifact") {
@@ -535,10 +515,8 @@ val generateAdaptedConstructorsConformanceArtifact = tasks.register<Test>("gener
     filter.includeTestsMatching("*default adapted constructor references lower to managed function values*")
     inputs.file(workerJar)
     outputs.file(adaptedConstructorsConformanceArtifact)
-    doFirst {
-        systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
-        systemProperty("compukter.vm.adaptedConstructorsArtifact", adaptedConstructorsConformanceArtifact.get().asFile.absolutePath)
-    }
+    systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
+    systemProperty("compukter.vm.adaptedConstructorsArtifact", adaptedConstructorsConformanceArtifact.get().asFile.absolutePath)
 }
 
 val generateMutableFieldsConformanceArtifact = tasks.register<Test>("generateMutableFieldsConformanceArtifact") {
@@ -551,10 +529,8 @@ val generateMutableFieldsConformanceArtifact = tasks.register<Test>("generateMut
     filter.includeTestsMatching("*mutable constructor properties lower to instance field writes*")
     inputs.file(workerJar)
     outputs.file(mutableFieldsConformanceArtifact)
-    doFirst {
-        systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
-        systemProperty("compukter.vm.mutableFieldsArtifact", mutableFieldsConformanceArtifact.get().asFile.absolutePath)
-    }
+    systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
+    systemProperty("compukter.vm.mutableFieldsArtifact", mutableFieldsConformanceArtifact.get().asFile.absolutePath)
 }
 
 val generateFunctionValuesConformanceArtifact = tasks.register<Test>("generateFunctionValuesConformanceArtifact") {
@@ -567,10 +543,8 @@ val generateFunctionValuesConformanceArtifact = tasks.register<Test>("generateFu
     filter.includeTestsMatching("*supported function values lower to managed closures and shared capture cells*")
     inputs.file(workerJar)
     outputs.file(functionValuesConformanceArtifact)
-    doFirst {
-        systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
-        systemProperty("compukter.vm.functionValuesArtifact", functionValuesConformanceArtifact.get().asFile.absolutePath)
-    }
+    systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
+    systemProperty("compukter.vm.functionValuesArtifact", functionValuesConformanceArtifact.get().asFile.absolutePath)
 }
 
 val generateTransparentCallConformanceArtifact = tasks.register<Test>("generateTransparentCallConformanceArtifact") {
@@ -583,10 +557,8 @@ val generateTransparentCallConformanceArtifact = tasks.register<Test>("generateT
     filter.includeTestsMatching("*ordinary project call resumes transparently across host blocking*")
     inputs.file(workerJar)
     outputs.file(transparentCallConformanceArtifact)
-    doFirst {
-        systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
-        systemProperty("compukter.vm.transparentCallArtifact", transparentCallConformanceArtifact.get().asFile.absolutePath)
-    }
+    systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
+    systemProperty("compukter.vm.transparentCallArtifact", transparentCallConformanceArtifact.get().asFile.absolutePath)
 }
 
 val generateTasksConformanceArtifact = tasks.register<Test>("generateTasksConformanceArtifact") {
@@ -599,10 +571,8 @@ val generateTasksConformanceArtifact = tasks.register<Test>("generateTasksConfor
     filter.includeTestsMatching("*direct top level ordinary task lowers to spawn and join*")
     inputs.file(workerJar)
     outputs.file(tasksConformanceArtifact)
-    doFirst {
-        systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
-        systemProperty("compukter.vm.tasksArtifact", tasksConformanceArtifact.get().asFile.absolutePath)
-    }
+    systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
+    systemProperty("compukter.vm.tasksArtifact", tasksConformanceArtifact.get().asFile.absolutePath)
 }
 
 val generateTimerConformanceArtifact = tasks.register<Test>("generateTimerConformanceArtifact") {
@@ -615,10 +585,8 @@ val generateTimerConformanceArtifact = tasks.register<Test>("generateTimerConfor
     filter.includeTestsMatching("*task tick sleep lowers to one asynchronous timer request*")
     inputs.file(workerJar)
     outputs.file(timerConformanceArtifact)
-    doFirst {
-        systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
-        systemProperty("compukter.vm.timerArtifact", timerConformanceArtifact.get().asFile.absolutePath)
-    }
+    systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
+    systemProperty("compukter.vm.timerArtifact", timerConformanceArtifact.get().asFile.absolutePath)
 }
 
 val generateBlockingCallConformanceArtifact = tasks.register<Test>("generateBlockingCallConformanceArtifact") {
@@ -631,10 +599,8 @@ val generateBlockingCallConformanceArtifact = tasks.register<Test>("generateBloc
     filter.includeTestsMatching("*ordinary main lowers trusted terminal wait as vm blocking*")
     inputs.file(workerJar)
     outputs.file(blockingCallConformanceArtifact)
-    doFirst {
-        systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
-        systemProperty("compukter.vm.blockingCallArtifact", blockingCallConformanceArtifact.get().asFile.absolutePath)
-    }
+    systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
+    systemProperty("compukter.vm.blockingCallArtifact", blockingCallConformanceArtifact.get().asFile.absolutePath)
 }
 
 val generateExceptionsConformanceArtifact = tasks.register<Test>("generateExceptionsConformanceArtifact") {
@@ -664,10 +630,8 @@ val generateExceptionsConformanceArtifact = tasks.register<Test>("generateExcept
     for (name in listOf("host-tasks", "host-state", "host-filesystem")) {
         outputs.file(exceptionsConformanceArtifact.map { file -> File(file.asFile.absolutePath + ".$name.cpkt") })
     }
-    doFirst {
-        systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
-        systemProperty("compukter.vm.exceptionsArtifact", exceptionsConformanceArtifact.get().asFile.absolutePath)
-    }
+    systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
+    systemProperty("compukter.vm.exceptionsArtifact", exceptionsConformanceArtifact.get().asFile.absolutePath)
 }
 
 val generateWhenConformanceArtifact = tasks.register<Test>("generateWhenConformanceArtifact") {
@@ -680,10 +644,8 @@ val generateWhenConformanceArtifact = tasks.register<Test>("generateWhenConforma
     filter.includeTestsMatching("*bounded when lowers deterministically for vm execution*")
     inputs.file(workerJar)
     outputs.file(whenConformanceArtifact)
-    doFirst {
-        systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
-        systemProperty("compukter.vm.whenArtifact", whenConformanceArtifact.get().asFile.absolutePath)
-    }
+    systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
+    systemProperty("compukter.vm.whenArtifact", whenConformanceArtifact.get().asFile.absolutePath)
 }
 
 val generateArgvConformanceArtifact = tasks.register<Test>("generateArgvConformanceArtifact") {
@@ -696,10 +658,8 @@ val generateArgvConformanceArtifact = tasks.register<Test>("generateArgvConforma
     filter.includeTestsMatching("*string array entry lowers deterministically for vm argv conformance*")
     inputs.file(workerJar)
     outputs.file(argvConformanceArtifact)
-    doFirst {
-        systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
-        systemProperty("compukter.vm.argvArtifact", argvConformanceArtifact.get().asFile.absolutePath)
-    }
+    systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
+    systemProperty("compukter.vm.argvArtifact", argvConformanceArtifact.get().asFile.absolutePath)
 }
 
 val generatePlatformScalarConformanceArtifact = tasks.register<Test>("generatePlatformScalarConformanceArtifact") {
@@ -712,10 +672,8 @@ val generatePlatformScalarConformanceArtifact = tasks.register<Test>("generatePl
     filter.includeTestsMatching("*redstone side set preserves its bounded Int precondition*")
     inputs.file(workerJar)
     outputs.file(platformScalarConformanceArtifact)
-    doFirst {
-        systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
-        systemProperty("compukter.vm.platformScalarArtifact", platformScalarConformanceArtifact.get().asFile.absolutePath)
-    }
+    systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
+    systemProperty("compukter.vm.platformScalarArtifact", platformScalarConformanceArtifact.get().asFile.absolutePath)
 }
 
 val generateRedstoneConformanceArtifact = tasks.register<Test>("generateRedstoneConformanceArtifact") {
@@ -728,10 +686,8 @@ val generateRedstoneConformanceArtifact = tasks.register<Test>("generateRedstone
     filter.includeTestsMatching("*redstone program lowers deterministically for vm conformance*")
     inputs.file(workerJar)
     outputs.file(redstoneConformanceArtifact)
-    doFirst {
-        systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
-        systemProperty("compukter.vm.redstoneArtifact", redstoneConformanceArtifact.get().asFile.absolutePath)
-    }
+    systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
+    systemProperty("compukter.vm.redstoneArtifact", redstoneConformanceArtifact.get().asFile.absolutePath)
 }
 
 val generateSoundConformanceArtifact = tasks.register<Test>("generateSoundConformanceArtifact") {
@@ -744,10 +700,8 @@ val generateSoundConformanceArtifact = tasks.register<Test>("generateSoundConfor
     filter.includeTestsMatching("*sound beep lowers deterministically to a blocking Boolean capability operation*")
     inputs.file(workerJar)
     outputs.file(soundConformanceArtifact)
-    doFirst {
-        systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
-        systemProperty("compukter.vm.soundArtifact", soundConformanceArtifact.get().asFile.absolutePath)
-    }
+    systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
+    systemProperty("compukter.vm.soundArtifact", soundConformanceArtifact.get().asFile.absolutePath)
 }
 
 val generateDisplayConformanceArtifact = tasks.register<Test>("generateDisplayConformanceArtifact") {
@@ -760,10 +714,8 @@ val generateDisplayConformanceArtifact = tasks.register<Test>("generateDisplayCo
     filter.includeTestsMatching("*text display program lowers deterministically for GameTest*")
     inputs.file(workerJar)
     outputs.file(displayConformanceArtifact)
-    doFirst {
-        systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
-        systemProperty("compukter.vm.displayArtifact", displayConformanceArtifact.get().asFile.absolutePath)
-    }
+    systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
+    systemProperty("compukter.vm.displayArtifact", displayConformanceArtifact.get().asFile.absolutePath)
 }
 
 val graphicalDisplayHibernationArtifact = layout.buildDirectory.file("generated/conformance/graphical-display-hibernation.cpkt")
@@ -780,11 +732,9 @@ val generateGraphicalDisplayConformanceArtifact = tasks.register<Test>("generate
     inputs.file(workerJar)
     outputs.file(graphicalDisplayArtifact)
     outputs.file(graphicalDisplayHibernationArtifact)
-    doFirst {
-        systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
-        systemProperty("compukter.vm.graphicalDisplayArtifact", graphicalDisplayArtifact.get().asFile.absolutePath)
-        systemProperty("compukter.vm.graphicalDisplayHibernationArtifact", graphicalDisplayHibernationArtifact.get().asFile.absolutePath)
-    }
+    systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
+    systemProperty("compukter.vm.graphicalDisplayArtifact", graphicalDisplayArtifact.get().asFile.absolutePath)
+    systemProperty("compukter.vm.graphicalDisplayHibernationArtifact", graphicalDisplayHibernationArtifact.get().asFile.absolutePath)
 }
 
 val generateIntLoopsConformanceArtifact = tasks.register<Test>("generateIntLoopsConformanceArtifact") {
@@ -803,10 +753,8 @@ val generateIntLoopsConformanceArtifact = tasks.register<Test>("generateIntLoops
     outputs.file(intLoopsConformanceArtifact.map { it.asFile.resolveSibling("${it.asFile.name}.ranges.cpkt") })
     outputs.file(intLoopsConformanceArtifact.map { it.asFile.resolveSibling("${it.asFile.name}.do-while.cpkt") })
     outputs.file(intLoopsConformanceArtifact.map { it.asFile.resolveSibling("${it.asFile.name}.labeled-loops.cpkt") })
-    doFirst {
-        systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
-        systemProperty("compukter.vm.intLoopsArtifact", intLoopsConformanceArtifact.get().asFile.absolutePath)
-    }
+    systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
+    systemProperty("compukter.vm.intLoopsArtifact", intLoopsConformanceArtifact.get().asFile.absolutePath)
 }
 
 val generateIntArrayConformanceArtifact = tasks.register<Test>("generateIntArrayConformanceArtifact") {
@@ -819,10 +767,8 @@ val generateIntArrayConformanceArtifact = tasks.register<Test>("generateIntArray
     filter.includeTestsMatching("*specialized IntArray lowers deterministically for vm conformance*")
     inputs.file(workerJar)
     outputs.file(intArrayConformanceArtifact)
-    doFirst {
-        systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
-        systemProperty("compukter.vm.intArrayArtifact", intArrayConformanceArtifact.get().asFile.absolutePath)
-    }
+    systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
+    systemProperty("compukter.vm.intArrayArtifact", intArrayConformanceArtifact.get().asFile.absolutePath)
 }
 
 val generateReferenceArrayConformanceArtifact = tasks.register<Test>("generateReferenceArrayConformanceArtifact") {
@@ -839,10 +785,8 @@ val generateReferenceArrayConformanceArtifact = tasks.register<Test>("generateRe
     outputs.file(referenceArrayConformanceArtifact.map { it.asFile.resolveSibling("${it.asFile.name}.packed.cpkt") })
     outputs.file(referenceArrayConformanceArtifact)
     outputs.file(referenceArrayConformanceArtifact.map { it.asFile.resolveSibling("${it.asFile.name}.loops.cpkt") })
-    doFirst {
-        systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
-        systemProperty("compukter.vm.referenceArrayArtifact", referenceArrayConformanceArtifact.get().asFile.absolutePath)
-    }
+    systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
+    systemProperty("compukter.vm.referenceArrayArtifact", referenceArrayConformanceArtifact.get().asFile.absolutePath)
 }
 
 val generateNullableReferencesConformanceArtifact = tasks.register<Test>("generateNullableReferencesConformanceArtifact") {
@@ -855,10 +799,8 @@ val generateNullableReferencesConformanceArtifact = tasks.register<Test>("genera
     filter.includeTestsMatching("*nullable references lower null comparisons Elvis and reference safe calls*")
     inputs.file(workerJar)
     outputs.file(nullableReferencesConformanceArtifact)
-    doFirst {
-        systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
-        systemProperty("compukter.vm.nullableReferenceArtifact", nullableReferencesConformanceArtifact.get().asFile.absolutePath)
-    }
+    systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
+    systemProperty("compukter.vm.nullableReferenceArtifact", nullableReferencesConformanceArtifact.get().asFile.absolutePath)
 }
 
 val generateLongConformanceArtifact = tasks.register<Test>("generateLongConformanceArtifact") {
@@ -871,10 +813,8 @@ val generateLongConformanceArtifact = tasks.register<Test>("generateLongConforma
     filter.includeTestsMatching("*Long arithmetic conversions comparisons and text lower for vm conformance*")
     inputs.file(workerJar)
     outputs.file(longConformanceArtifact)
-    doFirst {
-        systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
-        systemProperty("compukter.vm.longArtifact", longConformanceArtifact.get().asFile.absolutePath)
-    }
+    systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
+    systemProperty("compukter.vm.longArtifact", longConformanceArtifact.get().asFile.absolutePath)
 }
 
 val generateGenericFunctionsConformanceArtifact = tasks.register<Test>("generateGenericFunctionsConformanceArtifact") {
@@ -887,10 +827,8 @@ val generateGenericFunctionsConformanceArtifact = tasks.register<Test>("generate
     filter.includeTestsMatching("*generic identity specializes primitive and reference calls*")
     inputs.file(workerJar)
     outputs.file(genericFunctionsConformanceArtifact)
-    doFirst {
-        systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
-        systemProperty("compukter.vm.genericFunctionsArtifact", genericFunctionsConformanceArtifact.get().asFile.absolutePath)
-    }
+    systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
+    systemProperty("compukter.vm.genericFunctionsArtifact", genericFunctionsConformanceArtifact.get().asFile.absolutePath)
 }
 
 val generateGenericCellConformanceArtifact = tasks.register<Test>("generateGenericCellConformanceArtifact") {
@@ -903,10 +841,8 @@ val generateGenericCellConformanceArtifact = tasks.register<Test>("generateGener
     filter.includeTestsMatching("*generic cell specializes field layout and preserves aliases*")
     inputs.file(workerJar)
     outputs.file(genericCellConformanceArtifact)
-    doFirst {
-        systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
-        systemProperty("compukter.vm.genericCellArtifact", genericCellConformanceArtifact.get().asFile.absolutePath)
-    }
+    systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
+    systemProperty("compukter.vm.genericCellArtifact", genericCellConformanceArtifact.get().asFile.absolutePath)
 }
 
 val generateGenericInterfaceConformanceArtifact = tasks.register<Test>("generateGenericInterfaceConformanceArtifact") {
@@ -919,10 +855,8 @@ val generateGenericInterfaceConformanceArtifact = tasks.register<Test>("generate
     filter.includeTestsMatching("*generic interface dispatch retains concrete Int and reference types*")
     inputs.file(workerJar)
     outputs.file(genericInterfaceConformanceArtifact)
-    doFirst {
-        systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
-        systemProperty("compukter.vm.genericInterfaceArtifact", genericInterfaceConformanceArtifact.get().asFile.absolutePath)
-    }
+    systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
+    systemProperty("compukter.vm.genericInterfaceArtifact", genericInterfaceConformanceArtifact.get().asFile.absolutePath)
 }
 
 tasks.register<Test>("generateProviderDefaultsConformanceArtifact") {
@@ -937,11 +871,9 @@ tasks.register<Test>("generateProviderDefaultsConformanceArtifact") {
     inputs.file(workerJar)
     outputs.file(providerDefaultsConformanceArtifact)
     outputs.file(strictFirstConformanceArtifact)
-    doFirst {
-        systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
-        systemProperty("compukter.vm.providerDefaultsArtifact", providerDefaultsConformanceArtifact.get().asFile.absolutePath)
-        systemProperty("compukter.vm.strictFirstArtifact", strictFirstConformanceArtifact.get().asFile.absolutePath)
-    }
+    systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
+    systemProperty("compukter.vm.providerDefaultsArtifact", providerDefaultsConformanceArtifact.get().asFile.absolutePath)
+    systemProperty("compukter.vm.strictFirstArtifact", strictFirstConformanceArtifact.get().asFile.absolutePath)
 }
 
 val peripheralQueriesConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-peripheral-queries.cpkt")
@@ -955,10 +887,8 @@ tasks.register<Test>("generatePeripheralQueriesConformanceArtifact") {
     filter.includeTestsMatching("*canonical peripheral companion specializes shared typed queries*")
     inputs.file(workerJar)
     outputs.file(peripheralQueriesConformanceArtifact)
-    doFirst {
-        systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
-        systemProperty("compukter.vm.peripheralQueriesArtifact", peripheralQueriesConformanceArtifact.get().asFile.absolutePath)
-    }
+    systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
+    systemProperty("compukter.vm.peripheralQueriesArtifact", peripheralQueriesConformanceArtifact.get().asFile.absolutePath)
 }
 
 tasks.register<Test>("generateSingletonProvidersConformanceArtifact") {
@@ -974,12 +904,10 @@ tasks.register<Test>("generateSingletonProvidersConformanceArtifact") {
     inputs.file(workerJar)
     outputs.file(singletonProvidersConformanceArtifact)
     outputs.file(addonProvidersConformanceArtifact)
-    doFirst {
-        systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
-        systemProperty("compukters.addonGuestApiFixture", addonGuestApiFixtureBundle.singleFile.absolutePath)
-        systemProperty("compukter.vm.singletonProvidersArtifact", singletonProvidersConformanceArtifact.get().asFile.absolutePath)
-        systemProperty("compukter.vm.addonProvidersArtifact", addonProvidersConformanceArtifact.get().asFile.absolutePath)
-    }
+    systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
+    systemProperty("compukters.addonGuestApiFixture", addonGuestApiFixtureBundle.singleFile.absolutePath)
+    systemProperty("compukter.vm.singletonProvidersArtifact", singletonProvidersConformanceArtifact.get().asFile.absolutePath)
+    systemProperty("compukter.vm.addonProvidersArtifact", addonProvidersConformanceArtifact.get().asFile.absolutePath)
 }
 
 val generateListConformanceArtifact = tasks.register<Test>("generateListConformanceArtifact") {
@@ -992,10 +920,8 @@ val generateListConformanceArtifact = tasks.register<Test>("generateListConforma
     filter.includeTestsMatching("*read only lists retain typed Int String and guest references*")
     inputs.file(workerJar)
     outputs.file(listConformanceArtifact)
-    doFirst {
-        systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
-        systemProperty("compukter.vm.listArtifact", listConformanceArtifact.get().asFile.absolutePath)
-    }
+    systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
+    systemProperty("compukter.vm.listArtifact", listConformanceArtifact.get().asFile.absolutePath)
 }
 
 val generateListAnyConformanceArtifact = tasks.register<Test>("generateListAnyConformanceArtifact") {
@@ -1008,10 +934,8 @@ val generateListAnyConformanceArtifact = tasks.register<Test>("generateListAnyCo
     filter.includeTestsMatching("*list Int covariance to Any preserves the list and boxes reads*")
     inputs.file(workerJar)
     outputs.file(listAnyConformanceArtifact)
-    doFirst {
-        systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
-        systemProperty("compukter.vm.listAnyArtifact", listAnyConformanceArtifact.get().asFile.absolutePath)
-    }
+    systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
+    systemProperty("compukter.vm.listAnyArtifact", listAnyConformanceArtifact.get().asFile.absolutePath)
 }
 
 val generateValueClassBoxesConformanceArtifact = tasks.register<Test>("generateValueClassBoxesConformanceArtifact") {
@@ -1028,11 +952,9 @@ val generateValueClassBoxesConformanceArtifact = tasks.register<Test>("generateV
     val artifact = layout.buildDirectory.file("generated/conformance/kotlin-value-class-boxes.cpkt")
     outputs.file(artifact)
     outputs.file(artifact.map { File(it.asFile.absolutePath + ".addon.cpkt") })
-    doFirst {
-        systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
-        systemProperty("compukters.addonGuestApiFixture", addonGuestApiFixtureBundle.singleFile.absolutePath)
-        systemProperty("compukter.vm.valueClassBoxesArtifact", artifact.get().asFile.absolutePath)
-    }
+    systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
+    systemProperty("compukters.addonGuestApiFixture", addonGuestApiFixtureBundle.singleFile.absolutePath)
+    systemProperty("compukter.vm.valueClassBoxesArtifact", artifact.get().asFile.absolutePath)
 }
 
 val generateMfvcConformanceArtifact = tasks.register<Test>("generateMfvcConformanceArtifact") {
@@ -1049,11 +971,9 @@ val generateMfvcConformanceArtifact = tasks.register<Test>("generateMfvcConforma
     val artifact = layout.buildDirectory.file("generated/conformance/kotlin-mfvc.cpkt")
     outputs.file(artifact)
     outputs.file(artifact.map { File(it.asFile.absolutePath + ".addon.cpkt") })
-    doFirst {
-        systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
-        systemProperty("compukters.addonGuestApiFixture", addonGuestApiFixtureBundle.singleFile.absolutePath)
-        systemProperty("compukter.vm.mfvcArtifact", artifact.get().asFile.absolutePath)
-    }
+    systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
+    systemProperty("compukters.addonGuestApiFixture", addonGuestApiFixtureBundle.singleFile.absolutePath)
+    systemProperty("compukter.vm.mfvcArtifact", artifact.get().asFile.absolutePath)
 }
 
 val generateNullableCollectionsConformanceArtifact = tasks.register<Test>("generateNullableCollectionsConformanceArtifact") {
@@ -1066,10 +986,8 @@ val generateNullableCollectionsConformanceArtifact = tasks.register<Test>("gener
     filter.includeTestsMatching("*nullable Int and collection elements preserve values and nulls*")
     inputs.file(workerJar)
     outputs.file(nullableCollectionsConformanceArtifact)
-    doFirst {
-        systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
-        systemProperty("compukter.vm.nullableCollectionsArtifact", nullableCollectionsConformanceArtifact.get().asFile.absolutePath)
-    }
+    systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
+    systemProperty("compukter.vm.nullableCollectionsArtifact", nullableCollectionsConformanceArtifact.get().asFile.absolutePath)
 }
 
 val generateCollectionSelectionConformanceArtifact = tasks.register<Test>("generateCollectionSelectionConformanceArtifact") {
@@ -1082,10 +1000,8 @@ val generateCollectionSelectionConformanceArtifact = tasks.register<Test>("gener
     filter.includeTestsMatching("*collection nullable selection preserves traversal values and identity*")
     inputs.file(workerJar)
     outputs.file(collectionSelectionConformanceArtifact)
-    doFirst {
-        systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
-        systemProperty("compukter.vm.collectionSelectionArtifact", collectionSelectionConformanceArtifact.get().asFile.absolutePath)
-    }
+    systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
+    systemProperty("compukter.vm.collectionSelectionArtifact", collectionSelectionConformanceArtifact.get().asFile.absolutePath)
 }
 
 val generateFoldConformanceArtifact = tasks.register<Test>("generateFoldConformanceArtifact") {
@@ -1098,10 +1014,8 @@ val generateFoldConformanceArtifact = tasks.register<Test>("generateFoldConforma
     filter.includeTestsMatching("*Iterable fold specializes independent element and accumulator types*")
     inputs.file(workerJar)
     outputs.file(foldConformanceArtifact)
-    doFirst {
-        systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
-        systemProperty("compukter.vm.foldArtifact", foldConformanceArtifact.get().asFile.absolutePath)
-    }
+    systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
+    systemProperty("compukter.vm.foldArtifact", foldConformanceArtifact.get().asFile.absolutePath)
 }
 
 val generateMapConformanceArtifact = tasks.register<Test>("generateMapConformanceArtifact") {
@@ -1114,10 +1028,8 @@ val generateMapConformanceArtifact = tasks.register<Test>("generateMapConformanc
     filter.includeTestsMatching("*Iterable map preserves order independent types and nullable identity*")
     inputs.file(workerJar)
     outputs.file(mapConformanceArtifact)
-    doFirst {
-        systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
-        systemProperty("compukter.vm.mapArtifact", mapConformanceArtifact.get().asFile.absolutePath)
-    }
+    systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
+    systemProperty("compukter.vm.mapArtifact", mapConformanceArtifact.get().asFile.absolutePath)
 }
 
 val generateScopeConformanceArtifact = tasks.register<Test>("generateScopeConformanceArtifact") {
@@ -1130,10 +1042,8 @@ val generateScopeConformanceArtifact = tasks.register<Test>("generateScopeConfor
     filter.includeTestsMatching("*stdlib scope functions execute with inline receiver and nullable semantics*")
     inputs.file(workerJar)
     outputs.file(scopeConformanceArtifact)
-    doFirst {
-        systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
-        systemProperty("compukter.vm.scopeArtifact", scopeConformanceArtifact.get().asFile.absolutePath)
-    }
+    systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
+    systemProperty("compukter.vm.scopeArtifact", scopeConformanceArtifact.get().asFile.absolutePath)
 }
 
 val generateMapNotNullConformanceArtifact = tasks.register<Test>("generateMapNotNullConformanceArtifact") {
@@ -1146,10 +1056,8 @@ val generateMapNotNullConformanceArtifact = tasks.register<Test>("generateMapNot
     filter.includeTestsMatching("*Iterable mapNotNull preserves traversal narrowing and identity*")
     inputs.file(workerJar)
     outputs.file(mapNotNullConformanceArtifact)
-    doFirst {
-        systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
-        systemProperty("compukter.vm.mapNotNullArtifact", mapNotNullConformanceArtifact.get().asFile.absolutePath)
-    }
+    systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
+    systemProperty("compukter.vm.mapNotNullArtifact", mapNotNullConformanceArtifact.get().asFile.absolutePath)
 }
 
 val generateDestinationConformanceArtifact = tasks.register<Test>("generateDestinationConformanceArtifact") {
@@ -1162,10 +1070,8 @@ val generateDestinationConformanceArtifact = tasks.register<Test>("generateDesti
     filter.includeTestsMatching("*Iterable destination operations append preserve types and return identity*")
     inputs.file(workerJar)
     outputs.file(destinationConformanceArtifact)
-    doFirst {
-        systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
-        systemProperty("compukter.vm.destinationArtifact", destinationConformanceArtifact.get().asFile.absolutePath)
-    }
+    systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
+    systemProperty("compukter.vm.destinationArtifact", destinationConformanceArtifact.get().asFile.absolutePath)
 }
 
 val generateFilterConformanceArtifact = tasks.register<Test>("generateFilterConformanceArtifact") {
@@ -1178,10 +1084,8 @@ val generateFilterConformanceArtifact = tasks.register<Test>("generateFilterConf
     filter.includeTestsMatching("*Iterable filter preserves traversal nullable elements and identity*")
     inputs.file(workerJar)
     outputs.file(filterConformanceArtifact)
-    doFirst {
-        systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
-        systemProperty("compukter.vm.filterArtifact", filterConformanceArtifact.get().asFile.absolutePath)
-    }
+    systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
+    systemProperty("compukter.vm.filterArtifact", filterConformanceArtifact.get().asFile.absolutePath)
 }
 
 val generateFilterNotNullConformanceArtifact = tasks.register<Test>("generateFilterNotNullConformanceArtifact") {
@@ -1194,10 +1098,8 @@ val generateFilterNotNullConformanceArtifact = tasks.register<Test>("generateFil
     filter.includeTestsMatching("*Iterable filterNotNull narrows boxed Int and reference elements*")
     inputs.file(workerJar)
     outputs.file(filterNotNullConformanceArtifact)
-    doFirst {
-        systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
-        systemProperty("compukter.vm.filterNotNullArtifact", filterNotNullConformanceArtifact.get().asFile.absolutePath)
-    }
+    systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
+    systemProperty("compukter.vm.filterNotNullArtifact", filterNotNullConformanceArtifact.get().asFile.absolutePath)
 }
 
 val generateTextStdlibConformanceArtifact = tasks.register<Test>("generateTextStdlibConformanceArtifact") {
@@ -1211,10 +1113,8 @@ val generateTextStdlibConformanceArtifact = tasks.register<Test>("generateTextSt
     inputs.file(workerJar)
     outputs.file(textStdlibConformanceArtifact)
     outputs.file(textStdlibConformanceArtifact.map { it.asFile.resolveSibling("${it.asFile.name}.failure.cpkt") })
-    doFirst {
-        systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
-        systemProperty("compukter.vm.textStdlibArtifact", textStdlibConformanceArtifact.get().asFile.absolutePath)
-    }
+    systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
+    systemProperty("compukter.vm.textStdlibArtifact", textStdlibConformanceArtifact.get().asFile.absolutePath)
 }
 
 val generateHashCollectionsConformanceArtifact = tasks.register<Test>("generateHashCollectionsConformanceArtifact") {
@@ -1248,10 +1148,8 @@ val generateHashCollectionsConformanceArtifact = tasks.register<Test>("generateH
     outputs.file(artifact.map { it.asFile.resolveSibling("${it.asFile.name}.pair.cpkt") })
     outputs.file(artifact.map { it.asFile.resolveSibling("${it.asFile.name}.inventory.cpkt") })
     (0..5).forEach { batch -> outputs.file(artifact.map { it.asFile.resolveSibling("hash-scalars-$batch.cpkt") }) }
-    doFirst {
-        systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
-        systemProperty("compukter.vm.hashCollectionsArtifact", artifact.get().asFile.absolutePath)
-    }
+    systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
+    systemProperty("compukter.vm.hashCollectionsArtifact", artifact.get().asFile.absolutePath)
 }
 
 val generateMutableListConformanceArtifact = tasks.register<Test>("generateMutableListConformanceArtifact") {
@@ -1269,10 +1167,8 @@ val generateMutableListConformanceArtifact = tasks.register<Test>("generateMutab
         outputs.file(mutableListConformanceArtifact.map { it.asFile.resolveSibling("primitive-lists-$batch.cpkt") })
     }
     outputs.file(mutableListConformanceArtifact.map { it.asFile.resolveSibling("${it.asFile.name}.failure.cpkt") })
-    doFirst {
-        systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
-        systemProperty("compukter.vm.mutableListArtifact", mutableListConformanceArtifact.get().asFile.absolutePath)
-    }
+    systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
+    systemProperty("compukter.vm.mutableListArtifact", mutableListConformanceArtifact.get().asFile.absolutePath)
 }
 
 val generateListAnyQuotaConformanceArtifact = tasks.register<Test>("generateListAnyQuotaConformanceArtifact") {
@@ -1285,10 +1181,8 @@ val generateListAnyQuotaConformanceArtifact = tasks.register<Test>("generateList
     filter.includeTestsMatching("*list Any boxes survive quota slices and garbage collection*")
     inputs.file(workerJar)
     outputs.file(listAnyQuotaConformanceArtifact)
-    doFirst {
-        systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
-        systemProperty("compukter.vm.listAnyQuotaArtifact", listAnyQuotaConformanceArtifact.get().asFile.absolutePath)
-    }
+    systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
+    systemProperty("compukter.vm.listAnyQuotaArtifact", listAnyQuotaConformanceArtifact.get().asFile.absolutePath)
 }
 
 val generateListBoundsConformanceArtifact = tasks.register<Test>("generateListBoundsConformanceArtifact") {
@@ -1301,10 +1195,8 @@ val generateListBoundsConformanceArtifact = tasks.register<Test>("generateListBo
     filter.includeTestsMatching("*list index outside bounds compiles to trapped array access*")
     inputs.file(workerJar)
     outputs.file(listBoundsConformanceArtifact)
-    doFirst {
-        systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
-        systemProperty("compukter.vm.listBoundsArtifact", listBoundsConformanceArtifact.get().asFile.absolutePath)
-    }
+    systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
+    systemProperty("compukter.vm.listBoundsArtifact", listBoundsConformanceArtifact.get().asFile.absolutePath)
 }
 
 val generateListQuotaConformanceArtifact = tasks.register<Test>("generateListQuotaConformanceArtifact") {
@@ -1317,10 +1209,8 @@ val generateListQuotaConformanceArtifact = tasks.register<Test>("generateListQuo
     filter.includeTestsMatching("*list iterator resumes across quota slices*")
     inputs.file(workerJar)
     outputs.file(listQuotaConformanceArtifact)
-    doFirst {
-        systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
-        systemProperty("compukter.vm.listQuotaArtifact", listQuotaConformanceArtifact.get().asFile.absolutePath)
-    }
+    systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
+    systemProperty("compukter.vm.listQuotaArtifact", listQuotaConformanceArtifact.get().asFile.absolutePath)
 }
 
 val generateGenericLibraryConformanceArtifact = tasks.register<Test>("generateGenericLibraryConformanceArtifact") {
@@ -1333,10 +1223,8 @@ val generateGenericLibraryConformanceArtifact = tasks.register<Test>("generateGe
     filter.includeTestsMatching("*source library generic functions and classes specialize in consumer*")
     inputs.file(workerJar)
     outputs.file(genericLibraryConformanceArtifact)
-    doFirst {
-        systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
-        systemProperty("compukter.vm.genericLibraryArtifact", genericLibraryConformanceArtifact.get().asFile.absolutePath)
-    }
+    systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
+    systemProperty("compukter.vm.genericLibraryArtifact", genericLibraryConformanceArtifact.get().asFile.absolutePath)
 }
 
 val generateFloatConformanceArtifact = tasks.register<Test>("generateFloatConformanceArtifact") {
@@ -1349,10 +1237,8 @@ val generateFloatConformanceArtifact = tasks.register<Test>("generateFloatConfor
     filter.includeTestsMatching("*Float arithmetic conversions comparisons and text lower for vm conformance*")
     inputs.file(workerJar)
     outputs.file(floatConformanceArtifact)
-    doFirst {
-        systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
-        systemProperty("compukter.vm.floatArtifact", floatConformanceArtifact.get().asFile.absolutePath)
-    }
+    systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
+    systemProperty("compukter.vm.floatArtifact", floatConformanceArtifact.get().asFile.absolutePath)
 }
 
 val generateDoubleConformanceArtifact = tasks.register<Test>("generateDoubleConformanceArtifact") {
@@ -1365,10 +1251,8 @@ val generateDoubleConformanceArtifact = tasks.register<Test>("generateDoubleConf
     filter.includeTestsMatching("*Double arithmetic conversions comparisons boxing and text lower for vm conformance*")
     inputs.file(workerJar)
     outputs.file(doubleConformanceArtifact)
-    doFirst {
-        systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
-        systemProperty("compukter.vm.doubleArtifact", doubleConformanceArtifact.get().asFile.absolutePath)
-    }
+    systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
+    systemProperty("compukter.vm.doubleArtifact", doubleConformanceArtifact.get().asFile.absolutePath)
 }
 
 val generateDoubleArrayConformanceArtifact = tasks.register<Test>("generateDoubleArrayConformanceArtifact") {
@@ -1381,10 +1265,8 @@ val generateDoubleArrayConformanceArtifact = tasks.register<Test>("generateDoubl
     filter.includeTestsMatching("*DoubleArray storage copying iteration and failures lower for vm conformance*")
     inputs.file(workerJar)
     outputs.file(doubleArrayConformanceArtifact)
-    doFirst {
-        systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
-        systemProperty("compukter.vm.doubleArrayArtifact", doubleArrayConformanceArtifact.get().asFile.absolutePath)
-    }
+    systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
+    systemProperty("compukter.vm.doubleArrayArtifact", doubleArrayConformanceArtifact.get().asFile.absolutePath)
 }
 
 val generateStringCompareConformanceArtifact = tasks.register<Test>("generateStringCompareConformanceArtifact") {
@@ -1397,10 +1279,8 @@ val generateStringCompareConformanceArtifact = tasks.register<Test>("generateStr
     filter.includeTestsMatching("*String compareTo and ordering operators lower UTF-16 order for vm conformance*")
     inputs.file(workerJar)
     outputs.file(stringCompareConformanceArtifact)
-    doFirst {
-        systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
-        systemProperty("compukter.vm.stringCompareArtifact", stringCompareConformanceArtifact.get().asFile.absolutePath)
-    }
+    systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
+    systemProperty("compukter.vm.stringCompareArtifact", stringCompareConformanceArtifact.get().asFile.absolutePath)
 }
 
 val generateScalarCompareConformanceArtifact = tasks.register<Test>("generateScalarCompareConformanceArtifact") {
@@ -1413,10 +1293,8 @@ val generateScalarCompareConformanceArtifact = tasks.register<Test>("generateSca
     filter.includeTestsMatching("*Char and Boolean compareTo preserve scalar ordering for vm conformance*")
     inputs.file(workerJar)
     outputs.file(scalarCompareConformanceArtifact)
-    doFirst {
-        systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
-        systemProperty("compukter.vm.scalarCompareArtifact", scalarCompareConformanceArtifact.get().asFile.absolutePath)
-    }
+    systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
+    systemProperty("compukter.vm.scalarCompareArtifact", scalarCompareConformanceArtifact.get().asFile.absolutePath)
 }
 
 val generateShellArtifact = tasks.register<Test>("generateShellArtifact") {
@@ -1477,10 +1355,8 @@ val generateCompilationArtifact = tasks.register<Test>("generateCompilationArtif
     inputs.file(workerJar)
     val artifact = layout.buildDirectory.file("generated/conformance/compilation.cpkt")
     outputs.file(artifact)
-    doFirst {
-        systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
-        systemProperty("compukters.compilation.artifact", artifact.get().asFile.absolutePath)
-    }
+    systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
+    systemProperty("compukters.compilation.artifact", artifact.get().asFile.absolutePath)
 }
 
 val generateFilesystemArtifact = tasks.register<Test>("generateFilesystemArtifact") {
@@ -1575,12 +1451,10 @@ val forkedWorkerTest = tasks.register<Test>("forkedWorkerTest") {
     shouldRunAfter(tasks.test)
     inputs.dir(sharedToolingPayloadDirectory)
     outputs.file(workerMeasurementReport)
-    doFirst {
-        systemProperty("compukters.worker.payload", sharedToolingPayloadDirectory.get().asFile.absolutePath)
-        systemProperty("compukters.worker.java", javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(21) }.get().executablePath)
-        systemProperty("compukters.worker.test-classpath", sourceSets.test.get().runtimeClasspath.asPath)
-        systemProperty("compukters.worker.measurement-report", workerMeasurementReport.get().asFile.absolutePath)
-    }
+    systemProperty("compukters.worker.payload", sharedToolingPayloadDirectory.get().asFile.absolutePath)
+    systemProperty("compukters.worker.java", javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(21) }.get().executablePath.asFile.absolutePath)
+    systemProperty("compukters.worker.test-classpath", sourceSets.test.get().runtimeClasspath.asPath)
+    systemProperty("compukters.worker.measurement-report", workerMeasurementReport.get().asFile.absolutePath)
 }
 
 tasks.check {
@@ -1608,31 +1482,39 @@ val nonWorkerIsolationChecks =
                 )
         }
         .map { candidate ->
-            candidate.tasks.register("assertNoK2CompilerRuntime") {
-                doLast {
-                    candidate.configurations.findByName("runtimeClasspath")?.takeIf { it.isCanBeResolved }?.let { runtime ->
-                        val leaked = runtime.resolvedConfiguration.resolvedArtifacts.filter { it.moduleVersion.id.name in compilerModuleNames }
-                        check(leaked.isEmpty()) { "${candidate.path} production runtime leaks compiler artifacts: $leaked" }
-                    }
+            val isolationCheck = candidate.tasks.register<AssertForbiddenRuntimeModules>("assertNoK2CompilerRuntime") {
+                forbiddenNames.set(compilerModuleNames)
+            }
+            candidate.plugins.withId("java") {
+                isolationCheck.configure {
+                    moduleNames.set(candidate.configurations.getByName("runtimeClasspath").runtimeModuleNames())
                 }
             }
+            isolationCheck
         }
 
 val assertCompilerWorkerIsolation = tasks.register("assertCompilerWorkerIsolation") {
     dependsOn(prepareCompilerWorkerPayload, nonWorkerIsolationChecks, ":compiler-client:assertNoK2CompilerRuntime")
+    val actionGuestPlatformSources = objects.fileCollection().from(guestPlatformSources)
+    val actionPinnedKotlinVersion = pinnedKotlinVersion
+    val actionWorkerJar = workerJar
+    val actionWorkerPayloadDirectory = workerPayloadDirectory
+    val actionWorkerRuntimeClasspath = objects.fileCollection().from(workerRuntimeClasspath)
+    val workerModules = workerRuntimeClasspath.runtimeModuleCoordinates()
+    inputs.property("workerModules", workerModules)
     doLast {
-        val workerArtifacts = workerRuntimeClasspath.resolvedConfiguration.resolvedArtifacts
+        val workerArtifacts = workerModules.get()
         val compilerVersions =
             workerArtifacts
-                .filter { it.moduleVersion.id.name == "kotlin-compiler" }
-                .map { it.moduleVersion.id.version }
+                .filter { it.name == "kotlin-compiler" }
+                .map { it.version }
                 .toSet()
-        check(compilerVersions == setOf(pinnedKotlinVersion)) {
-            "kotlin-compiler must resolve exactly to $pinnedKotlinVersion, got $compilerVersions"
+        check(compilerVersions == setOf(actionPinnedKotlinVersion)) {
+            "kotlin-compiler must resolve exactly to $actionPinnedKotlinVersion, got $compilerVersions"
         }
         val forbiddenCompilerModules =
             workerArtifacts.filter {
-                it.moduleVersion.id.name in
+                it.name in
                     setOf(
                         "kotlin-compiler-embeddable",
                         "kotlin-scripting-compiler-embeddable",
@@ -1644,18 +1526,20 @@ val assertCompilerWorkerIsolation = tasks.register("assertCompilerWorkerIsolatio
         }
 
         val registrarPath = "META-INF/services/org.jetbrains.kotlin.compiler.plugin.CompilerPluginRegistrar"
-        val registrars = zipTree(workerJar.get().asFile).matching { include(registrarPath) }.files
+        val registrars = ZipFile(actionWorkerJar.get().asFile).use { archive ->
+            archive.entries().asSequence().filter { it.name == registrarPath }.map { it.name }.toList()
+        }
         check(registrars.isEmpty()) { "worker adapter jar must not duplicate the compiler engine registrar" }
 
-        val payloadLibraries = workerPayloadDirectory.get().asFile.toPath().resolve("lib")
+        val payloadLibraries = actionWorkerPayloadDirectory.get().asFile.toPath().resolve("lib")
         val actualNames = Files.list(payloadLibraries).use { paths -> paths.map { it.fileName.toString() }.toList().toSet() }
         val expectedNames =
-            (workerRuntimeClasspath.files + guestPlatformSources.files + workerJar.get().asFile)
+            (actionWorkerRuntimeClasspath.files + actionGuestPlatformSources.files + actionWorkerJar.get().asFile)
                 .map { it.name }
                 .toSet()
         check(actualNames == expectedNames) { "worker payload differs from its fixed resolved runtime classpath" }
         val forbiddenGroups = listOf("minecraft", "neoforge", "fabric", "architectury")
-        val forbidden = workerArtifacts.filter { artifact -> forbiddenGroups.any { it in artifact.moduleVersion.id.group.lowercase() } }
+        val forbidden = workerArtifacts.filter { artifact -> forbiddenGroups.any { it in artifact.group.lowercase() } }
         check(forbidden.isEmpty()) { "worker payload contains game or mod-loader artifacts: $forbidden" }
     }
 }
@@ -1676,10 +1560,8 @@ tasks.register<Test>("generateCollectionBenchmarkArtifacts") {
     filter.includeTestsMatching("*collection representation benchmark artifacts compile*")
     inputs.file(workerJar)
     outputs.dir(collectionBenchmarkArtifacts)
-    doFirst {
-        systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
-        systemProperty("compukter.bench.collectionsOutput", collectionBenchmarkArtifacts.get().asFile.absolutePath)
-    }
+    systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
+    systemProperty("compukter.bench.collectionsOutput", collectionBenchmarkArtifacts.get().asFile.absolutePath)
 }
 
 val objectArrayBenchmarkArtifacts = layout.buildDirectory.dir("generated/benchmarks/object-arrays")
@@ -1696,10 +1578,8 @@ tasks.register<Test>("generateTransientAllocationBenchmarkArtifacts") {
     filter.includeTestsMatching("*transient allocation benchmark artifacts compile*")
     inputs.file(workerJar)
     outputs.dir(transientBenchmarkArtifacts)
-    doFirst {
-        systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
-        systemProperty("compukter.bench.transientOutput", transientBenchmarkArtifacts.get().asFile.absolutePath)
-    }
+    systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
+    systemProperty("compukter.bench.transientOutput", transientBenchmarkArtifacts.get().asFile.absolutePath)
 }
 
 tasks.register<Test>("generateObjectArrayBenchmarkArtifacts") {
@@ -1712,10 +1592,8 @@ tasks.register<Test>("generateObjectArrayBenchmarkArtifacts") {
     filter.includeTestsMatching("*object array heap benchmark artifacts compile*")
     inputs.file(workerJar)
     outputs.dir(objectArrayBenchmarkArtifacts)
-    doFirst {
-        systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
-        systemProperty("compukter.bench.objectArraysOutput", objectArrayBenchmarkArtifacts.get().asFile.absolutePath)
-    }
+    systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
+    systemProperty("compukter.bench.objectArraysOutput", objectArrayBenchmarkArtifacts.get().asFile.absolutePath)
 }
 
 val objectCollectionBenchmarkArtifacts = layout.buildDirectory.dir("generated/benchmarks/object-collections")
@@ -1730,10 +1608,8 @@ tasks.register<Test>("generateObjectCollectionBenchmarkArtifacts") {
     filter.includeTestsMatching("*object collection heap benchmark artifacts compile*")
     inputs.file(workerJar)
     outputs.dir(objectCollectionBenchmarkArtifacts)
-    doFirst {
-        systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
-        systemProperty("compukter.bench.objectCollectionsOutput", objectCollectionBenchmarkArtifacts.get().asFile.absolutePath)
-    }
+    systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
+    systemProperty("compukter.bench.objectCollectionsOutput", objectCollectionBenchmarkArtifacts.get().asFile.absolutePath)
 }
 
 val collectionReuseCount = providers.gradleProperty("compukterCollectionReuseCount").orElse("1024").get().toInt().also {
@@ -1753,11 +1629,9 @@ tasks.register<Test>("generateCollectionReuseBenchmarkArtifacts") {
     inputs.file(workerJar)
     inputs.property("collectionReuseCount", collectionReuseCount)
     outputs.dir(collectionReuseBenchmarkArtifacts)
-    doFirst {
-        systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
-        systemProperty("compukter.bench.collectionReuseCount", collectionReuseCount)
-        systemProperty("compukter.bench.collectionReuseOutput", collectionReuseBenchmarkArtifacts.get().asFile.absolutePath)
-    }
+    systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
+    systemProperty("compukter.bench.collectionReuseCount", collectionReuseCount)
+    systemProperty("compukter.bench.collectionReuseOutput", collectionReuseBenchmarkArtifacts.get().asFile.absolutePath)
 }
 
 val toStringConformanceArtifact = layout.buildDirectory.file("generated/conformance/to-string.cpkt")
@@ -1771,10 +1645,8 @@ val generateToStringConformanceArtifact = tasks.register<Test>("generateToString
     filter.includeTestsMatching("*toString dispatch and lazy Any messages preserve values and effects for vm execution*")
     inputs.file(workerJar)
     outputs.file(toStringConformanceArtifact)
-    doFirst {
-        systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
-        systemProperty("compukter.vm.toStringArtifact", toStringConformanceArtifact.get().asFile.absolutePath)
-    }
+    systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
+    systemProperty("compukter.vm.toStringArtifact", toStringConformanceArtifact.get().asFile.absolutePath)
 }
 val hashCodeConformanceArtifact = layout.buildDirectory.file("generated/conformance/hash-code.cpkt")
 val hashCodeArrayConformanceArtifact = layout.buildDirectory.file("generated/conformance/hash-code-arrays.cpkt")
@@ -1789,11 +1661,9 @@ val generateHashCodeConformanceArtifact = tasks.register<Test>("generateHashCode
     inputs.file(workerJar)
     outputs.file(hashCodeConformanceArtifact)
     outputs.file(hashCodeArrayConformanceArtifact)
-    doFirst {
-        systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
-        systemProperty("compukter.vm.hashCodeArtifact", hashCodeConformanceArtifact.get().asFile.absolutePath)
-        systemProperty("compukter.vm.hashCodeArrayArtifact", hashCodeArrayConformanceArtifact.get().asFile.absolutePath)
-    }
+    systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
+    systemProperty("compukter.vm.hashCodeArtifact", hashCodeConformanceArtifact.get().asFile.absolutePath)
+    systemProperty("compukter.vm.hashCodeArrayArtifact", hashCodeArrayConformanceArtifact.get().asFile.absolutePath)
 }
 
 val equalsConformanceArtifact = layout.buildDirectory.file("generated/conformance/equals.cpkt")
@@ -1807,10 +1677,8 @@ val generateEqualsConformanceArtifact = tasks.register<Test>("generateEqualsConf
     filter.includeTestsMatching("*virtual equals handles libraries data values nullable references and effects for vm execution*")
     inputs.file(workerJar)
     outputs.file(equalsConformanceArtifact)
-    doFirst {
-        systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
-        systemProperty("compukter.vm.equalsArtifact", equalsConformanceArtifact.get().asFile.absolutePath)
-    }
+    systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
+    systemProperty("compukter.vm.equalsArtifact", equalsConformanceArtifact.get().asFile.absolutePath)
 }
 
 val mathConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-math.cpkt")
@@ -1825,10 +1693,8 @@ tasks.register<Test>("generateMathConformanceArtifact") {
     inputs.file(workerJar)
     inputs.file("src/test/resources/kotlin/math/main.kt")
     outputs.file(mathConformanceArtifact)
-    doFirst {
-        systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
-        systemProperty("compukter.vm.mathArtifact", mathConformanceArtifact.get().asFile.absolutePath)
-    }
+    systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
+    systemProperty("compukter.vm.mathArtifact", mathConformanceArtifact.get().asFile.absolutePath)
 }
 
 
@@ -1843,10 +1709,11 @@ val generateNetworkConformanceArtifacts = tasks.register<Test>("generateNetworkC
     filter.includeTestsMatching("*binary computer network programs lower for GameTest*")
     inputs.file(workerJar)
     outputs.dir(networkConformanceDirectory)
+    val networkOutput = networkConformanceDirectory.get().asFile
+    systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
+    systemProperty("compukter.vm.networkArtifacts", networkOutput.absolutePath)
     doFirst {
-        networkConformanceDirectory.get().asFile.mkdirs()
-        systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
-        systemProperty("compukter.vm.networkArtifacts", networkConformanceDirectory.get().asFile.absolutePath)
+        check(networkOutput.isDirectory || networkOutput.mkdirs()) { "Cannot create $networkOutput" }
     }
 }
 
@@ -1862,8 +1729,6 @@ tasks.register<Test>("generateGeometryConformanceArtifact") {
     inputs.file(workerJar)
     inputs.file("src/test/resources/kotlin/geometry/main.kt")
     outputs.file(geometryConformanceArtifact)
-    doFirst {
-        systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
-        systemProperty("compukter.vm.geometryArtifact", geometryConformanceArtifact.get().asFile.absolutePath)
-    }
+    systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
+    systemProperty("compukter.vm.geometryArtifact", geometryConformanceArtifact.get().asFile.absolutePath)
 }

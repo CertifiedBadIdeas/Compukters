@@ -81,10 +81,12 @@ val verifyRelocatedFormatterRuntime = tasks.register("verifyRelocatedFormatterRu
     inputs.file(relocatedFormatterJar.flatMap { it.archiveFile })
     inputs.files(relocatedFormatterRuntime)
     inputs.file(rootProject.layout.projectDirectory.file("licenses/distribution-components.tsv"))
+    val actionRelocatedFormatterJar = relocatedFormatterJar.flatMap { it.archiveFile }
+    val actionRelocatedFormatterRuntime = objects.fileCollection().from(relocatedFormatterRuntime)
+    val inventoryFile = rootProject.file("licenses/distribution-components.tsv")
     doLast {
         val expectedDependencies =
-            rootProject
-                .file("licenses/distribution-components.tsv")
+            inventoryFile
                 .readLines()
                 .drop(1)
                 .filter { it.isNotBlank() }
@@ -92,12 +94,12 @@ val verifyRelocatedFormatterRuntime = tasks.register("verifyRelocatedFormatterRu
                 .filter { it[0] == "jvm-analysis-formatter" }
                 .map { (_, component, version, _) -> "$component-$version.jar" }
                 .sorted()
-        val actualDependencies = relocatedFormatterRuntime.files.map(File::getName).sorted()
+        val actualDependencies = actionRelocatedFormatterRuntime.files.map(File::getName).sorted()
         check(actualDependencies == expectedDependencies) {
             "relocated formatter dependency inventory mismatch: expected $expectedDependencies, found $actualDependencies"
         }
 
-        ZipFile(relocatedFormatterJar.get().archiveFile.get().asFile).use { jar ->
+        ZipFile(actionRelocatedFormatterJar.get().asFile).use { jar ->
             val entries = jar.entries().asSequence().filterNot { it.isDirectory }.toList()
             val names = entries.map { it.name }
             check(names.size == names.toSet().size) { "relocated formatter contains duplicate entries" }
@@ -125,10 +127,8 @@ val verifyRelocatedFormatterRuntime = tasks.register("verifyRelocatedFormatterRu
 
 tasks.test {
     dependsOn(relocatedFormatterJar)
-    doFirst {
-        val classpath = listOf(relocatedFormatterJar.get().archiveFile.get().asFile) + ordinaryCompilerRuntime.files
-        systemProperty("compukters.test.relocatedFormatterClasspath", classpath.joinToString(File.pathSeparator))
-    }
+    val classpath = listOf(relocatedFormatterJar.get().archiveFile.get().asFile) + ordinaryCompilerRuntime.files
+    systemProperty("compukters.test.relocatedFormatterClasspath", classpath.joinToString(File.pathSeparator))
 }
 
 tasks.check {

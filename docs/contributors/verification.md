@@ -24,17 +24,28 @@ compiler tasks execute concurrently even within the `compiler-k2` project. Local
 `:v1_21_1-neoforge:remapJar :v26_1-neoforge:jar` has also been exercised with the cache; these packaging
 tasks alone do not verify production archive contents or release readiness.
 
+The `build` and `verifyLocalFull` graphs have also been exercised for strict cache storage and replay. JVM
+parameters are configured before task execution; isolation and archive checks consume declared dependency metadata
+and file collections. The media inventory retains a dynamic file tree, so newly added assets are still checked on
+cache replay. Generated guest bundles, host contracts and built-in programs remain declared task outputs.
+
+Cache compatibility does not imply a passing build: ordinary compilation, runtime and GameTest failures still fail
+the command. [Issue #744](https://github.com/CertifiedBadIdeas/Compukters/issues/744) tracks the global rollout and
+remaining functional verification blockers. Tagged release graphs still require their separate gate.
+
 ```sh
 ./gradlew-sandbox-dev-parallel-summary :compiler-k2:generateKotlincArtifact :compiler-k2:generateShellArtifact --configuration-cache
 ./gradlew-sandbox-dev-parallel-summary :v1_21_1-neoforge:classes :v26_1-neoforge:classes --configuration-cache
 ./gradlew-sandbox-dev-parallel-summary :tooling-runtime:verifyToolingRuntimeBundle --configuration-cache
+./gradlew-sandbox-dev-parallel-summary build --configuration-cache
+./gradlew-sandbox-dev-parallel-summary verifyLocalFull --configuration-cache
 ```
 
 The first run stores the task graph; repeat the same command and check for `Reusing configuration cache`.
 Initial creation of `versions.properties` or generated Minecraft metadata can require another cache write before
 reuse stabilizes. Build-version selection tracks Git tags on `HEAD`, so adding or moving a release tag invalidates
-the cached configuration when its output changes. These focused checks do not establish compatibility for full
-verification or tagged release graphs; do not suppress Configuration Cache errors for an unverified graph.
+the cached configuration when its output changes. Do not suppress Configuration Cache errors for an unverified
+graph, or treat successful cache storage as successful functional verification.
 
 ## Gradle caches in agent worktrees
 
