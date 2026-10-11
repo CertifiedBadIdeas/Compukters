@@ -99,6 +99,9 @@ K2 factory identities and compiler diagnostic codes classify unresolved referenc
 message text. Hover types and declarations use K2 short-name renderers, preserving generic, nullable and
 function-type structure without package prefixes. Qualified declaration identities remain available to
 navigation and binding checks.
+The attached-source catalog uses separate packaged-platform and aggregate-addon file/byte pools, matching K2
+source admission. The module limit still applies to their combined identities; chained addon attachments cannot
+reset the addon pool. Switching target profiles starts from the packaged catalog.
 
 Analysis protocol v15 adds a peripheral-provider role to semantic tokens and completion kinds. The worker identifies providers through inheritance of `PeripheralProvider`, including companion values; type references retain their ordinary class role. The editor renders provider values in the dedicated palette color with a `P` completion badge.
 
