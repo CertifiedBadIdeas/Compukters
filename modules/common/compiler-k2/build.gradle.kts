@@ -1460,6 +1460,23 @@ val generateKotlincArtifact = tasks.register<Test>("generateKotlincArtifact") {
     }
 }
 
+val generateCompilationArtifact = tasks.register<Test>("generateCompilationArtifact") {
+    description = "Compiles typed Guest compiler and process Path APIs for native runtime integration."
+    group = "verification"
+    dependsOn(tasks.jar)
+    useJUnitPlatform()
+    testClassesDirs = sourceSets.test.get().output.classesDirs
+    classpath = sourceSets.test.get().runtimeClasspath
+    filter.includeTestsMatching("*typed compiler facade lowers Path results and rejects removed APIs*")
+    inputs.file(workerJar)
+    val artifact = layout.buildDirectory.file("generated/conformance/compilation.cpkt")
+    outputs.file(artifact)
+    doFirst {
+        systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
+        systemProperty("compukters.compilation.artifact", artifact.get().asFile.absolutePath)
+    }
+}
+
 val generateFilesystemArtifact = tasks.register<Test>("generateFilesystemArtifact") {
     description = "Compiles the portable filesystem Guest contract for native runtime integration."
     group = "verification"

@@ -16,13 +16,14 @@
  * limitations under the License.
  */
 
+import compukter.filesystem.Path
 import compukter.io.Stderr
 import compukter.process.Process
 import compukter.process.ProcessFailureReason
 import compukter.process.ProcessResult
 
 fun main() {
-    val diagnostic = bootDiagnostic(Process.run("/rom/shell"))
+    val diagnostic = bootDiagnostic(Process.run(Path("/rom/shell")))
     if (diagnostic.isNotEmpty()) Stderr.write("boot failed: " + diagnostic + "\n")
 }
 

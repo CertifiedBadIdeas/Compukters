@@ -29,7 +29,7 @@ object CanonicalTrustedIntrinsics {
     val stdio = PlatformCapabilityId("compukter", "stdio", 1)
     val process = PlatformCapabilityId("compukter", "process", 2)
     val filesystem = PlatformCapabilityId("compukter", "filesystem", 2)
-    val compiler = PlatformCapabilityId("compukter", "compiler", 1)
+    val compiler = PlatformCapabilityId("compukter", "compiler", 2)
     val redstone = PlatformCapabilityId("compukter", "redstone", 1)
     val sound = PlatformCapabilityId("compukter", "sound", 1)
     val display = PlatformCapabilityId("compukters", "display", 1)
@@ -241,8 +241,16 @@ object CanonicalTrustedIntrinsics {
                 true,
             )
 
-            capability("compukter", "core", "compukter.compiler", "Compiler.compile", "fun(String,String):Int", compiler, 0u, true)
-            capability("compukter", "core", "compukter.compiler", "Compiler.diagnostics", "fun():String", compiler, 1u)
+            capability(
+                "compukter",
+                "core",
+                "compukter.compiler",
+                "CompilerBindings.compile",
+                "fun(String,String):String",
+                compiler,
+                0u,
+                true,
+            )
             capability("compukter", "core", "compukter.process", "ProcessBindings.run", "fun(String,String):Int", process, 0u, true)
             capability("compukter", "core", "compukter.process", "ProcessBindings.takeFailureDiagnostic", "fun():String", process, 1u)
             capability(

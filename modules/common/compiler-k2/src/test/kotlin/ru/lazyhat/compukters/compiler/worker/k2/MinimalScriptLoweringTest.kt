@@ -8000,6 +8000,95 @@ class MinimalScriptLoweringTest {
         }
 
     @Test
+    fun `typed compiler facade lowers Path results and rejects removed APIs`() =
+        withAdapter { adapter ->
+            val source =
+                """
+                import compukter.compiler.CompilationFailureReason
+                import compukter.compiler.CompilationResult
+                import compukter.compiler.Compiler
+                import compukter.concurrent.Tasks
+                import compukter.filesystem.FileSystem
+                import compukter.filesystem.Path
+                import compukter.process.Process
+                import compukter.process.ProcessFailureReason
+                import compukter.process.ProcessResult
+
+                fun failure(result: CompilationResult): CompilationResult.Failed {
+                    if (result is CompilationResult.Failed) return result
+                    throw IllegalStateException("expected compilation failure")
+                }
+                fun success(result: CompilationResult): CompilationResult.Success {
+                    if (result is CompilationResult.Success) return result
+                    throw IllegalStateException("expected compilation success")
+                }
+                fun main() {
+                    val source = Path("/home/./main.kt")
+                    FileSystem.writeText(source, "fun main() { println(42) }")
+                    FileSystem.writeText(Path("/home/bad.kt"), "fun main() { missingSymbol() }")
+                    val first = Tasks.launch {
+                        val result = failure(Compiler.compile(Path("/home/bad.kt"), Path("/home/bad")))
+                        require(result.reason == CompilationFailureReason.REJECTED)
+                        require(result.diagnostics.contains("missingSymbol"))
+                    }
+                    val second = Tasks.launch {
+                        val result = failure(Compiler.compile(source, Path("/home/../rom/forbidden")))
+                        require(result.reason == CompilationFailureReason.REJECTED)
+                        require(result.diagnostics == "output is not writable")
+                    }
+                    first.join()
+                    second.join()
+                    val compiled = success(Compiler.compile(source, Path("/home/dir/../main")))
+                    require(compiled.output == Path("/home/main"))
+                    val result = Process.run(Path("/../../home/./dir/../main"))
+                    require(result is ProcessResult.Exited && result.code == 0)
+                    val overwritten = failure(Compiler.compile(Path("/home/bad.kt"), compiled.output))
+                    require(overwritten.diagnostics.contains("missingSymbol"))
+                    val preserved = Process.run(compiled.output)
+                    require(preserved is ProcessResult.Exited && preserved.code == 0)
+                    val same = failure(Compiler.compile(source, Path("/home/dir/../main.kt")))
+                    require(same.reason == CompilationFailureReason.REJECTED)
+                    val missing = failure(Compiler.compile(Path("/home/missing.kt"), Path("/home/missing")))
+                    require(missing.diagnostics == "source is not readable")
+                    val absent = Process.run(Path("/home/./absent"))
+                    require(absent is ProcessResult.Failed && absent.reason == ProcessFailureReason.NOT_FOUND)
+                    val units = CharArray(4097)
+                    var index = 0
+                    while (index < units.size) { units[index] = 'a'; index++ }
+                    val longPath = Path("/home/" + String(units, 0, units.size))
+                    require(failure(Compiler.compile(longPath, compiled.output)).reason == CompilationFailureReason.INVALID_PATH)
+                    val longProcess = Process.run(longPath)
+                    require(longProcess is ProcessResult.Failed && longProcess.reason == ProcessFailureReason.INVALID_PATH)
+                    val longArgs = Process.run(compiled.output, arrayOf(String(units, 0, units.size)))
+                    require(longArgs is ProcessResult.Failed && longArgs.reason == ProcessFailureReason.LIMIT_EXCEEDED)
+                    val combined = Path("/home/" + String(units, 0, 2050))
+                    require(failure(Compiler.compile(combined, combined)).reason == CompilationFailureReason.LIMIT_EXCEEDED)
+                    println("compiler and process Path API ok")
+                }
+                """.trimIndent()
+            val first = adapter.compile(request(source))
+            val artifact = assertNotNull(first.artifact, first.diagnostics.joinToString()).toByteArray()
+            assertContentEquals(artifact, assertNotNull(adapter.compile(request(source)).artifact).toByteArray())
+            val decoded = ArtifactReader.read(artifact)
+            val strings = decoded.modules.first().strings
+            val capability = decoded.capabilities.single { strings[it.name.value.toInt()].toString() == "compiler" }
+            assertEquals(AbiVersion(2u, 0u), capability.abi)
+            assertEquals(1u, capability.operationCount)
+            System.getProperty("compukters.compilation.artifact")?.let { output ->
+                Path.of(output).also { it.parent.createDirectories() }.writeBytes(artifact)
+            }
+            listOf(
+                "import compukter.compiler.Compiler\nfun main() { Compiler.compile(\"/home/a.kt\", \"/home/a\") }",
+                "import compukter.compiler.Compiler\nfun main() { Compiler.diagnostics() }",
+                "import compukter.compiler.CompilerBindings\nfun main() { CompilerBindings.compile(\"/home/a.kt\", \"/home/a\") }",
+            ).forEach { forbidden ->
+                val result = adapter.compile(request(forbidden))
+                assertNull(result.artifact, forbidden)
+                assertTrue(result.hasErrors, forbidden)
+            }
+        }
+
+    @Test
     fun `typed process v2 facade lowers without public capability masks or suspend calls`() =
         withAdapter { adapter ->
             val source =
@@ -8009,7 +8098,7 @@ class MinimalScriptLoweringTest {
                 import compukter.process.ProcessResult
 
                 fun main() {
-                    when (val result = Process.run("/rom/tool", arrayOf("a", ""))) {
+                    when (val result = Process.run(compukter.filesystem.Path("/rom/tool"), arrayOf("a", ""))) {
                         is ProcessResult.Exited -> if (result.code != 0) Process.exit(result.code)
                         is ProcessResult.Failed -> if (result.reason == ProcessFailureReason.NOT_FOUND) {
                             Process.exit(2)
@@ -8039,6 +8128,7 @@ class MinimalScriptLoweringTest {
             assertTrue("compukter.process.ProcessFailureReason.NOT_FOUND" in imports.getValue(SymbolKind.FIELD))
 
             listOf(
+                "import compukter.process.Process\nfun main() { Process.run(\"/rom/tool\") }",
                 "import compukter.process.Process\nfun main() { Process.run(\"/rom/tool\", 1) }",
                 "import compukter.process.Process\nfun main() { Process.commandLine() }",
                 "import compukter.process.ProcessBindings\nfun main() { ProcessBindings.takeFailureDiagnostic() }",
