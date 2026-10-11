@@ -1,0 +1,731 @@
+[
+  {
+    "mode": "unchanged",
+    "trial": 1,
+    "samples": [
+      {
+        "sample": 1,
+        "millis": 986.818456,
+        "bytes": 152916
+      },
+      {
+        "sample": 2,
+        "millis": 511.380188,
+        "bytes": 152916
+      },
+      {
+        "sample": 3,
+        "millis": 374.878623,
+        "bytes": 152916
+      },
+      {
+        "sample": 4,
+        "millis": 300.303195,
+        "bytes": 152916
+      },
+      {
+        "sample": 5,
+        "millis": 310.306517,
+        "bytes": 152916
+      },
+      {
+        "sample": 6,
+        "millis": 286.841702,
+        "bytes": 152916
+      },
+      {
+        "sample": 7,
+        "millis": 293.435693,
+        "bytes": 152916
+      },
+      {
+        "sample": 8,
+        "millis": 283.633181,
+        "bytes": 152916
+      },
+      {
+        "sample": 9,
+        "millis": 271.254888,
+        "bytes": 152916
+      },
+      {
+        "sample": 10,
+        "millis": 266.223736,
+        "bytes": 152916
+      },
+      {
+        "sample": 11,
+        "millis": 257.517395,
+        "bytes": 152916
+      },
+      {
+        "sample": 12,
+        "millis": 253.358543,
+        "bytes": 152916
+      },
+      {
+        "sample": 13,
+        "millis": 248.634382,
+        "bytes": 152916
+      },
+      {
+        "sample": 14,
+        "millis": 247.567542,
+        "bytes": 152916
+      },
+      {
+        "sample": 15,
+        "millis": 252.012763,
+        "bytes": 152916
+      }
+    ]
+  },
+  {
+    "mode": "comment",
+    "trial": 1,
+    "samples": [
+      {
+        "sample": 1,
+        "millis": 1011.111534,
+        "bytes": 152916
+      },
+      {
+        "sample": 2,
+        "millis": 471.499189,
+        "bytes": 152916
+      },
+      {
+        "sample": 3,
+        "millis": 421.383116,
+        "bytes": 152916
+      },
+      {
+        "sample": 4,
+        "millis": 382.117296,
+        "bytes": 152916
+      },
+      {
+        "sample": 5,
+        "millis": 344.721737,
+        "bytes": 152916
+      },
+      {
+        "sample": 6,
+        "millis": 332.668574,
+        "bytes": 152916
+      },
+      {
+        "sample": 7,
+        "millis": 326.549712,
+        "bytes": 152916
+      },
+      {
+        "sample": 8,
+        "millis": 315.65186,
+        "bytes": 152916
+      },
+      {
+        "sample": 9,
+        "millis": 294.777724,
+        "bytes": 152916
+      },
+      {
+        "sample": 10,
+        "millis": 259.915786,
+        "bytes": 152916
+      },
+      {
+        "sample": 11,
+        "millis": 265.106417,
+        "bytes": 152916
+      },
+      {
+        "sample": 12,
+        "millis": 257.425655,
+        "bytes": 152916
+      },
+      {
+        "sample": 13,
+        "millis": 256.790355,
+        "bytes": 152916
+      },
+      {
+        "sample": 14,
+        "millis": 263.977237,
+        "bytes": 152916
+      },
+      {
+        "sample": 15,
+        "millis": 256.442475,
+        "bytes": 152916
+      }
+    ]
+  },
+  {
+    "mode": "code",
+    "trial": 1,
+    "samples": [
+      {
+        "sample": 1,
+        "millis": 1136.150919,
+        "bytes": 152916
+      },
+      {
+        "sample": 2,
+        "millis": 550.01344,
+        "bytes": 152916
+      },
+      {
+        "sample": 3,
+        "millis": 428.065489,
+        "bytes": 152916
+      },
+      {
+        "sample": 4,
+        "millis": 329.683324,
+        "bytes": 152916
+      },
+      {
+        "sample": 5,
+        "millis": 340.057776,
+        "bytes": 152916
+      },
+      {
+        "sample": 6,
+        "millis": 325.493303,
+        "bytes": 152916
+      },
+      {
+        "sample": 7,
+        "millis": 298.293456,
+        "bytes": 152916
+      },
+      {
+        "sample": 8,
+        "millis": 294.087455,
+        "bytes": 152916
+      },
+      {
+        "sample": 9,
+        "millis": 268.914678,
+        "bytes": 152916
+      },
+      {
+        "sample": 10,
+        "millis": 271.523589,
+        "bytes": 152916
+      },
+      {
+        "sample": 11,
+        "millis": 272.795749,
+        "bytes": 152916
+      },
+      {
+        "sample": 12,
+        "millis": 281.085831,
+        "bytes": 152916
+      },
+      {
+        "sample": 13,
+        "millis": 249.024304,
+        "bytes": 152916
+      },
+      {
+        "sample": 14,
+        "millis": 259.507606,
+        "bytes": 152916
+      },
+      {
+        "sample": 15,
+        "millis": 256.841576,
+        "bytes": 152916
+      }
+    ]
+  },
+  {
+    "mode": "unchanged",
+    "trial": 2,
+    "samples": [
+      {
+        "sample": 1,
+        "millis": 1103.241458,
+        "bytes": 152916
+      },
+      {
+        "sample": 2,
+        "millis": 561.753887,
+        "bytes": 152916
+      },
+      {
+        "sample": 3,
+        "millis": 429.397472,
+        "bytes": 152916
+      },
+      {
+        "sample": 4,
+        "millis": 310.170331,
+        "bytes": 152916
+      },
+      {
+        "sample": 5,
+        "millis": 338.670889,
+        "bytes": 152916
+      },
+      {
+        "sample": 6,
+        "millis": 349.529752,
+        "bytes": 152916
+      },
+      {
+        "sample": 7,
+        "millis": 302.429679,
+        "bytes": 152916
+      },
+      {
+        "sample": 8,
+        "millis": 313.836822,
+        "bytes": 152916
+      },
+      {
+        "sample": 9,
+        "millis": 301.649389,
+        "bytes": 152916
+      },
+      {
+        "sample": 10,
+        "millis": 280.742904,
+        "bytes": 152916
+      },
+      {
+        "sample": 11,
+        "millis": 275.520122,
+        "bytes": 152916
+      },
+      {
+        "sample": 12,
+        "millis": 288.398956,
+        "bytes": 152916
+      },
+      {
+        "sample": 13,
+        "millis": 272.258071,
+        "bytes": 152916
+      },
+      {
+        "sample": 14,
+        "millis": 274.213782,
+        "bytes": 152916
+      },
+      {
+        "sample": 15,
+        "millis": 296.753477,
+        "bytes": 152916
+      }
+    ]
+  },
+  {
+    "mode": "comment",
+    "trial": 2,
+    "samples": [
+      {
+        "sample": 1,
+        "millis": 1166.342082,
+        "bytes": 152916
+      },
+      {
+        "sample": 2,
+        "millis": 587.823782,
+        "bytes": 152916
+      },
+      {
+        "sample": 3,
+        "millis": 415.846078,
+        "bytes": 152916
+      },
+      {
+        "sample": 4,
+        "millis": 334.183227,
+        "bytes": 152916
+      },
+      {
+        "sample": 5,
+        "millis": 332.045236,
+        "bytes": 152916
+      },
+      {
+        "sample": 6,
+        "millis": 293.573526,
+        "bytes": 152916
+      },
+      {
+        "sample": 7,
+        "millis": 321.006043,
+        "bytes": 152916
+      },
+      {
+        "sample": 8,
+        "millis": 310.442391,
+        "bytes": 152916
+      },
+      {
+        "sample": 9,
+        "millis": 322.486604,
+        "bytes": 152916
+      },
+      {
+        "sample": 10,
+        "millis": 308.30692,
+        "bytes": 152916
+      },
+      {
+        "sample": 11,
+        "millis": 274.203802,
+        "bytes": 152916
+      },
+      {
+        "sample": 12,
+        "millis": 274.866961,
+        "bytes": 152916
+      },
+      {
+        "sample": 13,
+        "millis": 261.755618,
+        "bytes": 152916
+      },
+      {
+        "sample": 14,
+        "millis": 331.388996,
+        "bytes": 152916
+      },
+      {
+        "sample": 15,
+        "millis": 252.701805,
+        "bytes": 152916
+      }
+    ]
+  },
+  {
+    "mode": "code",
+    "trial": 2,
+    "samples": [
+      {
+        "sample": 1,
+        "millis": 1142.807173,
+        "bytes": 152916
+      },
+      {
+        "sample": 2,
+        "millis": 578.331349,
+        "bytes": 152916
+      },
+      {
+        "sample": 3,
+        "millis": 417.065817,
+        "bytes": 152916
+      },
+      {
+        "sample": 4,
+        "millis": 371.674305,
+        "bytes": 152916
+      },
+      {
+        "sample": 5,
+        "millis": 355.054472,
+        "bytes": 152916
+      },
+      {
+        "sample": 6,
+        "millis": 319.704572,
+        "bytes": 152916
+      },
+      {
+        "sample": 7,
+        "millis": 338.686097,
+        "bytes": 152916
+      },
+      {
+        "sample": 8,
+        "millis": 327.004035,
+        "bytes": 152916
+      },
+      {
+        "sample": 9,
+        "millis": 295.408816,
+        "bytes": 152916
+      },
+      {
+        "sample": 10,
+        "millis": 291.565775,
+        "bytes": 152916
+      },
+      {
+        "sample": 11,
+        "millis": 285.763964,
+        "bytes": 152916
+      },
+      {
+        "sample": 12,
+        "millis": 273.91256,
+        "bytes": 152916
+      },
+      {
+        "sample": 13,
+        "millis": 290.229135,
+        "bytes": 152916
+      },
+      {
+        "sample": 14,
+        "millis": 268.408889,
+        "bytes": 152916
+      },
+      {
+        "sample": 15,
+        "millis": 290.590925,
+        "bytes": 152916
+      }
+    ]
+  },
+  {
+    "mode": "unchanged",
+    "trial": 3,
+    "samples": [
+      {
+        "sample": 1,
+        "millis": 1380.772144,
+        "bytes": 152916
+      },
+      {
+        "sample": 2,
+        "millis": 551.164525,
+        "bytes": 152916
+      },
+      {
+        "sample": 3,
+        "millis": 409.055448,
+        "bytes": 152916
+      },
+      {
+        "sample": 4,
+        "millis": 321.559105,
+        "bytes": 152916
+      },
+      {
+        "sample": 5,
+        "millis": 309.319912,
+        "bytes": 152916
+      },
+      {
+        "sample": 6,
+        "millis": 291.606117,
+        "bytes": 152916
+      },
+      {
+        "sample": 7,
+        "millis": 290.855087,
+        "bytes": 152916
+      },
+      {
+        "sample": 8,
+        "millis": 272.989192,
+        "bytes": 152916
+      },
+      {
+        "sample": 9,
+        "millis": 270.791502,
+        "bytes": 152916
+      },
+      {
+        "sample": 10,
+        "millis": 271.035801,
+        "bytes": 152916
+      },
+      {
+        "sample": 11,
+        "millis": 245.309204,
+        "bytes": 152916
+      },
+      {
+        "sample": 12,
+        "millis": 241.540773,
+        "bytes": 152916
+      },
+      {
+        "sample": 13,
+        "millis": 241.874415,
+        "bytes": 152916
+      },
+      {
+        "sample": 14,
+        "millis": 235.617782,
+        "bytes": 152916
+      },
+      {
+        "sample": 15,
+        "millis": 243.594684,
+        "bytes": 152916
+      }
+    ]
+  },
+  {
+    "mode": "comment",
+    "trial": 3,
+    "samples": [
+      {
+        "sample": 1,
+        "millis": 1077.994256,
+        "bytes": 152916
+      },
+      {
+        "sample": 2,
+        "millis": 519.707378,
+        "bytes": 152916
+      },
+      {
+        "sample": 3,
+        "millis": 367.245298,
+        "bytes": 152916
+      },
+      {
+        "sample": 4,
+        "millis": 322.001375,
+        "bytes": 152916
+      },
+      {
+        "sample": 5,
+        "millis": 324.363846,
+        "bytes": 152916
+      },
+      {
+        "sample": 6,
+        "millis": 295.494289,
+        "bytes": 152916
+      },
+      {
+        "sample": 7,
+        "millis": 287.287816,
+        "bytes": 152916
+      },
+      {
+        "sample": 8,
+        "millis": 288.616867,
+        "bytes": 152916
+      },
+      {
+        "sample": 9,
+        "millis": 290.210067,
+        "bytes": 152916
+      },
+      {
+        "sample": 10,
+        "millis": 280.115455,
+        "bytes": 152916
+      },
+      {
+        "sample": 11,
+        "millis": 272.756503,
+        "bytes": 152916
+      },
+      {
+        "sample": 12,
+        "millis": 269.772582,
+        "bytes": 152916
+      },
+      {
+        "sample": 13,
+        "millis": 265.392831,
+        "bytes": 152916
+      },
+      {
+        "sample": 14,
+        "millis": 260.593179,
+        "bytes": 152916
+      },
+      {
+        "sample": 15,
+        "millis": 257.364939,
+        "bytes": 152916
+      }
+    ]
+  },
+  {
+    "mode": "code",
+    "trial": 3,
+    "samples": [
+      {
+        "sample": 1,
+        "millis": 1026.789875,
+        "bytes": 152916
+      },
+      {
+        "sample": 2,
+        "millis": 504.278635,
+        "bytes": 152916
+      },
+      {
+        "sample": 3,
+        "millis": 379.073881,
+        "bytes": 152916
+      },
+      {
+        "sample": 4,
+        "millis": 331.246499,
+        "bytes": 152916
+      },
+      {
+        "sample": 5,
+        "millis": 322.303326,
+        "bytes": 152916
+      },
+      {
+        "sample": 6,
+        "millis": 308.020553,
+        "bytes": 152916
+      },
+      {
+        "sample": 7,
+        "millis": 300.652821,
+        "bytes": 152916
+      },
+      {
+        "sample": 8,
+        "millis": 288.022907,
+        "bytes": 152916
+      },
+      {
+        "sample": 9,
+        "millis": 285.725137,
+        "bytes": 152916
+      },
+      {
+        "sample": 10,
+        "millis": 288.596037,
+        "bytes": 152916
+      },
+      {
+        "sample": 11,
+        "millis": 271.522013,
+        "bytes": 152916
+      },
+      {
+        "sample": 12,
+        "millis": 272.994754,
+        "bytes": 152916
+      },
+      {
+        "sample": 13,
+        "millis": 253.162298,
+        "bytes": 152916
+      },
+      {
+        "sample": 14,
+        "millis": 262.66697,
+        "bytes": 152916
+      },
+      {
+        "sample": 15,
+        "millis": 256.734219,
+        "bytes": 152916
+      }
+    ]
+  }
+]

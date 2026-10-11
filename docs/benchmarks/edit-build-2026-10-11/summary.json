@@ -1,0 +1,29 @@
+{
+  "unchanged": {
+    "first_edit_median_ms": 291.606117,
+    "ten_edits_median_ms": 272.6236315,
+    "per_trial_ten_edits_median_ms": [
+      261.8705655,
+      292.5762165,
+      258.050353
+    ]
+  },
+  "comment": {
+    "first_edit_median_ms": 295.494289,
+    "ten_edits_median_ms": 277.49120800000003,
+    "per_trial_ten_edits_median_ms": [
+      264.541827,
+      300.940223,
+      276.435979
+    ]
+  },
+  "code": {
+    "first_edit_median_ms": 319.704572,
+    "ten_edits_median_ms": 285.7445505,
+    "per_trial_ten_edits_median_ms": [
+      272.159669,
+      291.07835,
+      279.3599455
+    ]
+  }
+}

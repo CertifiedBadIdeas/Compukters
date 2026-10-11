@@ -1,0 +1,20 @@
+{
+  "outputs": 135,
+  "native_verified": 135,
+  "native_abi": 22,
+  "baseline_and_comment_outputs_identical": true,
+  "code_outputs_changed": 30,
+  "distinct_code_variant_hashes": {
+    "2": "af7593f498cbb21e3e7a56f1e5cc0fed63825509f449601a97280afff4ae8e44",
+    "3": "142f867b3daae34978fc98b03150f3f03e3e972ed20549d192d40a444f7b0723",
+    "4": "e5bdb4e42924b31244e36ad302e542e4e6a97db7faff676c7de048b1e0305ab4",
+    "5": "f62b2ff368a0cf50d221edbb94ab417c52433500f7f801078a8920c0ae4a893a",
+    "6": "6ace185f924c35ee4df0f83c40727a2315a78233a1a182a429ebe267e6879c75",
+    "7": "1e48a58966c6d295d4e9b15c92ff3273ab8516b684cede318145d9abbe7729c3",
+    "8": "7ffc94d24d9fdce9bc7734dd05c033c09ac5e21580ea23999dcdde47acda944a",
+    "9": "4d45db586e40d3db19c95e796bc1aa702860263cfeef7f0bfbcb83e87ecb3b53",
+    "1": "2b3a3a443f4ef01225c95cdb9cecd84077736ea38182823636c49512b7e6a244"
+  },
+  "bytes_all_outputs": 152916,
+  "scope": "stateless verification, not execution of changed PID constants"
+}
