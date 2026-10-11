@@ -120,10 +120,7 @@ internal open class IdeDrawBuilder(
         z: Int = Z_CONTENT,
     ) {
         if (z >= Z_POPUP) {
-            for (spread in 6 downTo 1) {
-                val shadow = IdeRect(bounds.left - spread, bounds.top - spread + 2, bounds.right + spread, bounds.bottom + spread + 2)
-                fills += IdeFillDraw(IdeFillKind.Shadow, shadow, 0x08000000, z - 1)
-            }
+            fills += IdeWindowSurface.shadows(bounds, z - 1)
         }
         panels += IdePanelDraw(kind, bounds, color, z)
     }

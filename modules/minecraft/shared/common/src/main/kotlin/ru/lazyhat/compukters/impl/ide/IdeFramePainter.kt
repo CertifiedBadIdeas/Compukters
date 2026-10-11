@@ -20,6 +20,7 @@ package ru.lazyhat.compukters.impl.ide
 
 import ru.lazyhat.compukters.impl.ide.target.IdeTargetTerminalState
 import ru.lazyhat.compukters.impl.terminal.TerminalGridGeometry
+import ru.lazyhat.compukters.impl.terminal.TerminalSurfaceStyle
 import ru.lazyhat.compukters.impl.ui.CompuktersUiViewport
 import ru.lazyhat.compukters.lang.runtime.vm.TerminalState
 
@@ -72,8 +73,26 @@ object IdeFramePainter {
     ) {
         val model = frame.model
         val operations = mutableListOf<IdeRenderOperation>()
-        model.panels.forEach { draw -> operations += IdeRenderOperation(draw.zIndex) { canvas.fill(draw.bounds, draw.color) } }
-        model.fills.forEach { draw -> operations += IdeRenderOperation(draw.zIndex) { canvas.fill(draw.bounds, draw.color) } }
+        model.panels.forEach { draw ->
+            operations +=
+                IdeRenderOperation(draw.zIndex) {
+                    if (IdeWindowSurface.isWindow(draw.kind)) {
+                        IdeWindowSurface.paint(canvas, draw.bounds, draw.color)
+                    } else {
+                        canvas.fill(draw.bounds, draw.color)
+                    }
+                }
+        }
+        model.fills.forEach { draw ->
+            operations +=
+                IdeRenderOperation(draw.zIndex) {
+                    if (draw.kind == IdeFillKind.Shadow) {
+                        IdeWindowSurface.roundedFill(canvas, draw.bounds, draw.color)
+                    } else {
+                        canvas.fill(draw.bounds, draw.color)
+                    }
+                }
+        }
         model.icons.forEach { draw -> operations += IdeRenderOperation(draw.zIndex) { canvas.icon(draw) } }
         model.text.forEach { draw -> operations += IdeRenderOperation(draw.zIndex) { canvas.text(draw) } }
         executeIdeRenderOperations(operations, frame.terminalVisible) { terminalOverlay(frame, canvas, nowMillis) }
@@ -85,31 +104,37 @@ object IdeFramePainter {
         nowMillis: Long,
     ) {
         val overlay = IdeTerminalOverlayGeometry.compute(frame.geometry.content)
-        canvas.fill(overlay.shadow, 0x66000000)
-        canvas.fill(overlay.panel, 0xFF27323A.toInt())
-        canvas.fill(
-            IdeRect(overlay.panel.left + 1, overlay.panel.top + 1, overlay.panel.right - 1, overlay.panel.bottom - 1),
-            0xFF101418.toInt(),
+        IdeWindowSurface.shadows(overlay.panel, IDE_TERMINAL_OVERLAY_Z).forEach { shadow ->
+            IdeWindowSurface.roundedFill(canvas, shadow.bounds, shadow.color)
+        }
+        IdeWindowSurface.paint(
+            canvas,
+            overlay.panel,
+            TerminalSurfaceStyle.BACKGROUND_COLOR,
+            if (frame.terminalFocused) IdeColors.ACCENT else IdeColors.WINDOW_BORDER,
         )
+        val labels = IdeDrawBuilder(frame.geometry.font)
         if (!overlay.supported) {
-            text(
-                canvas,
+            labels.ui(
+                IdeTextKind.Status,
                 overlay.unsupportedMessage,
                 overlay.messageBounds.left,
                 overlay.messageBounds.top,
-                0xFFFF6B6B.toInt(),
+                IdeColors.ERROR,
                 overlay.messageBounds,
             )
+            labels.build().text.forEach(canvas::text)
             return
         }
-        text(
-            canvas,
-            terminalOverlayTitle(frame.terminalState),
+        labels.centeredUi(
+            IdeTextKind.Status,
+            labels.fitUi(terminalOverlayTitle(frame.terminalState), overlay.title.width - 10),
             overlay.title.left + 5,
-            overlay.title.top + 5,
-            if (frame.terminalFocused) 0xFF38D6B4.toInt() else 0xFFF2F4F8.toInt(),
             overlay.title,
+            if (frame.terminalState is IdeTargetTerminalState.Failed) IdeColors.ERROR else IdeColors.TEXT,
+            IDE_TERMINAL_OVERLAY_Z,
         )
+        labels.build().text.forEach(canvas::text)
         val replica =
             when (val state = frame.terminalState) {
                 is IdeTargetTerminalState.Active -> state.replica
@@ -117,33 +142,8 @@ object IdeFramePainter {
                 else -> null
             }
         overlay.grid?.let { grid ->
-            canvas.fill(grid, 0xFF000000.toInt())
             replica?.let { canvas.terminal(it.state, TerminalGridGeometry(grid.left, grid.top), nowMillis) }
         }
-    }
-
-    private fun text(
-        canvas: IdeCanvas,
-        value: String,
-        x: Int,
-        y: Int,
-        color: Int,
-        clip: IdeRect,
-    ) {
-        canvas.text(
-            IdeTextDraw(
-                IdeTextKind.Status,
-                value,
-                x,
-                y,
-                color,
-                IdeTextStyle.Ui,
-                IdeCodeFontProfile.DEFAULT,
-                clip,
-                null,
-                IDE_TERMINAL_OVERLAY_Z,
-            ),
-        )
     }
 }
 
