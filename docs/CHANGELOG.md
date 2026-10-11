@@ -30,6 +30,7 @@ headings so this page has one stable URL that can be shared outside the reposito
   Unknown references color their complete identifier; errors and warnings underline their exact source ranges.
   Hovering a marked token shows its problems together, preserving source editing and horizontal scrolling.
   Argument hints open when typing a call or pressing Ctrl+P, wrap long signatures and emphasize the current parameter.
+  Toolbar labels align vertically with icons; outlined controls stand out from the panel and Run uses the neutral action style.
   Attached addon sources have a separate bounded allowance, so bundled library sources do not exhaust it.
 
 - Guest Kotlin supports `do-while` loops with body-local variables in the condition, and labeled
