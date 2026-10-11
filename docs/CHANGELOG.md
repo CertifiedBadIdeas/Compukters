@@ -16,6 +16,11 @@ headings so this page has one stable URL that can be shared outside the reposito
 - Documentation offers a version selector for released 0.5.1 and nightly guides and API references. The released
   documentation opens by default; nightly identifies its current source commit.
 
+- Guest `kotlin.math` provides reusable `Vector2i`, `Vector2f`, `Vector3i` and `Vector3f` value classes,
+  Position/Size aliases, arithmetic, dot/cross products, lengths, normalization, interpolation, explicit
+  rounding and half-open 2D rectangles. Displays accept vectors and rectangles while retaining scalar
+  coordinate calls. Infix `xy`, `by` and `sized` provide compact geometry construction.
+
 - Guest executables omit unused class and interface methods and their dependencies. Virtual dispatch keeps its
   required implementations; independently compiled libraries retain their exported method surface.
 
