@@ -178,7 +178,8 @@ class PlatformLibraryCompiler {
                             }
                     ).distinctBy { it.symbol },
                     emptyList(),
-                    (collected.classes + dependencyTemplateClasses).distinctBy { it.symbol },
+                    (collected.classes + dependencyTemplateClasses + dependencyDeclarations.classes.filter { it.isValue })
+                        .distinctBy { it.symbol },
                     entry,
                     pluginContext,
                     session,

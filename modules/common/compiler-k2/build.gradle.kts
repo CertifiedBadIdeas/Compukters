@@ -1797,3 +1797,21 @@ val generateNetworkConformanceArtifacts = tasks.register<Test>("generateNetworkC
         systemProperty("compukter.vm.networkArtifacts", networkConformanceDirectory.get().asFile.absolutePath)
     }
 }
+
+val geometryConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-geometry.cpkt")
+tasks.register<Test>("generateGeometryConformanceArtifact") {
+    description = "Compiles reusable Guest vectors, aliases and rectangles for VM conformance."
+    group = "verification"
+    dependsOn(tasks.jar)
+    useJUnitPlatform()
+    testClassesDirs = sourceSets.test.get().output.classesDirs
+    classpath = sourceSets.test.get().runtimeClasspath
+    filter.includeTestsMatching("*stdlib geometry executes vector aliases arithmetic rectangles and rounding*")
+    inputs.file(workerJar)
+    inputs.file("src/test/resources/kotlin/geometry/main.kt")
+    outputs.file(geometryConformanceArtifact)
+    doFirst {
+        systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
+        systemProperty("compukter.vm.geometryArtifact", geometryConformanceArtifact.get().asFile.absolutePath)
+    }
+}
