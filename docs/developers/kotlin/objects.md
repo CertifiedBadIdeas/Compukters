@@ -226,7 +226,10 @@ produce diagnostics. `Any`, nullable values, interfaces, ordinary fields, refere
 the direct layout. Equality/hash/text are structural and nominal, including NaN and signed-zero behavior,
 unsigned formatting, nullable fields, nested values and source `toString` overrides. Precompiled
 platform/addon libraries export a canonical direct layout, wrapper and all payload fields; a consumer shares
-these identities, including concrete generic value classes. Single `Int`/`Boolean`/`Char` peripheral handles
+these identities, including concrete generic value classes. Reading a value-class property from an imported
+library object loads its nominal field box and recovers the inline layout; Path-valued compilation results
+exercise this boundary in `typed compiler facade lowers Path results and rejects removed APIs` and
+`ProgramRuntimeHostIntegrationTest.typed Guest compilation and process paths preserve diagnostics permissions and outputs`. Single `Int`/`Boolean`/`Char` peripheral handles
 retain their established scalar ABI fast path. New inline layouts require Runtime ABI 1.15. The Guest frontend
 and native IDE share K2's `JvmInlineMultiFieldValueClasses` frontend setting and retain
 `MultiFieldValueClassRepresentation`. This switch permits the shared frontend checker; it does not select

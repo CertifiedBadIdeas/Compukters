@@ -47,7 +47,9 @@ private fun dispatchWords(words: Array<String>) {
     if (words.size == 0) return
     val command = words[0]
     when (command) {
-        "help" -> writeHelp(words)
+        "help" -> {
+            writeHelp(words)
+        }
 
         "echo" -> {
             for (index in 1 until words.size) {
@@ -83,7 +85,9 @@ private fun dispatchWords(words: Array<String>) {
             }
         }
 
-        "cat", "mkdir", "mv", "rm" -> executeFileCommand(words)
+        "cat", "mkdir", "mv", "rm" -> {
+            executeFileCommand(words)
+        }
 
         "" -> {
             Stderr.write("empty command\n")
@@ -100,7 +104,7 @@ private fun executeExternal(words: Array<String>) {
     val arguments = words.copyOfRange(1, words.size)
     var path =
         try {
-            Path(resolvePath(command)).normalize().value
+            Path(resolvePath(command))
         } catch (failure: IllegalArgumentException) {
             Stderr.write("invalid path: $command\n")
             return
@@ -108,10 +112,10 @@ private fun executeExternal(words: Array<String>) {
     var result = Process.run(path, arguments)
     val fallback = shellFallbackPath(command, result)
     if (fallback.isNotEmpty()) {
-        path = Path(fallback).normalize().value
+        path = Path(fallback)
         result = Process.run(path, arguments)
     }
-    val diagnostic = shellProcessDiagnostic(result, path)
+    val diagnostic = shellProcessDiagnostic(result, path.normalize().value)
     if (diagnostic.isNotEmpty()) Stderr.write(diagnostic + "\n")
 }
 
@@ -141,8 +145,11 @@ private fun writeHelp(words: Array<String>) {
         return
     }
     val usage = commandUsage(words[1])
-    if (usage.isEmpty()) Stderr.write("no help for command: ${words[1]}\n")
-    else println(usage)
+    if (usage.isEmpty()) {
+        Stderr.write("no help for command: ${words[1]}\n")
+    } else {
+        println(usage)
+    }
 }
 
 private fun commandUsage(command: String): String =
@@ -185,9 +192,18 @@ private fun executeFileCommand(words: Array<String>) {
                     start = end
                 }
             }
-            "mkdir" -> if (parents) FileSystem.createDirectories(path) else FileSystem.createDirectory(path)
-            "mv" -> FileSystem.move(path, Path(resolvePath(words[2])))
-            "rm" -> FileSystem.delete(path)
+
+            "mkdir" -> {
+                if (parents) FileSystem.createDirectories(path) else FileSystem.createDirectory(path)
+            }
+
+            "mv" -> {
+                FileSystem.move(path, Path(resolvePath(words[2])))
+            }
+
+            "rm" -> {
+                FileSystem.delete(path)
+            }
         }
     } catch (failure: FileSystemException) {
         Stderr.write("$command: ${failure.message ?: "filesystem error"}\n")

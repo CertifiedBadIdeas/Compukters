@@ -33,6 +33,7 @@ import ru.lazyhat.compukters.compiler.worker.protocol.TrustedBundleIdentity
 import ru.lazyhat.compukters.compiler.worker.protocol.WorkerLimits
 import ru.lazyhat.compukters.core.device.runtime.compiler.CompilerCompletionRouter
 import ru.lazyhat.compukters.core.device.runtime.compiler.ServerComputerCompiler
+import ru.lazyhat.compukters.core.device.runtime.program.NativeProgramVmSessionFactory
 import ru.lazyhat.compukters.core.device.runtime.program.ProgramFailure
 import ru.lazyhat.compukters.core.device.runtime.program.ProgramRuntimeHost
 import ru.lazyhat.compukters.core.device.runtime.program.ProgramRuntimeState
@@ -80,6 +81,29 @@ class ProgramRuntimeHostIntegrationTest {
         ProgramRuntimeHost().use { host ->
             assertEquals(ProgramStartResult.Started, host.start(artifact))
             advanceUntil(host) { it is ProgramRuntimeState.Halted }
+        }
+    }
+
+    @Test
+    fun `typed Guest compilation and process paths preserve diagnostics permissions and outputs`() {
+        val artifact = Path.of(requiredProperty("compukters.compilationRuntime.artifact")).readBytes()
+        assertTrue(VmArtifactVerifier.verify(artifact))
+        val root = Files.createTempDirectory("compukters-typed-compilation-").toRealPath()
+        try {
+            TestCompilerService
+                .open(
+                    root.resolve("compiler"),
+                    Path.of(requiredProperty("compukters.compilerWorker.manifest")),
+                    Path.of(requiredProperty("compukters.compilerWorker.payload")),
+                ).use { compiler ->
+                    ProgramRuntimeHost(sessionFactory = NativeProgramVmSessionFactory(), compilerRouter = compiler.router).use { host ->
+                        assertEquals(ProgramStartResult.Started, host.start(artifact))
+                        advanceUntil(host) { it is ProgramRuntimeState.Halted }
+                        assertEquals("42\n42\ncompiler and process Path API ok\n", terminalText(requireNotNull(host.terminalFullState())))
+                    }
+                }
+        } finally {
+            root.toFile().deleteRecursively()
         }
     }
 
@@ -423,6 +447,7 @@ class ProgramRuntimeHostIntegrationTest {
                                 "a.KT" to "source file must end in .kt",
                                 "a.kt -o" to "missing output after -o",
                                 "a.kt b.kt" to "kotlinc accepts exactly one source file",
+                                "a.kt -o /home//bad" to "invalid compilation path",
                             )) {
                                 submit(computer, "kotlinc $arguments")
                                 pressEnter(computer)
@@ -474,11 +499,11 @@ class ProgramRuntimeHostIntegrationTest {
                             val compiledOutput = terminalText(requireNotNull(computer.terminalFullState()))
                             assertTrue(compiledOutput.contains("compiled editor loop"), compiledOutput)
 
-                            submit(computer, "kotlinc demo.kt -o /home/renamed")
+                            submit(computer, "kotlinc ./demo.kt -o /home/dir/../renamed")
                             pressEnter(computer)
                             val explicitOutput = terminalText(requireNotNull(computer.terminalFullState()))
                             assertTrue(explicitOutput.endsWith("compiled: /home/renamed\n>\n"), explicitOutput)
-                            submit(computer, "renamed")
+                            submit(computer, "/home/./dir/../renamed")
                             pressEnter(computer)
                             assertTrue(
                                 terminalText(requireNotNull(computer.terminalFullState())).endsWith("compiled editor loop\n>\n"),
