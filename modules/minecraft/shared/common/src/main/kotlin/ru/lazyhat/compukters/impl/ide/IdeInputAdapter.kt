@@ -1004,42 +1004,7 @@ class IdeInputAdapter(
         editor: IdeEditorView.Text,
         geometry: IdeRenderGeometry,
         sourceGlyphOnly: Boolean = false,
-    ): Int? {
-        val font = geometry.font
-        val gutterDigits =
-            editor.totalLines
-                .toString()
-                .length
-                .coerceAtLeast(2)
-        val codeLeft = geometry.editor.left + (gutterDigits + 2) * font.cellWidth
-        if (sourceGlyphOnly && x < codeLeft) return null
-        val row = ((y - geometry.editor.top).toInt() / font.cellHeight)
-        val line = editor.visibleLines.getOrNull(row) ?: return null
-        val lineStart = editor.visibleLineStartsUtf16[row]
-        val requestedColumn = editor.firstVisibleColumn + ((x - codeLeft).toInt() / font.cellWidth).coerceAtLeast(0)
-        if (sourceGlyphOnly && requestedColumn !in editor.firstVisibleColumn until line.visualWidth()) return null
-        var offset = 0
-        var column = 0
-        while (offset < line.length && column < requestedColumn) {
-            val codePoint = line.codePointAt(offset)
-            val next = if (codePoint == '\t'.code) column + TAB_WIDTH - column % TAB_WIDTH else column + 1
-            if (next > requestedColumn) break
-            column = next
-            offset += Character.charCount(codePoint)
-        }
-        return lineStart + offset
-    }
-
-    private fun String.visualWidth(): Int {
-        var offset = 0
-        var column = 0
-        while (offset < length) {
-            val codePoint = codePointAt(offset)
-            column = if (codePoint == '\t'.code) column + TAB_WIDTH - column % TAB_WIDTH else column + 1
-            offset += Character.charCount(codePoint)
-        }
-        return column
-    }
+    ): Int? = IdeSourceGeometry(editor, geometry).pointerOffset(x, y, sourceGlyphOnly)
 
     private fun IdeRect.contains(
         x: Double,
@@ -1052,7 +1017,6 @@ class IdeInputAdapter(
         const val TREE_ROWS_TOP = 4
         const val SCROLL_ROWS = 3
         const val SCROLL_COLUMNS = 4
-        const val TAB_WIDTH = 4
         const val DRAG_THRESHOLD = 4.0
     }
 

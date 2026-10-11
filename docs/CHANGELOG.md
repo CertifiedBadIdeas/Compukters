@@ -33,7 +33,8 @@ headings so this page has one stable URL that can be shared outside the reposito
   and paths throughout the project, including collapsed folders, with keyboard and mouse navigation. Active tabs use
   a restrained background and accent underline. The header separates project, file and target; Build and Run use
   labeled controls when space permits. The status bar shows concise activity, with a scrollable read-only Details
-  window and complete message copying.
+  window and complete message copying. Source highlighting, caret, selection and mouse pointing share tab and
+  Unicode columns, including horizontally scrolled text.
 
 - Documentation offers a version selector for released 0.5.1 and nightly guides and API references. The released
   documentation opens by default; nightly identifies its current source commit.
