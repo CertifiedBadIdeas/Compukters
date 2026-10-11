@@ -56,6 +56,9 @@ and export every payload field. Consumers import both identities, including conc
 signature matching resolves nominal inline identities across modules. Bound method references store the
 boxed receiver in their closure environment and reconstruct its direct layout before static invocation.
 Constructor references reuse constructor lowering, including argument layout and initializer execution.
+References to stateless trusted platform object methods use the same receiver-free signature as direct calls,
+so factories such as `Matrix4f::perspective` do not capture an absent runtime companion instance. Managed
+object and companion methods retain their ordinary receiver capture.
 Compiler and IDE sessions share `CompuktersLanguageVersionSettings` so native multi-field declarations
 receive consistent frontend analysis.
 

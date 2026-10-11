@@ -1301,7 +1301,7 @@ internal object KotlinProjectLowering {
                         it is IrConstructor || it is IrProperty || it is IrAnonymousInitializer
                     }
                 }
-        val closureSources = collectGuestClosures(closureRoots)
+        val closureSources = collectGuestClosures(closureRoots, session)
         val writtenValues = collectWrittenGuestValues(closureRoots)
         val captureCellDeclarations =
             closureSources
@@ -9479,7 +9479,10 @@ private fun collectWrittenGuestValues(roots: List<IrElement>): Set<IrValueSymbol
 }
 
 @OptIn(UnsafeDuringIrConstructionAPI::class)
-private fun collectGuestClosures(functions: List<IrElement>): List<GuestClosureSource> {
+private fun collectGuestClosures(
+    functions: List<IrElement>,
+    session: CompilationSession,
+): List<GuestClosureSource> {
     val expressions = mutableListOf<IrExpression>()
     val collector =
         object : IrVisitorVoid() {
@@ -9528,9 +9531,16 @@ private fun collectGuestClosures(functions: List<IrElement>): List<GuestClosureS
             }
         if (referenceTarget != null) {
             val shape = expression.type.guestFunctionShape()
-            val boundReceiver = expression.boundReferenceReceiver(referenceTarget)
-            val instanceMethod = referenceTarget.parent is IrClass
-            val dispatchReceiver = referenceTarget.parameters.singleOrNull { it.kind == IrParameterKind.DispatchReceiver }
+            val sourceReceiver = expression.boundReferenceReceiver(referenceTarget)
+            val dispatchReceiver = loweredParameters(referenceTarget, session).singleOrNull { it.kind == IrParameterKind.DispatchReceiver }
+            val erasedReceiver = dispatchReceiver == null && referenceTarget.parameters.any { it.kind == IrParameterKind.DispatchReceiver }
+            // Trusted stateless object methods are exported without a receiver. A reference must use
+            // the same signature as a direct call, rather than capture an object with no runtime type.
+            if (erasedReceiver && sourceReceiver != null && sourceReceiver !is IrGetObjectValue) {
+                throw UnsupportedKotlinIr(expression, "erased object function reference requires a singleton receiver")
+            }
+            val boundReceiver = sourceReceiver.takeUnless { erasedReceiver }
+            val instanceMethod = referenceTarget.parent is IrClass && !erasedReceiver
             val receiverType = boundReceiver?.type ?: shape?.parameters?.firstOrNull()
             val ownerInstance =
                 (receiverType as? IrSimpleType)?.let { receiver ->

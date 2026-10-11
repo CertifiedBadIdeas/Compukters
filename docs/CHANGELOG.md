@@ -72,7 +72,9 @@ headings so this page has one stable URL that can be shared outside the reposito
 - Guest `kotlin.math` provides reusable `Vector2i`, `Vector2f`, `Vector3i` and `Vector3f` value classes,
   Position/Size aliases, arithmetic, dot/cross products, lengths, normalization, interpolation, explicit
   rounding and half-open 2D rectangles. Displays accept vectors and rectangles while retaining scalar
-  coordinate calls. Infix `xy`, `by` and `sized` provide compact geometry construction.
+  coordinate calls. Infix `xy`, `by` and `sized` provide compact geometry construction. Immutable `Matrix4f`
+  and homogeneous `Vector4f` add reusable 3D transformation composition, radians-based axis rotations,
+  perspective/orthographic projection and explicit perspective division with clip-volume checks.
 
 - Guest executables omit unused class and interface methods and their dependencies. Virtual dispatch keeps its
   required implementations; independently compiled libraries retain their exported method surface.
