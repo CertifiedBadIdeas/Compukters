@@ -28,10 +28,8 @@ import ru.lazyhat.compukters.ide.client.analysis.IdeParameterInfoState
 import ru.lazyhat.compukters.ide.client.analysis.IdeSemanticAnchor
 import ru.lazyhat.compukters.ide.client.analysis.IdeSemanticInteraction
 import ru.lazyhat.compukters.ide.client.analysis.presentationOrNull
-import ru.lazyhat.compukters.ide.client.build.IdeBuildState
 import ru.lazyhat.compukters.ide.client.files.IdeComputerChildren
 import ru.lazyhat.compukters.ide.client.files.IdeComputerNode
-import ru.lazyhat.compukters.ide.client.files.IdeComputerTransferState
 import ru.lazyhat.compukters.ide.client.files.IdeComputerTreeState
 import ru.lazyhat.compukters.ide.client.git.IdeGitField
 import ru.lazyhat.compukters.ide.client.git.IdeGitFieldView
@@ -48,7 +46,6 @@ import ru.lazyhat.compukters.ide.client.state.IdePageState
 import ru.lazyhat.compukters.ide.client.state.IdeToolingState
 import ru.lazyhat.compukters.ide.client.state.IdeViewState
 import ru.lazyhat.compukters.ide.client.state.IdeWorkspaceView
-import ru.lazyhat.compukters.ide.client.target.IdeAttachedTarget
 import ru.lazyhat.compukters.ide.client.target.IdeTargetState
 import ru.lazyhat.compukters.ide.editor.EditorRange
 import ru.lazyhat.compukters.ide.git.GitOperation
@@ -96,6 +93,7 @@ object IdeRenderer {
         projectFirstRow: Int = 0,
         fileTabFirstIndex: Int = 0,
         quickOpen: IdeQuickOpenView? = null,
+        statusDetails: IdeStatusDetailsView? = null,
     ): IdeDrawModel {
         val output =
             Builder(
@@ -133,9 +131,11 @@ object IdeRenderer {
             is IdePageState.Workspace -> output.workspace(page.value, state.target, state.tooling, state.busy, caretVisible)
         }
         output.terminalTool(state.target)
-        output.scaleControls(uiScale, enabled = quickOpen == null && prompt == null && state.dialog == null)
+        output.scaleControls(uiScale, enabled = statusDetails == null && quickOpen == null && prompt == null && state.dialog == null)
         val dialog = state.dialog
-        if (quickOpen != null) {
+        if (statusDetails != null && dialog == null && prompt == null) {
+            IdeStatusDetailsRenderer.draw(output, geometry.panel, statusDetails)
+        } else if (quickOpen != null) {
             output.quickOpen(quickOpen)
         } else if (prompt != null) {
             output.prompt(prompt)
@@ -285,28 +285,16 @@ object IdeRenderer {
             busy: Set<IdeBusyOperation>,
             caretVisible: Boolean,
         ) {
-            val projectTitle = "Projects · ${workspace.project.displayName}"
-            val projectControl = projectControl(projectTitle)
-            target(IdeHitAction.ProjectSwitcher, projectControl, true, "Choose or manage projects", selected = projectSwitcherOpen)
-            val projectLabelWidth = ((projectControl.width - 18) / 6).coerceAtLeast(1)
-            val projectLabel = projectTitle.take(projectLabelWidth)
-            ui(IdeTextKind.Header, "$projectLabel ▾", projectControl.left + 5, projectControl.top + 5)
-            val active = workspace.activeFile?.value ?: "No file"
-            val fileColors = IdeGitFileColors(workspace.git.status ?: workspace.git.result?.status)
-            val activeLeft = projectControl.right + 7
-            val activeWidth = ((geometry.header.right - IdeUiScaleControl.WIDTH - activeLeft - 6) / font.cellWidth).coerceAtLeast(0)
-            val targetText = " · ${targetLabel(targetState)}"
-            val visibleActive = active.take((activeWidth - targetText.length).coerceAtLeast(0))
-            ui(IdeTextKind.Header, visibleActive, activeLeft, geometry.header.top + 7, fileColors.color(active), geometry.header)
-            ui(
-                IdeTextKind.Header,
-                targetText,
-                activeLeft + visibleActive.length * font.cellWidth,
-                geometry.header.top + 7,
-                IdeColors.MUTED,
-                geometry.header,
+            val projectControl = IdeWorkspaceHeader.draw(this, geometry, workspace, targetState, projectSwitcherOpen)
+            IdeToolbar.draw(
+                this,
+                geometry,
+                workspace,
+                targetState,
+                toolingState,
+                busy,
+                workspace.activeFile != null || selectedTreePath != null,
             )
-            toolbar(workspace, targetState, toolingState, busy, workspace.activeFile != null || selectedTreePath != null)
             toolWindows(workspace)
             tree(workspace)
             fileTabs(workspace, busy)
@@ -334,7 +322,7 @@ object IdeRenderer {
                 }
             }
             diagnostics(workspace)
-            status(workspace, targetState, toolingState, busy)
+            IdeStatusBar.draw(this, geometry, workspace, targetState, toolingState, busy)
             if (projectSwitcherOpen) projectSwitcher(workspace, projectControl)
         }
 
@@ -352,12 +340,6 @@ object IdeRenderer {
             }
             text += component.text
             fills += component.fills
-        }
-
-        private fun projectControl(displayName: String): IdeRect {
-            val maximum = minOf(PROJECT_SWITCHER_WIDTH, (geometry.header.width / 2).coerceAtLeast(PROJECT_CONTROL_MINIMUM_WIDTH))
-            val width = (displayName.length * 6 + 22).coerceIn(PROJECT_CONTROL_MINIMUM_WIDTH, maximum)
-            return IdeRect(geometry.header.left + 4, geometry.header.top + 3, geometry.header.left + 4 + width, geometry.header.bottom - 3)
         }
 
         private fun projectSwitcher(
@@ -904,95 +886,6 @@ object IdeRenderer {
                     )
                 }
                 start += raw.length + 1
-            }
-        }
-
-        private fun toolbar(
-            workspace: ru.lazyhat.compukters.ide.client.state.IdeWorkspaceView,
-            targetState: IdeTargetState,
-            toolingState: IdeToolingState,
-            busy: Set<IdeBusyOperation>,
-            hasActiveEntry: Boolean,
-        ) {
-            var left = geometry.toolbar.left + 6
-
-            fun action(
-                icon: IdeIconKind,
-                action: IdeHitAction,
-                enabled: Boolean = true,
-                tooltip: String,
-                selected: Boolean = false,
-            ) {
-                val bounds = IdeRect(left, geometry.toolbar.top + 3, left + TOOLBAR_ICON_CONTROL_WIDTH, geometry.toolbar.bottom - 3)
-                target(action, bounds, enabled, tooltip, selected = selected)
-                icons += IdeIconDraw(icon, bounds, if (enabled) IdeColors.TEXT else IdeColors.DISABLED, Z_TEXT)
-                left = bounds.right + 4
-            }
-
-            fun groupGap() {
-                left += TOOLBAR_GROUP_GAP
-            }
-
-            val toolingReady = toolingState == IdeToolingState.Ready
-            val toolingUnavailable = if (toolingReady) null else "Kotlin tooling is not ready"
-            val build = workspace.build
-            val editor = workspace.editor as? IdeEditorView.Text
-            val formatBusy = IdeBusyOperation.Format in busy
-            val writableKotlin = editor?.readOnly == false && editor.path?.value?.endsWith(".kt") == true
-            val formatTooltip =
-                when {
-                    !toolingReady -> checkNotNull(toolingUnavailable)
-                    !writableKotlin -> "Open a writable Kotlin source"
-                    formatBusy -> "Kotlin formatting is already running"
-                    else -> "Reformat Code (Ctrl+Alt+L)"
-                }
-            action(
-                IdeIconKind.Format,
-                IdeHitAction.Format,
-                toolingReady && writableKotlin && !formatBusy,
-                formatTooltip,
-                selected = formatBusy,
-            )
-            action(IdeIconKind.Resolve, IdeHitAction.Resolve, toolingReady, toolingUnavailable ?: "Resolve dependencies")
-            if (IdeBusyOperation.Clone in busy || IdeBusyOperation.Git in busy) {
-                action(IdeIconKind.Cancel, IdeHitAction.GitCancel, tooltip = "Cancel Git operation")
-            } else if (build is IdeBuildState.Compiling || build is IdeBuildState.Saving) {
-                action(IdeIconKind.Cancel, IdeHitAction.Cancel, tooltip = "Cancel build")
-            } else {
-                action(IdeIconKind.Build, IdeHitAction.Build, toolingReady, toolingUnavailable ?: "Build (Ctrl+F9)")
-            }
-            groupGap()
-            val targetReady =
-                toolingReady && targetState.isReadyForAction && build !is IdeBuildState.Compiling && build !is IdeBuildState.Saving
-            val targetTooltip =
-                when {
-                    !toolingReady -> toolingUnavailable
-                    targetState.attachedTarget == null -> NO_TARGET
-                    !targetReady -> "Target operation in progress"
-                    else -> null
-                }
-            action(IdeIconKind.Verify, IdeHitAction.Verify, targetReady, targetTooltip ?: "Verify target artifact")
-            action(IdeIconKind.Deploy, IdeHitAction.Deploy, targetReady, targetTooltip ?: "Deploy to target")
-            action(IdeIconKind.Run, IdeHitAction.Run, targetReady, targetTooltip ?: "Run on target")
-            groupGap()
-            action(IdeIconKind.NewFile, IdeHitAction.CreateText, tooltip = "New file")
-            action(IdeIconKind.NewDirectory, IdeHitAction.CreateDirectory, tooltip = "New directory")
-            action(
-                IdeIconKind.Rename,
-                IdeHitAction.Rename,
-                hasActiveEntry,
-                if (hasActiveEntry) "Rename selected entry" else "Select an entry to rename",
-            )
-            action(
-                IdeIconKind.Delete,
-                IdeHitAction.Delete,
-                hasActiveEntry,
-                if (hasActiveEntry) "Delete selected entry" else "Select an entry to delete",
-            )
-            val bounds = IdeRect(left + 4, geometry.toolbar.top + 3, left + 88, geometry.toolbar.bottom - 3)
-            if (geometry.toolbar.contains(bounds)) {
-                target(IdeHitAction.QuickOpen, bounds, busy.isEmpty(), "Open file (Ctrl+Shift+N)")
-                ui(IdeTextKind.Toolbar, "Open file…", bounds.left + 8, bounds.top + 5)
             }
         }
 
@@ -2181,75 +2074,6 @@ object IdeRenderer {
             }
         }
 
-        private fun status(
-            workspace: ru.lazyhat.compukters.ide.client.state.IdeWorkspaceView,
-            targetState: IdeTargetState,
-            toolingState: IdeToolingState,
-            busy: Set<IdeBusyOperation>,
-        ) {
-            val parts = linkedSetOf<String>()
-            val errors = workspace.diagnostics.errors
-            val warnings = workspace.diagnostics.warnings
-            parts += "$errors ${if (errors == 1) "error" else "errors"} · $warnings ${if (warnings == 1) "warning" else "warnings"}"
-            (workspace.editor as? IdeEditorView.Text)?.let { editor ->
-                parts +=
-                    if (editor.conflict) {
-                        "Conflict"
-                    } else if (editor.dirty) {
-                        "Modified"
-                    } else {
-                        "Saved"
-                    }
-                parts += "UTF-16 ${editor.caretUtf16}"
-                when (val analysis = editor.analysis) {
-                    is IdeAnalysisState.Loading -> parts += "Analysis…"
-                    is IdeAnalysisState.Unavailable -> parts += analysis.status
-                    else -> Unit
-                }
-            }
-            when (val build = workspace.build) {
-                is IdeBuildState.Succeeded -> parts += "Artifact ${build.bytes} B · ${if (build.cacheHit) "cache hit" else "compiled"}"
-                is IdeBuildState.Failed -> parts += build.detail
-                is IdeBuildState.Compiling -> parts += "Building…"
-                is IdeBuildState.Saving -> parts += "Saving…"
-                else -> Unit
-            }
-            if (IdeBusyOperation.Format in busy) parts += "Formatting…"
-            targetStatus(targetState)?.let(parts::add)
-            when (toolingState) {
-                IdeToolingState.Preparing -> parts += "Kotlin tooling is starting…"
-                is IdeToolingState.Unavailable -> parts += toolingState.detail
-                IdeToolingState.Ready -> Unit
-            }
-            workspace.status?.let { parts += it.message }
-            when (val transfer = workspace.computerTransfer) {
-                IdeComputerTransferState.Idle -> {
-                    Unit
-                }
-
-                is IdeComputerTransferState.Downloading -> {
-                    parts +=
-                        "Copying ${transfer.progress.filesComplete}/${transfer.progress.filesTotal} · ${transfer.progress.bytesComplete}/${transfer.progress.bytesTotal} B"
-                }
-
-                is IdeComputerTransferState.ConfirmationRequired -> {
-                    parts += "Copy ready · confirmation required"
-                }
-
-                is IdeComputerTransferState.Failed -> {
-                    parts += transfer.detail
-                }
-            }
-            ui(
-                IdeTextKind.Status,
-                parts.joinToString(" · "),
-                geometry.status.left + 6,
-                geometry.status.top + 5,
-                IdeColors.MUTED,
-                geometry.status,
-            )
-        }
-
         fun dialog(dialog: IdeDialogState) {
             for (index in hitTargets.indices) hitTargets[index] = hitTargets[index].copy(enabled = false)
             fills += IdeFillDraw(IdeFillKind.DialogScrim, geometry.panel, IdeColors.DIM, Z_DIALOG_SCRIM)
@@ -2438,81 +2262,6 @@ object IdeRenderer {
         }
     }
 
-    private fun targetLabel(state: IdeTargetState): String =
-        when (state) {
-            IdeTargetState.LocalOnly -> "Local only"
-            is IdeTargetState.Attaching -> "Attaching…"
-            is IdeTargetState.Detached -> "Target detached"
-            is IdeTargetState.Failed -> state.target?.displayName ?: "Target unavailable"
-            else -> checkNotNull(state.attachedTarget).displayName
-        }
-
-    private fun targetStatus(state: IdeTargetState): String? =
-        when (state) {
-            IdeTargetState.LocalOnly,
-            is IdeTargetState.Attached,
-            -> null
-
-            is IdeTargetState.Attaching -> "Attaching target…"
-
-            is IdeTargetState.Uploading -> "Verifying…"
-
-            is IdeTargetState.Verified -> "Verified"
-
-            is IdeTargetState.Observing -> "Checking destination…"
-
-            is IdeTargetState.ConfirmationRequired -> "Overwrite confirmation required"
-
-            is IdeTargetState.Deploying -> "Deploying…"
-
-            is IdeTargetState.Deployed -> "Deployed ${state.path.value}"
-
-            is IdeTargetState.Submitting -> "Submitting command…"
-
-            is IdeTargetState.CommandSubmitted -> state.message
-
-            is IdeTargetState.Detached -> state.failure.detail
-
-            is IdeTargetState.Failed -> state.failure.detail
-        }
-
-    private val IdeTargetState.attachedTarget: IdeAttachedTarget?
-        get() =
-            when (this) {
-                IdeTargetState.LocalOnly,
-                is IdeTargetState.Attaching,
-                is IdeTargetState.Detached,
-                -> null
-
-                is IdeTargetState.Attached -> target
-
-                is IdeTargetState.Uploading -> target
-
-                is IdeTargetState.Verified -> target
-
-                is IdeTargetState.Observing -> target
-
-                is IdeTargetState.ConfirmationRequired -> target
-
-                is IdeTargetState.Deploying -> target
-
-                is IdeTargetState.Deployed -> target
-
-                is IdeTargetState.Submitting -> target
-
-                is IdeTargetState.CommandSubmitted -> target
-
-                is IdeTargetState.Failed -> target
-            }
-
-    private val IdeTargetState.isReadyForAction: Boolean
-        get() =
-            this is IdeTargetState.Attached ||
-                this is IdeTargetState.Verified ||
-                this is IdeTargetState.Deployed ||
-                this is IdeTargetState.CommandSubmitted ||
-                (this is IdeTargetState.Failed && target != null)
-
     private fun expand(
         bounds: IdeRect,
         amount: Int,
@@ -2601,12 +2350,9 @@ object IdeRenderer {
 
     private const val TAB_WIDTH = 4
     private const val UI_LINE_HEIGHT = 12
-    private const val PROJECT_CONTROL_MINIMUM_WIDTH = 80
     private const val PROJECT_SWITCHER_WIDTH = 540
     private const val PROJECT_ROW_HEIGHT = 40
     private const val PROJECT_ACTION_HEIGHT = 18
-    private const val TOOLBAR_ICON_CONTROL_WIDTH = 22
-    private const val TOOLBAR_GROUP_GAP = 6
     private const val TOOLTIP_MARGIN = 4
     private const val TOOLTIP_HORIZONTAL_PADDING = 5
     private const val TOOLTIP_POINTER_OFFSET = 12

@@ -94,6 +94,41 @@ import kotlin.test.assertTrue
 
 class IdeRendererStateTest {
     @Test
+    fun `chrome separates text bounds and preserves full status beyond compact labels`() {
+        val detail = "Compiler stopped: " + "Detailed failure information 😀 ".repeat(100)
+        val state = workspaceState(IdeEditorView.Empty, IdeBuildState.Idle, IdeProblem(detail, IdeProblemSeverity.Error))
+        val workspace = (state.page as IdePageState.Workspace).value
+        assertTrue(IdeStatusBar.messages(workspace, state.target, state.tooling, state.busy).contains(detail))
+        listOf(960 to 540, 640 to 360, 300 to 200).forEach { (width, height) ->
+            val geometry = IdeRenderGeometry.compute(width, height, 96, 64, true, true, IdeCodeFontProfile.DEFAULT)
+            val model = IdeRenderer.extract(state, geometry)
+            val toolbar = model.hitTargets.filter { it.action in WORKSPACE_ACTIONS }
+            toolbar.forEach { assertTrue(geometry.toolbar.contains(it.bounds)) }
+            toolbar.zipWithNext().forEach { (left, right) -> assertTrue(left.bounds.right <= right.bounds.left) }
+            val labels = model.text.filter { (it.kind == IdeTextKind.Header && it.clip != null) || it.kind == IdeTextKind.Status }
+            labels.forEach { label ->
+                val clip = assertNotNull(label.clip)
+                assertTrue(label.x + label.value.codePointCount(0, label.value.length) * 6 <= clip.right)
+                assertTrue(clip.containsPoint(label.x.toDouble(), label.y.toDouble()))
+            }
+            assertTrue(model.text.none { it.value == detail })
+            assertTrue(model.hitTargets.single { it.action == IdeHitAction.StatusDetails }.enabled)
+            if (width <= 640) assertTrue(model.text.none { it.kind == IdeTextKind.Toolbar && it.value in listOf("Build", "Run") })
+        }
+        val details = IdeStatusDetails()
+        details.open(workspace.project.directoryName, IdeStatusBar.messages(workspace, state.target, state.tooling, state.busy))
+        val model = IdeRenderer.extract(state, geometry(), statusDetails = details.view(geometry().panel))
+        assertTrue(model.hitTargets.filter { it.action in WORKSPACE_ACTIONS }.none { it.enabled })
+        assertTrue(
+            model.hitTargets
+                .filter {
+                    it.action in listOf(IdeHitAction.ScaleAuto, IdeHitAction.ScaleTwo, IdeHitAction.ScaleThree)
+                }.none { it.enabled },
+        )
+        assertTrue(details.text().contains(detail))
+    }
+
+    @Test
     fun `presentation shares admitted Git scrolling between drawing focus and pointer input`() {
         val initial = workspaceState(IdeEditorView.Empty, IdeBuildState.Idle)
         val workspace = (initial.page as IdePageState.Workspace).value
@@ -733,7 +768,15 @@ class IdeRendererStateTest {
                 geometry(),
             )
         assertEquals(IdeColors.ERROR, closed.fills.single { it.kind == IdeFillKind.DiagnosticMarker }.color)
-        assertEquals(open.text.single { it.kind == IdeTextKind.Status }.value, closed.text.single { it.kind == IdeTextKind.Status }.value)
+        assertEquals(
+            open.text.filter { it.kind == IdeTextKind.Status && it.value != "Details" }.joinToString(" · ") { it.value },
+            closed.text
+                .filter {
+                    it.kind ==
+                        IdeTextKind.Status &&
+                        it.value != "Details"
+                }.joinToString(" · ") { it.value },
+        )
     }
 
     private fun completionEditor(
@@ -769,8 +812,8 @@ class IdeRendererStateTest {
         assertEquals(bounds.editor.top, marker.bounds.top - 3)
         assertTrue(
             model.text
-                .single { it.kind == IdeTextKind.Status }
-                .value
+                .filter { it.kind == IdeTextKind.Status && it.value != "Details" }
+                .joinToString(" · ") { it.value }
                 .startsWith("2 errors · 1 warning"),
         )
         val targets = model.hitTargets.filter { it.action == IdeHitAction.DiagnosticChoice }
@@ -1393,7 +1436,12 @@ class IdeRendererStateTest {
             model.icons.map { it.kind },
         )
         assertTrue(model.icons.all { icon -> geometry().toolbar.contains(icon.bounds) })
-        assertTrue(model.text.filter { it.kind == IdeTextKind.Toolbar }.all { it.value == "Open file…" })
+        assertTrue(
+            model.text
+                .filter { it.kind == IdeTextKind.Toolbar }
+                .map { it.value }
+                .containsAll(listOf("Build", "Run", "Open file…")),
+        )
         assertTrue(geometry().toolbar.contains(model.hitTargets.single { it.action == IdeHitAction.QuickOpen }.bounds))
         assertTrue(model.hitTargets.filter { it.action in WORKSPACE_ACTIONS }.all { it.tooltip != null })
         listOf(500 to 240, 300 to 200).forEach { (width, height) ->
@@ -1458,8 +1506,8 @@ class IdeRendererStateTest {
         }
         assertTrue(
             model.text
-                .single { it.kind == IdeTextKind.Status }
-                .value
+                .filter { it.kind == IdeTextKind.Status && it.value != "Details" }
+                .joinToString(" · ") { it.value }
                 .contains("Kotlin tooling is starting"),
         )
     }
@@ -1483,8 +1531,8 @@ class IdeRendererStateTest {
         assertTrue(busyAction.selected)
         assertTrue(
             formatting.text
-                .single { it.kind == IdeTextKind.Status }
-                .value
+                .filter { it.kind == IdeTextKind.Status && it.value != "Details" }
+                .joinToString(" · ") { it.value }
                 .contains("Formatting…"),
         )
     }
@@ -1578,8 +1626,8 @@ class IdeRendererStateTest {
             IdeRenderer
                 .extract(state, geometry())
                 .text
-                .single { it.kind == IdeTextKind.Status }
-                .value
+                .filter { it.kind == IdeTextKind.Status && it.value != "Details" }
+                .joinToString(" · ") { it.value }
 
         assertEquals(1, Regex(Regex.escape(message)).findAll(status).count())
     }
