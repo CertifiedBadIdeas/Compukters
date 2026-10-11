@@ -21,7 +21,6 @@ import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 plugins {
     id("kotlin-convention")
     id("dev.architectury.loom-no-remap")
-    id("architectury-plugin")
 }
 
 val libVersion = "v261"
@@ -35,13 +34,9 @@ setBuildContext(
     minecraftVersion = minecraftVersion,
 )
 
-// Common (Architectury) module: archive version = "<mc>-<modVersion>".
+// Common Minecraft module: archive version = "<mc>-<modVersion>".
 // Loader-specific conventions override this with "<mc>-<loader>-<modVersion>".
 version = computeModVersion()
-
-architectury {
-    minecraft = minecraftVersion
-}
 
 dependencies {
     minecraft(minecraftLibrary)

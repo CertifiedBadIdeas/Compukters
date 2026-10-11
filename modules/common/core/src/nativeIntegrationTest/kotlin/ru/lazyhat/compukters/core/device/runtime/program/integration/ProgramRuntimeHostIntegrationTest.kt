@@ -47,6 +47,8 @@ import ru.lazyhat.compukters.lang.runtime.vm.TerminalKeyAction
 import ru.lazyhat.compukters.lang.runtime.vm.TerminalModifier
 import ru.lazyhat.compukters.lang.runtime.vm.TerminalState
 import ru.lazyhat.compukters.lang.runtime.vm.VmArtifactVerifier
+import ru.lazyhat.compukters.lang.runtime.vm.VmCanonicalLineException
+import ru.lazyhat.compukters.lang.runtime.vm.VmCanonicalLineFailure
 import ru.lazyhat.compukters.lang.runtime.vm.VmOutcome
 import ru.lazyhat.compukters.lang.runtime.vm.VmRuntime
 import ru.lazyhat.compukters.lang.runtime.vm.VmSession
@@ -66,6 +68,7 @@ import java.util.concurrent.Executors
 import kotlin.io.path.readBytes
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertIs
 import kotlin.test.assertTrue
 
@@ -392,6 +395,58 @@ class ProgramRuntimeHostIntegrationTest {
             repeat(40) { press(host, TerminalKey.DOWN) }
             assertTrue(terminalText(requireNotNull(host.terminalFullState())).endsWith(">\n"))
         }
+
+    @Test
+    fun `IDE submits a complete command to the builtin shell`() {
+        withShell { host ->
+            assertTrue(host.submitCanonicalLine("echo launched-from-IDE".toCharArray()))
+            advanceUntil(host) { it == ProgramRuntimeState.WaitingForInput }
+            assertTrue(terminalText(requireNotNull(host.terminalFullState())).contains("launched-from-IDE\n>"))
+            press(host, TerminalKey.UP)
+            assertTrue(terminalText(requireNotNull(host.terminalFullState())).endsWith("> echo launched-from-IDE\n"))
+            press(host, TerminalKey.C, setOf(TerminalModifier.CONTROL))
+            assertTrue(host.submitCanonicalLine("echo again".toCharArray()))
+            advanceUntil(host) { it == ProgramRuntimeState.WaitingForInput }
+            assertTrue(terminalText(requireNotNull(host.terminalFullState())).contains("again\n>"))
+            assertTrue(host.submitCanonicalLine("/home/hello".toCharArray()))
+            advanceUntil(host) { it == ProgramRuntimeState.WaitingForInput }
+            assertTrue(terminalText(requireNotNull(host.terminalFullState())).contains("nested child ran\n>"))
+        }
+    }
+
+    @Test
+    fun `IDE complete lines preserve drafts and reject busy children and queued input`() {
+        withShell { host ->
+            submit(host, "echo draft")
+            val screen = requireNotNull(host.terminalFullState())
+            val draft = assertFailsWith<VmCanonicalLineException> { host.submitCanonicalLine("echo injected".toCharArray()) }
+            assertEquals(VmCanonicalLineFailure.PARTIAL_INPUT, draft.failure)
+            assertEquals(screen, host.terminalFullState())
+            pressEnter(host)
+            assertTrue(terminalText(requireNotNull(host.terminalFullState())).contains("draft\n>"))
+
+            assertTrue(host.submitCanonicalLine("edit note.txt".toCharArray()))
+            advanceUntil(host) { it == ProgramRuntimeState.WaitingForInput }
+            val busy = assertFailsWith<VmCanonicalLineException> { host.submitCanonicalLine("echo injected".toCharArray()) }
+            assertEquals(VmCanonicalLineFailure.NO_PENDING_READ, busy.failure)
+            press(host, TerminalKey.C, setOf(TerminalModifier.CONTROL))
+
+            for ((line, expected) in listOf(
+                "x".repeat(257) to VmCanonicalLineFailure.LINE_TOO_LONG,
+                "echo a\necho b" to VmCanonicalLineFailure.UNSUPPORTED_CODE_UNIT,
+                "\uD800" to VmCanonicalLineFailure.UNSUPPORTED_CODE_UNIT,
+            )) {
+                val rejected = assertFailsWith<VmCanonicalLineException> { host.submitCanonicalLine(line.toCharArray()) }
+                assertEquals(expected, rejected.failure)
+            }
+            assertTrue(host.sendTerminalText("echo queued"))
+            val queued = assertFailsWith<VmCanonicalLineException> { host.submitCanonicalLine("echo injected".toCharArray()) }
+            assertEquals(VmCanonicalLineFailure.INPUT_BUSY, queued.failure)
+            advanceUntil(host) { it == ProgramRuntimeState.WaitingForInput }
+            pressEnter(host)
+            assertTrue(terminalText(requireNotNull(host.terminalFullState())).contains("queued\n>"))
+        }
+    }
 
     private fun shellCommand(
         host: ProgramRuntimeHost,

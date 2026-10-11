@@ -23,10 +23,6 @@ plugins {
     alias(libs.plugins.minecraftSharedSourcesConvention)
 }
 
-architectury {
-    common("neoforge")
-}
-
 dependencies {
     implementation(projects.addonApi)
     implementation(projects.addonGuestApi)
