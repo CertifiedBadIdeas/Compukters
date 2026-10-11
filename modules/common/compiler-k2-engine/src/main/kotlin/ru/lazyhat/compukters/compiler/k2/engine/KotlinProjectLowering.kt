@@ -10269,15 +10269,13 @@ private fun capabilityShape(
 ): PlatformCapabilityShape =
     session.capabilityShapes[capability]
         ?: PlatformCapabilityShape(
-            if ((capability.namespace == "compukters" && capability.name == "display") ||
-                (capability.namespace == "compukter" && capability.name == "terminal")
-            ) {
-                1
-            } else {
-                0
+            when (capability.namespace to capability.name) {
+                "compukter" to "terminal" -> 2
+                "compukters" to "display" -> 1
+                else -> 0
             },
             when (capability.namespace to capability.name) {
-                "compukter" to "terminal" -> 18u
+                "compukter" to "terminal" -> 19u
                 "compukter" to "stdio" -> 3u
                 "compukter" to "process" -> 3u
                 "compukter" to "filesystem" -> 15u

@@ -390,6 +390,7 @@ object CanonicalTrustedIntrinsics {
                     Triple("cursorY", "fun():Int", false),
                     Triple("width", "fun():Int", false),
                     Triple("height", "fun():Int", false),
+                    Triple("awaitSubmittedLineEvent", "fun(Int):Int", true),
                 )
             terminalOperations.forEachIndexed { operation, (name, signature, blocking) ->
                 capability(
