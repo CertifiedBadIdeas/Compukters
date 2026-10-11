@@ -32,7 +32,7 @@ fun lex(source: String): LexResult {
     val singleQuoted = 1
     val doubleQuoted = 2
     val escaped = 3
-    val words = arrayOf("", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "")
+    val words = Array(maximumWords) { "" }
     val token = CharArray(maximumWordCodeUnits)
     var wordCount = 0
     var tokenLength = 0

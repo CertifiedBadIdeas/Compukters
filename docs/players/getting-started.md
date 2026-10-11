@@ -53,6 +53,21 @@ take a **Compukter**, or run:
 Place the block and use it with an empty hand. Its terminal opens and the built-in shell displays a `>` prompt after the
 computer boots. Run `help` to see the currently available shell commands.
 
+Use `help <command>` for usage. Relative paths start at `/home`; quote names containing spaces. For example:
+
+```text
+mkdir -p "notes folder/archive"
+edit "notes folder/message.txt"
+cat "notes folder/message.txt"
+mv "notes folder/message.txt" "notes folder/archive/message.txt"
+rm "notes folder/archive/message.txt"
+```
+
+`cat` prints strict UTF-8 text up to 65,536 encoded bytes, preserving the file's line endings without adding a newline.
+`mv` takes the complete destination path and refuses to replace an existing entry. `rm` removes a file or an empty
+directory; it does not delete a directory tree. Paths may contain `.` and `..`; filesystem access normalizes them,
+and `/rom` remains read-only. Executable paths also normalize before the shell starts a child program.
+
 ## Unload, resume and restart
 
 Running computers hibernate when their carrier unloads and during orderly server shutdown. Loading them again continues
