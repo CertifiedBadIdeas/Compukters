@@ -7144,6 +7144,128 @@ class MinimalScriptLoweringTest {
         }
 
     @Test
+    fun `do while loops preserve post test order jumps cleanup and exceptions for vm execution`() =
+        withAdapter { adapter ->
+            val source =
+                """
+                class State(var bodies: Int, var conditions: Int, var cleanup: Int)
+                fun condition(state: State, limit: Int): Boolean {
+                    state.conditions += 1
+                    return state.bodies < limit
+                }
+                fun cleanupCondition(state: State, limit: Int): Boolean {
+                    check(state.cleanup == state.bodies)
+                    return condition(state, limit)
+                }
+                fun earlyReturn(state: State): Int {
+                    do {
+                        try {
+                            return 7
+                        } finally {
+                            state.cleanup += 1
+                        }
+                    } while (condition(state, 4))
+                    return 0
+                }
+                fun main() {
+                    val once = State(0, 0, 0)
+                    do { once.bodies += 1 } while (condition(once, 0))
+                    check(once.bodies == 1 && once.conditions == 1)
+
+                    val continued = State(0, 0, 0)
+                    var sum = 0
+                    do {
+                        try {
+                            continued.bodies += 1
+                            if (continued.bodies < 3) continue
+                            sum += continued.bodies
+                        } finally {
+                            continued.cleanup += 1
+                        }
+                    } while (cleanupCondition(continued, 4))
+                    check(continued.bodies == 4 && continued.conditions == 4 && continued.cleanup == 4 && sum == 7)
+
+                    val broken = State(0, 0, 0)
+                    do {
+                        try {
+                            broken.bodies += 1
+                            break
+                        } finally {
+                            broken.cleanup += 1
+                        }
+                    } while (condition(broken, 4))
+                    check(broken.bodies == 1 && broken.conditions == 0 && broken.cleanup == 1)
+                    check(earlyReturn(broken) == 7 && broken.conditions == 0 && broken.cleanup == 2)
+
+                    var enclosingCleanup = 0
+                    var outer = 0
+                    var total = 0
+                    try {
+                        do {
+                            outer += 1
+                            var inner = 0
+                            do {
+                                inner += 1
+                                if (inner == 2) continue
+                                if (inner == 4) break
+                                total += inner
+                            } while (inner < 10)
+                        } while (outer < 3)
+                    } finally {
+                        enclosingCleanup += 1
+                    }
+                    check(total == 12 && enclosingCleanup == 1)
+
+                    var caught = 0
+                    var cleanup = 0
+                    try {
+                        do {
+                            try { throw IllegalArgumentException("body") } finally { cleanup += 1 }
+                        } while (true)
+                    } catch (failure: IllegalArgumentException) { caught += 1 }
+                    try {
+                        do { total += 1 } while (error("condition"))
+                    } catch (failure: IllegalStateException) { caught += 1 }
+                    check(caught == 2 && cleanup == 1 && total == 13)
+
+                    var bypassed = 0
+                    do {
+                        bypassed += 1
+                        if (bypassed == 1) break
+                    } while (error("skipped condition"))
+                    check(bypassed == 1)
+                    do {} while (false)
+
+                    var mixed = 0
+                    while (mixed < 2) {
+                        do {
+                            mixed += 1
+                            break
+                        } while (true)
+                    }
+                    check(mixed == 2)
+
+                    var scoped = 0
+                    do {
+                        val again = scoped < 2
+                        scoped += 1
+                    } while (again)
+                    check(scoped == 3)
+                    var iterations = 0
+                    do { iterations += 1 } while (iterations < 1000)
+                    check(iterations == 1000)
+                }
+                """.trimIndent()
+            val first = adapter.compile(request(source))
+            val second = adapter.compile(request(source))
+            val artifact = assertNotNull(first.artifact, first.diagnostics.joinToString()).toByteArray()
+            assertContentEquals(artifact, assertNotNull(second.artifact, second.diagnostics.joinToString()).toByteArray())
+            System.getProperty("compukter.vm.intLoopsArtifact")?.let { output ->
+                Path.of("$output.do-while.cpkt").also { it.parent.createDirectories() }.writeBytes(artifact)
+            }
+        }
+
+    @Test
     fun `while loop jumps lower locally and reject outer targets`() =
         withAdapter { adapter ->
             val local =
@@ -7560,7 +7682,6 @@ class MinimalScriptLoweringTest {
         withAdapter { adapter ->
             listOf(
                 "fun main() { for (value in arrayOf(1)) { value + 1 } }",
-                "fun main() { var value = 0; do { value = value + 1 } while (value < 2) }",
             ).forEach { source ->
                 val result = adapter.compile(request(source))
 
