@@ -119,4 +119,34 @@ class IdePromptTest {
 
         assertEquals("a".repeat(255), prompt.state?.value)
     }
+
+    @Test
+    fun `prompt editing clears validation and isolates history between steps`() {
+        val prompt = IdePromptController()
+
+        fun key(
+            code: Int,
+            modifiers: Int = 0,
+        ) = prompt.keyPressed(IdeKeyInput(code, modifiers), { "" }, {})
+        prompt.open(IdePromptKind.CloneRemote, "invalid")
+        assertNull(prompt.confirm())
+        assertNotNull(prompt.state?.error)
+        key(IdeKeyCode.HOME)
+        assertNotNull(prompt.state?.error)
+        key(IdeKeyCode.A, IdeModifier.CONTROL)
+        prompt.type("https://example.com/demo.git")
+        assertNull(prompt.state?.error)
+        assertNull(prompt.confirm())
+        assertEquals("demo", prompt.state?.value)
+        key(IdeKeyCode.Z, IdeModifier.CONTROL)
+        assertEquals("demo", prompt.state?.value)
+        key(IdeKeyCode.HOME)
+        prompt.type("my-")
+        assertEquals(IdeCommand.CloneProject("my-demo", "https://example.com/demo.git"), prompt.confirm())
+        assertNull(prompt.state)
+        prompt.open(IdePromptKind.CreateProject, "new")
+        prompt.cancel()
+        assertTrue(!prompt.type("ignored"))
+        assertNull(prompt.state)
+    }
 }

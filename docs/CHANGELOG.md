@@ -16,7 +16,8 @@ headings so this page has one stable URL that can be shared outside the reposito
 - The IDE has open-file tabs with retained edits, caret, selection, scrolling and undo history. Tabs show unsaved
   changes and save conflicts, scroll when space is limited, and save modified files before closing. Screen interaction,
   frame composition and reusable controls are shared across both supported Minecraft versions; version adapters handle
-  Minecraft input and drawing.
+  Minecraft input and drawing. Dialog fields support mouse selection, cursor and word navigation, clipboard actions,
+  undo/redo and horizontal scrolling; token fields remain masked.
 
 - Documentation offers a version selector for released 0.5.1 and nightly guides and API references. The released
   documentation opens by default; nightly identifies its current source commit.
