@@ -764,6 +764,7 @@ private class MessageSink {
         string(value.message)
         nullablePath(value.path)
         nullableRange(value.range)
+        enum(value.highlight)
     }
 
     fun completionItem(value: CompletionItem) {
@@ -1204,7 +1205,7 @@ private class MessageSource(
     }
 
     fun diagnostic(): EditorDiagnostic =
-        EditorDiagnostic(enumValue(), string(context.limits.diagnosticTextBytes), nullablePath(), nullableRange())
+        EditorDiagnostic(enumValue(), string(context.limits.diagnosticTextBytes), nullablePath(), nullableRange(), enumValue())
 
     fun completionItem(): CompletionItem {
         val callShape = optional { CompletionCallShape(boolean(), boolean(), boolean()) }

@@ -54,6 +54,14 @@ This changes the native checkpoint contract and Runtime identity; native ABI 21 
 while the filesystem remains persistent. The selected candidate is Runtime 0.23.0; tagged packaging requires its
 published bundles. Executable container format 3 and existing Guest array representation remain unchanged.
 
+## Diagnostic highlighting
+
+Analysis protocol 16 appends a bounded little-endian u16 highlight enum to each diagnostic: standard (0) or unresolved
+reference (1). K2 factory identities and compiler diagnostic codes produce this classification; the client
+never parses localized message text. Existing severity, path and exact UTF-16 range admission remain unchanged.
+Protocol 15 frames and unknown enum values are rejected. Worker payload identities change with the coherent
+producer/consumer update; platform, compiler framing, artifacts and native ABI remain unchanged.
+
 ## Boundary identities
 
 | Boundary | Current representation | Owner |
@@ -63,7 +71,7 @@ published bundles. Executable container format 3 and existing Guest array repres
 | Base platform | Bundle format 9, standalone module format 5, platform ABI 3 | `PlatformBundleCodec` in `modules/common/platform-bundle` |
 | Kotlin metadata carrier | Private format 6 | `platform-k2` |
 | Compiler worker | Protocol 5; explicit source-free library preparation | `compiler-client` and `compiler-k2` |
-| IDE analysis | Protocol 15 | `ide-analysis-client` and `ide-analysis-k2` |
+| IDE analysis | Protocol 16 | `ide-analysis-client` and `ide-analysis-k2` |
 
 ## Reference-array initializer surface
 

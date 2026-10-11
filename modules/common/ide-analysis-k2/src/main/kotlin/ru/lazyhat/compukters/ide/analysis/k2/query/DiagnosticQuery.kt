@@ -28,8 +28,10 @@ import org.jetbrains.kotlin.analysis.api.diagnostics.KaSeverity
 import org.jetbrains.kotlin.lexer.KtTokens
 import org.jetbrains.kotlin.psi.KtFile
 import org.jetbrains.kotlin.psi.KtNamedFunction
+import org.jetbrains.kotlin.psi.KtProperty
 import ru.lazyhat.compukters.compiler.worker.protocol.VirtualSourcePath
 import ru.lazyhat.compukters.ide.analysis.EditorDiagnostic
+import ru.lazyhat.compukters.ide.analysis.EditorDiagnosticHighlight
 import ru.lazyhat.compukters.ide.analysis.EditorDiagnosticSeverity
 import ru.lazyhat.compukters.ide.analysis.protocol.AnalysisLimits
 import ru.lazyhat.compukters.ide.editor.EditorRange
@@ -89,13 +91,20 @@ internal object DiagnosticQuery {
             if (result.size >= limits.diagnostics) {
                 throw AnalysisOutputLimitException("diagnostic count exceeds analysis limit")
             }
-            val range = diagnostic.textRanges.firstOrNull { !it.isEmpty }
+            val initializerRange =
+                if (diagnostic.factoryName == "INITIALIZER_TYPE_MISMATCH") {
+                    (diagnostic.psi as? KtProperty)?.initializer?.textRange
+                } else {
+                    null
+                }
+            val range = initializerRange ?: diagnostic.textRanges.firstOrNull { !it.isEmpty }
             result +=
                 EditorDiagnostic(
                     severity = diagnostic.severity.toEditorSeverity(),
                     message = requiredBoundedUtf8(diagnostic.defaultMessage, limits.diagnosticTextBytes, "diagnostic text"),
                     path = path,
                     range = range?.let { EditorRange(it.startOffset, it.endOffset) },
+                    highlight = EditorDiagnosticHighlight.fromDiagnosticCode(diagnostic.factoryName),
                 )
         }
         return result.sorted()

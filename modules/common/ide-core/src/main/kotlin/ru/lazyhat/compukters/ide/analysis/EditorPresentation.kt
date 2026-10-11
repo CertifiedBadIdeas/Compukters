@@ -48,11 +48,31 @@ enum class EditorDiagnosticSeverity {
     Error,
 }
 
+enum class EditorDiagnosticHighlight {
+    Standard,
+    UnresolvedReference,
+    ;
+
+    companion object {
+        fun fromDiagnosticCode(code: String?): EditorDiagnosticHighlight =
+            when (code) {
+                "UNRESOLVED_REFERENCE", "UNRESOLVED_REFERENCE_WRONG_RECEIVER", "UNRESOLVED_IMPORT", "UNRESOLVED_LABEL" -> {
+                    UnresolvedReference
+                }
+
+                else -> {
+                    Standard
+                }
+            }
+    }
+}
+
 data class EditorDiagnostic(
     val severity: EditorDiagnosticSeverity,
     val message: String,
     val path: VirtualSourcePath? = null,
     val range: EditorRange? = null,
+    val highlight: EditorDiagnosticHighlight = EditorDiagnosticHighlight.Standard,
 ) {
     init {
         require(message.isNotEmpty()) { "diagnostic message must not be empty" }
