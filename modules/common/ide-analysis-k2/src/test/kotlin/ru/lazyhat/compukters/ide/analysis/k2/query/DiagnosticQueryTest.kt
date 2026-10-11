@@ -46,6 +46,40 @@ class DiagnosticQueryTest {
     }
 
     @Test
+    fun `random generators and extensions resolve with source and metadata inputs`() {
+        val source =
+            """
+            import kotlin.random.*
+            class Zero : Random() { override fun nextBits(bitCount: Int): Int = 0 }
+            fun main() {
+                val seeded: Random = Random(42L)
+                val default: Random = Random.Default
+                val factory: (Int) -> Random = ::Random
+                val bound: (Int) -> Int = seeded::nextInt
+                val unsigned: (UInt) -> UInt = { seeded.nextUInt(it) }
+                val i: Int = seeded.nextInt(1..9)
+                val l: Long = default.nextLong(1L..9L)
+                val u: UInt = seeded.nextUInt(1u..9u)
+                val ul: ULong = seeded.nextULong(1uL..9uL)
+                val bytes: ByteArray = default.nextBytes(5)
+                val ubytes: UByteArray = seeded.nextUBytes(5)
+                seeded.nextBytes(bytes, 1, 3)
+                seeded.nextUBytes(ubytes, 1, 3)
+                val f: Float = Zero().nextFloat()
+                val d: Double = seeded.nextDouble(-1.0, 1.0)
+                check(factory(42).nextBoolean() || bound(2) == 0 || unsigned(2u) == 0u)
+            }
+            """.trimIndent()
+        for (attachedSources in listOf(false, true)) {
+            K2QueryFixture.sourceWithGuestApi(attachedSources, "main.kt" to source).use { fixture ->
+                val result = fixture.execute(fixture.presentation()) as AnalysisResult.Presentation
+                val active = result.value.accept(fixture.identity) as SnapshotPresentationAcceptance.Active
+                assertTrue(active.diagnostics.none { it.severity == EditorDiagnosticSeverity.Error }, active.diagnostics.toString())
+            }
+        }
+    }
+
+    @Test
     fun `array initializer constructors resolve with source and metadata inputs`() {
         val source =
             """

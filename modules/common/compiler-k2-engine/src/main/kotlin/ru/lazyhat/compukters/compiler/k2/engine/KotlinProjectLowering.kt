@@ -4971,7 +4971,7 @@ private fun linkedPlatformFunctions(
             }
 
             override fun visitCall(expression: IrCall) {
-                val target = expression.symbol.owner
+                val target = expression.symbol.owner.resolveFakeOverrideMaybeAbstract() ?: expression.symbol.owner
                 val symbol = target.fqNameWhenAvailable?.asString()
                 if (symbol != null) {
                     val signature = target.canonicalPlatformSignature()

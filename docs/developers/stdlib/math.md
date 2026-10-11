@@ -9,7 +9,7 @@ permalink: /STDLIB-SUPPORT/math/
 
 [← Guest standard library support]({{ '/STDLIB-SUPPORT/' | relative_url }})
 
-**Status:** Supported in the current checkout. Import `kotlin.math.*`; the API belongs to `stdlib:core` 1.15.0.
+**Status:** Supported in the current checkout. Import `kotlin.math.*`; the API belongs to `stdlib:core` 1.16.0.
 The [Guest API reference]({{ '/guest-api/' | relative_url }}) owns exact signatures. These functions operate
 on Guest scalars and execute in the VM, including calls from compiled library bodies and callable references.
 They require no peripheral, JVM classpath or host capability. Programs retaining floating math instructions
