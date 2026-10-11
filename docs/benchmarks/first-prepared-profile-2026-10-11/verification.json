@@ -1,0 +1,16 @@
+{
+  "native_verified_artifacts": 180,
+  "counts_by_experiment": {
+    "cpu": 30,
+    "method": 30,
+    "warmup": 120
+  },
+  "outputs_byte_identical_to_unmodified_baselines": true,
+  "output_sha256": {
+    "pid": "bc01f4194e6f7c247ef71b9cccf16145f44bccd1e959d83c3f149530556027ee",
+    "edit": "0874242b0a24e76ed3d386c9570f2bacb69a876c4c9a6692af1b031b6fd6e23b"
+  },
+  "native_abi": 22,
+  "native_library_sha256": "c2ff8dbc822099b08e4bfa28dcc94b065626c20e2a0af0d83971b47edc5f0f61",
+  "scope": "stateless artifact verification; no in-game UI or flight/session execution"
+}

@@ -1,0 +1,728 @@
+[
+  {
+    "workload": "pid",
+    "trial": 1,
+    "mode": "prepared",
+    "timings": {
+      "preparationMillis": 3849.341391
+    },
+    "samples": [
+      {
+        "iteration": 1,
+        "millis": 1021.265616,
+        "bytes": 152916
+      },
+      {
+        "iteration": 2,
+        "millis": 487.398822,
+        "bytes": 152916
+      },
+      {
+        "iteration": 3,
+        "millis": 381.012009,
+        "bytes": 152916
+      },
+      {
+        "iteration": 4,
+        "millis": 319.347049,
+        "bytes": 152916
+      },
+      {
+        "iteration": 5,
+        "millis": 304.888021,
+        "bytes": 152916
+      },
+      {
+        "iteration": 6,
+        "millis": 299.810592,
+        "bytes": 152916
+      },
+      {
+        "iteration": 7,
+        "millis": 282.306975,
+        "bytes": 152916
+      },
+      {
+        "iteration": 8,
+        "millis": 270.292327,
+        "bytes": 152916
+      },
+      {
+        "iteration": 9,
+        "millis": 266.767807,
+        "bytes": 152916
+      },
+      {
+        "iteration": 10,
+        "millis": 274.062877,
+        "bytes": 152916
+      }
+    ]
+  },
+  {
+    "workload": "pid",
+    "trial": 1,
+    "mode": "ir",
+    "timings": {
+      "preparationMillis": 3794.138985,
+      "irWarmupMillis": 313.900261
+    },
+    "samples": [
+      {
+        "iteration": 1,
+        "millis": 782.766629,
+        "bytes": 152916
+      },
+      {
+        "iteration": 2,
+        "millis": 481.230695,
+        "bytes": 152916
+      },
+      {
+        "iteration": 3,
+        "millis": 342.356268,
+        "bytes": 152916
+      },
+      {
+        "iteration": 4,
+        "millis": 326.89536,
+        "bytes": 152916
+      },
+      {
+        "iteration": 5,
+        "millis": 309.106482,
+        "bytes": 152916
+      },
+      {
+        "iteration": 6,
+        "millis": 281.932827,
+        "bytes": 152916
+      },
+      {
+        "iteration": 7,
+        "millis": 266.11839,
+        "bytes": 152916
+      },
+      {
+        "iteration": 8,
+        "millis": 255.819641,
+        "bytes": 152916
+      },
+      {
+        "iteration": 9,
+        "millis": 253.963022,
+        "bytes": 152916
+      },
+      {
+        "iteration": 10,
+        "millis": 276.453108,
+        "bytes": 152916
+      }
+    ]
+  },
+  {
+    "workload": "edit",
+    "trial": 1,
+    "mode": "prepared",
+    "timings": {
+      "preparationMillis": 2767.913362
+    },
+    "samples": [
+      {
+        "iteration": 1,
+        "millis": 924.550012,
+        "bytes": 151112
+      },
+      {
+        "iteration": 2,
+        "millis": 389.809032,
+        "bytes": 151112
+      },
+      {
+        "iteration": 3,
+        "millis": 270.90983,
+        "bytes": 151112
+      },
+      {
+        "iteration": 4,
+        "millis": 269.186641,
+        "bytes": 151112
+      },
+      {
+        "iteration": 5,
+        "millis": 227.455786,
+        "bytes": 151112
+      },
+      {
+        "iteration": 6,
+        "millis": 226.233856,
+        "bytes": 151112
+      },
+      {
+        "iteration": 7,
+        "millis": 213.934179,
+        "bytes": 151112
+      },
+      {
+        "iteration": 8,
+        "millis": 212.755088,
+        "bytes": 151112
+      },
+      {
+        "iteration": 9,
+        "millis": 191.657552,
+        "bytes": 151112
+      },
+      {
+        "iteration": 10,
+        "millis": 192.497782,
+        "bytes": 151112
+      }
+    ]
+  },
+  {
+    "workload": "edit",
+    "trial": 1,
+    "mode": "ir",
+    "timings": {
+      "preparationMillis": 2591.653552,
+      "irWarmupMillis": 342.173821
+    },
+    "samples": [
+      {
+        "iteration": 1,
+        "millis": 734.445414,
+        "bytes": 151112
+      },
+      {
+        "iteration": 2,
+        "millis": 392.004223,
+        "bytes": 151112
+      },
+      {
+        "iteration": 3,
+        "millis": 307.053006,
+        "bytes": 151112
+      },
+      {
+        "iteration": 4,
+        "millis": 272.291781,
+        "bytes": 151112
+      },
+      {
+        "iteration": 5,
+        "millis": 276.41919,
+        "bytes": 151112
+      },
+      {
+        "iteration": 6,
+        "millis": 231.237247,
+        "bytes": 151112
+      },
+      {
+        "iteration": 7,
+        "millis": 217.074029,
+        "bytes": 151112
+      },
+      {
+        "iteration": 8,
+        "millis": 216.024669,
+        "bytes": 151112
+      },
+      {
+        "iteration": 9,
+        "millis": 208.222001,
+        "bytes": 151112
+      },
+      {
+        "iteration": 10,
+        "millis": 201.483401,
+        "bytes": 151112
+      }
+    ]
+  },
+  {
+    "workload": "pid",
+    "trial": 2,
+    "mode": "prepared",
+    "timings": {
+      "preparationMillis": 3559.879352
+    },
+    "samples": [
+      {
+        "iteration": 1,
+        "millis": 1030.002884,
+        "bytes": 152916
+      },
+      {
+        "iteration": 2,
+        "millis": 461.080119,
+        "bytes": 152916
+      },
+      {
+        "iteration": 3,
+        "millis": 393.692609,
+        "bytes": 152916
+      },
+      {
+        "iteration": 4,
+        "millis": 326.355087,
+        "bytes": 152916
+      },
+      {
+        "iteration": 5,
+        "millis": 329.283957,
+        "bytes": 152916
+      },
+      {
+        "iteration": 6,
+        "millis": 288.662692,
+        "bytes": 152916
+      },
+      {
+        "iteration": 7,
+        "millis": 279.379944,
+        "bytes": 152916
+      },
+      {
+        "iteration": 8,
+        "millis": 273.058714,
+        "bytes": 152916
+      },
+      {
+        "iteration": 9,
+        "millis": 287.438613,
+        "bytes": 152916
+      },
+      {
+        "iteration": 10,
+        "millis": 274.431874,
+        "bytes": 152916
+      }
+    ]
+  },
+  {
+    "workload": "pid",
+    "trial": 2,
+    "mode": "ir",
+    "timings": {
+      "preparationMillis": 3616.852662,
+      "irWarmupMillis": 333.186823
+    },
+    "samples": [
+      {
+        "iteration": 1,
+        "millis": 822.248826,
+        "bytes": 152916
+      },
+      {
+        "iteration": 2,
+        "millis": 463.350306,
+        "bytes": 152916
+      },
+      {
+        "iteration": 3,
+        "millis": 375.662828,
+        "bytes": 152916
+      },
+      {
+        "iteration": 4,
+        "millis": 338.808503,
+        "bytes": 152916
+      },
+      {
+        "iteration": 5,
+        "millis": 302.464179,
+        "bytes": 152916
+      },
+      {
+        "iteration": 6,
+        "millis": 295.445629,
+        "bytes": 152916
+      },
+      {
+        "iteration": 7,
+        "millis": 289.802531,
+        "bytes": 152916
+      },
+      {
+        "iteration": 8,
+        "millis": 276.632802,
+        "bytes": 152916
+      },
+      {
+        "iteration": 9,
+        "millis": 276.767542,
+        "bytes": 152916
+      },
+      {
+        "iteration": 10,
+        "millis": 267.746833,
+        "bytes": 152916
+      }
+    ]
+  },
+  {
+    "workload": "edit",
+    "trial": 2,
+    "mode": "prepared",
+    "timings": {
+      "preparationMillis": 2842.843877
+    },
+    "samples": [
+      {
+        "iteration": 1,
+        "millis": 880.696662,
+        "bytes": 151112
+      },
+      {
+        "iteration": 2,
+        "millis": 398.371961,
+        "bytes": 151112
+      },
+      {
+        "iteration": 3,
+        "millis": 306.843872,
+        "bytes": 151112
+      },
+      {
+        "iteration": 4,
+        "millis": 263.532828,
+        "bytes": 151112
+      },
+      {
+        "iteration": 5,
+        "millis": 244.200701,
+        "bytes": 151112
+      },
+      {
+        "iteration": 6,
+        "millis": 259.392238,
+        "bytes": 151112
+      },
+      {
+        "iteration": 7,
+        "millis": 222.474973,
+        "bytes": 151112
+      },
+      {
+        "iteration": 8,
+        "millis": 224.512183,
+        "bytes": 151112
+      },
+      {
+        "iteration": 9,
+        "millis": 211.198424,
+        "bytes": 151112
+      },
+      {
+        "iteration": 10,
+        "millis": 200.845426,
+        "bytes": 151112
+      }
+    ]
+  },
+  {
+    "workload": "edit",
+    "trial": 2,
+    "mode": "ir",
+    "timings": {
+      "preparationMillis": 2629.297751,
+      "irWarmupMillis": 351.344975
+    },
+    "samples": [
+      {
+        "iteration": 1,
+        "millis": 709.311,
+        "bytes": 151112
+      },
+      {
+        "iteration": 2,
+        "millis": 379.059912,
+        "bytes": 151112
+      },
+      {
+        "iteration": 3,
+        "millis": 274.577115,
+        "bytes": 151112
+      },
+      {
+        "iteration": 4,
+        "millis": 258.984707,
+        "bytes": 151112
+      },
+      {
+        "iteration": 5,
+        "millis": 230.395761,
+        "bytes": 151112
+      },
+      {
+        "iteration": 6,
+        "millis": 220.476753,
+        "bytes": 151112
+      },
+      {
+        "iteration": 7,
+        "millis": 210.626723,
+        "bytes": 151112
+      },
+      {
+        "iteration": 8,
+        "millis": 233.563581,
+        "bytes": 151112
+      },
+      {
+        "iteration": 9,
+        "millis": 211.988243,
+        "bytes": 151112
+      },
+      {
+        "iteration": 10,
+        "millis": 193.063726,
+        "bytes": 151112
+      }
+    ]
+  },
+  {
+    "workload": "pid",
+    "trial": 3,
+    "mode": "prepared",
+    "timings": {
+      "preparationMillis": 3580.963553
+    },
+    "samples": [
+      {
+        "iteration": 1,
+        "millis": 1040.277208,
+        "bytes": 152916
+      },
+      {
+        "iteration": 2,
+        "millis": 500.978331,
+        "bytes": 152916
+      },
+      {
+        "iteration": 3,
+        "millis": 394.353994,
+        "bytes": 152916
+      },
+      {
+        "iteration": 4,
+        "millis": 318.705393,
+        "bytes": 152916
+      },
+      {
+        "iteration": 5,
+        "millis": 309.258414,
+        "bytes": 152916
+      },
+      {
+        "iteration": 6,
+        "millis": 291.572156,
+        "bytes": 152916
+      },
+      {
+        "iteration": 7,
+        "millis": 286.645277,
+        "bytes": 152916
+      },
+      {
+        "iteration": 8,
+        "millis": 281.383388,
+        "bytes": 152916
+      },
+      {
+        "iteration": 9,
+        "millis": 265.762469,
+        "bytes": 152916
+      },
+      {
+        "iteration": 10,
+        "millis": 261.23698,
+        "bytes": 152916
+      }
+    ]
+  },
+  {
+    "workload": "pid",
+    "trial": 3,
+    "mode": "ir",
+    "timings": {
+      "preparationMillis": 3560.795936,
+      "irWarmupMillis": 327.103023
+    },
+    "samples": [
+      {
+        "iteration": 1,
+        "millis": 802.00849,
+        "bytes": 152916
+      },
+      {
+        "iteration": 2,
+        "millis": 462.696759,
+        "bytes": 152916
+      },
+      {
+        "iteration": 3,
+        "millis": 345.531161,
+        "bytes": 152916
+      },
+      {
+        "iteration": 4,
+        "millis": 316.590795,
+        "bytes": 152916
+      },
+      {
+        "iteration": 5,
+        "millis": 297.280688,
+        "bytes": 152916
+      },
+      {
+        "iteration": 6,
+        "millis": 289.396718,
+        "bytes": 152916
+      },
+      {
+        "iteration": 7,
+        "millis": 283.793578,
+        "bytes": 152916
+      },
+      {
+        "iteration": 8,
+        "millis": 275.64772,
+        "bytes": 152916
+      },
+      {
+        "iteration": 9,
+        "millis": 279.322689,
+        "bytes": 152916
+      },
+      {
+        "iteration": 10,
+        "millis": 264.022531,
+        "bytes": 152916
+      }
+    ]
+  },
+  {
+    "workload": "edit",
+    "trial": 3,
+    "mode": "prepared",
+    "timings": {
+      "preparationMillis": 2790.400589
+    },
+    "samples": [
+      {
+        "iteration": 1,
+        "millis": 906.583914,
+        "bytes": 151112
+      },
+      {
+        "iteration": 2,
+        "millis": 447.571922,
+        "bytes": 151112
+      },
+      {
+        "iteration": 3,
+        "millis": 341.254014,
+        "bytes": 151112
+      },
+      {
+        "iteration": 4,
+        "millis": 254.553353,
+        "bytes": 151112
+      },
+      {
+        "iteration": 5,
+        "millis": 245.696454,
+        "bytes": 151112
+      },
+      {
+        "iteration": 6,
+        "millis": 248.056494,
+        "bytes": 151112
+      },
+      {
+        "iteration": 7,
+        "millis": 233.559955,
+        "bytes": 151112
+      },
+      {
+        "iteration": 8,
+        "millis": 216.469377,
+        "bytes": 151112
+      },
+      {
+        "iteration": 9,
+        "millis": 209.298748,
+        "bytes": 151112
+      },
+      {
+        "iteration": 10,
+        "millis": 209.030808,
+        "bytes": 151112
+      }
+    ]
+  },
+  {
+    "workload": "edit",
+    "trial": 3,
+    "mode": "ir",
+    "timings": {
+      "preparationMillis": 2547.407356,
+      "irWarmupMillis": 351.216474
+    },
+    "samples": [
+      {
+        "iteration": 1,
+        "millis": 671.441232,
+        "bytes": 151112
+      },
+      {
+        "iteration": 2,
+        "millis": 368.525682,
+        "bytes": 151112
+      },
+      {
+        "iteration": 3,
+        "millis": 291.052531,
+        "bytes": 151112
+      },
+      {
+        "iteration": 4,
+        "millis": 271.934142,
+        "bytes": 151112
+      },
+      {
+        "iteration": 5,
+        "millis": 249.066735,
+        "bytes": 151112
+      },
+      {
+        "iteration": 6,
+        "millis": 236.027246,
+        "bytes": 151112
+      },
+      {
+        "iteration": 7,
+        "millis": 211.285108,
+        "bytes": 151112
+      },
+      {
+        "iteration": 8,
+        "millis": 215.995779,
+        "bytes": 151112
+      },
+      {
+        "iteration": 9,
+        "millis": 192.36985,
+        "bytes": 151112
+      },
+      {
+        "iteration": 10,
+        "millis": 210.328599,
+        "bytes": 151112
+      }
+    ]
+  }
+]
