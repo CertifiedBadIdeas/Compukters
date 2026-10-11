@@ -53,6 +53,7 @@ private val systemProgramTasks =
     setOf(
         "generateBootArtifact",
         "generateEditArtifact",
+        "generateCmatrixArtifact",
         "generateKotlincArtifact",
         "generateShellArtifact",
         "generateVmbenchArtifact",
