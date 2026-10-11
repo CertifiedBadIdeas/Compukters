@@ -18,36 +18,7 @@
 
 val repositoryRoot = rootProject.projectDir
 val inventoryFile = rootProject.file("licenses/media-assets.tsv")
-val excludedDirectoryNames =
-    setOf(
-        ".git",
-        ".gradle",
-        ".gradle-sandbox",
-        ".agents",
-        ".idea",
-        ".toolchain",
-        "build",
-        "out",
-        "target",
-        "run",
-    )
-val excludedGeneratedDirectories = setOf("docs/guest-api")
-
-fun discoverRepositoryMedia(): List<File> =
-    repositoryRoot
-        .walkTopDown()
-        .onEnter { directory ->
-            directory == repositoryRoot ||
-                (directory.name !in excludedDirectoryNames &&
-                    directory.relativeTo(repositoryRoot).invariantSeparatorsPath !in excludedGeneratedDirectories &&
-                    !directory.name.startsWith(".gradle-") &&
-                    !directory.resolve(".git").exists())
-        }.filter(File::isFile)
-        .filter { file -> file.extension.lowercase() in MediaLicenseInventory.extensions }
-        .sortedBy { file -> file.relativeTo(repositoryRoot).invariantSeparatorsPath }
-        .toList()
-
-val repositoryMedia = providers.provider(::discoverRepositoryMedia)
+val repositoryMedia = repositoryMediaFiles(repositoryRoot)
 val mediaProvenance =
     providers.provider {
         if (!inventoryFile.isFile) {
