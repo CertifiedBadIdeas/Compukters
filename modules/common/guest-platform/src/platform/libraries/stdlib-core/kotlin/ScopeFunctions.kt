@@ -7,7 +7,10 @@
 package kotlin
 
 /** Calls [action] with each index from zero until [times], or not at all for non-positive counts. */
-public inline fun repeat(times: Int, action: (Int) -> Unit) {
+public inline fun repeat(
+    times: Int,
+    action: (Int) -> Unit,
+) {
     var index = 0
     while (index < times) {
         action(index)
@@ -25,7 +28,10 @@ public inline fun <T, R> T.run(block: T.() -> R): R = block()
 public inline fun <R> run(block: () -> R): R = block()
 
 /** Calls [block] with [receiver] as its receiver and returns its result. */
-public inline fun <T, R> with(receiver: T, block: T.() -> R): R = receiver.block()
+public inline fun <T, R> with(
+    receiver: T,
+    block: T.() -> R,
+): R = receiver.block()
 
 /** Calls [block] with this value as its receiver and returns this value. */
 public inline fun <T> T.apply(block: T.() -> Unit): T {

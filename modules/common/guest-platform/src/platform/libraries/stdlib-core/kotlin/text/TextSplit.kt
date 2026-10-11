@@ -10,7 +10,10 @@ import kotlin.collections.ArrayList
 import kotlin.collections.List
 
 /** Splits on delimiter, retaining empty parts. Zero limit means no limit; positive limit keeps the remaining suffix. */
-public fun String.split(delimiter: Char, limit: Int = 0): List<String> {
+public fun String.split(
+    delimiter: Char,
+    limit: Int = 0,
+): List<String> {
     require(limit >= 0)
     val result = ArrayList<String>()
     var start = 0
@@ -25,7 +28,10 @@ public fun String.split(delimiter: Char, limit: Int = 0): List<String> {
 }
 
 /** Splits on delimiter, retaining empty parts. An empty delimiter separates UTF-16 code units, including empty ends. */
-public fun String.split(delimiter: String, limit: Int = 0): List<String> {
+public fun String.split(
+    delimiter: String,
+    limit: Int = 0,
+): List<String> {
     require(limit >= 0)
     val result = ArrayList<String>()
     var start = 0
@@ -61,4 +67,3 @@ public fun String.lines(): List<String> {
     result.add(substring(start, length))
     return result
 }
-

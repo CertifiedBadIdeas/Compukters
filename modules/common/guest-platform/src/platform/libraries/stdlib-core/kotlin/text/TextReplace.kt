@@ -7,7 +7,10 @@
 package kotlin.text
 
 /** Replaces every oldChar with newChar, comparing case-sensitively. */
-public fun String.replace(oldChar: Char, newChar: Char): String {
+public fun String.replace(
+    oldChar: Char,
+    newChar: Char,
+): String {
     if (oldChar == newChar || indexOf(oldChar) < 0) return this
     val output = CharArray(length)
     var index = 0
@@ -20,7 +23,10 @@ public fun String.replace(oldChar: Char, newChar: Char): String {
 }
 
 /** Replaces nonoverlapping oldValue matches. An empty oldValue inserts newValue at every UTF-16 boundary. */
-public fun String.replace(oldValue: String, newValue: String): String {
+public fun String.replace(
+    oldValue: String,
+    newValue: String,
+): String {
     if (oldValue == newValue) return this
     val step = if (oldValue.length == 0) 1 else oldValue.length
     var matches = 0L

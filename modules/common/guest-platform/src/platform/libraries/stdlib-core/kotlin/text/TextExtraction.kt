@@ -10,7 +10,10 @@ package kotlin.text
 public fun String.substringBefore(delimiter: Char): String = substringBefore(delimiter, this)
 
 /** Returns the part before the first delimiter, or missingDelimiterValue if absent. */
-public fun String.substringBefore(delimiter: Char, missingDelimiterValue: String): String {
+public fun String.substringBefore(
+    delimiter: Char,
+    missingDelimiterValue: String,
+): String {
     val index = indexOf(delimiter)
     return if (index < 0) missingDelimiterValue else substring(0, index)
 }
@@ -19,7 +22,10 @@ public fun String.substringBefore(delimiter: Char, missingDelimiterValue: String
 public fun String.substringBefore(delimiter: String): String = substringBefore(delimiter, this)
 
 /** Returns the part before the first delimiter, or missingDelimiterValue if absent. */
-public fun String.substringBefore(delimiter: String, missingDelimiterValue: String): String {
+public fun String.substringBefore(
+    delimiter: String,
+    missingDelimiterValue: String,
+): String {
     val index = indexOf(delimiter)
     return if (index < 0) missingDelimiterValue else substring(0, index)
 }
@@ -28,7 +34,10 @@ public fun String.substringBefore(delimiter: String, missingDelimiterValue: Stri
 public fun String.substringAfter(delimiter: Char): String = substringAfter(delimiter, this)
 
 /** Returns the part after the first delimiter, or missingDelimiterValue if absent. */
-public fun String.substringAfter(delimiter: Char, missingDelimiterValue: String): String {
+public fun String.substringAfter(
+    delimiter: Char,
+    missingDelimiterValue: String,
+): String {
     val index = indexOf(delimiter)
     return if (index < 0) missingDelimiterValue else substring(index + 1, length)
 }
@@ -37,7 +46,10 @@ public fun String.substringAfter(delimiter: Char, missingDelimiterValue: String)
 public fun String.substringAfter(delimiter: String): String = substringAfter(delimiter, this)
 
 /** Returns the part after the first delimiter, or missingDelimiterValue if absent. */
-public fun String.substringAfter(delimiter: String, missingDelimiterValue: String): String {
+public fun String.substringAfter(
+    delimiter: String,
+    missingDelimiterValue: String,
+): String {
     val index = indexOf(delimiter)
     return if (index < 0) missingDelimiterValue else substring(index + delimiter.length, length)
 }
@@ -46,7 +58,10 @@ public fun String.substringAfter(delimiter: String, missingDelimiterValue: Strin
 public fun String.substringBeforeLast(delimiter: Char): String = substringBeforeLast(delimiter, this)
 
 /** Returns the part before the last delimiter, or missingDelimiterValue if absent. */
-public fun String.substringBeforeLast(delimiter: Char, missingDelimiterValue: String): String {
+public fun String.substringBeforeLast(
+    delimiter: Char,
+    missingDelimiterValue: String,
+): String {
     val index = lastIndexOf(delimiter)
     return if (index < 0) missingDelimiterValue else substring(0, index)
 }
@@ -55,7 +70,10 @@ public fun String.substringBeforeLast(delimiter: Char, missingDelimiterValue: St
 public fun String.substringBeforeLast(delimiter: String): String = substringBeforeLast(delimiter, this)
 
 /** Returns the part before the last delimiter, or missingDelimiterValue if absent. */
-public fun String.substringBeforeLast(delimiter: String, missingDelimiterValue: String): String {
+public fun String.substringBeforeLast(
+    delimiter: String,
+    missingDelimiterValue: String,
+): String {
     val index = lastIndexOf(delimiter)
     return if (index < 0) missingDelimiterValue else substring(0, index)
 }
@@ -64,7 +82,10 @@ public fun String.substringBeforeLast(delimiter: String, missingDelimiterValue: 
 public fun String.substringAfterLast(delimiter: Char): String = substringAfterLast(delimiter, this)
 
 /** Returns the part after the last delimiter, or missingDelimiterValue if absent. */
-public fun String.substringAfterLast(delimiter: Char, missingDelimiterValue: String): String {
+public fun String.substringAfterLast(
+    delimiter: Char,
+    missingDelimiterValue: String,
+): String {
     val index = lastIndexOf(delimiter)
     return if (index < 0) missingDelimiterValue else substring(index + 1, length)
 }
@@ -73,16 +94,16 @@ public fun String.substringAfterLast(delimiter: Char, missingDelimiterValue: Str
 public fun String.substringAfterLast(delimiter: String): String = substringAfterLast(delimiter, this)
 
 /** Returns the part after the last delimiter, or missingDelimiterValue if absent. */
-public fun String.substringAfterLast(delimiter: String, missingDelimiterValue: String): String {
+public fun String.substringAfterLast(
+    delimiter: String,
+    missingDelimiterValue: String,
+): String {
     val index = lastIndexOf(delimiter)
     return if (index < 0) missingDelimiterValue else substring(index + delimiter.length, length)
 }
 
 /** Removes prefix when present, otherwise returns this string. */
-public fun String.removePrefix(prefix: String): String =
-    if (startsWith(prefix)) substring(prefix.length, length) else this
+public fun String.removePrefix(prefix: String): String = if (startsWith(prefix)) substring(prefix.length, length) else this
 
 /** Removes suffix when present, otherwise returns this string. */
-public fun String.removeSuffix(suffix: String): String =
-    if (endsWith(suffix)) substring(0, length - suffix.length) else this
-
+public fun String.removeSuffix(suffix: String): String = if (endsWith(suffix)) substring(0, length - suffix.length) else this

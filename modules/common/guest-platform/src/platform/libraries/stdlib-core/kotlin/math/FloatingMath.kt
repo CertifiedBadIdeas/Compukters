@@ -65,17 +65,30 @@ public fun abs(x: Double): Double = absPrimitive(x)
 
 public fun sign(x: Double): Double = signPrimitive(x)
 
-public fun atan2(y: Double, x: Double): Double = atan2Primitive(y, x)
+public fun atan2(
+    y: Double,
+    x: Double,
+): Double = atan2Primitive(y, x)
 
-public fun hypot(x: Double, y: Double): Double = hypotPrimitive(x, y)
+public fun hypot(
+    x: Double,
+    y: Double,
+): Double = hypotPrimitive(x, y)
 
-public fun min(a: Double, b: Double): Double = minPrimitive(a, b)
+public fun min(
+    a: Double,
+    b: Double,
+): Double = minPrimitive(a, b)
 
-public fun max(a: Double, b: Double): Double = maxPrimitive(a, b)
+public fun max(
+    a: Double,
+    b: Double,
+): Double = maxPrimitive(a, b)
 
 public fun Double.pow(x: Double): Double = powPrimitive(this, x)
 
 /** IEEE remainder using the nearest integer quotient with ties to even; differs from `%`. */
+@Suppress("ktlint:standard:function-naming")
 public fun Double.IEEErem(divisor: Double): Double = IEEEremPrimitive(this, divisor)
 
 public fun Double.withSign(sign: Double): Double = withSignPrimitive(this, sign)
@@ -102,7 +115,10 @@ public fun Double.pow(n: Int): Double = pow(n.toDouble())
 public fun Double.withSign(sign: Int): Double = withSign(sign.toDouble())
 
 /** Logarithm in the given base; a non-positive base or a base of one produces NaN. */
-public fun log(x: Double, base: Double): Double {
+public fun log(
+    x: Double,
+    base: Double,
+): Double {
     if (base <= 0 || base == 1.0) return Double.NaN
     return ln(x) / ln(base)
 }
@@ -178,17 +194,30 @@ public fun abs(x: Float): Float = absPrimitive(x)
 
 public fun sign(x: Float): Float = signPrimitive(x)
 
-public fun atan2(y: Float, x: Float): Float = atan2Primitive(y, x)
+public fun atan2(
+    y: Float,
+    x: Float,
+): Float = atan2Primitive(y, x)
 
-public fun hypot(x: Float, y: Float): Float = hypotPrimitive(x, y)
+public fun hypot(
+    x: Float,
+    y: Float,
+): Float = hypotPrimitive(x, y)
 
-public fun min(a: Float, b: Float): Float = minPrimitive(a, b)
+public fun min(
+    a: Float,
+    b: Float,
+): Float = minPrimitive(a, b)
 
-public fun max(a: Float, b: Float): Float = maxPrimitive(a, b)
+public fun max(
+    a: Float,
+    b: Float,
+): Float = maxPrimitive(a, b)
 
 public fun Float.pow(x: Float): Float = powPrimitive(this, x)
 
 /** IEEE remainder using the nearest integer quotient with ties to even; differs from `%`. */
+@Suppress("ktlint:standard:function-naming")
 public fun Float.IEEErem(divisor: Float): Float = IEEEremPrimitive(this, divisor)
 
 public fun Float.withSign(sign: Float): Float = withSignPrimitive(this, sign)
@@ -215,7 +244,10 @@ public fun Float.pow(n: Int): Float = toDouble().pow(n.toDouble()).toFloat()
 public fun Float.withSign(sign: Int): Float = withSign(sign.toFloat())
 
 /** Logarithm in the given base; a non-positive base or a base of one produces NaN. */
-public fun log(x: Float, base: Float): Float {
+public fun log(
+    x: Float,
+    base: Float,
+): Float {
     if (base <= 0 || base == 1.0f) return Float.NaN
     return ln(x) / ln(base)
 }
