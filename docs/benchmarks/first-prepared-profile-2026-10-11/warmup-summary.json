@@ -1,0 +1,58 @@
+{
+  "pid": {
+    "prepared": {
+      "first_compilation_median_ms": 1030.002884,
+      "preparation_median_ms": 3580.963553,
+      "ir_warmup_median_ms": 0,
+      "ir_warmup_plus_first_compilation_median_ms": 1030.002884,
+      "serial_preparation_and_first_result_median_ms": 4621.240761,
+      "warm_samples_4_10_median_ms": 286.645277,
+      "first_compilation_per_trial_ms": [
+        1021.265616,
+        1030.002884,
+        1040.277208
+      ]
+    },
+    "ir": {
+      "first_compilation_median_ms": 802.00849,
+      "preparation_median_ms": 3616.852662,
+      "ir_warmup_median_ms": 327.103023,
+      "ir_warmup_plus_first_compilation_median_ms": 1129.111513,
+      "serial_preparation_and_first_result_median_ms": 4772.288311,
+      "warm_samples_4_10_median_ms": 281.932827,
+      "first_compilation_per_trial_ms": [
+        782.766629,
+        822.248826,
+        802.00849
+      ]
+    }
+  },
+  "edit": {
+    "prepared": {
+      "first_compilation_median_ms": 906.583914,
+      "preparation_median_ms": 2790.400589,
+      "ir_warmup_median_ms": 0,
+      "ir_warmup_plus_first_compilation_median_ms": 906.583914,
+      "serial_preparation_and_first_result_median_ms": 3696.9845029999997,
+      "warm_samples_4_10_median_ms": 224.512183,
+      "first_compilation_per_trial_ms": [
+        924.550012,
+        880.696662,
+        906.583914
+      ]
+    },
+    "ir": {
+      "first_compilation_median_ms": 709.311,
+      "preparation_median_ms": 2591.653552,
+      "ir_warmup_median_ms": 351.216474,
+      "ir_warmup_plus_first_compilation_median_ms": 1060.6559750000001,
+      "serial_preparation_and_first_result_median_ms": 3668.272787,
+      "warm_samples_4_10_median_ms": 217.074029,
+      "first_compilation_per_trial_ms": [
+        734.445414,
+        709.311,
+        671.441232
+      ]
+    }
+  }
+}
