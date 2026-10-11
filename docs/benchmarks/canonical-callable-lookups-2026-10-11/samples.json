@@ -1,0 +1,962 @@
+[
+  {
+    "workload": "pid",
+    "pair": 1,
+    "variant": "baseline",
+    "sample": 1,
+    "millis": 5052.482255,
+    "bytes": 152916
+  },
+  {
+    "workload": "pid",
+    "pair": 1,
+    "variant": "baseline",
+    "sample": 2,
+    "millis": 578.876758,
+    "bytes": 152916
+  },
+  {
+    "workload": "pid",
+    "pair": 1,
+    "variant": "baseline",
+    "sample": 3,
+    "millis": 464.982784,
+    "bytes": 152916
+  },
+  {
+    "workload": "pid",
+    "pair": 1,
+    "variant": "baseline",
+    "sample": 4,
+    "millis": 447.153332,
+    "bytes": 152916
+  },
+  {
+    "workload": "pid",
+    "pair": 1,
+    "variant": "baseline",
+    "sample": 5,
+    "millis": 445.508194,
+    "bytes": 152916
+  },
+  {
+    "workload": "pid",
+    "pair": 1,
+    "variant": "baseline",
+    "sample": 6,
+    "millis": 447.710333,
+    "bytes": 152916
+  },
+  {
+    "workload": "pid",
+    "pair": 1,
+    "variant": "baseline",
+    "sample": 7,
+    "millis": 414.519775,
+    "bytes": 152916
+  },
+  {
+    "workload": "pid",
+    "pair": 1,
+    "variant": "baseline",
+    "sample": 8,
+    "millis": 378.572133,
+    "bytes": 152916
+  },
+  {
+    "workload": "pid",
+    "pair": 1,
+    "variant": "baseline",
+    "sample": 9,
+    "millis": 381.133401,
+    "bytes": 152916
+  },
+  {
+    "workload": "pid",
+    "pair": 1,
+    "variant": "baseline",
+    "sample": 10,
+    "millis": 379.052383,
+    "bytes": 152916
+  },
+  {
+    "workload": "pid",
+    "pair": 1,
+    "variant": "indexed",
+    "sample": 1,
+    "millis": 5106.684839,
+    "bytes": 152916
+  },
+  {
+    "workload": "pid",
+    "pair": 1,
+    "variant": "indexed",
+    "sample": 2,
+    "millis": 495.609894,
+    "bytes": 152916
+  },
+  {
+    "workload": "pid",
+    "pair": 1,
+    "variant": "indexed",
+    "sample": 3,
+    "millis": 411.118037,
+    "bytes": 152916
+  },
+  {
+    "workload": "pid",
+    "pair": 1,
+    "variant": "indexed",
+    "sample": 4,
+    "millis": 347.47998,
+    "bytes": 152916
+  },
+  {
+    "workload": "pid",
+    "pair": 1,
+    "variant": "indexed",
+    "sample": 5,
+    "millis": 359.549959,
+    "bytes": 152916
+  },
+  {
+    "workload": "pid",
+    "pair": 1,
+    "variant": "indexed",
+    "sample": 6,
+    "millis": 303.706323,
+    "bytes": 152916
+  },
+  {
+    "workload": "pid",
+    "pair": 1,
+    "variant": "indexed",
+    "sample": 7,
+    "millis": 288.460288,
+    "bytes": 152916
+  },
+  {
+    "workload": "pid",
+    "pair": 1,
+    "variant": "indexed",
+    "sample": 8,
+    "millis": 287.86048,
+    "bytes": 152916
+  },
+  {
+    "workload": "pid",
+    "pair": 1,
+    "variant": "indexed",
+    "sample": 9,
+    "millis": 276.069392,
+    "bytes": 152916
+  },
+  {
+    "workload": "pid",
+    "pair": 1,
+    "variant": "indexed",
+    "sample": 10,
+    "millis": 272.235205,
+    "bytes": 152916
+  },
+  {
+    "workload": "hello",
+    "pair": 1,
+    "variant": "baseline",
+    "sample": 1,
+    "millis": 4721.006943,
+    "bytes": 4632
+  },
+  {
+    "workload": "hello",
+    "pair": 1,
+    "variant": "baseline",
+    "sample": 2,
+    "millis": 412.392914,
+    "bytes": 4632
+  },
+  {
+    "workload": "hello",
+    "pair": 1,
+    "variant": "baseline",
+    "sample": 3,
+    "millis": 371.691924,
+    "bytes": 4632
+  },
+  {
+    "workload": "hello",
+    "pair": 1,
+    "variant": "baseline",
+    "sample": 4,
+    "millis": 262.877298,
+    "bytes": 4632
+  },
+  {
+    "workload": "hello",
+    "pair": 1,
+    "variant": "baseline",
+    "sample": 5,
+    "millis": 272.859109,
+    "bytes": 4632
+  },
+  {
+    "workload": "hello",
+    "pair": 1,
+    "variant": "baseline",
+    "sample": 6,
+    "millis": 259.063892,
+    "bytes": 4632
+  },
+  {
+    "workload": "hello",
+    "pair": 1,
+    "variant": "baseline",
+    "sample": 7,
+    "millis": 241.568469,
+    "bytes": 4632
+  },
+  {
+    "workload": "hello",
+    "pair": 1,
+    "variant": "baseline",
+    "sample": 8,
+    "millis": 233.308947,
+    "bytes": 4632
+  },
+  {
+    "workload": "hello",
+    "pair": 1,
+    "variant": "baseline",
+    "sample": 9,
+    "millis": 223.734427,
+    "bytes": 4632
+  },
+  {
+    "workload": "hello",
+    "pair": 1,
+    "variant": "baseline",
+    "sample": 10,
+    "millis": 228.279222,
+    "bytes": 4632
+  },
+  {
+    "workload": "hello",
+    "pair": 1,
+    "variant": "indexed",
+    "sample": 1,
+    "millis": 4516.496847,
+    "bytes": 4632
+  },
+  {
+    "workload": "hello",
+    "pair": 1,
+    "variant": "indexed",
+    "sample": 2,
+    "millis": 287.722409,
+    "bytes": 4632
+  },
+  {
+    "workload": "hello",
+    "pair": 1,
+    "variant": "indexed",
+    "sample": 3,
+    "millis": 228.748875,
+    "bytes": 4632
+  },
+  {
+    "workload": "hello",
+    "pair": 1,
+    "variant": "indexed",
+    "sample": 4,
+    "millis": 168.568462,
+    "bytes": 4632
+  },
+  {
+    "workload": "hello",
+    "pair": 1,
+    "variant": "indexed",
+    "sample": 5,
+    "millis": 183.332727,
+    "bytes": 4632
+  },
+  {
+    "workload": "hello",
+    "pair": 1,
+    "variant": "indexed",
+    "sample": 6,
+    "millis": 160.00833,
+    "bytes": 4632
+  },
+  {
+    "workload": "hello",
+    "pair": 1,
+    "variant": "indexed",
+    "sample": 7,
+    "millis": 171.855359,
+    "bytes": 4632
+  },
+  {
+    "workload": "hello",
+    "pair": 1,
+    "variant": "indexed",
+    "sample": 8,
+    "millis": 150.476039,
+    "bytes": 4632
+  },
+  {
+    "workload": "hello",
+    "pair": 1,
+    "variant": "indexed",
+    "sample": 9,
+    "millis": 154.821415,
+    "bytes": 4632
+  },
+  {
+    "workload": "hello",
+    "pair": 1,
+    "variant": "indexed",
+    "sample": 10,
+    "millis": 140.539299,
+    "bytes": 4632
+  },
+  {
+    "workload": "pid",
+    "pair": 2,
+    "variant": "indexed",
+    "sample": 1,
+    "millis": 5436.115894,
+    "bytes": 152916
+  },
+  {
+    "workload": "pid",
+    "pair": 2,
+    "variant": "indexed",
+    "sample": 2,
+    "millis": 690.442974,
+    "bytes": 152916
+  },
+  {
+    "workload": "pid",
+    "pair": 2,
+    "variant": "indexed",
+    "sample": 3,
+    "millis": 514.574747,
+    "bytes": 152916
+  },
+  {
+    "workload": "pid",
+    "pair": 2,
+    "variant": "indexed",
+    "sample": 4,
+    "millis": 407.176876,
+    "bytes": 152916
+  },
+  {
+    "workload": "pid",
+    "pair": 2,
+    "variant": "indexed",
+    "sample": 5,
+    "millis": 430.389846,
+    "bytes": 152916
+  },
+  {
+    "workload": "pid",
+    "pair": 2,
+    "variant": "indexed",
+    "sample": 6,
+    "millis": 350.00156,
+    "bytes": 152916
+  },
+  {
+    "workload": "pid",
+    "pair": 2,
+    "variant": "indexed",
+    "sample": 7,
+    "millis": 346.913713,
+    "bytes": 152916
+  },
+  {
+    "workload": "pid",
+    "pair": 2,
+    "variant": "indexed",
+    "sample": 8,
+    "millis": 339.49297,
+    "bytes": 152916
+  },
+  {
+    "workload": "pid",
+    "pair": 2,
+    "variant": "indexed",
+    "sample": 9,
+    "millis": 305.296321,
+    "bytes": 152916
+  },
+  {
+    "workload": "pid",
+    "pair": 2,
+    "variant": "indexed",
+    "sample": 10,
+    "millis": 324.367154,
+    "bytes": 152916
+  },
+  {
+    "workload": "pid",
+    "pair": 2,
+    "variant": "baseline",
+    "sample": 1,
+    "millis": 5850.135492,
+    "bytes": 152916
+  },
+  {
+    "workload": "pid",
+    "pair": 2,
+    "variant": "baseline",
+    "sample": 2,
+    "millis": 679.344561,
+    "bytes": 152916
+  },
+  {
+    "workload": "pid",
+    "pair": 2,
+    "variant": "baseline",
+    "sample": 3,
+    "millis": 524.634571,
+    "bytes": 152916
+  },
+  {
+    "workload": "pid",
+    "pair": 2,
+    "variant": "baseline",
+    "sample": 4,
+    "millis": 474.166177,
+    "bytes": 152916
+  },
+  {
+    "workload": "pid",
+    "pair": 2,
+    "variant": "baseline",
+    "sample": 5,
+    "millis": 498.286356,
+    "bytes": 152916
+  },
+  {
+    "workload": "pid",
+    "pair": 2,
+    "variant": "baseline",
+    "sample": 6,
+    "millis": 540.658158,
+    "bytes": 152916
+  },
+  {
+    "workload": "pid",
+    "pair": 2,
+    "variant": "baseline",
+    "sample": 7,
+    "millis": 421.412805,
+    "bytes": 152916
+  },
+  {
+    "workload": "pid",
+    "pair": 2,
+    "variant": "baseline",
+    "sample": 8,
+    "millis": 419.917807,
+    "bytes": 152916
+  },
+  {
+    "workload": "pid",
+    "pair": 2,
+    "variant": "baseline",
+    "sample": 9,
+    "millis": 419.253558,
+    "bytes": 152916
+  },
+  {
+    "workload": "pid",
+    "pair": 2,
+    "variant": "baseline",
+    "sample": 10,
+    "millis": 416.32419,
+    "bytes": 152916
+  },
+  {
+    "workload": "hello",
+    "pair": 2,
+    "variant": "indexed",
+    "sample": 1,
+    "millis": 5531.747733,
+    "bytes": 4632
+  },
+  {
+    "workload": "hello",
+    "pair": 2,
+    "variant": "indexed",
+    "sample": 2,
+    "millis": 340.017204,
+    "bytes": 4632
+  },
+  {
+    "workload": "hello",
+    "pair": 2,
+    "variant": "indexed",
+    "sample": 3,
+    "millis": 223.766225,
+    "bytes": 4632
+  },
+  {
+    "workload": "hello",
+    "pair": 2,
+    "variant": "indexed",
+    "sample": 4,
+    "millis": 198.122128,
+    "bytes": 4632
+  },
+  {
+    "workload": "hello",
+    "pair": 2,
+    "variant": "indexed",
+    "sample": 5,
+    "millis": 171.529631,
+    "bytes": 4632
+  },
+  {
+    "workload": "hello",
+    "pair": 2,
+    "variant": "indexed",
+    "sample": 6,
+    "millis": 168.252714,
+    "bytes": 4632
+  },
+  {
+    "workload": "hello",
+    "pair": 2,
+    "variant": "indexed",
+    "sample": 7,
+    "millis": 170.999501,
+    "bytes": 4632
+  },
+  {
+    "workload": "hello",
+    "pair": 2,
+    "variant": "indexed",
+    "sample": 8,
+    "millis": 146.174563,
+    "bytes": 4632
+  },
+  {
+    "workload": "hello",
+    "pair": 2,
+    "variant": "indexed",
+    "sample": 9,
+    "millis": 145.675514,
+    "bytes": 4632
+  },
+  {
+    "workload": "hello",
+    "pair": 2,
+    "variant": "indexed",
+    "sample": 10,
+    "millis": 155.394175,
+    "bytes": 4632
+  },
+  {
+    "workload": "hello",
+    "pair": 2,
+    "variant": "baseline",
+    "sample": 1,
+    "millis": 5684.517446,
+    "bytes": 4632
+  },
+  {
+    "workload": "hello",
+    "pair": 2,
+    "variant": "baseline",
+    "sample": 2,
+    "millis": 466.534492,
+    "bytes": 4632
+  },
+  {
+    "workload": "hello",
+    "pair": 2,
+    "variant": "baseline",
+    "sample": 3,
+    "millis": 332.463208,
+    "bytes": 4632
+  },
+  {
+    "workload": "hello",
+    "pair": 2,
+    "variant": "baseline",
+    "sample": 4,
+    "millis": 279.667652,
+    "bytes": 4632
+  },
+  {
+    "workload": "hello",
+    "pair": 2,
+    "variant": "baseline",
+    "sample": 5,
+    "millis": 279.400803,
+    "bytes": 4632
+  },
+  {
+    "workload": "hello",
+    "pair": 2,
+    "variant": "baseline",
+    "sample": 6,
+    "millis": 273.920448,
+    "bytes": 4632
+  },
+  {
+    "workload": "hello",
+    "pair": 2,
+    "variant": "baseline",
+    "sample": 7,
+    "millis": 300.100096,
+    "bytes": 4632
+  },
+  {
+    "workload": "hello",
+    "pair": 2,
+    "variant": "baseline",
+    "sample": 8,
+    "millis": 245.177213,
+    "bytes": 4632
+  },
+  {
+    "workload": "hello",
+    "pair": 2,
+    "variant": "baseline",
+    "sample": 9,
+    "millis": 248.08608,
+    "bytes": 4632
+  },
+  {
+    "workload": "hello",
+    "pair": 2,
+    "variant": "baseline",
+    "sample": 10,
+    "millis": 242.639925,
+    "bytes": 4632
+  },
+  {
+    "workload": "pid",
+    "pair": 3,
+    "variant": "baseline",
+    "sample": 1,
+    "millis": 5559.236598,
+    "bytes": 152916
+  },
+  {
+    "workload": "pid",
+    "pair": 3,
+    "variant": "baseline",
+    "sample": 2,
+    "millis": 717.418983,
+    "bytes": 152916
+  },
+  {
+    "workload": "pid",
+    "pair": 3,
+    "variant": "baseline",
+    "sample": 3,
+    "millis": 512.559185,
+    "bytes": 152916
+  },
+  {
+    "workload": "pid",
+    "pair": 3,
+    "variant": "baseline",
+    "sample": 4,
+    "millis": 499.945625,
+    "bytes": 152916
+  },
+  {
+    "workload": "pid",
+    "pair": 3,
+    "variant": "baseline",
+    "sample": 5,
+    "millis": 497.327349,
+    "bytes": 152916
+  },
+  {
+    "workload": "pid",
+    "pair": 3,
+    "variant": "baseline",
+    "sample": 6,
+    "millis": 470.390941,
+    "bytes": 152916
+  },
+  {
+    "workload": "pid",
+    "pair": 3,
+    "variant": "baseline",
+    "sample": 7,
+    "millis": 427.964237,
+    "bytes": 152916
+  },
+  {
+    "workload": "pid",
+    "pair": 3,
+    "variant": "baseline",
+    "sample": 8,
+    "millis": 449.458749,
+    "bytes": 152916
+  },
+  {
+    "workload": "pid",
+    "pair": 3,
+    "variant": "baseline",
+    "sample": 9,
+    "millis": 467.121265,
+    "bytes": 152916
+  },
+  {
+    "workload": "pid",
+    "pair": 3,
+    "variant": "baseline",
+    "sample": 10,
+    "millis": 405.369287,
+    "bytes": 152916
+  },
+  {
+    "workload": "pid",
+    "pair": 3,
+    "variant": "indexed",
+    "sample": 1,
+    "millis": 5501.3555,
+    "bytes": 152916
+  },
+  {
+    "workload": "pid",
+    "pair": 3,
+    "variant": "indexed",
+    "sample": 2,
+    "millis": 508.149959,
+    "bytes": 152916
+  },
+  {
+    "workload": "pid",
+    "pair": 3,
+    "variant": "indexed",
+    "sample": 3,
+    "millis": 385.558519,
+    "bytes": 152916
+  },
+  {
+    "workload": "pid",
+    "pair": 3,
+    "variant": "indexed",
+    "sample": 4,
+    "millis": 350.873967,
+    "bytes": 152916
+  },
+  {
+    "workload": "pid",
+    "pair": 3,
+    "variant": "indexed",
+    "sample": 5,
+    "millis": 310.42544,
+    "bytes": 152916
+  },
+  {
+    "workload": "pid",
+    "pair": 3,
+    "variant": "indexed",
+    "sample": 6,
+    "millis": 293.562244,
+    "bytes": 152916
+  },
+  {
+    "workload": "pid",
+    "pair": 3,
+    "variant": "indexed",
+    "sample": 7,
+    "millis": 282.441673,
+    "bytes": 152916
+  },
+  {
+    "workload": "pid",
+    "pair": 3,
+    "variant": "indexed",
+    "sample": 8,
+    "millis": 290.302136,
+    "bytes": 152916
+  },
+  {
+    "workload": "pid",
+    "pair": 3,
+    "variant": "indexed",
+    "sample": 9,
+    "millis": 273.924941,
+    "bytes": 152916
+  },
+  {
+    "workload": "pid",
+    "pair": 3,
+    "variant": "indexed",
+    "sample": 10,
+    "millis": 258.738563,
+    "bytes": 152916
+  },
+  {
+    "workload": "hello",
+    "pair": 3,
+    "variant": "baseline",
+    "sample": 1,
+    "millis": 4757.228988,
+    "bytes": 4632
+  },
+  {
+    "workload": "hello",
+    "pair": 3,
+    "variant": "baseline",
+    "sample": 2,
+    "millis": 385.840086,
+    "bytes": 4632
+  },
+  {
+    "workload": "hello",
+    "pair": 3,
+    "variant": "baseline",
+    "sample": 3,
+    "millis": 293.635389,
+    "bytes": 4632
+  },
+  {
+    "workload": "hello",
+    "pair": 3,
+    "variant": "baseline",
+    "sample": 4,
+    "millis": 248.133034,
+    "bytes": 4632
+  },
+  {
+    "workload": "hello",
+    "pair": 3,
+    "variant": "baseline",
+    "sample": 5,
+    "millis": 251.801042,
+    "bytes": 4632
+  },
+  {
+    "workload": "hello",
+    "pair": 3,
+    "variant": "baseline",
+    "sample": 6,
+    "millis": 240.98375,
+    "bytes": 4632
+  },
+  {
+    "workload": "hello",
+    "pair": 3,
+    "variant": "baseline",
+    "sample": 7,
+    "millis": 238.951112,
+    "bytes": 4632
+  },
+  {
+    "workload": "hello",
+    "pair": 3,
+    "variant": "baseline",
+    "sample": 8,
+    "millis": 237.152374,
+    "bytes": 4632
+  },
+  {
+    "workload": "hello",
+    "pair": 3,
+    "variant": "baseline",
+    "sample": 9,
+    "millis": 215.94825,
+    "bytes": 4632
+  },
+  {
+    "workload": "hello",
+    "pair": 3,
+    "variant": "baseline",
+    "sample": 10,
+    "millis": 217.708529,
+    "bytes": 4632
+  },
+  {
+    "workload": "hello",
+    "pair": 3,
+    "variant": "indexed",
+    "sample": 1,
+    "millis": 4920.927321,
+    "bytes": 4632
+  },
+  {
+    "workload": "hello",
+    "pair": 3,
+    "variant": "indexed",
+    "sample": 2,
+    "millis": 275.852897,
+    "bytes": 4632
+  },
+  {
+    "workload": "hello",
+    "pair": 3,
+    "variant": "indexed",
+    "sample": 3,
+    "millis": 207.28652,
+    "bytes": 4632
+  },
+  {
+    "workload": "hello",
+    "pair": 3,
+    "variant": "indexed",
+    "sample": 4,
+    "millis": 182.700029,
+    "bytes": 4632
+  },
+  {
+    "workload": "hello",
+    "pair": 3,
+    "variant": "indexed",
+    "sample": 5,
+    "millis": 163.986983,
+    "bytes": 4632
+  },
+  {
+    "workload": "hello",
+    "pair": 3,
+    "variant": "indexed",
+    "sample": 6,
+    "millis": 158.730748,
+    "bytes": 4632
+  },
+  {
+    "workload": "hello",
+    "pair": 3,
+    "variant": "indexed",
+    "sample": 7,
+    "millis": 153.383361,
+    "bytes": 4632
+  },
+  {
+    "workload": "hello",
+    "pair": 3,
+    "variant": "indexed",
+    "sample": 8,
+    "millis": 140.936662,
+    "bytes": 4632
+  },
+  {
+    "workload": "hello",
+    "pair": 3,
+    "variant": "indexed",
+    "sample": 9,
+    "millis": 154.258021,
+    "bytes": 4632
+  },
+  {
+    "workload": "hello",
+    "pair": 3,
+    "variant": "indexed",
+    "sample": 10,
+    "millis": 130.07719,
+    "bytes": 4632
+  }
+]
