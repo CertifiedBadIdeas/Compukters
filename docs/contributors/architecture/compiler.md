@@ -63,6 +63,16 @@ Nullable `String` and supported Guest class source references use the artifact's
 `Null` instruction. K2's safe-call and Elvis branches lower through ordinary verified control flow, with reference
 casts when a non-null branch joins a nullable result. All twelve nullable primitives use their distinct nominal managed boxes or null. Safe casts and non-null assertions on value classes preserve their direct layout; see the [language contract](../../developers/kotlin/nullability.md) for the tested boundary.
 
+## Reference-array initialization
+
+The canonical `Array<T>(size, init)` constructor is lowered with the same existing allocation and charged
+index loop as primitive-array initializers. Size and callback expressions evaluate before allocation;
+`NewArray` enforces negative-size errors before the first callback invocation. Function-interface calls
+produce each value in ascending index order, and value-class results are boxed at the reference-array storage
+boundary. Concrete generic container specializations retain their callback and element shapes; bare type-parameter array
+construction retains K2's reification requirement, and reified inline functions remain outside the Guest subset. Allocation,
+exceptions, suspension and GC use the ordinary VM mechanisms; Kotlin does not run the initializer on the host.
+
 ## Compilation, specialization and linking
 
 The trusted server JVM owns compiler scheduling, diagnostics, artifact production, and the server-global

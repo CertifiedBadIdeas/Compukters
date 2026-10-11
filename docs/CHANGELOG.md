@@ -13,6 +13,10 @@ headings so this page has one stable URL that can be shared outside the reposito
 
 ## 0.6.0 — In development
 
+- Guest reference arrays support `Array(size) { index -> value }`, including strings, objects, nullable
+  elements, reusable vector value classes and generic container elements. Initializers run once per
+  ascending index and preserve managed exception behavior.
+
 - The IDE has open-file tabs with retained edits, caret, selection, scrolling and undo history. Tabs show unsaved
   changes and save conflicts, scroll when space is limited, and save modified files before closing. Screen interaction,
   frame composition and reusable controls are shared across both supported Minecraft versions; version adapters handle

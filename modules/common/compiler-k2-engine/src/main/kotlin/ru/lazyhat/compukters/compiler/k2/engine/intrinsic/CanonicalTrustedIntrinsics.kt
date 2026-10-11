@@ -47,6 +47,7 @@ object CanonicalTrustedIntrinsics {
             primitive("kotlin", "builtins", "kotlin", "Any.equals", "fun(Any?):Boolean")
             primitive("kotlin", "builtins", "kotlin", "Any.hashCode", "fun():Int")
             primitive("kotlin", "builtins", "kotlin", "Any.toString", "fun():String")
+            primitive("kotlin", "builtins", "kotlin", "Array.<init>", "constructor(Int,(Int)->T)")
             primitive("kotlin", "builtins", "kotlin", "Array.get", "fun(Int):T")
             primitive("kotlin", "builtins", "kotlin", "Array.set", "fun(Int,T):Unit")
             primitive("kotlin", "builtins", "kotlin", "Array.size", "val():Int")
