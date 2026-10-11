@@ -3,10 +3,13 @@
 ## Workspace & Working Checkout
 
 Treat this repository root as the Compukters workspace. For repository changes, use a separate Git worktree and task
-branch by default; reuse the existing worktree for the same task. Keep the user's original checkout and unrelated
+branch by default; reuse an existing worktree only while the same task is still active. Create each new task worktree
+from the current `dev` (or `main` inside a submodule). Keep the user's original checkout and unrelated
 changes intact. Read-only investigation may stay in the current checkout. Work in the user's current checkout only
 when they explicitly request it. Initialize required submodules at the task checkout's pinned revisions, and do not
-merge, push or remove the task worktree without authorization.
+push without authorization. For this workspace, verified task changes have standing authorization to merge into
+`dev` (submodule changes into `main`) and then remove that task's worktree. Preserve unrelated worktrees and never
+force-remove a dirty checkout. Before removal, retain verification evidence outside the task worktree.
 
 Do not spawn sub-agents or delegate work to other agents unless the user explicitly requests sub-agent or
 parallel-agent involvement for a specific task.
@@ -31,7 +34,19 @@ VM code lives in `host/compukter-vm`. Wiki guides are grouped under
 ## Build, Test, and Development Commands
 
 - AI agents running Gradle from the sandbox should use `./gradlew-sandbox` instead of `./gradlew`. It keeps
-  `GRADLE_USER_HOME` in `.gradle-sandbox`, disables the Gradle daemon, and avoids sharing host Gradle lock files.
+  `GRADLE_USER_HOME` in each checkout's `.gradle-sandbox`, disables the Gradle daemon, and avoids sharing host Gradle
+  lock files. On first use, it initializes an absent home from the workspace template with required reflinks,
+  sharing disk data while keeping writable files and locks independent. Python 3, GNU `cp` and `flock` are required.
+- When the template is absent, the wrapper automatically tries idle caches from existing workspace worktrees and
+  `~/.gradle`. If none are available, the first build populates its empty home normally and publishes a template after
+  success. Homes cloned from the current generation refresh it after successful builds; older homes cannot overwrite
+  a newer generation. Cache-template maintenance does not change a Gradle build's exit status.
+- Seed or refresh the workspace template with `./gradlew-sandbox-cache seed <idle-gradle-home>`. The default template
+  is under the main checkout's `.toolchain/gradle-cache/template`; `COMPUKTERS_GRADLE_CACHE_TEMPLATE` overrides its
+  location. Source and destination must support reflinks on the same filesystem; there is no full-copy fallback.
+  Existing homes stay intact. Do not seed a home used by an unmanaged Gradle process; managed wrappers reject
+  publication while their builds are running. Do not copy caches manually, use hard links, or symlink writable homes.
+  See `docs/contributors/verification.md` for initialization and actual disk-usage measurement.
 - For non-interactive Gradle tasks, including formatting, compilation, tests, checks, packaging, and verification,
   AI agents should prefer
   `./gradlew-sandbox-dev-parallel-summary <tasks>`. It runs the same parallel wrapper, captures the complete combined

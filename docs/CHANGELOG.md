@@ -13,6 +13,11 @@ headings so this page has one stable URL that can be shared outside the reposito
 
 ## 0.6.0 — In development
 
+- Agent Gradle worktrees initialize independent writable caches from a workspace template using reflinks,
+  sharing unchanged disk data while keeping build locks separate. Missing templates bootstrap from idle local
+  caches or a successful first build, including after cache deletion. Template refresh preserves existing homes
+  and rejects active managed sources; unsupported filesystems never silently allocate full cache copies.
+
 - Guest reference arrays support `Array(size) { index -> value }`, including strings, objects, nullable
   elements, reusable vector value classes and generic container elements. Initializers run once per
   ascending index and preserve managed exception behavior.
@@ -143,7 +148,8 @@ listed in [Kotlin support](developers/kotlin-support.md) and [standard library s
 
 - Compilation reuses prepared libraries for repeated module selections, avoids repeated module hashing during
   linking, and allocates less temporary memory when encoding executable artifacts and library identities. Semantic
-  hashing checks debug metadata without encoding it.
+  hashing checks debug metadata without encoding it. Live-value analysis uses indexed control flow and bitsets to reduce
+  temporary allocations during register allocation and GC-root generation.
 - All twelve primitive types are supported: `Boolean`, `Char`, `Byte`, `Short`, `Int`, `Long`, `Float`, `Double`,
   `UByte`, `UShort`, `UInt` and `ULong`. Applicable arithmetic, comparisons, conversions, increment/decrement,
   bit operations, constants, text and console output retain their source semantics. Signed narrow bit operations

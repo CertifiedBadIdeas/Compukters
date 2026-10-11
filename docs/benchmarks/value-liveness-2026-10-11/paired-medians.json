@@ -1,0 +1,98 @@
+[
+  {
+    "workload": "pid",
+    "mode": "cold",
+    "pair": 1,
+    "baseline_warm_median_ms": 298.879711,
+    "optimized_warm_median_ms": 269.985775,
+    "warm_reduction_percent": 9.667412988096737
+  },
+  {
+    "workload": "pid",
+    "mode": "cold",
+    "pair": 2,
+    "baseline_warm_median_ms": 347.137288,
+    "optimized_warm_median_ms": 289.894226,
+    "warm_reduction_percent": 16.490035492816318
+  },
+  {
+    "workload": "pid",
+    "mode": "cold",
+    "pair": 3,
+    "baseline_warm_median_ms": 292.418446,
+    "optimized_warm_median_ms": 269.2587,
+    "warm_reduction_percent": 7.920070131280309
+  },
+  {
+    "workload": "pid",
+    "mode": "prepared",
+    "pair": 1,
+    "baseline_warm_median_ms": 331.820859,
+    "optimized_warm_median_ms": 272.303195,
+    "warm_reduction_percent": 17.936685529465155
+  },
+  {
+    "workload": "pid",
+    "mode": "prepared",
+    "pair": 2,
+    "baseline_warm_median_ms": 302.15312,
+    "optimized_warm_median_ms": 255.350208,
+    "warm_reduction_percent": 15.489799344120621
+  },
+  {
+    "workload": "pid",
+    "mode": "prepared",
+    "pair": 3,
+    "baseline_warm_median_ms": 306.287273,
+    "optimized_warm_median_ms": 303.693429,
+    "warm_reduction_percent": 0.8468663991794548
+  },
+  {
+    "workload": "edit",
+    "mode": "cold",
+    "pair": 1,
+    "baseline_warm_median_ms": 231.205695,
+    "optimized_warm_median_ms": 199.666148,
+    "warm_reduction_percent": 13.641336559637944
+  },
+  {
+    "workload": "edit",
+    "mode": "cold",
+    "pair": 2,
+    "baseline_warm_median_ms": 227.396223,
+    "optimized_warm_median_ms": 235.024072,
+    "warm_reduction_percent": -3.354430825352802
+  },
+  {
+    "workload": "edit",
+    "mode": "cold",
+    "pair": 3,
+    "baseline_warm_median_ms": 235.763727,
+    "optimized_warm_median_ms": 220.39863,
+    "warm_reduction_percent": 6.517159019970868
+  },
+  {
+    "workload": "edit",
+    "mode": "prepared",
+    "pair": 1,
+    "baseline_warm_median_ms": 249.66673,
+    "optimized_warm_median_ms": 211.585051,
+    "warm_reduction_percent": 15.253005076006726
+  },
+  {
+    "workload": "edit",
+    "mode": "prepared",
+    "pair": 2,
+    "baseline_warm_median_ms": 235.542341,
+    "optimized_warm_median_ms": 203.154665,
+    "warm_reduction_percent": 13.750256477242027
+  },
+  {
+    "workload": "edit",
+    "mode": "prepared",
+    "pair": 3,
+    "baseline_warm_median_ms": 263.29901,
+    "optimized_warm_median_ms": 216.877457,
+    "warm_reduction_percent": 17.630735869458842
+  }
+]
