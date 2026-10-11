@@ -37,7 +37,9 @@ headings so this page has one stable URL that can be shared outside the reposito
   Minecraft input and drawing. Dialog fields support mouse selection, cursor and word navigation, clipboard actions,
   undo/redo and horizontal scrolling; token fields remain masked. Quick file opening (Ctrl+Shift+N) searches filenames
   and paths throughout the project, including collapsed folders, with keyboard and mouse navigation. Active tabs use
-  a restrained background and accent underline.
+  a restrained background and accent underline. The header separates project, file and target; Build and Run use
+  labeled controls when space permits. The status bar shows concise activity, with a scrollable read-only Details
+  window and complete message copying.
 
 - Documentation offers a version selector for released 0.5.1 and nightly guides and API references. The released
   documentation opens by default; nightly identifies its current source commit.
@@ -152,7 +154,8 @@ listed in [Kotlin support](developers/kotlin-support.md) and [standard library s
 
 - Compilation reuses prepared libraries for repeated module selections, avoids repeated module hashing during
   linking, and allocates less temporary memory when encoding executable artifacts and library identities. Semantic
-  hashing checks debug metadata without encoding it.
+  hashing checks debug metadata without encoding it. Live-value analysis uses indexed control flow and bitsets to reduce
+  temporary allocations during register allocation and GC-root generation.
 - All twelve primitive types are supported: `Boolean`, `Char`, `Byte`, `Short`, `Int`, `Long`, `Float`, `Double`,
   `UByte`, `UShort`, `UInt` and `ULong`. Applicable arithmetic, comparisons, conversions, increment/decrement,
   bit operations, constants, text and console output retain their source semantics. Signed narrow bit operations
