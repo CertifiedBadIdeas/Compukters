@@ -21,6 +21,12 @@ package compukter.system.edit
 import compukter.filesystem.FileSystem
 import compukter.io.Stderr
 import compukter.terminal.Terminal
+import kotlin.collections.copyInto
+
+value class EditState(
+    val gapStart: Int,
+    val gapEnd: Int,
+)
 
 fun main(args: Array<String>) {
     val argumentError = editError(args)
@@ -41,11 +47,12 @@ fun main(args: Array<String>) {
 
     val source = if (kind == 1) FileSystem.readText(path) else ""
     val buffer = CharArray(4096)
-    var state = editInsertDocument(buffer, editEmpty(buffer), source)
-    if (state < 0) {
+    val initialState = editInsertDocument(buffer, editEmpty(buffer), source)
+    if (initialState == null) {
         Stderr.write("edit: file exceeds 4096 UTF-16 units\n")
         return
     }
+    var state: EditState = initialState
     var dirty = source.contains("\r\n")
     var status = if (dirty) "CRLF normalized" else ""
     var rowOffset = 0
@@ -78,7 +85,6 @@ fun main(args: Array<String>) {
             if (confirmExit) {
                 if (editStartsWith(text, 'y', 'Y')) {
                     val saved = editSave(buffer, state, path)
-                    state = editState(editLogicalLength(buffer, state), buffer.size)
                     if (saved == 0) running = false else status = editFileSystemError(saved)
                     if (saved == 0) dirty = false
                     confirmExit = saved != 0
@@ -87,8 +93,9 @@ fun main(args: Array<String>) {
                 }
             } else {
                 val next = editInsertInput(buffer, state, text)
-                if (next == state && text.isNotEmpty()) status = "Buffer full"
-                else if (next != state) {
+                if (next == state && text.isNotEmpty()) {
+                    status = "Buffer full"
+                } else if (next != state) {
                     state = next
                     dirty = true
                 }
@@ -101,8 +108,6 @@ fun main(args: Array<String>) {
                 if (key == 1 && action == 1) confirmExit = false
             } else if ((action == 1 || action == 2) && editHasControl(modifiers) && key == 83) {
                 val saved = editSave(buffer, state, path)
-                val length = editLogicalLength(buffer, state)
-                state = editState(length, buffer.size)
                 if (saved == 0) {
                     dirty = false
                     status = "Saved"
@@ -113,21 +118,22 @@ fun main(args: Array<String>) {
                 if (dirty) confirmExit = true else running = false
             } else if (action == 1 || action == 2) {
                 val previous = state
-                state = when (key) {
-                    8 -> editBackspace(buffer, state)
-                    9 -> editInsertTab(buffer, state)
-                    13 -> editInsertNewline(buffer, state)
-                    257 -> editDelete(buffer, state)
-                    258 -> editMoveHome(buffer, state)
-                    259 -> editMoveEnd(buffer, state)
-                    260 -> editMoveVertical(buffer, state, -16)
-                    261 -> editMoveVertical(buffer, state, 16)
-                    262 -> editMoveVertical(buffer, state, -1)
-                    263 -> editMoveLeft(buffer, state)
-                    264 -> editMoveVertical(buffer, state, 1)
-                    265 -> editMoveRight(buffer, state)
-                    else -> state
-                }
+                state =
+                    when (key) {
+                        8 -> editBackspace(buffer, state)
+                        9 -> editInsertTab(buffer, state)
+                        13 -> editInsertNewline(buffer, state)
+                        257 -> editDelete(buffer, state)
+                        258 -> editMoveHome(buffer, state)
+                        259 -> editMoveEnd(buffer, state)
+                        260 -> editMoveVertical(buffer, state, -16)
+                        261 -> editMoveVertical(buffer, state, 16)
+                        262 -> editMoveVertical(buffer, state, -1)
+                        263 -> editMoveLeft(buffer, state)
+                        264 -> editMoveVertical(buffer, state, 1)
+                        265 -> editMoveRight(buffer, state)
+                        else -> state
+                    }
                 if (state != previous && (key == 8 || key == 9 || key == 13 || key == 257)) dirty = true
                 if (state == previous && (key == 9 || key == 13)) status = "Buffer full"
             }
@@ -143,88 +149,75 @@ fun editPath(args: Array<String>): String {
     return if (path.startsWith("/")) path else "/home/" + path
 }
 
-fun editEmpty(buffer: CharArray): Int = editState(0, buffer.size)
-
-fun editGapStart(state: Int): Int = state / 65536
-
-fun editGapEnd(state: Int): Int = state % 65536
-
-private fun editState(
-    gapStart: Int,
-    gapEnd: Int,
-): Int = gapStart * 65536 + gapEnd
+fun editEmpty(buffer: CharArray): EditState = EditState(0, buffer.size)
 
 fun editInsertText(
     buffer: CharArray,
-    state: Int,
+    state: EditState,
     text: String,
-): Int {
-    var gapStart = editGapStart(state)
-    val gapEnd = editGapEnd(state)
+): EditState {
+    var gapStart = state.gapStart
+    val gapEnd = state.gapEnd
     if (text.length > gapEnd - gapStart) return state
     for (index in 0 until text.length) {
         buffer[gapStart] = text[index]
         gapStart = gapStart + 1
     }
-    return editState(gapStart, gapEnd)
+    return EditState(gapStart, gapEnd)
 }
 
 fun editMoveLeft(
     buffer: CharArray,
-    state: Int,
-): Int {
-    val gapStart = editGapStart(state)
-    val gapEnd = editGapEnd(state)
+    state: EditState,
+): EditState {
+    val gapStart = state.gapStart
+    val gapEnd = state.gapEnd
     if (gapStart == 0) return state
     val width = editScalarBefore(buffer, gapStart)
-    for (index in 0 until width) {
-        buffer[gapEnd - width + index] = buffer[gapStart - width + index]
-    }
-    return editState(gapStart - width, gapEnd - width)
+    buffer.copyInto(buffer, gapEnd - width, gapStart - width, gapStart)
+    return EditState(gapStart - width, gapEnd - width)
 }
 
 fun editMoveRight(
     buffer: CharArray,
-    state: Int,
-): Int {
-    val gapStart = editGapStart(state)
-    val gapEnd = editGapEnd(state)
+    state: EditState,
+): EditState {
+    val gapStart = state.gapStart
+    val gapEnd = state.gapEnd
     if (gapEnd == buffer.size) return state
     val width = editScalarAt(buffer, gapEnd, buffer.size)
-    for (index in 0 until width) {
-        buffer[gapStart + index] = buffer[gapEnd + index]
-    }
-    return editState(gapStart + width, gapEnd + width)
+    buffer.copyInto(buffer, gapStart, gapEnd, gapEnd + width)
+    return EditState(gapStart + width, gapEnd + width)
 }
 
 fun editBackspace(
     buffer: CharArray,
-    state: Int,
-): Int {
-    val gapStart = editGapStart(state)
+    state: EditState,
+): EditState {
+    val gapStart = state.gapStart
     if (gapStart == 0) return state
-    return editState(gapStart - editScalarBefore(buffer, gapStart), editGapEnd(state))
+    return EditState(gapStart - editScalarBefore(buffer, gapStart), state.gapEnd)
 }
 
 fun editDelete(
     buffer: CharArray,
-    state: Int,
-): Int {
-    val gapEnd = editGapEnd(state)
+    state: EditState,
+): EditState {
+    val gapEnd = state.gapEnd
     if (gapEnd == buffer.size) return state
-    return editState(editGapStart(state), gapEnd + editScalarAt(buffer, gapEnd, buffer.size))
+    return EditState(state.gapStart, gapEnd + editScalarAt(buffer, gapEnd, buffer.size))
 }
 
 fun editInsertTab(
     buffer: CharArray,
-    state: Int,
-): Int = editInsertText(buffer, state, "    ")
+    state: EditState,
+): EditState = editInsertText(buffer, state, "    ")
 
 fun editInsertNewline(
     buffer: CharArray,
-    state: Int,
-): Int {
-    val gapStart = editGapStart(state)
+    state: EditState,
+): EditState {
+    val gapStart = state.gapStart
     var lineStart = gapStart
     while (lineStart > 0 && buffer[lineStart - 1] != '\n') lineStart = lineStart - 1
     var indentationEnd = lineStart
@@ -235,7 +228,7 @@ fun editInsertNewline(
         indentationEnd = indentationEnd + 1
     }
     val indentation = indentationEnd - lineStart
-    if (editGapEnd(state) - gapStart < indentation + 1) return state
+    if (state.gapEnd - gapStart < indentation + 1) return state
     var next = editInsertText(buffer, state, "\n")
     var index = lineStart
     while (index < indentationEnd) {
@@ -247,11 +240,11 @@ fun editInsertNewline(
 
 fun editCursorLine(
     buffer: CharArray,
-    state: Int,
+    state: EditState,
 ): Int {
     var line = 0
     var index = 0
-    val gapStart = editGapStart(state)
+    val gapStart = state.gapStart
     while (index < gapStart) {
         if (buffer[index] == '\n') line = line + 1
         index = index + 1
@@ -261,13 +254,13 @@ fun editCursorLine(
 
 fun editCursorColumn(
     buffer: CharArray,
-    state: Int,
+    state: EditState,
 ): Int {
-    var lineStart = editGapStart(state)
+    var lineStart = state.gapStart
     while (lineStart > 0 && buffer[lineStart - 1] != '\n') lineStart = lineStart - 1
     var column = 0
     var index = lineStart
-    val gapStart = editGapStart(state)
+    val gapStart = state.gapStart
     while (index < gapStart) {
         index = index + editScalarAt(buffer, index, gapStart)
         column = column + 1
@@ -295,48 +288,35 @@ fun editAdjustColumnOffset(
     return columnOffset
 }
 
-fun editCompact(
-    buffer: CharArray,
-    state: Int,
-): Int {
-    val gapStart = editGapStart(state)
-    val gapEnd = editGapEnd(state)
-    var source = gapEnd
-    var destination = gapStart
-    while (source < buffer.size) {
-        buffer[destination] = buffer[source]
-        source = source + 1
-        destination = destination + 1
-    }
-    return destination
-}
-
 fun editText(
     buffer: CharArray,
-    state: Int,
-): String =
-    buffer.concatToString(0, editGapStart(state)) +
-        buffer.concatToString(editGapEnd(state), buffer.size)
+    state: EditState,
+): String {
+    val text = CharArray(editLogicalLength(buffer, state))
+    buffer.copyInto(text, 0, 0, state.gapStart)
+    buffer.copyInto(text, state.gapStart, state.gapEnd, buffer.size)
+    return text.concatToString(0, text.size)
+}
 
 fun editLogicalLength(
     buffer: CharArray,
-    state: Int,
-): Int = editGapStart(state) + buffer.size - editGapEnd(state)
+    state: EditState,
+): Int = state.gapStart + buffer.size - state.gapEnd
 
 fun editMoveHome(
     buffer: CharArray,
-    state: Int,
-): Int {
-    var target = editGapStart(state)
+    state: EditState,
+): EditState {
+    var target = state.gapStart
     while (target > 0 && editLogicalCharAt(buffer, state, target - 1) != '\n') target = target - 1
     return editMoveTo(buffer, state, target)
 }
 
 fun editMoveEnd(
     buffer: CharArray,
-    state: Int,
-): Int {
-    var target = editGapStart(state)
+    state: EditState,
+): EditState {
+    var target = state.gapStart
     val length = editLogicalLength(buffer, state)
     while (target < length && editLogicalCharAt(buffer, state, target) != '\n') target = target + 1
     return editMoveTo(buffer, state, target)
@@ -344,9 +324,9 @@ fun editMoveEnd(
 
 fun editMoveVertical(
     buffer: CharArray,
-    state: Int,
+    state: EditState,
     delta: Int,
-): Int {
+): EditState {
     val column = editCursorColumn(buffer, state)
     val currentLine = editCursorLine(buffer, state)
     var targetLine = currentLine + delta
@@ -369,18 +349,18 @@ fun editMoveVertical(
 
 private fun editMoveTo(
     buffer: CharArray,
-    initialState: Int,
+    initialState: EditState,
     target: Int,
-): Int {
+): EditState {
     var state = initialState
-    while (editGapStart(state) > target) state = editMoveLeft(buffer, state)
-    while (editGapStart(state) < target) state = editMoveRight(buffer, state)
+    while (state.gapStart > target) state = editMoveLeft(buffer, state)
+    while (state.gapStart < target) state = editMoveRight(buffer, state)
     return state
 }
 
 private fun editLineCount(
     buffer: CharArray,
-    state: Int,
+    state: EditState,
 ): Int {
     var count = 1
     var index = 0
@@ -394,7 +374,7 @@ private fun editLineCount(
 
 private fun editLineStart(
     buffer: CharArray,
-    state: Int,
+    state: EditState,
     requestedLine: Int,
 ): Int {
     var line = 0
@@ -409,16 +389,16 @@ private fun editLineStart(
 
 private fun editLogicalCharAt(
     buffer: CharArray,
-    state: Int,
+    state: EditState,
     index: Int,
 ): Char {
-    val gapStart = editGapStart(state)
-    return if (index < gapStart) buffer[index] else buffer[editGapEnd(state) + index - gapStart]
+    val gapStart = state.gapStart
+    return if (index < gapStart) buffer[index] else buffer[state.gapEnd + index - gapStart]
 }
 
 private fun editLogicalScalarWidth(
     buffer: CharArray,
-    state: Int,
+    state: EditState,
     index: Int,
 ): Int {
     val length = editLogicalLength(buffer, state)
@@ -434,21 +414,21 @@ private fun editLogicalScalarWidth(
 
 private fun editInsertCharacter(
     buffer: CharArray,
-    state: Int,
+    state: EditState,
     character: Char,
-): Int {
-    val gapStart = editGapStart(state)
-    val gapEnd = editGapEnd(state)
+): EditState {
+    val gapStart = state.gapStart
+    val gapEnd = state.gapEnd
     if (gapStart == gapEnd) return state
     buffer[gapStart] = character
-    return editState(gapStart + 1, gapEnd)
+    return EditState(gapStart + 1, gapEnd)
 }
 
 private fun editInsertDocument(
     buffer: CharArray,
-    state: Int,
+    state: EditState,
     text: String,
-): Int {
+): EditState? {
     var outputLength = 0
     var index = 0
     while (index < text.length) {
@@ -457,7 +437,7 @@ private fun editInsertDocument(
         }
         index = index + 1
     }
-    if (outputLength > editGapEnd(state) - editGapStart(state)) return 0 - 1
+    if (outputLength > state.gapEnd - state.gapStart) return null
     var next = state
     index = 0
     while (index < text.length) {
@@ -474,26 +454,50 @@ private fun editInsertDocument(
 
 private fun editInsertInput(
     buffer: CharArray,
-    state: Int,
+    state: EditState,
     text: String,
-): Int {
-    var accepted = 0
+): EditState {
+    // Preflight the expanded paste before changing any buffer contents.
+    var lineStart = state.gapStart
+    while (lineStart > 0 && buffer[lineStart - 1] != '\n') lineStart = lineStart - 1
+    var indentationEnd = lineStart
+    while (indentationEnd < state.gapStart && (buffer[indentationEnd] == ' ' || buffer[indentationEnd] == '\t')) {
+        indentationEnd = indentationEnd + 1
+    }
+    var indentation = indentationEnd - lineStart
+    var inIndentation = indentationEnd == state.gapStart
+    var required = 0
     var index = 0
     while (index < text.length) {
         val character = text[index]
-        if (character == '\n' || character == '\t' || (character >= ' ' && character != '\u007f')) {
-            accepted = accepted + 1
+        if (character == '\n') {
+            required = required + 1 + indentation
+            inIndentation = true
+        } else if (character == '\t') {
+            required = required + 4
+            if (inIndentation) indentation = indentation + 4
+        } else if (character >= ' ' && character != '\u007f') {
+            required = required + 1
+            if (inIndentation && character == ' ') {
+                indentation = indentation + 1
+            } else {
+                inIndentation = false
+            }
         }
+        if (required > state.gapEnd - state.gapStart) return state
         index = index + 1
     }
-    if (accepted > editGapEnd(state) - editGapStart(state)) return state
     var next = state
     index = 0
     while (index < text.length) {
         val character = text[index]
-        if (character == '\n') next = editInsertNewline(buffer, next)
-        else if (character == '\t') next = editInsertTab(buffer, next)
-        else if (character >= ' ' && character != '\u007f') next = editInsertCharacter(buffer, next, character)
+        if (character == '\n') {
+            next = editInsertNewline(buffer, next)
+        } else if (character == '\t') {
+            next = editInsertTab(buffer, next)
+        } else if (character >= ' ' && character != '\u007f') {
+            next = editInsertCharacter(buffer, next, character)
+        }
         index = index + 1
     }
     return next
@@ -501,7 +505,7 @@ private fun editInsertInput(
 
 private fun editRender(
     buffer: CharArray,
-    state: Int,
+    state: EditState,
     path: String,
     dirty: Boolean,
     status: String,
@@ -520,8 +524,11 @@ private fun editRender(
     val cursorLine = editCursorLine(buffer, state)
     val cursorColumn = editCursorColumn(buffer, state)
     var message = status
-    if (confirmExit) message = "Save modified buffer? Y/N"
-    else if (message == "") message = "Ln " + editNumber(cursorLine + 1) + ", Col " + editNumber(cursorColumn + 1)
+    if (confirmExit) {
+        message = "Save modified buffer? Y/N"
+    } else if (message == "") {
+        message = "Ln ${cursorLine + 1}, Col ${cursorColumn + 1}"
+    }
     Terminal.writeAt(0, 17, message)
     Terminal.writeAt(0, 18, "^S Save  ^X Exit")
     Terminal.setCursor(cursorColumn - columnOffset, cursorLine - rowOffset + 1)
@@ -530,7 +537,7 @@ private fun editRender(
 
 private fun editVisibleLine(
     buffer: CharArray,
-    state: Int,
+    state: EditState,
     line: Int,
     columnOffset: Int,
     rowBuffer: CharArray,
@@ -560,32 +567,9 @@ private fun editVisibleLine(
 
 private fun editSave(
     buffer: CharArray,
-    state: Int,
+    state: EditState,
     path: String,
-): Int {
-    val length = editCompact(buffer, state)
-    return FileSystem.writeText(path, buffer.concatToString(0, length))
-}
-
-private fun editNumber(value: Int): String {
-    if (value < 10) return editDigit(value)
-    if (value < 100) return editDigit(value / 10) + editDigit(value % 10)
-    if (value < 1000) return editDigit(value / 100) + editDigit((value / 10) % 10) + editDigit(value % 10)
-    return editDigit(value / 1000) + editDigit((value / 100) % 10) + editDigit((value / 10) % 10) + editDigit(value % 10)
-}
-
-private fun editDigit(value: Int): String {
-    if (value == 0) return "0"
-    if (value == 1) return "1"
-    if (value == 2) return "2"
-    if (value == 3) return "3"
-    if (value == 4) return "4"
-    if (value == 5) return "5"
-    if (value == 6) return "6"
-    if (value == 7) return "7"
-    if (value == 8) return "8"
-    return "9"
-}
+): Int = FileSystem.writeText(path, editText(buffer, state))
 
 private fun editFileSystemError(result: Int): String {
     if (result == 0 - 1) return "invalid path"

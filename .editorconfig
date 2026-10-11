@@ -5,3 +5,7 @@ charset = utf-8
 indent_style = space
 tab_width = 4
 trim_trailing_whitespace = true
+
+# ROM program source names match their shell commands.
+[system/programs/*.kt]
+ktlint_standard_filename = disabled
