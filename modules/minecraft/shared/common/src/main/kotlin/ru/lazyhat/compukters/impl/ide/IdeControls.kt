@@ -24,13 +24,21 @@ data class IdeControlDraw(
     val target: IdeHitTarget,
 )
 
+enum class IdeControlStyle { Standard, Neutral, Primary }
+
 object IdeControls {
-    fun target(target: IdeHitTarget): IdeControlDraw =
+    fun target(
+        target: IdeHitTarget,
+        style: IdeControlStyle = IdeControlStyle.Standard,
+    ): IdeControlDraw =
         IdeControlDraw(
             IdePanelDraw(
                 IdePanelKind.Control,
                 target.bounds,
                 when {
+                    style == IdeControlStyle.Primary && target.enabled -> IdeColors.SELECTION
+                    style == IdeControlStyle.Neutral && target.selected -> IdeColors.SELECTION
+                    style == IdeControlStyle.Neutral -> IdeColors.PANEL_ALT
                     target.selected -> IdeColors.ACCENT
                     target.enabled -> IdeColors.BORDER
                     else -> IdeColors.PANEL_ALT

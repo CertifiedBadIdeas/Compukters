@@ -28,7 +28,7 @@ query or fragment. SSH transport is deferred.
 
 With no project open, the central **Projects** panel shows saved projects alongside **Create project**, **Open directory**,
 **Clone HTTPS** and **HTTPS token**. On smaller windows these actions appear beneath the list.
-With a project open, click **Projects** in the header to choose or manage projects and access the same actions.
+With a project open, click the project name in the header to choose or manage projects and access the same actions.
 The start page and project menu show each folder path and distinguish IDE folders from **External** projects.
 Scroll the list to reach additional projects. An external path is remembered across IDE and Minecraft restarts, so
 you only need to enter it once. Listing saved folders does not read their manifests; a missing or invalid
@@ -57,6 +57,18 @@ a conflict lets you cancel or discard its changes and close that file. Cancel to
 Closing the last tab
 leaves an empty editor without closing the IDE. Renaming a file or folder updates its tabs, and switching projects
 starts a new tab list. The tab list lasts for the current IDE session.
+
+## Workspace controls and status
+
+The header separates the project selector, active file path and attached target. **Build** and **Run** have labels
+on wider windows and become icons when space is limited; their tooltips explain the action and any unavailable state.
+The status bar keeps diagnostic counts, save state and current activity in separate areas.
+
+Click **Details** in the status bar to read all messages captured when the window opens, including full failure
+messages and artifact information. Use the wheel, **Up/Down**, **Page Up/Down**, **Home** or **End** to scroll.
+**Copy all** or **Ctrl+C** copies the complete text, including messages outside the visible area. **Esc**, **Enter**
+or **Close** returns to the workspace. This window is read-only; typing and project shortcuts cannot edit the file
+underneath it.
 
 ## UI scale
 
