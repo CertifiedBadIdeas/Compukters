@@ -31,6 +31,23 @@ import kotlin.test.assertTrue
 
 class ExpressionInfoQueryTest {
     @Test
+    fun `hover uses short names in nested generic nullable and function types`() {
+        val source = "package example.deep\nclass Box<T>\nfun convert(input: Box<String?>, fn: (Int) -> String): Box<String?> = input"
+        K2QueryFixture.source("main.kt" to source).use { fixture ->
+            val result =
+                fixture.execute(
+                    AnalysisQuery.ExpressionInfo(fixture.identity, VirtualSourcePath.kotlin("main.kt"), source.indexOf("convert")),
+                ) as AnalysisResult.ExpressionInfo
+            val info = assertNotNull(result.value)
+            assertEquals("Box<String?>", info.renderedType)
+            val signature = assertNotNull(info.signature)
+            assertTrue(signature.contains("Box<String?>"), signature)
+            assertTrue(signature.contains("(Int) -> String"), signature)
+            assertTrue(!signature.contains("example.deep.") && !signature.contains("kotlin."), signature)
+        }
+    }
+
+    @Test
     fun `array copy hover resolves builtin documentation`() {
         val source = "fun main() { val values = IntArray(2); values.copyOf(3); values.copyInto(IntArray(2)) }"
         K2QueryFixture.sourceWithGuestApi(true, "main.kt" to source).use { fixture ->
@@ -134,7 +151,7 @@ class ExpressionInfoQueryTest {
                 ) as AnalysisResult.ExpressionInfo
             val info = assertNotNull(result.value)
 
-            assertEquals("kotlin.Int", info.renderedType)
+            assertEquals("Int", info.renderedType)
             assertEquals(EditorRange(start, start + 1), info.range)
         }
     }
@@ -153,7 +170,7 @@ class ExpressionInfoQueryTest {
                     ),
                 ) as AnalysisResult.ExpressionInfo
 
-            assertEquals("kotlin.Long", assertNotNull(result.value).renderedType)
+            assertEquals("Long", assertNotNull(result.value).renderedType)
         }
     }
 
@@ -171,7 +188,7 @@ class ExpressionInfoQueryTest {
                     ),
                 ) as AnalysisResult.ExpressionInfo
 
-            assertEquals("kotlin.String", assertNotNull(result.value).renderedType)
+            assertEquals("String", assertNotNull(result.value).renderedType)
         }
     }
 
@@ -220,7 +237,7 @@ class ExpressionInfoQueryTest {
                     AnalysisQuery.ExpressionInfo(fixture.identity, VirtualSourcePath.kotlin("main.kt"), offset),
                 ) as AnalysisResult.ExpressionInfo
 
-            assertEquals("kotlin.String", assertNotNull(result.value).renderedType)
+            assertEquals("String", assertNotNull(result.value).renderedType)
         }
     }
 
@@ -235,7 +252,7 @@ class ExpressionInfoQueryTest {
                 ) as AnalysisResult.ExpressionInfo
             val info = assertNotNull(result.value)
 
-            assertEquals("kotlin.String", info.renderedType)
+            assertEquals("String", info.renderedType)
             assertTrue(assertNotNull(info.signature).contains("greet"), info.signature)
         }
     }
@@ -250,7 +267,7 @@ class ExpressionInfoQueryTest {
                     AnalysisQuery.ExpressionInfo(fixture.identity, VirtualSourcePath.kotlin("main.kt"), offset),
                 ) as AnalysisResult.ExpressionInfo
 
-            assertEquals("kotlin.String", assertNotNull(result.value).renderedType)
+            assertEquals("String", assertNotNull(result.value).renderedType)
         }
     }
 

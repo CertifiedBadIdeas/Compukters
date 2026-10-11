@@ -449,6 +449,8 @@ class IdeBuildCoordinator(
                 boundedMessage(value.message, snapshot.profile.limits.diagnosticTextBytes),
                 path,
                 range,
+                ru.lazyhat.compukters.ide.analysis.EditorDiagnosticHighlight
+                    .fromDiagnosticCode(value.code),
             )
         }
     }
