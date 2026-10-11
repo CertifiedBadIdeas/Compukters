@@ -94,6 +94,66 @@ import kotlin.test.assertTrue
 
 class IdeRendererStateTest {
     @Test
+    fun `diagnostic tokens retain exact styles clipped waves and grouped noninteractive hover`() {
+        val source = "\t😀 missingSymbol; other"
+        val start = source.indexOf("missingSymbol")
+        val range = EditorRange(start, start + "missingSymbol".length)
+        val path = VirtualSourcePath.kotlin("src/main.kt")
+        val error =
+            IdeDiagnosticRow(
+                EditorDiagnostic(
+                    EditorDiagnosticSeverity.Error,
+                    "Unknown symbol",
+                    path,
+                    range,
+                    ru.lazyhat.compukters.ide.analysis.EditorDiagnosticHighlight.UnresolvedReference,
+                ),
+                source,
+            )
+        val warning = IdeDiagnosticRow(EditorDiagnostic(EditorDiagnosticSeverity.Warning, "Second problem", path, range), source)
+        val otherStart = source.indexOf("other")
+        val other =
+            IdeDiagnosticRow(
+                EditorDiagnostic(
+                    EditorDiagnosticSeverity.Error,
+                    "Type mismatch",
+                    path,
+                    EditorRange(otherStart, source.length),
+                ),
+                source,
+            )
+        val stale =
+            IdeDiagnosticRow(
+                EditorDiagnostic(EditorDiagnosticSeverity.Error, "Old problem", path, range),
+                source.replace("missingSymbol", "differentName"),
+            )
+        val editor = semanticEditor(source, firstVisibleColumn = 8) { _, _ -> IdeSemanticInteraction.None }
+        val base = workspaceState(editor, IdeBuildState.Idle)
+        val workspace = (base.page as IdePageState.Workspace).value
+        val state =
+            base.copy(
+                page = IdePageState.Workspace(workspace.copy(diagnostics = IdeDiagnostics(listOf(error, warning, other, stale)))),
+            )
+        val model = IdeRenderer.extract(state, geometry())
+        assertEquals(IdeColors.ERROR, model.text.single { it.value == "missingSymbol" }.color)
+        assertTrue(model.text.single { it.value == "other" }.color != IdeColors.ERROR)
+        val waves = model.fills.filter { it.kind == IdeFillKind.DiagnosticUnderline }
+        assertTrue(waves.isNotEmpty())
+        val code = IdeSourceGeometry(editor, geometry()).codeBounds
+        assertTrue(waves.all { code.contains(it.bounds) })
+        val tokenHits = model.hitTargets.filter { it.diagnostic != null && !it.enabled }
+        assertTrue(tokenHits.none { it.diagnostic == stale })
+        assertTrue(tokenHits.all { code.contains(it.bounds) })
+        val hit = tokenHits.first { it.diagnostic == error }
+        val hovered = IdeRenderer.extract(state, geometry(), pointerX = hit.bounds.left + 1, pointerY = hit.bounds.top + 1)
+        val text = hovered.text.filter { it.kind == IdeTextKind.Tooltip }
+        assertTrue(text.any { it.value == "Unknown symbol" })
+        assertTrue(text.any { it.value == "Second problem" })
+        assertTrue(text.none { it.value == "Old problem" })
+        assertTrue(text.all { requireNotNull(it.clip).contains(IdeRect(it.x, it.y, it.x + 1, it.y + 1)) })
+    }
+
+    @Test
     fun `horizontal source scrolling keeps text selection and hidden caret out of the gutter`() {
         val text = "val name = \"" + "a".repeat(100) + "\""
         val editor =
@@ -881,7 +941,7 @@ class IdeRendererStateTest {
                 .startsWith("2 errors · 1 warning"),
         )
         val targets = model.hitTargets.filter { it.action == IdeHitAction.DiagnosticChoice }
-        val gutter = targets.single { it.bounds.top == bounds.editor.top }
+        val gutter = targets.single { it.enabled && it.bounds.top == bounds.editor.top }
         assertEquals(error, gutter.diagnostic)
         assertFalse(targets.single { it.diagnostic == stale }.enabled)
         val commands = mutableListOf<ru.lazyhat.compukters.ide.client.state.IdeCommand>()

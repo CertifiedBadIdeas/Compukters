@@ -38,6 +38,7 @@ internal class IdeEditorRenderer(
 ) {
     private val font = geometry.font
     private val source = IdeSourceGeometry(editor, geometry)
+    private val diagnosticRenderer = IdeDiagnosticRenderer(output, geometry, source)
 
     fun draw(
         caretVisible: Boolean,
@@ -64,6 +65,7 @@ internal class IdeEditorRenderer(
                     val start = if (localStart > 0 && line.getOrNull(localStart - 1) == '.') range.startUtf16 - 1 else range.startUtf16
                     EditorRange(start, range.endUtf16)
                 }
+            val diagnosticSpans = diagnosticRenderer.spans(editor, diagnostics.rows, line, lineStart, completionRange)
             val diagnostic =
                 diagnostics.rows
                     .filter { it.navigable && it.diagnostic.path?.value == editor.path?.value && it.line == lineNumber }
@@ -141,7 +143,8 @@ internal class IdeEditorRenderer(
             }
             occurrenceHighlights(editor, line, lineStart, codeLeft, rowTop)
             selection(editor, line, lineStart, rowTop)
-            styledLine(editor, lineNumber, line, lineStart, y)
+            styledLine(editor, lineNumber, line, lineStart, y, diagnosticSpans)
+            diagnosticRenderer.draw(diagnosticSpans, line, lineStart, rowTop)
             while (usageIndex < counts.size && counts[usageIndex].range.startUtf16 < lineStart) usageIndex++
             var usageX = codeLeft + (visualColumns(line) - editor.firstVisibleColumn + 2) * font.cellWidth
             while (usageIndex < counts.size && counts[usageIndex].range.startUtf16 < lineStart + line.length) {
@@ -175,7 +178,7 @@ internal class IdeEditorRenderer(
                 }
             }
         }
-        IdeEditorPopups(output, geometry, source).draw(editor)
+        IdeEditorPopups(output, geometry, source).draw(editor, diagnostics)
     }
 
     private fun selection(
@@ -236,6 +239,7 @@ internal class IdeEditorRenderer(
         line: String,
         lineStart: Int,
         y: Int,
+        diagnostics: List<IdeDiagnosticSpan>,
     ) {
         if (line.isEmpty()) return
         val lexical = editor.lexical.lines.getOrNull(lineIndex)
@@ -246,6 +250,10 @@ internal class IdeEditorRenderer(
                 ?.anchor
         val projectPath = editor.path
         val boundaries = sortedSetOf(0, line.length)
+        diagnostics.forEach {
+            boundaries += it.range.startUtf16 - lineStart
+            boundaries += it.range.endUtf16 - lineStart
+        }
         lexical?.spans?.forEach { span ->
             boundaries += span.startUtf16.coerceIn(0, line.length)
             boundaries += span.endUtf16.coerceIn(0, line.length)
@@ -282,12 +290,24 @@ internal class IdeEditorRenderer(
             val absoluteRange = EditorRange(lineStart + start, lineStart + end)
             val linked =
                 link?.tokenRange?.let { absoluteRange.startUtf16 >= it.startUtf16 && absoluteRange.endUtf16 <= it.endUtf16 } == true
+            val unresolved =
+                diagnostics
+                    .filter {
+                        it.row.diagnostic.highlight == ru.lazyhat.compukters.ide.analysis.EditorDiagnosticHighlight.UnresolvedReference &&
+                            absoluteRange.intersects(it.range)
+                    }.maxByOrNull { it.row.diagnostic.severity.ordinal }
             output.code(
                 IdeTextKind.Source,
                 IdeSourceColumns.glyphs(line.substring(start, end), IdeSourceColumns.columnAt(line, start)),
                 x,
                 y,
-                if (linked) IdeColors.HYPERLINK else IdeSourceStyles.styleColor(resolved),
+                if (unresolved != null) {
+                    IdeSourceStyles.diagnosticColor(unresolved.row.diagnostic.severity)
+                } else if (linked) {
+                    IdeColors.HYPERLINK
+                } else {
+                    IdeSourceStyles.styleColor(resolved)
+                },
                 source.codeBounds,
                 resolved,
                 absoluteRange,
