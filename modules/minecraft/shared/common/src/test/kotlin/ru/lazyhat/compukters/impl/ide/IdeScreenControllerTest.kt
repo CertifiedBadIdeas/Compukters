@@ -80,6 +80,61 @@ class IdeScreenControllerTest {
     }
 
     @Test
+    fun `modal field routes scaled dragging clipboard and undo without changing the page`() {
+        Fixture().use { fixture ->
+            val ui = fixture.ui
+            val viewport = fixture.host.viewport()
+            val create =
+                ui
+                    .frame(0, 0)
+                    .model.hitTargets
+                    .single { it.action == IdeHitAction.CreateProject }
+
+            fun pointer(
+                x: Double,
+                y: Double,
+            ) = IdePointerInput(viewport.toMinecraftX(x), viewport.toMinecraftY(y), 0, 0)
+            ui.mouseClicked(pointer(create.bounds.left + 2.0, create.bounds.top + 2.0), false)
+            ui.charTyped(IdeCharacterInput("abcdef"))
+            val frame = ui.frame(0, 0)
+            val bounds = IdePromptGeometry.compute(frame.geometry.panel).field
+            val x = bounds.left + 5.0
+            val y = bounds.top + 10.0
+            val cell = IdeCodeFontProfile.DEFAULT.cellWidth
+            ui.mouseClicked(pointer(x + cell, y), false)
+            ui.mouseDragged(pointer(x + 4 * cell, y))
+            ui.mouseReleased(pointer(x + 4 * cell, y))
+            ui.keyPressed(IdeKeyInput(IdeKeyCode.C, IdeModifier.CONTROL))
+            assertEquals("bcd", fixture.host.clipboard)
+            ui.charTyped(IdeCharacterInput("X"))
+
+            fun value() =
+                ui
+                    .frame(0, 0)
+                    .model.text
+                    .single {
+                        it.kind == IdeTextKind.Dialog &&
+                            it.clip == IdeRect(bounds.left + 1, bounds.top + 1, bounds.right - 1, bounds.bottom - 1)
+                    }.value
+            assertEquals("aXef", value())
+            ui.keyPressed(IdeKeyInput(IdeKeyCode.Z, IdeModifier.CONTROL))
+            assertEquals("abcdef", value())
+            ui.keyPressed(IdeKeyInput(IdeKeyCode.A, IdeModifier.CONTROL))
+            fixture.host.clipboard = "replacement"
+            ui.keyPressed(IdeKeyInput(IdeKeyCode.V, IdeModifier.CONTROL, paste = true))
+            assertEquals("replacement", value())
+            assertTrue(fixture.controller.viewState().page is IdePageState.Start)
+            ui.keyPressed(IdeKeyInput(IdeKeyCode.ESCAPE))
+            assertFalse(
+                ui
+                    .frame(0, 0)
+                    .model.panels
+                    .any { it.kind == IdePanelKind.Dialog },
+            )
+        }
+    }
+
+    @Test
     fun `completed close restores parent and removal releases the session only once`() {
         Fixture().use { fixture ->
             fixture.controller.dispatch(IdeCommand.CloseRequested)

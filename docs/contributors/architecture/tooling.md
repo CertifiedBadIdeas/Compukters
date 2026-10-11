@@ -267,3 +267,8 @@ open until a resolution. Rename, deletion and project transitions update the sam
 slice, active-file reveal, overflow controls, labels and close buttons. `IdeRenderer` composes these components; the shared
 screen controller owns tab-bar scrolling and passes the same model to drawing and input. New controls and screen
 interaction belong here; backend changes belong in the Minecraft version adapter only when its API requires them.
+
+`IdeTextField` owns each modal prompt's single-line `EditorDocument`, bounded undo history, selection and horizontal
+viewport. `IdeTextFieldLayout` supplies the same code-point geometry to painting and pointer input; `IdePromptGeometry`
+keeps the field rectangle shared with the dialog. Closing or advancing a prompt releases its document and history.
+The component uses the existing editor engine without Minecraft types or version-specific widgets.
