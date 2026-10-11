@@ -13,8 +13,11 @@ This reference groups versioned representation boundaries by the version that in
 
 ## Portable Guest filesystem
 
-`compukter:core` 3.0.0 replaces the old string/status FileSystem source facade with Compukters-owned Path,
-metadata, typed exceptions, immutable read/directory snapshots and guarded atomic replacement drafts.
+`compukter:core` 4.0.0 replaces the old string/status FileSystem source facade with Compukters-owned Path,
+pure lexical paths and an explicit FileSystem facade with metadata, typed exceptions, immutable
+read/directory snapshots and guarded atomic replacement drafts. Path has no storage members or native
+construction request; optional compukter.io.path extensions delegate to FileSystem. Native limits are
+checked when operating on storage.
 New source emits `compukter:filesystem` ABI 2 with 15 synchronous operations; historical ABI 1 remains
 admitted for existing artifacts without source wrappers. Private byte replies begin with an unsigned status
 byte (0 success, otherwise the existing filesystem error magnitude), with at most 4095 content bytes.

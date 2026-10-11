@@ -124,7 +124,7 @@ bounded multi-file project snapshots.
 
 `/rom/edit <path>` is a nano-like 51x19 editor backed by one managed 4096-unit `CharArray` gap buffer. Cursor motion and
 deletion preserve UTF-16 surrogate pairs, CRLF input is normalized to LF, Tab inserts four spaces, Enter inherits
-leading indentation, and the viewport scrolls in both axes. Ctrl+S writes through Rust-owned atomic `Path.writeText`;
+leading indentation, and the viewport scrolls in both axes. Ctrl+S writes through Rust-owned atomic `FileSystem.writeText`;
 Ctrl+X exits directly when clean or opens a Y/N/Escape save prompt when dirty. The buffer, source, and compiled artifact
 belong to the computer filesystem, while terminal state belongs only to the current VM lifetime. The playable
 in-computer loop is `edit demo.kt` -> `kotlinc demo.kt` -> `demo`; source and artifact survive machine reload and remain

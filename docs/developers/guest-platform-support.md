@@ -292,17 +292,22 @@ tests `positional_patch_and_fill_do_not_move_the_stream_cursor` and
 
 **Status:** Supported within the documented portable API.
 
-`compukter.filesystem.Path` provides typed metadata and errors, binary I/O, strict UTF-8 text,
+`compukter.filesystem.Path` is a pure lexical value. `FileSystem` provides typed metadata and errors,
+binary I/O, strict UTF-8 text,
 immutable read snapshots, sorted directory snapshots, directory operations and atomic replacement drafts.
 Transfers are bounded independently of file size. Resources belong to each foreground program and survive
 hibernation with their positions and revision guards; terminal program outcomes release them.
+Optional separately imported `compukter.io.path` extensions delegate to the same operations.
 See [Guest filesystem]({{ '/FILESYSTEM/' | relative_url }}) for limits, cleanup and the 0.6.0 source migration.
 
 **Evidence:**
 [`MinimalScriptLoweringTest`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/compiler-k2/src/test/kotlin/ru/lazyhat/compukters/compiler/worker/k2/MinimalScriptLoweringTest.kt),
-test `portable filesystem API executes binary text snapshots and atomic drafts`, and
+tests `portable filesystem API executes binary text snapshots and atomic drafts`,
+`lexical Guest paths need no filesystem capability` and
+`Path storage conveniences require explicit extension imports`, and
 [`ProgramRuntimeHostIntegrationTest`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/core/src/nativeIntegrationTest/kotlin/ru/lazyhat/compukters/core/device/runtime/program/integration/ProgramRuntimeHostIntegrationTest.kt),
-tests `portable Guest filesystem performs bounded atomic IO and typed failures` and
+tests `lexical Guest paths execute without filesystem access`,
+`portable Guest filesystem performs bounded atomic IO and typed failures` and
 `builtin editor saves its full Unicode buffer without moving the cursor`.
 Native lifecycle, quotas, guarded replacements and checkpoint rejection are exercised in
 [`computer_filesystem.rs`](https://github.com/CertifiedBadIdeas/Compukter-VM/blob/main/src/computer_filesystem.rs).

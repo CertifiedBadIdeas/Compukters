@@ -19,6 +19,7 @@
 package compukter.system.shell
 
 import compukter.filesystem.FileKind
+import compukter.filesystem.FileSystem
 import compukter.filesystem.FileSystemException
 import compukter.filesystem.Path
 import compukter.io.Stderr
@@ -123,10 +124,10 @@ private fun resolvePath(path: String): String = if (path.startsWith("/")) path e
 private fun writeList(path: String) {
     try {
         val entry = Path(path)
-        if (entry.stat().kind == FileKind.FILE) {
+        if (FileSystem.stat(entry).kind == FileKind.FILE) {
             println(path)
         } else {
-            val directory = entry.openDirectory()
+            val directory = FileSystem.openDirectory(entry)
             try {
                 while (true) {
                     val child = directory.read() ?: break
@@ -138,15 +139,19 @@ private fun writeList(path: String) {
         }
     } catch (failure: FileSystemException) {
         Stderr.write((failure.message ?: "filesystem error") + "\n")
+    } catch (failure: IllegalArgumentException) {
+        Stderr.write("invalid path: $path\n")
     }
 }
 
 private fun writeStat(path: String) {
     try {
-        val info = Path(path).stat()
+        val info = FileSystem.stat(Path(path))
         println(if (info.kind == FileKind.FILE) "file: $path" else "directory: $path")
     } catch (failure: FileSystemException) {
         Stderr.write((failure.message ?: "filesystem error") + "\n")
+    } catch (failure: IllegalArgumentException) {
+        Stderr.write("invalid path: $path\n")
     }
 }
 
