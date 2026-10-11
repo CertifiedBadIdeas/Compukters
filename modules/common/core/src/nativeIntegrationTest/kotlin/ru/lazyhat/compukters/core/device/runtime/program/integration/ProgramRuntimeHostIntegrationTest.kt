@@ -74,6 +74,16 @@ class ProgramRuntimeHostIntegrationTest {
     }
 
     @Test
+    fun `lexical Guest paths execute without filesystem access`() {
+        val artifact = Path.of(requiredProperty("compukters.lexicalPathRuntime.artifact")).readBytes()
+        assertTrue(VmArtifactVerifier.verify(artifact))
+        ProgramRuntimeHost().use { host ->
+            assertEquals(ProgramStartResult.Started, host.start(artifact))
+            advanceUntil(host) { it is ProgramRuntimeState.Halted }
+        }
+    }
+
+    @Test
     fun `portable Guest filesystem performs bounded atomic IO and typed failures`() {
         val artifact = Path.of(requiredProperty("compukters.filesystemRuntime.artifact")).readBytes()
         assertTrue(VmArtifactVerifier.verify(artifact))
@@ -495,6 +505,10 @@ class ProgramRuntimeHostIntegrationTest {
         submit(host, "stat /home")
         pressEnter(host)
         assertTrue(terminalText(requireNotNull(host.terminalFullState())).endsWith("> stat /home\ndirectory: /home\n>\n"))
+
+        submit(host, "stat /home/../escape")
+        pressEnter(host)
+        assertTrue(terminalText(requireNotNull(host.terminalFullState())).endsWith("invalid path: /home/../escape\n>\n"))
 
         submit(host, "stat missing")
         pressEnter(host)

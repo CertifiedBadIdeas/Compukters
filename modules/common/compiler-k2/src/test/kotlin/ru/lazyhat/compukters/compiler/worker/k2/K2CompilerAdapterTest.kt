@@ -223,6 +223,7 @@ class K2CompilerAdapterTest {
                         "compukter.display.TextDisplay",
                         "compukter.terminal.Terminal",
                         "compukter.filesystem.Path",
+                        "compukter.filesystem.FileSystem",
                         "compukter.filesystem.FileInfo",
                         "compukter.filesystem.FileSystemException",
                         "compukter.io.Closeable",
