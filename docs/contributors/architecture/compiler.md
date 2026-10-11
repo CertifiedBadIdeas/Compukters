@@ -100,7 +100,10 @@ pruned and relocated modules; those caches never grow the retained library entry
 user libraries cannot reuse library metadata without an explicit invalidation policy. Replacing or closing the
 prepared selection releases its frontend and linker metadata together.
 Hash-only encoding checks debug sizes and source coordinates without materializing debug sections. Full artifact
-encoding still includes those sections.
+encoding still includes those sections. The compiler adapter uses `LibraryModuleLinker.linkAndWrite` to assemble,
+validate and serialize the executable once. The write applies the stricter of the ordinary linker ceiling and the
+request ceiling for every resource, retaining the request's diagnostic budget. Ordinary `link` callers still receive
+a validated model and an exception for invalid linked artifacts; the serialized API returns writer diagnostics.
 
 The packaged tooling payload is validated and published beneath `<world>/compukters/compiler-worker`; temporary
 worker state is kept separately beneath `<world>/compukters/compiler-temp`. Successful server artifacts are stored

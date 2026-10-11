@@ -60,6 +60,7 @@ import ru.lazyhat.compukters.compiler.artifact.model.Utf16LiteralId
 import ru.lazyhat.compukters.compiler.artifact.model.ValueType
 import ru.lazyhat.compukters.compiler.artifact.model.hasStructuredHostResponse
 import ru.lazyhat.compukters.compiler.artifact.model.usesUnsignedSemantics
+import ru.lazyhat.compukters.compiler.artifact.write.ArtifactWriteLimits
 import ru.lazyhat.compukters.compiler.artifact.write.ArtifactWriteResult
 import ru.lazyhat.compukters.compiler.artifact.write.ArtifactWriter
 import ru.lazyhat.compukters.compiler.artifact.write.encodeTypeRef
@@ -71,11 +72,13 @@ object LibraryModuleLinker {
         application: Artifact,
         libraries: Map<String, Module>,
     ): Artifact =
-        linkInputs(
-            application,
-            libraries.mapValues { (_, module) ->
-                LibraryInput(module, application.capabilities.indices.associateWith { index -> index })
-            },
+        validateLinked(
+            linkInputs(
+                application,
+                libraries.mapValues { (_, module) ->
+                    LibraryInput(module, application.capabilities.indices.associateWith { index -> index })
+                },
+            ),
         )
 
     fun link(
@@ -84,7 +87,8 @@ object LibraryModuleLinker {
         preserveLibraryExports: Boolean = false,
         specializationNames: Set<String> = emptySet(),
         inferMinimumRuntimeAbi: Boolean = false,
-    ): Artifact = linkArtifacts(application, libraryArtifacts, preserveLibraryExports, specializationNames, inferMinimumRuntimeAbi)
+    ): Artifact =
+        validateLinked(linkArtifacts(application, libraryArtifacts, preserveLibraryExports, specializationNames, inferMinimumRuntimeAbi))
 
     fun link(
         application: Artifact,
@@ -93,7 +97,36 @@ object LibraryModuleLinker {
         specializationNames: Set<String> = emptySet(),
         inferMinimumRuntimeAbi: Boolean = false,
     ): Artifact =
-        linkArtifacts(application, libraries.artifacts, preserveLibraryExports, specializationNames, inferMinimumRuntimeAbi, libraries)
+        validateLinked(
+            linkArtifacts(application, libraries.artifacts, preserveLibraryExports, specializationNames, inferMinimumRuntimeAbi, libraries),
+        )
+
+    /** Encodes the linked executable once, preserving both ordinary linker and caller resource ceilings. */
+    fun linkAndWrite(
+        application: Artifact,
+        libraries: PreparedLibraryModules,
+        limits: ArtifactWriteLimits = ArtifactWriteLimits(),
+        preserveLibraryExports: Boolean = false,
+        specializationNames: Set<String> = emptySet(),
+        inferMinimumRuntimeAbi: Boolean = false,
+    ): ArtifactWriteResult =
+        ArtifactWriter.write(
+            linkArtifacts(application, libraries.artifacts, preserveLibraryExports, specializationNames, inferMinimumRuntimeAbi, libraries),
+            limits.withinLinkerLimits(),
+        )
+
+    private fun validateLinked(linked: Artifact): Artifact {
+        when (val write = ArtifactWriter.write(linked)) {
+            is ArtifactWriteResult.Success -> {}
+
+            is ArtifactWriteResult.Failure -> {
+                throw IllegalArgumentException(
+                    "linked artifact is invalid: ${write.errors.joinToString { "${it.location}: ${it.detail}" }}",
+                )
+            }
+        }
+        return linked
+    }
 
     private fun linkArtifacts(
         application: Artifact,
@@ -293,15 +326,6 @@ object LibraryModuleLinker {
                     capabilities = capabilities,
                 ),
             )
-        when (val write = ArtifactWriter.write(linked)) {
-            is ArtifactWriteResult.Success -> {}
-
-            is ArtifactWriteResult.Failure -> {
-                throw IllegalArgumentException(
-                    "linked artifact is invalid: ${write.errors.joinToString { "${it.location}: ${it.detail}" }}",
-                )
-            }
-        }
         return linked
     }
 }
@@ -966,3 +990,26 @@ private fun moduleName(module: Module): String =
     module.strings.getOrNull(module.name.value.toInt())?.toString() ?: error("module name is invalid")
 
 private fun ByteArray.hex(): String = joinToString(separator = "") { "%02x".format(it) }
+
+private fun ArtifactWriteLimits.withinLinkerLimits(): ArtifactWriteLimits {
+    val defaults = ArtifactWriteLimits()
+    return copy(
+        artifactBytes = minOf(artifactBytes, defaults.artifactBytes),
+        sections = minOf(sections, defaults.sections),
+        recordsPerSection = minOf(recordsPerSection, defaults.recordsPerSection),
+        metadataUtf8Bytes = minOf(metadataUtf8Bytes, defaults.metadataUtf8Bytes),
+        utf16CodeUnits = minOf(utf16CodeUnits, defaults.utf16CodeUnits),
+        codeBytes = minOf(codeBytes, defaults.codeBytes),
+        modules = minOf(modules, defaults.modules),
+        functions = minOf(functions, defaults.functions),
+        registersPerFunction = minOf(registersPerFunction, defaults.registersPerFunction),
+        physicalComponentsPerValue = minOf(physicalComponentsPerValue, defaults.physicalComponentsPerValue),
+        safepointsPerFunction = minOf(safepointsPerFunction, defaults.safepointsPerFunction),
+        rootsPerSafepoint = minOf(rootsPerSafepoint, defaults.rootsPerSafepoint),
+        blocks = minOf(blocks, defaults.blocks),
+        imports = minOf(imports, defaults.imports),
+        exceptions = minOf(exceptions, defaults.exceptions),
+        capabilities = minOf(capabilities, defaults.capabilities),
+        debugBytes = minOf(debugBytes, defaults.debugBytes),
+    )
+}
