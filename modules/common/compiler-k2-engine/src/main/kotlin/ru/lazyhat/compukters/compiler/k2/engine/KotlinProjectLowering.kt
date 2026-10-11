@@ -6208,6 +6208,19 @@ private class FunctionCompiler(
         }
     }
 
+    private fun compileReferenceArrayLoad(
+        array: RegisterId,
+        index: RegisterId,
+        elementType: IrType,
+        element: IrElement,
+    ): RegisterId {
+        val resolved = resolvedType(elementType)
+        val box = guestTypes.valueClassBox(resolved)
+        val storage = box?.let { ValueType.Ref(resolved.isNullable(), it.type) } ?: valueType(resolved, element)
+        val loaded = allocate(storage).also { emit(Instruction.ArrayLoad(it, array, index)) }
+        return if (box != null && !resolved.isNullable()) unboxValueClass(loaded, box) else loaded
+    }
+
     private fun compileReferenceArrayElement(
         expression: IrExpression,
         elementType: IrType?,
@@ -7943,10 +7956,7 @@ private class FunctionCompiler(
             return result(ValueType.I32) { Instruction.ArrayLength(it, arguments[0]) }
         }
         if (arguments.size == 2 && isSupportedReferenceArray(argumentExpressions[0].type) && name == "get") {
-            val box = guestTypes.valueClassBox(resolvedType(call.type))
-            return result(box?.let { ValueType.Ref(call.type.isNullable(), it.type) } ?: valueType(call.type, call)) {
-                Instruction.ArrayLoad(it, arguments[0], arguments[1])
-            }
+            return compileReferenceArrayLoad(arguments[0], arguments[1], call.type, call)
         }
         if (arguments.size == 3 && isSupportedReferenceArray(argumentExpressions[0].type) && name == "set") {
             emit(Instruction.ArrayStore(arguments[0], arguments[1], arguments[2]))
@@ -8626,8 +8636,10 @@ private class FunctionCompiler(
     private fun compileForLoop(block: IrBlock) {
         val iterator = block.statements.firstOrNull() as? IrVariable
         val iteratorCall = iterator?.initializer as? IrCall
-        if (GuestPrimitive.entries.any { iteratorCall?.targetFqName() == "${it.arrayName}.iterator" }) {
-            compilePrimitiveArrayForLoop(block)
+        if (iteratorCall?.targetFqName() == "kotlin.Array.iterator" ||
+            GuestPrimitive.entries.any { iteratorCall?.targetFqName() == "${it.arrayName}.iterator" }
+        ) {
+            compileArrayForLoop(block)
         } else if (iteratorCall?.targetFqName() in
             setOf("kotlin.collections.Iterable.iterator", "kotlin.collections.List.iterator")
         ) {
@@ -8639,9 +8651,9 @@ private class FunctionCompiler(
         }
     }
 
-    private fun compilePrimitiveArrayForLoop(block: IrBlock) {
+    private fun compileArrayForLoop(block: IrBlock) {
         val plan =
-            primitiveArrayForLoopPlan(block) ?: throw UnsupportedKotlinIr(block, "unsupported canonical primitive-array for-loop shape")
+            arrayForLoopPlan(block) ?: throw UnsupportedKotlinIr(block, "unsupported canonical array for-loop shape")
         val source = compileExpression(plan.array)
         val array = allocate(valueType(plan.array.type, plan.array))
         emit(Instruction.Move(array, source))
@@ -8658,9 +8670,14 @@ private class FunctionCompiler(
         emit(Instruction.Branch(initialHasNext, blockId(body), blockId(body)))
 
         currentBlock = body
-        val loopValue = allocate(valueType(plan.canonical.loopVariable.type, plan.canonical.loopVariable))
-        values[plan.canonical.loopVariable.symbol] = loopValue
-        emit(Instruction.ArrayLoad(loopValue, array, index))
+        val loopVariable = plan.canonical.loopVariable
+        val loopValue =
+            if (GuestPrimitive.array(resolvedType(plan.array.type)) != null) {
+                allocate(valueType(loopVariable.type, loopVariable)).also { emit(Instruction.ArrayLoad(it, array, index)) }
+            } else {
+                compileReferenceArrayLoad(array, index, loopVariable.type, loopVariable)
+            }
+        values[loopVariable.symbol] = loopValue
         val context = LoopContext(plan.canonical.loop, continueTarget = null, placeholderTarget = body, finallyDepth = finallyContexts.size)
         withLoopContext(context) {
             compileStatement(plan.canonical.body)
@@ -8813,34 +8830,40 @@ private class FunctionCompiler(
         val bounds = rangeCall.arguments.filterNotNull()
         if (bounds.size != 2 || bounds.any { it.type != intType }) return null
 
-        val canonical = canonicalIntForLoopBody(block, iterator, iteratorName = "Iterator") ?: return null
+        val canonical = canonicalForLoopBody(block, iterator, iteratorName = "Iterator") ?: return null
         return IntForLoopPlan(canonical.loop, canonical.loopVariable, bounds[0], bounds[1], inclusive, descending, step, canonical.body)
     }
 
     @OptIn(UnsafeDuringIrConstructionAPI::class)
-    private fun primitiveArrayForLoopPlan(block: IrBlock): PrimitiveArrayForLoopPlan? {
+    private fun arrayForLoopPlan(block: IrBlock): ArrayForLoopPlan? {
         if (block.statements.size != 2) return null
         val iterator = block.statements[0] as? IrVariable ?: return null
         if (iterator.origin.toString() != "FOR_LOOP_ITERATOR") return null
         val iteratorCall = iterator.initializer as? IrCall ?: return null
         val array = iteratorCall.arguments.filterNotNull().singleOrNull() ?: return null
-        val primitive = GuestPrimitive.array(resolvedType(array.type)) ?: return null
-        if (iteratorCall.targetFqName() != "${primitive.arrayName}.iterator") return null
+        val primitive = GuestPrimitive.array(resolvedType(array.type))
+        val iteratorName =
+            if (primitive != null) {
+                if (iteratorCall.targetFqName() != "${primitive.arrayName}.iterator") return null
+                if (primitive.unsigned) "Iterator" else "${primitive.sourceName}Iterator"
+            } else {
+                if (!isSupportedReferenceArray(array.type) || iteratorCall.targetFqName() != "kotlin.Array.iterator") return null
+                "Iterator"
+            }
         val loopBody = ((block.statements[1] as? IrWhileLoop)?.body as? IrBlock) ?: return null
         val loopVariable = loopBody.statements.firstOrNull() as? IrVariable ?: return null
-        if (GuestPrimitive.scalar(resolvedType(loopVariable.type)) != primitive) return null
-        val iteratorName = if (primitive.unsigned) "Iterator" else "${primitive.sourceName}Iterator"
-        val canonical = canonicalIntForLoopBody(block, iterator, loopVariable.type, iteratorName) ?: return null
-        return PrimitiveArrayForLoopPlan(canonical, array)
+        if (primitive != null && GuestPrimitive.scalar(resolvedType(loopVariable.type)) != primitive) return null
+        val canonical = canonicalForLoopBody(block, iterator, loopVariable.type, iteratorName) ?: return null
+        return ArrayForLoopPlan(canonical, array)
     }
 
     @OptIn(UnsafeDuringIrConstructionAPI::class)
-    private fun canonicalIntForLoopBody(
+    private fun canonicalForLoopBody(
         block: IrBlock,
         iterator: IrVariable,
         elementType: IrType = intType,
         iteratorName: String = "IntIterator",
-    ): CanonicalIntForLoopBody? {
+    ): CanonicalForLoopBody? {
         val loop = block.statements[1] as? IrWhileLoop ?: return null
         if (loop.origin?.toString() != "FOR_LOOP_INNER_WHILE") return null
         val hasNext = loop.condition as? IrCall ?: return null
@@ -8857,7 +8880,7 @@ private class FunctionCompiler(
         val nextReceiver = nextCall.arguments.filterNotNull().singleOrNull() as? IrGetValue ?: return null
         if (nextReceiver.symbol !== iterator.symbol) return null
         val body = loopBody.statements[1] as? IrExpression ?: return null
-        return CanonicalIntForLoopBody(loop, loopVariable, body)
+        return CanonicalForLoopBody(loop, loopVariable, body)
     }
 
     private fun compileLoopJump(
@@ -9381,14 +9404,14 @@ private class FunctionCompiler(
             }
     }
 
-    private data class CanonicalIntForLoopBody(
+    private data class CanonicalForLoopBody(
         val loop: IrWhileLoop,
         val loopVariable: IrVariable,
         val body: IrExpression,
     )
 
-    private data class PrimitiveArrayForLoopPlan(
-        val canonical: CanonicalIntForLoopBody,
+    private data class ArrayForLoopPlan(
+        val canonical: CanonicalForLoopBody,
         val array: IrExpression,
     )
 }

@@ -79,6 +79,15 @@ producer/consumer update; platform, compiler framing, artifacts and native ABI r
 | Compiler worker | Protocol 5; explicit source-free library preparation | `compiler-client` and `compiler-k2` |
 | IDE analysis | Protocol 16 | `ide-analysis-client` and `ide-analysis-k2` |
 
+## Reference-array loop surface
+
+`kotlin:builtins` 1.11.0 adds the structural external `Array<T>.iterator(): Iterator<T>` declaration used by
+K2 to resolve direct array loops. Compiler lowering consumes the canonical loop shape and emits existing
+array-length, indexed-load and scalar advancement instructions, with the same element representation as
+indexed reads. It does not provide executable stored array iterators. This is an additive source surface;
+dependent libraries rebuild against the new module content identity. Platform ABI 3, bundle format 9,
+standalone module format 5, CPKT 3.0 and native C ABI 23 are unchanged.
+
 ## Reference-array initializer surface
 
 `kotlin:builtins` 1.10.0 adds the public `Array<T>(Int, (Int) -> T)` constructor for the currently admitted

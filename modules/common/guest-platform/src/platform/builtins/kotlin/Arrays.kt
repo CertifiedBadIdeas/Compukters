@@ -17,6 +17,9 @@ public class Array<T> {
     public external operator fun get(index: Int): T
 
     public external operator fun set(index: Int, value: T): Unit
+
+    /** Structural declaration for direct array loops; stored iterators are not executable. */
+    public external operator fun iterator(): Iterator<T>
 }
 
 public class BooleanArray {
