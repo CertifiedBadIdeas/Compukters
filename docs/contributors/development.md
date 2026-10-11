@@ -49,6 +49,52 @@ After making edits, finish any remaining setup manually rather than using resume
 `dev` (or submodule `main`), retain verification logs in the main checkout and remove only that completed task's
 worktree. New tasks start from the updated base.
 
+### Diagnose readiness
+
+```sh
+./worktree-task doctor
+./worktree-task doctor --path .worktrees/feat-display-api
+```
+
+Diagnostics print `OK`, `INFO`, `WARN` or `ERROR` with the checkout/branch, committed submodule pins,
+Java launcher (JDK 25 for Gradle), required commands, cache home/template and an actual reflink probe
+between the template filesystem and checkout. An absent or cold cache is informational: the first build
+may need network access. A populated cache does not prove that every offline task can run. Missing initialization of selected submodules (VM by default), pin mismatches, an invalid Java launcher, shared/symlinked cache homes or unsupported
+reflinks produce a nonzero exit code. Unselected submodules and dirty files are reported without
+repairing them. Submodule-only Rust checkouts skip Gradle/JDK/cache checks. The command does not fetch,
+install dependencies or start a build; its temporary reflink probe files are removed.
+
+### Complete a task
+
+Commit, merge and verify the integrated change first, then run from outside the checkout being removed:
+
+```sh
+./worktree-task finish feat/display-api
+./worktree-task finish fix/vm-execution --repo host/compukter-vm --evidence /path/to/cargo-test.log
+```
+
+`finish` uses the task record written during setup, checks that the recorded branch still owns that
+worktree, and requires its HEAD to be an ancestor of the recorded local base (`dev` or submodule `main`
+by default). It performs no merge, commit, push or branch deletion. Dirty or untracked files, locked
+worktrees, active managed Gradle builds, mismatched/dirty submodules, unpublished submodule branch/tag
+commits and additional worktrees belonging to nested module clones prevent removal.
+
+Provide real verification output through repeatable `--evidence <file-or-directory>` options, or keep it
+in the task's `build/agent-logs/`, which is included automatically. Evidence must exist and directories
+must contain files; this records agent-supplied evidence, without interpreting it as proof that tests
+passed. Before removal, the command archives it with task/integration commits and ignored files other
+than disposable build outputs and caches under the main workspace's
+`build/agent-logs/worktree-completion/<task>-<unique-id>/`. Dev worlds, temporary plans and IDE settings
+are preserved there. Generated `build`, `.gradle`, `.kotlin`, root `target`, `.gradle-sandbox` and
+`.toolchain` data are disposable. If archiving fails, the checkout remains intact.
+
+Git requires `--force` to remove worktrees containing submodules even after deinitialization. The helper
+uses it only for those checkouts after all cleanliness, pin, local-ref and preservation checks; it never
+force-removes a dirty checkout. Other worktrees are untouched. `--path` optionally asserts the recorded
+checkout location. For a task created with an older helper, explicitly register its clean checkout by
+repeating its setup command with `--resume` before using `finish`. A new task always starts from the
+updated local base.
+
 ## Minecraft development
 
 Run Gradle with JDK 25 selected through `JAVA_HOME` or a Gradle-discoverable
