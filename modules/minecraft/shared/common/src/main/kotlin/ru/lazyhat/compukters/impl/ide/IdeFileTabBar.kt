@@ -126,14 +126,14 @@ object IdeFileTabBar {
                 }
             val color = if (selected) IdeColors.TEXT else IdeColors.MUTED
             val labelBounds = IdeRect(cell.bounds.left + 4, cell.bounds.top, cell.close.left, cell.bounds.bottom)
-            label(cell.label + suffix, labelBounds.left, cell.bounds.top + 7, color, labelBounds)
-            label("×", cell.close.left + 5, cell.close.top + 5, IdeColors.MUTED, cell.close)
+            label(cell.label + suffix, labelBounds.left, font.centeredCellTop(cell.bounds), color, labelBounds)
+            label("×", cell.close.left + 5, font.centeredCellTop(cell.close), IdeColors.MUTED, cell.close)
         }
         layout.previous?.let {
-            label("‹", it.left + 6, it.top + 7, if (layout.hasPrevious) IdeColors.TEXT else IdeColors.MUTED, it)
+            label("‹", it.left + 6, font.centeredCellTop(it), if (layout.hasPrevious) IdeColors.TEXT else IdeColors.MUTED, it)
         }
         layout.next?.let {
-            label("›", it.left + 6, it.top + 7, if (layout.hasNext) IdeColors.TEXT else IdeColors.MUTED, it)
+            label("›", it.left + 6, font.centeredCellTop(it), if (layout.hasNext) IdeColors.TEXT else IdeColors.MUTED, it)
         }
         val controls =
             controls(layout, active, enabled).map { control ->
@@ -176,6 +176,7 @@ object IdeFileTabBar {
                                 cell.file.path == active,
                             filePath = cell.file.path,
                         ),
+                        IdeControlStyle.Standard,
                     ),
                 )
                 add(
@@ -189,6 +190,7 @@ object IdeFileTabBar {
                             41,
                             filePath = cell.file.path,
                         ),
+                        IdeControlStyle.Standard,
                     ),
                 )
             }
@@ -203,6 +205,7 @@ object IdeFileTabBar {
                             IdeFocusGroup.Page,
                             40,
                         ),
+                        IdeControlStyle.Standard,
                     ),
                 )
             }
@@ -210,6 +213,7 @@ object IdeFileTabBar {
                 add(
                     IdeControls.target(
                         IdeHitTarget(IdeHitAction.NextFileTabs, it, enabled && layout.hasNext, "Next files", IdeFocusGroup.Page, 40),
+                        IdeControlStyle.Standard,
                     ),
                 )
             }

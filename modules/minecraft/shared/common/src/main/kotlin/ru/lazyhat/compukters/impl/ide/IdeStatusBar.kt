@@ -102,7 +102,7 @@ internal object IdeStatusBar {
         val bounds = geometry.status
         val details = IdeRect(bounds.right - 58, bounds.top + 1, bounds.right - 4, bounds.bottom - 1)
         output.target(IdeHitAction.StatusDetails, details, true, "Full status details", style = IdeControlStyle.Neutral)
-        output.ui(IdeTextKind.Status, "Details", details.left + 6, details.top + 4, IdeColors.MUTED, details)
+        output.ui(IdeTextKind.Status, "Details", details.left + 6, geometry.font.centeredCellTop(details), IdeColors.MUTED, details)
         val editor = workspace.editor as? IdeEditorView.Text
         val metadata = messages(workspace, target, tooling, busy).take(if (editor == null) 1 else 2).joinToString(" · ")
         val available = (details.left - bounds.left - 14).coerceAtLeast(0)
@@ -112,7 +112,7 @@ internal object IdeStatusBar {
             IdeTextKind.Status,
             output.fitUi(metadata, metadataWidth),
             metadataBounds.left,
-            bounds.top + 5,
+            geometry.font.centeredCellTop(bounds),
             IdeColors.MUTED,
             metadataBounds,
         )
@@ -122,7 +122,7 @@ internal object IdeStatusBar {
             IdeTextKind.Status,
             activity,
             activityBounds.right - output.uiWidth(activity),
-            bounds.top + 5,
+            geometry.font.centeredCellTop(bounds),
             IdeColors.MUTED,
             activityBounds,
         )

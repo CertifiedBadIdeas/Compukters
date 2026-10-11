@@ -191,17 +191,16 @@ internal object IdeStatusDetailsRenderer {
             style = IdeControlStyle.Neutral,
         )
         target(IdeHitAction.Dismiss, view.close, true, "Close (Escape)", z = Z_DIALOG_TARGET, style = IdeControlStyle.Neutral)
-        ui(IdeTextKind.Dialog, "Copy all", view.copy.left + 8, view.copy.top + 5, z = Z_DIALOG_TARGET + 1)
-        ui(IdeTextKind.Dialog, "Close", view.close.left + 8, view.close.top + 5, z = Z_DIALOG_TARGET + 1)
+        centeredUi(IdeTextKind.Dialog, "Copy all", view.copy.left + 8, view.copy, z = Z_DIALOG_TARGET + 1)
+        centeredUi(IdeTextKind.Dialog, "Close", view.close.left + 8, view.close, z = Z_DIALOG_TARGET + 1)
         val progress = "${view.firstRow + 1}–${view.firstRow + view.rows.size} / ${view.totalRows}"
         val progressBounds = IdeRect(view.copy.right + 8, view.close.top, view.close.left - 8, view.close.bottom)
-        ui(
+        centeredUi(
             IdeTextKind.Dialog,
             fitUi(progress, progressBounds.width),
             progressBounds.left,
-            progressBounds.top + 5,
-            IdeColors.MUTED,
             progressBounds,
+            IdeColors.MUTED,
             z = Z_DIALOG_TARGET + 1,
         )
     }

@@ -81,7 +81,7 @@ data class IdeTextFieldLayout(
                     view.text.substring(start, end)
                 }
             val x = inside.left + 4
-            val top = inside.top + (inside.height - font.cellHeight) / 2
+            val top = font.centeredCellTop(inside)
             val caretX = x + (caretColumn - first) * font.cellWidth
             val caret = if (caretX >= x && caretX < inside.right - 3) IdeRect(caretX, top, caretX + 1, top + font.cellHeight) else null
             val selection =

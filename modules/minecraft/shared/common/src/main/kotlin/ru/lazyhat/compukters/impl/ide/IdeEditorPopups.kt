@@ -112,7 +112,7 @@ internal class IdeEditorPopups(
                 IdeTextKind.Hover,
                 value,
                 popup.bounds.left + 4,
-                popup.bounds.top + 3 + font.glyphDrawOffsetY + index * font.cellHeight,
+                popup.bounds.top + POPUP_VERTICAL_PADDING / 2 + font.glyphDrawOffsetY + index * font.cellHeight,
                 color,
                 popup.bounds,
                 z = Z_POPUP_TEXT,
@@ -139,9 +139,9 @@ internal class IdeEditorPopups(
             val rowBounds =
                 IdeRect(
                     popup.bounds.left,
-                    popup.bounds.top + 2 + row * UI_LINE_HEIGHT,
+                    popup.bounds.top + POPUP_VERTICAL_PADDING / 2 + row * UI_LINE_HEIGHT,
                     popup.bounds.right,
-                    minOf(popup.bounds.bottom, popup.bounds.top + 2 + (row + 1) * UI_LINE_HEIGHT),
+                    minOf(popup.bounds.bottom, popup.bounds.top + POPUP_VERTICAL_PADDING / 2 + (row + 1) * UI_LINE_HEIGHT),
                 )
             if (rowBounds.height <= 0) continue
             val selected = index == chooser.selectedIndex
@@ -152,7 +152,7 @@ internal class IdeEditorPopups(
                 IdeTextKind.DeclarationChoice,
                 labels[index],
                 popup.bounds.left + 4,
-                popup.bounds.top + 3 + row * UI_LINE_HEIGHT,
+                popup.bounds.top + POPUP_VERTICAL_PADDING / 2 + row * UI_LINE_HEIGHT,
                 if (selected) IdeColors.ACCENT else IdeColors.TEXT,
                 popup.bounds,
                 Z_POPUP_TEXT,
@@ -216,7 +216,7 @@ internal class IdeEditorPopups(
             geometry.completionPopup(
                 caret,
                 maxOf(COMPLETION_MINIMUM_WIDTH, contentWidth),
-                visibleItems.size * font.cellHeight + 4,
+                visibleItems.size * font.cellHeight + POPUP_VERTICAL_PADDING,
             )
         output.panel(IdePanelKind.Dialog, popup.bounds, IdeColors.PANEL_ALT, Z_POPUP)
         output.scissor(IdeScissorDraw(IdeScissorKind.Completion, popup.bounds, Z_POPUP))
@@ -231,7 +231,7 @@ internal class IdeEditorPopups(
         val resultClip = IdeRect(innerRight - resultWidth, popup.bounds.top, innerRight, popup.bounds.bottom)
         rows.forEachIndexed { index, row ->
             val selected = completion.firstVisibleIndex + index == completion.selectedIndex
-            val y = popup.bounds.top + 3 + font.glyphDrawOffsetY + index * font.cellHeight
+            val y = popup.bounds.top + POPUP_VERTICAL_PADDING / 2 + font.glyphDrawOffsetY + index * font.cellHeight
             completionBadge(visibleItems[index].proposal.kind)?.let { (letter, color) ->
                 output.code(IdeTextKind.CompletionBadge, letter, innerLeft, y, color, popup.bounds, z = Z_POPUP_TEXT)
             }
@@ -457,7 +457,7 @@ internal class IdeEditorPopups(
         private const val COMPLETION_HORIZONTAL_PADDING = 8
         private const val SEMANTIC_POPUP_MINIMUM_WIDTH = 180
         private const val POPUP_HORIZONTAL_PADDING = 8
-        private const val POPUP_VERTICAL_PADDING = 4
+        private const val POPUP_VERTICAL_PADDING = 8
         private const val DECLARATION_VISIBLE_ROWS = 8
         private const val PARAMETER_INFO_VISIBLE_ROWS = 6
     }
