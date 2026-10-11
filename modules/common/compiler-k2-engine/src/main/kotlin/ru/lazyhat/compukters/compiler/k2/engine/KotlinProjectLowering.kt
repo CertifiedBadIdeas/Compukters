@@ -1274,10 +1274,7 @@ internal object KotlinProjectLowering {
                         session.trustedPlatformModule(function.file.fileEntry.name) != null
                 }.filterNot { function ->
                     !includeTrustedPlatformBodies &&
-                        session.platformFunctions.any { link ->
-                            link.symbol == function.fqNameWhenAvailable?.asString() &&
-                                link.signature == function.canonicalPlatformSignature()
-                        }
+                        isLinkedPlatformFunction(function, session)
                 }
         val userFunctions =
             playerFunctions.sortedWith(
@@ -1393,7 +1390,7 @@ internal object KotlinProjectLowering {
                 classes.distinctBy { it.symbol }.mapNotNull { declaration ->
                     val name = declaration.fqNameWhenAvailable?.asString()
                     if (declaration.runtimeExceptionType() == null || name == "kotlin.Throwable") return@mapNotNull null
-                    if (session.platformFunctions.any { it.symbol == "$name.<init>" }) return@mapNotNull null
+                    if (session.platformFunctionsFor("$name.<init>").isNotEmpty()) return@mapNotNull null
                     GuestClassInstance(declaration, emptyList())
                 }
         val initializerClasses =
@@ -9639,6 +9636,16 @@ private val specializedCollectionInterfaces =
         "kotlin.collections.MutableMap.MutableEntry",
     )
 
+private fun isLinkedPlatformFunction(
+    function: IrSimpleFunction,
+    session: CompilationSession,
+): Boolean {
+    val candidates = session.platformFunctionsFor(function.fqNameWhenAvailable?.asString())
+    if (candidates.isEmpty()) return false
+    val signature = function.canonicalPlatformSignature()
+    return candidates.any { it.signature == signature }
+}
+
 private fun loweredParameters(
     function: IrFunction,
     session: CompilationSession,
@@ -9666,9 +9673,7 @@ private fun loweredParameters(
 ) {
     function.parameters
 } else if (
-    session.platformFunctions.any { link ->
-        link.symbol == function.fqNameWhenAvailable?.asString() && link.signature == function.canonicalPlatformSignature()
-    }
+    isLinkedPlatformFunction(function, session)
 ) {
     if ((function.parent as? IrClass)?.let { it.kind == ClassKind.OBJECT && !it.isManagedPlatformObject() } == true) {
         function.parameters.filter { it.kind != IrParameterKind.DispatchReceiver }
@@ -9914,13 +9919,7 @@ private fun resolveTrustedIntrinsic(
     val signature = function.canonicalPlatformSignature()
     val handler =
         session.canonicalIntrinsicRegistry
-            ?.handlers
-            ?.entries
-            ?.singleOrNull { (key, _) ->
-                (platformModule?.let { key.module == it } ?: (key.module in session.selectedPlatformModules)) &&
-                    key.callableId.asSingleFqName().asString() == fqName &&
-                    key.signature.value == signature
-            }?.value as? CapabilityOperationHandler ?: return null
+            ?.resolve(fqName, signature, platformModule, session.selectedPlatformModules) as? CapabilityOperationHandler ?: return null
     val capability = handler.requiredCapability
     return LoweredCapabilityOperation(
         LoweredCapabilityIdentity(
