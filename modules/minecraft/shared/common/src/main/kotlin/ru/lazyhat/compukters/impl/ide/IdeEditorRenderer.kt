@@ -170,7 +170,9 @@ internal class IdeEditorRenderer(
             if (caretVisible && caretBelongsToLine) {
                 val local = (editor.caretUtf16 - lineStart).coerceAtMost(line.length)
                 val x = source.xAt(line, local)
-                output.fill(IdeFillDraw(IdeFillKind.Caret, IdeRect(x, rowTop, x + 1, rowTop + font.cellHeight), IdeColors.CARET, Z_CARET))
+                source.clipCode(IdeRect(x, rowTop, x + 1, rowTop + font.cellHeight))?.let { caret ->
+                    output.fill(IdeFillDraw(IdeFillKind.Caret, caret, IdeColors.CARET, Z_CARET))
+                }
             }
         }
         IdeEditorPopups(output, geometry, source).draw(editor)
@@ -189,10 +191,11 @@ internal class IdeEditorRenderer(
         if (localEnd <= localStart) return
         val left = source.xAt(line, localStart)
         val right = source.xAt(line, localEnd)
+        val selection = source.clipCode(IdeRect(left, rowTop, right, rowTop + font.cellHeight)) ?: return
         output.fill(
             IdeFillDraw(
                 IdeFillKind.Selection,
-                IdeRect(left, rowTop, right, rowTop + font.cellHeight),
+                selection,
                 IdeColors.SELECTION,
                 Z_SELECTION,
             ),
@@ -285,7 +288,7 @@ internal class IdeEditorRenderer(
                 x,
                 y,
                 if (linked) IdeColors.HYPERLINK else IdeSourceStyles.styleColor(resolved),
-                geometry.editor,
+                source.codeBounds,
                 resolved,
                 absoluteRange,
             )
@@ -316,8 +319,8 @@ internal class IdeEditorRenderer(
         textY: Int,
         color: Int,
     ) {
-        val left = maxOf(x, geometry.editor.left)
-        val right = minOf(x + columns * font.cellWidth, geometry.editor.right)
+        val left = maxOf(x, source.codeBounds.left)
+        val right = minOf(x + columns * font.cellWidth, source.codeBounds.right)
         if (right <= left) return
         val top = (textY - font.glyphDrawOffsetY + font.cellHeight - 1).coerceIn(geometry.editor.top, geometry.editor.bottom - 1)
         output.fill(

@@ -94,6 +94,29 @@ import kotlin.test.assertTrue
 
 class IdeRendererStateTest {
     @Test
+    fun `horizontal source scrolling keeps text selection and hidden caret out of the gutter`() {
+        val text = "val name = \"" + "a".repeat(100) + "\""
+        val editor =
+            semanticEditor(text, caretUtf16 = 0, firstVisibleColumn = 8, selection = EditorRange(0, 20)) { _, _ ->
+                IdeSemanticInteraction.None
+            }
+        val geometry = geometry()
+        val source = IdeSourceGeometry(editor, geometry)
+        val output = IdeDrawBuilder(geometry.font)
+        IdeEditorRenderer(output, geometry, editor).draw(true, IdeDiagnostics.Empty)
+        val model = output.build()
+        val runs = model.text.filter { it.kind == IdeTextKind.Source }
+        assertTrue(runs.isNotEmpty())
+        assertTrue(runs.all { assertNotNull(it.clip).left >= source.codeLeft })
+        assertTrue(model.fills.none { it.kind == IdeFillKind.Caret })
+        val selection = model.fills.single { it.kind == IdeFillKind.Selection }
+        assertEquals(source.codeLeft, selection.bounds.left)
+        assertTrue(geometry.editor.contains(selection.bounds))
+        val gutter = model.text.single { it.kind == IdeTextKind.LineNumber }
+        assertTrue(gutter.x < source.codeLeft)
+    }
+
+    @Test
     fun `styled source fragments share tab columns with caret selection and pointer offsets`() {
         val text = "val\tname = \"😀\""
         val editor =

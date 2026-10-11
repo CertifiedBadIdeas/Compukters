@@ -271,7 +271,8 @@ replicates compiler/editor state. Its renderer disables underlying controls; uns
 without losing the captured contents.
 
 `IdeSourceColumns` owns UTF-16/code-point/tab conversion; `IdeSourceGeometry` gives one admitted source view its
-shared gutter, row, caret, source anchor and pointer mapping. Styled fragments expand tabs from the line's actual
+shared gutter, row, caret, source anchor and pointer mapping. Its code bounds exclude line numbers; source text,
+selection, carets and underlines stay inside those bounds when horizontally scrolled. Styled fragments expand tabs from the line's actual
 column. `IdeEditorRenderer` owns source, selection, highlights and gutter indicators; `IdeFindRenderer` owns search
 controls; `IdeEditorPopups` owns hover, declaration chooser, completion and parameter information. These components
 emit directly into the existing frame collector and use the same source geometry for anchors.

@@ -90,6 +90,16 @@ internal class IdeSourceGeometry(
             .length
             .coerceAtLeast(2)
     val codeLeft = geometry.editor.left + (gutterDigits + 2) * geometry.font.cellWidth
+    val codeBounds = IdeRect(minOf(codeLeft, geometry.editor.right), geometry.editor.top, geometry.editor.right, geometry.editor.bottom)
+
+    fun clipCode(bounds: IdeRect): IdeRect? {
+        val left = maxOf(bounds.left, codeBounds.left)
+        val top = maxOf(bounds.top, codeBounds.top)
+        val right = minOf(bounds.right, codeBounds.right)
+        val bottom = minOf(bounds.bottom, codeBounds.bottom)
+        return if (right > left && bottom > top) IdeRect(left, top, right, bottom) else null
+    }
+
     val visibleRows = minOf(geometry.codeRows, editor.visibleLines.size)
 
     fun xAt(
