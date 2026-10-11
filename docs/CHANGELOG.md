@@ -18,8 +18,10 @@ headings so this page has one stable URL that can be shared outside the reposito
   Hovering a marked token shows its problems together, preserving source editing and horizontal scrolling.
   Argument hints open when typing a call or pressing Ctrl+P, wrap long signatures and emphasize the current parameter.
 
-- Guest Kotlin supports `do-while` loops, including local `break` and `continue`, body-local variables in
-  the condition, and managed exception and `finally` cleanup across VM instruction slices.
+- Guest Kotlin supports `do-while` loops with body-local variables in the condition, and labeled
+  `break@label` / `continue@label` across nested `while`, `do-while`, `Int` progression, primitive-array,
+  and supported iterable loops. Loop jumps preserve managed exception and `finally` cleanup across VM
+  instruction slices.
 
 - Contributors can create, diagnose and safely complete task worktrees with `worktree-task`: local `dev`/`main` bases,
   readiness diagnostics, integration checks and cleanup with archived evidence, pinned VM and optional addon
