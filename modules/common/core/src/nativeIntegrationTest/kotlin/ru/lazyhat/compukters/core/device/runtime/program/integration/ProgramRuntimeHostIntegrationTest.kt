@@ -448,6 +448,45 @@ class ProgramRuntimeHostIntegrationTest {
         }
     }
 
+    @Test
+    fun `builtin cmatrix animates bounded rain and Ctrl C restores the shell`() {
+        withShell { host ->
+            assertTrue(host.submitCanonicalLine("cmatrix 1".toCharArray()))
+            val screens = mutableSetOf<List<ru.lazyhat.compukters.lang.runtime.vm.TerminalCell>>()
+            var green = false
+            var bright = false
+            repeat(200) {
+                host.serverTick()
+                assertEquals(ProgramRuntimeState.Running, host.state)
+                val screen = requireNotNull(host.terminalFullState())
+                if (!screen.cursorVisible) {
+                    screens.add(screen.cells)
+                    green = green || screen.cells.any { it.codePoint > 32 && it.foreground == 2 && it.background == 0 }
+                    bright = bright || screen.cells.any { it.codePoint > 32 && it.foreground == 15 && it.background == 0 }
+                }
+            }
+            assertTrue(screens.size > 3, "rain must change while running")
+            assertTrue(green, "green trail cells")
+            assertTrue(bright, "white stream heads")
+            press(host, TerminalKey.C, setOf(TerminalModifier.CONTROL))
+            val prompt = requireNotNull(host.terminalFullState())
+            assertTrue(prompt.cursorVisible)
+            assertTrue(terminalText(prompt).endsWith(">\n"))
+            assertTrue(prompt.cells.any { it.codePoint == '>'.code && it.foreground == 15 && it.background == 0 })
+            assertTrue(shellCommand(host, "echo alive").contains("alive\n>"))
+        }
+    }
+
+    @Test
+    fun `builtin cmatrix rejects invalid delays without entering fullscreen`() {
+        withShell { host ->
+            for (args in listOf("--help", "0", "21", "-1", "9999999999", "1 2", "x")) {
+                assertTrue(shellCommand(host, "cmatrix $args").contains("usage: cmatrix"), args)
+                assertTrue(requireNotNull(host.terminalFullState()).cursorVisible, args)
+            }
+        }
+    }
+
     private fun shellCommand(
         host: ProgramRuntimeHost,
         command: String,
@@ -862,6 +901,7 @@ class ProgramRuntimeHostIntegrationTest {
         val programs =
             listOf(
                 "/rom/boot" to boot,
+                "/rom/cmatrix" to Path.of(requiredProperty("compukters.cmatrixRuntime.artifact")).readBytes(),
                 "/rom/edit" to edit,
                 "/rom/hello" to child,
                 "/rom/kotlinc" to kotlinc,

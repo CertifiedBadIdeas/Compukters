@@ -362,6 +362,7 @@ val functionValuesConformanceArtifact = layout.buildDirectory.file("generated/co
 val bootArtifact = layout.buildDirectory.file("generated/system/boot.cpkt")
 val shellArtifact = layout.buildDirectory.file("generated/system/shell.cpkt")
 val kotlincArtifact = layout.buildDirectory.file("generated/system/kotlinc.cpkt")
+val cmatrixArtifact = layout.buildDirectory.file("generated/system/cmatrix.cpkt")
 val editArtifact = layout.buildDirectory.file("generated/system/edit.cpkt")
 val vmbenchArtifact = layout.buildDirectory.file("generated/system/vmbench.cpkt")
 val vmbenchAgentArtifact = layout.buildDirectory.file("generated/system/vmbench-agent.cpkt")
@@ -1391,6 +1392,21 @@ val generateEditArtifact = tasks.register<Test>("generateEditArtifact") {
     systemProperty("compukters.edit.artifact", editArtifact.get().asFile.absolutePath)
 }
 
+val generateCmatrixArtifact = tasks.register<Test>("generateCmatrixArtifact") {
+    description = "Compiles the checked-in Guest Kotlin cmatrix program into a deterministic Compukter Artifact."
+    group = "build"
+    dependsOn(tasks.jar)
+    useJUnitPlatform()
+    testClassesDirs = sourceSets.test.get().output.classesDirs
+    classpath = sourceSets.test.get().runtimeClasspath
+    filter.includeTestsMatching("*checked in cmatrix program compiles deterministically*")
+    inputs.file(rootProject.file("system/programs/cmatrix.kt"))
+    inputs.file(workerJar)
+    outputs.file(cmatrixArtifact)
+    systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
+    systemProperty("compukters.cmatrix.artifact", cmatrixArtifact.get().asFile.absolutePath)
+}
+
 val generateVmbenchArtifact = tasks.register<Test>("generateVmbenchArtifact") {
     description = "Compiles the checked-in deterministic VM benchmark into a Compukter Artifact."
     group = "build"
@@ -1436,7 +1452,7 @@ val forkedWorkerTest = tasks.register<Test>("forkedWorkerTest") {
     inputs.dir(sharedToolingPayloadDirectory)
     outputs.file(workerMeasurementReport)
     systemProperty("compukters.worker.payload", sharedToolingPayloadDirectory.get().asFile.absolutePath)
-    systemProperty("compukters.worker.java", javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(21) }.get().executablePath)
+    systemProperty("compukters.worker.java", javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(21) }.get().executablePath.asFile.absolutePath)
     systemProperty("compukters.worker.test-classpath", sourceSets.test.get().runtimeClasspath.asPath)
     systemProperty("compukters.worker.measurement-report", workerMeasurementReport.get().asFile.absolutePath)
 }

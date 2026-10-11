@@ -163,6 +163,16 @@ and formatter failures warn without changing or saving the source. Ctrl+S, autos
 
 ## Client editor and terminal presentation
 
+The IDE's visual baseline is IntelliJ IDEA Islands Dark: follow its restrained colors, hierarchy, spacing and
+interaction states as closely as the Minecraft renderer permits. Use shared theme roles and window/control
+primitives rather than per-component palettes or font offsets. Floating dialogs, popups and the embedded terminal
+share thin borders, subtle rounded corners and shadows; the focused terminal uses the standard blue focus accent.
+The embedded and standalone terminal share `TerminalSurfaceStyle.BACKGROUND_COLOR`; the default grid
+background is transparent on that surface. Terminal program colors and the fixed Guest grid remain
+terminal-owned content. The reference is JetBrains'
+[Islands theme](https://blog.jetbrains.com/platform/2025/12/meet-the-islands-theme-the-new-default-look-for-jetbrains-ides/)
+and [Islands integration guidance](https://plugins.jetbrains.com/docs/intellij/supporting-islands-theme.html).
+
 The client renders the fixed 51x19 grid in a centered compact panel while the world remains visible through a
 translucent dim layer. A separate footer presents rolling `CPU` utilization, current Guest heap and virtual-disk
 usage, and concise lifecycle activity. Here `CPU` is the virtual computer's consumed/granted semantic Guest-unit

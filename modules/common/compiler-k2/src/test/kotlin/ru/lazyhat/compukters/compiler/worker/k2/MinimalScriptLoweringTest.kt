@@ -29,6 +29,7 @@ import ru.lazyhat.compukters.compiler.artifact.model.FunctionFlag
 import ru.lazyhat.compukters.compiler.artifact.model.FunctionId
 import ru.lazyhat.compukters.compiler.artifact.model.FunctionRef
 import ru.lazyhat.compukters.compiler.artifact.model.Instruction
+import ru.lazyhat.compukters.compiler.artifact.model.MatrixOperation
 import ru.lazyhat.compukters.compiler.artifact.model.ModuleKind
 import ru.lazyhat.compukters.compiler.artifact.model.NominalType
 import ru.lazyhat.compukters.compiler.artifact.model.ScalarValueType
@@ -91,7 +92,17 @@ class MinimalScriptLoweringTest {
             val source = repositoryFile("modules/common/compiler-k2/src/test/resources/kotlin/geometry/main.kt").readText()
             val result = adapter.compile(request(source))
             val bytes = assertNotNull(result.artifact, result.diagnostics.toString()).toByteArray()
-            ArtifactReader.read(bytes)
+            val artifact = ArtifactReader.read(bytes)
+            assertEquals(AbiVersion(1u, 17u), artifact.minimumRuntimeAbi)
+            assertEquals(
+                MatrixOperation.entries.toSet(),
+                artifact.modules
+                    .flatMap { it.blocks }
+                    .flatMap { it.instructions }
+                    .filterIsInstance<Instruction.MatrixMath>()
+                    .map { it.operation }
+                    .toSet(),
+            )
             System.getProperty("compukter.vm.geometryArtifact")?.let { output ->
                 java.nio.file.Files
                     .write(
@@ -8936,6 +8947,22 @@ class MinimalScriptLoweringTest {
             assertOrdinaryEntry(artifact)
             assertTrue(first.diagnostics.none { it.severity.name == "ERROR" }, first.diagnostics.toString())
             System.getProperty("compukters.edit.artifact")?.let { output ->
+                Path.of(output).also { it.parent.createDirectories() }.writeBytes(artifact)
+            }
+        }
+
+    @Test
+    fun `checked in cmatrix program compiles deterministically`() =
+        withAdapter { adapter ->
+            val source = repositoryFile("system/programs/cmatrix.kt").readText()
+            val first = adapter.compile(request("system/programs/cmatrix.kt" to source))
+            val second = adapter.compile(request("system/programs/cmatrix.kt" to source))
+
+            val artifact = assertNotNull(first.artifact, first.diagnostics.joinToString()).toByteArray()
+            assertContentEquals(artifact, assertNotNull(second.artifact).toByteArray())
+            assertOrdinaryEntry(artifact)
+            assertTrue(first.diagnostics.none { it.severity.name == "ERROR" }, first.diagnostics.toString())
+            System.getProperty("compukters.cmatrix.artifact")?.let { output ->
                 Path.of(output).also { it.parent.createDirectories() }.writeBytes(artifact)
             }
         }

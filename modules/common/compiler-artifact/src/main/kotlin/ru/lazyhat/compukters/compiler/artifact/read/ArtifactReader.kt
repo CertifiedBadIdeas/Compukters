@@ -658,6 +658,13 @@ private fun decodeCode(bytes: ByteArray): List<Instruction> {
                     Instruction.Convert(r(), r(), unsignedSource = form and 1u != 0u, unsignedDestination = form and 2u != 0u)
                 }
 
+                0x1eu -> {
+                    require(form == 0u)
+                    val selector = frame.uleb()
+                    val operation = MatrixOperation.entries.single { it.selector == selector }
+                    Instruction.MatrixMath(operation, r(), r(), if (operation.rightComponents != null) r() else null)
+                }
+
                 0x1cu -> {
                     require(form == 3u || form == 4u)
                     val selector = frame.uleb()

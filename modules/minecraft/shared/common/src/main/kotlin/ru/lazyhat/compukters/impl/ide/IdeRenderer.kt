@@ -342,7 +342,11 @@ object IdeRenderer {
             control: IdeRect,
         ) {
             val availableHeight = (geometry.status.top - geometry.header.bottom - 4).coerceAtLeast(PROJECT_ROW_HEIGHT)
-            val projectRows = ((availableHeight - 4 * PROJECT_ACTION_HEIGHT) / PROJECT_ROW_HEIGHT).coerceAtLeast(0)
+            val projectRows =
+                ((availableHeight - 4 * PROJECT_ACTION_HEIGHT - 2 * IdeWindowSurface.PADDING) / PROJECT_ROW_HEIGHT)
+                    .coerceAtLeast(
+                        0,
+                    )
             val first = projectFirstRow.coerceIn(0, (workspace.projects.size - projectRows).coerceAtLeast(0))
             val visibleProjects = workspace.projects.drop(first).take(projectRows)
             val width = minOf(PROJECT_SWITCHER_WIDTH, geometry.panel.right - control.left - 4).coerceAtLeast(control.width)
@@ -351,17 +355,18 @@ object IdeRenderer {
                     control.left,
                     geometry.header.bottom,
                     control.left + width,
-                    geometry.header.bottom + visibleProjects.size * PROJECT_ROW_HEIGHT + 4 * PROJECT_ACTION_HEIGHT + 2,
+                    geometry.header.bottom + visibleProjects.size * PROJECT_ROW_HEIGHT + 4 * PROJECT_ACTION_HEIGHT +
+                        2 * IdeWindowSurface.PADDING,
                 )
             panel(IdePanelKind.ProjectSwitcher, bounds, IdeColors.PANEL_ALT, Z_PROJECT_SWITCHER)
             scissors += IdeScissorDraw(IdeScissorKind.ProjectSwitcher, bounds, Z_PROJECT_SWITCHER)
             visibleProjects.forEachIndexed { index, project ->
                 val row =
                     IdeRect(
-                        bounds.left + 1,
-                        bounds.top + 1 + index * PROJECT_ROW_HEIGHT,
-                        bounds.right - 1,
-                        bounds.top + 1 + (index + 1) * PROJECT_ROW_HEIGHT,
+                        bounds.left + IdeWindowSurface.PADDING,
+                        bounds.top + IdeWindowSurface.PADDING + index * PROJECT_ROW_HEIGHT,
+                        bounds.right - IdeWindowSurface.PADDING,
+                        bounds.top + IdeWindowSurface.PADDING + (index + 1) * PROJECT_ROW_HEIGHT,
                     )
                 projectRow(
                     project,
@@ -380,8 +385,14 @@ object IdeRenderer {
                 IdeHitAction.CloneProject to "Clone HTTPS repository",
                 IdeHitAction.GitAuthenticate to "HTTPS token · session only",
             ).forEachIndexed { index, (action, label) ->
-                val top = bounds.top + 1 + visibleProjects.size * PROJECT_ROW_HEIGHT + index * PROJECT_ACTION_HEIGHT
-                val row = IdeRect(bounds.left + 1, top, bounds.right - 1, top + PROJECT_ACTION_HEIGHT)
+                val top = bounds.top + IdeWindowSurface.PADDING + visibleProjects.size * PROJECT_ROW_HEIGHT + index * PROJECT_ACTION_HEIGHT
+                val row =
+                    IdeRect(
+                        bounds.left + IdeWindowSurface.PADDING,
+                        top,
+                        bounds.right - IdeWindowSurface.PADDING,
+                        top + PROJECT_ACTION_HEIGHT,
+                    )
                 target(action, row, true, focusGroup = IdeFocusGroup.ProjectSwitcher, z = Z_PROJECT_SWITCHER_TARGET)
                 ui(IdeTextKind.ProjectAction, label, row.left + 6, font.centeredCellTop(row), clip = bounds, z = Z_PROJECT_SWITCHER_TEXT)
             }

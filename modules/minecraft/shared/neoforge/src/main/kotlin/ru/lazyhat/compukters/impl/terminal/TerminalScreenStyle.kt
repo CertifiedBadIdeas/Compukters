@@ -17,7 +17,7 @@ import net.minecraft.network.chat.Component
 internal object TerminalScreenStyle {
     const val DIM_COLOR: Int = -535818224
     const val PANEL_BORDER_COLOR: Int = -10855846
-    const val PANEL_COLOR: Int = -15329770
+    const val PANEL_COLOR: Int = TerminalSurfaceStyle.BACKGROUND_COLOR
     const val TITLE_COLOR: Int = -1513240
     const val RESOURCE_COLOR: Int = -4671304
     val UNSUPPORTED_MESSAGE: Component = Component.literal("Compukters UI requires at least 640x360 pixels")

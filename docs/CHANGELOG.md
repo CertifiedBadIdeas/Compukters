@@ -13,6 +13,9 @@ headings so this page has one stable URL that can be shared outside the reposito
 
 ## 0.6.0 — In development
 
+- The built-in `cmatrix` program draws animated green terminal rain with bright stream heads,
+  configurable tick delay and Ctrl+C return to the shell.
+
 - The built-in shell supports cursor editing, Unicode-aware deletion, horizontal scrolling and a bounded
   32-command history that restores unfinished input. `Ctrl+U` clears the line; `Ctrl+C` cancels input or stops
   the foreground command tree and returns to the shell. IDE Run submits a complete command atomically
@@ -40,7 +43,9 @@ headings so this page has one stable URL that can be shared outside the reposito
   Hovering a marked token shows its problems together, preserving source editing and horizontal scrolling.
   Argument hints open when typing a call or pressing Ctrl+P, wrap long signatures and emphasize the current parameter.
   IDE controls share an outlined neutral style, with vertically centered labels in toolbars, dialogs, project navigation
-  and status/search bars. Hover and completion popups reserve space around every text row.
+  and status/search bars. Hover and completion popups reserve space around every text row. Floating IDE windows
+  share subtle borders and rounded corners; the embedded terminal shares the standalone terminal background
+  and IDE window chrome and focus accent.
   Attached addon sources have a separate bounded allowance, so bundled library sources do not exhaust it.
 
 - Guest Kotlin specializes `Array<T>` for all twelve non-null primitive families with dense, unboxed
@@ -100,7 +105,8 @@ headings so this page has one stable URL that can be shared outside the reposito
   rounding and half-open 2D rectangles. Displays accept vectors and rectangles while retaining scalar
   coordinate calls. Infix `xy`, `by` and `sized` provide compact geometry construction. Immutable `Matrix4f`
   and homogeneous `Vector4f` add reusable 3D transformation composition, radians-based axis rotations,
-  perspective/orthographic projection and explicit perspective division with clip-volume checks.
+  perspective/orthographic projection and explicit perspective division with clip-volume checks. Matrix products,
+  point/direction transforms and transposition execute as VM intrinsics with scalar Float semantics.
 
 - Guest executables omit unused class and interface methods and their dependencies. Virtual dispatch keeps its
   required implementations; independently compiled libraries retain their exported method surface.

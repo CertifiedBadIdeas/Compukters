@@ -130,6 +130,7 @@ import ru.lazyhat.compukters.compiler.artifact.model.Instruction
 import ru.lazyhat.compukters.compiler.artifact.model.Manifest
 import ru.lazyhat.compukters.compiler.artifact.model.MathBinaryOperation
 import ru.lazyhat.compukters.compiler.artifact.model.MathUnaryOperation
+import ru.lazyhat.compukters.compiler.artifact.model.MatrixOperation
 import ru.lazyhat.compukters.compiler.artifact.model.MetadataText
 import ru.lazyhat.compukters.compiler.artifact.model.Module
 import ru.lazyhat.compukters.compiler.artifact.model.ModuleId
@@ -152,6 +153,7 @@ import ru.lazyhat.compukters.compiler.artifact.model.usesUnsignedSemantics
 import ru.lazyhat.compukters.compiler.artifact.pool.ConstantPoolBuilder
 import ru.lazyhat.compukters.compiler.artifact.write.ArtifactWriter
 import ru.lazyhat.compukters.compiler.k2.engine.intrinsic.CapabilityOperationHandler
+import ru.lazyhat.compukters.compiler.k2.engine.intrinsic.CompilerPrimitiveHandler
 import ru.lazyhat.compukters.compiler.k2.engine.intrinsic.IntrinsicBlockingMode
 import ru.lazyhat.compukters.compiler.k2.engine.intrinsic.PlatformCapabilityId
 import ru.lazyhat.compukters.platform.bundle.PlatformDeclarationIdentity
@@ -3687,13 +3689,21 @@ internal object KotlinProjectLowering {
         return Artifact(
             minimumRuntimeAbi =
                 when {
+                    modules.any { module -> module.blocks.any { block -> block.instructions.any { it is Instruction.MatrixMath } } } -> {
+                        AbiVersion(1u, 17u)
+                    }
+
                     modules.any { module ->
                         module.blocks.any { block ->
                             block.instructions.any { it is Instruction.MathUnary || it is Instruction.MathBinary }
                         }
-                    } -> AbiVersion(1u, 16u)
+                    } -> {
+                        AbiVersion(1u, 16u)
+                    }
 
-                    modules.any { module -> module.types.any { it is NominalType.InlineValue } } -> AbiVersion(1u, 15u)
+                    modules.any { module -> module.types.any { it is NominalType.InlineValue } } -> {
+                        AbiVersion(1u, 15u)
+                    }
 
                     modules.any { module ->
                         module.types.any {
@@ -3701,9 +3711,13 @@ internal object KotlinProjectLowering {
                                 it.storage != ru.lazyhat.compukters.compiler.artifact.model.ArrayStorage.NATURAL
                         } ||
                             module.blocks.any { block -> block.instructions.any { it.usesUnsignedSemantics() } }
-                    } -> AbiVersion(1u, 14u)
+                    } -> {
+                        AbiVersion(1u, 14u)
+                    }
 
-                    modules.any { it.hasStructuredHostResponse() } -> AbiVersion(1u, 13u)
+                    modules.any { it.hasStructuredHostResponse() } -> {
+                        AbiVersion(1u, 13u)
+                    }
 
                     modules.any { module ->
                         module.blocks.any { block ->
@@ -3712,39 +3726,63 @@ internal object KotlinProjectLowering {
                                     (it is Instruction.StringValueOf && it.type == StringValueType.F64)
                             }
                         }
-                    } -> AbiVersion(1u, 12u)
+                    } -> {
+                        AbiVersion(1u, 12u)
+                    }
 
                     modules.any { module ->
                         module.blocks.any { block ->
                             block.instructions.any { it is Instruction.ValueHash }
                         }
-                    } -> AbiVersion(1u, 11u)
+                    } -> {
+                        AbiVersion(1u, 11u)
+                    }
 
                     modules.any { module ->
                         module.blocks.any { block ->
                             block.instructions.any { it is Instruction.StringValueOf && it.type == StringValueType.REFERENCE }
                         }
-                    } -> AbiVersion(1u, 10u)
+                    } -> {
+                        AbiVersion(1u, 10u)
+                    }
 
                     modules.any { module ->
                         module.types.any { it is NominalType.Class && it.runtimeExceptionKind != null }
-                    } -> AbiVersion(1u, 9u)
+                    } -> {
+                        AbiVersion(1u, 9u)
+                    }
 
-                    modules.any { module -> module.types.any { it is NominalType.Class && it.throwableRoot } } -> AbiVersion(1u, 8u)
+                    modules.any { module -> module.types.any { it is NominalType.Class && it.throwableRoot } } -> {
+                        AbiVersion(1u, 8u)
+                    }
 
-                    modules.any { module -> module.types.any { it is NominalType.Array && it.superType != null } } -> AbiVersion(1u, 7u)
+                    modules.any { module -> module.types.any { it is NominalType.Array && it.superType != null } } -> {
+                        AbiVersion(1u, 7u)
+                    }
 
-                    modules.any { it.hasHeterogeneousReferenceComparison() } -> AbiVersion(1u, 6u)
+                    modules.any { it.hasHeterogeneousReferenceComparison() } -> {
+                        AbiVersion(1u, 6u)
+                    }
 
-                    usesArrayCopy -> AbiVersion(1u, 5u)
+                    usesArrayCopy -> {
+                        AbiVersion(1u, 5u)
+                    }
 
-                    usesF32StringConversion -> AbiVersion(1u, 4u)
+                    usesF32StringConversion -> {
+                        AbiVersion(1u, 4u)
+                    }
 
-                    usesI64StringConversion -> AbiVersion(1u, 3u)
+                    usesI64StringConversion -> {
+                        AbiVersion(1u, 3u)
+                    }
 
-                    usesTasks -> AbiVersion(1u, 1u)
+                    usesTasks -> {
+                        AbiVersion(1u, 1u)
+                    }
 
-                    else -> AbiVersion(1u, 0u)
+                    else -> {
+                        AbiVersion(1u, 0u)
+                    }
                 },
             semanticFeatures =
                 setOfNotNull(
@@ -7909,6 +7947,35 @@ private class FunctionCompiler(
         val fqName = target.fqNameWhenAvailable?.asString().orEmpty()
         val name = target.name.asString()
         compilePrimitiveBuiltinCall(call, target, argumentExpressions, arguments)?.let { return it }
+        if (fqName.startsWith("kotlin.math.")) {
+            val operation =
+                when (name) {
+                    "matrixTransposePrimitive" -> MatrixOperation.TRANSPOSE
+                    "matrixMultiplyPrimitive" -> MatrixOperation.MULTIPLY_MATRIX
+                    "matrixVectorPrimitive" -> MatrixOperation.MULTIPLY_VECTOR
+                    "matrixPointPrimitive" -> MatrixOperation.TRANSFORM_POINT
+                    "matrixDirectionPrimitive" -> MatrixOperation.TRANSFORM_DIRECTION
+                    else -> null
+                }
+            if (operation != null) {
+                val module = session.trustedPlatformModule(target.file.fileEntry.name)
+                val handler =
+                    session.canonicalIntrinsicRegistry?.resolve(
+                        fqName,
+                        target.canonicalPlatformSignature(),
+                        module,
+                        session.selectedPlatformModules,
+                    )
+                if (module == null || handler !is CompilerPrimitiveHandler ||
+                    arguments.size != if (operation.rightComponents == null) 1 else 2
+                ) {
+                    throw UnsupportedKotlinIr(call, "matrix primitive requires exact trusted stdlib ownership and signature")
+                }
+                return allocate(valueType(call.type, call)).also {
+                    emit(Instruction.MatrixMath(operation, it, arguments[0], arguments.getOrNull(1)))
+                }
+            }
+        }
         compileMathBuiltinCall(call, target, argumentExpressions, arguments)?.let { return it }
 
         fun result(
