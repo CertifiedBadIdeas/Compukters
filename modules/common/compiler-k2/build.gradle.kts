@@ -135,8 +135,12 @@ val prepareCompilerWorkerPayload = tasks.register<Sync>("prepareCompilerWorkerPa
         into("META-INF/licenses")
     }
 
+    val payloadDirectory = workerPayloadDirectory
+    val platformFile = platformBundleFile
+    val compilerVersion = pinnedKotlinVersion
+    val workerMainClass = application.mainClass.get()
     doLast {
-        val root = workerPayloadDirectory.get().asFile.toPath()
+        val root = payloadDirectory.get().asFile.toPath()
         val libraryDirectory = root.resolve("lib")
         val files =
             Files.list(libraryDirectory).use { paths ->
@@ -151,7 +155,7 @@ val prepareCompilerWorkerPayload = tasks.register<Sync>("prepareCompilerWorkerPa
             payloadDigest.update(ByteBuffer.allocate(4).order(ByteOrder.LITTLE_ENDIAN).putInt(bytes.size).array())
             payloadDigest.update(bytes)
         }
-        val platformBytes = Files.readAllBytes(platformBundleFile.get().toPath())
+        val platformBytes = Files.readAllBytes(platformFile.get().toPath())
         check(platformBytes.size >= 40) { "Compukters platform bundle is truncated" }
         check(platformBytes.copyOfRange(0, 4).contentEquals("CPBF".encodeToByteArray())) {
             "invalid Compukters platform bundle magic"
@@ -164,7 +168,7 @@ val prepareCompilerWorkerPayload = tasks.register<Sync>("prepareCompilerWorkerPa
             sortedMapOf(
                 "artifactWriter" to "1",
                 "codegenAbi" to "1",
-                "compiler" to pinnedKotlinVersion,
+                "compiler" to compilerVersion,
                 "language" to "2.4",
                 "platformAbi" to platformAbi,
             )
@@ -175,7 +179,7 @@ val prepareCompilerWorkerPayload = tasks.register<Sync>("prepareCompilerWorkerPa
             digestField(name)
             digestField(value)
         }
-        digestField(application.mainClass.get())
+        digestField(workerMainClass)
         files.forEach { (path, size, hash) ->
             digestField(path)
             payloadDigest.update(ByteBuffer.allocate(8).order(ByteOrder.LITTLE_ENDIAN).putLong(size).array())
@@ -187,7 +191,7 @@ val prepareCompilerWorkerPayload = tasks.register<Sync>("prepareCompilerWorkerPa
                 appendLine("format=1")
                 appendLine("kind=compiler")
                 identityProperties.forEach { (name, value) -> appendLine("identity.$name=$value") }
-                appendLine("mainClass=${application.mainClass.get()}")
+                appendLine("mainClass=$workerMainClass")
                 appendLine("payloadSha256=$payloadHash")
                 files.forEach { (path, size, hash) ->
                     append("file=").append(path).append('\t').append(size).append('\t')
@@ -828,8 +832,10 @@ val generateReferenceArrayConformanceArtifact = tasks.register<Test>("generateRe
     testClassesDirs = sourceSets.test.get().output.classesDirs
     classpath = sourceSets.test.get().runtimeClasspath
     filter.includeTestsMatching("*reference arrays preserve Guest class elements and aliases*")
+    filter.includeTestsMatching("*reference array loops preserve specialized elements source identity and cleanup for vm execution*")
     inputs.file(workerJar)
     outputs.file(referenceArrayConformanceArtifact)
+    outputs.file(referenceArrayConformanceArtifact.map { it.asFile.resolveSibling("${it.asFile.name}.loops.cpkt") })
     doFirst {
         systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
         systemProperty("compukter.vm.referenceArrayArtifact", referenceArrayConformanceArtifact.get().asFile.absolutePath)
@@ -1422,10 +1428,8 @@ val generateShellArtifact = tasks.register<Test>("generateShellArtifact") {
     inputs.file(rootProject.file("system/programs/shell/Lexer.kt"))
     inputs.file(workerJar)
     outputs.file(shellArtifact)
-    doFirst {
-        systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
-        systemProperty("compukters.shell.artifact", shellArtifact.get().asFile.absolutePath)
-    }
+    systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
+    systemProperty("compukters.shell.artifact", shellArtifact.get().asFile.absolutePath)
 }
 
 val generateBootArtifact = tasks.register<Test>("generateBootArtifact") {
@@ -1439,10 +1443,8 @@ val generateBootArtifact = tasks.register<Test>("generateBootArtifact") {
     inputs.file(rootProject.file("system/programs/boot.kt"))
     inputs.file(workerJar)
     outputs.file(bootArtifact)
-    doFirst {
-        systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
-        systemProperty("compukters.boot.artifact", bootArtifact.get().asFile.absolutePath)
-    }
+    systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
+    systemProperty("compukters.boot.artifact", bootArtifact.get().asFile.absolutePath)
 }
 
 val generateKotlincArtifact = tasks.register<Test>("generateKotlincArtifact") {
@@ -1456,9 +1458,24 @@ val generateKotlincArtifact = tasks.register<Test>("generateKotlincArtifact") {
     inputs.file(rootProject.file("system/programs/kotlinc.kt"))
     inputs.file(workerJar)
     outputs.file(kotlincArtifact)
+    systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
+    systemProperty("compukters.kotlinc.artifact", kotlincArtifact.get().asFile.absolutePath)
+}
+
+val generateCompilationArtifact = tasks.register<Test>("generateCompilationArtifact") {
+    description = "Compiles typed Guest compiler and process Path APIs for native runtime integration."
+    group = "verification"
+    dependsOn(tasks.jar)
+    useJUnitPlatform()
+    testClassesDirs = sourceSets.test.get().output.classesDirs
+    classpath = sourceSets.test.get().runtimeClasspath
+    filter.includeTestsMatching("*typed compiler facade lowers Path results and rejects removed APIs*")
+    inputs.file(workerJar)
+    val artifact = layout.buildDirectory.file("generated/conformance/compilation.cpkt")
+    outputs.file(artifact)
     doFirst {
         systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
-        systemProperty("compukters.kotlinc.artifact", kotlincArtifact.get().asFile.absolutePath)
+        systemProperty("compukters.compilation.artifact", artifact.get().asFile.absolutePath)
     }
 }
 
@@ -1475,11 +1492,9 @@ val generateFilesystemArtifact = tasks.register<Test>("generateFilesystemArtifac
     val artifact = layout.buildDirectory.file("generated/conformance/filesystem.cpkt")
     val lexicalArtifact = layout.buildDirectory.file("generated/conformance/lexical-path.cpkt")
     outputs.files(artifact, lexicalArtifact)
-    doFirst {
-        systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
-        systemProperty("compukters.filesystem.artifact", artifact.get().asFile.absolutePath)
-        systemProperty("compukters.lexicalPath.artifact", lexicalArtifact.get().asFile.absolutePath)
-    }
+    systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
+    systemProperty("compukters.filesystem.artifact", artifact.get().asFile.absolutePath)
+    systemProperty("compukters.lexicalPath.artifact", lexicalArtifact.get().asFile.absolutePath)
 }
 
 val generateEditArtifact = tasks.register<Test>("generateEditArtifact") {
@@ -1493,10 +1508,8 @@ val generateEditArtifact = tasks.register<Test>("generateEditArtifact") {
     inputs.file(rootProject.file("system/programs/edit.kt"))
     inputs.file(workerJar)
     outputs.file(editArtifact)
-    doFirst {
-        systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
-        systemProperty("compukters.edit.artifact", editArtifact.get().asFile.absolutePath)
-    }
+    systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
+    systemProperty("compukters.edit.artifact", editArtifact.get().asFile.absolutePath)
 }
 
 val generateVmbenchArtifact = tasks.register<Test>("generateVmbenchArtifact") {
@@ -1511,10 +1524,8 @@ val generateVmbenchArtifact = tasks.register<Test>("generateVmbenchArtifact") {
     inputs.file(rootProject.file("system/programs/vmbench-workload.kt"))
     inputs.file(workerJar)
     outputs.file(vmbenchArtifact)
-    doFirst {
-        systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
-        systemProperty("compukters.vmbench.artifact", vmbenchArtifact.get().asFile.absolutePath)
-    }
+    systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
+    systemProperty("compukters.vmbench.artifact", vmbenchArtifact.get().asFile.absolutePath)
 }
 
 val generateVmbenchAgentArtifact = tasks.register<Test>("generateVmbenchAgentArtifact") {
@@ -1529,10 +1540,8 @@ val generateVmbenchAgentArtifact = tasks.register<Test>("generateVmbenchAgentArt
     inputs.file(rootProject.file("system/programs/vmbench-workload.kt"))
     inputs.file(workerJar)
     outputs.file(vmbenchAgentArtifact)
-    doFirst {
-        systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
-        systemProperty("compukters.vmbenchAgent.artifact", vmbenchAgentArtifact.get().asFile.absolutePath)
-    }
+    systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
+    systemProperty("compukters.vmbenchAgent.artifact", vmbenchAgentArtifact.get().asFile.absolutePath)
 }
 
 val workerMeasurementReport = layout.buildDirectory.file("reports/worker/measurements.json")

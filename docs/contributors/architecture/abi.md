@@ -11,6 +11,27 @@ permalink: /ARCHITECTURE/abi/
 
 This reference groups versioned representation boundaries by the version that introduced them. Those versions are minimum feature requirements, not a claim that older Runtime distributions implement today’s platform. The source owners below define the active contract. Before changing a wire format, inspect each producer, consumer and verifier. Runtime release pins in `build-scripts/src/main/kotlin/RuntimeBundleSupport.kt` describe published bundles separately from the local VM checkout.
 
+## Typed Guest compilation and process paths
+
+`compukter:core` 6.0.0 replaces String-based `Compiler.compile` and `Process.run` with Path-based
+facades. Compiler returns `CompilationResult.Success(output: Path)` or `Failed(reason, diagnostics)`;
+`Compiler.diagnostics()` is removed. Paths normalize before native calls. Original path lengths remain
+bounded at 4096 UTF-16 units, and combined canonical compilation paths must fit the same outbound limit.
+Process arguments and its canonical path also share this limit and report `LIMIT_EXCEEDED` before publication.
+
+The new compiler binding emits `compukter:compiler` ABI 2, selector 0: asynchronous
+`(String, String) -> String`. Its private reply starts with one status UTF-16 unit (0 success, 1 rejected,
+2 stale source/output, 3 invalid compiled artifact, 4 installation I/O failure), followed by diagnostics.
+The entire reply fits the inbound text limit; diagnostic truncation preserves Unicode scalar boundaries.
+Status and diagnostics belong to the same request, including across cooperative tasks and checkpoint restoration.
+ABI 1 remains admitted for historical executables; new source has no compatibility wrappers.
+
+Native C ABI 23, Runtime source version 0.23.0, CPKT 3.0, checkpoint envelope/schema 3 and the compiler worker
+protocol remain unchanged. Existing String transport carries the reply, and the pending admitted operation
+already retains its result representation in checkpoints. ABI 2 requires the updated local VM; published
+Runtime pins do not imply support for this new capability. Library consumers rebuild against the changed
+core module identity. Imported value-class fields are loaded through their nominal storage box before unboxing.
+
 ## Portable Guest filesystem
 
 `compukter:core` 5.1.0 permits dot components in lexical Path values and adds pure normalization,
@@ -79,6 +100,15 @@ producer/consumer update; platform, compiler framing, artifacts and native ABI r
 | Compiler worker | Protocol 5; explicit source-free library preparation | `compiler-client` and `compiler-k2` |
 | IDE analysis | Protocol 16 | `ide-analysis-client` and `ide-analysis-k2` |
 
+## Reference-array loop surface
+
+`kotlin:builtins` 1.11.0 adds the structural external `Array<T>.iterator(): Iterator<T>` declaration used by
+K2 to resolve direct array loops. Compiler lowering consumes the canonical loop shape and emits existing
+array-length, indexed-load and scalar advancement instructions, with the same element representation as
+indexed reads. It does not provide executable stored array iterators. This is an additive source surface;
+dependent libraries rebuild against the new module content identity. Platform ABI 3, bundle format 9,
+standalone module format 5, CPKT 3.0 and native C ABI 23 are unchanged.
+
 ## Reference-array initializer surface
 
 `kotlin:builtins` 1.10.0 adds the public `Array<T>(Int, (Int) -> T)` constructor for the currently admitted
@@ -112,6 +142,17 @@ Protocol 4 frames are rejected without a fallback. Worker payload hashes change 
 platform, artifact, codegen and native ABI contracts are unchanged. Both operations share bounded framing, admission,
 queue capacity and deadlines. Queued preparation yields to explicit compilation; an active preparation completes
 before the next request. No project FIR or IR enters the retained library cache.
+
+## Guest matrix module identity
+
+`stdlib:core` 1.14.0 adds immutable `Matrix4f` and homogeneous `Vector4f` in `kotlin.math`.
+Transform factories, composition, projection and explicit perspective division use ordinary compiled library
+bodies and existing value-class and Float/Double math instructions. Component constructors have explicit
+arguments; the current metadata default-argument schema does not encode Float literals.
+Dependent libraries rebuild against the changed module content identity. Bundle format 9, module format 5,
+platform ABI 3, metadata format 6, executable format 3, Runtime ABI 1.16 and native ABI 23 remain unchanged.
+The [math guide]({{ '/STDLIB-SUPPORT/math/#matrices-and-homogeneous-coordinates' | relative_url }}) owns
+coordinate conventions and numerical contracts; `testKotlinGeometryVmConformance` exercises the public API.
 
 ## Guest geometry module identity
 

@@ -321,36 +321,41 @@ Native lifecycle, quotas, guarded replacements and checkpoint rejection are exer
 
 ### Process facade
 
-**Status:** Partial.
+**Status:** Supported.
 
-`Process.run(path, args)` returns typed exited/failed results, and `Process.exit(code)` terminates explicitly.
-The source facade and VM process contract are covered separately rather than by one end-to-end generated
-program.
+`Process.run(path: Path, args)` normalizes the lexical path and returns typed exited/failed results.
+`Process.exit(code)` terminates explicitly. Process argument encoding and diagnostics are task-owned;
+path and encoded arguments share a bounded outbound request.
 
 **Evidence:**
 [`MinimalScriptLoweringTest`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/compiler-k2/src/test/kotlin/ru/lazyhat/compukters/compiler/worker/k2/MinimalScriptLoweringTest.kt),
-test `typed process v2 facade lowers without public capability masks or suspend calls`, paired with
-[`computer.rs`](https://github.com/CertifiedBadIdeas/Compukter-VM/blob/main/src/computer.rs), tests
-`process_v2_run_materializes_structured_arguments_for_the_child` and
-`process_v2_explicit_exit_preserves_all_codes_and_rejects_invalid_values`.
+test `typed process v2 facade lowers without public capability masks or suspend calls`, and
+[`ProgramRuntimeHostIntegrationTest`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/core/src/nativeIntegrationTest/kotlin/ru/lazyhat/compukters/core/device/runtime/program/integration/ProgramRuntimeHostIntegrationTest.kt),
+tests `typed Guest compilation and process paths preserve diagnostics permissions and outputs` and
+`ROM boot runs a foreground child and reboot creates a fresh shell`.
 
-**Related work:** not scheduled
+**Related work:** [#739](https://github.com/CertifiedBadIdeas/Compukters/issues/739)
 
 ### Compiler facade
 
-**Status:** Partial.
+**Status:** Supported.
 
-`Compiler.compile(source, output)` and `Compiler.diagnostics()` are published by `compukter:core`, and the
-checked-in `/rom/kotlinc` program compiles deterministically. Full Guest-to-host compilation behavior is
-tested at the VM transaction layer rather than as one generated Kotlin execution test.
+`Compiler.compile(source: Path, output: Path)` normalizes both paths and returns `CompilationResult.Success`
+with a canonical output Path or `CompilationResult.Failed` with a reason and diagnostics from that call.
+The source facade has no separate diagnostics query. Rust owns source snapshots, access checks, revision
+conflicts and atomic executable installation. The current Guest facade compiles one `.kt` source;
+project compilation remains a separate tooling API. See [examples and failure reasons](filesystem.md#compilation-and-process-launch).
 
 **Evidence:**
 [`MinimalScriptLoweringTest`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/compiler-k2/src/test/kotlin/ru/lazyhat/compukters/compiler/worker/k2/MinimalScriptLoweringTest.kt),
-test `checked in kotlinc compiles deterministically`, paired with
-[`computer.rs`](https://github.com/CertifiedBadIdeas/Compukter-VM/blob/main/src/computer.rs), test
-`compiler_transaction_snapshots_and_atomically_installs_an_executable`.
+tests `typed compiler facade lowers Path results and rejects removed APIs` and `checked in kotlinc compiles deterministically`,
+and [`ProgramRuntimeHostIntegrationTest`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/core/src/nativeIntegrationTest/kotlin/ru/lazyhat/compukters/core/device/runtime/program/integration/ProgramRuntimeHostIntegrationTest.kt),
+test `typed Guest compilation and process paths preserve diagnostics permissions and outputs`.
+Native paired replies, Unicode bounds and checkpoint restoration are covered in
+[`computer.rs`](https://github.com/CertifiedBadIdeas/Compukter-VM/blob/main/src/computer.rs) and
+[`checkpoint/computer.rs`](https://github.com/CertifiedBadIdeas/Compukter-VM/blob/main/src/checkpoint/computer.rs).
 
-**Related work:** not scheduled
+**Related work:** [#739](https://github.com/CertifiedBadIdeas/Compukters/issues/739)
 
 ### Trusted API identity
 

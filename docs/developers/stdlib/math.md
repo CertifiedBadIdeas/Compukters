@@ -9,7 +9,7 @@ permalink: /STDLIB-SUPPORT/math/
 
 [← Guest standard library support]({{ '/STDLIB-SUPPORT/' | relative_url }})
 
-**Status:** Supported in the current checkout. Import `kotlin.math.*`; the API belongs to `stdlib:core` 1.13.0.
+**Status:** Supported in the current checkout. Import `kotlin.math.*`; the API belongs to `stdlib:core` 1.14.0.
 The [Guest API reference]({{ '/guest-api/' | relative_url }}) owns exact signatures. These functions operate
 on Guest scalars and execute in the VM, including calls from compiled library bodies and callable references.
 They require no peripheral, JVM classpath or host capability. Programs retaining floating math instructions
@@ -87,12 +87,66 @@ This additive surface changes the stdlib module identity. Platform bundle/metada
 formats are unchanged; rebuild dependent libraries with the matching platform. Existing Runtime value-class
 and math instructions execute the implementation.
 
+## Matrices and homogeneous coordinates
+
+`Matrix4f` and `Vector4f` are immutable Float value classes in `kotlin.math`, with nominal equality,
+hashing and managed collection storage. Construct a matrix from sixteen components in row-major order;
+`m00` through `m33` name row and column, and `matrix[row, column]` reads indexes 0..3.
+An invalid index throws catchable `IndexOutOfBoundsException`. Use `Matrix4f.identity()` for identity.
+
+Matrices multiply column vectors. `a * b * point` applies `b` first, then `a`; matrix multiplication is
+not commutative. `transposed()` exchanges rows and columns. Factories provide `translation(Vector3f)`,
+`scale(Vector3f)` or uniform `scale(Float)`, and `rotationX/Y/Z(angleRadians)`. Rotations use the right-hand
+rule and angles in radians. Matrix components and ordinary arithmetic permit IEEE non-finite values.
+
+`matrix * Vector3f` and `transformPoint(Vector3f)` lift a point with `w = 1` and return `Vector4f`.
+`transformDirection(Vector3f)` uses `w = 0`, so affine translation does not affect a direction.
+`matrix * Vector4f` uses the supplied `w`. `Vector4f` provides arithmetic, scalar multiplication on either
+side, division, infix `dot`, `length`, zero-preserving `normalized()` and `xyz` without division.
+
+Projection factories look down negative Z, with normalized depth from -1 (near) to +1 (far):
+
+- `perspective(verticalFieldOfViewRadians, aspectRatio, near, far)` requires finite inputs,
+  `0 < verticalFieldOfViewRadians < PI`, `aspectRatio > 0` and `0 < near < far`.
+- `orthographic(left, right, bottom, top, near, far)` requires finite ordered bounds:
+  `left < right`, `bottom < top`, `near < far`. Negative near distances are allowed.
+
+Factories use Double intermediates and reject invalid parameters or coefficients overflowing Float with
+catchable `IllegalArgumentException`. They do not change display resolution or select a camera automatically.
+
+The projected result retains `w`. `isInsideClipVolume` requires finite positive `w` and includes the bounds
+`-w <= x,y,z <= w`; NaN, infinite coordinates and points behind the camera are outside.
+`perspectiveDivide()` returns `Vector3f(x / w, y / w, z / w)`, rejects zero or non-finite `w`, and performs
+no clipping. A negative finite `w` is permitted by division; test visibility separately. Floating roundoff
+may move a computed boundary point slightly outside a clip plane. Rendering triangles or lines that cross
+clip planes requires clipping those primitives, rather than simply discarding their outside vertices.
+
+```kotlin
+import kotlin.math.*
+
+val projection = Matrix4f.perspective((PI / 3.0).toFloat(), 1f, 0.1f, 100f)
+val model = Matrix4f.translation(Vector3f(0f, 0f, -5f)) * Matrix4f.rotationY(angle)
+val clip = projection * model * Vector3f(1f, 1f, 1f)
+if (clip.isInsideClipVolume) {
+    val ndc = clip.perspectiveDivide()
+    val pixel = Vector2f(
+        (ndc.x + 1f) * 0.5f * (screen.size.x - 1).toFloat(),
+        (1f - ndc.y) * 0.5f * (screen.size.y - 1).toFloat(),
+    ).roundToInt()
+    screen.pixel(pixel, 0xFFFFFF)
+}
+```
+
+Here `angle` is in radians and `screen` is a configured `GraphicalDisplay`. Normalized Y points upward;
+display Y points downward. Check positive display dimensions before mapping coordinates.
+
 ## Evidence and maintenance
 
 - `testKotlinGeometryVmConformance` compiles and executes `compiler-k2/src/test/resources/kotlin/geometry/main.kt`,
   covering arithmetic/aliases, normalization at zero and Float extremes, rounding, half-open bounds, invalid
-  extents and collection storage. IDE `DiagnosticQueryTest` checks aliases and member completion with source
-  and metadata-only inputs. `PlatformSignatureAliasesTest` checks signature expansion and ambiguous/cyclic rejection.
+  extents, dense and noncommuting matrix products, axis rotations, homogeneous point/direction lifting,
+  projection bounds, invalid parameters, explicit division, callable references and collection storage.
+  IDE `DiagnosticQueryTest` checks aliases, matrices and member completion with source and metadata-only inputs. `PlatformSignatureAliasesTest` checks signature expansion and ambiguous/cyclic rejection.
 - `testKotlinMathVmConformance` compiles and executes
   `modules/common/compiler-k2/src/test/resources/kotlin/math/main.kt` against the Rust VM. It exercises
   every unary and binary operation in both widths, derived library bodies, integer limits, rounding
@@ -108,4 +162,5 @@ and math instructions execute the implementation.
 Source owners: `guest-platform/src/platform/libraries/stdlib-core/kotlin/math`,
 `CanonicalTrustedIntrinsics`, `KotlinProjectLowering`, artifact `MathOperation`, and VM `execution/math.rs`.
 
-Related work: [#708](https://github.com/CertifiedBadIdeas/Compukters/issues/708).
+Related work: [#708](https://github.com/CertifiedBadIdeas/Compukters/issues/708),
+[#740](https://github.com/CertifiedBadIdeas/Compukters/issues/740).
