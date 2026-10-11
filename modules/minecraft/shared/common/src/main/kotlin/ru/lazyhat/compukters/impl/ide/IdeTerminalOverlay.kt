@@ -22,7 +22,6 @@ import ru.lazyhat.compukters.lang.runtime.vm.TerminalKeyAction
 
 data class IdeTerminalOverlayGeometry(
     val panel: IdeRect,
-    val shadow: IdeRect,
     val title: IdeRect,
     val grid: IdeRect?,
     val messageBounds: IdeRect,
@@ -40,7 +39,6 @@ data class IdeTerminalOverlayGeometry(
                 val panel = content
                 return IdeTerminalOverlayGeometry(
                     panel = panel,
-                    shadow = IdeRect(panel.left, panel.top, panel.left, panel.bottom),
                     title = panel,
                     grid = null,
                     messageBounds = inset(panel, MESSAGE_PADDING),
@@ -64,7 +62,6 @@ data class IdeTerminalOverlayGeometry(
                 )
             return IdeTerminalOverlayGeometry(
                 panel = panel,
-                shadow = IdeRect(panel.left - SHADOW_WIDTH, panel.top, panel.left, panel.bottom),
                 title = title,
                 grid = grid,
                 messageBounds = grid,
@@ -90,7 +87,6 @@ data class IdeTerminalOverlayGeometry(
         private const val BORDER_SIZE = 1
         private const val GRID_PADDING = 6
         private const val TITLE_HEIGHT = 18
-        private const val SHADOW_WIDTH = 2
         private const val MESSAGE_PADDING = 8
         private const val UNSUPPORTED_MESSAGE = "Viewport is too small for the target terminal"
     }

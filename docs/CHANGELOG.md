@@ -40,7 +40,9 @@ headings so this page has one stable URL that can be shared outside the reposito
   Hovering a marked token shows its problems together, preserving source editing and horizontal scrolling.
   Argument hints open when typing a call or pressing Ctrl+P, wrap long signatures and emphasize the current parameter.
   IDE controls share an outlined neutral style, with vertically centered labels in toolbars, dialogs, project navigation
-  and status/search bars. Hover and completion popups reserve space around every text row.
+  and status/search bars. Hover and completion popups reserve space around every text row. Floating IDE windows
+  share subtle borders and rounded corners; the embedded terminal shares the standalone terminal background
+  and IDE window chrome and focus accent.
   Attached addon sources have a separate bounded allowance, so bundled library sources do not exhaust it.
 
 - Guest Kotlin specializes `Array<T>` for all twelve non-null primitive families with dense, unboxed
