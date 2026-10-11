@@ -47,13 +47,13 @@ test `when range and alternative branches accept Unit statements`.
 **Status:** Partial.
 
 These forms compile and are used by the checked-in shell, including nested loops and reassignment. `break` and
-`continue` targeting the current innermost `while` lower directly; jumps to an outer loop are rejected. There
-is no source-level conformance suite covering every expression/result shape.
+`continue` target either the innermost loop or an active enclosing labeled loop. There is no source-level
+conformance suite covering every expression/result shape.
 
 **Evidence:**
 [`MinimalScriptLoweringTest`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/compiler-k2/src/test/kotlin/ru/lazyhat/compukters/compiler/worker/k2/MinimalScriptLoweringTest.kt),
 tests `shell language subset lowers control flow scalars strings and raw terminal calls`, `checked in shell
-compiles deterministically`, and `while loop jumps lower locally and reject outer targets`.
+compiles deterministically`, and `while loop jumps lower locally`.
 
 **Related work:** not scheduled
 
@@ -65,8 +65,8 @@ compiles deterministically`, and `while loop jumps lower locally and reject oute
 one positive `step` on those progressions evaluate and snapshot their bounds and step once, then execute as
 scalar frame slots with no range, progression, or iterator allocation. Invalid dynamic steps throw a Guest
 argument error. Empty, reversed, singleton, negative, `Int.MIN_VALUE`, and `Int.MAX_VALUE` boundaries preserve
-Kotlin behavior. `break` and `continue` targeting the current innermost `for` are supported, including nested
-loops. Every repeated path crosses an existing loop-header quota safepoint.
+Kotlin behavior. Local and labeled `break` and `continue` are supported, including nested loops. Every
+repeated path crosses an existing loop-header quota safepoint.
 
 **Evidence:**
 [`MinimalScriptLoweringTest`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/compiler-k2/src/test/kotlin/ru/lazyhat/compukters/compiler/worker/k2/MinimalScriptLoweringTest.kt),
@@ -92,7 +92,7 @@ Ordinary `do-while` executes its body before testing the condition. Each local `
 `finally` cleanup and reaches the condition; local `break` and function return run cleanup and skip the
 condition. Body-local declarations retain Kotlin's condition scope. Nested loops select their own local
 targets. Exceptions from the body or condition use ordinary managed handlers, and loop execution resumes
-across instruction-budget slices. Labeled jumps to outer loops remain unsupported.
+across instruction-budget slices. Labeled jumps preserve these condition and cleanup rules.
 
 **Evidence:** `MinimalScriptLoweringTest`, test `do while loops preserve post test order jumps cleanup and
 exceptions for vm execution`, executed by `testKotlinIntLoopsVmConformance` with instruction budgets of 64
@@ -101,12 +101,33 @@ checks source-attached and metadata-only IDE sessions.
 
 **Related work:** [#737](https://github.com/CertifiedBadIdeas/Compukters/issues/737)
 
+## Labeled loop jumps
+
+**Status:** Supported.
+
+`break@label` and `continue@label` resolve to an active enclosing loop by K2 IR identity, including nested
+`while`, `do-while`, optimized `Int` progression loops, primitive-array loops, and admitted `Iterable` loops.
+A break exits that loop; a continue reaches its condition, progression increment, array index advancement,
+or iterator check. Reused label names resolve to the nearest matching loop according to Kotlin scope.
+
+Only crossed `finally` scopes run, from the innermost outward; cleanup surrounding the target loop stays
+active. A return, another loop jump, or exception from cleanup overrides the pending jump. This adds no
+instructions or ABI changes and does not widen jumps across function or inline-lambda boundaries. Invalid
+or out-of-scope labels produce diagnostics without publishing an artifact.
+
+**Evidence:** `MinimalScriptLoweringTest`, tests `labeled loop jumps preserve target advancement and cleanup
+for vm execution` (deterministic artifact) and `invalid loop labels publish no artifact`.
+`testKotlinIntLoopsVmConformance` requires the labeled-loop artifact and executes its assertions at instruction
+budgets of 64 and 512. `DiagnosticQueryTest`, test `labeled loop analysis resolves mixed targets with source
+and metadata inputs`, checks both IDE input forms.
+
+**Related work:** [#738](https://github.com/CertifiedBadIdeas/Compukters/issues/738)
+
 ## Remaining loop forms
 
 **Status:** Partial.
 
-Direct primitive-array and supported iterable loops execute. Reference-array iteration and labeled jumps
-to an outer loop remain unavailable.
+Direct primitive-array and supported iterable loops execute. Reference-array iteration remains unavailable.
 
 **Evidence:** `unsupported loop forms publish no artifact`.
 

@@ -849,7 +849,7 @@ class IdeAnalysisCoordinatorTest {
     }
 
     @Test
-    fun `platform declaration navigates to source supplied by active addon target`() {
+    fun `addon declaration navigates when packaged sources exhaust their separate file budget`() {
         val sourcePath = VirtualSourcePath.kotlin("fixture/telemetry/Telemetry.kt")
         val sourceText = "package fixture.telemetry\nobject Telemetry"
         val moduleId = PlatformModuleId("fixture", "api")
@@ -889,10 +889,14 @@ class IdeAnalysisCoordinatorTest {
                 WorkerLimits(),
                 listOf(payload),
             )
+        val packagedIdentity =
+            ru.lazyhat.compukters.ide.analysis
+                .AnalysisModuleIdentity("stdlib:core", Hash256.of(ByteArray(32) { 7 }))
+        val packagedSources = (0 until 64).associate { VirtualSourcePath.kotlin("packaged/Source$it.kt") to "x" }
         val fixture =
             fixture(
                 "val answer = 42",
-                attachedSources = IdeAttachedSourceCatalog.of(emptyMap(), 1, 1, 128, 128),
+                attachedSources = IdeAttachedSourceCatalog.of(mapOf(packagedIdentity to packagedSources), 2, 64, 128, 128),
             )
         val active = fixture.open()
         fixture.coordinator.updateTargetProfile(target)
@@ -924,6 +928,10 @@ class IdeAnalysisCoordinatorTest {
             assertIs<IdeDeclarationOutcome.Targets>(pending.join()).values.single(),
         )
         assertEquals(sourceText, fixture.coordinator.attachedSource(identity, sourcePath))
+        assertEquals("x", fixture.coordinator.attachedSource(packagedIdentity, VirtualSourcePath.kotlin("packaged/Source0.kt")))
+        fixture.coordinator.updateTargetProfile(null)
+        assertNull(fixture.coordinator.attachedSource(identity, sourcePath))
+        assertEquals("x", fixture.coordinator.attachedSource(packagedIdentity, VirtualSourcePath.kotlin("packaged/Source0.kt")))
     }
 
     @Test

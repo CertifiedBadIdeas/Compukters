@@ -1761,24 +1761,24 @@ fn entry_argument_limits() -> EntryArgumentLimits {
     }
 }
 
-fn k2_do_while_loops_execute_across_quota_slices(path: &std::path::Path) {
-    let verified = verify_artifact(Arc::from(fs::read(path).expect("K2 do-while output must exist")), ArtifactLimits::default())
-        .expect("pinned VM must verify K2 do-while output");
+fn k2_loop_control_executes_across_quota_slices(path: &std::path::Path) {
+    let verified = verify_artifact(Arc::from(fs::read(path).expect("K2 loop-control output must exist")), ArtifactLimits::default())
+        .expect("pinned VM must verify K2 loop-control output");
     for budget in [64, 512] {
-        let mut session = Session::admit(verified.clone(), list_no_io_profile(), &[]).expect("do-while program must admit");
-        session.start(&[]).expect("do-while program must start");
+        let mut session = Session::admit(verified.clone(), list_no_io_profile(), &[]).expect("loop-control program must admit");
+        session.start(&[]).expect("loop-control program must start");
         let mut halted = false;
         let mut exhausted_slices = 0;
         for _ in 0..200_000 {
-            match session.advance(budget, 16).expect("do-while program must advance") {
+            match session.advance(budget, 16).expect("loop-control program must advance") {
                 AdvanceOutcome::SliceExhausted => exhausted_slices += 1,
                 AdvanceOutcome::Halted(None) => { halted = true; break; },
-                AdvanceOutcome::UncaughtException => panic!("do-while assertion failed: {}", session.uncaught_exception_diagnostic(&verified).unwrap()),
-                outcome => panic!("unexpected do-while outcome: {outcome:?}"),
+                AdvanceOutcome::UncaughtException => panic!("loop-control assertion failed: {}", session.uncaught_exception_diagnostic(&verified).unwrap()),
+                outcome => panic!("unexpected loop-control outcome: {outcome:?}"),
             }
         }
-        assert!(halted, "do-while program must finish within bounded slices");
-        assert!(exhausted_slices > 0, "do-while execution must cross quota boundaries");
+        assert!(halted, "loop-control program must finish within bounded slices");
+        assert!(exhausted_slices > 0, "loop-control execution must cross quota boundaries");
     }
 }
 
@@ -1788,7 +1788,10 @@ fn k2_int_loops_execute_across_quota_slices_without_host_io() {
     execute_primitive_program(std::path::Path::new(&format!("{path}.ranges.cpkt")));
     let do_while_path = std::env::var("COMPUKTER_KOTLIN_DO_WHILE_ARTIFACT")
         .expect("COMPUKTER_KOTLIN_DO_WHILE_ARTIFACT must be set for this conformance test");
-    k2_do_while_loops_execute_across_quota_slices(std::path::Path::new(&do_while_path));
+    k2_loop_control_executes_across_quota_slices(std::path::Path::new(&do_while_path));
+    let labeled_path = std::env::var("COMPUKTER_KOTLIN_LABELED_LOOPS_ARTIFACT")
+        .expect("COMPUKTER_KOTLIN_LABELED_LOOPS_ARTIFACT must be set for this conformance test");
+    k2_loop_control_executes_across_quota_slices(std::path::Path::new(&labeled_path));
     let bytes = fs::read(path).expect("K2 Int loops output must exist");
     let verified = verify_artifact(Arc::from(bytes), ArtifactLimits::default())
         .expect("pinned VM must verify K2 Int loops output");

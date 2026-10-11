@@ -7266,7 +7266,7 @@ class MinimalScriptLoweringTest {
         }
 
     @Test
-    fun `while loop jumps lower locally and reject outer targets`() =
+    fun `while loop jumps lower locally`() =
         withAdapter { adapter ->
             val local =
                 adapter.compile(
@@ -7293,26 +7293,189 @@ class MinimalScriptLoweringTest {
 
             assertNotNull(local.artifact, local.diagnostics.joinToString())
             assertTrue(local.diagnostics.none { it.severity.name == "ERROR" }, local.diagnostics.toString())
+        }
 
-            val outerTarget =
-                adapter.compile(
-                    request(
-                        """
-                        fun main() {
-                            outer@ while (true) {
-                                while (true) break@outer
+    @Test
+    fun `labeled loop jumps preserve target advancement and cleanup for vm execution`() =
+        withAdapter { adapter ->
+            val source =
+                """
+                class State(var cleanup: Int)
+                fun overrideReturn(state: State): Int {
+                    outer@ while (true) {
+                        while (true) {
+                            try { break@outer } finally {
+                                state.cleanup += 1
+                                return 9
                             }
                         }
-                        """.trimIndent(),
-                    ),
-                )
+                    }
+                    return 0
+                }
+                fun main() {
+                    var count = 0
+                    var order = 0
+                    var enclosing = 0
+                    try {
+                        outer@ while (count < 4) {
+                            count += 1
+                            while (true) {
+                                try {
+                                    try {
+                                        if (count < 3) continue@outer
+                                        break@outer
+                                    } finally { order = order * 10 + 1 }
+                                } finally { order = order * 10 + 2 }
+                            }
+                        }
+                        check(count == 3 && order == 121212 && enclosing == 0)
+                    } finally { enclosing += 1 }
+                    check(enclosing == 1)
 
-            assertNull(outerTarget.artifact)
-            assertTrue(outerTarget.hasErrors)
-            assertTrue(
-                outerTarget.diagnostics.any { "outer loop jump" in it.message },
-                outerTarget.diagnostics.toString(),
-            )
+                    var bodies = 0
+                    var conditions = 0
+                    post@ do {
+                        bodies += 1
+                        while (true) {
+                            if (bodies == 4) break@post
+                            continue@post
+                        }
+                    } while (runCondition(++conditions, bodies))
+                    check(bodies == 4 && conditions == 3)
+
+                    var sum = 0
+                    numbers@ for (value in 1..9 step 2) {
+                        do {
+                            if (value == 3) continue@numbers
+                            if (value == 7) break@numbers
+                            sum += value
+                            continue@numbers
+                        } while (true)
+                    }
+                    check(sum == 6)
+                    sum = 0
+                    array@ for (value in intArrayOf(1, 2, 3, 4)) {
+                        for (inner in 1..2) {
+                            if (value == 2) continue@array
+                            if (value == 4) break@array
+                            sum += value
+                            continue@array
+                        }
+                    }
+                    check(sum == 4)
+                    sum = 0
+                    val values: Iterable<Int> = listOf(1, 2, 3, 4)
+                    items@ for (value in values) {
+                        do {
+                            if (value == 2) continue@items
+                            if (value == 4) break@items
+                            sum += value
+                            continue@items
+                        } while (true)
+                    }
+                    check(sum == 4)
+
+                    var abandoned = 0
+                    stopped@ for (value in 1..3) {
+                        for (element in intArrayOf(1, 2)) {
+                            abandoned += element
+                            continue@stopped
+                        }
+                    }
+                    check(abandoned == 3)
+                    stopped@ while (true) {
+                        for (element in intArrayOf(1, 2)) {
+                            abandoned += element
+                            break@stopped
+                        }
+                    }
+                    check(abandoned == 4)
+
+                    var retained = 0
+                    var crossed = 0
+                    var iterations = 0
+                    outer@ while (iterations < 3) {
+                        iterations += 1
+                        try {
+                            middle@ while (true) {
+                                while (true) {
+                                    try { break@middle } finally { crossed += 1 }
+                                }
+                            }
+                            check(retained == iterations - 1)
+                        } finally { retained += 1 }
+                    }
+                    check(retained == 3 && crossed == 3)
+
+                    var replaced = 0
+                    replacement@ for (value in 1..3) {
+                        while (true) {
+                            try { break@replacement } finally {
+                                replaced += value
+                                continue@replacement
+                            }
+                        }
+                    }
+                    check(replaced == 6)
+                    replaced = 0
+                    replacement@ while (true) {
+                        while (true) {
+                            try { continue@replacement } finally {
+                                replaced += 1
+                                break@replacement
+                            }
+                        }
+                    }
+                    check(replaced == 1)
+                    val state = State(0)
+                    check(overrideReturn(state) == 9 && state.cleanup == 1)
+                    var caught = 0
+                    try {
+                        thrown@ while (true) {
+                            while (true) {
+                                try { break@thrown } finally { error("cleanup") }
+                            }
+                        }
+                    } catch (failure: IllegalStateException) { caught += 1 }
+                    check(caught == 1)
+
+                    var shadowed = 0
+                    same@ while (shadowed < 2) {
+                        same@ while (true) { shadowed += 1; break@same }
+                    }
+                    check(shadowed == 2)
+                    var quota = 0
+                    sliced@ for (value in 1..1000) {
+                        while (true) { quota += 1; continue@sliced }
+                    }
+                    check(quota == 1000)
+                }
+                fun runCondition(conditions: Int, bodies: Int): Boolean {
+                    check(conditions == bodies)
+                    return bodies < 10
+                }
+                """.trimIndent()
+            val first = adapter.compile(request(source))
+            val second = adapter.compile(request(source))
+            val artifact = assertNotNull(first.artifact, first.diagnostics.joinToString()).toByteArray()
+            assertContentEquals(artifact, assertNotNull(second.artifact, second.diagnostics.joinToString()).toByteArray())
+            System.getProperty("compukter.vm.intLoopsArtifact")?.let { output ->
+                Path.of("$output.labeled-loops.cpkt").also { it.parent.createDirectories() }.writeBytes(artifact)
+            }
+        }
+
+    @Test
+    fun `invalid loop labels publish no artifact`() =
+        withAdapter { adapter ->
+            for (source in listOf(
+                "fun main() { while (true) break@missing }",
+                "fun main() { label@ run { break@label } }",
+                "fun main() { outer@ while (true) { fun jump() { break@outer }; jump() } }",
+            )) {
+                val result = adapter.compile(request(source))
+                assertNull(result.artifact, source)
+                assertTrue(result.hasErrors, result.diagnostics.toString())
+            }
         }
 
     @Test
