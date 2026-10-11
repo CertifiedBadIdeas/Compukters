@@ -15,8 +15,9 @@ headings so this page has one stable URL that can be shared outside the reposito
 
 - The built-in shell supports cursor editing, Unicode-aware deletion, horizontal scrolling and a bounded
   32-command history that restores unfinished input. `Ctrl+U` clears the line; `Ctrl+C` cancels input or stops
-  the foreground command tree and returns to the shell.
-- Guest `Terminal` provides owned typed Text/Key events, named keys and modifiers, standard-library integer
+  the foreground command tree and returns to the shell. IDE Run submits a complete command atomically
+  at an empty prompt; unfinished input and running editors remain protected.
+- Guest `Terminal` provides owned typed Text/Key/SubmittedLine events, named keys and modifiers, standard-library integer
   geometry for cursor/drawing operations, terminal size observations and named palette colors. The old public
   raw event protocol is replaced; built-in shell, editor and benchmark agent use the new API.
 

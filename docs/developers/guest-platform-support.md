@@ -246,12 +246,20 @@ and
 
 **Status:** Supported.
 
-`compukter:core` 7.0.0 replaces the raw public event protocol with `Terminal.readEvent()`.
+`compukter:core` 7.1.0 replaces the raw public event protocol with `Terminal.readEvent()`.
 It blocks until input arrives and returns an owned `TerminalEvent.Text(text)` or
 `TerminalEvent.Key(key, action, modifiers)`. `TerminalKey` and `TerminalKeyAction` are enums;
 `TerminalModifiers` exposes `shift`, `control`, `alt` and `superKey` Boolean properties.
 The facade releases native event ownership before returning, including on decoding failure.
 There is no public `awaitEvent` / `event*` / `finishEvent` sequence.
+
+`Terminal.readEvent(submittedLineLimit)` also admits a distinct
+`TerminalEvent.SubmittedLine(text)` from host/IDE complete-line submission. The limit is in UTF-16
+units (0..4096); zero rejects submission while a line editor has a draft. Ordinary `readEvent()`
+does not opt in. Complete lines are atomic: queued/active input, control characters, malformed UTF-16
+and oversized lines reject before changing input. The shell enables reception at an empty prompt,
+with a 256-unit limit; submitted commands use normal dispatch and session history. Editors and
+other raw-input programs remain protected unless they explicitly opt in.
 
 `Terminal.cursor` is a `Position2i`; `Terminal.size` is a `Size2i`. These reuse the standard library's
 integer vectors. `setCursor(position)` and `writeAt(position, text)` accept positions, while
@@ -270,6 +278,7 @@ fun main() {
     when (val event = Terminal.readEvent()) {
         is TerminalEvent.Text -> Terminal.writeAt(Vector2i(0, 0), event.text)
         is TerminalEvent.Key -> if (event.key == TerminalKey.ENTER) println("Enter")
+        is TerminalEvent.SubmittedLine -> println(event.text)
     }
 }
 ```
@@ -285,9 +294,13 @@ tests `typed terminal facade lowers observations events and rejects removed APIs
 `checked in shell compiles deterministically` and `checked in editor compiles deterministically`;
 [`ProgramRuntimeHostIntegrationTest`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/core/src/nativeIntegrationTest/kotlin/ru/lazyhat/compukters/core/device/runtime/program/integration/ProgramRuntimeHostIntegrationTest.kt),
 tests `builtin shell edits scalar boundaries and restores history drafts`,
-`builtin shell bounds session history and retains the current draft`, and
-`ROM boot runs a foreground child and reboot creates a fresh shell`;
-native `terminal_observations_read_authoritative_geometry_without_mutating_it` and `ctrl_c_*` tests.
+`builtin shell bounds session history and retains the current draft`,
+`ROM boot runs a foreground child and reboot creates a fresh shell`,
+`IDE submits a complete command to the builtin shell`, and
+`IDE complete lines preserve drafts and reject busy children and queued input`;
+native `terminal_observations_read_authoritative_geometry_without_mutating_it`, `ctrl_c_*`,
+`submitted_line_event_is_atomic_bounded_and_opt_in` and
+`checkpoint_preserves_submitted_line_wait_and_owned_event` tests.
 
 ### Filesystem facade
 
