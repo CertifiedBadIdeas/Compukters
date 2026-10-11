@@ -23,6 +23,7 @@ import compukter.filesystem.FileSystem
 import compukter.filesystem.FileSystemException
 import compukter.filesystem.Path
 import compukter.io.Stderr
+import compukter.io.use
 import compukter.process.Process
 import compukter.process.ProcessFailureReason
 import compukter.process.ProcessResult
@@ -46,9 +47,7 @@ private fun dispatchWords(words: Array<String>) {
     if (words.size == 0) return
     val command = words[0]
     when (command) {
-        "help" -> {
-            println("help echo clear pwd ls stat kotlinc edit vmbench")
-        }
+        "help" -> writeHelp(words)
 
         "echo" -> {
             for (index in 1 until words.size) {
@@ -84,6 +83,8 @@ private fun dispatchWords(words: Array<String>) {
             }
         }
 
+        "cat", "mkdir", "mv", "rm" -> executeFileCommand(words)
+
         "" -> {
             Stderr.write("empty command\n")
         }
@@ -97,11 +98,17 @@ private fun dispatchWords(words: Array<String>) {
 private fun executeExternal(words: Array<String>) {
     val command = words[0]
     val arguments = words.copyOfRange(1, words.size)
-    var path = resolvePath(command)
+    var path =
+        try {
+            Path(resolvePath(command)).normalize().value
+        } catch (failure: IllegalArgumentException) {
+            Stderr.write("invalid path: $command\n")
+            return
+        }
     var result = Process.run(path, arguments)
     val fallback = shellFallbackPath(command, result)
     if (fallback.isNotEmpty()) {
-        path = fallback
+        path = Path(fallback).normalize().value
         result = Process.run(path, arguments)
     }
     val diagnostic = shellProcessDiagnostic(result, path)
@@ -121,20 +128,85 @@ fun shellFallbackPath(
 
 private fun resolvePath(path: String): String = if (path.startsWith("/")) path else "/home/" + path
 
+private fun writeHelp(words: Array<String>) {
+    if (words.size == 1) {
+        println("help echo clear pwd ls stat cat mkdir mv rm")
+        println("kotlinc edit vmbench")
+        println("help <command> for usage")
+        println("Relative paths start at /home; quote spaces.")
+        return
+    }
+    if (words.size != 2) {
+        Stderr.write("usage: help [command]\n")
+        return
+    }
+    val usage = commandUsage(words[1])
+    if (usage.isEmpty()) Stderr.write("no help for command: ${words[1]}\n")
+    else println(usage)
+}
+
+private fun commandUsage(command: String): String =
+    when (command) {
+        "help" -> "help [command]"
+        "echo" -> "echo [words...]"
+        "clear" -> "clear"
+        "pwd" -> "pwd"
+        "ls" -> "ls [path]"
+        "stat" -> "stat <path>"
+        "cat" -> "cat <path> (UTF-8, at most 65536 bytes)"
+        "mkdir" -> "mkdir [-p] <path>"
+        "mv" -> "mv <source> <destination> (no overwrite)"
+        "rm" -> "rm <path> (file or empty directory)"
+        "kotlinc" -> "kotlinc <source.kt> [-o output]"
+        "edit" -> "edit <path>"
+        "vmbench" -> "vmbench <cpu|redstone> <rounds 1..1000000>"
+        else -> ""
+    }
+
+private fun executeFileCommand(words: Array<String>) {
+    val command = words[0]
+    val parents = command == "mkdir" && words.size > 1 && words[1] == "-p"
+    val required = if (command == "mv" || parents) 3 else 2
+    if (words.size != required || words[1].isEmpty() || (required == 3 && words[2].isEmpty())) {
+        Stderr.write("usage: ${commandUsage(command)}\n")
+        return
+    }
+    try {
+        val path = Path(resolvePath(if (parents) words[2] else words[1]))
+        when (command) {
+            "cat" -> {
+                val text = FileSystem.readText(path, 65536)
+                var start = 0
+                while (start < text.length) {
+                    var end = if (text.length - start > 256) start + 256 else text.length
+                    // Keep each stdout request bounded without splitting a Unicode scalar.
+                    if (end < text.length && text[end - 1].code in 55296..56319) end--
+                    print(text.substring(start, end))
+                    start = end
+                }
+            }
+            "mkdir" -> if (parents) FileSystem.createDirectories(path) else FileSystem.createDirectory(path)
+            "mv" -> FileSystem.move(path, Path(resolvePath(words[2])))
+            "rm" -> FileSystem.delete(path)
+        }
+    } catch (failure: FileSystemException) {
+        Stderr.write("$command: ${failure.message ?: "filesystem error"}\n")
+    } catch (failure: IllegalArgumentException) {
+        Stderr.write("$command: invalid path\n")
+    }
+}
+
 private fun writeList(path: String) {
     try {
         val entry = Path(path)
         if (FileSystem.stat(entry).kind == FileKind.FILE) {
             println(path)
         } else {
-            val directory = FileSystem.openDirectory(entry)
-            try {
+            FileSystem.openDirectory(entry).use { directory ->
                 while (true) {
                     val child = directory.read() ?: break
                     println(child.name ?: "")
                 }
-            } finally {
-                directory.close()
             }
         }
     } catch (failure: FileSystemException) {

@@ -13,6 +13,11 @@ headings so this page has one stable URL that can be shared outside the reposito
 
 ## 0.6.0 — In development
 
+- The built-in shell provides `cat`, `mkdir` (including `-p`), `mv` and `rm`, plus command-specific help.
+  File commands support quoted names and normalized dot paths. Text output preserves Unicode across bounded
+  writes; moves refuse replacement and deletion is limited to files and empty directories. Executable paths
+  normalize before foreground launch.
+
 - Guest Kotlin supports `do-while` loops, including local `break` and `continue`, body-local variables in
   the condition, and managed exception and `finally` cleanup across VM instruction slices.
 

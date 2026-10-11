@@ -243,7 +243,83 @@ class ProgramRuntimeHostIntegrationTest {
         }
     }
 
-    private fun withEditor(block: (ProgramRuntimeHost) -> Unit) {
+    @Test
+    fun `builtin shell manages quoted paths without replacing or recursively deleting entries`() =
+        withShell { host ->
+            shellCommand(host, "mkdir -p \"notes folder/child\"")
+            assertTrue(shellCommand(host, "stat \"notes folder/./child\"").contains("directory:"))
+            shellCommand(host, "mkdir destination")
+            val collision = shellCommand(host, "mv \"notes folder/child\" destination")
+            assertTrue(collision.contains("mv:"), collision)
+            assertTrue(shellCommand(host, "stat \"notes folder/child\"").contains("directory:"))
+            val nonempty = shellCommand(host, "rm \"notes folder\"")
+            assertTrue(nonempty.contains("rm:"), nonempty)
+            shellCommand(host, "mv \"notes folder/child\" \"notes folder/renamed\"")
+            assertTrue(shellCommand(host, "ls \"notes folder\"").contains("renamed"))
+            shellCommand(host, "rm \"notes folder/renamed\"")
+            shellCommand(host, "rm \"notes folder\"")
+            assertTrue(shellCommand(host, "stat destination").contains("directory:"))
+            assertTrue(shellCommand(host, "stat \"notes folder\"").contains("not found"))
+        }
+
+    @Test
+    fun `builtin shell cat preserves Unicode across output chunks and removes files`() =
+        withShell { host ->
+            shellCommand(host, "edit \"unicode note.txt\"")
+            submit(host, "x".repeat(255) + "😀tail")
+            press(host, TerminalKey.S, setOf(TerminalModifier.CONTROL))
+            press(host, TerminalKey.X, setOf(TerminalModifier.CONTROL))
+            val contents = shellCommand(host, "cat \"./unicode note.txt\"")
+            assertTrue(contents.contains("😀tail"), contents)
+            assertTrue(contents.endsWith("tail>\n"), contents)
+            shellCommand(host, "mv \"unicode note.txt\" moved.txt")
+            assertTrue(shellCommand(host, "cat moved.txt").contains("😀tail"))
+            shellCommand(host, "rm moved.txt")
+            val missing = shellCommand(host, "cat moved.txt")
+            assertTrue(missing.contains("cat:"), missing)
+            shellCommand(host, "edit empty.txt")
+            press(host, TerminalKey.S, setOf(TerminalModifier.CONTROL))
+            press(host, TerminalKey.X, setOf(TerminalModifier.CONTROL))
+            assertTrue(shellCommand(host, "cat empty.txt").endsWith("cat empty.txt\n>\n"))
+            assertTrue(shellCommand(host, "echo alive").contains("alive\n>"))
+        }
+
+    @Test
+    fun `builtin shell reports usage invalid paths and immutable ROM errors and remains usable`() =
+        withShell { host ->
+            for (command in listOf("cat", "mkdir -p", "mv one", "rm \"\"")) {
+                val output = shellCommand(host, command)
+                assertTrue(output.contains("usage:"), output)
+            }
+            assertTrue(shellCommand(host, "cat /home//bad").contains("invalid path"))
+            assertTrue(shellCommand(host, "ls /home//bad").contains("invalid path"))
+            assertTrue(shellCommand(host, "/home//bad").contains("invalid path"))
+            assertTrue(shellCommand(host, "rm ../rom/shell").contains("rm:"))
+            assertTrue(shellCommand(host, "stat /rom/shell").contains("file:"))
+            assertTrue(shellCommand(host, "cat /home").contains("is a directory"))
+            assertTrue(shellCommand(host, "help mkdir").contains("mkdir [-p] <path>"))
+            assertTrue(shellCommand(host, "echo alive").contains("alive\n>"))
+        }
+
+    private fun shellCommand(
+        host: ProgramRuntimeHost,
+        command: String,
+    ): String {
+        submit(host, "clear")
+        pressEnter(host)
+        submit(host, command)
+        pressEnter(host)
+        return terminalText(requireNotNull(host.terminalFullState()))
+    }
+
+    private fun withEditor(block: (ProgramRuntimeHost) -> Unit) =
+        withShell { host ->
+            submit(host, "edit regression.txt")
+            pressEnter(host)
+            block(host)
+        }
+
+    private fun withShell(block: (ProgramRuntimeHost) -> Unit) {
         VmRuntime.loadNativeLibrary(Path.of(requiredProperty("compukters.ffi.library")))
         val rom =
             rom(
@@ -267,8 +343,6 @@ class ProgramRuntimeHostIntegrationTest {
                 ProgramRuntimeHost(store = store, computerId = computerId, romImage = rom).use { host ->
                     assertEquals(ProgramStartResult.Started, host.startBoot())
                     advanceUntil(host) { it == ProgramRuntimeState.WaitingForInput }
-                    submit(host, "edit regression.txt")
-                    pressEnter(host)
                     block(host)
                 }
             }
@@ -486,7 +560,8 @@ class ProgramRuntimeHostIntegrationTest {
     fun `compiled Kotlin shell edits Unicode and dispatches built-ins`() {
         VmRuntime.loadNativeLibrary(Path.of(requiredProperty("compukters.ffi.library")))
         val artifact = Path.of(requiredProperty("compukters.programRuntime.artifact")).readBytes()
-        val host = ProgramRuntimeHost(ProgramTickBudget(64, 64, 4))
+        // The expanded shell's minimum slice exceeds the former 64-instruction test budget.
+        val host = ProgramRuntimeHost(ProgramTickBudget(128, 64, 4))
 
         assertEquals(ProgramStartResult.Started, host.start(artifact))
         advanceUntil(host) { it == ProgramRuntimeState.WaitingForInput }
@@ -494,10 +569,11 @@ class ProgramRuntimeHostIntegrationTest {
 
         submit(host, "help")
         pressEnter(host)
-        assertEquals(
-            "> help\nhelp echo clear pwd ls stat kotlinc edit vmbench\n>\n",
-            terminalText(requireNotNull(host.terminalFullState())),
-        )
+        val help = terminalText(requireNotNull(host.terminalFullState()))
+        for (command in listOf("cat", "mkdir", "mv", "rm", "kotlinc", "edit", "vmbench")) {
+            assertTrue(help.contains(command), help)
+        }
+        assertTrue(help.endsWith(">\n"), help)
 
         submit(host, "pwd")
         pressEnter(host)
