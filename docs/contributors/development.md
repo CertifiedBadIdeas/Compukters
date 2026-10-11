@@ -11,6 +11,44 @@ permalink: /DEVELOPMENT/
 Start from the [Compukters repository](https://github.com/CertifiedBadIdeas/Compukters). Clone with submodules, or run
 `git submodule update --init --recursive` in an existing checkout. The pinned Rust VM is part of the build.
 
+## Agent task worktrees
+
+Create a ready task checkout with one command:
+
+```sh
+./worktree-task feat/display-api
+```
+
+It creates a new branch from the current **local** `dev` under the main workspace's `.worktrees/feat-display-api`,
+initializes `host/compukter-vm` at the revision pinned by that checkout, prepares an independent Gradle cache through
+the [sandbox cache workflow](verification.md#gradle-caches-in-agent-worktrees), and prints the command to enter it.
+The original checkout can contain unrelated edits; they are preserved. Invoking the command from another parent
+worktree still places the new checkout under the main workspace. It does not fetch, pull or switch the base branch.
+
+Choose additional modules or create a task in an already initialized submodule repository:
+
+```sh
+./worktree-task feat/create-support --submodule addons/create
+./worktree-task chore/addon-integration --all-submodules
+./worktree-task fix/vm-execution --repo host/compukter-vm
+./worktree-task fix/create-addon --repo addons/create
+```
+
+Submodule tasks start from local `main` and use names such as `.worktrees/host-compukter-vm--fix-vm-execution`.
+Use `--base <local-branch>` or `--path <directory>` to override those defaults, and `--no-submodules` for work that
+needs none. Extra `--submodule` options can be repeated. Modules are always initialized at the new checkout's pinned
+revisions, including recursive dependencies; the source checkout's current module HEAD is not copied. Existing local
+module Git objects are reused when they contain the pinned revision, without changing stored remote URLs. Missing
+objects or nested modules can require network access. If GitHub SSH has no usable agent, an installed `gh` supplies
+HTTPS authentication through command-scoped settings. Agents must run potential remote operations outside the sandbox.
+
+Setup refuses existing destinations and branches. If submodule or cache preparation fails after checkout creation,
+it preserves the branch and checkout and prints the location. Correct the problem and repeat the same command with
+`--resume`; this requires a clean registered checkout on the expected task branch and preserves its current HEAD.
+After making edits, finish any remaining setup manually rather than using resume. After verified integration into
+`dev` (or submodule `main`), retain verification logs in the main checkout and remove only that completed task's
+worktree. New tasks start from the updated base.
+
 ## Minecraft development
 
 Run Gradle with JDK 25 selected through `JAVA_HOME` or a Gradle-discoverable

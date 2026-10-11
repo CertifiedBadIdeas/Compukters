@@ -1,0 +1,5 @@
+#!/bin/sh
+set -eu
+
+APP_HOME=$(CDPATH= cd -P "$(dirname "$0")" >/dev/null && pwd) || exit 1
+exec python3 "$APP_HOME/tools/worktrees/create.py" --workspace "$APP_HOME" "$@"
