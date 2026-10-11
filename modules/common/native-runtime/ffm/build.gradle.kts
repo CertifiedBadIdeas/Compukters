@@ -157,12 +157,10 @@ val nativeIntegrationTest =
         dependsOn(":compiler-k2:generateExceptionsConformanceArtifact")
         inputs.file(exceptionsArtifact)
         jvmArgs("--enable-native-access=ALL-UNNAMED", "--illegal-native-access=deny")
-        doFirst {
-            systemProperty("compukter.ffi.library", compukterFfiLibrary.absolutePath)
-            systemProperty("compukters.shell.artifact", shellArtifact.get().asFile.absolutePath)
-            systemProperty("compukters.blocking-call.artifact", blockingCallArtifact.get().asFile.absolutePath)
-            systemProperty("compukters.exceptions.artifact", exceptionsArtifact.get().asFile.absolutePath)
-        }
+        systemProperty("compukter.ffi.library", compukterFfiLibrary.absolutePath)
+        systemProperty("compukters.shell.artifact", shellArtifact.get().asFile.absolutePath)
+        systemProperty("compukters.blocking-call.artifact", blockingCallArtifact.get().asFile.absolutePath)
+        systemProperty("compukters.exceptions.artifact", exceptionsArtifact.get().asFile.absolutePath)
     }
 
 val packagedNativeIntegrationTest =
@@ -176,9 +174,7 @@ val packagedNativeIntegrationTest =
         filter.includeTestsMatching("ru.lazyhat.compukters.lang.runtime.integration.PackagedFfmRuntimeIntegrationTest")
         inputs.file(shellArtifact)
         jvmArgs("--enable-native-access=ALL-UNNAMED", "--illegal-native-access=deny")
-        doFirst {
-            systemProperty("compukters.shell.artifact", shellArtifact.get().asFile.absolutePath)
-        }
+        systemProperty("compukters.shell.artifact", shellArtifact.get().asFile.absolutePath)
     }
 
 val runtimeJar = tasks.named<Jar>("jar")
@@ -190,8 +186,9 @@ val verifyNativeRuntimeJarResource =
         inputs.file(runtimeJar.flatMap { it.archiveFile })
         val expectedNativeResources = expectedNativeResources(releaseRuntimeMode, nativeResourcePath, RuntimeTransport.FFI)
         inputs.property("expectedNativeResources", expectedNativeResources)
+        val actionRuntimeJar = runtimeJar.flatMap { it.archiveFile }
         doLast {
-            val archive = runtimeJar.get().archiveFile.get().asFile
+            val archive = actionRuntimeJar.get().asFile
             val nativeEntries =
                 ZipFile(archive).use { zip ->
                     zip

@@ -18,36 +18,7 @@
 
 val repositoryRoot = rootProject.projectDir
 val inventoryFile = rootProject.file("licenses/media-assets.tsv")
-val excludedDirectoryNames =
-    setOf(
-        ".git",
-        ".gradle",
-        ".gradle-sandbox",
-        ".agents",
-        ".idea",
-        ".toolchain",
-        "build",
-        "out",
-        "target",
-        "run",
-    )
-val excludedGeneratedDirectories = setOf("docs/guest-api")
-
-fun discoverRepositoryMedia(): List<File> =
-    repositoryRoot
-        .walkTopDown()
-        .onEnter { directory ->
-            directory == repositoryRoot ||
-                (directory.name !in excludedDirectoryNames &&
-                    directory.relativeTo(repositoryRoot).invariantSeparatorsPath !in excludedGeneratedDirectories &&
-                    !directory.name.startsWith(".gradle-") &&
-                    !directory.resolve(".git").exists())
-        }.filter(File::isFile)
-        .filter { file -> file.extension.lowercase() in MediaLicenseInventory.extensions }
-        .sortedBy { file -> file.relativeTo(repositoryRoot).invariantSeparatorsPath }
-        .toList()
-
-val repositoryMedia = providers.provider(::discoverRepositoryMedia)
+val repositoryMedia = repositoryMediaFiles(repositoryRoot)
 val mediaProvenance =
     providers.provider {
         if (!inventoryFile.isFile) {
@@ -68,18 +39,21 @@ val verifyMediaLicenseInventory =
         inputs.files(repositoryMedia)
         inputs.files(mediaProvenance)
 
+        val inventory = inventoryFile
+        val root = repositoryRoot
+        val mediaFiles = objects.fileCollection().from(repositoryMedia)
         doLast {
-            check(inventoryFile.isFile) {
-                "media license inventory is missing: ${inventoryFile.relativeTo(repositoryRoot)}"
+            check(inventory.isFile) {
+                "media license inventory is missing: ${inventory.relativeTo(root)}"
             }
-            val records = MediaLicenseInventory.parse(inventoryFile.readText())
+            val records = MediaLicenseInventory.parse(inventory.readText())
             val discoveredPaths =
-                discoverRepositoryMedia()
-                    .mapTo(mutableSetOf()) { file -> file.relativeTo(repositoryRoot).invariantSeparatorsPath }
+                mediaFiles.files
+                    .mapTo(mutableSetOf()) { file -> file.relativeTo(root).invariantSeparatorsPath }
             val referencedPaths = records.flatMap { record -> listOf(record.path, record.provenance) }.toSet()
             val existingPaths =
                 referencedPaths
-                    .filterTo(mutableSetOf()) { path -> repositoryRoot.resolve(path).isFile }
+                    .filterTo(mutableSetOf()) { path -> root.resolve(path).isFile }
 
             MediaLicenseInventory.verify(records, discoveredPaths, existingPaths)
             logger.lifecycle("Verified ${records.size} classified media assets.")

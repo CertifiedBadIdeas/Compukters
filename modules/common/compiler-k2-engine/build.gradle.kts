@@ -62,16 +62,12 @@ dependencies {
 }
 
 val assertCompilerEngineBoundary = tasks.register("assertCompilerEngineBoundary") {
+    val runtimeComponents = configurations.runtimeClasspath.get().runtimeComponentNames(project.path)
+    inputs.property("runtimeComponents", runtimeComponents)
     doLast {
         val allowedProjects =
             setOf(":addon-guest-api", ":compiler-artifact", ":compiler-client", ":platform-bundle", ":platform-k2", ":worker-client")
-        val projects =
-            configurations.runtimeClasspath
-                .get()
-                .incoming.resolutionResult.allComponents
-                .mapNotNull { it.id as? org.gradle.api.artifacts.component.ProjectComponentIdentifier }
-                .map { it.projectPath }
-                .toSet() - project.path
+        val projects = runtimeComponents.get().filter { it.startsWith(":") }.toSet()
         check(projects.all { it in allowedProjects }) { "compiler engine has forbidden project dependencies: ${projects - allowedProjects}" }
     }
 }
@@ -84,10 +80,8 @@ tasks.test {
     val guestBuiltins = rootProject.file("modules/common/guest-platform/src/platform/builtins")
     inputs.dir(guestBuiltins)
     dependsOn(tasks.jar)
-    doFirst {
-        systemProperty("compukters.guest.builtins", guestBuiltins.absolutePath)
-        systemProperty("compukters.engine.jar", tasks.jar.get().archiveFile.get().asFile.absolutePath)
-    }
+    systemProperty("compukters.guest.builtins", guestBuiltins.absolutePath)
+    systemProperty("compukters.engine.jar", tasks.jar.get().archiveFile.get().asFile.absolutePath)
 }
 
 val inlineBlocksArtifact = layout.buildDirectory.file("generated/conformance/kotlin-inline-blocks.cpkt")
@@ -103,10 +97,8 @@ tasks.register<Test>("generateInlineBlocksConformanceArtifact") {
     inputs.dir(guestBuiltins)
     inputs.file(tasks.jar.flatMap { it.archiveFile })
     outputs.file(inlineBlocksArtifact)
-    doFirst {
-        systemProperty("compukters.guest.builtins", guestBuiltins.absolutePath)
-        systemProperty("compukter.vm.inlineBlocksArtifact", inlineBlocksArtifact.get().asFile.absolutePath)
-    }
+    systemProperty("compukters.guest.builtins", guestBuiltins.absolutePath)
+    systemProperty("compukter.vm.inlineBlocksArtifact", inlineBlocksArtifact.get().asFile.absolutePath)
 }
 
 val primitivesArtifact = layout.buildDirectory.file("generated/conformance/kotlin-primitives.cpkt")
@@ -122,8 +114,6 @@ tasks.register<Test>("generatePrimitivesConformanceArtifact") {
     inputs.dir(guestBuiltins)
     inputs.file(tasks.jar.flatMap { it.archiveFile })
     outputs.file(primitivesArtifact)
-    doFirst {
-        systemProperty("compukters.guest.builtins", guestBuiltins.absolutePath)
-        systemProperty("compukter.vm.primitivesArtifact", primitivesArtifact.get().asFile.absolutePath)
-    }
+    systemProperty("compukters.guest.builtins", guestBuiltins.absolutePath)
+    systemProperty("compukter.vm.primitivesArtifact", primitivesArtifact.get().asFile.absolutePath)
 }

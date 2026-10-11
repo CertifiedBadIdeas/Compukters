@@ -6854,7 +6854,8 @@ class MinimalScriptLoweringTest {
                 val second = adapter.compile(request(source))
                 val bytes = assertNotNull(first.artifact, "$name: ${first.diagnostics}").toByteArray()
                 assertContentEquals(bytes, assertNotNull(second.artifact).toByteArray())
-                assertEquals(AbiVersion(1u, if (name == "host-filesystem") 14u else 10u), ArtifactReader.read(bytes).minimumRuntimeAbi)
+                // The lexical Path wrapper uses inline values, introduced by runtime ABI 1.15.
+                assertEquals(AbiVersion(1u, if (name == "host-filesystem") 15u else 10u), ArtifactReader.read(bytes).minimumRuntimeAbi)
                 System.getProperty("compukter.vm.exceptionsArtifact")?.let { output ->
                     Path.of("$output.$name.cpkt").also { it.parent.createDirectories() }.writeBytes(bytes)
                 }

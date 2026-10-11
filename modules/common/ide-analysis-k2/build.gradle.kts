@@ -241,8 +241,11 @@ val verifyAnalysisWorkerLicenses = tasks.register("verifyAnalysisWorkerLicenses"
     dependsOn(analysisWorkerPayload, ":ide-kotlin-formatter:verifyRelocatedFormatterRuntime")
     inputs.file(analysisWorkerPayload.flatMap { it.archiveFile })
     inputs.file(rootProject.layout.projectDirectory.file("licenses/distribution-components.tsv"))
+    val actionAnalysisWorkerPayload = analysisWorkerPayload.flatMap { it.archiveFile }
+    val inventoryFile = rootProject.file("licenses/distribution-components.tsv")
+    val licenseSlf4JVersion = libs.versions.slf4j.get()
     doLast {
-        val archive = analysisWorkerPayload.get().archiveFile.get().asFile
+        val archive = actionAnalysisWorkerPayload.get().asFile
         val entries =
             ZipFile(archive).use { zip ->
                 zip.entries().asSequence().filterNot { it.isDirectory }.map { it.name }.toList()
@@ -250,7 +253,7 @@ val verifyAnalysisWorkerLicenses = tasks.register("verifyAnalysisWorkerLicenses"
         listOf(
             "META-INF/licenses/Compukters-Apache-2.0.txt",
             "META-INF/licenses/jvm/ktlint-1.8.0-MIT.txt",
-            "META-INF/licenses/jvm/slf4j-${libs.versions.slf4j.get()}-MIT.txt",
+            "META-INF/licenses/jvm/slf4j-${licenseSlf4JVersion}-MIT.txt",
             "META-INF/NOTICE.txt",
             "META-INF/THIRD-PARTY-NOTICES.md",
         ).forEach { required ->
@@ -260,8 +263,7 @@ val verifyAnalysisWorkerLicenses = tasks.register("verifyAnalysisWorkerLicenses"
         }
 
         val expectedExternal =
-            rootProject
-                .file("licenses/distribution-components.tsv")
+            inventoryFile
                 .readLines()
                 .drop(1)
                 .filter { it.isNotBlank() }
@@ -328,19 +330,17 @@ tasks.test {
     val platformBundle = project(":guest-platform").tasks.named("assemblePlatformBundle")
     dependsOn(guestApiJar, platformBundle, addonGuestApiFixtureBundle)
     inputs.files(addonGuestApiFixtureBundle)
-    doFirst {
-        val formatterClasspath = kotlinFormatterRuntime.files + configurations.runtimeClasspath.get().files
-        systemProperty("compukters.test.kotlinFormatterClasspath", formatterClasspath.joinToString(File.pathSeparator))
-        systemProperty("compukters.test.guestApi", guestApiJar.get().archiveFile.get().asFile.absolutePath)
-        systemProperty(
-            "compukters.test.platformBundle",
-            project(":guest-platform").layout.buildDirectory.file("platform/compukters-platform.cpb").get().asFile.absolutePath,
-        )
-        systemProperty(
-            "compukters.test.addonGuestApiFixture",
-            addonGuestApiFixtureBundle.singleFile.absolutePath,
-        )
-    }
+    val formatterClasspath = kotlinFormatterRuntime.files + configurations.runtimeClasspath.get().files
+    systemProperty("compukters.test.kotlinFormatterClasspath", formatterClasspath.joinToString(File.pathSeparator))
+    systemProperty("compukters.test.guestApi", guestApiJar.get().archiveFile.get().asFile.absolutePath)
+    systemProperty(
+        "compukters.test.platformBundle",
+        project(":guest-platform").layout.buildDirectory.file("platform/compukters-platform.cpb").get().asFile.absolutePath,
+    )
+    systemProperty(
+        "compukters.test.addonGuestApiFixture",
+        addonGuestApiFixtureBundle.singleFile.absolutePath,
+    )
     // Each class owns independent standalone K2 environments and compiler-global caches.
     // Keep those discarded environments from accumulating across the entire unit suite.
     forkEvery = 1
@@ -359,28 +359,26 @@ val forkedWorkerTest = tasks.register<Test>("forkedWorkerTest") {
         includeTestsMatching("ru.lazyhat.compukters.ide.analysis.k2.integration.*")
         isFailOnNoMatchingTests = false
     }
-    doFirst {
-        systemProperty("compukters.analysis.testClasspath", classpath.files.joinToString(File.pathSeparator))
-        systemProperty("compukters.analysis.java", javaToolchains.launcherFor {
-            languageVersion = JavaLanguageVersion.of(21)
-        }.get().executablePath.asFile.absolutePath)
-        systemProperty(
-            "compukters.analysis.payload",
-            project(":tooling-runtime").layout.buildDirectory.dir("tooling-bundle/content").get().asFile.absolutePath,
-        )
-        systemProperty(
-            "compukters.test.platformBundle",
-            project(":guest-platform").layout.buildDirectory.file("platform/compukters-platform.cpb").get().asFile.absolutePath,
-        )
-        systemProperty(
-            "compukters.test.guestApi",
-            project(":guest-platform").tasks.named<Jar>("jar").get().archiveFile.get().asFile.absolutePath,
-        )
-        systemProperty(
-            "compukters.test.addonGuestApiFixture",
-            addonGuestApiFixtureBundle.singleFile.absolutePath,
-        )
-    }
+    systemProperty("compukters.analysis.testClasspath", classpath.files.joinToString(File.pathSeparator))
+    systemProperty("compukters.analysis.java", javaToolchains.launcherFor {
+        languageVersion = JavaLanguageVersion.of(21)
+    }.get().executablePath.asFile.absolutePath)
+    systemProperty(
+        "compukters.analysis.payload",
+        project(":tooling-runtime").layout.buildDirectory.dir("tooling-bundle/content").get().asFile.absolutePath,
+    )
+    systemProperty(
+        "compukters.test.platformBundle",
+        project(":guest-platform").layout.buildDirectory.file("platform/compukters-platform.cpb").get().asFile.absolutePath,
+    )
+    systemProperty(
+        "compukters.test.guestApi",
+        project(":guest-platform").tasks.named<Jar>("jar").get().archiveFile.get().asFile.absolutePath,
+    )
+    systemProperty(
+        "compukters.test.addonGuestApiFixture",
+        addonGuestApiFixtureBundle.singleFile.absolutePath,
+    )
 }
 
 val incrementalAnalysisPerformanceTest = tasks.register<Test>("incrementalAnalysisPerformanceTest") {
@@ -398,29 +396,27 @@ val incrementalAnalysisPerformanceTest = tasks.register<Test>("incrementalAnalys
         includeTestsMatching("ru.lazyhat.compukters.ide.analysis.k2.integration.SourceIndexMeasurementTest")
         isFailOnNoMatchingTests = true
     }
-    doFirst {
-        systemProperty("compukters.analysis.performance", "true")
-        systemProperty("compukters.analysis.testClasspath", classpath.files.joinToString(File.pathSeparator))
-        systemProperty("compukters.analysis.java", javaToolchains.launcherFor {
-            languageVersion = JavaLanguageVersion.of(21)
-        }.get().executablePath.asFile.absolutePath)
-        systemProperty(
-            "compukters.analysis.payload",
-            project(":tooling-runtime").layout.buildDirectory.dir("tooling-bundle/content").get().asFile.absolutePath,
-        )
-        systemProperty(
-            "compukters.test.platformBundle",
-            project(":guest-platform").layout.buildDirectory.file("platform/compukters-platform.cpb").get().asFile.absolutePath,
-        )
-        systemProperty(
-            "compukters.test.guestApi",
-            project(":guest-platform").tasks.named<Jar>("jar").get().archiveFile.get().asFile.absolutePath,
-        )
-        systemProperty(
-            "compukters.test.addonGuestApiFixture",
-            addonGuestApiFixtureBundle.singleFile.absolutePath,
-        )
-    }
+    systemProperty("compukters.analysis.performance", "true")
+    systemProperty("compukters.analysis.testClasspath", classpath.files.joinToString(File.pathSeparator))
+    systemProperty("compukters.analysis.java", javaToolchains.launcherFor {
+        languageVersion = JavaLanguageVersion.of(21)
+    }.get().executablePath.asFile.absolutePath)
+    systemProperty(
+        "compukters.analysis.payload",
+        project(":tooling-runtime").layout.buildDirectory.dir("tooling-bundle/content").get().asFile.absolutePath,
+    )
+    systemProperty(
+        "compukters.test.platformBundle",
+        project(":guest-platform").layout.buildDirectory.file("platform/compukters-platform.cpb").get().asFile.absolutePath,
+    )
+    systemProperty(
+        "compukters.test.guestApi",
+        project(":guest-platform").tasks.named<Jar>("jar").get().archiveFile.get().asFile.absolutePath,
+    )
+    systemProperty(
+        "compukters.test.addonGuestApiFixture",
+        addonGuestApiFixtureBundle.singleFile.absolutePath,
+    )
 }
 
 // Both suites initialize the heavyweight standalone K2/IntelliJ environment.
