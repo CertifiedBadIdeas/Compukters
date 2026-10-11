@@ -53,61 +53,19 @@ public value class Matrix4f(
         }
     }
 
-    public fun transposed(): Matrix4f =
-        Matrix4f(
-            m00,
-            m10,
-            m20,
-            m30,
-            m01,
-            m11,
-            m21,
-            m31,
-            m02,
-            m12,
-            m22,
-            m32,
-            m03,
-            m13,
-            m23,
-            m33,
-        )
+    public fun transposed(): Matrix4f = matrixTransposePrimitive(this)
 
-    public operator fun times(other: Matrix4f): Matrix4f =
-        Matrix4f(
-            m00 * other.m00 + m01 * other.m10 + m02 * other.m20 + m03 * other.m30,
-            m00 * other.m01 + m01 * other.m11 + m02 * other.m21 + m03 * other.m31,
-            m00 * other.m02 + m01 * other.m12 + m02 * other.m22 + m03 * other.m32,
-            m00 * other.m03 + m01 * other.m13 + m02 * other.m23 + m03 * other.m33,
-            m10 * other.m00 + m11 * other.m10 + m12 * other.m20 + m13 * other.m30,
-            m10 * other.m01 + m11 * other.m11 + m12 * other.m21 + m13 * other.m31,
-            m10 * other.m02 + m11 * other.m12 + m12 * other.m22 + m13 * other.m32,
-            m10 * other.m03 + m11 * other.m13 + m12 * other.m23 + m13 * other.m33,
-            m20 * other.m00 + m21 * other.m10 + m22 * other.m20 + m23 * other.m30,
-            m20 * other.m01 + m21 * other.m11 + m22 * other.m21 + m23 * other.m31,
-            m20 * other.m02 + m21 * other.m12 + m22 * other.m22 + m23 * other.m32,
-            m20 * other.m03 + m21 * other.m13 + m22 * other.m23 + m23 * other.m33,
-            m30 * other.m00 + m31 * other.m10 + m32 * other.m20 + m33 * other.m30,
-            m30 * other.m01 + m31 * other.m11 + m32 * other.m21 + m33 * other.m31,
-            m30 * other.m02 + m31 * other.m12 + m32 * other.m22 + m33 * other.m32,
-            m30 * other.m03 + m31 * other.m13 + m32 * other.m23 + m33 * other.m33,
-        )
+    public operator fun times(other: Matrix4f): Matrix4f = matrixMultiplyPrimitive(this, other)
 
-    public operator fun times(vector: Vector4f): Vector4f =
-        Vector4f(
-            m00 * vector.x + m01 * vector.y + m02 * vector.z + m03 * vector.w,
-            m10 * vector.x + m11 * vector.y + m12 * vector.z + m13 * vector.w,
-            m20 * vector.x + m21 * vector.y + m22 * vector.z + m23 * vector.w,
-            m30 * vector.x + m31 * vector.y + m32 * vector.z + m33 * vector.w,
-        )
+    public operator fun times(vector: Vector4f): Vector4f = matrixVectorPrimitive(this, vector)
 
     /** Lift a point with w=1, retaining the result's homogeneous w. */
     public operator fun times(point: Vector3f): Vector4f = transformPoint(point)
 
-    public fun transformPoint(point: Vector3f): Vector4f = this * Vector4f(point.x, point.y, point.z, 1f)
+    public fun transformPoint(point: Vector3f): Vector4f = matrixPointPrimitive(this, point)
 
     /** Lift a direction with w=0, so affine translation has no effect. */
-    public fun transformDirection(direction: Vector3f): Vector4f = this * Vector4f(direction.x, direction.y, direction.z, 0f)
+    public fun transformDirection(direction: Vector3f): Vector4f = matrixDirectionPrimitive(this, direction)
 
     public companion object {
         public fun identity(): Matrix4f =
@@ -343,3 +301,25 @@ private fun projectionComponent(value: Double): Float {
 }
 
 private fun finiteMatrixComponent(value: Float): Boolean = value >= -Float.MAX_VALUE && value <= Float.MAX_VALUE
+
+private external fun matrixTransposePrimitive(matrix: Matrix4f): Matrix4f
+
+private external fun matrixMultiplyPrimitive(
+    left: Matrix4f,
+    right: Matrix4f,
+): Matrix4f
+
+private external fun matrixVectorPrimitive(
+    matrix: Matrix4f,
+    vector: Vector4f,
+): Vector4f
+
+private external fun matrixPointPrimitive(
+    matrix: Matrix4f,
+    point: Vector3f,
+): Vector4f
+
+private external fun matrixDirectionPrimitive(
+    matrix: Matrix4f,
+    direction: Vector3f,
+): Vector4f

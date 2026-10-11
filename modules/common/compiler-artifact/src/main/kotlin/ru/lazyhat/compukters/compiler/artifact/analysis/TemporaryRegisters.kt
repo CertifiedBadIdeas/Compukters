@@ -140,6 +140,10 @@ private fun Instruction.remapRegisters(register: (RegisterId) -> RegisterId): In
             copy(destination = register(destination), source = register(source))
         }
 
+        is Instruction.MatrixMath -> {
+            copy(destination = register(destination), left = register(left), right = right?.let { register(it) })
+        }
+
         is Instruction.MathUnary -> {
             copy(destination = register(destination), source = register(source))
         }

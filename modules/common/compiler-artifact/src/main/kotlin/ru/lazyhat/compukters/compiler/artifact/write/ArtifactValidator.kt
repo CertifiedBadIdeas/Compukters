@@ -534,6 +534,11 @@ internal fun validateArtifact(
                 block.instructions.any { it is Instruction.StringValueOf && it.type == StringValueType.F32 }
             }
         }
+    if (artifact.minimumRuntimeAbi < AbiVersion(1u, 17u) &&
+        artifact.modules.any { module -> module.blocks.any { block -> block.instructions.any { it is Instruction.MatrixMath } } }
+    ) {
+        add(ArtifactWriteErrorCode.INVALID_RANGE, "matrix math requires minimum runtime ABI 1.17")
+    }
     if (artifact.minimumRuntimeAbi < AbiVersion(1u, 16u) &&
         artifact.modules.any { module ->
             module.blocks.any { block ->
@@ -1358,6 +1363,33 @@ internal fun validateArtifact(
                                 !valueTypesMatch(moduleIndex, destinationType, moduleIndex, sourceType)
                             ) {
                                 add(ArtifactWriteErrorCode.INVALID_RANGE, "move source and destination types differ", location)
+                            }
+                        }
+
+                        is Instruction.MatrixMath -> {
+                            fun checkLayout(
+                                id: RegisterId,
+                                role: String,
+                                count: Int,
+                            ) {
+                                val value = register(id, role) as? ValueType.Inline
+                                val identity = value?.let { resolveType(moduleIndex, it.type) }
+                                val layout = identity?.let { artifact.modules[it.module].types[it.type] } as? NominalType.InlineValue
+                                if (layout == null || layout.components.size != count || layout.components.any { it != ValueType.F32 }) {
+                                    add(
+                                        ArtifactWriteErrorCode.INVALID_RANGE,
+                                        "matrix $role requires $count F32 inline components",
+                                        location,
+                                    )
+                                }
+                            }
+                            checkLayout(instruction.left, "left", 16)
+                            checkLayout(instruction.destination, "destination", instruction.operation.resultComponents)
+                            val count = instruction.operation.rightComponents
+                            if ((count == null) != (instruction.right == null)) {
+                                add(ArtifactWriteErrorCode.INVALID_RANGE, "matrix operation has incorrect arity", location)
+                            } else if (count != null && instruction.right != null) {
+                                checkLayout(instruction.right, "right", count)
                             }
                         }
 

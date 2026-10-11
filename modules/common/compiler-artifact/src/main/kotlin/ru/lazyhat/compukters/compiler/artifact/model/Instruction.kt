@@ -53,6 +53,13 @@ sealed interface Instruction {
         val unsignedDestination: Boolean = false,
     ) : Instruction
 
+    data class MatrixMath(
+        val operation: MatrixOperation,
+        val destination: RegisterId,
+        val left: RegisterId,
+        val right: RegisterId? = null,
+    ) : Instruction
+
     data class MathUnary(
         val type: ScalarValueType,
         val operation: MathUnaryOperation,
