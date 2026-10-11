@@ -6525,9 +6525,9 @@ class MinimalScriptLoweringTest {
                         """.trimIndent(),
                     "host-filesystem" to
                         """
-                        import compukter.filesystem.FileSystem
+                        import compukter.filesystem.Path
                         import compukter.io.IOException
-                        fun readFile(): String = FileSystem.readText("/home/missing")
+                        fun readFile(): String = Path("/home/missing").readText()
                         fun main() {
                             var cleanup = false
                             try { readFile(); error("read must fail") }
@@ -6545,7 +6545,7 @@ class MinimalScriptLoweringTest {
                 val second = adapter.compile(request(source))
                 val bytes = assertNotNull(first.artifact, "$name: ${first.diagnostics}").toByteArray()
                 assertContentEquals(bytes, assertNotNull(second.artifact).toByteArray())
-                assertEquals(AbiVersion(1u, 10u), ArtifactReader.read(bytes).minimumRuntimeAbi)
+                assertEquals(AbiVersion(1u, if (name == "host-filesystem") 14u else 10u), ArtifactReader.read(bytes).minimumRuntimeAbi)
                 System.getProperty("compukter.vm.exceptionsArtifact")?.let { output ->
                     Path.of("$output.$name.cpkt").also { it.parent.createDirectories() }.writeBytes(bytes)
                 }
@@ -7569,17 +7569,136 @@ class MinimalScriptLoweringTest {
         }
 
     @Test
+    fun `portable filesystem API executes binary text snapshots and atomic drafts`() =
+        withAdapter { adapter ->
+            val source =
+                """
+                import compukter.filesystem.Path
+                import compukter.filesystem.FileKind
+                import compukter.filesystem.FileSystemError
+                import compukter.filesystem.FileSystemException
+                import compukter.io.Closeable
+                import compukter.io.use
+
+                class FailingCloseable : Closeable {
+                    var closed = false
+                    override fun close() { closed = true; throw IllegalStateException("cleanup") }
+                }
+
+                fun expect(reason: FileSystemError, block: () -> Unit) {
+                    try { block(); error("operation must fail") }
+                    catch (failure: FileSystemException) { require(failure.reason == reason) }
+                }
+
+                fun main() {
+                    val home = Path("/home")
+                    require(home.name == "home" && home.parent == Path("/"))
+                    require(Path("/").parent == null && Path("/").name == null)
+                    expect(FileSystemError.INVALID_PATH) { Path("relative") }
+                    expect(FileSystemError.INVALID_PATH) { home.resolve("../escape") }
+                    val directory = home.resolve("fs-check/nested")
+                    directory.createDirectories()
+                    require(directory.stat().kind == FileKind.DIRECTORY)
+                    val file = directory.resolve("data")
+                    require(file.statOrNull() == null)
+                    val binary = ByteArray(12000) { (it % 256).toByte() }
+                    file.writeBytes(binary)
+                    require(file.stat().sizeBytes == 12000L)
+                    val copied = file.readBytes(12000)
+                    for (index in 0 until binary.size) require(binary[index] == copied[index])
+                    expect(FileSystemError.QUOTA_EXCEEDED) { file.readBytes(11999) }
+                    val old = file.openRead()
+                    file.writeText("changed")
+                    require(old.read(1)[0] == binary[0])
+                    old.close(); old.close()
+                    expect(FileSystemError.CLOSED) { old.read() }
+                    val chars = CharArray(5100) { index ->
+                        when (index % 3) { 0 -> '\uD83D'; 1 -> '\uDE00'; else -> '漢' }
+                    }
+                    val text = String(chars, 0, chars.size) + "\u0000tail"
+                    file.writeText(text)
+                    require(file.readText() == text)
+                    val revision = file.stat().revision
+                    val draft = file.openWrite()
+                    draft.write(byteArrayOf(65, 66))
+                    require(file.stat().revision == revision && file.readText() == text)
+                    draft.close()
+                    require(file.readText() == text)
+                    val conflicting = file.openWrite()
+                    conflicting.write(byteArrayOf(67))
+                    file.writeText("other")
+                    expect(FileSystemError.BUSY) { conflicting.commit() }
+                    conflicting.close()
+                    require(file.readText() == "other")
+                    expect(FileSystemError.INVALID_UTF8) { file.writeText("\uD800") }
+                    require(file.readText() == "other")
+                    file.writeBytes(byteArrayOf(-64, -128))
+                    expect(FileSystemError.INVALID_UTF8) { file.readText() }
+                    file.writeBytes(byteArrayOf(-19, -96, -128))
+                    expect(FileSystemError.INVALID_UTF8) { file.readText() }
+                    file.writeBytes(byteArrayOf(-12, -112, -128, -128))
+                    expect(FileSystemError.INVALID_UTF8) { file.readText() }
+                    val other = directory.resolve("a")
+                    other.writeText("a")
+                    val listing = directory.openDirectory()
+                    directory.resolve("later").writeText("later")
+                    require(listing.read() == other && listing.read() == file && listing.read() == null)
+                    listing.close()
+                    expect(FileSystemError.QUOTA_EXCEEDED) { directory.list(1) }
+                    val target = directory.resolve("moved")
+                    file.moveTo(target)
+                    require(file.statOrNull() == null && target.stat().kind == FileKind.FILE)
+                    expect(FileSystemError.ALREADY_EXISTS) { target.moveTo(other) }
+                    target.moveTo(other, true)
+                    expect(FileSystemError.NOT_EMPTY) { directory.delete() }
+                    require(!file.deleteIfExists())
+                    require(other.deleteIfExists())
+                    directory.resolve("later").delete()
+                    directory.delete()
+                    home.resolve("fs-check").delete()
+                    expect(FileSystemError.NOT_FOUND) { file.readBytes() }
+                    expect(FileSystemError.READ_ONLY) { Path("/rom/readonly").writeBytes(byteArrayOf(1)) }
+                    val resource = FailingCloseable()
+                    val original = IllegalArgumentException("body")
+                    try { resource.use { throw original } }
+                    catch (failure: IllegalArgumentException) { require(failure === original) }
+                    require(resource.closed)
+                    val resource2 = FailingCloseable()
+                    try { resource2.use { 42 }; error("close must fail") }
+                    catch (failure: IllegalStateException) { require(failure.message == "cleanup") }
+                    println("filesystem API ok")
+                }
+                """.trimIndent()
+            val first = adapter.compile(request(source))
+            val second = adapter.compile(request(source))
+            val artifact = assertNotNull(first.artifact, first.diagnostics.joinToString()).toByteArray()
+            assertContentEquals(artifact, assertNotNull(second.artifact, second.diagnostics.joinToString()).toByteArray())
+            val decoded = ArtifactReader.read(artifact)
+            val strings = decoded.modules.first().strings
+            val filesystem =
+                decoded.capabilities.single {
+                    strings[it.namespace.value.toInt()].toString() == "compukter" &&
+                        strings[it.name.value.toInt()].toString() == "filesystem"
+                }
+            assertEquals(AbiVersion(2u, 0u), filesystem.abi)
+            assertEquals(15u, filesystem.operationCount)
+            System.getProperty("compukters.filesystem.artifact")?.let { output ->
+                Path.of(output).also { it.parent.createDirectories() }.writeBytes(artifact)
+            }
+        }
+
+    @Test
     fun `filesystem text facade lowers through exact trusted signatures`() =
         withAdapter { adapter ->
             val result =
                 adapter.compile(
                     request(
                         """
-                        import compukter.filesystem.FileSystem
+                        import compukter.filesystem.Path
 
                         fun main() {
-                            val contents = FileSystem.readText("notes.txt")
-                            FileSystem.writeText("copy.txt", contents)
+                            val contents = Path("/home/notes.txt").readText()
+                            Path("/home/copy.txt").writeText(contents)
                         }
                         """.trimIndent(),
                     ),
