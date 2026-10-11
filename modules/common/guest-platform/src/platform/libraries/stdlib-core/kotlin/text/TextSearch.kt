@@ -29,7 +29,10 @@ public fun String.endsWith(suffix: String): Boolean {
 
 public fun String.contains(other: String): Boolean = indexOf(other) >= 0
 
-public fun String.indexOf(other: String, startIndex: Int = 0): Int {
+public fun String.indexOf(
+    other: String,
+    startIndex: Int = 0,
+): Int {
     var candidate = if (startIndex < 0) 0 else startIndex
     if (other.length == 0) return if (candidate > length) length else candidate
     val lastCandidate = length - other.length
