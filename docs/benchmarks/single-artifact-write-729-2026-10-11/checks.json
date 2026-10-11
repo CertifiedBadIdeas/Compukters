@@ -1,0 +1,27 @@
+{
+  "compiler-artifact": {
+    "tests": 187,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0
+  },
+  "compiler-k2": {
+    "tests": 199,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 5
+  },
+  "native_scenarios": [
+    "generic-library",
+    "generic-interface",
+    "dispatch",
+    "exceptions",
+    "tasks"
+  ],
+  "lint": [
+    "compiler-artifact",
+    "compiler-k2"
+  ],
+  "implementation_head": "9a3290c05f3f28098811a7c03c741f331c66e23f",
+  "scope": "Focused suites and five real VM execution scenarios; no full-checkout or release claim."
+}

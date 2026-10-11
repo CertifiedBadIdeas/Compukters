@@ -1,0 +1,16 @@
+{
+  "pid": {
+    "outputs": 60,
+    "byte_identical": true,
+    "bytes": 152916,
+    "sha256": "bc01f4194e6f7c247ef71b9cccf16145f44bccd1e959d83c3f149530556027ee",
+    "native_verified": 60
+  },
+  "hello": {
+    "outputs": 60,
+    "byte_identical": true,
+    "bytes": 4632,
+    "sha256": "b8f3d9dd969b6654964cfecc453f166910a7e29b57e93ab11f42ccec3ef17b68",
+    "native_verified": 60
+  }
+}

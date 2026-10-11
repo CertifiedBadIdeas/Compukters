@@ -1,0 +1,44 @@
+[
+  {
+    "workload": "pid",
+    "pair": 1,
+    "baseline": 401.966367,
+    "single": 396.678476,
+    "saved_percent": 1.3155058318598087
+  },
+  {
+    "workload": "pid",
+    "pair": 2,
+    "baseline": 434.270842,
+    "single": 389.207604,
+    "saved_percent": 10.376758843044776
+  },
+  {
+    "workload": "pid",
+    "pair": 3,
+    "baseline": 404.1719,
+    "single": 389.768335,
+    "saved_percent": 3.5637225150981586
+  },
+  {
+    "workload": "hello",
+    "pair": 1,
+    "baseline": 230.988583,
+    "single": 238.306061,
+    "saved_percent": -3.1678959647975304
+  },
+  {
+    "workload": "hello",
+    "pair": 2,
+    "baseline": 240.008134,
+    "single": 233.695295,
+    "saved_percent": 2.6302604394232842
+  },
+  {
+    "workload": "hello",
+    "pair": 3,
+    "baseline": 248.970545,
+    "single": 228.000618,
+    "saved_percent": 8.422653772156053
+  }
+]

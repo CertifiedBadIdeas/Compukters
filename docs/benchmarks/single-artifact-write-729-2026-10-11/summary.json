@@ -1,0 +1,34 @@
+{
+  "pid": {
+    "baseline": {
+      "warm_median_ms": 427.081637,
+      "cold_median_ms": 4960.061276,
+      "warm_samples": 21,
+      "cold_samples": 3
+    },
+    "single": {
+      "warm_median_ms": 389.768335,
+      "cold_median_ms": 5021.095883,
+      "warm_samples": 21,
+      "cold_samples": 3
+    },
+    "saved_ms": 37.31330200000002,
+    "saved_percent": 8.736807852967937
+  },
+  "hello": {
+    "baseline": {
+      "warm_median_ms": 240.008134,
+      "cold_median_ms": 4708.265221,
+      "warm_samples": 21,
+      "cold_samples": 3
+    },
+    "single": {
+      "warm_median_ms": 233.695295,
+      "cold_median_ms": 4512.192867,
+      "warm_samples": 21,
+      "cold_samples": 3
+    },
+    "saved_ms": 6.312839000000025,
+    "saved_percent": 2.6302604394232842
+  }
+}
