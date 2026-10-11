@@ -79,7 +79,7 @@ internal object IdeToolbar {
                     IdeTextKind.Toolbar,
                     label,
                     bounds.left + 28,
-                    bounds.top + (bounds.height - geometry.font.cellHeight) / 2,
+                    geometry.font.centeredCellTop(bounds),
                     color,
                     bounds,
                 )
@@ -150,7 +150,7 @@ internal object IdeToolbar {
         val bounds = IdeRect(left + 4, geometry.toolbar.top + 3, left + 88, geometry.toolbar.bottom - 3)
         if (geometry.toolbar.contains(bounds)) {
             target(IdeHitAction.QuickOpen, bounds, busy.isEmpty(), "Open file (Ctrl+Shift+N)", style = IdeControlStyle.Neutral)
-            ui(IdeTextKind.Toolbar, "Open file…", bounds.left + 8, bounds.top + (bounds.height - geometry.font.cellHeight) / 2)
+            ui(IdeTextKind.Toolbar, "Open file…", bounds.left + 8, geometry.font.centeredCellTop(bounds))
         }
     }
 

@@ -43,7 +43,13 @@ internal object IdeWorkspaceHeader {
             selected = projectSwitcherOpen,
             style = IdeControlStyle.Neutral,
         )
-        output.ui(IdeTextKind.Header, "${output.fitUi(title, project.width - 22)} ▾", project.left + 6, project.top + 5, clip = project)
+        output.ui(
+            IdeTextKind.Header,
+            "${output.fitUi(title, project.width - 22)} ▾",
+            project.left + 6,
+            geometry.font.centeredCellTop(project),
+            clip = project,
+        )
         val right = header.right - IdeUiScaleControl.WIDTH - 8
         val targetText = targetLabel(target)
         val targetWidth = minOf(output.uiWidth(targetText), ((right - project.right - 16) / 2).coerceAtLeast(0))
@@ -51,13 +57,20 @@ internal object IdeWorkspaceHeader {
         val file = IdeRect(project.right + 8, header.top, (targetLeft - 8).coerceAtLeast(project.right + 8), header.bottom)
         val active = workspace.activeFile?.value ?: "No file"
         val colors = IdeGitFileColors(workspace.git.status ?: workspace.git.result?.status)
-        output.ui(IdeTextKind.Header, output.fitUi(active, file.width), file.left, header.top + 7, colors.color(active), file)
+        output.ui(
+            IdeTextKind.Header,
+            output.fitUi(active, file.width),
+            file.left,
+            geometry.font.centeredCellTop(header),
+            colors.color(active),
+            file,
+        )
         val targetBounds = IdeRect(targetLeft, header.top, right, header.bottom)
         output.ui(
             IdeTextKind.Header,
             output.fitUi(targetText, targetBounds.width),
             targetBounds.left,
-            header.top + 7,
+            geometry.font.centeredCellTop(header),
             IdeColors.MUTED,
             targetBounds,
         )

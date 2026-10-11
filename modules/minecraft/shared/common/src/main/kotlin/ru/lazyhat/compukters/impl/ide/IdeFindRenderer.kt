@@ -44,7 +44,7 @@ internal class IdeFindRenderer(
         val queryStart = queryGlyphs.offsetByCodePoints(0, minOf(scroll, queryGlyphs.codePointCount(0, queryGlyphs.length)))
         val visibleQuery = queryGlyphs.substring(queryStart)
         val x = inside.left + 3
-        val y = inside.top + 1 + font.glyphDrawOffsetY
+        val y = font.centeredCellTop(inside) + font.glyphDrawOffsetY
         if (find.focused) {
             find.querySelection?.let { selection ->
                 val start = visualColumns(find.query.substring(0, selection.startUtf16)) - scroll
@@ -74,7 +74,7 @@ internal class IdeFindRenderer(
             IdeTextKind.Find,
             count,
             counter.left,
-            bounds.top + 8,
+            font.centeredCellTop(counter),
             if (find.query.isNotEmpty() &&
                 find.matches.isEmpty()
             ) {
@@ -90,9 +90,9 @@ internal class IdeFindRenderer(
         output.target(IdeHitAction.FindPrevious, previous, find.matches.isNotEmpty(), "Previous match (Shift+Enter)")
         output.target(IdeHitAction.FindNext, next, find.matches.isNotEmpty(), "Next match (Enter)")
         output.target(IdeHitAction.FindClose, close, true, "Close search (Escape)")
-        output.ui(IdeTextKind.Find, "↑", previous.left + 7, previous.top + 5)
-        output.ui(IdeTextKind.Find, "↓", next.left + 7, next.top + 5)
-        output.ui(IdeTextKind.Find, "×", close.left + 7, close.top + 5)
+        output.ui(IdeTextKind.Find, "↑", previous.left + 7, font.centeredCellTop(previous))
+        output.ui(IdeTextKind.Find, "↓", next.left + 7, font.centeredCellTop(next))
+        output.ui(IdeTextKind.Find, "×", close.left + 7, font.centeredCellTop(close))
     }
 
     private fun visualColumns(value: String): Int = IdeSourceColumns.columnAt(value)
