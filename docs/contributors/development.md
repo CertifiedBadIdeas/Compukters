@@ -11,6 +11,12 @@ permalink: /DEVELOPMENT/
 Start from the [Compukters repository](https://github.com/CertifiedBadIdeas/Compukters). Clone with submodules, or run
 `git submodule update --init --recursive` in an existing checkout. The pinned Rust VM is part of the build.
 
+Minecraft builds use Architectury Loom for dependencies, mappings and development runs. Shared Minecraft modules
+are packaged directly through their ordinary JAR variants (`namedElements` on 1.21.1) and the project's Shadow
+conventions; they do not
+use Architectury Plugin transformations or its runtime Java agent. Register shared source sets through `loom.mods`
+when adding a Minecraft module. The Minecraft 1.21.1 production archive is remapped after merging its dependencies.
+
 ## Agent task worktrees
 
 Create a ready task checkout with one command:

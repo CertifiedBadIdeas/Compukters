@@ -15,7 +15,8 @@ headings so this page has one stable URL that can be shared outside the reposito
 
 - Contributors can opt into Gradle Configuration Cache for built-in program generation, Minecraft classes and
   shared tooling assembly. Independent built-in compiler tasks can run in parallel within the same project;
-  cached build-version selection tracks Git tags on `HEAD`.
+  cached build-version selection tracks Git tags on `HEAD`. Minecraft builds use Loom directly for common
+  module packaging and development runs, without the Architectury Plugin transformer or Java agent.
 
 - Guest compilation and process launch accept lexical `Path` values and normalize dot components before native
   access. `Compiler.compile` returns a typed result with its own diagnostics and the canonical installed output;
