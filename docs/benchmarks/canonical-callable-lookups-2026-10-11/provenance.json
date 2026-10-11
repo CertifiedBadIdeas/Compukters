@@ -1,0 +1,59 @@
+{
+  "baseline_compiler_source_head": "e2e984b8aaffbb670b37954cd9233cd447b7426d",
+  "baseline_payload_built_at": "9a3290c05f3f28098811a7c03c741f331c66e23f",
+  "implementation_head": "2bf92aa74958e223a535f4c3537818777a23ee7c",
+  "method": "3 alternating baseline/indexed JVM pairs per workload; 10 actual compilations per JVM, sample 1 cold, samples 4-10 warm; one retained adapter per JVM; no instrumentation/result cache; excludes JVM start, IPC, dependency resolution and Minecraft UI",
+  "platform": "Linux-7.2.9-zen1-1-zen-x86_64-with-glibc2.44",
+  "cpu": "AMD Ryzen 9 9950X3D 16-Core Processor",
+  "governor": "powersave",
+  "java": "openjdk version \"21.0.12.1\" 2026-08-18\nOpenJDK Runtime Environment (build 21.0.12.1+1)\nOpenJDK 64-Bit Server VM (build 21.0.12.1+1, mixed mode, sharing)\n",
+  "jvm_args": [
+    "-Xmx2g"
+  ],
+  "tooling_manifests": {
+    "baseline": "format=1\nkind=compiler\nidentity.artifactWriter=1\nidentity.codegenAbi=1\nidentity.compiler=2.4.10\nidentity.language=2.4\nidentity.platformAbi=59b5cb3031977b905d1258f1d1d4c739413c98625b389b7b7c34e3a6155f4f91\nmainClass=ru.lazyhat.compukters.compiler.worker.server.CompilerWorkerMainKt\npayloadSha256=5b5651c90d194bba748af6246ab7d5aecad1d446219c72ff6513f83e7ee5a415\nclasspath=common/lib/addon-guest-api-0.6.0.jar\nclasspath=compiler/lib/compiler-artifact-0.6.0.jar\nclasspath=common/lib/compiler-client-0.6.0.jar\nclasspath=compiler/lib/compiler-k2-0.6.0.jar\nclasspath=compiler/lib/compiler-k2-engine-0.6.0.jar\nclasspath=compiler/lib/guest-platform-0.6.0.jar\nclasspath=common/lib/kotlin-compiler-2.4.10.jar\nclasspath=common/lib/kotlin-stdlib-2.4.10.jar\nclasspath=common/lib/kotlin-stdlib-jdk7-2.4.10.jar\nclasspath=common/lib/kotlin-stdlib-jdk8-2.4.10.jar\nclasspath=compiler/lib/kotlinx-coroutines-core-jvm-1.8.0.jar\nclasspath=common/lib/platform-bundle-0.6.0.jar\nclasspath=common/lib/platform-k2-0.6.0.jar\nclasspath=common/lib/worker-client-0.6.0.jar\n",
+    "indexed": "format=1\nkind=compiler\nidentity.artifactWriter=1\nidentity.codegenAbi=1\nidentity.compiler=2.4.10\nidentity.language=2.4\nidentity.platformAbi=59b5cb3031977b905d1258f1d1d4c739413c98625b389b7b7c34e3a6155f4f91\nmainClass=ru.lazyhat.compukters.compiler.worker.server.CompilerWorkerMainKt\npayloadSha256=dcf17a81be40606b7e5bde05cb7aea1657543b4894641ca8439d84f3162e52f3\nclasspath=common/lib/addon-guest-api-0.6.0.jar\nclasspath=compiler/lib/compiler-artifact-0.6.0.jar\nclasspath=common/lib/compiler-client-0.6.0.jar\nclasspath=compiler/lib/compiler-k2-0.6.0.jar\nclasspath=compiler/lib/compiler-k2-engine-0.6.0.jar\nclasspath=compiler/lib/guest-platform-0.6.0.jar\nclasspath=common/lib/kotlin-compiler-2.4.10.jar\nclasspath=common/lib/kotlin-stdlib-2.4.10.jar\nclasspath=common/lib/kotlin-stdlib-jdk7-2.4.10.jar\nclasspath=common/lib/kotlin-stdlib-jdk8-2.4.10.jar\nclasspath=compiler/lib/kotlinx-coroutines-core-jvm-1.8.0.jar\nclasspath=common/lib/platform-bundle-0.6.0.jar\nclasspath=common/lib/platform-k2-0.6.0.jar\nclasspath=common/lib/worker-client-0.6.0.jar\n"
+  },
+  "inputs": {
+    "input/hello/src/main.kt": {
+      "bytes": 44,
+      "sha256": "19659ade8a2b1573242993e9945229cd6775c801dfd36118fba6dc8a753b64fb"
+    },
+    "input/pid/src/control.kt": {
+      "bytes": 4362,
+      "sha256": "f900af29d5da98f6032e48c94daf5fd492c781f3864e490d0d48e92052f476ea"
+    },
+    "input/pid/src/main.kt": {
+      "bytes": 6303,
+      "sha256": "f1f07b699799ed9a4a5e5fda81e7c6d1755d5d2509c97053e0103a07c32822d2"
+    },
+    "sable.cagb": {
+      "bytes": 171875,
+      "sha256": "f47c4b4c48f5b1390c35087e81c4ec6f9533b5620b928fa301c75c3b75135c87"
+    },
+    "propulsion.cagb": {
+      "bytes": 215015,
+      "sha256": "c3cd41cfb24cd2233f940544e3364a7a7091f8dbeea0b067d39a50c330042793"
+    },
+    "CompileProbe.kt": {
+      "bytes": 3219,
+      "sha256": "f592fe0bb7cca14bd8f2b74a32084d71069fa61e8b5087302e590985a16b8020"
+    },
+    "probe.jar": {
+      "bytes": 7898,
+      "sha256": "efc8fbcb4913e1cef8d6405610cc482a07214e9ddc3175c0c6fe9ea83029533d"
+    }
+  },
+  "native_verifier": {
+    "abi": 22,
+    "sha256": "c2ff8dbc822099b08e4bfa28dcc94b065626c20e2a0af0d83971b47edc5f0f61",
+    "scope": "stateless artifact verification, not PID session admission or flight validation"
+  },
+  "module_roots": [
+    "stdlib:core",
+    "compukter:core",
+    "sable:api",
+    "propulsion:api"
+  ],
+  "private_sources_published": false
+}
