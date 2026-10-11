@@ -242,51 +242,52 @@ test `redstone program lowers deterministically for vm conformance`,
 and
 [`ComputerRedstoneGameTest`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/minecraft/v26_1/v26_1-neoforge/src/gameTest/kotlin/ru/lazyhat/compukters/impl/computer/ComputerRedstoneGameTest.kt).
 
-### Terminal write, event wait, and key result
+### Typed terminal events and drawing
 
 **Status:** Supported.
 
-`Terminal.write`, `Terminal.awaitEvent`, and `Terminal.eventKey` lower to exact terminal capability calls and
-execute across a host request.
+`compukter:core` 7.0.0 replaces the raw public event protocol with `Terminal.readEvent()`.
+It blocks until input arrives and returns an owned `TerminalEvent.Text(text)` or
+`TerminalEvent.Key(key, action, modifiers)`. `TerminalKey` and `TerminalKeyAction` are enums;
+`TerminalModifiers` exposes `shift`, `control`, `alt` and `superKey` Boolean properties.
+The facade releases native event ownership before returning, including on decoding failure.
+There is no public `awaitEvent` / `event*` / `finishEvent` sequence.
+
+`Terminal.cursor` is a `Position2i`; `Terminal.size` is a `Size2i`. These reuse the standard library's
+integer vectors. `setCursor(position)` and `writeAt(position, text)` accept positions, while
+`fill(rectangle)` and `fill(rectangle, character)` accept `Rect2i`; an empty rectangle is a no-op.
+`setColors(foreground, background)` accepts `TerminalColor` values from the fixed 16-color palette.
+Drawing stays bounded by the native grid. Positional drawing does not move the stream cursor.
+`write(text)`, `erasePrevious()`, `clear()` and `setCursorVisible(visible)` remain available.
+
+```kotlin
+import compukter.terminal.*
+import kotlin.math.*
+
+fun main() {
+    Terminal.setColors(TerminalColor.WHITE, TerminalColor.BLACK)
+    Terminal.fill(Rect2i(Vector2i(0, 0), Terminal.size))
+    when (val event = Terminal.readEvent()) {
+        is TerminalEvent.Text -> Terminal.writeAt(Vector2i(0, 0), event.text)
+        is TerminalEvent.Key -> if (event.key == TerminalKey.ENTER) println("Enter")
+    }
+}
+```
+
+Ctrl+C is reserved for foreground interruption. At an idle shell it cancels command input; when a
+child is running it unwinds that command's process tree and returns status 130 to its parent.
+It is forced cancellation, without Guest signal handlers. Ctrl+T is no longer reserved.
+Plain C/U text remains normal input; the client maps Ctrl+C and Ctrl+U as key events.
 
 **Evidence:**
 [`MinimalScriptLoweringTest`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/compiler-k2/src/test/kotlin/ru/lazyhat/compukters/compiler/worker/k2/MinimalScriptLoweringTest.kt),
-test `ordinary project call resumes transparently across host blocking`, and
-[`kotlin_writer.rs`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/compiler-artifact/src/test/rust/executable-conformance/kotlin_writer.rs),
-test `k2_ordinary_project_call_resumes_across_async_capability`.
-
-### Remaining raw terminal operations
-
-**Status:** Partial.
-
-Clear, erase, text and action/modifier event fields, and event completion lower through trusted signatures and
-have device-level VM tests, but lack generated Kotlin-to-VM execution coverage.
-
-**Evidence:**
-[`MinimalScriptLoweringTest`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/compiler-k2/src/test/kotlin/ru/lazyhat/compukters/compiler/worker/k2/MinimalScriptLoweringTest.kt),
-test `shell language subset lowers control flow scalars strings and raw terminal calls`, paired with
-[`terminal_device.rs`](https://github.com/CertifiedBadIdeas/Compukter-VM/blob/main/tests/terminal_device.rs),
-tests `stable_key_and_atomic_text_events_merge_in_fifo_order` and
-`input_limits_reject_whole_events_without_partial_queue_mutation`.
-
-**Related work:** not scheduled
-
-### Positional terminal drawing
-
-**Status:** Partial.
-
-Cursor position and visibility, palette colors, `writeAt`, and rectangular `fill` lower through exact trusted
-signatures and have VM device conformance, but no generated Kotlin program executes the complete facade end to
-end.
-
-**Evidence:**
-[`MinimalScriptLoweringTest`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/compiler-k2/src/test/kotlin/ru/lazyhat/compukters/compiler/worker/k2/MinimalScriptLoweringTest.kt),
-test `positional terminal facade lowers through exact trusted signatures`, paired with
-[`terminal_device.rs`](https://github.com/CertifiedBadIdeas/Compukter-VM/blob/main/tests/terminal_device.rs),
-tests `positional_patch_and_fill_do_not_move_the_stream_cursor` and
-`positional_terminal_write_clips_one_row_and_decodes_scalars`.
-
-**Related work:** not scheduled
+tests `typed terminal facade lowers observations events and rejects removed APIs`,
+`checked in shell compiles deterministically` and `checked in editor compiles deterministically`;
+[`ProgramRuntimeHostIntegrationTest`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/core/src/nativeIntegrationTest/kotlin/ru/lazyhat/compukters/core/device/runtime/program/integration/ProgramRuntimeHostIntegrationTest.kt),
+tests `builtin shell edits scalar boundaries and restores history drafts`,
+`builtin shell bounds session history and retains the current draft`, and
+`ROM boot runs a foreground child and reboot creates a fresh shell`;
+native `terminal_observations_read_authoritative_geometry_without_mutating_it` and `ctrl_c_*` tests.
 
 ### Filesystem facade
 

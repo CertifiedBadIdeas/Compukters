@@ -13,6 +13,13 @@ headings so this page has one stable URL that can be shared outside the reposito
 
 ## 0.6.0 — In development
 
+- The built-in shell supports cursor editing, Unicode-aware deletion, horizontal scrolling and a bounded
+  32-command history that restores unfinished input. `Ctrl+U` clears the line; `Ctrl+C` cancels input or stops
+  the foreground command tree and returns to the shell.
+- Guest `Terminal` provides owned typed Text/Key events, named keys and modifiers, standard-library integer
+  geometry for cursor/drawing operations, terminal size observations and named palette colors. The old public
+  raw event protocol is replaced; built-in shell, editor and benchmark agent use the new API.
+
 - Contributors can opt into Gradle Configuration Cache for built-in program generation, Minecraft classes and
   shared tooling assembly. Independent built-in compiler tasks can run in parallel within the same project;
   cached build-version selection tracks Git tags on `HEAD`.
@@ -397,7 +404,7 @@ listed in [Kotlin support](developers/kotlin-support.md) and [standard library s
   while computers restore. Propulsion restores matching engine handles, owned throttle, steering and thrust overrides
   before execution resumes, with stale replacement handles and rollback on control conflicts. Thrust may lapse during
   unload/restoration. An unused Create addon permits capture; active Create resources remain unsupported.
-- `Ctrl+T` in a computer or IDE target terminal stops the foreground command and its nested processes/tasks,
+- `Ctrl+C` in a computer or IDE target terminal stops the foreground command and its nested processes/tasks,
   releases peripheral control and returns to the shell while retaining output and files. Repeats are ignored;
   an idle shell remains running.
 - Redstone inputs are isolated from passive conduction through the chassis. Explicit weak/direct outputs remain

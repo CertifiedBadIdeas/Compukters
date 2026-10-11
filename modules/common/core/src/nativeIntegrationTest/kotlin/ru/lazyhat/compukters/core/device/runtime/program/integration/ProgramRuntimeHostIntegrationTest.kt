@@ -295,7 +295,7 @@ class ProgramRuntimeHostIntegrationTest {
             press(host, TerminalKey.X, setOf(TerminalModifier.CONTROL))
             val contents = shellCommand(host, "cat \"./unicode note.txt\"")
             assertTrue(contents.contains("😀tail"), contents)
-            assertTrue(contents.endsWith("tail>\n"), contents)
+            assertTrue(contents.endsWith("tail\n>\n"), contents)
             shellCommand(host, "mv \"unicode note.txt\" moved.txt")
             assertTrue(shellCommand(host, "cat moved.txt").contains("😀tail"))
             shellCommand(host, "rm moved.txt")
@@ -323,6 +323,74 @@ class ProgramRuntimeHostIntegrationTest {
             assertTrue(shellCommand(host, "cat /home").contains("is a directory"))
             assertTrue(shellCommand(host, "help mkdir").contains("mkdir [-p] <path>"))
             assertTrue(shellCommand(host, "echo alive").contains("alive\n>"))
+        }
+
+    @Test
+    fun `builtin shell edits scalar boundaries and restores history drafts`() =
+        withShell { host ->
+            submit(host, "echo first")
+            pressEnter(host)
+            submit(host, "echo AB")
+            press(host, TerminalKey.LEFT)
+            press(host, TerminalKey.UP)
+            assertTrue(terminalText(requireNotNull(host.terminalFullState())).endsWith("> echo first\n"))
+            press(host, TerminalKey.DOWN)
+            submit(host, "😀")
+            pressEnter(host)
+            assertTrue(terminalText(requireNotNull(host.terminalFullState())).endsWith("> echo A😀B\nA😀B\n>\n"))
+
+            submit(host, "echo 😀Z")
+            press(host, TerminalKey.HOME)
+            repeat(5) { press(host, TerminalKey.RIGHT) }
+            press(host, TerminalKey.DELETE)
+            pressEnter(host)
+            assertTrue(terminalText(requireNotNull(host.terminalFullState())).endsWith("> echo Z\nZ\n>\n"))
+
+            submit(host, "echo A😀B")
+            press(host, TerminalKey.LEFT)
+            press(host, TerminalKey.BACKSPACE)
+            submit(host, "λ")
+            press(host, TerminalKey.END)
+            pressEnter(host)
+            assertTrue(terminalText(requireNotNull(host.terminalFullState())).endsWith("> echo AλB\nAλB\n>\n"))
+
+            submit(host, "echo A😀" + "z".repeat(48))
+            pressEnter(host)
+            submit(host, "echo " + "x".repeat(50))
+            press(host, TerminalKey.UP)
+            assertTrue(requireNotNull(host.terminalFullState()).cells.none { it.codePoint == 0xfffd })
+            press(host, TerminalKey.DOWN)
+            press(host, TerminalKey.U, setOf(TerminalModifier.CONTROL))
+
+            submit(host, "echo " + "x".repeat(100) + "😀")
+            val scrolled = requireNotNull(host.terminalFullState())
+            assertTrue(scrolled.cursor.x in 2..50)
+            assertTrue(scrolled.cells.any { it.codePoint == 0x1f600 })
+            press(host, TerminalKey.HOME)
+            assertEquals(2, requireNotNull(host.terminalFullState()).cursor.x)
+            press(host, TerminalKey.U, setOf(TerminalModifier.CONTROL))
+            assertTrue(terminalText(requireNotNull(host.terminalFullState())).endsWith(">\n"))
+            submit(host, "echo cancelled")
+            press(host, TerminalKey.C, setOf(TerminalModifier.CONTROL))
+            assertTrue(terminalText(requireNotNull(host.terminalFullState())).endsWith("> ^C\n>\n"))
+            assertTrue(host.sendTerminalKey(TerminalKey.C, TerminalKeyAction.REPEAT, setOf(TerminalModifier.CONTROL)))
+            advanceUntil(host) { it == ProgramRuntimeState.WaitingForInput }
+            submit(host, "echo alive")
+            pressEnter(host)
+            assertTrue(terminalText(requireNotNull(host.terminalFullState())).endsWith("alive\n>\n"))
+        }
+
+    @Test
+    fun `builtin shell bounds session history and retains the current draft`() =
+        withShell { host ->
+            repeat(36) {
+                submit(host, "echo $it")
+                pressEnter(host)
+            }
+            repeat(40) { press(host, TerminalKey.UP) }
+            assertTrue(terminalText(requireNotNull(host.terminalFullState())).endsWith("> echo 4\n"))
+            repeat(40) { press(host, TerminalKey.DOWN) }
+            assertTrue(terminalText(requireNotNull(host.terminalFullState())).endsWith(">\n"))
         }
 
     private fun shellCommand(
@@ -463,15 +531,15 @@ class ProgramRuntimeHostIntegrationTest {
                                 missingOutput,
                             )
 
-                            // Native Ctrl+T must unwind an input-waiting child and leave the shell usable.
+                            // Native Ctrl+C must unwind an input-waiting child and leave the shell usable.
                             submit(computer, "edit interrupted.kt")
                             pressEnter(computer)
                             assertTrue(terminalText(requireNotNull(computer.terminalFullState())).startsWith("Compukters edit"))
-                            press(computer, TerminalKey.T, setOf(TerminalModifier.CONTROL))
+                            press(computer, TerminalKey.C, setOf(TerminalModifier.CONTROL))
                             val terminatedScreen = terminalText(requireNotNull(computer.terminalFullState()))
                             assertTrue(terminatedScreen.contains("^S Save"), terminatedScreen)
-                            assertTrue(terminatedScreen.endsWith(">\n"), terminatedScreen)
-                            assertTrue(computer.sendTerminalKey(TerminalKey.T, TerminalKeyAction.REPEAT, setOf(TerminalModifier.CONTROL)))
+                            assertTrue(terminatedScreen.endsWith("^C\n>\n"), terminatedScreen)
+                            assertTrue(computer.sendTerminalKey(TerminalKey.C, TerminalKeyAction.REPEAT, setOf(TerminalModifier.CONTROL)))
                             advanceUntil(computer) { it == ProgramRuntimeState.WaitingForInput }
                             submit(computer, "echo survived")
                             pressEnter(computer)
@@ -713,7 +781,9 @@ class ProgramRuntimeHostIntegrationTest {
                 compilerWaitStarted = null
             }
         }
-        error("program did not reach expected state within $MAXIMUM_TICKS ticks; last state was ${host.state}")
+        error(
+            "program did not reach expected state within $MAXIMUM_TICKS ticks; last state was ${host.state}; resources=${host.resourceSnapshot()}",
+        )
     }
 
     private fun advanceUntilHalted(session: VmSession): VmOutcome.Halted {
