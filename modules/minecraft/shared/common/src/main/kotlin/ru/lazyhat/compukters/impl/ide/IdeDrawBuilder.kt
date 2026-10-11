@@ -55,6 +55,14 @@ internal open class IdeDrawBuilder(
         fills += draw
     }
 
+    fun scissor(draw: IdeScissorDraw) {
+        scissors += draw
+    }
+
+    fun hit(target: IdeHitTarget) {
+        hitTargets += target
+    }
+
     fun uiWidth(value: String): Int = value.codePointCount(0, value.length) * font.cellWidth
 
     /** Bound fitting work by the visible code-point budget, matching the font used for drawing. */

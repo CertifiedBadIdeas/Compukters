@@ -49,6 +49,55 @@ import kotlin.test.assertTrue
 
 class IdeInputAdapterTest {
     @Test
+    fun `domain dialog blocks search semantic navigation and editor shortcuts`() {
+        val fixture = fixture()
+        val focus =
+            IdeFocusState.Editor.copy(
+                dialog = IdeDialogState.Confirmation("Delete", "Sure?", 1),
+                findVisible = true,
+                findFocused = true,
+                declarationChooserVisible = true,
+                parameterInfoVisible = true,
+                completionVisible = true,
+            )
+        assertTrue(fixture.adapter.keyPressed(key(IdeKeyCode.S, IdeModifier.CONTROL), focus))
+        assertTrue(fixture.adapter.keyPressed(key(IdeKeyCode.DOWN), focus))
+        assertFalse(fixture.adapter.charTyped(IdeCharacterInput("😀"), focus))
+        assertTrue(fixture.commands.isEmpty())
+        fixture.adapter.keyPressed(key(IdeKeyCode.ESCAPE), focus)
+        assertEquals(listOf<IdeCommand>(IdeCommand.CancelDialog), fixture.commands)
+    }
+
+    @Test
+    fun `focused search owns clipboard and shortcuts before every editor popup then returns to source`() {
+        val fixture = fixture(clipboard = "😀text")
+        val focus =
+            IdeFocusState.Editor.copy(
+                findVisible = true,
+                findFocused = true,
+                declarationChooserVisible = true,
+                parameterInfoVisible = true,
+                completionVisible = true,
+            )
+        assertTrue(fixture.adapter.keyPressed(key(IdeKeyCode.S, IdeModifier.CONTROL), focus))
+        assertTrue(fixture.commands.isEmpty())
+        fixture.adapter.keyPressed(IdeKeyInput(IdeKeyCode.V, IdeModifier.CONTROL, paste = true), focus)
+        fixture.adapter.charTyped(IdeCharacterInput("λ"), focus)
+        fixture.adapter.keyPressed(key(IdeKeyCode.TAB), focus)
+        assertEquals(
+            listOf<IdeCommand>(
+                IdeCommand.EditFind(IdeEditorInput.Type("😀text")),
+                IdeCommand.EditFind(IdeEditorInput.Type("λ")),
+                IdeCommand.FocusFind(false),
+            ),
+            fixture.commands,
+        )
+        fixture.commands.clear()
+        fixture.adapter.charTyped(IdeCharacterInput("λ"), focus.copy(findFocused = false))
+        assertEquals(listOf<IdeCommand>(IdeCommand.Edit(IdeEditorInput.Type("λ"))), fixture.commands)
+    }
+
+    @Test
     fun `scrolling project list opens the displayed project using its absolute index`() {
         val fixture = fixture()
         val geometry = IdeRenderGeometry.compute(960, 540, 180, 120, true, true, IdeCodeFontProfile.DEFAULT)

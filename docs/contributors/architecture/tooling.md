@@ -270,10 +270,23 @@ immutable messages on opening, owns only scrolling and closure, and copies the c
 replicates compiler/editor state. Its renderer disables underlying controls; unsupported viewports defer its geometry
 without losing the captured contents.
 
-Remaining debt is explicit: editor semantic popups, Git, explorer and bottom-panel rendering still live in
-`IdeRenderer.Builder`, and domain command routing remains substantial in `IdeInputAdapter`. Extract future feature
-components at those existing ownership boundaries; do not grow a generic widget framework or move domain transitions
-into renderers. Version adapters remain limited to Minecraft API differences.
+`IdeSourceColumns` owns UTF-16/code-point/tab conversion; `IdeSourceGeometry` gives one admitted source view its
+shared gutter, row, caret, source anchor and pointer mapping. Styled fragments expand tabs from the line's actual
+column. `IdeEditorRenderer` owns source, selection, highlights and gutter indicators; `IdeFindRenderer` owns search
+controls; `IdeEditorPopups` owns hover, declaration chooser, completion and parameter information. These components
+emit directly into the existing frame collector and use the same source geometry for anchors.
+
+`IdeEditorInputRouter` owns search, semantic navigation and ordinary editor keys and characters. Local screen overlays
+and domain dialogs are routed first, followed by focused Git/usage-panel input. Within editing, focused search takes
+precedence over the declaration chooser, parameter-info dismissal, completion navigation and ordinary editing.
+Screen-wide shortcuts retain their explicit screen-controller ordering. Clipboard bounds have one shared owner,
+`IdeClipboardText`, used by source editing, search and Git drafts. Authoritative document and analysis state remains
+in `ide-client`; these components do not cache or independently mutate it.
+
+Remaining debt is explicit: Git, explorer and bottom-panel rendering still live in `IdeRenderer.Builder`, and domain
+hit-action routing remains substantial in `IdeInputAdapter`. Extract future feature owners using these draw
+primitives; do not duplicate geometry, cache mutable controller snapshots, or move compiler/project behavior into
+renderers. Version adapters remain limited to Minecraft API differences.
 
 Version-specific `IdeScreen` shells translate Minecraft input and implement drawing, including font handles, texture
 pipelines, transforms and scissor semantics. Minecraft 1.21.1 converts logical clips to Minecraft GUI coordinates;
