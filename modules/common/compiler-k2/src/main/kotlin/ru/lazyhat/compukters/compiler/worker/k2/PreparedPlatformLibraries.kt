@@ -18,6 +18,7 @@
 
 package ru.lazyhat.compukters.compiler.worker.k2
 
+import ru.lazyhat.compukters.compiler.artifact.link.PreparedLibraryModules
 import ru.lazyhat.compukters.compiler.k2.engine.library.LoadedPlatformLibraries
 import ru.lazyhat.compukters.compiler.k2.engine.library.loadPlatformLibraries
 import ru.lazyhat.compukters.platform.bundle.PlatformBundle
@@ -35,6 +36,8 @@ internal class PreparedPlatformLibraries private constructor(
     val sourceOutputs: List<CompuktersFirModuleOutput>,
     private val environment: CompuktersFirBuildEnvironment,
 ) : AutoCloseable {
+    val linkerLibraries = PreparedLibraryModules.prepare(libraries.artifacts)
+
     fun createProjectEnvironment(): CompuktersFirBuildEnvironment = environment.createGuestRequestEnvironment()
 
     override fun close() = environment.close()

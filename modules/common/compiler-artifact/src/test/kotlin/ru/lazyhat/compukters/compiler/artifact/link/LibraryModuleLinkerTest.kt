@@ -67,6 +67,38 @@ import kotlin.test.assertTrue
 
 class LibraryModuleLinkerTest {
     @Test
+    fun `prepared library linking preserves bytes across project changes fragments and replaced libraries`() {
+        val first = libraryModule()
+        val changed = first.copy(constants = listOf(Constant.I32(3), Constant.I32(11)))
+        for (library in listOf(first, changed)) {
+            val input = application(library)
+            val descriptor =
+                input.modules.single().copy(
+                    imports = emptyList(),
+                    blocks = listOf(Block(FunctionId.of(0u), false, listOf(Instruction.Return(Destination.Unit)))),
+                )
+            val artifacts = listOf(input.copy(modules = listOf(descriptor, library)))
+            val prepared = PreparedLibraryModules.prepare(artifacts)
+            val changedProject =
+                input.copy(
+                    minimumRuntimeAbi = AbiVersion(1u, 5u),
+                    modules = input.modules.map { it.copy(strings = listOf(MetadataText.of("app-changed")) + it.strings.drop(1)) },
+                )
+            for (project in listOf(input, changedProject, input)) {
+                for (preserve in listOf(false, true)) {
+                    val source = if (preserve) project.copy(modules = project.modules + library) else project
+                    val expected = LibraryModuleLinker.link(source, artifacts, preserveLibraryExports = preserve)
+                    val actual = LibraryModuleLinker.link(source, prepared, preserveLibraryExports = preserve)
+                    assertContentEquals(
+                        assertIs<ArtifactWriteResult.Success>(ArtifactWriter.write(expected)).bytes,
+                        assertIs<ArtifactWriteResult.Success>(ArtifactWriter.write(actual)).bytes,
+                    )
+                }
+            }
+        }
+    }
+
+    @Test
     fun `runtime ABI inference is explicit and preserves declared floors by default`() {
         val base = application(libraryModule())
         val anchor =

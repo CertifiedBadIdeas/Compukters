@@ -162,6 +162,50 @@ class LibrarySpecializationsTest {
         assertEquals(3, rewritten.modules[1].imports.size)
     }
 
+    @Test
+    fun `prepared specialization indexes preserve owners layouts and rejection paths`() {
+        val source = artifact(module("app", ModuleKind.APPLICATION))
+        val owner = LibrarySpecializations.export(module("owner", ModuleKind.LIBRARY), names)
+        val partial = owner.copy(exports = owner.exports.filter { it.kind == SymbolKind.TYPE })
+        val dependent = module("dependent", ModuleKind.LIBRARY).copy(exports = emptyList())
+        val bundled = artifact(dependent).copy(modules = listOf(dependent, partial))
+        val complete = listOf(artifact(owner), bundled)
+        val prepared = PreparedLibraryModules.prepare(complete)
+        repeat(2) {
+            val actual =
+                LibrarySpecializations.reuse(
+                    source,
+                    complete,
+                    names,
+                    0,
+                    ModuleSemanticHashes(prepared),
+                    ModuleExportIndexes(prepared),
+                )
+            assertContentEquals(
+                ArtifactWriter.moduleSemanticHash(LibrarySpecializations.reuse(source, complete, names).modules.single()),
+                ArtifactWriter.moduleSemanticHash(actual.modules.single()),
+            )
+        }
+        val missing = owner.copy(exports = owner.exports.filter { it.kind != SymbolKind.FUNCTION })
+        val duplicate = owner.copy(exports = owner.exports + owner.exports.first { it.kind == SymbolKind.FUNCTION })
+        val changedLayout = owner.copy(fields = owner.fields.map { it.copy(mutable = false) })
+        val other = LibrarySpecializations.export(module("other", ModuleKind.LIBRARY), names)
+        for (libraries in listOf(
+            listOf(artifact(missing)),
+            listOf(artifact(duplicate)),
+            listOf(artifact(changedLayout)),
+            listOf(artifact(owner), artifact(other)),
+        )) {
+            val metadata = PreparedLibraryModules.prepare(libraries)
+            val expected = assertFailsWith<IllegalArgumentException> { LibrarySpecializations.reuse(source, libraries, names) }
+            val actual =
+                assertFailsWith<IllegalArgumentException> {
+                    LibrarySpecializations.reuse(source, libraries, names, 0, ModuleSemanticHashes(metadata), ModuleExportIndexes(metadata))
+                }
+            assertEquals(expected.message, actual.message)
+        }
+    }
+
     private fun artifact(module: Module): Artifact =
         Artifact(
             manifest = Manifest.minimal(64u),
