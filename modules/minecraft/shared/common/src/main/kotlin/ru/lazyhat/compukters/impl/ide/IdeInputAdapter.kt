@@ -678,6 +678,7 @@ class IdeInputAdapter(
             IdeHitAction.ForgetExternalProject,
             IdeHitAction.OpenProject,
             IdeHitAction.ProjectSwitcher,
+            IdeHitAction.QuickOpen,
             IdeHitAction.CreateText,
             IdeHitAction.CreateDirectory,
             IdeHitAction.Rename,

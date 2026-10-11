@@ -1374,13 +1374,17 @@ class IdeRendererStateTest {
             model.icons.map { it.kind },
         )
         assertTrue(model.icons.all { icon -> geometry().toolbar.contains(icon.bounds) })
-        assertTrue(model.text.none { it.kind == IdeTextKind.Toolbar })
+        assertTrue(model.text.filter { it.kind == IdeTextKind.Toolbar }.all { it.value == "Open file…" })
+        assertTrue(geometry().toolbar.contains(model.hitTargets.single { it.action == IdeHitAction.QuickOpen }.bounds))
         assertTrue(model.hitTargets.filter { it.action in WORKSPACE_ACTIONS }.all { it.tooltip != null })
         listOf(500 to 240, 300 to 200).forEach { (width, height) ->
             val constrained = IdeRenderGeometry.compute(width, height, 96, 64, true, true, IdeCodeFontProfile.DEFAULT)
             val constrainedModel = IdeRenderer.extract(workspaceState(IdeEditorView.Empty, IdeBuildState.Idle), constrained)
             assertTrue(constrained.supported)
             assertTrue(constrainedModel.icons.all { icon -> constrained.toolbar.contains(icon.bounds) })
+            assertTrue(
+                constrainedModel.hitTargets.filter { it.action == IdeHitAction.QuickOpen }.all { constrained.toolbar.contains(it.bounds) },
+            )
         }
 
         val compiling =

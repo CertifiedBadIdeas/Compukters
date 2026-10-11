@@ -40,6 +40,7 @@ data class IdeFileTabLayout(
 data class IdeFileTabDraw(
     val controls: List<IdeControlDraw>,
     val text: List<IdeTextDraw>,
+    val fills: List<IdeFillDraw>,
 )
 
 object IdeFileTabBar {
@@ -123,7 +124,7 @@ object IdeFileTabBar {
                 } else {
                     ""
                 }
-            val color = if (selected) IdeColors.EDITOR else IdeColors.TEXT
+            val color = if (selected) IdeColors.TEXT else IdeColors.MUTED
             val labelBounds = IdeRect(cell.bounds.left + 4, cell.bounds.top, cell.close.left, cell.bounds.bottom)
             label(cell.label + suffix, labelBounds.left, cell.bounds.top + 7, color, labelBounds)
             label("×", cell.close.left + 5, cell.close.top + 5, IdeColors.MUTED, cell.close)
@@ -134,7 +135,25 @@ object IdeFileTabBar {
         layout.next?.let {
             label("›", it.left + 6, it.top + 7, if (layout.hasNext) IdeColors.TEXT else IdeColors.MUTED, it)
         }
-        return IdeFileTabDraw(controls(layout, active, enabled), text)
+        val controls =
+            controls(layout, active, enabled).map { control ->
+                val color = if (control.target.filePath == active) IdeColors.EDITOR else IdeColors.PANEL_ALT
+                if (control.target.action in setOf(IdeHitAction.FileTab, IdeHitAction.CloseFileTab)) {
+                    control.copy(panel = control.panel.copy(color = color))
+                } else {
+                    control
+                }
+            }
+        val fills =
+            layout.cells.filter { it.file.path == active }.map { cell ->
+                IdeFillDraw(
+                    IdeFillKind.Border,
+                    IdeRect(cell.bounds.left, cell.bounds.bottom - 2, cell.bounds.right, cell.bounds.bottom),
+                    IdeColors.ACCENT,
+                    31,
+                )
+            }
+        return IdeFileTabDraw(controls, text, fills)
     }
 
     fun controls(

@@ -73,6 +73,7 @@ object IdeRenderer {
         viewportSupported: Boolean = true,
         projectFirstRow: Int = 0,
         fileTabFirstIndex: Int = 0,
+        quickOpen: IdeQuickOpenView? = null,
     ): IdeDrawModel {
         val output =
             Builder(
@@ -110,9 +111,11 @@ object IdeRenderer {
             is IdePageState.Workspace -> output.workspace(page.value, state.target, state.tooling, state.busy, caretVisible)
         }
         output.terminalTool(state.target)
-        output.scaleControls(uiScale, enabled = prompt == null && state.dialog == null)
+        output.scaleControls(uiScale, enabled = quickOpen == null && prompt == null && state.dialog == null)
         val dialog = state.dialog
-        if (prompt != null) {
+        if (quickOpen != null) {
+            output.quickOpen(quickOpen)
+        } else if (prompt != null) {
             output.prompt(prompt)
         } else if (dialog != null) {
             output.dialog(dialog)
@@ -338,6 +341,7 @@ object IdeRenderer {
                 hitTargets += it.target
             }
             text += component.text
+            fills += component.fills
         }
 
         private fun projectControl(displayName: String): IdeRect {
@@ -975,6 +979,11 @@ object IdeRenderer {
                 hasActiveEntry,
                 if (hasActiveEntry) "Delete selected entry" else "Select an entry to delete",
             )
+            val bounds = IdeRect(left + 4, geometry.toolbar.top + 3, left + 88, geometry.toolbar.bottom - 3)
+            if (geometry.toolbar.contains(bounds)) {
+                target(IdeHitAction.QuickOpen, bounds, busy.isEmpty(), "Open file (Ctrl+Shift+N)")
+                ui(IdeTextKind.Toolbar, "Open file…", bounds.left + 8, bounds.top + 5)
+            }
         }
 
         fun tooltip(
@@ -2280,6 +2289,63 @@ object IdeRenderer {
                 z = Z_DIALOG_TEXT,
             )
             ui(IdeTextKind.Dialog, "Cancel", dismiss.left + 12, dismiss.top + 5, z = Z_DIALOG_TEXT)
+        }
+
+        fun quickOpen(view: IdeQuickOpenView) {
+            for (index in hitTargets.indices) hitTargets[index] = hitTargets[index].copy(enabled = false)
+            fills += IdeFillDraw(IdeFillKind.DialogScrim, geometry.panel, IdeColors.DIM, Z_DIALOG_SCRIM)
+            val picker = IdeQuickOpenGeometry.compute(geometry.panel)
+            val bounds = picker.bounds
+            panel(IdePanelKind.Dialog, bounds, IdeColors.PANEL_ALT, Z_DIALOG)
+            ui(IdeTextKind.Dialog, "Open file", bounds.left + 12, bounds.top + 12, clip = bounds, z = Z_DIALOG_TEXT)
+            val field = IdeTextFields.draw(view.field, picker.field, Z_DIALOG + 1, font)
+            fills += field.fills
+            text += field.text
+            ui(
+                IdeTextKind.Dialog,
+                "${view.results.size} files shown · filter by name or path",
+                bounds.left + 12,
+                bounds.top + 62,
+                IdeColors.MUTED,
+                bounds,
+                Z_DIALOG_TEXT,
+            )
+            if (view.results.isEmpty()) {
+                ui(
+                    IdeTextKind.Dialog,
+                    "No matching files",
+                    picker.list.left + 8,
+                    picker.list.top + 10,
+                    IdeColors.MUTED,
+                    picker.list,
+                    Z_DIALOG_TEXT,
+                )
+            }
+            view.results.drop(view.first).take(picker.rows).forEachIndexed { index, path ->
+                val top = picker.list.top + index * IdeQuickOpenGeometry.ROW_HEIGHT
+                val row = IdeRect(picker.list.left, top, picker.list.right, top + IdeQuickOpenGeometry.ROW_HEIGHT)
+                if (view.first + index == view.selected) {
+                    fills += IdeFillDraw(IdeFillKind.Selection, row, IdeColors.SELECTION, Z_DIALOG + 2)
+                    fills +=
+                        IdeFillDraw(
+                            IdeFillKind.Border,
+                            IdeRect(row.left, row.top, row.left + 2, row.bottom),
+                            IdeColors.ACCENT,
+                            Z_DIALOG + 3,
+                        )
+                }
+                ui(IdeTextKind.Dialog, path.value.substringAfterLast('/'), row.left + 8, top + 4, clip = row, z = Z_DIALOG_TEXT)
+                ui(IdeTextKind.Dialog, path.value, row.left + 8, top + 17, IdeColors.MUTED, row, Z_DIALOG_TEXT)
+            }
+            ui(
+                IdeTextKind.Dialog,
+                "↑↓ select   Enter open   Esc cancel",
+                bounds.left + 12,
+                bounds.bottom - 17,
+                IdeColors.MUTED,
+                bounds,
+                Z_DIALOG_TEXT,
+            )
         }
 
         fun prompt(prompt: IdePromptState) {
