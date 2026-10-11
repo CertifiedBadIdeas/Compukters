@@ -26,7 +26,9 @@ import ru.lazyhat.compukters.platform.bundle.PlatformModuleId
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
 import kotlin.test.assertIs
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class TrustedIntrinsicContractTest {
@@ -35,6 +37,63 @@ class TrustedIntrinsicContractTest {
     private val key = TrustedIntrinsicKey(module, callable("kotlin.io", "println"), signature)
     private val capability = PlatformCapabilityId("compukter", "stdio", 1)
     private val handler = handler(capability)
+
+    @Test
+    fun `callable lookup keeps exact signatures source ownership and selected modules`() {
+        val otherModule = PlatformModuleId("addon", "api")
+        val otherHandler = CapabilityOperationHandler(capability, 1u, IntrinsicBlockingMode.NONE)
+        val intSignature = CanonicalCallableSignature("fun(Int):Unit")
+        val intHandler = CompilerPrimitiveHandler("integer-print")
+        val registry =
+            TrustedIntrinsicRegistry.create(
+                listOf(
+                    TrustedIntrinsicRegistration(key, handler),
+                    TrustedIntrinsicRegistration(key.copy(module = otherModule), otherHandler),
+                    TrustedIntrinsicRegistration(key.copy(signature = intSignature), intHandler),
+                ),
+            )
+        assertEquals(handler, registry.resolve("kotlin.io.println", signature.value, module, emptySet()))
+        assertEquals(otherHandler, registry.resolve("kotlin.io.println", signature.value, otherModule, setOf(module)))
+        assertEquals(intHandler, registry.resolve("kotlin.io.println", intSignature.value, module, setOf(otherModule)))
+        assertNull(registry.resolve("kotlin.io.println", "fun():Unit", module, setOf(module)))
+        assertNull(registry.resolve("project.println", signature.value, module, setOf(module)))
+        assertNull(registry.resolve("kotlin.io.println", signature.value, PlatformModuleId("project", "local"), setOf(module)))
+        assertFalse(registry.hasHandler(null, signature.value, module, setOf(module)))
+    }
+
+    @Test
+    fun `unknown source lookup rejects ambiguity while existence lookup retains all matches`() {
+        val otherModule = PlatformModuleId("addon", "api")
+        val primitive = CompilerPrimitiveHandler("other-print")
+        val registry =
+            TrustedIntrinsicRegistry.create(
+                listOf(
+                    TrustedIntrinsicRegistration(key, handler),
+                    TrustedIntrinsicRegistration(key.copy(module = otherModule), primitive),
+                ),
+            )
+        assertNull(registry.resolve("kotlin.io.println", signature.value, null, emptySet()))
+        assertEquals(handler, registry.resolve("kotlin.io.println", signature.value, null, setOf(module)))
+        assertEquals(primitive, registry.resolve("kotlin.io.println", signature.value, null, setOf(otherModule)))
+        assertNull(registry.resolve("kotlin.io.println", signature.value, null, setOf(module, otherModule)))
+        assertTrue(registry.hasHandler("kotlin.io.println", signature.value, null, setOf(module, otherModule)))
+        assertFalse(registry.hasHandler("kotlin.io.println", signature.value, null, emptySet()))
+    }
+
+    @Test
+    fun `callable ids with the same full name remain ambiguous rather than overwriting each other`() {
+        val member = CallableId(FqName("kotlin"), FqName("io"), Name.identifier("println"))
+        assertEquals(key.callableId.asSingleFqName(), member.asSingleFqName())
+        val registry =
+            TrustedIntrinsicRegistry.create(
+                listOf(
+                    TrustedIntrinsicRegistration(key, handler),
+                    TrustedIntrinsicRegistration(key.copy(callableId = member), CompilerPrimitiveHandler("member-print")),
+                ),
+            )
+        assertNull(registry.resolve("kotlin.io.println", signature.value, module, setOf(module)))
+        assertTrue(registry.hasHandler("kotlin.io.println", signature.value, module, emptySet()))
+    }
 
     @Test
     fun `exact external handler and executable target capability are accepted`() {

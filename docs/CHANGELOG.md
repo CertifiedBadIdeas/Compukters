@@ -41,7 +41,8 @@ headings so this page has one stable URL that can be shared outside the reposito
 - The IDE prepares resolved compiler libraries in the background when opening a project and after dependency or
   target-profile changes. Repeated Guest compilation reuses that library analysis, semantic hashes and export
   indexes within the retained worker,
-  including across IDE reopenings. Final executables are validated and serialized once with compilation limits.
+  including across IDE reopenings. Lowering indexes admitted callable names and signatures instead of repeatedly
+  scanning their registries. Final executables are validated and serialized once with compilation limits.
   Changing the dependency selection replaces the preparation; each project
   compilation keeps its own source session and specialization state. Queued preparation yields to Build.
 

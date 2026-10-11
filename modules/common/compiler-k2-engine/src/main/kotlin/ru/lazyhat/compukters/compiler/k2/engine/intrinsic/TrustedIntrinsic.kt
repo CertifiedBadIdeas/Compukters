@@ -88,6 +88,42 @@ class TrustedIntrinsicRegistry private constructor(
 ) {
     val handlers: Map<TrustedIntrinsicKey, TrustedIntrinsicHandler> = Collections.unmodifiableMap(handlers.toMap())
 
+    private val handlersByCallable =
+        this.handlers.entries
+            .groupBy {
+                it.key.callableId
+                    .asSingleFqName()
+                    .asString()
+            }.mapValues { (_, entries) -> entries.groupBy { it.key.signature.value } }
+
+    internal fun resolve(
+        symbol: String,
+        signature: String,
+        sourceModule: PlatformModuleId?,
+        selectedModules: Set<PlatformModuleId>,
+    ): TrustedIntrinsicHandler? =
+        candidates(symbol, signature)
+            .singleOrNull { matchesModule(it.key.module, sourceModule, selectedModules) }
+            ?.value
+
+    internal fun hasHandler(
+        symbol: String?,
+        signature: String,
+        sourceModule: PlatformModuleId?,
+        selectedModules: Set<PlatformModuleId>,
+    ): Boolean = candidates(symbol, signature).any { matchesModule(it.key.module, sourceModule, selectedModules) }
+
+    private fun candidates(
+        symbol: String?,
+        signature: String,
+    ): List<Map.Entry<TrustedIntrinsicKey, TrustedIntrinsicHandler>> = handlersByCallable[symbol]?.get(signature).orEmpty()
+
+    private fun matchesModule(
+        candidate: PlatformModuleId,
+        sourceModule: PlatformModuleId?,
+        selectedModules: Set<PlatformModuleId>,
+    ): Boolean = sourceModule?.let { candidate == it } ?: (candidate in selectedModules)
+
     companion object {
         fun empty(): TrustedIntrinsicRegistry = TrustedIntrinsicRegistry(emptyMap())
 
