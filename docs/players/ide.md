@@ -93,6 +93,14 @@ Select the entry in the project tree, then click the **Rename** toolbar icon. En
 project root, such as `src/automation/control.kt`. A folder rename updates the paths of its open descendant buffers.
 This also supports moving entries. **Shift+F6** is a separate Kotlin symbol refactoring action.
 
+## Editing dialog fields
+
+Click to place the cursor, drag to select, or double-click a word. Use **Left/Right**, **Home/End** and **Shift** to
+move or extend a selection; **Ctrl+Left/Right** moves by words. **Ctrl+A** selects the whole value. **Ctrl+C/X/V**
+copies, cuts or pastes; **Ctrl+Z** undoes and **Ctrl+Shift+Z** or **Ctrl+Y** redoes. Long values scroll to keep the
+cursor visible, and the mouse wheel scrolls the field horizontally. Pasted line breaks and tabs become spaces.
+**Enter** confirms and **Esc** cancels. Token fields remain masked and do not allow copying or cutting.
+
 ## Git changes and commits
 
 Open **Commit** using its icon on the left-hand tool stripe. For a project without a repository, use **Create Git repository**.

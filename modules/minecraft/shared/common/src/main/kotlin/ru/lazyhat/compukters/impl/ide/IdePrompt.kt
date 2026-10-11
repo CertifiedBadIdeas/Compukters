@@ -69,6 +69,7 @@ data class IdePromptState(
     val kind: IdePromptKind,
     val value: String,
     val error: String? = null,
+    val field: IdeTextFieldView = IdeTextFieldView(value, masked = kind is IdePromptKind.GitToken),
 ) {
     val title: String get() =
         when (val kind = kind) {
@@ -115,6 +116,8 @@ class IdePromptController {
     var state: IdePromptState? = null
         private set
 
+    private var field: IdeTextField? = null
+
     private var authorName = ""
     private var authorEmail = ""
 
@@ -122,26 +125,83 @@ class IdePromptController {
         kind: IdePromptKind,
         initial: String = "",
     ) {
-        state = IdePromptState(kind, appendBounded("", initial, maximum(kind)))
+        field?.close()
+        val editor = IdeTextField(initial, maximum(kind), kind is IdePromptKind.GitToken)
+        field = editor
+        val view = editor.view()
+        state = IdePromptState(kind, view.text, field = view)
+    }
+
+    private fun synchronize(clearError: Boolean = false) {
+        val current = state ?: return
+        val view = field?.view() ?: return
+        state = current.copy(value = view.text, field = view, error = if (clearError) null else current.error)
     }
 
     fun type(text: String): Boolean {
-        val current = state ?: return false
-        val admitted = appendBounded(current.value, text, maximum(current.kind))
-        state = current.copy(value = admitted, error = null)
+        val editor = field ?: return false
+        editor.type(text)
+        synchronize(clearError = true)
         return true
     }
 
-    fun backspace(): Boolean {
-        val current = state ?: return false
-        if (current.value.isEmpty()) return true
-        val end = current.value.offsetByCodePoints(current.value.length, -1)
-        state = current.copy(value = current.value.substring(0, end), error = null)
+    fun keyPressed(
+        event: IdeKeyInput,
+        readClipboard: () -> String,
+        writeClipboard: (String) -> Unit,
+    ): Boolean {
+        val editor = field ?: return false
+        val before = editor.view().text
+        editor.keyPressed(event, readClipboard, writeClipboard)
+        synchronize(clearError = before != editor.view().text)
         return true
+    }
+
+    fun backspace(): Boolean = keyPressed(IdeKeyInput(IdeKeyCode.BACKSPACE), { "" }, {})
+
+    fun admitLayout(panel: IdeRect) {
+        field?.layout(IdePromptGeometry.compute(panel).field)
+        synchronize()
+    }
+
+    fun press(
+        x: Double,
+        y: Double,
+        panel: IdeRect,
+        shift: Boolean,
+        doubleClick: Boolean,
+    ): Boolean {
+        val handled = field?.press(x, y, IdePromptGeometry.compute(panel).field, shift, doubleClick) == true
+        synchronize()
+        return handled
+    }
+
+    fun drag(
+        x: Double,
+        panel: IdeRect,
+    ) {
+        field?.drag(x, IdePromptGeometry.compute(panel).field)
+        synchronize()
+    }
+
+    fun release() {
+        field?.release()
+    }
+
+    fun scroll(
+        x: Double,
+        y: Double,
+        panel: IdeRect,
+        columns: Int,
+    ) {
+        if (IdePromptGeometry.compute(panel).field.containsPoint(x, y)) field?.scroll(columns)
+        admitLayout(panel)
     }
 
     fun cancel(): Boolean {
         if (state == null) return false
+        field?.close()
+        field = null
         state = null
         return true
     }
@@ -244,7 +304,7 @@ class IdePromptController {
                 state = current.copy(error = failure.message ?: "Invalid name")
                 return null
             }
-        state = null
+        cancel()
         return command
     }
 
@@ -253,24 +313,6 @@ class IdePromptController {
             IdePromptKind.OpenExisting, IdePromptKind.CloneRemote, IdePromptKind.GitRemoteUrl, is IdePromptKind.GitToken -> 4096
             else -> MAXIMUM_CODE_UNITS
         }
-
-    private fun appendBounded(
-        prefix: String,
-        suffix: String,
-        maximum: Int,
-    ): String {
-        val result = StringBuilder(minOf(maximum, prefix.length + suffix.length))
-        result.append(prefix)
-        var offset = 0
-        while (offset < suffix.length) {
-            val codePoint = suffix.codePointAt(offset)
-            val units = Character.charCount(codePoint)
-            if (result.length + units > maximum) break
-            result.appendCodePoint(codePoint)
-            offset += units
-        }
-        return result.toString()
-    }
 
     private companion object {
         const val MAXIMUM_CODE_UNITS = 256

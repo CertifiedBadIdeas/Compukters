@@ -27,6 +27,11 @@ data class IdeRect(
     val width: Int get() = right - left
     val height: Int get() = bottom - top
 
+    fun containsPoint(
+        x: Double,
+        y: Double,
+    ): Boolean = x >= left && x < right && y >= top && y < bottom
+
     fun contains(other: IdeRect): Boolean = other.left >= left && other.top >= top && other.right <= right && other.bottom <= bottom
 
     init {

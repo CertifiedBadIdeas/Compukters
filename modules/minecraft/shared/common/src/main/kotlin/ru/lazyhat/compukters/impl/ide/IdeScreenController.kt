@@ -115,7 +115,18 @@ class IdeScreenController(
         if (!viewport.supported) return true
         val geometry = geometry()
         val state = controller.viewState()
-        if (prompt.state != null || state.dialog != null) {
+        if (prompt.state != null) {
+            if (uiEvent.button() == 0 &&
+                prompt.press(uiEvent.x(), uiEvent.y(), geometry.panel, uiEvent.modifiers() and IdeModifier.SHIFT != 0, doubleClick)
+            ) {
+                input.pointerActivity()
+            } else if (uiEvent.button() == 0) {
+                input.pointerClicked(uiEvent.x(), uiEvent.y(), uiEvent.modifiers(), pointerContext(geometry), doubleClick)
+            }
+            host.clearFocus()
+            return true
+        }
+        if (state.dialog != null) {
             input.pointerClicked(uiEvent.x(), uiEvent.y(), uiEvent.modifiers(), pointerContext(geometry), doubleClick)
             host.clearFocus()
             return true
@@ -214,6 +225,11 @@ class IdeScreenController(
         if (!viewport.supported) return true
         val uiEvent = event.map(viewport)
         val geometry = geometry()
+        if (prompt.state != null) {
+            prompt.drag(uiEvent.x(), geometry.panel)
+            return true
+        }
+        if (controller.viewState().dialog != null) return true
         if (terminalOverlay.visible && terminalOverlayGeometry(geometry).panel.contains(uiEvent.x(), uiEvent.y())) return true
         if (splitters.drag(uiEvent.x().toInt(), uiEvent.y().toInt(), geometry)) return true
         if (input.explorerDragged(uiEvent.x(), uiEvent.y(), pointerContext(geometry))) return true
@@ -232,6 +248,11 @@ class IdeScreenController(
         val viewport = viewport()
         if (!viewport.supported) return true
         val uiEvent = event.map(viewport)
+        if (prompt.state != null) {
+            prompt.release()
+            return true
+        }
+        if (controller.viewState().dialog != null) return true
         if (splitters.release()) return true
         if (input.explorerReleased(uiEvent.x(), uiEvent.y(), uiEvent.modifiers(), pointerContext(geometry()))) return true
         return false
@@ -248,7 +269,12 @@ class IdeScreenController(
         val uiMouseX = viewport.toVirtualX(mouseX)
         val uiMouseY = viewport.toVirtualY(mouseY)
         val geometry = geometry()
-        if (prompt.state != null || controller.viewState().dialog != null) return true
+        if (prompt.state != null) {
+            val direction = if (scrollX != 0.0) scrollX else -scrollY
+            if (direction != 0.0) prompt.scroll(uiMouseX, uiMouseY, geometry.panel, if (direction > 0) 3 else -3)
+            return true
+        }
+        if (controller.viewState().dialog != null) return true
         if (terminalOverlay.visible && terminalOverlayGeometry(geometry).panel.contains(uiMouseX, uiMouseY)) return true
         if (geometry.fileTabs?.contains(uiMouseX, uiMouseY) == true) {
             if (scrollY != 0.0 ||
@@ -293,9 +319,7 @@ class IdeScreenController(
             return when {
                 event.key == IdeKeyCode.ESCAPE -> prompt.cancel()
                 event.key == IdeKeyCode.ENTER -> confirmPrompt()
-                event.key == IdeKeyCode.BACKSPACE -> prompt.backspace()
-                event.paste -> prompt.type(host.clipboard)
-                else -> true
+                else -> prompt.keyPressed(event, { host.clipboard }, { host.clipboard = it })
             }
         }
         if (controller.viewState().dialog != null) return input.keyPressed(event, focusState())
@@ -336,6 +360,7 @@ class IdeScreenController(
     }
 
     fun removed() {
+        prompt.cancel()
         input.cancelExplorerDrag()
         splitters.focusLost()
         terminalOverlay.focusLost()
@@ -366,6 +391,7 @@ class IdeScreenController(
         val treeFirstRow = admittedTreeFirstRow(geometry)
         val state = controller.viewState()
         admitFileTabScroll(geometry)
+        prompt.admitLayout(geometry.panel)
         val model =
             IdeRenderer.extract(
                 state,
@@ -476,6 +502,7 @@ class IdeScreenController(
     }
 
     private fun pointerContext(geometry: IdeRenderGeometry): IdePointerContext {
+        prompt.admitLayout(geometry.panel)
         val state = controller.viewState()
         admitFileTabScroll(geometry)
         val treeFirstRow = admittedTreeFirstRow(geometry)
