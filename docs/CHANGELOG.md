@@ -28,7 +28,9 @@ headings so this page has one stable URL that can be shared outside the reposito
   ascending index and preserve managed exception behavior.
 
 - Guest paths are pure portable String-backed value classes, constructed with `Path(...)` or the explicitly imported
-  `String.toPath()` extension. A separate `FileSystem` API provides typed metadata/errors,
+  `String.toPath()` extension. Paths support `.` / `..` and pure `normalize()`, with ascent clamped at root;
+  filesystem operations use canonical virtual targets checked independently by the native boundary.
+  A separate `FileSystem` API provides typed metadata/errors,
   binary I/O, strict UTF-8 text, directory snapshots and ordinary create/delete/move operations. Sequential readers pin their file contents;
   writers stage bounded chunks and publish only through a guarded atomic commit. Program exit aborts drafts,
   and hibernation preserves resources and their positions. The old string/status `FileSystem` source facade

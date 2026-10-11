@@ -43,13 +43,40 @@ Path equality and hashing compare path values; `toString()` returns the path str
 `Any`, arrays and collections retain the nominal Path type through managed boxing. Direct typed calls use
 the inline value layout. Path has no object identity or generated data-class `copy()` / `component1()` members.
 
-Paths are exact and absolute. Empty components, trailing slashes except `/`, `.` and `..`, NUL, malformed
-Unicode are rejected with `IllegalArgumentException` by pure Guest syntax validation. `resolve` accepts
-a relative name against an explicit base; it does not normalize dot traversal. `name` and `parent` are null
-for `/`. Path values do not carry storage identity, permissions, existence or size limits. FileSystem checks a
-4096 UTF-16-unit transport bound before submitting path arguments. Its native parser additionally enforces
-configured limits: 4096 UTF-8 path bytes, 255-byte components and depth 64 by default. A syntactically valid
-Path exceeding those limits can still be constructed; a storage operation on it throws typed `INVALID_PATH`.
+Paths retain their exact absolute spelling, including `.` and `..`. Empty components, trailing slashes
+except `/`, NUL and malformed Unicode are rejected with `IllegalArgumentException` by pure Guest syntax
+validation. `resolve` accepts a relative path against an explicit base and preserves dot components.
+`name` and `parent` are lexical and are null for `/`; equality compares spelling rather than file identity.
+
+`normalize()` removes `.` and cancels a preceding component with `..`, without accessing storage.
+Attempts to ascend above `/` stay at `/`, so `/../../home/./notes` normalizes to `/home/notes`.
+Names such as `.hidden`, `...` and `..name` remain ordinary names. Normalization does not require any
+intermediate directory to exist and is idempotent:
+
+```kotlin
+val input = Path("/home/projects/.././config.txt")
+val canonical = input.normalize() // /home/config.txt
+// input.value is still /home/projects/.././config.txt
+FileSystem.writeText(input, "configuration") // operates on /home/config.txt
+```
+
+Path values do not carry storage identity, permissions, existence or size limits. Every FileSystem operation
+normalizes its input before submitting a native request. Recursive directory creation traverses the normalized
+ancestors; directory snapshots return normalized child paths. FileSystem checks the original input's
+4096 UTF-16-unit transport bound before normalization, even if cancellation would shorten it. The native
+parser additionally enforces limits on the canonical path: 4096 UTF-8 path bytes, 255-byte components and
+depth 64 by default. A syntactically valid Path exceeding those limits can still be constructed; a storage
+operation on it throws typed `INVALID_PATH`.
+
+### Native and host boundary
+
+Normalization grants no permissions. Rust independently admits only canonical absolute virtual paths;
+a direct native request containing `.` or `..` is rejected. Native capability checks compare components
+of the normalized target, and `/rom` remains immutable even when addressed through `/home/../rom`.
+A path such as `/home/../../etc/passwd` normalizes to `/etc/passwd` in the virtual namespace, where no
+such mount exists. It never addresses the host OS filesystem. Guest names are stored in the virtual tree;
+host persistence addresses computer IDs and content objects rather than appending guest path strings
+to a host directory. There are no guest symlinks or OS-dependent separators in this contract.
 
 `FileSystem.stat(path)` returns `FileInfo(kind, sizeBytes, revision, isExecutable)`. `FileKind` distinguishes files and
 directories; the revision is an opaque token for comparison. `FileSystem.statOrNull(path)` returns null only for a missing

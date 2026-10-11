@@ -7606,7 +7606,29 @@ class MinimalScriptLoweringTest {
                     catch (failure: IllegalArgumentException) { }
                 }
 
+                fun normalized(raw: String, expected: String) {
+                    val path = raw.toPath()
+                    require(path.value == raw)
+                    val canonical = path.normalize()
+                    require(canonical == Path(expected))
+                    require(canonical.normalize() == canonical)
+                }
+
                 fun main() {
+                    normalized("/", "/")
+                    normalized("/.", "/")
+                    normalized("/..", "/")
+                    normalized("/../../home/./notes", "/home/notes")
+                    normalized("/home/projects/.././config.txt", "/home/config.txt")
+                    normalized("/home/a/b/../../c", "/home/c")
+                    normalized("/home/a/../../..", "/")
+                    normalized("/home/a/../b/../c", "/home/c")
+                    normalized("/home/.hidden/.../..name", "/home/.hidden/.../..name")
+                    normalized("/home/😀/../λ/./漢", "/home/λ/漢")
+                    require(Path("/home/./notes") != Path("/home/notes"))
+                    require(Path("/home/..").parent == Path("/home"))
+                    require(Path("/home").resolve("../rom").value == "/home/../rom")
+                    require(Path("/home").resolve("../rom").normalize() == Path("/rom"))
                     val home = "/home".toPath()
                     require(home == Path("/home"))
                     val construct: (String) -> Path = ::Path
@@ -7643,8 +7665,6 @@ class MinimalScriptLoweringTest {
                     invalid("relative")
                     invalid("/home/")
                     invalid("/home//a")
-                    invalid("/home/.")
-                    invalid("/home/../a")
                     invalid("/home/\u0000")
                     invalid("/home/\uD800")
                     invalid("/home/\uDC00")
@@ -7680,7 +7700,9 @@ class MinimalScriptLoweringTest {
 
                 fun expect(reason: FileSystemError, block: () -> Unit) {
                     try { block(); error("operation must fail") }
-                    catch (failure: FileSystemException) { require(failure.reason == reason) }
+                    catch (failure: FileSystemException) {
+                        if (failure.reason != reason) error("expected ${'$'}reason, got ${'$'}{failure.reason}: ${'$'}{failure.path}")
+                    }
                 }
 
                 fun expectArgument(block: () -> Unit) {
@@ -7693,7 +7715,7 @@ class MinimalScriptLoweringTest {
                     require(home.name == "home" && home.parent == Path("/"))
                     require(Path("/").parent == null && Path("/").name == null)
                     expectArgument { Path("relative") }
-                    expectArgument { home.resolve("../escape") }
+                    expectArgument { home.resolve("/absolute") }
                     val tooLong = home.resolve(String(CharArray(5000) { 'a' }, 0, 5000))
                     expect(FileSystemError.INVALID_PATH) { FileSystem.stat(tooLong) }
                     val tooWide = home.resolve(String(CharArray(256) { 'a' }, 0, 256))
@@ -7764,6 +7786,47 @@ class MinimalScriptLoweringTest {
                     FileSystem.delete(home.resolve("fs-check"))
                     expect(FileSystemError.NOT_FOUND) { FileSystem.readBytes(file) }
                     expect(FileSystemError.READ_ONLY) { FileSystem.writeBytes(Path("/rom/readonly"), byteArrayOf(1)) }
+                    val navigation = Path("/home/fs-nav")
+                    FileSystem.createDirectory(navigation)
+                    FileSystem.createDirectory(navigation.resolve("missing/../made"))
+                    FileSystem.createDirectories(navigation.resolve("ignored/../made/deep"))
+                    require(FileSystem.statOrNull(navigation.resolve("missing")) == null)
+                    require(FileSystem.statOrNull(navigation.resolve("ignored")) == null)
+                    val alias = navigation.resolve("./made/../data")
+                    alias.writeText("dot navigation")
+                    val canonical = navigation.resolve("data")
+                    require(FileSystem.readText(canonical) == "dot navigation")
+                    require(FileSystem.stat(alias).revision == FileSystem.stat(canonical).revision)
+                    val aliasDraft = FileSystem.openWrite(alias)
+                    aliasDraft.write(byteArrayOf(65))
+                    FileSystem.writeText(canonical, "new revision")
+                    expect(FileSystemError.BUSY) { aliasDraft.commit() }
+                    aliasDraft.close()
+                    require(alias.readText() == "new revision")
+                    val snapshot = FileSystem.openDirectory(navigation.resolve("made/.."))
+                    require(snapshot.read() == canonical)
+                    require(snapshot.read() == navigation.resolve("made"))
+                    require(snapshot.read() == null)
+                    snapshot.close()
+                    require(FileSystem.list(navigation.resolve(".")).size == 2)
+                    val destination = navigation.resolve("made/../moved")
+                    FileSystem.move(alias, destination)
+                    require(FileSystem.statOrNull(canonical) == null)
+                    require(FileSystem.readText(destination) == "new revision")
+                    expect(FileSystemError.READ_ONLY) { FileSystem.writeBytes(Path("/home/../rom/forbidden"), byteArrayOf(1)) }
+                    expect(FileSystemError.PERMISSION_DENIED) { FileSystem.createDirectories(Path("/home/../rom/forbidden/deep")) }
+                    expect(FileSystemError.READ_ONLY) { FileSystem.move(destination, Path("/home/../rom/moved")) }
+                    require(FileSystem.readText(destination) == "new revision")
+                    expect(FileSystemError.PERMISSION_DENIED) { FileSystem.readBytes(Path("/home/../../etc/passwd")) }
+                    expect(FileSystemError.NOT_FOUND) { FileSystem.writeBytes(Path("/home/../../tmp/outside"), byteArrayOf(1)) }
+                    val rawOverLimit = Path("/home/" + String(CharArray(5000) { 'a' }, 0, 5000) + "/../fs-nav/moved")
+                    require(rawOverLimit.normalize() == destination.normalize())
+                    expect(FileSystemError.INVALID_PATH) { FileSystem.stat(rawOverLimit) }
+                    require(FileSystem.deleteIfExists(navigation.resolve("../../home/fs-nav/./moved")))
+                    require(!FileSystem.deleteIfExists(destination))
+                    FileSystem.delete(navigation.resolve("made/./deep"))
+                    FileSystem.delete(navigation.resolve("made/../made"))
+                    FileSystem.delete(navigation.resolve("../fs-nav"))
                     val resource = FailingCloseable()
                     val original = IllegalArgumentException("body")
                     try { resource.use { throw original } }
