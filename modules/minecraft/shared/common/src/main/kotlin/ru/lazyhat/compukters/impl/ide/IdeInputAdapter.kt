@@ -13,7 +13,6 @@
 package ru.lazyhat.compukters.impl.ide
 
 import ru.lazyhat.compukters.ide.client.IdeClientLimits
-import ru.lazyhat.compukters.ide.client.analysis.IDE_COMPLETION_VISIBLE_ROWS
 import ru.lazyhat.compukters.ide.client.analysis.IdeAnalysisState
 import ru.lazyhat.compukters.ide.client.analysis.IdeSemanticInteraction
 import ru.lazyhat.compukters.ide.client.files.IdeComputerNode
@@ -27,9 +26,7 @@ import ru.lazyhat.compukters.ide.client.state.IdeEditorView
 import ru.lazyhat.compukters.ide.client.state.IdeGitMenu
 import ru.lazyhat.compukters.ide.client.state.IdeGitScrollArea
 import ru.lazyhat.compukters.ide.client.state.IdeHorizontalDirection
-import ru.lazyhat.compukters.ide.client.state.IdeMoveDirection
 import ru.lazyhat.compukters.ide.client.state.IdeProjectSummary
-import ru.lazyhat.compukters.ide.client.state.IdeVerticalDirection
 import ru.lazyhat.compukters.ide.project.fs.ProjectPath
 import ru.lazyhat.compukters.ide.project.tree.ProjectFileKind
 import ru.lazyhat.compukters.ide.project.tree.ProjectTreeEntry
@@ -125,6 +122,8 @@ class IdeInputAdapter(
     private val selectionSource: IdeSelectionSource = IdeSelectionSource { null },
     private val projectActions: IdeProjectActionSink = IdeProjectActionSink { _, _ -> false },
 ) {
+    private val editorInput = IdeEditorInputRouter(sink, clipboard, limits, uiActions, clipboardWriter, selectionSource)
+
     var projectFirstRow: Int = 0
         private set
     var treeFirstRow: Int = 0
@@ -174,7 +173,11 @@ class IdeInputAdapter(
             val shift = event.modifiers and IdeModifier.SHIFT != 0
             if (control && event.key == IdeKeyCode.ENTER) return dispatch(IdeCommand.GitCommitDraft(push = shift))
             if (draft != null && focusedField != null) {
-                if (event.paste) return dispatch(IdeCommand.EditGitDraft(IdeEditorInput.Type(boundedClipboard(clipboard.text()))))
+                if (event.paste) {
+                    return dispatch(
+                        IdeCommand.EditGitDraft(IdeEditorInput.Type(IdeClipboardText.bounded(clipboard.text(), limits))),
+                    )
+                }
                 if (control && (event.key == IdeKeyCode.C || event.key == IdeKeyCode.X)) {
                     val field = draft.field(focusedField)
                     val selected = field.selection?.let { field.text.substring(it.startUtf16, it.endUtf16) }
@@ -201,7 +204,7 @@ class IdeInputAdapter(
                             else -> null
                         }
                     } else {
-                        (editorKey(event.key, shift, focus.editorPageRows) as? IdeCommand.Edit)?.input
+                        (editorInput.editingKey(event.key, shift, focus.editorPageRows) as? IdeCommand.Edit)?.input
                     }
                 return input?.let { dispatch(IdeCommand.EditGitDraft(it)) } ?: true
             }
@@ -241,54 +244,7 @@ class IdeInputAdapter(
                 }
             }
         }
-        if (focus.area == IdeFocusArea.Editor) {
-            if (event.modifiers and IdeModifier.CONTROL != 0 && event.key == IdeKeyCode.F) return dispatch(IdeCommand.OpenFind)
-            if (focus.findVisible && event.key == IdeKeyCode.ESCAPE) return dispatch(IdeCommand.CloseFind)
-            if (focus.findFocused) return findKey(event, focus)
-        }
-        if (focus.declarationChooserVisible) chooserKey(event)?.let { return dispatch(it) }
-        if (focus.parameterInfoVisible && event.key == IdeKeyCode.ESCAPE) {
-            return dispatch(IdeCommand.DismissParameterInfo)
-        }
-        if (focus.completionVisible) completionKey(event)?.let { return dispatch(it) }
-        if (focus.area != IdeFocusArea.Editor) return false
-        if (event.paste) return dispatchType(boundedClipboard(clipboard.text()))
-        val control = event.modifiers and IdeModifier.CONTROL != 0
-        val alt = event.modifiers and IdeModifier.ALT != 0
-        val shift = event.modifiers and IdeModifier.SHIFT != 0
-        if (shift && !control && !alt && event.key == IdeKeyCode.F6) return uiActions.activate(IdeHitAction.RenameSymbol)
-        if (control && event.key == IdeKeyCode.C) return copySelection()
-        if (control && event.key == IdeKeyCode.X) return cutSelection()
-        val command =
-            if (control) {
-                when (event.key) {
-                    IdeKeyCode.SLASH -> if (!alt && !shift) IdeCommand.Edit(IdeEditorInput.ToggleLineComment) else null
-                    IdeKeyCode.S -> IdeCommand.Save
-                    IdeKeyCode.L -> if (alt && !shift) IdeCommand.Format else null
-                    IdeKeyCode.B -> IdeCommand.GoToDeclaration()
-                    IdeKeyCode.P -> IdeCommand.ShowParameterInfo
-                    IdeKeyCode.F9 -> IdeCommand.Build
-                    IdeKeyCode.SPACE -> IdeCommand.ManualCompletion
-                    IdeKeyCode.Z -> IdeCommand.Edit(if (shift) IdeEditorInput.Redo else IdeEditorInput.Undo)
-                    IdeKeyCode.Y -> IdeCommand.Edit(IdeEditorInput.Redo)
-                    IdeKeyCode.A -> IdeCommand.Edit(IdeEditorInput.SelectAll)
-                    IdeKeyCode.LEFT -> wordMove(IdeHorizontalDirection.Left, shift)
-                    IdeKeyCode.RIGHT -> wordMove(IdeHorizontalDirection.Right, shift)
-                    IdeKeyCode.BACKSPACE -> IdeCommand.Edit(IdeEditorInput.DeleteWordBackward)
-                    IdeKeyCode.DELETE -> IdeCommand.Edit(IdeEditorInput.DeleteWordForward)
-                    else -> null
-                }
-            } else if (alt) {
-                when (event.key) {
-                    IdeKeyCode.LEFT -> IdeCommand.NavigateBack
-                    IdeKeyCode.RIGHT -> IdeCommand.NavigateForward
-                    IdeKeyCode.F7 -> IdeCommand.FindUsages
-                    else -> null
-                }
-            } else {
-                editorKey(event.key, shift, focus.editorPageRows)
-            }
-        return command?.let(::dispatch) ?: false
+        return editorInput.keyPressed(event, focus)
     }
 
     fun charTyped(
@@ -301,40 +257,7 @@ class IdeInputAdapter(
         }
         if (focus.usagesFocused) return true
         if (focus.dialog != null || focus.area != IdeFocusArea.Editor) return false
-        if (focus.findFocused) return dispatch(IdeCommand.EditFind(IdeEditorInput.Type(event.text)))
-        return dispatchType(event.text)
-    }
-
-    private fun findKey(
-        event: IdeKeyInput,
-        focus: IdeFocusState,
-    ): Boolean {
-        val control = event.modifiers and IdeModifier.CONTROL != 0
-        val shift = event.modifiers and IdeModifier.SHIFT != 0
-        if (event.paste) return dispatch(IdeCommand.EditFind(IdeEditorInput.Type(boundedClipboard(clipboard.text()))))
-        if (event.key == IdeKeyCode.ENTER) return dispatch(IdeCommand.NavigateFind(shift))
-        if (event.key == IdeKeyCode.TAB) return dispatch(IdeCommand.FocusFind(false))
-        if (control && event.key == IdeKeyCode.C) {
-            focus.findSelectedText?.let(clipboardWriter::setText)
-            return true
-        }
-        val input =
-            if (control) {
-                when (event.key) {
-                    IdeKeyCode.A -> IdeEditorInput.SelectAll
-                    IdeKeyCode.Z -> if (shift) IdeEditorInput.Redo else IdeEditorInput.Undo
-                    IdeKeyCode.Y -> IdeEditorInput.Redo
-                    IdeKeyCode.LEFT -> IdeEditorInput.MoveWord(IdeHorizontalDirection.Left, shift)
-                    IdeKeyCode.RIGHT -> IdeEditorInput.MoveWord(IdeHorizontalDirection.Right, shift)
-                    IdeKeyCode.BACKSPACE -> IdeEditorInput.DeleteWordBackward
-                    IdeKeyCode.DELETE -> IdeEditorInput.DeleteWordForward
-                    else -> null
-                }
-            } else {
-                (editorKey(event.key, shift, 1) as? IdeCommand.Edit)?.input
-            }
-        input?.let { dispatch(IdeCommand.EditFind(it)) }
-        return true
+        return editorInput.charTyped(event, focus)
     }
 
     fun keyReleased(event: IdeKeyInput): Boolean =
@@ -838,165 +761,10 @@ class IdeInputAdapter(
     private fun IdeDialogState.FileConflict.confirmAction(): IdeConflictAction =
         if (closing) IdeConflictAction.DiscardAndClose else IdeConflictAction.ReloadFromDisk
 
-    private fun completionKey(event: IdeKeyInput): IdeCommand? =
-        when (event.key) {
-            IdeKeyCode.ESCAPE -> IdeCommand.DismissCompletion
-            IdeKeyCode.ENTER -> IdeCommand.Edit(IdeEditorInput.Enter)
-            IdeKeyCode.TAB -> IdeCommand.Edit(IdeEditorInput.Tab)
-            IdeKeyCode.UP -> IdeCommand.Edit(IdeEditorInput.Move(IdeMoveDirection.Up, false))
-            IdeKeyCode.DOWN -> IdeCommand.Edit(IdeEditorInput.Move(IdeMoveDirection.Down, false))
-            IdeKeyCode.PAGE_UP -> repeatMove(IdeMoveDirection.Up, IDE_COMPLETION_VISIBLE_ROWS)
-            IdeKeyCode.PAGE_DOWN -> repeatMove(IdeMoveDirection.Down, IDE_COMPLETION_VISIBLE_ROWS)
-            else -> null
-        }
-
-    private fun chooserKey(event: IdeKeyInput): IdeCommand? =
-        when (event.key) {
-            IdeKeyCode.ESCAPE -> IdeCommand.DismissSemanticInteraction
-            IdeKeyCode.ENTER -> IdeCommand.AcceptDeclarationChoice
-            IdeKeyCode.UP -> IdeCommand.MoveDeclarationChoice(-1)
-            IdeKeyCode.DOWN -> IdeCommand.MoveDeclarationChoice(1)
-            else -> null
-        }
-
-    private fun editorKey(
-        key: Int,
-        shift: Boolean,
-        pageRows: Int,
-    ): IdeCommand? =
-        when (key) {
-            IdeKeyCode.F2 -> {
-                IdeCommand.NavigateDiagnostic(shift)
-            }
-
-            IdeKeyCode.LEFT -> {
-                move(IdeMoveDirection.Left, shift)
-            }
-
-            IdeKeyCode.RIGHT -> {
-                move(IdeMoveDirection.Right, shift)
-            }
-
-            IdeKeyCode.UP -> {
-                move(IdeMoveDirection.Up, shift)
-            }
-
-            IdeKeyCode.DOWN -> {
-                move(IdeMoveDirection.Down, shift)
-            }
-
-            IdeKeyCode.HOME -> {
-                move(IdeMoveDirection.Home, shift)
-            }
-
-            IdeKeyCode.END -> {
-                move(IdeMoveDirection.End, shift)
-            }
-
-            IdeKeyCode.BACKSPACE -> {
-                IdeCommand.Edit(IdeEditorInput.Backspace)
-            }
-
-            IdeKeyCode.DELETE -> {
-                IdeCommand.Edit(IdeEditorInput.Delete)
-            }
-
-            IdeKeyCode.ENTER -> {
-                IdeCommand.Edit(IdeEditorInput.Enter)
-            }
-
-            IdeKeyCode.TAB -> {
-                IdeCommand.Edit(if (shift) IdeEditorInput.Outdent else IdeEditorInput.Tab)
-            }
-
-            IdeKeyCode.PAGE_UP -> {
-                IdeCommand.Edit(IdeEditorInput.Page(IdeVerticalDirection.Up, pageRows.coerceAtLeast(1), shift))
-            }
-
-            IdeKeyCode.PAGE_DOWN -> {
-                IdeCommand.Edit(IdeEditorInput.Page(IdeVerticalDirection.Down, pageRows.coerceAtLeast(1), shift))
-            }
-
-            IdeKeyCode.ESCAPE -> {
-                IdeCommand.CloseRequested
-            }
-
-            else -> {
-                null
-            }
-        }
-
-    private fun move(
-        direction: IdeMoveDirection,
-        selection: Boolean,
-    ) = IdeCommand.Edit(IdeEditorInput.Move(direction, selection))
-
-    private fun wordMove(
-        direction: IdeHorizontalDirection,
-        selection: Boolean,
-    ) = IdeCommand.Edit(IdeEditorInput.MoveWord(direction, selection))
-
-    private fun copySelection(): Boolean {
-        selectionSource.selectedText()?.let { clipboardWriter.setText(boundedClipboard(it)) }
-        return true
-    }
-
-    private fun cutSelection(): Boolean {
-        val selected = selectionSource.selectedText() ?: return true
-        clipboardWriter.setText(boundedClipboard(selected))
-        return dispatch(IdeCommand.Edit(IdeEditorInput.Cut))
-    }
-
-    private fun repeatMove(
-        direction: IdeMoveDirection,
-        count: Int,
-    ): IdeCommand {
-        repeat(count - 1) { sink.dispatch(move(direction, false)) }
-        return move(direction, false)
-    }
-
-    private fun dispatchType(text: String): Boolean {
-        if (text.isEmpty()) return true
-        return dispatch(IdeCommand.Edit(IdeEditorInput.Type(text)))
-    }
-
     private fun dispatch(command: IdeCommand): Boolean {
         sink.dispatch(command)
         return true
     }
-
-    private fun boundedClipboard(value: String): String {
-        val result = StringBuilder(minOf(value.length, limits.clipboardCodeUnits))
-        var offset = 0
-        var bytes = 0
-        while (offset < value.length) {
-            val first = value[offset]
-            val validPair =
-                Character.isHighSurrogate(first) && offset + 1 < value.length && Character.isLowSurrogate(value[offset + 1])
-            val codePoint =
-                when {
-                    validPair -> Character.toCodePoint(first, value[offset + 1])
-                    Character.isSurrogate(first) -> 0xfffd
-                    else -> first.code
-                }
-            val inputUnits = if (validPair) 2 else 1
-            val outputUnits = Character.charCount(codePoint)
-            val outputBytes = utf8Bytes(codePoint)
-            if (result.length + outputUnits > limits.clipboardCodeUnits || bytes + outputBytes > limits.clipboardUtf8Bytes) break
-            result.appendCodePoint(codePoint)
-            bytes += outputBytes
-            offset += inputUnits
-        }
-        return result.toString()
-    }
-
-    private fun utf8Bytes(codePoint: Int): Int =
-        when {
-            codePoint <= 0x7f -> 1
-            codePoint <= 0x7ff -> 2
-            codePoint <= 0xffff -> 3
-            else -> 4
-        }
 
     private fun editorOffset(
         x: Double,
