@@ -119,24 +119,22 @@ val programRuntimeIntegrationTest =
         inputs.file(compilerWorkerManifest)
         inputs.file(processTerminalChildArtifact)
         inputs.file(processInstallRomExecutableArtifact)
-        doFirst {
-            systemProperty("compukters.ffi.library", compukterFfiLibrary.absolutePath)
-            systemProperty("compukters.programRuntime.artifact", programRuntimeArtifact.get().asFile.absolutePath)
-            systemProperty("compukters.bootRuntime.artifact", bootRuntimeArtifact.get().asFile.absolutePath)
-            systemProperty("compukters.kotlincRuntime.artifact", kotlincRuntimeArtifact.get().asFile.absolutePath)
-            systemProperty("compukters.compilationRuntime.artifact", compilationRuntimeArtifact.get().asFile.absolutePath)
-            systemProperty("compukters.filesystemRuntime.artifact", filesystemRuntimeArtifact.get().asFile.absolutePath)
-            systemProperty("compukters.lexicalPathRuntime.artifact", lexicalPathRuntimeArtifact.get().asFile.absolutePath)
-            systemProperty("compukters.editRuntime.artifact", editRuntimeArtifact.get().asFile.absolutePath)
-            systemProperty("compukters.vmbenchAgentRuntime.artifact", vmbenchAgentRuntimeArtifact.get().asFile.absolutePath)
-            systemProperty("compukters.compilerWorker.payload", compilerWorkerPayload.get().asFile.absolutePath)
-            systemProperty("compukters.compilerWorker.manifest", compilerWorkerManifest.get().asFile.absolutePath)
-            systemProperty("compukters.processTerminalChild.artifact", processTerminalChildArtifact.asFile.absolutePath)
-            systemProperty(
-                "compukters.processInstallRomExecutable.artifact",
-                processInstallRomExecutableArtifact.asFile.absolutePath,
-            )
-        }
+        systemProperty("compukters.ffi.library", compukterFfiLibrary.absolutePath)
+        systemProperty("compukters.programRuntime.artifact", programRuntimeArtifact.get().asFile.absolutePath)
+        systemProperty("compukters.bootRuntime.artifact", bootRuntimeArtifact.get().asFile.absolutePath)
+        systemProperty("compukters.kotlincRuntime.artifact", kotlincRuntimeArtifact.get().asFile.absolutePath)
+        systemProperty("compukters.compilationRuntime.artifact", compilationRuntimeArtifact.get().asFile.absolutePath)
+        systemProperty("compukters.filesystemRuntime.artifact", filesystemRuntimeArtifact.get().asFile.absolutePath)
+        systemProperty("compukters.lexicalPathRuntime.artifact", lexicalPathRuntimeArtifact.get().asFile.absolutePath)
+        systemProperty("compukters.editRuntime.artifact", editRuntimeArtifact.get().asFile.absolutePath)
+        systemProperty("compukters.vmbenchAgentRuntime.artifact", vmbenchAgentRuntimeArtifact.get().asFile.absolutePath)
+        systemProperty("compukters.compilerWorker.payload", compilerWorkerPayload.get().asFile.absolutePath)
+        systemProperty("compukters.compilerWorker.manifest", compilerWorkerManifest.get().asFile.absolutePath)
+        systemProperty("compukters.processTerminalChild.artifact", processTerminalChildArtifact.asFile.absolutePath)
+        systemProperty(
+            "compukters.processInstallRomExecutable.artifact",
+            processInstallRomExecutableArtifact.asFile.absolutePath,
+        )
     }
 
 tasks.check {

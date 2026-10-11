@@ -65,12 +65,10 @@ tasks.test {
     inputs.files(addonApiArtifact, addonToolingArtifact, guestPlatformArtifact, addonAdapterArtifact)
     systemProperty("compukters.addon.sdk.version", addonSdkVersion)
     systemProperty("compukters.addon.kotlin.version", libs.plugins.kotlin.get().version.requiredVersion)
-    doFirst {
-        systemProperty("compukters.addon.test.api", addonApiArtifact.get().asFile.absolutePath)
-        systemProperty("compukters.addon.test.tooling", addonToolingArtifact.get().asFile.absolutePath)
-        systemProperty("compukters.addon.test.platform", guestPlatformArtifact.get().asFile.absolutePath)
-        systemProperty("compukters.addon.test.adapter", addonAdapterArtifact.get().asFile.absolutePath)
-    }
+    systemProperty("compukters.addon.test.api", addonApiArtifact.get().asFile.absolutePath)
+    systemProperty("compukters.addon.test.tooling", addonToolingArtifact.get().asFile.absolutePath)
+    systemProperty("compukters.addon.test.platform", guestPlatformArtifact.get().asFile.absolutePath)
+    systemProperty("compukters.addon.test.adapter", addonAdapterArtifact.get().asFile.absolutePath)
 }
 
 publishing {

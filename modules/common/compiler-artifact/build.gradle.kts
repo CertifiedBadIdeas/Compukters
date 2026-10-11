@@ -40,15 +40,15 @@ val assertCompilerArtifactIsolation = tasks.register("assertCompilerArtifactIsol
     group = "verification"
     description = "Fails when compiler implementation artifacts enter compiler-artifact production classpaths."
 
+    val classpathComponents = listOf("compileClasspath", "runtimeClasspath").map {
+        configurations.getByName(it).runtimeComponentNames(project.path)
+    }
+    val productionComponents = providers.provider { classpathComponents.flatMap { it.get() }.distinct().sorted() }
+    inputs.property("productionComponents", productionComponents)
     doLast {
-        val forbidden =
-            listOf("compileClasspath", "runtimeClasspath")
-                .flatMap { name -> configurations.getByName(name).resolvedConfiguration.resolvedArtifacts }
-                .map { it.moduleVersion.id.group to it.moduleVersion.id.name }
-                .filter { (group, name) ->
-                    group == "org.jetbrains.kotlin" &&
-                        (name.startsWith("kotlin-compiler") || name.startsWith("kotlin-scripting-compiler"))
-                }
+        val forbidden = productionComponents.get().filter {
+            it.startsWith("org.jetbrains.kotlin:kotlin-compiler") || it.startsWith("org.jetbrains.kotlin:kotlin-scripting-compiler")
+        }
         check(forbidden.isEmpty()) { "compiler-artifact contains compiler implementation dependencies: $forbidden" }
     }
 }

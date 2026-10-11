@@ -135,11 +135,9 @@ val nativeIntegrationTest =
         inputs.file(shellArtifact)
         dependsOn(":compiler-k2:generateExceptionsConformanceArtifact")
         inputs.file(exceptionsArtifact)
-        doFirst {
-            systemProperty("compukter.jni.library", compukterJniLibrary.absolutePath)
-            systemProperty("compukters.shell.artifact", shellArtifact.get().asFile.absolutePath)
-            systemProperty("compukters.exceptions.artifact", exceptionsArtifact.get().asFile.absolutePath)
-        }
+        systemProperty("compukter.jni.library", compukterJniLibrary.absolutePath)
+        systemProperty("compukters.shell.artifact", shellArtifact.get().asFile.absolutePath)
+        systemProperty("compukters.exceptions.artifact", exceptionsArtifact.get().asFile.absolutePath)
     }
 
 val packagedNativeIntegrationTest =
@@ -152,9 +150,7 @@ val packagedNativeIntegrationTest =
         classpath = sourceSets.test.get().runtimeClasspath
         filter.includeTestsMatching("ru.lazyhat.compukters.lang.runtime.integration.PackagedJniRuntimeIntegrationTest")
         inputs.file(shellArtifact)
-        doFirst {
-            systemProperty("compukters.shell.artifact", shellArtifact.get().asFile.absolutePath)
-        }
+        systemProperty("compukters.shell.artifact", shellArtifact.get().asFile.absolutePath)
     }
 
 val runtimeJar = tasks.named<Jar>("jar")
@@ -166,8 +162,9 @@ val verifyNativeRuntimeJarResource =
         inputs.file(runtimeJar.flatMap { it.archiveFile })
         val expectedNativeResources = expectedNativeResources(releaseRuntimeMode, nativeResourcePath, RuntimeTransport.JNI)
         inputs.property("expectedNativeResources", expectedNativeResources)
+        val actionRuntimeJar = runtimeJar.flatMap { it.archiveFile }
         doLast {
-            val archive = runtimeJar.get().archiveFile.get().asFile
+            val archive = actionRuntimeJar.get().asFile
             val nativeEntries =
                 ZipFile(archive).use { zip ->
                     zip

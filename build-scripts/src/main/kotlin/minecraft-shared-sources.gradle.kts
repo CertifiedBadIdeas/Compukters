@@ -87,16 +87,22 @@ val verifyMinecraftSourceOwnership =
         group = "verification"
         description = "Rejects cross-version source roots and classes emitted in Minecraft-owned packages."
         dependsOn(tasks.named(sourceSets.main.get().classesTaskName))
+        val ownRoot = projectDir.parentFile.canonicalFile
+        val minecraftRoot = minecraftProjectDirectory.asFile
+        val configuredSourceRoots = sourceSets.flatMap { it.allSource.srcDirs }.map(File::getCanonicalFile)
+        val emittedMinecraftClasses = sourceSets.main.get().output.classesDirs.asFileTree.matching {
+            include("net/minecraft/**")
+        }
+        inputs.property("configuredSourceRoots", configuredSourceRoots.map { it.absolutePath })
+        inputs.files(emittedMinecraftClasses)
         doLast {
-            val ownVersionRoot = projectDir.parentFile.canonicalFile.toPath()
+            val ownVersionRoot = ownRoot.toPath()
             val versionRoots =
-                minecraftProjectDirectory.asFile.listFiles().orEmpty()
+                minecraftRoot.listFiles().orEmpty()
                     .filter { it.isDirectory && it.name.startsWith("v") }
                     .map { it.canonicalFile.toPath() }
             val foreignSourceRoots =
-                sourceSets
-                    .flatMap { it.allSource.srcDirs }
-                    .map { it.canonicalFile.toPath() }
+                configuredSourceRoots.map { it.toPath() }
                     .filter { sourceRoot ->
                         versionRoots.any { versionRoot -> sourceRoot.startsWith(versionRoot) && versionRoot != ownVersionRoot }
                     }
@@ -105,9 +111,7 @@ val verifyMinecraftSourceOwnership =
             }
 
             val minecraftPackageClasses =
-                sourceSets.main.get().output.classesDirs.asFileTree.matching {
-                    include("net/minecraft/**")
-                }.files
+                emittedMinecraftClasses.files
             check(minecraftPackageClasses.isEmpty()) {
                 "project-owned classes must not be emitted beneath net.minecraft: ${minecraftPackageClasses.sorted()}"
             }
