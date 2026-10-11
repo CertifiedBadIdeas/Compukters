@@ -59,13 +59,19 @@ Running computers hibernate when their carrier unloads and during orderly server
 the saved program, including unsaved editor text, terminal state and nested foreground programs. Timer waits retain their
 remaining ticks. A cleanly halted or shut-down computer stays off.
 
-Corrupt or incompatible execution snapshots stop restoration instead of starting the program again. An operator can
-request a fresh boot with `/compukters reboot x y z` for a loaded computer. This discards execution and unsaved edits,
+If a saved execution snapshot is corrupt or incompatible, the computer logs the failure and boots again from ROM,
+retaining its identity and `/home` files. An operator can request a fresh boot with `/compukters reboot x y z` for a
+loaded computer. This discards execution and unsaved edits,
 but retains the computer identity and `/home` files. Physics on Sable constructions keeps running while the computer
 restores. Restoration time depends on the saved execution, storage and server load.
 
-The base runtime and Sable observation addon support hibernation. Stateful Create and Propulsion hosts have not yet
-implemented resource checkpoints; worlds using those hosts cannot rely on transparent execution resume.
+The base runtime, Sable observation addon and Propulsion engine controls support hibernation. Propulsion restores
+owned throttle, steering and thrust commands before the program continues. Missing or replaced engines leave their
+old handles stale; a control conflict triggers a fresh boot without overwriting another controller. Thrust can lapse
+during unload or restoration while construction physics keeps running.
+
+Installing Create does not prevent hibernation when its Guest resources are unused. Active Create resources do not
+support capture yet; capture failure is logged and the computer starts fresh on its next load.
 
 ## Path 1: build and run a project in the IDE
 
