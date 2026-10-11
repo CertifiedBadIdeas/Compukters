@@ -81,11 +81,11 @@ dependencies {
     implementation(projects.addonApi)
     shadowBundle(project(path = projects.addonApi.path)) { isTransitive = false }
     implementation(projects.v1211AddonNeoforgeApi)
-    shadowBundle(project(path = projects.v1211AddonNeoforgeApi.path, configuration = "transformProductionNeoForge"))
+    shadowBundle(project(path = projects.v1211AddonNeoforgeApi.path, configuration = "namedElements"))
     implementation(projects.addonGuestApi)
     shadowBundle(project(path = projects.addonGuestApi.path)) { isTransitive = false }
     common(project(path = projects.v1211Common.path)) { isTransitive = false }
-    shadowBundle(project(path = projects.v1211Common.path, configuration = "transformProductionNeoForge"))
+    shadowBundle(project(path = projects.v1211Common.path, configuration = "namedElements"))
     testImplementation(project(path = projects.v1211Common.path, configuration = "namedElements"))
     implementation(projects.nativeRuntimeJni)
     shadowBundle(project(path = projects.nativeRuntimeJni.path)) { isTransitive = false }

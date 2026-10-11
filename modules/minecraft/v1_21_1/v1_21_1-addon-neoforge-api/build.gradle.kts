@@ -27,10 +27,6 @@ plugins {
 
 val addonSdkVersion = libs.versions.addon.sdk.get()
 
-architectury {
-    common("neoforge")
-}
-
 dependencies {
     compileOnly(projects.addonApi)
     compileOnly(projects.core)
