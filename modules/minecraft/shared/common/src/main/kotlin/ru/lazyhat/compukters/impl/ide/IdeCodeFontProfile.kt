@@ -31,6 +31,12 @@ class IdeCodeFontProfile private constructor(
 ) {
     val glyphDrawOffsetY: Int = baseline - MINECRAFT_TEXT_BASELINE
 
+    /** Logical cell origin; drawing applies the glyph baseline offset exactly once. */
+    fun centeredCellTop(
+        bounds: IdeRect,
+        rows: Int = 1,
+    ): Int = bounds.top + (bounds.height - rows * cellHeight) / 2
+
     companion object {
         private const val MINECRAFT_TEXT_BASELINE = 7
 

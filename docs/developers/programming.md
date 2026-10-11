@@ -55,7 +55,7 @@ host operations remain bounded even when a program launches multiple cooperative
 ## Diagnose failures
 
 Read compiler diagnostics before deployment and inspect the target terminal for runtime failures and bounded source
-stacks. Use **Ctrl+T** in the terminal or IDE target terminal to stop the foreground command and its nested work and
+stacks. Use **Ctrl+C** in the terminal or IDE target terminal to stop the foreground command and its nested work and
 return to the shell. Release device control before exiting when a device API exposes `close()`.
 
 Files in `/home` survive ordinary world saves and reloads. Running programs also retain memory, tasks and unsaved

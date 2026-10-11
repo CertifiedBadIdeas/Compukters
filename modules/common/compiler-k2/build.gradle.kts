@@ -825,15 +825,17 @@ val generateIntArrayConformanceArtifact = tasks.register<Test>("generateIntArray
 }
 
 val generateReferenceArrayConformanceArtifact = tasks.register<Test>("generateReferenceArrayConformanceArtifact") {
-    description = "Compiles typed Guest class reference arrays for pinned VM conformance."
+    description = "Compiles specialized primitive and typed reference Guest arrays for pinned VM conformance."
     group = "verification"
     dependsOn(tasks.jar)
     useJUnitPlatform()
     testClassesDirs = sourceSets.test.get().output.classesDirs
     classpath = sourceSets.test.get().runtimeClasspath
+    filter.includeTestsMatching("*primitive generic arrays specialize dense storage and reference boundary copies for vm execution*")
     filter.includeTestsMatching("*reference arrays preserve Guest class elements and aliases*")
     filter.includeTestsMatching("*reference array loops preserve specialized elements source identity and cleanup for vm execution*")
     inputs.file(workerJar)
+    outputs.file(referenceArrayConformanceArtifact.map { it.asFile.resolveSibling("${it.asFile.name}.packed.cpkt") })
     outputs.file(referenceArrayConformanceArtifact)
     outputs.file(referenceArrayConformanceArtifact.map { it.asFile.resolveSibling("${it.asFile.name}.loops.cpkt") })
     doFirst {
@@ -1426,6 +1428,7 @@ val generateShellArtifact = tasks.register<Test>("generateShellArtifact") {
     filter.includeTestsMatching("*checked in shell compiles deterministically*")
     inputs.file(rootProject.file("system/programs/shell.kt"))
     inputs.file(rootProject.file("system/programs/shell/Lexer.kt"))
+    inputs.file(rootProject.file("system/programs/shell/ShellEditor.kt"))
     inputs.file(workerJar)
     outputs.file(shellArtifact)
     systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)

@@ -20,13 +20,13 @@ package compukter.system.vmbench
 
 import compukter.io.Stderr
 import compukter.terminal.Terminal
+import compukter.terminal.TerminalEvent
 
 fun main() {
-    val event = Terminal.awaitEvent()
-    val input = if (event == 1) Terminal.eventText() else ""
+    val event = Terminal.readEvent()
+    val input = if (event is TerminalEvent.Text) event.text else ""
     val allocation = input == "alloc"
     val rounds = if (allocation) 1_000_000 else parseVmbenchRounds(input)
-    Terminal.finishEvent()
     if (rounds == 0) {
         Stderr.write("vmbench agent requires rounds 1..1000000\n")
         return

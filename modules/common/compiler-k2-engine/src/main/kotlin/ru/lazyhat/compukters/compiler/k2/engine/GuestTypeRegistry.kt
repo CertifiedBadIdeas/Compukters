@@ -51,7 +51,7 @@ internal class GuestTypeRegistry(
             FunctionValue.scalar(type)
         }
 
-    private var referenceArrays: Map<String, ValueType.Ref> = emptyMap()
+    private var guestArrays: Map<String, ValueType.Ref> = emptyMap()
 
     fun arrayElement(type: IrType): IrType? {
         val simple = type as? IrSimpleType ?: return null
@@ -59,11 +59,11 @@ internal class GuestTypeRegistry(
         return (simple.arguments.singleOrNull() as? IrTypeProjection)?.type
     }
 
-    fun registerReferenceArrays(types: Map<String, ValueType.Ref>) {
-        referenceArrays = types
+    fun registerGuestArrays(types: Map<String, ValueType.Ref>) {
+        guestArrays = types
     }
 
-    fun referenceArrayType(type: IrType): ValueType.Ref? = referenceArrays[type.specializationTypeIdentity()]
+    fun guestArrayType(type: IrType): ValueType.Ref? = guestArrays[type.specializationTypeIdentity()]
 
     fun isStringArray(type: IrType): Boolean {
         val simple = type as? IrSimpleType ?: return false

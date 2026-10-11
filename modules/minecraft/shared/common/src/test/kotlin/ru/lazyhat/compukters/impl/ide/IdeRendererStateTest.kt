@@ -795,7 +795,12 @@ class IdeRendererStateTest {
         assertTrue(lines.any { it.value.startsWith("@param value") })
         assertTrue(lines.last().value.endsWith('…'))
         assertTrue(lines.size <= 20)
-        assertTrue(lines.all { it.y < requireNotNull(it.clip).bottom })
+        assertTrue(
+            lines.all {
+                it.y - IdeCodeFontProfile.DEFAULT.glyphDrawOffsetY + IdeCodeFontProfile.DEFAULT.cellHeight <=
+                    requireNotNull(it.clip).bottom - 4
+            },
+        )
         for (line in lines) {
             assertTrue(
                 line.value
@@ -1486,8 +1491,8 @@ class IdeRendererStateTest {
         assertTrue(
             model.fills.any { it.kind == IdeFillKind.Shadow && it.zIndex < popupPanel.zIndex && it.bounds.bottom > hoverBounds.bottom },
         )
-        assertEquals(3 * IdeCodeFontProfile.DEFAULT.cellHeight + 4, hoverBounds.height)
-        assertEquals(hoverBounds.top + 3 + IdeCodeFontProfile.DEFAULT.glyphDrawOffsetY, hover.first().y)
+        assertEquals(3 * IdeCodeFontProfile.DEFAULT.cellHeight + 8, hoverBounds.height)
+        assertEquals(hoverBounds.top + 4 + IdeCodeFontProfile.DEFAULT.glyphDrawOffsetY, hover.first().y)
         assertTrue(hover.maxOf { it.zIndex } < model.text.filter { it.kind == IdeTextKind.Dialog }.minOf { it.zIndex })
         assertTrue(
             hover.all {
@@ -1571,6 +1576,55 @@ class IdeRendererStateTest {
             assertFalse(target.enabled)
             assertEquals("No target attached", target.tooltip)
         }
+    }
+
+    @Test
+    fun `project switcher controls paint above popup background and below their labels`() {
+        val model = IdeRenderer.extract(workspaceState(IdeEditorView.Empty, IdeBuildState.Idle), geometry(), projectSwitcherOpen = true)
+        val popup = model.panels.single { it.kind == IdePanelKind.ProjectSwitcher }
+        val controls = model.hitTargets.filter { it.focusGroup == IdeFocusGroup.ProjectSwitcher }
+        assertTrue(controls.isNotEmpty())
+        for (target in controls) {
+            val panel = model.panels.single { it.kind == IdePanelKind.Control && it.bounds == target.bounds }
+            assertTrue(panel.zIndex > popup.zIndex)
+            val borders =
+                model.fills.filter {
+                    it.kind == IdeFillKind.ControlBorder && it.zIndex > popup.zIndex &&
+                        target.bounds.contains(it.bounds)
+                }
+            assertEquals(4, borders.size)
+            assertTrue(borders.all { it.zIndex > panel.zIndex && it.zIndex < IdeDrawLayers.Z_PROJECT_SWITCHER_TEXT })
+        }
+    }
+
+    @Test
+    fun `dialog header and status labels stay centered inside shared controls`() {
+        val geometry = geometry()
+        val state = workspaceState(IdeEditorView.Empty, IdeBuildState.Idle)
+        val plain = IdeRenderer.extract(state, geometry)
+        val modal = IdeRenderer.extract(state.copy(dialog = IdeDialogState.LockUpdate("demo")), geometry)
+        for ((model, action, labelKind) in listOf(
+            Triple(plain, IdeHitAction.ProjectSwitcher, IdeTextKind.Header),
+            Triple(plain, IdeHitAction.StatusDetails, IdeTextKind.Status),
+            Triple(modal, IdeHitAction.Confirm, IdeTextKind.Dialog),
+            Triple(modal, IdeHitAction.Dismiss, IdeTextKind.Dialog),
+        )) {
+            val target = model.hitTargets.single { it.action == action }
+            val bounds = target.bounds
+            val label =
+                model.text.single {
+                    it.kind == labelKind && it.x in bounds.left until bounds.right &&
+                        it.y in bounds.top until bounds.bottom
+                }
+            val cellTop = label.y - geometry.font.glyphDrawOffsetY
+            assertTrue(cellTop >= bounds.top && cellTop + geometry.font.cellHeight <= bounds.bottom)
+            assertTrue(kotlin.math.abs((cellTop - bounds.top) - (bounds.bottom - cellTop - geometry.font.cellHeight)) <= 1)
+            assertEquals(IdeColors.CONTROL, model.panels.single { it.kind == IdePanelKind.Control && it.bounds == bounds }.color)
+            assertEquals(4, model.fills.count { it.kind == IdeFillKind.ControlBorder && bounds.contains(it.bounds) })
+        }
+        val statusLabels = plain.text.filter { it.kind == IdeTextKind.Status && it.value != "Details" }
+        assertTrue(statusLabels.isNotEmpty())
+        assertTrue(statusLabels.all { it.y - geometry.font.glyphDrawOffsetY + geometry.font.cellHeight <= geometry.status.bottom })
     }
 
     @Test
@@ -1866,8 +1920,8 @@ class IdeRendererStateTest {
         assertTrue(model.text.any { it.kind == IdeTextKind.Completion && it.value == label })
         val row = model.text.single { it.kind == IdeTextKind.Completion }
         assertEquals(IdeCodeFontProfile.DEFAULT, row.codeFont)
-        assertEquals(IdeCodeFontProfile.DEFAULT.cellHeight + 4, popup.height)
-        assertEquals(popup.top + 3 + IdeCodeFontProfile.DEFAULT.glyphDrawOffsetY, row.y)
+        assertEquals(IdeCodeFontProfile.DEFAULT.cellHeight + 8, popup.height)
+        assertEquals(popup.top + 4 + IdeCodeFontProfile.DEFAULT.glyphDrawOffsetY, row.y)
         assertTrue(popup.width > 220, popup.toString())
         assertTrue(popup.width <= geometry.editor.width, popup.toString())
     }
