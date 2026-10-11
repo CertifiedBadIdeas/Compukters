@@ -80,6 +80,13 @@ sealed interface IdeEvent {
         val target: IdeAttachedTarget?,
     ) : IdeEvent
 
+    data class LocalConfigurationResolved(
+        val generation: Long,
+        val operationId: Long,
+        val project: ProjectHandle,
+        val result: IdeResolveResult,
+    ) : IdeEvent
+
     data class BuildInputLoaded(
         val generation: Long,
         val operationId: Long,
@@ -262,6 +269,7 @@ internal fun IdeEvent.copyForQueue(): IdeEvent =
         is IdeEvent.CatalogLoaded -> copy(projects = Collections.unmodifiableList(projects.toList()))
 
         is IdeEvent.LibraryConfigurationLoaded,
+        is IdeEvent.LocalConfigurationResolved,
         is IdeEvent.BuildInputLoaded,
         is IdeEvent.ToolingReady,
         is IdeEvent.ToolingFailed,

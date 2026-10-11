@@ -45,6 +45,8 @@ headings so this page has one stable URL that can be shared outside the reposito
   labeled controls when space permits. The status bar shows concise activity, with a scrollable read-only Details
   window and complete message copying. Source highlighting, caret, selection and mouse pointing share tab and
   Unicode columns, including horizontally scrolled text; scrolling keeps source text and selection clear of line numbers.
+  Opening a project without a computer automatically creates a missing local dependency lock for Kotlin analysis
+  and Build, without saving source drafts or replacing existing locks. Deploy and Run require an attached computer.
 
 - Documentation offers a version selector for released 0.5.1 and nightly guides and API references. The released
   documentation opens by default; nightly identifies its current source commit.

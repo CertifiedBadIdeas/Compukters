@@ -106,6 +106,12 @@ class IdeBuildCoordinator(
         input: IdeBuildInput,
         updateExisting: Boolean,
         target: TargetCompileProfile? = null,
+    ): CompletableFuture<IdeResolveResult> = resolveConfiguration(input.configuration, updateExisting, target)
+
+    fun resolveConfiguration(
+        input: IdeProjectConfiguration,
+        updateExisting: Boolean = false,
+        target: TargetCompileProfile? = null,
     ): CompletableFuture<IdeResolveResult> =
         submit(
             action = { resolveNow(input, updateExisting, target) },
@@ -227,7 +233,7 @@ class IdeBuildCoordinator(
     }
 
     private fun resolveNow(
-        input: IdeBuildInput,
+        input: IdeProjectConfiguration,
         updateExisting: Boolean,
         target: TargetCompileProfile?,
     ): IdeResolveResult =
@@ -493,6 +499,7 @@ class IdeBuildCoordinator(
         val result = CompletableFuture<T>()
         try {
             executor.execute {
+                if (result.isDone || closed.get()) return@execute
                 try {
                     result.complete(action())
                 } catch (failure: Throwable) {
