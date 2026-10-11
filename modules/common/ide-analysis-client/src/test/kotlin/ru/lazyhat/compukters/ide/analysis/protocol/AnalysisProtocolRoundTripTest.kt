@@ -61,6 +61,31 @@ import kotlin.test.assertIs
 
 class AnalysisProtocolRoundTripTest {
     @Test
+    fun `diagnostic highlight round trips and rejects unknown kinds`() {
+        val query = AnalysisQuery.Presentation(identity, path())
+        val correlated = context.forQuery(query)
+        for (highlight in ru.lazyhat.compukters.ide.analysis.EditorDiagnosticHighlight.entries) {
+            val diagnostic = EditorDiagnostic(EditorDiagnosticSeverity.Error, "unknown symbol", path(), EditorRange(4, 10), highlight)
+            val value = SnapshotPresentation.create(identity, sourceLengths(), diagnostics = listOf(diagnostic))
+            val message = AnalysisQuerySuccess(requestId, AnalysisResult.Presentation(identity, value))
+            val decoded = assertIs<AnalysisQuerySuccess>(roundTrip(message, correlated))
+            val active =
+                assertIs<SnapshotPresentationAcceptance.Active>(
+                    assertIs<AnalysisResult.Presentation>(decoded.result).value.accept(identity),
+                )
+            assertEquals(diagnostic, active.diagnostics.single())
+            val frame = AnalysisMessageCodec.encode(message, correlated)
+            val invalid = frame.copy(payload = frame.payload.copyOf().also { it[it.size - 13] = 127 })
+            val failure = assertFailsWith<AnalysisProtocolException> { AnalysisMessageCodec.decode(invalid, correlated) }
+            assertEquals(AnalysisProtocolError.UnknownEnumValue, failure.error)
+        }
+        val frame = AnalysisMessageCodec.encode(AnalysisQueryRequest(requestId, query), context)
+        val old = AnalysisFrameCodec.encode(frame).also { it[4] = 15 }
+        val failure = assertFailsWith<AnalysisProtocolException> { AnalysisFrameCodec.decode(old, ProtocolLimits.MAX_FRAME_PAYLOAD_BYTES) }
+        assertEquals(AnalysisProtocolError.WrongVersion, failure.error)
+    }
+
+    @Test
     fun `semantic-only presentation policy round trips and rejects mismatched diagnostics`() {
         val query = AnalysisQuery.Presentation(identity, path(), false)
         assertEquals(AnalysisQueryRequest(requestId, query), roundTrip(AnalysisQueryRequest(requestId, query), context))

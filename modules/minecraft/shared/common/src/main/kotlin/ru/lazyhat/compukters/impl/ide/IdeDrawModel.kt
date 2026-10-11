@@ -58,6 +58,7 @@ enum class IdeTextKind {
     CompletionBadge,
     CompletionReturnType,
     ParameterInfo,
+    ParameterInfoHeader,
     Hover,
     DeclarationChoice,
     ProjectChoice,
@@ -75,6 +76,8 @@ enum class IdeTextRotation { None, Clockwise90 }
 enum class IdeFillKind {
     CurrentLine,
     DiagnosticMarker,
+    DiagnosticUnderline,
+    ParameterInfoActive,
     GitChange,
     CheckboxBorder,
     CheckboxMark,

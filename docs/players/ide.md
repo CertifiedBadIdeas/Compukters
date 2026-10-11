@@ -72,6 +72,21 @@ messages and artifact information. Use the wheel, **Up/Down**, **Page Up/Down**,
 or **Close** returns to the workspace. This window is read-only; typing and project shortcuts cannot edit the file
 underneath it.
 
+## Kotlin information and problems
+
+Hover a declaration or expression to see its signature, inferred type and available documentation.
+Types use short Kotlin names, including nested generics, nullable types and function types. The popup separates
+signature, type, source and documentation, and wraps long text within the editor.
+
+Unknown references color the complete identifier. Errors and warnings underline the exact affected source range;
+a mismatched property initializer marks its value. Hover a marked token to read the overlapping problems together.
+Clicking that token still places the caret normally. The Problems window and **F2**/**Shift+F2** retain problem navigation.
+
+Argument information opens automatically when you type `(` in Kotlin code, and **Ctrl+P** opens it manually
+inside a call. The resolved signatures follow the caret; the current positional, named or vararg parameter is
+highlighted. Long signatures wrap while keeping the current parameter visible. **Esc** dismisses the popup.
+Typing `(` inside strings or comments does not open argument information.
+
 ## UI scale
 
 Choose **Auto**, **2** or **3** beside **Scale** in the IDE header. The selection takes effect immediately and is

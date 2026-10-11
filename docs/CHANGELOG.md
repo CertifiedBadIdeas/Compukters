@@ -18,6 +18,11 @@ headings so this page has one stable URL that can be shared outside the reposito
   writes; moves refuse replacement and deletion is limited to files and empty directories. Executable paths
   normalize before foreground launch.
 
+- IDE hover displays short Kotlin types with distinct signature, type, origin and wrapped documentation.
+  Unknown references color their complete identifier; errors and warnings underline their exact source ranges.
+  Hovering a marked token shows its problems together, preserving source editing and horizontal scrolling.
+  Argument hints open when typing a call or pressing Ctrl+P, wrap long signatures and emphasize the current parameter.
+
 - Guest Kotlin supports `do-while` loops, including local `break` and `continue`, body-local variables in
   the condition, and managed exception and `finally` cleanup across VM instruction slices.
 

@@ -75,6 +75,37 @@ import kotlin.test.assertTrue
 
 class IdeAnalysisFlowTest {
     @Test
+    fun `typing a call opening requests argument hints while strings and comments do not`() {
+        fun fixture(requests: FlowAnalysisRequests) =
+            ControllerFixture(
+                preferences("demo", "src/main.kt"),
+                analysisCoordinatorFactory = { workspace -> coordinator(workspace, requests) },
+            ).also { it.startAndTick() }
+        val requests = FlowAnalysisRequests()
+        val fixture = fixture(requests)
+        fixture.controller.dispatch(IdeCommand.Edit(IdeEditorInput.SelectAll))
+        fixture.controller.dispatch(IdeCommand.Edit(IdeEditorInput.Type("fun main() { println")))
+        fixture.controller.dispatch(IdeCommand.Edit(IdeEditorInput.Type("(")))
+        assertEquals(1, requests.parameterInfoRequests.size)
+        val source = fixture.textEditor().visibleLines.joinToString("\n")
+        requests.completeParameterInfo(0, source)
+        fixture.controller.tick()
+        assertNotNull((fixture.textEditor().analysis as IdeAnalysisState.Active).parameterInfo)
+        fixture.controller.dispatch(IdeCommand.DismissParameterInfo)
+        assertNull((fixture.textEditor().analysis as IdeAnalysisState.Active).parameterInfo)
+        fixture.controller.close()
+        for (prefix in listOf("val text = \"", "// text ", "/* text ")) {
+            val excludedRequests = FlowAnalysisRequests()
+            val excluded = fixture(excludedRequests)
+            excluded.controller.dispatch(IdeCommand.Edit(IdeEditorInput.SelectAll))
+            excluded.controller.dispatch(IdeCommand.Edit(IdeEditorInput.Type(prefix)))
+            excluded.controller.dispatch(IdeCommand.Edit(IdeEditorInput.Type("(")))
+            assertTrue(excludedRequests.parameterInfoRequests.isEmpty(), prefix)
+            excluded.controller.close()
+        }
+    }
+
+    @Test
     fun `local lock creation restores analysis without reopening or attaching a computer`() {
         val requests = FlowAnalysisRequests()
         val configuration = CompletableFuture<ru.lazyhat.compukters.ide.client.workspace.IdeProjectConfiguration>()

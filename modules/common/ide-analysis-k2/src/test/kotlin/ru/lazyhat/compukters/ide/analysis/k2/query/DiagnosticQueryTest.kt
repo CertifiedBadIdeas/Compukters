@@ -31,6 +31,21 @@ import kotlin.test.assertTrue
 
 class DiagnosticQueryTest {
     @Test
+    fun `unresolved identifiers carry a distinct highlight with their full token range`() {
+        val source = "fun main() { missingSymbol() }"
+        K2QueryFixture.source("main.kt" to source).use { fixture ->
+            val result = fixture.execute(fixture.presentation()) as AnalysisResult.Presentation
+            val active = result.value.accept(fixture.identity) as SnapshotPresentationAcceptance.Active
+            val missing =
+                active.diagnostics.single {
+                    it.highlight == ru.lazyhat.compukters.ide.analysis.EditorDiagnosticHighlight.UnresolvedReference
+                }
+            val start = source.indexOf("missingSymbol")
+            assertEquals(EditorRange(start, start + "missingSymbol".length), missing.range)
+        }
+    }
+
+    @Test
     fun `array initializer constructors resolve with source and metadata inputs`() {
         val source =
             """
@@ -460,11 +475,11 @@ class DiagnosticQueryTest {
         K2QueryFixture.source("main.kt" to source).use { fixture ->
             val result = fixture.execute(fixture.presentation()) as AnalysisResult.Presentation
             val active = result.value.accept(fixture.identity) as SnapshotPresentationAcceptance.Active
-            val offset = source.lastIndexOf('=')
+            val offset = source.indexOf("42")
 
             assertTrue(
                 active.diagnostics.any {
-                    it.severity == EditorDiagnosticSeverity.Error && it.range == EditorRange(offset, offset + 1)
+                    it.severity == EditorDiagnosticSeverity.Error && it.range == EditorRange(offset, offset + 2)
                 },
                 active.diagnostics.toString(),
             )

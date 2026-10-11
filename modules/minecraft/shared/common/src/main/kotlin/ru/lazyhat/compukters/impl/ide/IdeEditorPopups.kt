@@ -35,7 +35,10 @@ internal class IdeEditorPopups(
 ) {
     private val font = geometry.font
 
-    fun draw(editor: IdeEditorView.Text) {
+    fun draw(
+        editor: IdeEditorView.Text,
+        diagnostics: ru.lazyhat.compukters.ide.client.state.IdeDiagnostics,
+    ) {
         val active = editor.analysis as? IdeAnalysisState.Active
         when (val interaction = active?.interaction) {
             is IdeSemanticInteraction.Chooser -> {
@@ -50,7 +53,13 @@ internal class IdeEditorPopups(
                     completion(editor)
                 }
                 if (active?.completion == null && active?.parameterInfo == null && interaction is IdeSemanticInteraction.Hover) {
-                    semanticHover(interaction)
+                    if (diagnostics.rows.none {
+                            it.navigable && it.diagnostic.path?.value == interaction.anchor.path.value &&
+                                it.diagnostic.range?.intersects(interaction.anchor.tokenRange) == true
+                        }
+                    ) {
+                        semanticHover(interaction)
+                    }
                 }
             }
         }
@@ -61,43 +70,50 @@ internal class IdeEditorPopups(
         val availableHeight = maxOf(anchor.top - geometry.editor.top, geometry.editor.bottom - anchor.bottom)
         val maximumRows = minOf(20, (availableHeight - POPUP_VERTICAL_PADDING) / font.cellHeight)
         if (maximumRows <= 0) return
-        val maximumColumns = ((geometry.editor.width - POPUP_HORIZONTAL_PADDING) / font.cellWidth).coerceAtLeast(1)
-        val lines =
+        val maximumColumns = minOf(80, ((geometry.editor.width - POPUP_HORIZONTAL_PADDING) / font.cellWidth).coerceAtLeast(1))
+        val content =
             buildList {
-                hover.info.signature?.let(::add)
-                add("Type: ${hover.info.renderedType}")
+                hover.info.signature?.let { add(it to IdeColors.ACCENT) }
+                add("Type: ${hover.info.renderedType}" to IdeColors.TEXT)
                 hover.info.origin?.let { origin ->
                     add(
                         when (origin) {
-                            DeclarationOrigin.Project -> "Origin: Project"
-                            is DeclarationOrigin.Platform -> "Origin: ${origin.identity.name}"
-                        },
+                            DeclarationOrigin.Project -> "Project source"
+                            is DeclarationOrigin.Platform -> "Library · ${origin.identity.name}"
+                        } to IdeColors.MUTED,
                     )
                 }
-            }.map(::popupText).toMutableList()
-        hover.info.documentation?.let { documentation ->
-            lines += ""
-            lines += wrappedDocumentation(documentation, maximumColumns, maximumRows + 1)
-        }
+                hover.info.documentation?.let { documentation ->
+                    add("" to IdeColors.TEXT)
+                    add(documentation.replace("\t", "    ") to IdeColors.TEXT)
+                }
+            }
+        val lines =
+            content
+                .flatMap { (value, color) ->
+                    IdePopupText.wrap(value, maximumColumns, maximumRows + 1).map { range ->
+                        value.substring(range.startUtf16, range.endUtf16).trimEnd() to color
+                    }
+                }.toMutableList()
         if (lines.size > maximumRows) {
             lines.subList(maximumRows, lines.size).clear()
-            lines[lines.lastIndex] = popupText(lines.last() + "…")
+            lines[lines.lastIndex] = popupText(lines.last().first + "…") to lines.last().second
         }
         if (lines.isEmpty()) return
         val requestedWidth =
             maxOf(
                 SEMANTIC_POPUP_MINIMUM_WIDTH,
-                lines.maxOf(::visualColumns) * font.cellWidth + POPUP_HORIZONTAL_PADDING,
+                lines.maxOf { visualColumns(it.first) } * font.cellWidth + POPUP_HORIZONTAL_PADDING,
             )
         val popup = geometry.anchoredPopup(anchor, requestedWidth, lines.size * font.cellHeight + POPUP_VERTICAL_PADDING)
         semanticPopupPanel(popup.bounds)
-        lines.forEachIndexed { index, value ->
+        lines.forEachIndexed { index, (value, color) ->
             output.code(
                 IdeTextKind.Hover,
                 value,
                 popup.bounds.left + 4,
                 popup.bounds.top + 3 + font.glyphDrawOffsetY + index * font.cellHeight,
-                IdeColors.TEXT,
+                color,
                 popup.bounds,
                 z = Z_POPUP_TEXT,
             )
@@ -273,27 +289,6 @@ internal class IdeEditorPopups(
         )
     }
 
-    private fun wrappedDocumentation(
-        value: String,
-        columns: Int,
-        maximumRows: Int,
-    ): List<String> {
-        val lines = mutableListOf<String>()
-        for (line in value.replace("\t", "    ").lines()) {
-            var remaining = line
-            while (visualColumns(remaining) > columns && lines.size < maximumRows) {
-                val cutoff = remaining.offsetByCodePoints(0, columns)
-                val space = remaining.lastIndexOf(' ', cutoff - 1)
-                val end = if (space > 0) space else cutoff
-                lines += remaining.substring(0, end)
-                remaining = remaining.substring(end).trimStart()
-            }
-            if (lines.size >= maximumRows) break
-            lines += remaining
-        }
-        return lines
-    }
-
     private fun completionText(
         value: String,
         width: Int,
@@ -314,40 +309,94 @@ internal class IdeEditorPopups(
     }
 
     private fun parameterInfo(info: IdeParameterInfoState) {
-        val caret = source.caret() ?: return
-        val visibleItems = info.items.take(PARAMETER_INFO_VISIBLE_ROWS)
-        val contentWidth = visibleItems.maxOf { visualColumns(it.signature) } * font.cellWidth + POPUP_HORIZONTAL_PADDING
-        val popup =
-            geometry.anchoredPopup(
-                caret,
-                maxOf(SEMANTIC_POPUP_MINIMUM_WIDTH, contentWidth),
-                visibleItems.size * UI_LINE_HEIGHT + POPUP_VERTICAL_PADDING,
+        val anchor =
+            source.anchor(
+                ru.lazyhat.compukters.ide.editor
+                    .EditorRange(info.callRange.startUtf16, info.callRange.startUtf16),
             )
+                ?: source.caret() ?: return
+        val availableHeight = maxOf(anchor.top - geometry.editor.top, geometry.editor.bottom - anchor.bottom)
+        val maximumRows = minOf(20, (availableHeight - 12) / font.cellHeight)
+        if (maximumRows < 2) return
+        val columns = minOf(80, ((geometry.editor.width - 24) / font.cellWidth).coerceAtLeast(1))
+        val items = info.items.sortedByDescending { it.bestCandidate }.take(minOf(PARAMETER_INFO_VISIBLE_ROWS, maximumRows - 1))
+        val rowsPerItem = ((maximumRows - 1) / items.size).coerceAtLeast(1)
+        val lines =
+            items.flatMap { item ->
+                val wrapped = IdePopupText.wrap(item.signature, columns, item.signature.length)
+                val activeRow = wrapped.indexOfFirst { range -> item.activeParameter?.intersects(range) == true }.coerceAtLeast(0)
+                val first = (activeRow - rowsPerItem + 1).coerceAtLeast(0)
+                wrapped.drop(first).take(rowsPerItem).mapIndexed { index, range ->
+                    ParameterLine(item, range, first > 0 && index == 0)
+                }
+            }
+        val header = "Parameters · Ctrl+P" + if (info.items.size > 1) " · ${info.items.size} signatures" else ""
+        val width =
+            maxOf(
+                SEMANTIC_POPUP_MINIMUM_WIDTH,
+                maxOf(visualColumns(header), lines.maxOf { visualColumns(it.text) + if (it.truncated) 2 else 0 }) * font.cellWidth + 12,
+            )
+        val popup = geometry.anchoredPopup(anchor, width, (lines.size + 1) * font.cellHeight + 12)
         semanticPopupPanel(popup.bounds)
-        visibleItems.forEachIndexed { index, item ->
-            val y = popup.bounds.top + 3 + index * UI_LINE_HEIGHT
-            val x = popup.bounds.left + 4
-            val activeParameter = item.activeParameter
-            if (activeParameter == null) {
-                output.ui(IdeTextKind.ParameterInfo, item.signature, x, y, IdeColors.TEXT, popup.bounds, Z_POPUP_TEXT)
+        output.code(
+            IdeTextKind.ParameterInfoHeader,
+            header,
+            popup.bounds.left + 6,
+            popup.bounds.top + 6 + font.glyphDrawOffsetY,
+            IdeColors.MUTED,
+            popup.bounds,
+            z = Z_POPUP_TEXT,
+        )
+        lines.forEachIndexed { index, line ->
+            val item = line.item
+            val y = popup.bounds.top + 6 + font.glyphDrawOffsetY + (index + 1) * font.cellHeight
+            var x = popup.bounds.left + 6
+            if (line.truncated) {
+                output.code(IdeTextKind.ParameterInfo, "… ", x, y, IdeColors.MUTED, popup.bounds, z = Z_POPUP_TEXT)
+                x += 2 * font.cellWidth
+            }
+            val color = if (item.bestCandidate) IdeColors.TEXT else IdeColors.MUTED
+            val parameter = item.activeParameter?.takeIf { it.intersects(line.range) }
+            if (parameter == null) {
+                output.code(IdeTextKind.ParameterInfo, line.text, x, y, color, popup.bounds, z = Z_POPUP_TEXT)
             } else {
-                val prefix = item.signature.substring(0, activeParameter.startUtf16)
-                val active = item.signature.substring(activeParameter.startUtf16, activeParameter.endUtf16)
-                val suffix = item.signature.substring(activeParameter.endUtf16)
-                output.ui(IdeTextKind.ParameterInfo, prefix, x, y, IdeColors.TEXT, popup.bounds, Z_POPUP_TEXT)
+                val start = maxOf(parameter.startUtf16, line.range.startUtf16) - line.range.startUtf16
+                val end = minOf(parameter.endUtf16, line.range.endUtf16) - line.range.startUtf16
+                val prefix = line.text.substring(0, start)
+                val active = line.text.substring(start, end)
+                val suffix = line.text.substring(end)
                 val activeX = x + visualColumns(prefix) * font.cellWidth
-                output.ui(IdeTextKind.ParameterInfo, active, activeX, y, IdeColors.ACCENT, popup.bounds, Z_POPUP_TEXT)
-                output.ui(
+                val activeBounds =
+                    IdeRect(
+                        activeX,
+                        y - font.glyphDrawOffsetY,
+                        minOf(popup.bounds.right - 4, activeX + visualColumns(active) * font.cellWidth),
+                        y - font.glyphDrawOffsetY + font.cellHeight,
+                    )
+                if (activeBounds.width > 0) {
+                    output.fill(IdeFillDraw(IdeFillKind.ParameterInfoActive, activeBounds, IdeColors.SELECTION, Z_POPUP + 1))
+                }
+                output.code(IdeTextKind.ParameterInfo, prefix, x, y, color, popup.bounds, z = Z_POPUP_TEXT)
+                output.code(IdeTextKind.ParameterInfo, active, activeX, y, IdeColors.ACCENT, popup.bounds, z = Z_POPUP_TEXT)
+                output.code(
                     IdeTextKind.ParameterInfo,
                     suffix,
                     activeX + visualColumns(active) * font.cellWidth,
                     y,
-                    IdeColors.TEXT,
+                    color,
                     popup.bounds,
-                    Z_POPUP_TEXT,
+                    z = Z_POPUP_TEXT,
                 )
             }
         }
+    }
+
+    private data class ParameterLine(
+        val item: ru.lazyhat.compukters.ide.analysis.ParameterInfoItem,
+        val range: ru.lazyhat.compukters.ide.editor.EditorRange,
+        val truncated: Boolean,
+    ) {
+        val text: String get() = item.signature.substring(range.startUtf16, range.endUtf16)
     }
 
     private fun completionRow(entry: ru.lazyhat.compukters.ide.client.analysis.IdeCompletionEntry): String =
