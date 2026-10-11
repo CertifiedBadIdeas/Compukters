@@ -287,7 +287,7 @@ fun registerKotlinVmConformance(
             dependsOn(artifactTask)
             inputs.file(compilerArtifactVmConformanceHarness)
             inputs.file(compilerArtifactVmConformanceLock)
-            inputs.file(compilerArtifactVmConformanceSource)
+            inputs.files(fileTree(compilerArtifactVmConformanceSource.parentFile) { include("*.rs") })
             inputs.file(artifact)
             inputs.files(additionalArtifacts.values)
             doFirst {
@@ -330,6 +330,16 @@ registerKotlinVmConformance(
     cargoTargetDirectory = ".toolchain/build/cargo/compiler-k2-math-conformance",
     artifactEnvironmentVariable = "COMPUKTER_KOTLIN_GEOMETRY_ARTIFACT",
     conformanceScenario = "geometry",
+)
+
+registerKotlinVmConformance(
+    taskName = "testKotlinRandomVmConformance",
+    taskDescription = "Executes Guest random ranges, reproducibility, quota slices and checkpoint restoration.",
+    artifactTask = ":compiler-k2:generateRandomConformanceArtifact",
+    artifact = project(":compiler-k2").layout.buildDirectory.file("generated/conformance/kotlin-random.cpkt"),
+    cargoTargetDirectory = ".toolchain/build/cargo/compiler-k2-random-conformance",
+    artifactEnvironmentVariable = "COMPUKTER_KOTLIN_RANDOM_ARTIFACT",
+    conformanceScenario = "random",
 )
 
 registerKotlinVmConformance(
