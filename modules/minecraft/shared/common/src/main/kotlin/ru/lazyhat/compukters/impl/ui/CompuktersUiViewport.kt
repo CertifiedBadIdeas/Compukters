@@ -20,7 +20,7 @@ package ru.lazyhat.compukters.impl.ui
 
 import ru.lazyhat.compukters.impl.ide.IdeUiScale
 
-internal class CompuktersUiViewport private constructor(
+class CompuktersUiViewport private constructor(
     val physicalScale: Int,
     val minecraftGuiScale: Int,
     val width: Int,

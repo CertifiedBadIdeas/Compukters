@@ -244,3 +244,16 @@ editor without clearing its commit draft; history replies cannot replace the sav
 window reuses the diagnostics splitter/height and shows Problems/Find Usages or commit history in its content area.
 Both target screens derive bottom visibility from controller state; the splitter owns height only. Geometry fallback
 may collapse this window when there is insufficient room for the source editor.
+
+## Shared IDE screen presentation
+
+`minecraft/shared/common` owns `IdeScreenController`: focus, prompt/project menus, panel interactions, terminal
+overlay routing, geometry and frame preparation. Its `IdeScreenHost` port supplies clipboard, viewport and parent/session
+lifecycle effects. `IdeFramePainter` composes the shared draw model and terminal overlay in one ordered frame; an
+`IdeCanvas` port executes fills, icons, text and terminal grids. Neutral viewport and terminal geometry live alongside
+these shared components. The client controller remains the authority for project/document state and asynchronous work.
+
+Version-specific `IdeScreen` shells translate Minecraft input and implement drawing, including font handles, texture
+pipelines, transforms and scissor semantics. Minecraft 1.21.1 converts logical clips to Minecraft GUI coordinates;
+26.1 applies transformed clips through its extractor. The input-rejecting Minecraft keyboard focus proxy remains
+version-specific. Screen presentation contracts do not expose Minecraft graphics/event types to shared logic.
