@@ -13,6 +13,10 @@ headings so this page has one stable URL that can be shared outside the reposito
 
 ## 0.6.0 — In development
 
+- Contributors can create task worktrees with `worktree-task`: local `dev`/`main` bases, pinned VM and optional
+  addon initialization, reuse of available local Git objects and automatic independent Gradle-cache preparation.
+  Interrupted setup can resume in a clean checkout without resetting its branch.
+
 - Agent Gradle worktrees initialize independent writable caches from a workspace template using reflinks,
   sharing unchanged disk data while keeping build locks separate. Missing templates bootstrap from idle local
   caches or a successful first build, including after cache deletion. Template refresh preserves existing homes
