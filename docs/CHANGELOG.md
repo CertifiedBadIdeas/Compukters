@@ -13,6 +13,9 @@ headings so this page has one stable URL that can be shared outside the reposito
 
 ## 0.6.0 — In development
 
+- Guest Kotlin supports `do-while` loops, including local `break` and `continue`, body-local variables in
+  the condition, and managed exception and `finally` cleanup across VM instruction slices.
+
 - Contributors can create, diagnose and safely complete task worktrees with `worktree-task`: local `dev`/`main` bases,
   readiness diagnostics, integration checks and cleanup with archived evidence, pinned VM and optional addon
   initialization, reuse of available local Git objects and automatic independent Gradle-cache preparation.
