@@ -18,29 +18,44 @@
 
 package compukter.system.kotlinc
 
+import compukter.compiler.CompilationResult
 import compukter.compiler.Compiler
+import compukter.filesystem.Path
 import compukter.io.Stderr
 
 fun main(args: Array<String>) {
     when (val arguments = parseKotlincArguments(args)) {
-        is KotlincArguments.Error -> Stderr.write(arguments.message + "\n")
+        is KotlincArguments.Error -> {
+            Stderr.write(arguments.message + "\n")
+        }
+
         is KotlincArguments.Source -> {
-            val result = Compiler.compile(arguments.path, arguments.output)
-            if (result == 0) {
-                println("compiled: " + arguments.output)
-            } else {
-                val diagnostics = Compiler.diagnostics()
-                if (diagnostics.isNotEmpty()) Stderr.write(diagnostics + "\n")
-                else Stderr.write("compilation failed\n")
+            when (val result = Compiler.compile(arguments.path, arguments.output)) {
+                is CompilationResult.Success -> {
+                    println("compiled: " + result.output.value)
+                }
+
+                is CompilationResult.Failed -> {
+                    if (result.diagnostics.isNotEmpty()) {
+                        Stderr.write(result.diagnostics + "\n")
+                    } else {
+                        Stderr.write("compilation failed\n")
+                    }
+                }
             }
         }
     }
 }
 
 sealed interface KotlincArguments {
-    data class Source(val path: String, val output: String) : KotlincArguments
+    data class Source(
+        val path: Path,
+        val output: Path,
+    ) : KotlincArguments
 
-    data class Error(val message: String) : KotlincArguments
+    data class Error(
+        val message: String,
+    ) : KotlincArguments
 }
 
 fun parseKotlincArguments(args: Array<String>): KotlincArguments {
@@ -65,7 +80,11 @@ fun parseKotlincArguments(args: Array<String>): KotlincArguments {
             count == 3 && args[1] == "-o" -> resolveUserPath(args[2])
             else -> return KotlincArguments.Error("kotlinc accepts exactly one source file")
         }
-    return KotlincArguments.Source(resolvedSource, output)
+    return try {
+        KotlincArguments.Source(Path(resolvedSource), Path(output))
+    } catch (failure: IllegalArgumentException) {
+        KotlincArguments.Error("invalid compilation path")
+    }
 }
 
 private fun resolveUserPath(path: String): String = if (path.startsWith("/")) path else "/home/" + path

@@ -52,15 +52,17 @@ exceptions through the shared [operation-error mechanism](../kotlin/nullability.
 
 **Status:** Partial.
 
-Entry `Array<String>`, `emptyArray<T>()`, direct `arrayOf` calls, `size`, and indexed get/set work for
+Entry `Array<String>`, `emptyArray<T>()`, direct `arrayOf` calls, `size`, indexed get/set, and direct `for` loops work for
 `String`, supported Guest class references, value classes, and `Any`, including nullable forms and nominal
 primitive boxes, with concrete uses inside specialized generic functions. `Array<Any>` boxes supported scalars
 when constructed or written, preserves object identity, and returns the stored reference on reads.
+Direct iteration snapshots the array reference once, observes subsequent element writes, and uses the
+[indexed language lowering](../kotlin/control-flow.md#direct-reference-array-loops) without a stored iterator.
 `arrayOfNulls<T>(size)` creates null-filled arrays for supported reference elements and nullable primitive
 boxes, including generic specializations; negative sizes throw catchable `NegativeArraySizeException`.
 
 **Evidence:** `testKotlinMutableListVmConformance`. `copyOfRange` is available only for `Array<String>`.
-Primitive `Array<Int>`/`Array<Long>` and other primitive element arrays, spread arguments, iterators, and
+Non-null primitive `Array<Int>`/`Array<Long>` and other primitive element arrays, spread arguments, stored iterators, and
 higher-order operations are unavailable.
 
 **Evidence:**
@@ -72,6 +74,9 @@ and `reference arrays reject unsupported element representations`, paired with
 `testKotlinReferenceArrayVmConformance` and
 [`gc_tests.rs`](https://github.com/CertifiedBadIdeas/Compukter-VM/blob/main/src/execution/gc_tests.rs), test
 `collector_scans_reference_arrays`.
+
+**Evidence:** `reference array loops preserve specialized elements source identity and cleanup for vm execution`
+in `MinimalScriptLoweringTest`, executed by `testKotlinReferenceArrayVmConformance` at budgets 64 and 512.
 
 **Related work:** [#656](https://github.com/CertifiedBadIdeas/Compukters/issues/656) Imported non-generic
 nominal classes also work as reference-array elements, including nullable storage backing typed device lists.

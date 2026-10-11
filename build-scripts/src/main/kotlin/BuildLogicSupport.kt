@@ -243,33 +243,18 @@ fun Project.effectiveBuildVersion(): String {
     extra.getProperties()[EFFECTIVE_BUILD_VERSION_KEY]?.let { return it.toString() }
     val baseVersion = rootProject.version.toString()
     val headTags =
-        gitCaptureOrNull(rootProject.projectDir, "tag", "--points-at", "HEAD")
-            ?.lineSequence()
-            ?.map(String::trim)
-            ?.filter(String::isNotEmpty)
-            ?.toList()
-            ?: emptyList()
+        rootProject.providers.exec {
+            workingDir(rootProject.projectDir)
+            commandLine("git", "tag", "--points-at", "HEAD")
+            isIgnoreExitValue = true
+        }.standardOutput.asText.get()
+            .lineSequence()
+            .map(String::trim)
+            .filter(String::isNotEmpty)
+            .toList()
     val effective = computeEffectiveBuildVersion(baseVersion, headTags)
     extra[EFFECTIVE_BUILD_VERSION_KEY] = effective
     return effective
 }
-
-private fun gitCaptureOrNull(
-    projectDir: File,
-    vararg args: String,
-): String? =
-    runCatching {
-        val process =
-            ProcessBuilder("git", *args)
-                .directory(projectDir)
-                .redirectErrorStream(true)
-                .start()
-        val output =
-            process.inputStream
-                .bufferedReader()
-                .readText()
-                .trim()
-        if (process.waitFor() == 0) output else null
-    }.getOrNull()
 
 private fun ExtensionAware.extraProperties(): ExtraPropertiesExtension = extensions.getByType<ExtraPropertiesExtension>()

@@ -5434,6 +5434,152 @@ class MinimalScriptLoweringTest {
         }
 
     @Test
+    fun `reference array loops preserve specialized elements source identity and cleanup for vm execution`() =
+        withAdapter { adapter ->
+            val source =
+                """
+                import kotlin.math.Vector3f
+                class Node(val value: Int)
+                class Cell<T>(val value: T)
+                class Source(var calls: Int, var values: Array<Node>)
+                value class Id(val value: Int)
+                value class Label(val value: String)
+                fun selected(source: Source): Array<Node> { source.calls += 1; return source.values }
+                fun <T> last(values: Array<T>, fallback: T): T {
+                    var result = fallback
+                    for (value in values) result = value
+                    return result
+                }
+                fun main() {
+                    val first = Node(1)
+                    val original = arrayOf(first, Node(2), Node(3))
+                    val source = Source(0, original)
+                    var sum = 0
+                    for (node in selected(source)) {
+                        source.values = arrayOf(Node(100))
+                        original[1] = Node(7)
+                        sum += node.value
+                    }
+                    check(source.calls == 1 && sum == 11 && original[0] === first)
+                    check(last(original, first).value == 3)
+                    check(last(emptyArray<Node>(), first) === first)
+                    var empty = 0
+                    for (node in emptyArray<Node>()) empty += node.value
+                    check(empty == 0)
+
+                    var text = ""
+                    for (value in arrayOf("a", "b", "c")) text += value
+                    check(text == "abc")
+                    check(last(arrayOf("a", "b"), "") == "b")
+                    var nullableSum = 0
+                    for (node in arrayOf<Node?>(first, null, Node(4))) nullableSum += node?.value ?: 0
+                    check(nullableSum == 5)
+                    for (value in arrayOf<Int?>(2, null, 3)) nullableSum += value ?: 0
+                    check(nullableSum == 10)
+                    check(last(arrayOf<Int?>(2, null, 9), null) == 9)
+                    var doubles = 0.0
+                    for (value in arrayOf<Double?>(1.5, null, 2.5)) doubles += value ?: 0.0
+                    check(doubles == 4.0)
+                    for (cell in arrayOf(Cell("x"), Cell("y"))) text += cell.value
+                    check(text == "abcxy")
+                    check(last(arrayOf(Cell(6), Cell(7)), Cell(0)).value == 7)
+
+                    var ids = 0
+                    for (id in arrayOf(Id(3), Id(4))) ids += id.value
+                    check(ids == 7 && last(arrayOf(Id(5)), Id(0)).value == 5)
+                    for (id in arrayOf<Id?>(Id(8), null)) ids += id?.value ?: 0
+                    check(ids == 15)
+                    for (label in arrayOf(Label("z"))) text += label.value
+                    check(text == "abcxyz")
+                    var x = 0f
+                    for (point in Array(4) { Vector3f(it.toFloat(), 1f, -1f) }) x += point.x
+                    check(x == 6f)
+                    check(last(arrayOf(Vector3f(4f, 5f, 6f)), Vector3f(0f, 0f, 0f)).z == 6f)
+                    for (point in arrayOf<Vector3f?>(Vector3f(2f, 0f, 0f), null)) x += point?.x ?: 0f
+                    check(x == 8f)
+
+                    var objects = 0
+                    for (value in arrayOf<Any>(first, "word", 7, Id(9))) {
+                        if (value is Node) { check(value === first); objects += value.value }
+                        if (value is String) objects += value.length
+                        if (value is Int) objects += value
+                        if (value is Id) objects += value.value
+                    }
+                    check(objects == 21)
+
+                    var visited = 0
+                    var cleaned = 0
+                    var enclosing = 0
+                    try {
+                        outer@ for (node in Array(5) { Node(it) }) {
+                            do {
+                                try {
+                                    visited += 1
+                                    if (node.value == 1) continue@outer
+                                    if (node.value == 3) break@outer
+                                    sum += node.value
+                                    continue@outer
+                                } finally { cleaned += 1 }
+                            } while (true)
+                        }
+                        check(visited == 4 && cleaned == 4 && enclosing == 0 && sum == 13)
+                    } finally { enclosing += 1 }
+                    check(enclosing == 1)
+                    var local = 0
+                    for (node in original) {
+                        if (node.value == 1) continue
+                        local += node.value
+                        break
+                    }
+                    check(local == 7)
+                    var skipped = 0
+                    target@ for (value in 1..3) {
+                        for (node in original) { skipped += node.value; continue@target }
+                    }
+                    check(skipped == 3)
+
+                    var caught = 0
+                    try {
+                        for (node in original) {
+                            try { error("body") } finally { cleaned += 1 }
+                        }
+                    } catch (failure: IllegalStateException) { caught += 1 }
+                    check(caught == 1 && cleaned == 5)
+                    var churn = 0
+                    for (node in Array(8) { Node(it) }) {
+                        var allocations = 0
+                        while (allocations < 3000) { Node(allocations); allocations += 1 }
+                        churn += node.value
+                    }
+                    check(churn == 28 && original[0] === first)
+                    var quota = 0
+                    for (node in Array(1000) { Node(it) }) { quota += 1 }
+                    check(quota == 1000)
+                }
+                """.trimIndent()
+            val first = adapter.compile(request(source))
+            val second = adapter.compile(request(source))
+            val artifact = assertNotNull(first.artifact, first.diagnostics.joinToString()).toByteArray()
+            assertContentEquals(artifact, assertNotNull(second.artifact, second.diagnostics.joinToString()).toByteArray())
+            System.getProperty("compukter.vm.referenceArrayArtifact")?.let { output ->
+                Path.of("$output.loops.cpkt").also { it.parent.createDirectories() }.writeBytes(artifact)
+            }
+        }
+
+    @Test
+    fun `reference array loops reject unsupported storage and stored iterators`() =
+        withAdapter { adapter ->
+            for (source in listOf(
+                "fun main() { for (value in arrayOf(1)) { check(value > 0) } }",
+                "fun main() { val iterator = arrayOf(\"a\").iterator(); check(iterator.hasNext()) }",
+            )) {
+                val result = adapter.compile(request(source))
+                assertNull(result.artifact, source)
+                assertTrue(result.hasErrors, result.diagnostics.toString())
+            }
+        }
+
+    @Test
     fun `reference arrays reject unsupported element representations`() =
         withAdapter { adapter ->
             listOf(
@@ -7841,19 +7987,6 @@ class MinimalScriptLoweringTest {
         }
 
     @Test
-    fun `unsupported loop forms publish no artifact`() =
-        withAdapter { adapter ->
-            listOf(
-                "fun main() { for (value in arrayOf(1)) { value + 1 } }",
-            ).forEach { source ->
-                val result = adapter.compile(request(source))
-
-                assertNull(result.artifact, source)
-                assertTrue(result.hasErrors, source)
-            }
-        }
-
-    @Test
     fun `Path storage conveniences require explicit extension imports`() =
         withAdapter { adapter ->
             val result = adapter.compile(request("import compukter.filesystem.Path\nfun main() { Path(\"/home/note\").readText() }"))
@@ -8163,6 +8296,95 @@ class MinimalScriptLoweringTest {
         }
 
     @Test
+    fun `typed compiler facade lowers Path results and rejects removed APIs`() =
+        withAdapter { adapter ->
+            val source =
+                """
+                import compukter.compiler.CompilationFailureReason
+                import compukter.compiler.CompilationResult
+                import compukter.compiler.Compiler
+                import compukter.concurrent.Tasks
+                import compukter.filesystem.FileSystem
+                import compukter.filesystem.Path
+                import compukter.process.Process
+                import compukter.process.ProcessFailureReason
+                import compukter.process.ProcessResult
+
+                fun failure(result: CompilationResult): CompilationResult.Failed {
+                    if (result is CompilationResult.Failed) return result
+                    throw IllegalStateException("expected compilation failure")
+                }
+                fun success(result: CompilationResult): CompilationResult.Success {
+                    if (result is CompilationResult.Success) return result
+                    throw IllegalStateException("expected compilation success")
+                }
+                fun main() {
+                    val source = Path("/home/./main.kt")
+                    FileSystem.writeText(source, "fun main() { println(42) }")
+                    FileSystem.writeText(Path("/home/bad.kt"), "fun main() { missingSymbol() }")
+                    val first = Tasks.launch {
+                        val result = failure(Compiler.compile(Path("/home/bad.kt"), Path("/home/bad")))
+                        require(result.reason == CompilationFailureReason.REJECTED)
+                        require(result.diagnostics.contains("missingSymbol"))
+                    }
+                    val second = Tasks.launch {
+                        val result = failure(Compiler.compile(source, Path("/home/../rom/forbidden")))
+                        require(result.reason == CompilationFailureReason.REJECTED)
+                        require(result.diagnostics == "output is not writable")
+                    }
+                    first.join()
+                    second.join()
+                    val compiled = success(Compiler.compile(source, Path("/home/dir/../main")))
+                    require(compiled.output == Path("/home/main"))
+                    val result = Process.run(Path("/../../home/./dir/../main"))
+                    require(result is ProcessResult.Exited && result.code == 0)
+                    val overwritten = failure(Compiler.compile(Path("/home/bad.kt"), compiled.output))
+                    require(overwritten.diagnostics.contains("missingSymbol"))
+                    val preserved = Process.run(compiled.output)
+                    require(preserved is ProcessResult.Exited && preserved.code == 0)
+                    val same = failure(Compiler.compile(source, Path("/home/dir/../main.kt")))
+                    require(same.reason == CompilationFailureReason.REJECTED)
+                    val missing = failure(Compiler.compile(Path("/home/missing.kt"), Path("/home/missing")))
+                    require(missing.diagnostics == "source is not readable")
+                    val absent = Process.run(Path("/home/./absent"))
+                    require(absent is ProcessResult.Failed && absent.reason == ProcessFailureReason.NOT_FOUND)
+                    val units = CharArray(4097)
+                    var index = 0
+                    while (index < units.size) { units[index] = 'a'; index++ }
+                    val longPath = Path("/home/" + String(units, 0, units.size))
+                    require(failure(Compiler.compile(longPath, compiled.output)).reason == CompilationFailureReason.INVALID_PATH)
+                    val longProcess = Process.run(longPath)
+                    require(longProcess is ProcessResult.Failed && longProcess.reason == ProcessFailureReason.INVALID_PATH)
+                    val longArgs = Process.run(compiled.output, arrayOf(String(units, 0, units.size)))
+                    require(longArgs is ProcessResult.Failed && longArgs.reason == ProcessFailureReason.LIMIT_EXCEEDED)
+                    val combined = Path("/home/" + String(units, 0, 2050))
+                    require(failure(Compiler.compile(combined, combined)).reason == CompilationFailureReason.LIMIT_EXCEEDED)
+                    println("compiler and process Path API ok")
+                }
+                """.trimIndent()
+            val first = adapter.compile(request(source))
+            val artifact = assertNotNull(first.artifact, first.diagnostics.joinToString()).toByteArray()
+            assertContentEquals(artifact, assertNotNull(adapter.compile(request(source)).artifact).toByteArray())
+            val decoded = ArtifactReader.read(artifact)
+            val strings = decoded.modules.first().strings
+            val capability = decoded.capabilities.single { strings[it.name.value.toInt()].toString() == "compiler" }
+            assertEquals(AbiVersion(2u, 0u), capability.abi)
+            assertEquals(1u, capability.operationCount)
+            System.getProperty("compukters.compilation.artifact")?.let { output ->
+                Path.of(output).also { it.parent.createDirectories() }.writeBytes(artifact)
+            }
+            listOf(
+                "import compukter.compiler.Compiler\nfun main() { Compiler.compile(\"/home/a.kt\", \"/home/a\") }",
+                "import compukter.compiler.Compiler\nfun main() { Compiler.diagnostics() }",
+                "import compukter.compiler.CompilerBindings\nfun main() { CompilerBindings.compile(\"/home/a.kt\", \"/home/a\") }",
+            ).forEach { forbidden ->
+                val result = adapter.compile(request(forbidden))
+                assertNull(result.artifact, forbidden)
+                assertTrue(result.hasErrors, forbidden)
+            }
+        }
+
+    @Test
     fun `typed process v2 facade lowers without public capability masks or suspend calls`() =
         withAdapter { adapter ->
             val source =
@@ -8172,7 +8394,7 @@ class MinimalScriptLoweringTest {
                 import compukter.process.ProcessResult
 
                 fun main() {
-                    when (val result = Process.run("/rom/tool", arrayOf("a", ""))) {
+                    when (val result = Process.run(compukter.filesystem.Path("/rom/tool"), arrayOf("a", ""))) {
                         is ProcessResult.Exited -> if (result.code != 0) Process.exit(result.code)
                         is ProcessResult.Failed -> if (result.reason == ProcessFailureReason.NOT_FOUND) {
                             Process.exit(2)
@@ -8202,6 +8424,7 @@ class MinimalScriptLoweringTest {
             assertTrue("compukter.process.ProcessFailureReason.NOT_FOUND" in imports.getValue(SymbolKind.FIELD))
 
             listOf(
+                "import compukter.process.Process\nfun main() { Process.run(\"/rom/tool\") }",
                 "import compukter.process.Process\nfun main() { Process.run(\"/rom/tool\", 1) }",
                 "import compukter.process.Process\nfun main() { Process.commandLine() }",
                 "import compukter.process.ProcessBindings\nfun main() { ProcessBindings.takeFailureDiagnostic() }",

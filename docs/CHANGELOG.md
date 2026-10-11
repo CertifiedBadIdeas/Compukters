@@ -13,6 +13,14 @@ headings so this page has one stable URL that can be shared outside the reposito
 
 ## 0.6.0 — In development
 
+- Contributors can opt into Gradle Configuration Cache for built-in program generation, Minecraft classes and
+  shared tooling assembly. Independent built-in compiler tasks can run in parallel within the same project;
+  cached build-version selection tracks Git tags on `HEAD`.
+
+- Guest compilation and process launch accept lexical `Path` values and normalize dot components before native
+  access. `Compiler.compile` returns a typed result with its own diagnostics and the canonical installed output;
+  failed compilation preserves existing executables. Built-in `kotlinc`, shell and boot use these APIs.
+
 - The built-in shell provides `cat`, `mkdir` (including `-p`), `mv` and `rm`, plus command-specific help.
   File commands support quoted names and normalized dot paths. Text output preserves Unicode across bounded
   writes; moves refuse replacement and deletion is limited to files and empty directories. Executable paths
@@ -26,8 +34,8 @@ headings so this page has one stable URL that can be shared outside the reposito
   Attached addon sources have a separate bounded allowance, so bundled library sources do not exhaust it.
 
 - Guest Kotlin supports `do-while` loops with body-local variables in the condition, and labeled
-  `break@label` / `continue@label` across nested `while`, `do-while`, `Int` progression, primitive-array,
-  and supported iterable loops. Loop jumps preserve managed exception and `finally` cleanup across VM
+  `break@label` / `continue@label` across nested `while`, `do-while`, `Int` progression, primitive and
+  reference-array, and supported iterable loops. Loop jumps preserve managed exception and `finally` cleanup across VM
   instruction slices.
 
 - Contributors can create, diagnose and safely complete task worktrees with `worktree-task`: local `dev`/`main` bases,
@@ -40,8 +48,8 @@ headings so this page has one stable URL that can be shared outside the reposito
   caches or a successful first build, including after cache deletion. Template refresh preserves existing homes
   and rejects active managed sources; unsupported filesystems never silently allocate full cache copies.
 
-- Guest reference arrays support `Array(size) { index -> value }`, including strings, objects, nullable
-  elements, reusable vector value classes and generic container elements. Initializers run once per
+- Guest reference arrays support direct `for` loops and `Array(size) { index -> value }`, including strings,
+  objects, nullable elements, reusable vector value classes and generic container elements. Initializers run once per
   ascending index and preserve managed exception behavior.
 
 - Guest paths are pure portable String-backed value classes, constructed with `Path(...)` or the explicitly imported
@@ -76,7 +84,9 @@ headings so this page has one stable URL that can be shared outside the reposito
 - Guest `kotlin.math` provides reusable `Vector2i`, `Vector2f`, `Vector3i` and `Vector3f` value classes,
   Position/Size aliases, arithmetic, dot/cross products, lengths, normalization, interpolation, explicit
   rounding and half-open 2D rectangles. Displays accept vectors and rectangles while retaining scalar
-  coordinate calls. Infix `xy`, `by` and `sized` provide compact geometry construction.
+  coordinate calls. Infix `xy`, `by` and `sized` provide compact geometry construction. Immutable `Matrix4f`
+  and homogeneous `Vector4f` add reusable 3D transformation composition, radians-based axis rotations,
+  perspective/orthographic projection and explicit perspective division with clip-volume checks.
 
 - Guest executables omit unused class and interface methods and their dependencies. Virtual dispatch keeps its
   required implementations; independently compiled libraries retain their exported method surface.

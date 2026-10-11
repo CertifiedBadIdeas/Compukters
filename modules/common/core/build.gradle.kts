@@ -58,6 +58,8 @@ val kotlincRuntimeArtifact =
     project(":compiler-k2").layout.buildDirectory.file("generated/system/kotlinc.cpkt")
 val filesystemRuntimeArtifact =
     project(":compiler-k2").layout.buildDirectory.file("generated/conformance/filesystem.cpkt")
+val compilationRuntimeArtifact =
+    project(":compiler-k2").layout.buildDirectory.file("generated/conformance/compilation.cpkt")
 val lexicalPathRuntimeArtifact =
     project(":compiler-k2").layout.buildDirectory.file("generated/conformance/lexical-path.cpkt")
 val editRuntimeArtifact =
@@ -87,6 +89,7 @@ val programRuntimeIntegrationTest =
             ":compiler-k2:generateShellArtifact",
             ":compiler-k2:generateEditArtifact",
             ":compiler-k2:generateFilesystemArtifact",
+            ":compiler-k2:generateCompilationArtifact",
             ":compiler-k2:generateVmbenchAgentArtifact",
             ":tooling-runtime:toolingRuntimeBundle",
             ":tooling-runtime:toolingRuntimeManifest",
@@ -109,6 +112,7 @@ val programRuntimeIntegrationTest =
         inputs.file(kotlincRuntimeArtifact)
         inputs.file(editRuntimeArtifact)
         inputs.file(filesystemRuntimeArtifact)
+        inputs.file(compilationRuntimeArtifact)
         inputs.file(lexicalPathRuntimeArtifact)
         inputs.file(vmbenchAgentRuntimeArtifact)
         inputs.file(compilerWorkerPayload)
@@ -120,6 +124,7 @@ val programRuntimeIntegrationTest =
             systemProperty("compukters.programRuntime.artifact", programRuntimeArtifact.get().asFile.absolutePath)
             systemProperty("compukters.bootRuntime.artifact", bootRuntimeArtifact.get().asFile.absolutePath)
             systemProperty("compukters.kotlincRuntime.artifact", kotlincRuntimeArtifact.get().asFile.absolutePath)
+            systemProperty("compukters.compilationRuntime.artifact", compilationRuntimeArtifact.get().asFile.absolutePath)
             systemProperty("compukters.filesystemRuntime.artifact", filesystemRuntimeArtifact.get().asFile.absolutePath)
             systemProperty("compukters.lexicalPathRuntime.artifact", lexicalPathRuntimeArtifact.get().asFile.absolutePath)
             systemProperty("compukters.editRuntime.artifact", editRuntimeArtifact.get().asFile.absolutePath)
