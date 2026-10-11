@@ -3,17 +3,6 @@ name: Deploy documentation to Pages
 on:
   push:
     branches: ["dev"]
-    paths:
-      - ".github/workflows/pages.yml"
-      - "docs/**"
-      - "api-build/**"
-      - ".gitmodules"
-      - "modules/common/guest-platform/src/platform/**"
-      - "addons/create"
-      - "addons/sable"
-      - "addons/propulsion"
-      - "gradle.properties"
-      - "modules/minecraft/shared/common/src/main/kotlin/ru/lazyhat/compukters/impl/ide/IdeColors.kt"
   workflow_dispatch:
 
 permissions:
@@ -29,10 +18,26 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
+      - name: Checkout nightly sources
         uses: actions/checkout@v4
-      - name: Checkout addon API sources
-        run: git submodule update --init addons/create addons/sable addons/propulsion
+        with:
+          ref: dev
+      - name: Checkout release sources
+        uses: actions/checkout@v4
+        with:
+          ref: v0.5.1
+          path: build/docs-release-checkout
+      - name: Checkout pinned addon API sources
+        run: |
+          git submodule update --init addons/create addons/sable addons/propulsion
+          git -C build/docs-release-checkout submodule update --init addons/create addons/sable addons/propulsion
+      - name: Verify documentation tooling
+        run: python3 -m unittest discover -s docs/_tools -p 'test_versioned_docs.py'
+      - name: Record source revisions
+        id: revisions
+        run: |
+          echo "nightly=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          echo "release=$(git -C build/docs-release-checkout rev-parse HEAD)" >> "$GITHUB_OUTPUT"
       - name: Set up Java
         uses: actions/setup-java@v5
         with:
@@ -41,17 +46,40 @@ jobs:
       - name: Configure Pages
         id: pages
         uses: actions/configure-pages@v5
-      - name: Generate Compukters API reference
+      - name: Generate nightly API reference
         run: ./gradlew -p api-build dokkaGeneratePublicationHtml --no-daemon
-      - name: Stage Compukters API reference
-        run: python3 docs/_tools/build_guest_api.py
-      - name: Stage IDE syntax palette
-        run: python3 docs/_tools/build_ide_palette.py
-      - name: Build with Jekyll
+      - name: Generate release API reference
+        working-directory: build/docs-release-checkout
+        run: ./gradlew -p api-build dokkaGeneratePublicationHtml --no-daemon
+      - name: Stage both API references and syntax palettes
+        run: |
+          python3 docs/_tools/build_guest_api.py
+          python3 docs/_tools/build_ide_palette.py
+          cd build/docs-release-checkout
+          python3 docs/_tools/build_guest_api.py
+          python3 docs/_tools/build_ide_palette.py
+      - name: Prepare versioned Jekyll sources
+        run: |
+          python3 docs/_tools/build_versioned_docs.py prepare --checkout . --version nightly --output build/docs-sources/nightly
+          python3 docs/_tools/build_versioned_docs.py prepare --checkout build/docs-release-checkout --version 0.5.1 --output build/docs-sources/0.5.1
+      - name: Build release documentation
         uses: actions/jekyll-build-pages@v1
         with:
-          source: ./docs
-          destination: ./_site
+          source: ./build/docs-sources/0.5.1
+          destination: ./build/docs-sites/0.5.1
+          build_revision: ${{ steps.revisions.outputs.release }}
+      - name: Build nightly documentation
+        uses: actions/jekyll-build-pages@v1
+        with:
+          source: ./build/docs-sources/nightly
+          destination: ./build/docs-sites/nightly
+          build_revision: ${{ steps.revisions.outputs.nightly }}
+      - name: Compose documentation versions
+        run: >-
+          python3 docs/_tools/build_versioned_docs.py compose
+          --release-source build/docs-sources/0.5.1 --release-site build/docs-sites/0.5.1
+          --nightly-source build/docs-sources/nightly --nightly-site build/docs-sites/nightly
+          --output _site
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
 

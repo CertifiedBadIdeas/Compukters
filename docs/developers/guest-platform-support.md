@@ -23,7 +23,7 @@ classpath.
 | Module | Guest surface |
 | --- | --- |
 | `kotlin:builtins` | Core language types, arrays, function types, and structural declarations required by K2 |
-| `stdlib:core` | Core helpers such as `require`, supported array construction, inline scope functions, indexed `repeat`, ranges and collections |
+| `stdlib:core` | Core helpers such as `require`, supported array construction, inline scope functions, indexed `repeat`, ranges, collections and reusable vector/rectangle geometry |
 | `compukter:core` | Runtime and environment APIs: terminal and `kotlin.io`, filesystem, compiler, child processes, cooperative `Task` / `Tasks`, redstone, sound and persistent RGB displays |
 
 These module owners do not rename Kotlin packages or imports. Environment-dependent `kotlin.io` functions

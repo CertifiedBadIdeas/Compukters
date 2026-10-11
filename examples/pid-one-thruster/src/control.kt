@@ -4,7 +4,7 @@
  * Licensed under the Apache License, Version 2.0.
  */
 
-// This example uses arithmetic only: Guest kotlin.math is not available yet.
+// This example uses bounded arithmetic helpers; portable Guest kotlin.math is also available.
 data class Vector(
     val x: Double,
     val y: Double,
