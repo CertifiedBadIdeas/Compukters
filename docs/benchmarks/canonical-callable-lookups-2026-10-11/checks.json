@@ -1,0 +1,26 @@
+{
+  "compiler-k2-engine": {
+    "tests": 54,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0
+  },
+  "compiler-k2": {
+    "tests": 199,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 5
+  },
+  "native_scenarios": [
+    "generic-library",
+    "generic-interface",
+    "dispatch",
+    "exceptions",
+    "tasks"
+  ],
+  "lint": [
+    "compiler-k2-engine"
+  ],
+  "implementation_head": "2bf92aa74958e223a535f4c3537818777a23ee7c",
+  "scope": "Focused suites and five real VM execution scenarios; no full-checkout or release claim."
+}

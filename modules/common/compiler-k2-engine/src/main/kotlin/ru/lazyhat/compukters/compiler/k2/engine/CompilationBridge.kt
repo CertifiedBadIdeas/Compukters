@@ -52,7 +52,7 @@ class CompilationSession(
     val canonicalIntrinsicRegistry: CanonicalIntrinsicRegistry? = null,
     val capabilityShapes: Map<PlatformCapabilityId, PlatformCapabilityShape> = emptyMap(),
     val selectedPlatformModules: Set<PlatformModuleId> = emptySet(),
-    val platformFunctions: List<PlatformFunctionLink> = emptyList(),
+    platformFunctions: List<PlatformFunctionLink> = emptyList(),
     val platformDefaults: Map<PlatformDeclarationIdentity, List<PlatformDefaultArgument?>> = emptyMap(),
     val platformTypes: List<PlatformTypeLink> = emptyList(),
     val platformFields: List<PlatformFieldLink> = emptyList(),
@@ -62,6 +62,11 @@ class CompilationSession(
     val sourcePlatformSymbols: Set<String> = emptySet(),
     val limits: WorkerLimits = WorkerLimits(),
 ) {
+    val platformFunctions: List<PlatformFunctionLink> = platformFunctions.toList()
+    private val platformFunctionsBySymbol = this.platformFunctions.groupBy(PlatformFunctionLink::symbol)
+
+    internal fun platformFunctionsFor(symbol: String?): List<PlatformFunctionLink> = platformFunctionsBySymbol[symbol].orEmpty()
+
     internal val normalizedGuestModules = java.util.Collections.newSetFromMap(IdentityHashMap<IrModuleFragment, Boolean>())
     private val specializationNames = linkedSetOf<String>()
     val materializedPlatformSpecializations: Set<String> get() = specializationNames.toSet()

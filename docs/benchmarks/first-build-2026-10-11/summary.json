@@ -1,0 +1,23 @@
+{
+  "cold": {
+    "startup_median_ms": 229.903031,
+    "first_pid_median_ms": 5040.927293,
+    "samples_4_5_median_ms": 355.485565,
+    "serial_total_to_first_pid_median_ms": 5270.830324
+  },
+  "prepared": {
+    "startup_median_ms": 245.528389,
+    "first_pid_median_ms": 1161.417151,
+    "samples_4_5_median_ms": 338.3554855,
+    "serial_total_to_first_pid_median_ms": 5094.017311,
+    "preparationMillis": 3687.071771
+  },
+  "hello": {
+    "startup_median_ms": 253.257637,
+    "first_pid_median_ms": 644.16457,
+    "samples_4_5_median_ms": 318.0302225,
+    "serial_total_to_first_pid_median_ms": 5700.6298449999995,
+    "preparationMillis": 4116.154156,
+    "helloWarmupMillis": 710.447783
+  }
+}

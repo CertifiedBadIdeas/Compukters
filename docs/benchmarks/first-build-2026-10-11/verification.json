@@ -1,0 +1,11 @@
+{
+  "pid_outputs": 45,
+  "pid_byte_identical": true,
+  "pid_bytes": 152916,
+  "pid_sha256": "bc01f4194e6f7c247ef71b9cccf16145f44bccd1e959d83c3f149530556027ee",
+  "native_verified_pid": 45,
+  "native_verified_warmup": 3,
+  "native_abi": 22,
+  "native_library_sha256": "c2ff8dbc822099b08e4bfa28dcc94b065626c20e2a0af0d83971b47edc5f0f61",
+  "scope": "stateless artifact verification, not flight/session execution"
+}

@@ -79,6 +79,33 @@ nominal classes also work as reference-array elements, including nullable storag
 **Evidence:** `text display program lowers deterministically for GameTest`, executed by the real text-display
 scenario in `:v26_1-neoforge:runGameTestServer` with `TextDisplay.all()` and typed filtering.
 
+### Reference-array initializer constructors
+
+**Status:** Supported.
+
+`Array(size) { index -> value }` and `Array(size, initializer)` create arrays of admitted reference elements:
+`String`, `Any`, source/imported class references, value classes (including `Vector3f`), nullable elements and
+nullable primitive boxes. Generic container elements such as `Array<Cell<T>>` work after concrete specialization. A bare `Array<T>`
+constructor in a non-reified generic function is rejected by K2; reified inline functions remain unsupported. The initializer may be a
+capturing lambda, a stored function or a supported callable reference.
+
+Size and initializer expressions evaluate once, left-to-right, before allocation. The callback receives each
+ascending index exactly once; zero size calls it zero times. A negative size raises managed
+`NegativeArraySizeException` without invoking the callback body, while preserving initializer-expression side
+effects. An exception from a callback propagates immediately and preserves completed side effects. Value-class
+results use the same nominal managed boxes as `arrayOf`; generated loops and allocation use existing metered
+VM instructions and ordinary GC roots. This does not add non-null primitive `Array<Int>` storage or array
+covariance; use `IntArray(size) { ... }` for unboxed primitives.
+
+**Evidence:** `reference arrays preserve Guest class elements and aliases` in
+[`MinimalScriptLoweringTest`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/compiler-k2/src/test/kotlin/ru/lazyhat/compukters/compiler/worker/k2/MinimalScriptLoweringTest.kt),
+executed by `testKotlinReferenceArrayVmConformance` under small execution budgets and allocation pressure.
+The `reference arrays reject unsupported element representations` case protects rejection of primitive
+`Array<Int>` constructor results. IDE test `array initializer constructors resolve with source and metadata
+inputs` checks both source-attached and metadata-only sessions.
+
+**Related work:** [#730](https://github.com/CertifiedBadIdeas/Compukters/issues/730)
+
 ### All twelve primitive array families
 
 **Status:** Supported.

@@ -111,6 +111,12 @@ The computer also carries a compact terminal editor and compiler. At the shell p
 kotlinc hello.kt
 ```
 
+The terminal editor holds up to 4096 UTF-16 code units. Saving preserves the cursor position. Pasted tabs expand
+to four spaces and newlines inherit the current indentation; if the expanded paste does not fit, the editor
+shows `Buffer full` and leaves the document unchanged.
+The filesystem call counts both the path and text toward its 4096-unit argument limit, so the maximum savable
+text is smaller than the buffer capacity; exceeding that call limit currently terminates the editor.
+
 Without `-o`, `kotlinc` writes an extensionless executable with the source basename. Run it from the shell:
 
 ```text

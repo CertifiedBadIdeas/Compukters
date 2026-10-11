@@ -113,6 +113,131 @@ class ProgramRuntimeHostIntegrationTest {
     }
 
     @Test
+    fun `builtin editor save preserves the cursor and subsequent insertion position`() {
+        withEditor { host ->
+            submit(host, "first\nA😀BC")
+            press(host, TerminalKey.LEFT)
+            press(host, TerminalKey.LEFT)
+            press(host, TerminalKey.LEFT)
+            press(host, TerminalKey.RIGHT)
+            val cursor = requireNotNull(host.terminalFullState()).cursor
+            press(host, TerminalKey.S, setOf(TerminalModifier.CONTROL))
+            assertEquals(cursor, requireNotNull(host.terminalFullState()).cursor, terminalText(requireNotNull(host.terminalFullState())))
+            submit(host, "X")
+            assertTrue(terminalText(requireNotNull(host.terminalFullState())).contains("A😀XBC"))
+            press(host, TerminalKey.S, setOf(TerminalModifier.CONTROL))
+            press(host, TerminalKey.X, setOf(TerminalModifier.CONTROL))
+            submit(host, "edit regression.txt")
+            pressEnter(host)
+            assertTrue(terminalText(requireNotNull(host.terminalFullState())).contains("A😀XBC"))
+        }
+    }
+
+    @Test
+    fun `builtin editor rejects expanded paste atomically at buffer capacity`() {
+        for ((length, paste) in listOf(4088 to "\tZ", 4088 to "\nZ", 4088 to "😀\t", 4080 to "\n \nZ")) {
+            withEditor { host ->
+                submit(host, "\t" + "x".repeat(length))
+                val cursor = requireNotNull(host.terminalFullState()).cursor
+                submit(host, paste)
+                val screen = requireNotNull(host.terminalFullState())
+                assertEquals(cursor, screen.cursor, paste)
+                assertTrue(terminalText(screen).contains("Buffer full"), paste)
+                // Rejection must leave all remaining code units available.
+                submit(host, "x".repeat(4088 - length) + "ABCD")
+                assertTrue(terminalText(requireNotNull(host.terminalFullState())).contains("ABCD"))
+            }
+        }
+    }
+
+    @Test
+    fun `builtin editor accepts expanded paste exactly filling the buffer`() {
+        for ((length, paste) in listOf(4087 to "\tZ", 4087 to "\n", 4079 to "\n \nZ")) {
+            withEditor { host ->
+                submit(host, "\t" + "x".repeat(length))
+                submit(host, paste)
+                val screen = requireNotNull(host.terminalFullState())
+                assertTrue(!terminalText(screen).contains("Buffer full"))
+                val cursor = screen.cursor
+                val position = terminalText(screen).lines().first { it.startsWith("Ln ") }
+                submit(host, "Q")
+                assertEquals(
+                    cursor,
+                    requireNotNull(host.terminalFullState()).cursor,
+                    terminalText(requireNotNull(host.terminalFullState())),
+                )
+                assertTrue(terminalText(requireNotNull(host.terminalFullState())).contains("Buffer full"))
+                // Exercise navigation with a zero-sized gap, including overlapping self-copy.
+                press(host, TerminalKey.LEFT)
+                press(host, TerminalKey.RIGHT)
+                assertTrue(terminalText(requireNotNull(host.terminalFullState())).contains(position))
+            }
+        }
+    }
+
+    @Test
+    fun `builtin editor movement and deletion preserve Unicode scalar boundaries`() {
+        withEditor { host ->
+            submit(host, "A😀BC")
+            press(host, TerminalKey.LEFT)
+            press(host, TerminalKey.LEFT)
+            press(host, TerminalKey.BACKSPACE)
+            assertTrue(terminalText(requireNotNull(host.terminalFullState())).contains("ABC"))
+            press(host, TerminalKey.HOME)
+            press(host, TerminalKey.RIGHT)
+            press(host, TerminalKey.DELETE)
+            assertTrue(terminalText(requireNotNull(host.terminalFullState())).contains("AC"))
+            press(host, TerminalKey.END)
+            press(host, TerminalKey.BACKSPACE)
+            submit(host, "😀")
+            press(host, TerminalKey.LEFT)
+            press(host, TerminalKey.DELETE)
+            press(host, TerminalKey.S, setOf(TerminalModifier.CONTROL))
+            press(host, TerminalKey.X, setOf(TerminalModifier.CONTROL))
+            submit(host, "edit regression.txt")
+            pressEnter(host)
+            val screen = requireNotNull(host.terminalFullState())
+            assertEquals(1, screen.cursor.x)
+            assertEquals(1, screen.cursor.y)
+            assertTrue(terminalText(screen).contains("\nA\n"))
+        }
+    }
+
+    private fun withEditor(block: (ProgramRuntimeHost) -> Unit) {
+        VmRuntime.loadNativeLibrary(Path.of(requiredProperty("compukters.ffi.library")))
+        val rom =
+            rom(
+                Path.of(requiredProperty("compukters.bootRuntime.artifact")).readBytes(),
+                Path.of(requiredProperty("compukters.programRuntime.artifact")).readBytes(),
+                Path.of(requiredProperty("compukters.kotlincRuntime.artifact")).readBytes(),
+                Path.of(requiredProperty("compukters.editRuntime.artifact")).readBytes(),
+                Path.of(requiredProperty("compukters.processTerminalChild.artifact")).readBytes(),
+            )
+        val installer = Path.of(requiredProperty("compukters.processInstallRomExecutable.artifact")).readBytes()
+        val root = Files.createTempDirectory("compukters-editor-regression-").toRealPath()
+        try {
+            WorldFileSystemStore.open(root).use { store ->
+                val computerId = ComputerId.fromLongs(3, 4)
+                val generation =
+                    VmSession.openInStore(installer, store, computerId, rom).use { session ->
+                        assertEquals(VmOutcome.Halted(VmValue.I32(0)), advanceUntilHalted(session))
+                        session.filesystemGeneration()
+                    }
+                store.flush(computerId, generation)
+                ProgramRuntimeHost(store = store, computerId = computerId, romImage = rom).use { host ->
+                    assertEquals(ProgramStartResult.Started, host.startBoot())
+                    advanceUntil(host) { it == ProgramRuntimeState.WaitingForInput }
+                    submit(host, "edit regression.txt")
+                    pressEnter(host)
+                    block(host)
+                }
+            }
+        } finally {
+            root.toFile().deleteRecursively()
+        }
+    }
+
+    @Test
     fun `ROM boot runs a foreground child and reboot creates a fresh shell`() {
         VmRuntime.loadNativeLibrary(Path.of(requiredProperty("compukters.ffi.library")))
         val boot = Path.of(requiredProperty("compukters.bootRuntime.artifact")).readBytes()

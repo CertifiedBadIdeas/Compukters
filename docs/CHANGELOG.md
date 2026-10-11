@@ -13,6 +13,13 @@ headings so this page has one stable URL that can be shared outside the reposito
 
 ## 0.6.0 — In development
 
+- Guest reference arrays support `Array(size) { index -> value }`, including strings, objects, nullable
+  elements, reusable vector value classes and generic container elements. Initializers run once per
+  ascending index and preserve managed exception behavior.
+
+- The bundled terminal editor preserves the cursor when saving. Pasted text either fits in full, including
+  expanded tabs and automatic indentation, or leaves the document unchanged with a `Buffer full` message.
+
 - The IDE has open-file tabs with retained edits, caret, selection, scrolling and undo history. Tabs show unsaved
   changes and save conflicts, scroll when space is limited, and save modified files before closing. Screen interaction,
   frame composition and reusable controls are shared across both supported Minecraft versions; version adapters handle
@@ -43,7 +50,8 @@ headings so this page has one stable URL that can be shared outside the reposito
 - The IDE prepares resolved compiler libraries in the background when opening a project and after dependency or
   target-profile changes. Repeated Guest compilation reuses that library analysis, semantic hashes and export
   indexes within the retained worker,
-  including across IDE reopenings. Final executables are validated and serialized once with compilation limits.
+  including across IDE reopenings. Lowering indexes admitted callable names and signatures instead of repeatedly
+  scanning their registries. Final executables are validated and serialized once with compilation limits.
   Changing the dependency selection replaces the preparation; each project
   compilation keeps its own source session and specialization state. Queued preparation yields to Build.
 

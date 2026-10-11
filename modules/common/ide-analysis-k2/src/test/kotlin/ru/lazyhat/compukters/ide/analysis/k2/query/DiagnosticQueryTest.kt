@@ -31,6 +31,32 @@ import kotlin.test.assertTrue
 
 class DiagnosticQueryTest {
     @Test
+    fun `array initializer constructors resolve with source and metadata inputs`() {
+        val source =
+            """
+            import kotlin.math.Vector3f
+            class Node(val value: Int)
+            class Cell<T>(val value: T)
+            fun <T> initializedCells(size: Int, init: (Int) -> Cell<T>): Array<Cell<T>> = Array(size, init)
+            fun main() {
+                val points = Array(8) { Vector3f(it.toFloat(), 1f, -1f) }
+                val nullable: Array<Int?> = Array(3) { if (it == 0) null else it }
+                val nodes = Array(3, ::Node)
+                val cells = initializedCells(2) { Cell("generic") }
+                val strings = Array(2) { "item${'$'}it" }
+                check(points[0].x == 0f && nullable[1] == 1 && nodes[2].value == 2 && cells[1].value == "generic" && strings.size == 2)
+            }
+            """.trimIndent()
+        for (attachedSources in listOf(false, true)) {
+            K2QueryFixture.sourceWithGuestApi(attachedSources, "main.kt" to source).use { fixture ->
+                val result = fixture.execute(fixture.presentation()) as AnalysisResult.Presentation
+                val active = result.value.accept(fixture.identity) as SnapshotPresentationAcceptance.Active
+                assertTrue(active.diagnostics.none { it.severity == EditorDiagnosticSeverity.Error }, active.diagnostics.toString())
+            }
+        }
+    }
+
+    @Test
     fun `math analysis admits typed overloads extensions and callable references`() {
         val source =
             """
