@@ -94,6 +94,70 @@ import kotlin.test.assertTrue
 
 class IdeRendererStateTest {
     @Test
+    fun `horizontal source scrolling keeps text selection and hidden caret out of the gutter`() {
+        val text = "val name = \"" + "a".repeat(100) + "\""
+        val editor =
+            semanticEditor(text, caretUtf16 = 0, firstVisibleColumn = 8, selection = EditorRange(0, 20)) { _, _ ->
+                IdeSemanticInteraction.None
+            }
+        val geometry = geometry()
+        val source = IdeSourceGeometry(editor, geometry)
+        val output = IdeDrawBuilder(geometry.font)
+        IdeEditorRenderer(output, geometry, editor).draw(true, IdeDiagnostics.Empty)
+        val model = output.build()
+        val runs = model.text.filter { it.kind == IdeTextKind.Source }
+        assertTrue(runs.isNotEmpty())
+        assertTrue(runs.all { assertNotNull(it.clip).left >= source.codeLeft })
+        assertTrue(model.fills.none { it.kind == IdeFillKind.Caret })
+        val selection = model.fills.single { it.kind == IdeFillKind.Selection }
+        assertEquals(source.codeLeft, selection.bounds.left)
+        assertTrue(geometry.editor.contains(selection.bounds))
+        val gutter = model.text.single { it.kind == IdeTextKind.LineNumber }
+        assertTrue(gutter.x < source.codeLeft)
+    }
+
+    @Test
+    fun `styled source fragments share tab columns with caret selection and pointer offsets`() {
+        val text = "val\tname = \"😀\""
+        val editor =
+            semanticEditor(
+                text,
+                caretUtf16 = 4,
+                firstVisibleColumn = 2,
+                selection = EditorRange(3, 4),
+            ) { _, _ -> IdeSemanticInteraction.None }
+        val geometry = geometry()
+        val model = IdeRenderer.extract(workspaceState(editor, IdeBuildState.Idle), geometry)
+        val source = model.text.filter { it.kind == IdeTextKind.Source }
+        assertEquals("val name = \"😀\"", source.joinToString("") { it.value })
+        val layout = IdeSourceGeometry(editor, geometry)
+        val caret = model.fills.single { it.kind == IdeFillKind.Caret }
+        val selection = model.fills.single { it.kind == IdeFillKind.Selection && geometry.editor.contains(it.bounds) }
+        assertEquals(layout.xAt(text, 4), caret.bounds.left)
+        assertEquals(caret.bounds.left, selection.bounds.right)
+        source.forEach { run ->
+            val range = assertNotNull(run.sourceRange)
+            assertEquals(layout.xAt(text, range.startUtf16), run.x)
+        }
+        val commands = mutableListOf<IdeCommand>()
+        val input =
+            IdeInputAdapter(
+                IdeCommandSink(commands::add),
+                IdeClipboard { "" },
+                ru.lazyhat.compukters.ide.client
+                    .IdeClientLimits(),
+            )
+        input.pointerClicked(caret.bounds.left + 0.5, caret.bounds.top + 0.5, 0, IdePointerContext(geometry, editor = editor))
+        assertEquals(
+            IdeCommand.Edit(
+                ru.lazyhat.compukters.ide.client.state.IdeEditorInput
+                    .SetCaret(4, false),
+            ),
+            commands.first(),
+        )
+    }
+
+    @Test
     fun `chrome separates text bounds and preserves full status beyond compact labels`() {
         val detail = "Compiler stopped: " + "Detailed failure information 😀 ".repeat(100)
         val state = workspaceState(IdeEditorView.Empty, IdeBuildState.Idle, IdeProblem(detail, IdeProblemSeverity.Error))
@@ -2033,6 +2097,8 @@ class IdeRendererStateTest {
         caretUtf16: Int = 0,
         completion: ((AnalysisSnapshotIdentity, VirtualSourcePath) -> IdeCompletionState)? = null,
         gitLineChanges: List<ru.lazyhat.compukters.ide.git.GitLineChange> = emptyList(),
+        firstVisibleColumn: Int = 0,
+        selection: EditorRange? = null,
         interaction: (AnalysisSnapshotIdentity, VirtualSourcePath) -> IdeSemanticInteraction,
     ): IdeEditorView.Text {
         val document = EditorDocument(source)
@@ -2045,11 +2111,11 @@ class IdeRendererStateTest {
             visibleLines = listOf(source),
             visibleLineStartsUtf16 = listOf(0),
             firstVisibleLine = 0,
-            firstVisibleColumn = 0,
+            firstVisibleColumn = firstVisibleColumn,
             totalLines = 1,
             caretUtf16 = caretUtf16,
-            selectionStartUtf16 = null,
-            selectionEndUtf16 = null,
+            selectionStartUtf16 = selection?.startUtf16,
+            selectionEndUtf16 = selection?.endUtf16,
             contentRevision = 0,
             persistedContentRevision = 0,
             dirty = false,
