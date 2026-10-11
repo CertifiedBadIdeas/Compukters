@@ -1693,10 +1693,8 @@ tasks.register<Test>("generateRandomConformanceArtifact") {
     inputs.file(workerJar)
     inputs.file("src/test/resources/kotlin/random/main.kt")
     outputs.file(randomConformanceArtifact)
-    doFirst {
-        systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
-        systemProperty("compukter.vm.randomArtifact", randomConformanceArtifact.get().asFile.absolutePath)
-    }
+    systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
+    systemProperty("compukter.vm.randomArtifact", randomConformanceArtifact.get().asFile.absolutePath)
 }
 
 val mathConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-math.cpkt")
