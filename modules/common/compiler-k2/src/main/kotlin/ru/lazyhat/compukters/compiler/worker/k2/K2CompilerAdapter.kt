@@ -29,7 +29,6 @@ import ru.lazyhat.compukters.compiler.artifact.model.*
 import ru.lazyhat.compukters.compiler.artifact.read.ArtifactReader
 import ru.lazyhat.compukters.compiler.artifact.write.ArtifactWriteLimits
 import ru.lazyhat.compukters.compiler.artifact.write.ArtifactWriteResult
-import ru.lazyhat.compukters.compiler.artifact.write.ArtifactWriter
 import ru.lazyhat.compukters.compiler.k2.engine.CompilationSession
 import ru.lazyhat.compukters.compiler.k2.engine.CompuktersFir2IrPipeline
 import ru.lazyhat.compukters.compiler.k2.engine.PlatformCapabilityShape
@@ -272,21 +271,18 @@ class K2CompilerAdapter(
                             limits = request.limits,
                         )
                     CompuktersFir2IrPipeline.lowerGuest(output, session, sourceOutputs)?.let { lowered ->
-                        val linked =
-                            LibraryModuleLinker.link(
-                                lowered,
-                                prepared.linkerLibraries,
-                                specializationNames = session.materializedPlatformSpecializations,
-                                inferMinimumRuntimeAbi = true,
-                            )
                         when (
                             val result =
-                                ArtifactWriter.write(
-                                    linked,
-                                    ArtifactWriteLimits(
-                                        artifactBytes = request.limits.artifactBytes,
-                                        diagnostics = request.limits.diagnostics,
-                                    ),
+                                LibraryModuleLinker.linkAndWrite(
+                                    lowered,
+                                    prepared.linkerLibraries,
+                                    limits =
+                                        ArtifactWriteLimits(
+                                            artifactBytes = request.limits.artifactBytes,
+                                            diagnostics = request.limits.diagnostics,
+                                        ),
+                                    specializationNames = session.materializedPlatformSpecializations,
+                                    inferMinimumRuntimeAbi = true,
                                 )
                         ) {
                             is ArtifactWriteResult.Success -> {
