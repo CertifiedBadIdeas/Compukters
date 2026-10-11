@@ -7,11 +7,10 @@
 package kotlin.text
 
 /** Returns whether this UTF-16 character is Kotlin whitespace. */
-public fun Char.isWhitespace(): Boolean {
-    return (this >= '\u0009' && this <= '\u000d') || (this >= '\u001c' && this <= ' ') ||
+public fun Char.isWhitespace(): Boolean =
+    (this >= '\u0009' && this <= '\u000d') || (this >= '\u001c' && this <= ' ') ||
         this == '\u00a0' || this == '\u1680' || (this >= '\u2000' && this <= '\u200a') ||
         this == '\u2028' || this == '\u2029' || this == '\u202f' || this == '\u205f' || this == '\u3000'
-}
 
 /** Returns whether this string contains no characters. */
 public fun String.isEmpty(): Boolean = length == 0

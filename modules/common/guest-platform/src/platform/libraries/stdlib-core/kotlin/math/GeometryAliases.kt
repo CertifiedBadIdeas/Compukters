@@ -31,11 +31,14 @@ public typealias Position3f = Vector3f
 public typealias Size3f = Vector3f
 
 public infix fun Int.xy(y: Int): Vector2i = Vector2i(this, y)
+
 public infix fun Float.xy(y: Float): Vector2f = Vector2f(this, y)
 
 /** A size-oriented synonym for xy; negative components remain valid vectors. */
 public infix fun Int.by(height: Int): Size2i = Vector2i(this, height)
+
 public infix fun Float.by(height: Float): Size2f = Vector2f(this, height)
 
 public infix fun Vector2i.sized(size: Size2i): Rect2i = Rect2i(this, size)
+
 public infix fun Vector2f.sized(size: Size2f): Rect2f = Rect2f(this, size)

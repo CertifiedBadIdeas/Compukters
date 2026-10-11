@@ -60,13 +60,25 @@ internal external fun absPrimitive(x: Double): Double
 
 internal external fun signPrimitive(x: Double): Double
 
-internal external fun atan2Primitive(y: Double, x: Double): Double
+internal external fun atan2Primitive(
+    y: Double,
+    x: Double,
+): Double
 
-internal external fun hypotPrimitive(x: Double, y: Double): Double
+internal external fun hypotPrimitive(
+    x: Double,
+    y: Double,
+): Double
 
-internal external fun minPrimitive(a: Double, b: Double): Double
+internal external fun minPrimitive(
+    a: Double,
+    b: Double,
+): Double
 
-internal external fun maxPrimitive(a: Double, b: Double): Double
+internal external fun maxPrimitive(
+    a: Double,
+    b: Double,
+): Double
 
 internal external fun sinPrimitive(x: Float): Float
 
@@ -120,33 +132,71 @@ internal external fun absPrimitive(x: Float): Float
 
 internal external fun signPrimitive(x: Float): Float
 
-internal external fun atan2Primitive(y: Float, x: Float): Float
+internal external fun atan2Primitive(
+    y: Float,
+    x: Float,
+): Float
 
-internal external fun hypotPrimitive(x: Float, y: Float): Float
+internal external fun hypotPrimitive(
+    x: Float,
+    y: Float,
+): Float
 
-internal external fun minPrimitive(a: Float, b: Float): Float
+internal external fun minPrimitive(
+    a: Float,
+    b: Float,
+): Float
 
-internal external fun maxPrimitive(a: Float, b: Float): Float
+internal external fun maxPrimitive(
+    a: Float,
+    b: Float,
+): Float
 
-internal external fun powPrimitive(value: Double, x: Double): Double
+internal external fun powPrimitive(
+    value: Double,
+    x: Double,
+): Double
 
-internal external fun IEEEremPrimitive(value: Double, divisor: Double): Double
+@Suppress("ktlint:standard:function-naming")
+internal external fun IEEEremPrimitive(
+    value: Double,
+    divisor: Double,
+): Double
 
-internal external fun withSignPrimitive(value: Double, sign: Double): Double
+internal external fun withSignPrimitive(
+    value: Double,
+    sign: Double,
+): Double
 
-internal external fun nextTowardsPrimitive(value: Double, to: Double): Double
+internal external fun nextTowardsPrimitive(
+    value: Double,
+    to: Double,
+): Double
 
 internal external fun nextUpPrimitive(value: Double): Double
 
 internal external fun nextDownPrimitive(value: Double): Double
 
-internal external fun powPrimitive(value: Float, x: Float): Float
+internal external fun powPrimitive(
+    value: Float,
+    x: Float,
+): Float
 
-internal external fun IEEEremPrimitive(value: Float, divisor: Float): Float
+@Suppress("ktlint:standard:function-naming")
+internal external fun IEEEremPrimitive(
+    value: Float,
+    divisor: Float,
+): Float
 
-internal external fun withSignPrimitive(value: Float, sign: Float): Float
+internal external fun withSignPrimitive(
+    value: Float,
+    sign: Float,
+): Float
 
-internal external fun nextTowardsPrimitive(value: Float, to: Float): Float
+internal external fun nextTowardsPrimitive(
+    value: Float,
+    to: Float,
+): Float
 
 internal external fun nextUpPrimitive(value: Float): Float
 

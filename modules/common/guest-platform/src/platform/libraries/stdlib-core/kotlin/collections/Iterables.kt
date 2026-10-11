@@ -131,7 +131,10 @@ public inline fun <T> Iterable<T>.lastOrNull(predicate: (T) -> Boolean): T? {
  * Accumulates elements in iteration order, passing the current result and each element to [operation].
  * Returns [initial] unchanged when this iterable is empty.
  */
-public inline fun <T, R> Iterable<T>.fold(initial: R, operation: (R, T) -> R): R {
+public inline fun <T, R> Iterable<T>.fold(
+    initial: R,
+    operation: (R, T) -> R,
+): R {
     var accumulator = initial
     for (element in this) {
         accumulator = operation(accumulator, element)
@@ -178,7 +181,10 @@ public inline fun <T> Iterable<T>.filter(predicate: (T) -> Boolean): List<T> {
 }
 
 /** Appends transformed elements to [destination] in iteration order and returns that destination. */
-public inline fun <T, R, C : MutableCollection<in R>> Iterable<T>.mapTo(destination: C, transform: (T) -> R): C {
+public inline fun <T, R, C : MutableCollection<in R>> Iterable<T>.mapTo(
+    destination: C,
+    transform: (T) -> R,
+): C {
     for (element in this) {
         destination.add(transform(element))
     }
@@ -186,7 +192,10 @@ public inline fun <T, R, C : MutableCollection<in R>> Iterable<T>.mapTo(destinat
 }
 
 /** Appends matching elements to [destination] in iteration order and returns that destination. */
-public inline fun <T, C : MutableCollection<in T>> Iterable<T>.filterTo(destination: C, predicate: (T) -> Boolean): C {
+public inline fun <T, C : MutableCollection<in T>> Iterable<T>.filterTo(
+    destination: C,
+    predicate: (T) -> Boolean,
+): C {
     for (element in this) {
         if (predicate(element)) destination.add(element)
     }
@@ -194,7 +203,10 @@ public inline fun <T, C : MutableCollection<in T>> Iterable<T>.filterTo(destinat
 }
 
 /** Appends non-null transformed elements to [destination] and returns that destination. */
-public inline fun <T, R : Any, C : MutableCollection<in R>> Iterable<T>.mapNotNullTo(destination: C, transform: (T) -> R?): C {
+public inline fun <T, R : Any, C : MutableCollection<in R>> Iterable<T>.mapNotNullTo(
+    destination: C,
+    transform: (T) -> R?,
+): C {
     for (element in this) {
         val value = transform(element)
         if (value != null) destination.add(value)

@@ -7,11 +7,22 @@
 package kotlin.math
 
 /** Half-open rectangle: left/top included, right/bottom excluded. Zero-sized rectangles are empty. */
-public value class Rect2i(val position: Position2i, val size: Size2i) {
+public value class Rect2i(
+    val position: Position2i,
+    val size: Size2i,
+) {
     init {
         if (!(size.x >= 0 && size.y >= 0)) throw IllegalArgumentException("Negative rectangle size")
-        if (!(position.x.toLong() + size.x in Int.MIN_VALUE.toLong()..Int.MAX_VALUE.toLong())) throw IllegalArgumentException("Rectangle x extent overflows")
-        if (!(position.y.toLong() + size.y in Int.MIN_VALUE.toLong()..Int.MAX_VALUE.toLong())) throw IllegalArgumentException("Rectangle y extent overflows")
+        if (!(position.x.toLong() + size.x in Int.MIN_VALUE.toLong()..Int.MAX_VALUE.toLong())) {
+            throw IllegalArgumentException(
+                "Rectangle x extent overflows",
+            )
+        }
+        if (!(position.y.toLong() + size.y in Int.MIN_VALUE.toLong()..Int.MAX_VALUE.toLong())) {
+            throw IllegalArgumentException(
+                "Rectangle y extent overflows",
+            )
+        }
     }
 
     public val left: Int get() = position.x
@@ -21,9 +32,12 @@ public value class Rect2i(val position: Position2i, val size: Size2i) {
     public val isEmpty: Boolean get() = size.x == 0 || size.y == 0
 
     public operator fun contains(point: Vector2i): Boolean = point.x >= left && point.x < right && point.y >= top && point.y < bottom
-    public operator fun contains(other: Rect2i): Boolean = other.isEmpty || (!isEmpty && other.left >= left && other.top >= top && other.right <= right && other.bottom <= bottom)
 
-    public fun intersects(other: Rect2i): Boolean = !isEmpty && !other.isEmpty && left < other.right && other.left < right && top < other.bottom && other.top < bottom
+    public operator fun contains(other: Rect2i): Boolean =
+        other.isEmpty || (!isEmpty && other.left >= left && other.top >= top && other.right <= right && other.bottom <= bottom)
+
+    public fun intersects(other: Rect2i): Boolean =
+        !isEmpty && !other.isEmpty && left < other.right && other.left < right && top < other.bottom && other.top < bottom
 
     public fun intersection(other: Rect2i): Rect2i {
         val x = max(left, other.left)
@@ -48,12 +62,31 @@ public value class Rect2i(val position: Position2i, val size: Size2i) {
 }
 
 /** Half-open rectangle: left/top included, right/bottom excluded. Zero-sized rectangles are empty. */
-public value class Rect2f(val position: Position2f, val size: Size2f) {
+public value class Rect2f(
+    val position: Position2f,
+    val size: Size2f,
+) {
     init {
         if (!(size.x >= 0 && size.y >= 0)) throw IllegalArgumentException("Negative rectangle size")
-        if (!(abs(position.x) <= Float.MAX_VALUE && abs(position.y) <= Float.MAX_VALUE)) throw IllegalArgumentException("Non-finite rectangle position")
+        if (!(
+                abs(
+                    position.x,
+                ) <= Float.MAX_VALUE && abs(position.y) <= Float.MAX_VALUE
+            )
+        ) {
+            throw IllegalArgumentException("Non-finite rectangle position")
+        }
         if (!(size.x <= Float.MAX_VALUE && size.y <= Float.MAX_VALUE)) throw IllegalArgumentException("Non-finite rectangle size")
-        if (!(abs(position.x + size.x) <= Float.MAX_VALUE && abs(position.y + size.y) <= Float.MAX_VALUE)) throw IllegalArgumentException("Non-finite rectangle extent")
+        if (!(
+                abs(
+                    position.x + size.x,
+                ) <= Float.MAX_VALUE && abs(
+                    position.y + size.y,
+                ) <= Float.MAX_VALUE
+            )
+        ) {
+            throw IllegalArgumentException("Non-finite rectangle extent")
+        }
     }
 
     public val left: Float get() = position.x
@@ -63,9 +96,12 @@ public value class Rect2f(val position: Position2f, val size: Size2f) {
     public val isEmpty: Boolean get() = right <= left || bottom <= top
 
     public operator fun contains(point: Vector2f): Boolean = point.x >= left && point.x < right && point.y >= top && point.y < bottom
-    public operator fun contains(other: Rect2f): Boolean = other.isEmpty || (!isEmpty && other.left >= left && other.top >= top && other.right <= right && other.bottom <= bottom)
 
-    public fun intersects(other: Rect2f): Boolean = !isEmpty && !other.isEmpty && left < other.right && other.left < right && top < other.bottom && other.top < bottom
+    public operator fun contains(other: Rect2f): Boolean =
+        other.isEmpty || (!isEmpty && other.left >= left && other.top >= top && other.right <= right && other.bottom <= bottom)
+
+    public fun intersects(other: Rect2f): Boolean =
+        !isEmpty && !other.isEmpty && left < other.right && other.left < right && top < other.bottom && other.top < bottom
 
     public fun intersection(other: Rect2f): Rect2f {
         val x = max(left, other.left)
