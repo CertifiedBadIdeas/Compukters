@@ -143,6 +143,7 @@ class IdeAttachedSourceCatalog private constructor(
     private val maximumFiles: Int,
     private val maximumFileBytes: Int,
     private val maximumTotalBytes: Int,
+    private val packagedSources: Map<AnalysisModuleIdentity, Map<VirtualSourcePath, String>> = sources,
 ) {
     fun text(
         module: AnalysisModuleIdentity,
@@ -168,7 +169,19 @@ class IdeAttachedSourceCatalog private constructor(
                     }
             }
         require(additions.keys.none(sources::containsKey)) { "addon attached sources shadow a packaged module" }
-        return of(sources + additions, maximumModules, maximumFiles, maximumFileBytes, maximumTotalBytes)
+        // K2 admits packaged platform sources and all addon sources in separate pools.
+        // Retain that distinction when attaching navigation sources, including chained additions.
+        val addonSources = sources.filterKeys { it !in packagedSources } + additions
+        val admittedAddons =
+            of(addonSources, maximumModules - packagedSources.size, maximumFiles, maximumFileBytes, maximumTotalBytes)
+        return IdeAttachedSourceCatalog(
+            Collections.unmodifiableMap(packagedSources + admittedAddons.sources),
+            maximumModules,
+            maximumFiles,
+            maximumFileBytes,
+            maximumTotalBytes,
+            packagedSources,
+        )
     }
 
     companion object {
