@@ -19,6 +19,7 @@
 package compukter.system.shell
 
 import compukter.terminal.Terminal
+import compukter.terminal.TerminalColor
 import compukter.terminal.TerminalEvent
 import compukter.terminal.TerminalKey
 import compukter.terminal.TerminalKeyAction
@@ -42,6 +43,7 @@ class ShellEditor {
     }
 
     fun readCommand(): String? {
+        Terminal.setColors(TerminalColor.WHITE, TerminalColor.BLACK)
         if (Terminal.cursor.x != 0) println()
         print("> ")
         val row = Terminal.cursor.y

@@ -30,6 +30,7 @@ internal object SystemRomImage {
             SystemProgramImage.kotlinc(),
             SystemProgramImage.edit(),
             SystemProgramImage.vmbench(),
+            SystemProgramImage.cmatrix(),
         )
 
     fun encodePrograms(
@@ -38,6 +39,7 @@ internal object SystemRomImage {
         kotlincArtifact: ByteArray,
         editArtifact: ByteArray,
         vmbenchArtifact: ByteArray,
+        cmatrixArtifact: ByteArray,
     ): ByteArray {
         val programs =
             listOf(
@@ -46,6 +48,7 @@ internal object SystemRomImage {
                 "/rom/kotlinc" to kotlincArtifact,
                 "/rom/edit" to editArtifact,
                 "/rom/vmbench" to vmbenchArtifact,
+                "/rom/cmatrix" to cmatrixArtifact,
             ).sortedBy { it.first }
         programs.forEach { (path, artifact) ->
             require(artifact.isNotEmpty()) { "system program $path must not be empty" }

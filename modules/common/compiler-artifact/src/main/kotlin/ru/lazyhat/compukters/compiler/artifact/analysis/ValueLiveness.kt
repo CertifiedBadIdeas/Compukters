@@ -288,6 +288,8 @@ internal fun Instruction.readRegisters(): List<RegisterId> =
 
         is Instruction.Convert -> listOf(source)
 
+        is Instruction.MatrixMath -> listOfNotNull(left, right)
+
         is Instruction.MathUnary -> listOf(source)
 
         is Instruction.MathBinary -> listOf(left, right)
@@ -410,6 +412,8 @@ internal fun Instruction.writtenRegisters(): List<RegisterId> =
         is Instruction.Null -> listOf(destination)
 
         is Instruction.Convert -> listOf(destination)
+
+        is Instruction.MatrixMath -> listOf(destination)
 
         is Instruction.MathUnary -> listOf(destination)
 

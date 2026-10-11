@@ -123,7 +123,7 @@ producer/consumer update; platform, compiler framing, artifacts and native ABI r
 
 | Boundary | Current representation | Owner |
 | --- | --- | --- |
-| Executable container | Format 3; floating math requires Runtime ABI 1.16 | `modules/common/compiler-artifact` and `host/compukter-vm/src/artifact/format.rs` |
+| Executable container | Format 3; matrix kernels require Runtime ABI 1.17 | `modules/common/compiler-artifact` and `host/compukter-vm/src/artifact/format.rs` |
 | Native session transport | C ABI 23, checked by both FFM and JNI | `host/compukter-vm/ffi/src/lib.rs` and `modules/common/native-runtime` |
 | Base platform | Bundle format 9, standalone module format 5, platform ABI 3 | `PlatformBundleCodec` in `modules/common/platform-bundle` |
 | Kotlin metadata carrier | Private format 6 | `platform-k2` |
@@ -175,12 +175,13 @@ before the next request. No project FIR or IR enters the retained library cache.
 
 ## Guest matrix module identity
 
-`stdlib:core` 1.14.0 adds immutable `Matrix4f` and homogeneous `Vector4f` in `kotlin.math`.
-Transform factories, composition, projection and explicit perspective division use ordinary compiled library
-bodies and existing value-class and Float/Double math instructions. Component constructors have explicit
+`stdlib:core` 1.15.0 provides immutable `Matrix4f` and homogeneous `Vector4f` in `kotlin.math`.
+Matrix multiplication, vector multiplication, point/direction transforms and transposition use trusted
+private primitives lowered to verified Runtime ABI 1.17 kernels. Factories, indexing, perspective division,
+equality, hashing and boxing retain ordinary compiled library bodies. Component constructors have explicit
 arguments; the current metadata default-argument schema does not encode Float literals.
 Dependent libraries rebuild against the changed module content identity. Bundle format 9, module format 5,
-platform ABI 3, metadata format 6, executable format 3, Runtime ABI 1.16 and native ABI 23 remain unchanged.
+platform ABI 3, metadata format 6, executable format 3 and native ABI 23 remain unchanged.
 The [math guide]({{ '/STDLIB-SUPPORT/math/#matrices-and-homogeneous-coordinates' | relative_url }}) owns
 coordinate conventions and numerical contracts; `testKotlinGeometryVmConformance` exercises the public API.
 
@@ -564,6 +565,30 @@ charge one extra unit per additional inline component copied. Copies stay in com
 REF32 leaves participate in exact component safepoint maps. Nominal identity, initialization, leaf
 types, physical shapes, ABI gates and declared costs are checked by both Kotlin and Rust. Artifact
 container format 3 and exported C ABI 20 are unchanged; host entry/results retain their scalar contract.
+
+## Runtime ABI 1.17
+
+Runtime ABI 1.17 adds `matrix_math` (`0x1e`, form 0). The framed operands are a closed ULEB selector,
+destination u16, left u16 and, for binary selectors, right u16. All values are nominal inline layouts
+of homogeneous F32 components; the left matrix always has sixteen row-major components. Verification
+checks exact arity, initialized inputs, component counts/types, physical shapes, ABI and declared costs.
+Nominal identities may differ when layouts match. Kotlin writing/linking infers the minimum ABI from
+retained instructions; older ordinary Float artifacts remain usable. Container 3 and native C ABI 23 are unchanged.
+
+| Selector | Operation | Right components | Result components | Fixed cost |
+| --- | --- | --- | --- | --- |
+| 1 | Transpose | absent | 16 | 18 |
+| 2 | Matrix multiplication | 16 | 16 | 128 |
+| 3 | Vector multiplication | 4 | 4 | 32 |
+| 4 | Point transform (`w=1`) | 3 | 4 | 32 |
+| 5 | Direction transform (`w=0`) | 3 | 4 | 32 |
+
+Costs are bounded budget units, not timing guarantees. Kernels snapshot both inputs on the host stack
+before writing, allowing destination/input aliases without managed allocations or suspension. Dot products
+multiply each F32 pair and add strictly left to right, rounding and canonicalizing NaNs at each scalar
+operation. No FMA, reassociation or omitted zero terms: infinite translation times `w=0` produces NaN.
+Transpose copies original bits, including signed zeros and NaN payloads. Factories continue to use stdlib
+code and existing trigonometric intrinsics. Checkpoints retain logical inline values with existing framing.
 
 ## Runtime ABI 1.16
 
