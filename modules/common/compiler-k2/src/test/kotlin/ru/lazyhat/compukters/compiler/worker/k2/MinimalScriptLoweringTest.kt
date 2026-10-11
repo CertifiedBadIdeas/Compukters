@@ -7578,6 +7578,19 @@ class MinimalScriptLoweringTest {
         }
 
     @Test
+    fun `Path value class rejects data class conveniences and reference equality`() =
+        withAdapter { adapter ->
+            for (expression in listOf("path.copy()", "path.component1()", "path === Path(\"/home\")")) {
+                val result =
+                    adapter.compile(
+                        request("import compukter.filesystem.Path\nfun main() { val path = Path(\"/home\"); $expression }"),
+                    )
+                assertNull(result.artifact, expression)
+                assertTrue(result.diagnostics.isNotEmpty(), expression)
+            }
+        }
+
+    @Test
     fun `lexical Guest paths need no filesystem capability`() =
         withAdapter { adapter ->
             val source =
@@ -7588,11 +7601,34 @@ class MinimalScriptLoweringTest {
                 fun invalid(value: String) {
                     try { value.toPath(); error("invalid syntax accepted") }
                     catch (failure: IllegalArgumentException) { }
+                    val construct: (String) -> Path = ::Path
+                    try { construct(value); error("constructor reference skipped validation") }
+                    catch (failure: IllegalArgumentException) { }
                 }
 
                 fun main() {
                     val home = "/home".toPath()
                     require(home == Path("/home"))
+                    val construct: (String) -> Path = ::Path
+                    require(construct("/home") == home)
+                    require(home.toString() == "/home")
+                    require(home.hashCode() == Path("/home").hashCode())
+                    val boxed: Any = home
+                    require(boxed is Path && boxed == Path("/home"))
+                    require(boxed != "/home")
+                    require((boxed as Path).resolve("note").value == "/home/note")
+                    val nullable: Path? = home.parent
+                    require(nullable == Path("/"))
+                    require(nullable?.value == "/")
+                    val absent: Path? = Path("/").parent
+                    require(absent == null)
+                    val paths = arrayOf(home, Path("/rom"))
+                    require(paths[0] == home && paths[1].value == "/rom")
+                    val list = listOf(home, Path("/rom"))
+                    require(list[0] == home && list[1].value == "/rom")
+                    val keys = mutableMapOf<Path, String>()
+                    keys[home] = "found"
+                    require(keys[Path("/home")] == "found")
                     require("/".toPath() == Path("/"))
                     require("/home/absent/😀".toPath() == home.resolve("absent/😀"))
                     val missing = home.resolve("absent/😀")

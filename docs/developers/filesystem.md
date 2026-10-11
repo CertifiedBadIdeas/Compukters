@@ -9,8 +9,8 @@ permalink: /FILESYSTEM/
 # Guest filesystem
 
 Guest programs pass `compukter.filesystem.Path` values to `compukter.filesystem.FileSystem`. Path is an
-immutable lexical value: constructing it, comparing it, or resolving a child never accesses storage or
-submits a native request. FileSystem owns access to the current computer's virtual storage. Rust owns the files,
+immutable lexical `value class` backed by a String. Constructing it, comparing it, or resolving a child
+never accesses storage or submits a native request. FileSystem owns access to the current computer's virtual storage. Rust owns the files,
 permissions and persistence. `/home` is private persistent storage and `/rom` is immutable packaged content.
 The API uses its own types and has no JVM filesystem classes, host paths, working directory, symlinks or
 platform-dependent separators.
@@ -39,6 +39,9 @@ val note = "/home/notes/hello.txt".toPath()
 ```
 
 It delegates to `Path(this)`, uses the same syntax validation and never accesses storage.
+Path equality and hashing compare path values; `toString()` returns the path string. Nullable paths,
+`Any`, arrays and collections retain the nominal Path type through managed boxing. Direct typed calls use
+the inline value layout. Path has no object identity or generated data-class `copy()` / `component1()` members.
 
 Paths are exact and absolute. Empty components, trailing slashes except `/`, `.` and `..`, NUL, malformed
 Unicode are rejected with `IllegalArgumentException` by pure Guest syntax validation. `resolve` accepts
