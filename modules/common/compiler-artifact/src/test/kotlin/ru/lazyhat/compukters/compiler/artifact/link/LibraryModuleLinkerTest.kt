@@ -28,6 +28,7 @@ import ru.lazyhat.compukters.compiler.artifact.model.CapabilityId
 import ru.lazyhat.compukters.compiler.artifact.model.Constant
 import ru.lazyhat.compukters.compiler.artifact.model.ConstantId
 import ru.lazyhat.compukters.compiler.artifact.model.Destination
+import ru.lazyhat.compukters.compiler.artifact.model.EntryArguments
 import ru.lazyhat.compukters.compiler.artifact.model.EntryPoint
 import ru.lazyhat.compukters.compiler.artifact.model.Export
 import ru.lazyhat.compukters.compiler.artifact.model.ExportVisibility
@@ -55,6 +56,8 @@ import ru.lazyhat.compukters.compiler.artifact.model.SymbolKind
 import ru.lazyhat.compukters.compiler.artifact.model.TypeId
 import ru.lazyhat.compukters.compiler.artifact.model.TypeRef
 import ru.lazyhat.compukters.compiler.artifact.model.ValueType
+import ru.lazyhat.compukters.compiler.artifact.write.ArtifactWriteErrorCode
+import ru.lazyhat.compukters.compiler.artifact.write.ArtifactWriteLimits
 import ru.lazyhat.compukters.compiler.artifact.write.ArtifactWriteResult
 import ru.lazyhat.compukters.compiler.artifact.write.ArtifactWriter
 import ru.lazyhat.compukters.compiler.artifact.write.withRuntimeExceptionDependencies
@@ -89,13 +92,83 @@ class LibraryModuleLinkerTest {
                     val source = if (preserve) project.copy(modules = project.modules + library) else project
                     val expected = LibraryModuleLinker.link(source, artifacts, preserveLibraryExports = preserve)
                     val actual = LibraryModuleLinker.link(source, prepared, preserveLibraryExports = preserve)
-                    assertContentEquals(
-                        assertIs<ArtifactWriteResult.Success>(ArtifactWriter.write(expected)).bytes,
-                        assertIs<ArtifactWriteResult.Success>(ArtifactWriter.write(actual)).bytes,
-                    )
+                    val expectedWrite = assertIs<ArtifactWriteResult.Success>(ArtifactWriter.write(expected))
+                    val serialized =
+                        assertIs<ArtifactWriteResult.Success>(
+                            LibraryModuleLinker.linkAndWrite(source, prepared, preserveLibraryExports = preserve),
+                        )
+                    assertContentEquals(expectedWrite.bytes, assertIs<ArtifactWriteResult.Success>(ArtifactWriter.write(actual)).bytes)
+                    assertContentEquals(expectedWrite.bytes, serialized.bytes)
+                    assertContentEquals(expectedWrite.sha256, serialized.sha256)
                 }
             }
         }
+    }
+
+    @Test
+    fun `serialized linking accepts the exact byte limit and rejects a smaller request`() {
+        val library = libraryModule()
+        val source = application(library).copy(modules = application(library).modules + library)
+        val prepared = PreparedLibraryModules.prepare(emptyList())
+        val expected = assertIs<ArtifactWriteResult.Success>(ArtifactWriter.write(LibraryModuleLinker.link(source, prepared)))
+        val exact =
+            assertIs<ArtifactWriteResult.Success>(
+                LibraryModuleLinker.linkAndWrite(source, prepared, ArtifactWriteLimits(artifactBytes = expected.bytes.size)),
+            )
+        assertContentEquals(expected.bytes, exact.bytes)
+        assertContentEquals(expected.sha256, exact.sha256)
+        for (limits in listOf(
+            ArtifactWriteLimits(artifactBytes = expected.bytes.size - 1),
+            ArtifactWriteLimits(codeBytes = 0),
+            ArtifactWriteLimits(sections = 0),
+        )) {
+            val expectedFailure =
+                assertIs<ArtifactWriteResult.Failure>(ArtifactWriter.write(LibraryModuleLinker.link(source, prepared), limits))
+            val actual = assertIs<ArtifactWriteResult.Failure>(LibraryModuleLinker.linkAndWrite(source, prepared, limits))
+            assertEquals(expectedFailure.errors, actual.errors)
+            assertTrue(actual.errors.all { it.code == ArtifactWriteErrorCode.LIMIT_EXCEEDED })
+        }
+        assertContentEquals(expected.bytes, assertIs<ArtifactWriteResult.Success>(LibraryModuleLinker.linkAndWrite(source, prepared)).bytes)
+    }
+
+    @Test
+    fun `serialized linking reports invalid models while ordinary linking still rejects them`() {
+        val library = libraryModule()
+        val valid = application(library).copy(modules = application(library).modules + library)
+        val invalid = valid.copy(entry = valid.entry.copy(arguments = EntryArguments.STRING_ARRAY))
+        val prepared = PreparedLibraryModules.prepare(emptyList())
+        val failure = assertIs<ArtifactWriteResult.Failure>(LibraryModuleLinker.linkAndWrite(invalid, prepared))
+        assertTrue(failure.errors.any { it.detail.contains("entry argument contract") })
+        val ordinary = assertFailsWith<IllegalArgumentException> { LibraryModuleLinker.link(invalid, prepared) }
+        assertTrue(ordinary.message.orEmpty().startsWith("linked artifact is invalid:"))
+        assertIs<ArtifactWriteResult.Success>(LibraryModuleLinker.linkAndWrite(valid, prepared))
+    }
+
+    @Test
+    fun `caller cannot relax ordinary linker section limits`() {
+        val library = libraryModule()
+        val base = application(library)
+        val anchor =
+            base.modules.single().copy(
+                imports = emptyList(),
+                blocks = listOf(Block(FunctionId.of(0u), false, listOf(Instruction.Return(Destination.Unit)))),
+            )
+        val libraries = List(400) { index -> library.copy(strings = library.strings.dropLast(1) + MetadataText.of("zz-library-$index")) }
+        val source = base.copy(modules = listOf(anchor) + libraries)
+        val prepared = PreparedLibraryModules.prepare(emptyList())
+        val ordinary =
+            assertFailsWith<IllegalArgumentException> { LibraryModuleLinker.link(source, prepared, preserveLibraryExports = true) }
+        assertTrue(ordinary.message.orEmpty().contains("section count"), ordinary.message)
+        val failure =
+            assertIs<ArtifactWriteResult.Failure>(
+                LibraryModuleLinker.linkAndWrite(
+                    source,
+                    prepared,
+                    ArtifactWriteLimits(sections = Int.MAX_VALUE),
+                    preserveLibraryExports = true,
+                ),
+            )
+        assertTrue(failure.errors.any { it.code == ArtifactWriteErrorCode.LIMIT_EXCEEDED && it.detail.contains("section count") })
     }
 
     @Test
