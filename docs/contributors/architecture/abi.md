@@ -113,6 +113,17 @@ platform, artifact, codegen and native ABI contracts are unchanged. Both operati
 queue capacity and deadlines. Queued preparation yields to explicit compilation; an active preparation completes
 before the next request. No project FIR or IR enters the retained library cache.
 
+## Guest matrix module identity
+
+`stdlib:core` 1.14.0 adds immutable `Matrix4f` and homogeneous `Vector4f` in `kotlin.math`.
+Transform factories, composition, projection and explicit perspective division use ordinary compiled library
+bodies and existing value-class and Float/Double math instructions. Component constructors have explicit
+arguments; the current metadata default-argument schema does not encode Float literals.
+Dependent libraries rebuild against the changed module content identity. Bundle format 9, module format 5,
+platform ABI 3, metadata format 6, executable format 3, Runtime ABI 1.16 and native ABI 23 remain unchanged.
+The [math guide]({{ '/STDLIB-SUPPORT/math/#matrices-and-homogeneous-coordinates' | relative_url }}) owns
+coordinate conventions and numerical contracts; `testKotlinGeometryVmConformance` exercises the public API.
+
 ## Guest geometry module identity
 
 `stdlib:core` 1.13.0 adds reusable 2D/3D Int/Float value-class vectors, Position/Size aliases and 2D rectangles.

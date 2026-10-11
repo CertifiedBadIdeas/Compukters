@@ -18,7 +18,11 @@
 
 package ru.lazyhat.compukters.ide.client.analysis
 
+import ru.lazyhat.compukters.addon.api.AddonGuestApiBundleCodec
+import ru.lazyhat.compukters.compiler.worker.protocol.BinaryValue
 import ru.lazyhat.compukters.compiler.worker.protocol.Hash256
+import ru.lazyhat.compukters.compiler.worker.protocol.TrustedBundleIdentity
+import ru.lazyhat.compukters.compiler.worker.protocol.TrustedBundlePayload
 import ru.lazyhat.compukters.compiler.worker.protocol.VirtualSourcePath
 import ru.lazyhat.compukters.ide.analysis.AnalysisModuleIdentity
 import ru.lazyhat.compukters.ide.analysis.AnalysisProfileIdentity
@@ -28,6 +32,11 @@ import ru.lazyhat.compukters.ide.analysis.DeclarationOrigin
 import ru.lazyhat.compukters.ide.analysis.SourceSnapshotId
 import ru.lazyhat.compukters.ide.editor.EditorRange
 import ru.lazyhat.compukters.ide.project.fs.ProjectPath
+import ru.lazyhat.compukters.platform.bundle.PlatformBundleCodec
+import ru.lazyhat.compukters.platform.bundle.PlatformModule
+import ru.lazyhat.compukters.platform.bundle.PlatformModuleId
+import ru.lazyhat.compukters.platform.bundle.PlatformSource
+import ru.lazyhat.compukters.worker.value.ImmutableBytes
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -53,7 +62,7 @@ class IdeSemanticInteractionTest {
     @Test
     fun `attached source catalog enforces strict UTF-8 budgets`() {
         val bundle = AnalysisModuleIdentity("std.core", hash(3))
-        val first = VirtualSourcePath.kotlin("first.kt")
+        val first = VirtualSourcePath.kotlin("first/first.kt")
         val second = VirtualSourcePath.kotlin("second.kt")
 
         assertFailsWith<IllegalArgumentException> {
@@ -67,6 +76,30 @@ class IdeSemanticInteractionTest {
         }
         assertFailsWith<IllegalArgumentException> {
             IdeAttachedSourceCatalog.of(mapOf(bundle to mapOf(first to "a", second to "b")), 1, 1, 8, 8)
+        }
+    }
+
+    @Test
+    fun `attached addons have a separate bounded source pool and a shared module limit`() {
+        val packaged = AnalysisModuleIdentity("stdlib:core", hash(3))
+        val path = VirtualSourcePath.kotlin("base.kt")
+        val first = addonPayload("first", "first.kt" to "a")
+        val second = addonPayload("second", "second.kt" to "b")
+        val catalog = IdeAttachedSourceCatalog.of(mapOf(packaged to mapOf(path to "x")), 3, 1, 8, 1)
+        val combined = catalog.withAddonBundles(listOf(first))
+        val firstIdentity = AnalysisModuleIdentity("first:api", first.identity.hash)
+
+        assertEquals("x", combined.text(packaged, path))
+        assertEquals("a", combined.text(firstIdentity, VirtualSourcePath.kotlin("first/first.kt")))
+        assertFailsWith<IllegalArgumentException> { combined.withAddonBundles(listOf(second)) }
+        assertFailsWith<IllegalArgumentException> { catalog.withAddonBundles(listOf(first, second)) }
+        assertFailsWith<IllegalArgumentException> {
+            catalog.withAddonBundles(listOf(addonPayload("large", "large.kt" to "ab")))
+        }
+        assertFailsWith<IllegalArgumentException> {
+            IdeAttachedSourceCatalog
+                .of(mapOf(packaged to mapOf(path to "x")), 1, 1, 8, 1)
+                .withAddonBundles(listOf(first))
         }
     }
 
@@ -129,6 +162,34 @@ class IdeSemanticInteractionTest {
             @Suppress("UNCHECKED_CAST")
             (link.locations as MutableList<DeclarationLocation>).clear()
         }
+    }
+
+    private fun addonPayload(
+        name: String,
+        vararg sources: Pair<String, String>,
+    ): TrustedBundlePayload {
+        val bundle =
+            AddonGuestApiBundleCodec.assemble(
+                addon = name,
+                platformAbi = PlatformBundleCodec.SUPPORTED_PLATFORM_ABI,
+                module =
+                    PlatformModule(
+                        PlatformModuleId(name, "api"),
+                        "1.0.0",
+                        emptyList(),
+                        ImmutableBytes.of(byteArrayOf(1)),
+                        null,
+                        sources.map { (path, text) -> PlatformSource("$name/$path", ImmutableBytes.of(text.encodeToByteArray())) },
+                        emptyList(),
+                        emptyList(),
+                    ),
+                capabilitySchemas = emptyList(),
+                bindings = emptyList(),
+            )
+        return TrustedBundlePayload(
+            TrustedBundleIdentity.of(bundle.identity.id, Hash256.of(bundle.identity.contentHash.toByteArray())),
+            BinaryValue.of(AddonGuestApiBundleCodec.encode(bundle)),
+        )
     }
 
     private fun projectTarget(

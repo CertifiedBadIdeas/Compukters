@@ -139,10 +139,117 @@ fun verifyGeometry() {
     check(dimensions.size == 2) { "geometry assertion 127" }
     val make: (Int, Int) -> Vector2i = ::Vector2i
     check(make(10, 20) == position) { "geometry assertion 129" }
+    verifyMatrices()
     println("geometry ok")
 }
 
 fun main() {
     try { verifyGeometry() }
     catch (error: Throwable) { println(error.message ?: "unknown geometry failure"); throw error }
+}
+
+fun verifyMatrices() {
+    val identity = Matrix4f.identity()
+    check(identity == Matrix4f.identity())
+    val point = Vector3f(1f, 2f, 3f)
+    check(identity * point == Vector4f(1f, 2f, 3f, 1f))
+    val translation = Matrix4f.translation(Vector3f(10f, 20f, 30f))
+    val scale = Matrix4f.scale(Vector3f(2f, 3f, 4f))
+    check((translation * scale) * point == Vector4f(12f, 26f, 42f, 1f))
+    check((scale * translation) * point == Vector4f(22f, 66f, 132f, 1f))
+    check(translation.transformDirection(point) == Vector4f(1f, 2f, 3f, 0f))
+    check(translation.transformPoint(point) == translation * point)
+    check(Matrix4f.scale(2f) * point == Vector4f(2f, 4f, 6f, 1f))
+    val quarterTurn = (PI / 2.0).toFloat()
+    val rx = Matrix4f.rotationX(quarterTurn) * Vector3f(0f, 1f, 0f)
+    near(rx.y, 0f); near(rx.z, 1f)
+    val ry = Matrix4f.rotationY(quarterTurn) * Vector3f(0f, 0f, 1f)
+    near(ry.x, 1f); near(ry.z, 0f)
+    val rz = Matrix4f.rotationZ(quarterTurn) * Vector3f(1f, 0f, 0f)
+    near(rz.x, 0f); near(rz.y, 1f)
+
+    val dense = Matrix4f(1f, 2f, 3f, 4f, 5f, 6f, 7f, 8f, 9f, 10f, 11f, 12f, 13f, 14f, 15f, 16f)
+    val other = Matrix4f(16f, 15f, 14f, 13f, 12f, 11f, 10f, 9f, 8f, 7f, 6f, 5f, 4f, 3f, 2f, 1f)
+    val product = dense * other
+    for (row in 0..3) {
+        for (column in 0..3) {
+            var sum = 0f
+            for (k in 0..3) sum += dense[row, k] * other[k, column]
+            check(product[row, column] == sum) { "dense multiplication $row $column" }
+            check(dense.transposed()[row, column] == dense[column, row])
+        }
+    }
+    check(dense * identity == dense && identity * dense == dense)
+    check(dense.transposed().transposed() == dense)
+    check(dense * Vector4f(1f, 2f, 3f, 4f) == Vector4f(30f, 70f, 110f, 150f))
+    var badIndexCount = 0
+    for (index in listOf(-1, 4, Int.MAX_VALUE)) {
+        try { dense[index, 0] } catch (error: IndexOutOfBoundsException) { badIndexCount++ }
+        try { dense[0, index] } catch (error: IndexOutOfBoundsException) { badIndexCount++ }
+    }
+    check(badIndexCount == 6)
+
+    val vector = Vector4f(1f, 2f, 3f, 4f)
+    check(vector.xyz == point && vector.length > 5f)
+    check(vector + vector == 2f * vector && vector - vector == Vector4f(0f, 0f, 0f, 0f))
+    check(-vector == Vector4f(-1f, -2f, -3f, -4f) && vector * 2f / 2f == vector)
+    check((vector dot vector) == 30f)
+    check(Vector4f(0f, -0f, 0f, 0f).normalized() == Vector4f(0f, 0f, 0f, 0f))
+    near(Vector4f(Float.MAX_VALUE, Float.MAX_VALUE, Float.MAX_VALUE, Float.MAX_VALUE).normalized().w, 0.5f)
+    near(vector.normalized().length, 1f)
+    check(vector.perspectiveDivide() == Vector3f(0.25f, 0.5f, 0.75f))
+    check(Vector4f(2f, 4f, 6f, -2f).perspectiveDivide() == Vector3f(-1f, -2f, -3f))
+    for (w in listOf(0f, -0f, Float.NaN, Float.POSITIVE_INFINITY, Float.NEGATIVE_INFINITY)) {
+        rejected { Vector4f(1f, 2f, 3f, w).perspectiveDivide() }
+        check(!Vector4f(0f, 0f, 0f, w).isInsideClipVolume)
+    }
+    check(Vector4f(-2f, 2f, -2f, 2f).isInsideClipVolume)
+    check(!Vector4f(2.01f, 0f, 0f, 2f).isInsideClipVolume)
+    check(!Vector4f(0f, Float.NaN, 0f, 2f).isInsideClipVolume)
+    check(!Vector4f(0f, 0f, Float.POSITIVE_INFINITY, 2f).isInsideClipVolume)
+    check(!Vector4f(0f, 0f, 0f, -2f).isInsideClipVolume)
+
+    val projection = Matrix4f.perspective(quarterTurn, 2f, 1f, 9f)
+    val nearPoint = projection * Vector3f(0f, 0f, -1f)
+    val farPoint = projection * Vector3f(0f, 0f, -9f)
+    near(nearPoint.w, 1f); near(nearPoint.perspectiveDivide().z, -1f)
+    near(farPoint.w, 9f); near(farPoint.perspectiveDivide().z, 1f)
+    check(nearPoint.isInsideClipVolume && farPoint.isInsideClipVolume)
+    val corner = projection * Vector3f(2f, 1f, -1f)
+    near(corner.perspectiveDivide().x, 1f); near(corner.perspectiveDivide().y, 1f)
+    check(!(projection * Vector3f(0f, 0f, 1f)).isInsideClipVolume)
+    check(!(projection * Vector3f(0f, 0f, -0.5f)).isInsideClipVolume)
+    check(!(projection * Vector3f(0f, 0f, -10f)).isInsideClipVolume)
+    val ortho = Matrix4f.orthographic(-2f, 6f, -1f, 3f, 1f, 9f)
+    check((ortho * Vector3f(-2f, -1f, -1f)).perspectiveDivide() == Vector3f(-1f, -1f, -1f))
+    check((ortho * Vector3f(6f, 3f, -9f)).perspectiveDivide() == Vector3f(1f, 1f, 1f))
+    check((ortho * Vector3f(2f, 1f, -5f)).perspectiveDivide() == Vector3f(0f, 0f, 0f))
+    val wide = Matrix4f.orthographic(-Float.MAX_VALUE, Float.MAX_VALUE, -1f, 1f, -Float.MAX_VALUE, Float.MAX_VALUE)
+    check(wide.m00 > 0f && wide.m22 < 0f && wide.m23 == 0f)
+    val huge = Matrix4f.perspective(quarterTurn, 1f, Float.MAX_VALUE / 4f, Float.MAX_VALUE / 2f)
+    check(abs(huge.m22) <= Float.MAX_VALUE && abs(huge.m23) <= Float.MAX_VALUE)
+    for (bad in listOf(0f, -1f, Float.NaN, Float.POSITIVE_INFINITY)) {
+        rejected { Matrix4f.perspective(quarterTurn, bad, 1f, 9f) }
+        rejected { Matrix4f.perspective(bad, 1f, 1f, 9f) }
+        rejected { Matrix4f.perspective(quarterTurn, 1f, bad, 9f) }
+    }
+    rejected { Matrix4f.perspective(PI.toFloat(), 1f, 1f, 9f) }
+    rejected { Matrix4f.perspective(quarterTurn, 1f, 9f, 9f) }
+    rejected { Matrix4f.perspective(quarterTurn, 1f, 1f, Float.NaN) }
+    rejected { Matrix4f.perspective(quarterTurn, Float.MIN_VALUE, 1f, 9f) }
+    rejected { Matrix4f.orthographic(0f, 0f, -1f, 1f, 1f, 9f) }
+    rejected { Matrix4f.orthographic(-1f, 1f, 1f, -1f, 1f, 9f) }
+    rejected { Matrix4f.orthographic(-1f, 1f, -1f, 1f, 9f, 1f) }
+    rejected { Matrix4f.orthographic(-1f, Float.POSITIVE_INFINITY, -1f, 1f, 1f, 9f) }
+    rejected { Matrix4f.orthographic(0f, Float.MIN_VALUE, -1f, 1f, 1f, 9f) }
+
+    val values = listOf<Any>(identity, dense, vector)
+    check(values[0] == Matrix4f.identity() && values[1] == dense && values[2] == vector)
+    check(values[0] != vector)
+    check(mutableSetOf(identity, Matrix4f.identity(), dense).size == 2)
+    check(mutableSetOf(vector, Vector4f(1f, 2f, 3f, 4f)).size == 1)
+    val transform: (Vector3f) -> Vector4f = translation::transformPoint
+    check(transform(point) == translation * point)
+    val makeProjection: (Float, Float, Float, Float) -> Matrix4f = Matrix4f::perspective
+    check(makeProjection(quarterTurn, 2f, 1f, 9f) == projection)
 }
