@@ -13,6 +13,9 @@ headings so this page has one stable URL that can be shared outside the reposito
 
 ## 0.6.0 — In development
 
+- Documentation offers a version selector for released 0.5.1 and nightly guides and API references. The released
+  documentation opens by default; nightly identifies its current source commit.
+
 - Guest executables omit unused class and interface methods and their dependencies. Virtual dispatch keeps its
   required implementations; independently compiled libraries retain their exported method surface.
 
