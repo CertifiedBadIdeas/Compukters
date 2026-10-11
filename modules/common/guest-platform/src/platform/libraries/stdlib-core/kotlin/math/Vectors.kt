@@ -27,7 +27,11 @@ public value class Vector2i(
 
     public val length: Double get() = hypot(x.toDouble(), y.toDouble())
 
-    public fun distanceTo(other: Vector2i): Double = hypot(x.toDouble() - other.x.toDouble(), y.toDouble() - other.y.toDouble())
+    public fun distanceTo(other: Vector2i): Double =
+        hypot(
+            x.toDouble() - other.x.toDouble(),
+            y.toDouble() - other.y.toDouble(),
+        )
 
     public fun toFloat(): Vector2f = Vector2f(x.toFloat(), y.toFloat())
 }
@@ -55,7 +59,11 @@ public value class Vector2f(
 
     public val length: Float get() = hypot(x.toDouble(), y.toDouble()).toFloat()
 
-    public fun distanceTo(other: Vector2f): Float = hypot(x.toDouble() - other.x.toDouble(), y.toDouble() - other.y.toDouble()).toFloat()
+    public fun distanceTo(other: Vector2f): Float =
+        hypot(
+            x.toDouble() - other.x.toDouble(),
+            y.toDouble() - other.y.toDouble(),
+        ).toFloat()
 
     /** Unit direction; a zero vector stays zero. Double intermediates avoid Float magnitude overflow. */
     public fun normalized(): Vector2f {
@@ -70,14 +78,8 @@ public value class Vector2f(
         amount: Float,
     ): Vector2f =
         Vector2f(
-            (
-                x.toDouble() +
-                    (other.x.toDouble() - x.toDouble()) * amount.toDouble()
-            ).toFloat(),
-            (
-                y.toDouble() +
-                    (other.y.toDouble() - y.toDouble()) * amount.toDouble()
-            ).toFloat(),
+            (x.toDouble() + (other.x.toDouble() - x.toDouble()) * amount.toDouble()).toFloat(),
+            (y.toDouble() + (other.y.toDouble() - y.toDouble()) * amount.toDouble()).toFloat(),
         )
 
     public fun roundToInt(): Vector2i = Vector2i(x.roundToInt(), y.roundToInt())
@@ -118,7 +120,10 @@ public value class Vector3i(
 
     public fun distanceTo(other: Vector3i): Double =
         hypot(
-            hypot(x.toDouble() - other.x.toDouble(), y.toDouble() - other.y.toDouble()),
+            hypot(
+                x.toDouble() - other.x.toDouble(),
+                y.toDouble() - other.y.toDouble(),
+            ),
             z.toDouble() - other.z.toDouble(),
         )
 
@@ -164,7 +169,11 @@ public value class Vector3f(
     public fun normalized(): Vector3f {
         val magnitude = hypot(hypot(x.toDouble(), y.toDouble()), z.toDouble())
         if (magnitude == 0.0) return Vector3f(0f, 0f, 0f)
-        return Vector3f((x.toDouble() / magnitude).toFloat(), (y.toDouble() / magnitude).toFloat(), (z.toDouble() / magnitude).toFloat())
+        return Vector3f(
+            (x.toDouble() / magnitude).toFloat(),
+            (y.toDouble() / magnitude).toFloat(),
+            (z.toDouble() / magnitude).toFloat(),
+        )
     }
 
     /** Linear interpolation; amounts outside 0..1 extrapolate. */
@@ -173,18 +182,9 @@ public value class Vector3f(
         amount: Float,
     ): Vector3f =
         Vector3f(
-            (
-                x.toDouble() +
-                    (other.x.toDouble() - x.toDouble()) * amount.toDouble()
-            ).toFloat(),
-            (
-                y.toDouble() +
-                    (other.y.toDouble() - y.toDouble()) * amount.toDouble()
-            ).toFloat(),
-            (
-                z.toDouble() +
-                    (other.z.toDouble() - z.toDouble()) * amount.toDouble()
-            ).toFloat(),
+            (x.toDouble() + (other.x.toDouble() - x.toDouble()) * amount.toDouble()).toFloat(),
+            (y.toDouble() + (other.y.toDouble() - y.toDouble()) * amount.toDouble()).toFloat(),
+            (z.toDouble() + (other.z.toDouble() - z.toDouble()) * amount.toDouble()).toFloat(),
         )
 
     public fun roundToInt(): Vector3i = Vector3i(x.roundToInt(), y.roundToInt(), z.roundToInt())
