@@ -5197,7 +5197,7 @@ class MinimalScriptLoweringTest {
         withAdapter { adapter ->
             val source =
                 """
-                import compukter.terminal.Terminal
+                import compukter.terminal.*
 
                 fun main(args: Array<String>) {
                     Terminal.write(args[0] + ":" + args[1])
@@ -5669,11 +5669,11 @@ class MinimalScriptLoweringTest {
                         "fun greeting(name: String): String = \"Hello, \" + name + \"!\"",
                     "project/main.kt" to
                         """
-                        import compukter.terminal.Terminal
+                        import compukter.terminal.*
 
                         fun main() {
                             Terminal.write(greeting("Ada"))
-                            Terminal.awaitEvent()
+                            Terminal.readEvent()
                         }
                         """.trimIndent(),
                 )
@@ -5693,11 +5693,11 @@ class MinimalScriptLoweringTest {
         withAdapter { adapter ->
             val source =
                 """
-                import compukter.terminal.Terminal
+                import compukter.terminal.*
 
                 fun main() {
-                    val event = Terminal.awaitEvent()
-                    if (event == 1) Terminal.write("event")
+                    val event = Terminal.readEvent()
+                    if (event is TerminalEvent.Text) Terminal.write("event")
                 }
                 """.trimIndent()
             val first = adapter.compile(request(source))
@@ -5719,7 +5719,7 @@ class MinimalScriptLoweringTest {
                     "project/main.kt" to
                         """
                         import compukter.redstone.Redstone
-                        import compukter.terminal.Terminal
+                        import compukter.terminal.*
                         import kotlin.text.contains
                         import kotlin.text.endsWith
                         import kotlin.text.indexOf
@@ -5860,7 +5860,7 @@ class MinimalScriptLoweringTest {
         withAdapter { adapter ->
             val source =
                 """
-                import compukter.terminal.Terminal
+                import compukter.terminal.*
 
                 fun booleanArrayCopies() {
                     val original = BooleanArray(3) { true }
@@ -6183,7 +6183,7 @@ class MinimalScriptLoweringTest {
                 }
 
                 fun main() {
-                    val mode = Terminal.eventKey()
+                    val mode = Terminal.cursor.x
                     if (mode == 0) {
                         booleanArrayCopies()
                         byteArrayCopies()
@@ -6271,7 +6271,7 @@ class MinimalScriptLoweringTest {
             assertTrue(first.diagnostics.none { it.severity.name == "ERROR" }, first.diagnostics.toString())
             val decoded = ArtifactReader.read(artifact)
             // Output formatting retains the native arithmetic exception factory.
-            assertEquals(AbiVersion(1u, 14u), decoded.minimumRuntimeAbi)
+            assertEquals(AbiVersion(1u, 15u), decoded.minimumRuntimeAbi)
             assertTrue(SemanticFeature.ARRAY_COPY in decoded.semanticFeatures)
             System.getProperty("compukter.vm.intArrayArtifact")?.let { output ->
                 Path.of(output).also { it.parent.createDirectories() }.writeBytes(artifact)
@@ -6285,14 +6285,14 @@ class MinimalScriptLoweringTest {
                 request(
                     "project/main.kt" to
                         """
-                        import compukter.terminal.Terminal
+                        import compukter.terminal.*
 
                         import kotlin.collections.*
 
                         inline fun invoke(block: () -> Int): Int = block()
                         fun readKey(): Int {
-                            Terminal.awaitEvent()
-                            return Terminal.eventKey()
+                            val event = Terminal.readEvent()
+                            return if (event is TerminalEvent.Key && event.key == TerminalKey.ENTER) 13 else 0
                         }
 
                         fun main() {
@@ -6706,11 +6706,11 @@ class MinimalScriptLoweringTest {
                 request(
                     "project/main.kt" to
                         """
-                        import compukter.terminal.Terminal
+                        import compukter.terminal.*
 
                         fun key(): Int {
-                            Terminal.awaitEvent()
-                            return Terminal.eventKey()
+                            val event = Terminal.readEvent()
+                            return if (event is TerminalEvent.Key && event.key == TerminalKey.ENTER) 13 else 0
                         }
 
                         fun main() {
@@ -6788,20 +6788,51 @@ class MinimalScriptLoweringTest {
         }
 
     @Test
+    fun `typed terminal facade lowers observations events and rejects removed APIs`() =
+        withAdapter { adapter ->
+            val bodies =
+                listOf(
+                    "Terminal.setColors(TerminalColor.WHITE, TerminalColor.BLACK)",
+                    "Terminal.fill(kotlin.math.Rect2i(kotlin.math.Vector2i(0, 0), Terminal.size))",
+                    "val event = Terminal.readEvent(); if (event is TerminalEvent.Key) { val modifiers = event.modifiers; if (modifiers.control) println(1) }",
+                    "Terminal.setCursor(Terminal.cursor); println(Terminal.size.x)",
+                )
+            for (body in bodies) {
+                val result = adapter.compile(request("import compukter.terminal.*\nfun main() { $body }"))
+                val bytes = assertNotNull(result.artifact, "$body: ${result.diagnostics}").toByteArray()
+                val decoded = ArtifactReader.read(bytes)
+                val strings = decoded.modules.first().strings
+                val terminal = decoded.capabilities.single { strings[it.name.value.toInt()].toString() == "terminal" }
+                assertEquals(AbiVersion(2u, 1u), terminal.abi)
+                assertEquals(18u, terminal.operationCount)
+            }
+            for (body in listOf(
+                "Terminal.awaitEvent()",
+                "Terminal.finishEvent()",
+                "Terminal.setCursor(1, 2)",
+                "Terminal.setColors(15, 0)",
+            )) {
+                val result = adapter.compile(request("import compukter.terminal.Terminal\nfun main() { $body }"))
+                assertNull(result.artifact, body)
+                assertTrue(result.diagnostics.any { it.severity.name == "ERROR" }, body)
+            }
+        }
+
+    @Test
     fun `positional terminal facade lowers through exact trusted signatures`() =
         withAdapter { adapter ->
             val result =
                 adapter.compile(
                     request(
                         """
-                        import compukter.terminal.Terminal
+                        import compukter.terminal.*
 
                         fun main() {
-                            Terminal.setCursor(1, 2)
+                            Terminal.setCursor(kotlin.math.Vector2i(1, 2))
                             Terminal.setCursorVisible(false)
-                            Terminal.setColors(15, 0)
-                            Terminal.writeAt(1, 2, "text")
-                            Terminal.fill(0, 3, 51, 1, ' ')
+                            Terminal.setColors(TerminalColor.WHITE, TerminalColor.BLACK)
+                            Terminal.writeAt(kotlin.math.Vector2i(1, 2), "text")
+                            Terminal.fill(kotlin.math.Rect2i(kotlin.math.Vector2i(0, 3), kotlin.math.Vector2i(51, 1)), ' ')
                         }
                         """.trimIndent(),
                     ),
@@ -7274,7 +7305,7 @@ class MinimalScriptLoweringTest {
                 adapter.compile(
                     request(
                         """
-                        import compukter.terminal.Terminal
+                        import compukter.terminal.*
 
                         fun main() {
                             while (true) {
@@ -8442,7 +8473,7 @@ class MinimalScriptLoweringTest {
                 adapter.compile(
                     request(
                         """
-                        import compukter.terminal.Terminal
+                        import compukter.terminal.*
 
                         fun main() {
                             var line = ""
@@ -8450,9 +8481,9 @@ class MinimalScriptLoweringTest {
                             var index = 0
                             Terminal.write("> ")
                             while (running) {
-                                val kind = Terminal.awaitEvent()
-                                if (kind == 1) {
-                                    val text = Terminal.eventText()
+                                val event = Terminal.readEvent()
+                                if (event is TerminalEvent.Text) {
+                                    val text = event.text
                                     while (index < text.length) {
                                         val character = text[index]
                                         if (character >= ' ' && character != '\u007f' && line.length < 256) {
@@ -8462,18 +8493,16 @@ class MinimalScriptLoweringTest {
                                         }
                                         index = index + 1
                                     }
-                                } else if (Terminal.eventKey() == 13 && Terminal.eventAction() == 1) {
+                                } else if (event is TerminalEvent.Key && event.key == TerminalKey.ENTER && event.action == TerminalKeyAction.PRESS) {
                                     Terminal.write("\n")
                                     if (line == "clear") Terminal.clear() else Terminal.write(line)
                                     line = ""
-                                } else if (Terminal.eventKey() == 8) {
+                                } else if (event is TerminalEvent.Key && event.key == TerminalKey.BACKSPACE) {
                                     if (line.length > 0) {
                                         line = line.substring(0, line.length - 1)
                                         Terminal.erasePrevious()
                                     }
                                 }
-                                Terminal.eventModifiers()
-                                Terminal.finishEvent()
                             }
                         }
                         """.trimIndent(),
@@ -8489,10 +8518,12 @@ class MinimalScriptLoweringTest {
         withAdapter { adapter ->
             val source = repositoryFile("system/programs/shell.kt").readText()
             val lexer = repositoryFile("system/programs/shell/Lexer.kt").readText()
+            val editor = repositoryFile("system/programs/shell/ShellEditor.kt").readText()
             val sources =
                 arrayOf(
                     "system/programs/shell.kt" to source,
                     "system/programs/shell/Lexer.kt" to lexer,
+                    "system/programs/shell/ShellEditor.kt" to editor,
                 )
             val first = adapter.compile(request(*sources))
             val second = adapter.compile(request(*sources))
@@ -8764,7 +8795,7 @@ class MinimalScriptLoweringTest {
                 adapter.compile(
                     request(
                         "project/main.kt" to
-                            "import compukter.terminal.Terminal\nfun main() { Terminal.write(readln(\"guest\")); Terminal.awaitEvent() }",
+                            "import compukter.terminal.*\nfun main() { Terminal.write(readln(\"guest\")); Terminal.readEvent() }",
                         "project/read.kt" to "fun readln(value: String): String = value",
                     ),
                 )
