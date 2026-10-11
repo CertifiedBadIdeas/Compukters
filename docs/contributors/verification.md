@@ -15,6 +15,27 @@ For long runs where console volume is undesirable, use `./gradlew-sandbox-dev-pa
 the complete combined log under `build/agent-logs/`, prints only the final Gradle summary on success, and emits a
 bounded diagnostic summary and log tail on failure without changing the command's exit code.
 
+## Configuration Cache (opt-in)
+
+Configuration Cache remains disabled by default: compatibility must be checked for each task graph before use.
+For built-in program generation, both Minecraft `classes` targets and the shared tooling bundle, opt in with
+`--configuration-cache`. Keep `--parallel` (the parallel wrappers already supply it) to let independent built-in
+compiler tasks execute concurrently even within the `compiler-k2` project. Local packaging with
+`:v1_21_1-neoforge:remapJar :v26_1-neoforge:jar` has also been exercised with the cache; these packaging
+tasks alone do not verify production archive contents or release readiness.
+
+```sh
+./gradlew-sandbox-dev-parallel-summary :compiler-k2:generateKotlincArtifact :compiler-k2:generateShellArtifact --configuration-cache
+./gradlew-sandbox-dev-parallel-summary :v1_21_1-neoforge:classes :v26_1-neoforge:classes --configuration-cache
+./gradlew-sandbox-dev-parallel-summary :tooling-runtime:verifyToolingRuntimeBundle --configuration-cache
+```
+
+The first run stores the task graph; repeat the same command and check for `Reusing configuration cache`.
+Initial creation of `versions.properties` or generated Minecraft metadata can require another cache write before
+reuse stabilizes. Build-version selection tracks Git tags on `HEAD`, so adding or moving a release tag invalidates
+the cached configuration when its output changes. These focused checks do not establish compatibility for full
+verification or tagged release graphs; do not suppress Configuration Cache errors for an unverified graph.
+
 ## Gradle caches in agent worktrees
 
 The sandbox wrappers keep each checkout's writable Gradle home in `.gradle-sandbox`. New homes are automatically

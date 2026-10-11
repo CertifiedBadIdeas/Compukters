@@ -13,6 +13,10 @@ headings so this page has one stable URL that can be shared outside the reposito
 
 ## 0.6.0 — In development
 
+- Contributors can opt into Gradle Configuration Cache for built-in program generation, Minecraft classes and
+  shared tooling assembly. Independent built-in compiler tasks can run in parallel within the same project;
+  cached build-version selection tracks Git tags on `HEAD`.
+
 - The built-in shell provides `cat`, `mkdir` (including `-p`), `mv` and `rm`, plus command-specific help.
   File commands support quoted names and normalized dot paths. Text output preserves Unicode across bounded
   writes; moves refuse replacement and deletion is limited to files and empty directories. Executable paths
