@@ -77,17 +77,17 @@ cd addons/create
 ./gradlew-sandbox-dev-parallel runGameTestServer
 ```
 
-The tests build real devices and branched cable networks, name them through the server configurator, and compile and
-execute addon-enabled Guest Kotlin programs on placed computers. They cover motor-driven gauges, controller writes,
-cable cuts and restoration, block replacement, duplicate-name rejection, and expired handles. The boiler scenario
-contacts a non-controller tank segment, supplies water through Create's fluid capability, and checks passive heat,
-engine removal and restoration, tank replacement, and cable disconnection. Test classes are excluded from ordinary
-client/server runs and production archives. The base Compukters GameTests continue to run without Create.
+The tests build real devices, bind computers and devices to peripheral networks with the server configurator, and
+compile and execute addon-enabled Guest Kotlin programs on placed computers. They cover motor-driven gauges,
+controller writes, network removal and reconnection, block replacement, duplicate-name rejection, and expired handles.
+Replacement scenarios remove the old unavailable member through the network inspector before binding and naming its
+replacement. The boiler scenario contacts a non-controller tank segment, supplies water through Create's fluid
+capability, and checks passive heat, engine removal and restoration, tank replacement, and network disconnection.
+Test classes are excluded from ordinary client/server runs and production archives. The base Compukters GameTests continue to run without Create.
 
 For the visual check, launch `./gradlew-sandbox-dev-parallel runClient` from the addon directory in a disposable world.
-Connect a computer to a Speedometer, Stressometer, Rotation Speed Controller and four-block Fluid Tank boiler using
-branched cables. Name each device with the Peripheral Configurator. Inspect the cable connections and editor names;
-attempt a duplicate name and verify the conflict is visible. Cut and restore the cable and confirm the displayed
-reachability changes. Compare a program's boiler readings with Engineer's Goggles, then remove/rebuild its engine and
-replace a tank segment; old program handles must fail before reacquisition. Record a screenshot or short recording.
+Bind a computer, Speedometer, Stressometer, Rotation Speed Controller and four-block Fluid Tank boiler to one network
+with the Peripheral Configurator. Name each device and inspect the network members; attempt a duplicate name and
+verify the conflict is visible. Remove and rebind a member and confirm the displayed availability changes. Compare a
+program's boiler readings with Engineer's Goggles, then remove/rebuild its engine and replace a tank segment; old program handles must fail before reacquisition. Record a screenshot or short recording.
 This client observation is separate from automated server verification.

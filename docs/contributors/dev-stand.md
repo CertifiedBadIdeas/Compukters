@@ -75,8 +75,10 @@ in each Guest project's
 `compukter.toml`. See the [Sable guide]({{ '/SABLE/' | relative_url }}) and [Propulsion guide]({{ '/PROPULSION/' | relative_url }}) for examples,
 units and control lifetime.
 
-Joint verification on 2026-10-09 with Sable 2.0.6 passed `check`, `verifyAddons` and all 25 required GameTest scenarios.
-Interactive construction/flight behavior still needs manual testing. Propulsion 1.1.5 emits
+Joint verification on 2026-10-11 with Sable 2.0.6 passed all 27 required GameTest scenarios and the standalone
+Create and Propulsion `check` tasks. The fixtures use configurator-bound peripheral networks and exact device identities.
+Construction unload/reload restoration has also been checked manually. Free-flight PID stability still depends on the
+construction and controller tuning. Propulsion 1.1.5 emits
 missing-model warnings (including oxidizer states and lodestone tracker overlay) from its upstream resources; these
 do not prevent startup.
 
@@ -97,6 +99,12 @@ mods and the development chunk loader disabled:
   a straight graph and serialized carriage directly; it does not prove station assembly, schedules, portals or trains
   running on tracks inside a moving Sable plot.
 
-These tests characterize current behavior. They do not implement execution snapshots or prove that programs survive
-unload/restart. Computers currently cold-boot on construction reload, and a per-construction physics readiness barrier
-remains required for transparent restoration. `check` compiles the stand's GameTests; `runGameTestServer` executes them.
+The stand also runs Sable hibernation tests that retain execution and query the same construction after reload with
+live physics, for both one and two computers. Propulsion hibernation tests retain ordinary/vector engine commands
+across computer replacement, construction reload and world filesystem store restart. They also cover stale handles
+for replaced engines and rollback when another controller owns an engine.
+
+Computers resume saved execution after construction reload; physics continues during restoration without a readiness
+barrier. Propulsion rebinds owned commands before Guest execution continues, but thrust may lapse while unloaded or
+restoring. Failed capture or restoration falls back to a fresh boot with identity and `/home` retained. Active Create
+resources still do not support capture. `check` compiles the stand's GameTests; `runGameTestServer` executes them.
