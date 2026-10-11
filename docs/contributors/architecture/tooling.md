@@ -253,6 +253,28 @@ lifecycle effects. `IdeFramePainter` composes the shared draw model and terminal
 `IdeCanvas` port executes fills, icons, text and terminal grids. Neutral viewport and terminal geometry live alongside
 these shared components. The client controller remains the authority for project/document state and asynchronous work.
 
+`IdeScreenController.presentation` is the shared admission and extraction path for drawing, pointer input and keyboard
+focus. A per-event `IdePresentationSnapshot` links the admitted view, geometry, draw model and interaction projection;
+Git scroll limits and field reveal positions come from that model. Snapshots are not retained across ticks or domain
+state changes. Pointer projection is lazy within the snapshot so painting does not flatten another explorer tree.
+
+`IdeDrawBuilder` collects primitives and interaction metadata, while `IdeDrawLayers` defines shared painter ordering.
+`IdeWorkspaceHeader`, `IdeToolbar` and `IdeStatusBar` independently project workspace chrome. The toolbar retains domain
+availability rules and reserves bounded control rectangles; expanded labels fall back to icons at narrow widths.
+Neutral and primary control styles share drawing and hit bounds through `IdeControls`. Text fitting stops at the visible
+code-point budget rather than allocating an entire long status message.
+
+`IdeLocalOverlays` owns prompt, quick-open and status-details precedence and routes their input before workspace
+interaction. Domain dialogs and project transitions retire incompatible local details. `IdeStatusDetails` captures
+immutable messages on opening, owns only scrolling and closure, and copies the complete captured text. It never
+replicates compiler/editor state. Its renderer disables underlying controls; unsupported viewports defer its geometry
+without losing the captured contents.
+
+Remaining debt is explicit: editor semantic popups, Git, explorer and bottom-panel rendering still live in
+`IdeRenderer.Builder`, and domain command routing remains substantial in `IdeInputAdapter`. Extract future feature
+components at those existing ownership boundaries; do not grow a generic widget framework or move domain transitions
+into renderers. Version adapters remain limited to Minecraft API differences.
+
 Version-specific `IdeScreen` shells translate Minecraft input and implement drawing, including font handles, texture
 pipelines, transforms and scissor semantics. Minecraft 1.21.1 converts logical clips to Minecraft GUI coordinates;
 26.1 applies transformed clips through its extractor. The input-rejecting Minecraft keyboard focus proxy remains

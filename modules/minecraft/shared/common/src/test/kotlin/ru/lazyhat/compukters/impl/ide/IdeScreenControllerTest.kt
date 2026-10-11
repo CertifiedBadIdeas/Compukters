@@ -323,6 +323,72 @@ class IdeScreenControllerTest {
         }
     }
 
+    @Test
+    fun `status details consume editing input copy full messages and return to the same editor`() {
+        Fixture().use { fixture ->
+            fixture.controller.dispatch(IdeCommand.CreateProject("demo"))
+            fixture.awaitWorkspace()
+            val main =
+                ru.lazyhat.compukters.ide.project.fs.ProjectPath
+                    .file("src/main.kt")
+            fixture.controller.dispatch(IdeCommand.OpenFile(main))
+            fixture.awaitFile(main)
+            val before = (fixture.controller.viewState().page as IdePageState.Workspace).value.editor as IdeEditorView.Text
+            val ui = fixture.ui
+            val target =
+                ui
+                    .frame(0, 0)
+                    .model.hitTargets
+                    .single { it.action == IdeHitAction.StatusDetails }
+            val viewport = fixture.host.viewport()
+            ui.mouseClicked(
+                IdePointerInput(viewport.toMinecraftX(target.bounds.left + 2.0), viewport.toMinecraftY(target.bounds.top + 2.0), 0, 0),
+                false,
+            )
+            assertTrue(
+                ui
+                    .frame(0, 0)
+                    .model.text
+                    .any { it.value == "Status details" },
+            )
+            assertTrue(ui.charTyped(IdeCharacterInput("must not enter the document")))
+            assertTrue(ui.keyPressed(IdeKeyInput(IdeKeyCode.N, IdeModifier.CONTROL or IdeModifier.SHIFT)))
+            assertTrue(
+                ui
+                    .frame(0, 0)
+                    .model.text
+                    .any { it.value == "Status details" },
+            )
+            ui.keyPressed(IdeKeyInput(IdeKeyCode.C, IdeModifier.CONTROL))
+            assertTrue(fixture.host.clipboard.contains("0 errors · 0 warnings"))
+            assertTrue(fixture.host.clipboard.contains("UTF-16 ${before.caretUtf16}"))
+            fixture.host.pixelWidth = 0
+            assertTrue(
+                ui
+                    .frame(0, 0)
+                    .model.panels
+                    .none { it.kind == IdePanelKind.Dialog },
+            )
+            fixture.host.pixelWidth = 1920
+            ui.keyPressed(IdeKeyInput(IdeKeyCode.ESCAPE))
+            assertTrue(
+                ui
+                    .frame(0, 0)
+                    .model.panels
+                    .none { it.kind == IdePanelKind.Dialog },
+            )
+            val after = (fixture.controller.viewState().page as IdePageState.Workspace).value.editor as IdeEditorView.Text
+            assertEquals(before.path, after.path)
+            assertEquals(before.contentRevision, after.contentRevision)
+            assertEquals(before.visibleLines, after.visibleLines)
+            assertEquals(before.caretUtf16, after.caretUtf16)
+            assertEquals(IdeFocusArea.Editor, ui.focusArea)
+            assertTrue(ui.charTyped(IdeCharacterInput("x")))
+            val edited = (fixture.controller.viewState().page as IdePageState.Workspace).value.editor as IdeEditorView.Text
+            assertTrue(edited.contentRevision > after.contentRevision)
+        }
+    }
+
     private class Host : IdeScreenHost {
         override var clipboard = ""
         var focusCleared = 0
