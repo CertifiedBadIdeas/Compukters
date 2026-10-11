@@ -12,6 +12,7 @@ import java.util.UUID
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -48,6 +49,72 @@ class ConfiguratorOverlayGeometryTest {
         assertTrue(outlines[0].strong && outlines[1].strong && !outlines[2].strong)
         assertEquals(outlines[0].color, outlines[1].color)
         assertEquals(ConfiguratorOverlayGeometry.color(id), outlines[0].color)
+    }
+
+    @Test
+    fun `joined displays have one rectangular outline in every mode and orientation`() {
+        val network = UUID.fromString("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbc")
+        for (facing in listOf(Direction.NORTH, Direction.SOUTH, Direction.WEST, Direction.EAST)) {
+            val origin = BlockPos(197, -58, 176)
+            val screen =
+                ConfiguratorOverlayScreen(id, "wall", origin, facing, 3, 2, listOf(origin)).let { it.copy(panels = it.cells()) }
+            val devices = screen.panels.map { ConfiguratorOverlayDevice(it, "display", network, screen = id) }
+            val snapshot = ConfiguratorOverlaySnapshot(devices, listOf(screen))
+            for (mode in 0..2) {
+                val outline = ConfiguratorOverlayGeometry.outlines(snapshot, mode, screen.panels.last(), null, null).single()
+                assertEquals(ConfiguratorOverlayGeometry.color(if (mode == 2) id else network), outline.color)
+                assertTrue(outline.strong)
+                assertFalse(outline.dashed)
+                val width = if (facing.axis == Direction.Axis.X) outline.bounds.zsize else outline.bounds.xsize
+                assertEquals(3.016, width, 0.000001)
+                assertEquals(2.016, outline.bounds.ysize, 0.000001)
+            }
+        }
+    }
+
+    @Test
+    fun `missing panels remain dashed holes inside the single screen outline`() {
+        for (facing in listOf(Direction.NORTH, Direction.SOUTH, Direction.WEST, Direction.EAST)) {
+            val origin = BlockPos(197, -58, 176)
+            val rectangle = ConfiguratorOverlayScreen(id, "wall", origin, facing, 3, 3, listOf(origin))
+            val hole = rectangle.position(1, 1)
+            val screen = rectangle.copy(panels = rectangle.cells() - hole)
+            val snapshot =
+                ConfiguratorOverlaySnapshot(screen.panels.map { ConfiguratorOverlayDevice(it, "display", screen = id) }, listOf(screen))
+            for (mode in 0..2) {
+                val outlines = ConfiguratorOverlayGeometry.outlines(snapshot, mode, null, null, id)
+                assertEquals(2, outlines.size)
+                assertEquals(ConfiguratorOverlayGeometry.color(id), outlines.single { !it.dashed }.color)
+                val missing = outlines.single { it.dashed }
+                assertEquals(ConfiguratorOverlayGeometry.UNJOINED_COLOR, missing.color)
+                assertTrue(outlines.all { it.strong })
+                assertEquals(hole.y + 0.5, (missing.bounds.minY + missing.bounds.maxY) / 2, 0.000001)
+            }
+        }
+    }
+
+    @Test
+    fun `screen rectangle retains network highlighting while individual devices remain visible`() {
+        val network = UUID.fromString("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbc")
+        val origin = BlockPos.ZERO
+        val screen = ConfiguratorOverlayScreen(id, "wall", origin, Direction.NORTH, 2, 1, listOf(origin, origin.west()))
+        val computer = ConfiguratorOverlayDevice(BlockPos(4, 0, 0), "computer", network)
+        val unrelated = ConfiguratorOverlayDevice(BlockPos(6, 0, 0), "other")
+        val devices = screen.panels.map { ConfiguratorOverlayDevice(it, "display", network, screen = id) } + computer + unrelated
+        val snapshot = ConfiguratorOverlaySnapshot(devices, listOf(screen))
+        for (mode in 0..1) {
+            for (hover in listOf(computer.position, null)) {
+                val outlines = ConfiguratorOverlayGeometry.outlines(snapshot, mode, hover, network.takeIf { hover == null }, null)
+                assertEquals(3, outlines.size)
+                val screenOutline = outlines.last()
+                assertTrue(screenOutline.strong)
+                assertEquals(ConfiguratorOverlayGeometry.color(network), screenOutline.color)
+                assertTrue(outlines.first().strong)
+                assertFalse(outlines[1].strong)
+            }
+        }
+        val incomplete = ConfiguratorOverlaySnapshot(devices, emptyList(), true)
+        assertEquals(devices.size, ConfiguratorOverlayGeometry.outlines(incomplete, 2, null, null, null).size)
     }
 
     @Test

@@ -55,7 +55,9 @@ an independent 1×1 screen, keeping its portion of the image, resolution and net
 selection are cleared; empty slots no longer reserve an area. All installed panels must be loaded. Expansion and
 splitting invalidate old program handles and discard unfinished private frames; reopen the display from the program.
 While the configurator is held in either hand, softly animated outlines show nearby devices, networks and screens.
-They are hidden by walls. Hovered and selected groups are brighter; screen boundaries and dashed holes remain visible.
+They are hidden by walls. Joined displays have one outer rectangle without borders between their panels in every
+mode, including Network binding, where the rectangle uses the network color. Hovered and selected groups are brighter;
+missing panels remain marked by dashed holes.
 An amber panel inside a screen belongs to a separate screen and has not joined the surrounding assembly, for example
 because its orientation differs or several screens could claim it. Point at it
 for the membership and click-action hints. Selecting the first corner previews a valid rectangle while aiming at the

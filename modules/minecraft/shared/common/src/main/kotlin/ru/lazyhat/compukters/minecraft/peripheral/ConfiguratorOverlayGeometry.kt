@@ -42,29 +42,31 @@ object ConfiguratorOverlayGeometry {
     ): List<ConfiguratorOutline> {
         val hovered = snapshot.devices.firstOrNull { it.position == hover }
         val hoverGroup = if (mode == 2) hovered?.screen ?: hovered?.network else hovered?.network ?: hovered?.screen
+        val screens = snapshot.screens.filter { it.columns * it.rows > 1 }
+        val screensById = screens.associateBy { it.id }
         val result =
             snapshot.devices
-                .map { device ->
+                .mapNotNull { device ->
+                    val unjoined = unjoined(snapshot, device)
+                    val screen = screensById[device.screen]
+                    if (unjoined == null && screen != null && device.position in screen.panels) return@mapNotNull null
                     val group = if (mode == 2) device.screen ?: device.network else device.network ?: device.screen
                     val strong =
                         device.position == hover ||
                             (group != null && (group == hoverGroup || group == selectedNetwork || group == selectedScreen))
                     ConfiguratorOutline(
                         AABB(device.position).inflate(0.008),
-                        if (unjoined(snapshot, device) !=
-                            null
-                        ) {
-                            UNJOINED_COLOR
-                        } else {
-                            color(group)
-                        },
+                        if (unjoined != null) UNJOINED_COLOR else color(group),
                         strong,
                     )
                 }.toMutableList()
-        snapshot.screens.filter { it.columns * it.rows > 1 }.forEach { screen ->
-            val strong = screen.id == selectedScreen || screen.id == hovered?.screen
+        screens.forEach { screen ->
+            val network = snapshot.devices.firstOrNull { it.screen == screen.id && it.position in screen.panels }?.network
+            val group = if (mode == 2) screen.id else network ?: screen.id
+            val strong =
+                screen.id == selectedScreen || screen.id == hovered?.screen || group == hoverGroup || group == selectedNetwork
             val bounds = front(AABB(screen.origin).minmax(AABB(screen.position(screen.columns - 1, screen.rows - 1))), screen.facing)
-            result += ConfiguratorOutline(bounds.inflate(0.008), color(screen.id), strong)
+            result += ConfiguratorOutline(bounds.inflate(0.008), color(group), strong)
             (screen.cells() - screen.panels.toSet()).forEach { cell ->
                 result += ConfiguratorOutline(front(AABB(cell).deflate(0.04), screen.facing), UNJOINED_COLOR, strong, true)
             }

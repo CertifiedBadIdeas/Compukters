@@ -56,8 +56,9 @@ headings so this page has one stable URL that can be shared outside the reposito
   restart. Programs draw pixels, lines, rectangles, text and images, with optional coherent frames. Scaled text
   rasterizes the font at the requested size, retaining detailed strokes while preserving text cell spacing.
 - Holding the Peripheral Configurator reveals nearby devices, networks and screens with animated outlines hidden
-  behind walls. Screen holes, unjoined replacement panels, selected groups and assembly previews are visible,
-  with context and action hints beside the crosshair.
+  behind walls. Joined displays have one outer rectangle in every mode, using the network color in Network binding.
+  Screen holes, unjoined replacement panels, selected groups and assembly previews are visible, with context and
+  action hints beside the crosshair.
 - The Peripheral Configurator assembles and expands planar screens up to 8×8 blocks, including holes. Matching
   replacement panels automatically rejoin and restore their image and network; removing the last panel deletes the
   screen. Selecting a screen and Shift-clicking it again splits it into separate panels, preserving their images,
