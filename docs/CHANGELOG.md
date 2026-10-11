@@ -13,6 +13,10 @@ headings so this page has one stable URL that can be shared outside the reposito
 
 ## 0.6.0 — In development
 
+- Contributors can create task worktrees with `worktree-task`: local `dev`/`main` bases, pinned VM and optional
+  addon initialization, reuse of available local Git objects and automatic independent Gradle-cache preparation.
+  Interrupted setup can resume in a clean checkout without resetting its branch.
+
 - Agent Gradle worktrees initialize independent writable caches from a workspace template using reflinks,
   sharing unchanged disk data while keeping build locks separate. Missing templates bootstrap from idle local
   caches or a successful first build, including after cache deletion. Template refresh preserves existing homes
@@ -40,7 +44,8 @@ headings so this page has one stable URL that can be shared outside the reposito
   and paths throughout the project, including collapsed folders, with keyboard and mouse navigation. Active tabs use
   a restrained background and accent underline. The header separates project, file and target; Build and Run use
   labeled controls when space permits. The status bar shows concise activity, with a scrollable read-only Details
-  window and complete message copying.
+  window and complete message copying. Source highlighting, caret, selection and mouse pointing share tab and
+  Unicode columns, including horizontally scrolled text; scrolling keeps source text and selection clear of line numbers.
 
 - Documentation offers a version selector for released 0.5.1 and nightly guides and API references. The released
   documentation opens by default; nightly identifies its current source commit.
