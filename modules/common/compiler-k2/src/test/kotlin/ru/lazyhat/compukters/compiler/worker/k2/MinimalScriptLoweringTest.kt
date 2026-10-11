@@ -70,6 +70,21 @@ import kotlin.test.assertTrue
 
 class MinimalScriptLoweringTest {
     @Test
+    fun `value class initializer literals are retained without an ordinary constructor body`() =
+        withAdapter { adapter ->
+            val source =
+                """
+                value class Checked(val x: Int, val y: Int) {
+                    init { if (x < 0) throw IllegalArgumentException("negative vector component") }
+                }
+                fun main() { check(Checked(1, 2).x == 1) }
+                """.trimIndent()
+            val result = adapter.compile(request(source))
+            val bytes = assertNotNull(result.artifact, result.diagnostics.toString()).toByteArray()
+            ArtifactReader.read(bytes)
+        }
+
+    @Test
     fun `portable math compiles both widths library bodies and callable references`() =
         withAdapter { adapter ->
             val source = repositoryFile("modules/common/compiler-k2/src/test/resources/kotlin/math/main.kt").readText()

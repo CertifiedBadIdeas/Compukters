@@ -1402,7 +1402,11 @@ internal object KotlinProjectLowering {
                     (declaration.kind == ClassKind.ENUM_CLASS && declaration.declarations.any { it is IrEnumEntry })
             }
         val constructorDeclarations = constructorInstances.map { it.declaration }
-        val externalFunctions = linkedPlatformFunctions(userFunctions + constructorDeclarations, session)
+        val inlineInitializers =
+            classes.filter { inlineValueClasses.contains(it.symbol) }.distinctBy { it.symbol }.flatMap { declaration ->
+                declaration.declarations.filterIsInstance<IrAnonymousInitializer>()
+            }
+        val externalFunctions = linkedPlatformFunctions(userFunctions + constructorDeclarations + inlineInitializers, session)
         val linkedSymbols =
             linkedPlatformSymbols(
                 userFunctions + constructorDeclarations + sourceClasses.filter { inlineValueClasses.contains(it.symbol) },
@@ -1415,6 +1419,7 @@ internal object KotlinProjectLowering {
             }
         userFunctions.forEach { function -> function.accept(intrinsicCollector, null) }
         constructorClasses.forEach { declaration -> declaration.accept(intrinsicCollector, null) }
+        inlineInitializers.forEach { initializer -> initializer.accept(intrinsicCollector, null) }
         val capabilityIdentities =
             (
                 intrinsicCollector.capabilities +
@@ -1673,6 +1678,7 @@ internal object KotlinProjectLowering {
                 userFunctions.forEach { function -> function.accept(collector, null) }
                 constructorClasses.forEach { declaration -> declaration.accept(collector, null) }
                 constructorInstances.forEach { it.declaration.accept(collector, null) }
+                inlineInitializers.forEach { initializer -> initializer.body.accept(collector, null) }
                 topLevelProperties.forEach { property ->
                     property.declaration.backingField
                         ?.initializer
