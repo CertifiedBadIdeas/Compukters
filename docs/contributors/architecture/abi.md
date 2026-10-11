@@ -36,6 +36,14 @@ published bundles. Executable container format 3 and existing Guest array repres
 | Compiler worker | Protocol 5; explicit source-free library preparation | `compiler-client` and `compiler-k2` |
 | IDE analysis | Protocol 15 | `ide-analysis-client` and `ide-analysis-k2` |
 
+## Reference-array initializer surface
+
+`kotlin:builtins` 1.10.0 adds the public `Array<T>(Int, (Int) -> T)` constructor for the currently admitted
+reference-array element layouts. Compiler lowering reuses allocation, callback dispatch and array stores;
+no new instruction or representation is introduced. Dependent platform modules rebuild against the new
+module content identity. Platform ABI 3, bundle format 9, standalone module format 5, CPKT 3.0 and native
+C ABI 22 remain unchanged.
+
 ## Executable method retention and minimum ABI
 
 Final executable linking may remove unused class/interface methods and their dependencies. Library assembly retains

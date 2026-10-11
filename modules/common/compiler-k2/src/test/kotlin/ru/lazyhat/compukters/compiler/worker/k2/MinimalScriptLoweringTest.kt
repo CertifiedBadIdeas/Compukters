@@ -5283,13 +5283,24 @@ class MinimalScriptLoweringTest {
                 adapter.compile(
                     request(
                         """
+                        import kotlin.math.Vector3f
                         class Node(val value: Int)
+                        value class Id(val value: Int)
+                        value class Label(val value: String)
                         class Box(val text: String)
                         class Cell<T>(val value: T)
 
                         fun <T> single(value: T): Array<T> = arrayOf(value)
                         fun <T> readFirst(values: Array<T>): T = values[0]
                         fun <T> replaceFirst(values: Array<T>, value: T) { values[0] = value }
+
+                        fun <T> initializedCells(size: Int, init: (Int) -> Cell<T>): Array<Cell<T>> = Array(size, init)
+                        fun makeNode(index: Int): Node = Node(index + 10)
+                        fun sizeArgument(log: MutableList<String>): Int { log.add("size"); return 3 }
+                        fun initializerArgument(log: MutableList<String>): (Int) -> Node {
+                            log.add("initializer")
+                            return { index -> log.add("${'$'}index"); Node(index) }
+                        }
 
                         fun main() {
                             val first = Node(1)
@@ -5325,12 +5336,89 @@ class MinimalScriptLoweringTest {
                             require((mixed[0] as Int) == 11)
                             require(mixed[2] === mixedNode)
                             require(emptyArray<Any>().size == 0)
+                            val log = ArrayList<String>()
+                            val ordered = Array(sizeArgument(log), initializerArgument(log))
+                            require(log.size == 5 && log[0] == "size" && log[1] == "initializer" && log[2] == "0" && log[3] == "1" && log[4] == "2")
+                            require(ordered[2].value == 2)
+                            var calls = 0
+                            val empty = Array<Node>(0) { calls += 1; Node(it) }
+                            require(empty.size == 0 && calls == 0)
+                            var rejected = false
+                            try {
+                                Array<Node>(-1) { calls += 1; Node(it) }
+                            } catch (error: NegativeArraySizeException) { rejected = true }
+                            require(rejected && calls == 0)
+                            log.clear()
+                            try { Array(-1, initializerArgument(log)) }
+                            catch (error: NegativeArraySizeException) { log.add("negative") }
+                            require(log.size == 2 && log[0] == "initializer" && log[1] == "negative")
+                            var completed = 0
+                            var propagated = false
+                            try {
+                                Array<Node>(4) {
+                                    require(it == completed)
+                                    completed += 1
+                                    if (it == 2) throw IllegalStateException("initializer stopped")
+                                    Node(it)
+                                }
+                            } catch (error: IllegalStateException) {
+                                propagated = error.message == "initializer stopped"
+                            }
+                            require(propagated && completed == 3)
+                            val initializedNodes = Array(3, ::makeNode)
+                            require(initializedNodes[0].value == 10 && initializedNodes[2].value == 12)
+                            val constructor: (Int) -> Node = ::Node
+                            val referenced = Array(2, constructor)
+                            require(referenced[1].value == 1)
+                            val offset = 5
+                            val callback: (Int) -> String = { "item${'$'}{it + offset}" }
+                            val strings = Array(2, callback)
+                            require(strings[0] == "item5" && strings[1] == "item6")
+                            val typedCells = Array(2) { Cell("cell${'$'}it") }
+                            require(typedCells[1].value == "cell1")
+                            val genericCells = initializedCells(2) { Cell("generic") }
+                            require(genericCells[1].value == "generic")
+                            val nullable = Array<Node?>(2) { if (it == 0) first else null }
+                            require(nullable[0] === first && nullable[1] == null)
+                            val boxed = Array<Int?>(3) { if (it == 1) null else it }
+                            require(boxed[0] == 0 && boxed[1] == null && boxed[2] == 2)
+                            require(Array<Boolean?>(1) { true }[0] == true)
+                            require(Array<Byte?>(1) { (-7).toByte() }[0] == (-7).toByte())
+                            require(Array<Short?>(1) { (-300).toShort() }[0] == (-300).toShort())
+                            require(Array<Char?>(1) { 'x' }[0] == 'x')
+                            require(Array<Long?>(1) { 4294967296L }[0] == 4294967296L)
+                            require(Array<Float?>(1) { 1.5f }[0] == 1.5f)
+                            require(Array<Double?>(1) { 2.5 }[0] == 2.5)
+                            require(Array<UByte?>(1) { 255u.toUByte() }[0] == 255u.toUByte())
+                            require(Array<UShort?>(1) { 65535u.toUShort() }[0] == 65535u.toUShort())
+                            require(Array<UInt?>(1) { UInt.MAX_VALUE }[0] == UInt.MAX_VALUE)
+                            require(Array<ULong?>(1) { ULong.MAX_VALUE }[0] == ULong.MAX_VALUE)
+                            val ids = Array(3) { Id(it) }
+                            require(ids[2].value == 2)
+                            val labels = Array(2) { Label("label${'$'}it") }
+                            require(labels[1].value == "label1")
+                            val points = Array(8) { Vector3f(it.toFloat(), 1f, -1f) }
+                            require(points[7] == Vector3f(7f, 1f, -1f))
+                            points[0] = Vector3f(9f, 8f, 7f)
+                            val nullablePoints = Array<Vector3f?>(2) { if (it == 0) points[0] else null }
+                            require(nullablePoints[0] == points[0] && nullablePoints[1] == null)
+                            val universal = Array<Any>(3) { if (it == 0) 7 else if (it == 1) first else "word" }
+                            require((universal[0] as Int) == 7 && universal[1] === first && universal[2] == "word")
+                            val gcNodes = Array(32) { index ->
+                                var churn = 0
+                                while (churn < 2000) { Node(churn); churn += 1 }
+                                Node(index)
+                            }
+                            require(gcNodes[0].value == 0 && gcNodes[31].value == 31)
                             var allocation = 0
                             while (allocation < 60000) {
                                 Node(allocation)
                                 allocation = allocation + 1
                             }
                             require(nodes[0].value == 1)
+                            require(points[0] == Vector3f(9f, 8f, 7f) && points[7].x == 7f)
+                            require(initializedNodes[2].value == 12 && labels[1].value == "label1")
+                            require(boxed[2] == 2 && typedCells[1].value == "cell1")
                             require(boxes[1].text == "b")
                             require((mixed[0] as Int) == 11)
                             require(mixed[2] === mixedNode)
@@ -5350,6 +5438,7 @@ class MinimalScriptLoweringTest {
         withAdapter { adapter ->
             listOf(
                 "fun main() { arrayOf(1, 2) }",
+                "fun main() { Array(2) { it } }",
             ).forEach { source ->
                 val result = adapter.compile(request(source))
                 assertNull(result.artifact, result.diagnostics.joinToString())
