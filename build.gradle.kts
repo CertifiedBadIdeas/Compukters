@@ -1519,3 +1519,13 @@ registerKotlinVmConformance(
     ),
 )
 tasks.named("testKotlinTerminalOutputVmConformance") { dependsOn(":compiler-k2:generateCmatrixArtifact") }
+
+registerKotlinVmConformance(
+    taskName = "testKotlinAddonValueResponsesVmConformance",
+    taskDescription = "Executes inline addon responses, nested managed mixtures and ordinary boxing.",
+    artifactTask = ":compiler-k2:generateAddonValueResponsesConformanceArtifact",
+    artifact = project(":compiler-k2").layout.buildDirectory.file("generated/conformance/addon-values.cpkt"),
+    cargoTargetDirectory = ".toolchain/build/cargo/compiler-k2-addon-values-conformance",
+    artifactEnvironmentVariable = "COMPUKTER_ADDON_VALUES_ARTIFACT",
+    conformanceScenario = "addon-values",
+)
