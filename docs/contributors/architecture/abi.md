@@ -11,6 +11,15 @@ permalink: /ARCHITECTURE/abi/
 
 This reference groups versioned representation boundaries by the version that introduced them. Those versions are minimum feature requirements, not a claim that older Runtime distributions implement today’s platform. The source owners below define the active contract. Before changing a wire format, inspect each producer, consumer and verifier. Runtime release pins in `build-scripts/src/main/kotlin/RuntimeBundleSupport.kt` describe published bundles separately from the local VM checkout.
 
+## Double geometry and quaternion components
+
+`stdlib:core` 1.19.0 adds Vector2d/Vector3d/Vector4d and distinct Quaternionf/Quaterniond value types,
+plus explicit vector/quaternion and scalar-width conversions. Existing nominal inline layouts and F64
+arithmetic/math instructions express this additive source API. Platform module identities change;
+CPKT encoding, Runtime ABI, native C ABI and checkpoint schemas remain unchanged. Rebuild dependent
+library inputs with the matching platform. The [math inventory](../../developers/stdlib/math.md)
+owns numerical semantics and executable evidence.
+
 ## Sable mass observations
 
 Sable addon 1.2 appends `sable:sable` capability ABI 1.0 selector 1, `massProperties(): PhysicsMassProperties`.

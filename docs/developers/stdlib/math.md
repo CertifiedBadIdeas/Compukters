@@ -55,7 +55,8 @@ The [ABI reference]({{ '/ARCHITECTURE/abi/#runtime-abi-116' | relative_url }}) o
 
 ## Vectors and rectangles
 
-`Vector2i`, `Vector3i` (`Int`) and `Vector2f`, `Vector3f` (`Float`) are immutable multi-field value classes.
+`Vector2i`, `Vector3i` (`Int`), `Vector2f`, `Vector3f`, `Vector4f` (`Float`) and
+`Vector2d`, `Vector3d`, `Vector4d` (`Double`, stdlib:core 1.19.0) are immutable multi-field value classes.
 They belong to `stdlib:core`, need no display/peripheral, and retain nominal equality, hashing and managed-box
 behavior when stored in collections. `Position2i`, `Size2i`, `Position2f`, `Size2f` and their 3D counterparts
 are typealiases to these vectors: they document intent without adding validation or a distinct identity.
@@ -75,6 +76,22 @@ square/subtraction overflow and underflow; final Float results may overflow wher
 exceeds Float. Interpolation permits extrapolation outside 0..1. Non-finite vector arithmetic follows IEEE
 behavior. Convert pixel coordinates explicitly with `roundToInt()`, `floorToInt()` or `ceilToInt()`:
 all reject NaN and saturate beyond Int bounds; nearest rounding selects ties toward positive infinity.
+
+Double vectors retain Double components through arithmetic, dot/cross products and interpolation.
+`Vector2d`/`Vector3d` provide the same explicit integer rounding operations as their Float counterparts;
+Int and Float vectors provide `toDouble()`, and Double vectors provide explicit `toFloat()` narrowing.
+Double normalization scales finite components before computing length, so even vectors whose true
+magnitude exceeds Double can produce a unit direction; zero stays zero and non-finite inputs follow IEEE
+division behavior. `Vector4d` also provides `distanceTo`, `lerp`, `xyz`, `perspectiveDivide()` and
+`isInsideClipVolume` with the same finite-w and clip-bound rules as Vector4f.
+
+`Quaternionf` and `Quaterniond` are distinct immutable value classes with x/y/z/w Float and Double
+components respectively. Their representation matches the corresponding Vector4f/Vector4d, but nominal
+equality does not equate a quaternion with a vector. Explicit `toQuaternionf()` / `toQuaterniond()`
+and `toVector4f()` / `toVector4d()` preserve component values without normalization
+or rotation validation, including signed zero and non-finite values. This component type imposes no
+unit-quaternion precondition on construction. `Quaternionf.toDouble()` widens components;
+`Quaterniond.toFloat()` explicitly narrows them.
 
 Rectangles expose `position`, `size`, `left`, `top`, `right`, `bottom`, `isEmpty`, containment via `in`,
 `intersects`, `intersection` and bounding `union`. Bounds are half-open: left/top included, right/bottom
@@ -154,6 +171,9 @@ display Y points downward. Check positive display dimensions before mapping coor
   extents, dense and noncommuting matrix products, axis rotations, homogeneous point/direction lifting,
   projection bounds, invalid parameters, explicit division, callable references and collection storage.
   IDE `DiagnosticQueryTest` checks aliases, matrices and member completion with source and metadata-only inputs. `PlatformSignatureAliasesTest` checks signature expansion and ambiguous/cyclic rejection.
+- `testKotlinDoubleGeometryVmConformance` compiles and executes `compiler-k2/src/test/resources/kotlin/double-geometry/main.kt`,
+  covering Double precision, normalization at zero/subnormal/maximum magnitudes, rounding, non-finite inputs,
+  vector conversions, boxed nominal identity and component-preserving Quaterniond conversions.
 - `testKotlinMathVmConformance` compiles and executes
   `modules/common/compiler-k2/src/test/resources/kotlin/math/main.kt` against the Rust VM. It exercises
   every unary and binary operation in both widths, derived library bodies, integer limits, rounding
