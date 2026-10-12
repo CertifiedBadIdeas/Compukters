@@ -167,6 +167,10 @@ sealed interface IdeCommand {
 
     data object CancelDialog : IdeCommand
 
+    data class InsertPeripheralConstant(
+        val name: String,
+    ) : IdeCommand
+
     data class Edit(
         val input: IdeEditorInput,
     ) : IdeCommand
