@@ -44,6 +44,9 @@ archives before launching, so editing them does not require a Maven Local public
 Configuration Cache and parallel execution are enabled in this stand itself, so independent built-in program
 generators can run concurrently inside the included Compukters build. Repeated commands reuse the configured
 graph; `--max-workers=N` limits concurrent work.
+After changing the addon Gradle plugin, rerun `stageAddonDevelopmentDependencies` in the same workspace
+used by this stand before launching: the plugin is resolved from `build/addon-sdk`, not compiled by the launch graph.
+The stand uses Loom directly; it has no Architectury Plugin transformer or platform-common source set.
 
 Temporary flight diagnostics currently keep a 3x3 area of chunks ticking around each loaded computer.
 For Sable constructions the area follows the transformed world position of the computer, rather than its virtual

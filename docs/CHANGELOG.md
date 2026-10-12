@@ -18,8 +18,8 @@ headings so this page has one stable URL that can be shared outside the reposito
   Guest widgets provide buttons, indicators, gauges and history charts. The `create-scada` example
   controls a Create kinetic drive with real speed/load readings, RPM commands and connection/load alarms.
 
-- The all-addon development build enables Configuration Cache and parallel execution, allowing independent
-  built-in program artifacts to compile concurrently inside the included Compukters project.
+- The all-addon development build uses Loom directly and enables Configuration Cache and parallel execution,
+  allowing independent built-in program artifacts to compile concurrently inside the included Compukters project.
 
 - Guest stdlib provides immutable `Vector2d`, `Vector3d` and `Vector4d` with Double arithmetic,
   robust normalization and explicit conversions to/from existing vectors. Distinct `Quaternionf`/`Quaterniond`

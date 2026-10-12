@@ -21,17 +21,11 @@ import java.util.zip.ZipFile
 plugins {
     java
     id("dev.architectury.loom")
-    id("architectury-plugin")
 }
 
 group = "ru.lazyhat.compukters.development"
 version = "development"
 java { toolchain.languageVersion.set(JavaLanguageVersion.of(21)) }
-architectury {
-    minecraft = "1.21.1"
-    platformSetupLoomIde()
-    neoForge()
-}
 repositories {
     mavenCentral()
     maven("https://maven.architectury.dev/")
