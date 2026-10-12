@@ -39,11 +39,7 @@ internal fun collectGuestLocalFunctions(roots: List<IrElement>): Map<IrSimpleFun
             }
 
             override fun visitSimpleFunction(declaration: IrSimpleFunction) {
-                if ((
-                        declaration.origin == IrDeclarationOrigin.LOCAL_FUNCTION ||
-                            (declaration.parent is IrFunction && declaration.origin == IrDeclarationOrigin.DEFINED)
-                    ) && !declaration.name.isSpecial
-                ) {
+                if (declaration.isGuestLocalFunction()) {
                     if (declaration.typeParameters.isNotEmpty() || declaration.isInline || declaration.isSuspend) {
                         throw UnsupportedKotlinIr(declaration, "generic, inline and suspend local functions are not supported")
                     }
@@ -139,3 +135,7 @@ internal fun collectGuestLocalFunctions(roots: List<IrElement>): Map<IrSimpleFun
             symbol to GuestLocalFunction(function, ordinal, captures.getValue(symbol).values.toList())
         }.toMap()
 }
+
+internal fun IrSimpleFunction.isGuestLocalFunction(): Boolean =
+    !name.isSpecial &&
+        (origin == IrDeclarationOrigin.LOCAL_FUNCTION || (parent is IrFunction && origin == IrDeclarationOrigin.DEFINED))
