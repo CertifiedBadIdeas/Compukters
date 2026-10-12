@@ -19,6 +19,8 @@
 package ru.lazyhat.compukters.impl.ide
 
 import ru.lazyhat.compukters.ide.client.IdeClientLimits
+import ru.lazyhat.compukters.ide.client.analysis.IdeAnalysisState
+import ru.lazyhat.compukters.ide.client.analysis.IdeSemanticInteraction
 import ru.lazyhat.compukters.ide.client.analysis.IdeVisibleLatencyTrace
 import ru.lazyhat.compukters.ide.client.controller.IdeClientController
 import ru.lazyhat.compukters.ide.client.state.IdeCommand
@@ -171,6 +173,7 @@ class IdeScreenController(
             input.pointerActivity()
             return true
         }
+        if (presentation(geometry).model.hoverBounds?.contains(uiEvent.x(), uiEvent.y()) == true) return true
         val pointerContext = pointerContext(geometry)
         if (input.explorerPressed(uiEvent.x(), uiEvent.y(), uiEvent.modifiers(), pointerContext)) {
             focusArea = IdeFocusArea.Tree
@@ -263,6 +266,8 @@ class IdeScreenController(
         return false
     }
 
+    private val hoverViewport = IdeHoverViewport()
+
     fun mouseScrolled(
         mouseX: Double,
         mouseY: Double,
@@ -277,6 +282,8 @@ class IdeScreenController(
         synchronizeQuickOpen()
         if (overlays.scroll(uiMouseX, uiMouseY, scrollX, scrollY, geometry.panel)) return true
         if (controller.viewState().dialog != null) return true
+        val hoverModel = presentation(geometry).model
+        if (hoverViewport.scroll(hoverModel, uiMouseX, uiMouseY, scrollY)) return true
         if (terminalOverlay.visible && terminalOverlayGeometry(geometry).panel.contains(uiMouseX, uiMouseY)) return true
         if (geometry.fileTabs?.contains(uiMouseX, uiMouseY) == true) {
             if (scrollY != 0.0 ||
@@ -300,6 +307,7 @@ class IdeScreenController(
             pointerX = uiX
             pointerY = uiY
             if (overlays.active) return
+            if (presentation().model.hoverBounds?.contains(uiX, uiY) == true) return
             val modifiers = if (controlDown) IdeModifier.CONTROL else 0
             input.pointerMoved(
                 uiX,
@@ -487,11 +495,17 @@ class IdeScreenController(
         prompt.admitLayout(geometry.panel)
         admitFileTabScroll(geometry, state)
         val treeFirstRow = admittedTreeFirstRow(geometry, state)
+        val workspace = (state.page as? IdePageState.Workspace)?.value
+        val analysis = (workspace?.editor as? IdeEditorView.Text)?.analysis as? IdeAnalysisState.Active
+        val hover = analysis?.interaction as? IdeSemanticInteraction.Hover
+        hoverViewport.admit(hover)
         val model =
             IdeRenderer.extract(
                 state,
                 geometry,
                 prompt = prompt.state,
+                hoverScroll = hoverViewport.scroll,
+                hoverDocumentation = hoverViewport.documentation,
                 statusDetails = if (viewport.supported && geometry.supported) overlays.details.view(geometry.panel) else null,
                 quickOpen = if (viewport.supported && geometry.supported) quickOpen.view(geometry.panel) else null,
                 treeFirstRow = treeFirstRow,

@@ -48,6 +48,14 @@ internal object IdeSourceStyles {
 
             KotlinLexicalKind.LineComment, KotlinLexicalKind.BlockComment -> IdeColors.COMMENT
 
+            KotlinLexicalKind.KDocTag -> IdeColors.KEYWORD
+
+            KotlinLexicalKind.KDocSubject -> IdeColors.ANNOTATION
+
+            KotlinLexicalKind.KDocLink -> IdeColors.ACCENT
+
+            KotlinLexicalKind.KDocCode -> IdeColors.TEXT
+
             KotlinLexicalKind.TypeLike -> IdeColors.TYPE
 
             KotlinLexicalKind.Annotation -> IdeColors.ANNOTATION

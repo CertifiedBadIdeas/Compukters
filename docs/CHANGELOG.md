@@ -27,6 +27,9 @@ headings so this page has one stable URL that can be shared outside the reposito
   `Matrix3f`, `Matrix3d` and `Matrix4d` provide row-major transforms and bounded native matrix kernels;
   Double variants retain Double precision through multiplication and projection.
 
+- IDE tooling loads canonical platform navigation sources under a separate bounded budget,
+  so expanding the standard library does not consume the user project or addon source budgets.
+
 - Guest Kotlin provides reusable `StringBuilder` and `buildString`, full `CharSequence` support for strings, builders and
   user implementations, text iteration, `take`/`drop`
   helpers, padding and repetition, plus signed and unsigned integer parsers with radices 2–36.
@@ -34,6 +37,10 @@ headings so this page has one stable URL that can be shared outside the reposito
   preserve String results.
   Text operations preserve UTF-16 units and respect managed heap quotas; malformed integer text
   returns null or throws `NumberFormatException` according to the selected API.
+
+- Guest Kotlin supports named local functions with direct calls, recursion, nested helpers and escaping
+  references. Mutable captures share state with surrounding code and lambdas; direct immutable captures
+  stay in typed arguments. Local functions can use expression defaults and appear in class initializers.
 
 - Guest Kotlin functions accept expression default arguments using earlier parameters, receivers,
   helpers, lambdas and concrete generic types. Explicit arguments evaluate before omitted defaults;
@@ -436,7 +443,9 @@ listed in [Kotlin support](developers/kotlin-support.md) and [standard library s
   return types, including safe-call and literal receivers. Call insertion reuses delimiters, chooses parentheses
   or a trailing lambda, and places the caret at the first required input; imports and caret placement undo together.
 - Identifier matching supports case-insensitive word fragments and CamelCase with prefix ranking and highlighted
-  matches. Interpolation suggests visible variables after `$`. Hover shows bounded KDoc from project and attached
+  matches. Interpolation suggests visible variables after `$`. Hover shows structured English KDoc with parameter,
+  return, exception and other documentation sections, Markdown prose and code examples, and scrolling for long text.
+  The editor highlights KDoc tags, subjects, links and code. Documentation comes from project and attached
   library declarations. Completion temporarily pauses diagnostic passes while retaining unrelated problems.
 - Peripheral provider values use a dedicated color and `P` completion badge; device type references retain class
   presentation. Installed-addon APIs participate in completion, imports, parameter information and navigation;

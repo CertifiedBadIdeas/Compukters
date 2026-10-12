@@ -61,7 +61,26 @@ class IncrementalKotlinHighlighterTest {
         val random = Random(0xC0FFEE)
         val editor = EditorDocument("fun main() {\n    println(\"hello\")\n}\n")
         val highlighter = IncrementalKotlinHighlighter(editor)
-        val fragments = listOf("a", " ", "\n", "\r\n", "/*", "*/", "//", "\"", "\"\"\"", "1e+2", "😀")
+        val fragments =
+            listOf(
+                "/**",
+                " * ```kotlin",
+                " * ```",
+                "@param[value]",
+                "[Peer]",
+                "`bytes`",
+                "a",
+                " ",
+                "\n",
+                "\r\n",
+                "/*",
+                "*/",
+                "//",
+                "\"",
+                "\"\"\"",
+                "1e+2",
+                "😀",
+            )
 
         repeat(1_000) {
             if (editor.length == 0 || random.nextBoolean()) {
