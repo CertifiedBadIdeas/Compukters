@@ -446,3 +446,68 @@ readings to their visual range.
 
 See the tracked [Create drive dashboard](https://github.com/CertifiedBadIdeas/Compukters/tree/dev/examples/create-scada)
 for live RPM, stress, controller commands, bounded history and connection/load alarms on a 3×3 display.
+
+### Declarative display UI
+
+`compukter:core` supplies a small persistent widget tree. `displayUi(bounds) { ... }` builds it once;
+`bounds` is a screen-space `Rect2i` that can be moved/resized explicitly. `row(spacing)`, `column(spacing)`
+and `at(position)` determine fixed pixel layout. Leaf sizes are explicit, containers derive their content
+extents, and resizing the viewport clips content rather than rebuilding/reflowing it. Retain returned
+`UiText`, `UiButton`, `UiIndicator`, `UiGauge`, `UiChart`, `UiSlider` or `UiCanvas` references to update
+properties. Construction blocks on `displayUi`, `row`, `column` and `at` have `EXACTLY_ONCE`
+contracts, so nested blocks can initialize non-null local `val` references. Optional nullable widget
+configuration blocks have no definite-initialization guarantee; assign the returned widget instead.
+Deferred input/drawing handlers have no calls-in-place contract. There is no dependency tracking,
+recomposition, polling or background scheduler.
+
+```kotlin
+val rotation: UiSlider
+val ui = displayUi(Rect2i(12 xy 12, 168 by 160)) {
+    column(spacing = 8) {
+        canvas(168 by 132) {
+            onDraw = {
+                clear(Colors.BLACK)
+                // Local pixel coordinates, clipped to the canvas and UI viewport.
+                line(0, 0, size.x - 1, size.y - 1, Colors.CYAN)
+            }
+        }
+        rotation = slider(168 by 20, 0f, (PI * 2.0).toFloat())
+    }
+}
+// In the program's update loop:
+ui.dispatch(screen.pollPointer())
+val angle = rotation.value // Non-null reference initialized during construction.
+screen.frame { clear(Colors.BLACK); ui.draw(this) }
+```
+
+`draw()` never invokes input handlers or publishes a frame. `CanvasScope` supplies local `pixel`, `line`,
+`fillRect`, `rect`, `text` and `image` drawing, with clipping to nested viewports; it is also available from
+`screen.canvas(bounds)` for low-level drawing. `UiCanvas.onPointer` receives widget-local pointer positions.
+User drawing handlers still execute ordinary Guest code; use them only to draw, keeping device commands
+in input handlers or in the surrounding update loop.
+
+`GraphicalDisplay.pollPointer()` independently polls the transient `DisplayPointerEvent` stream:
+`DOWN`, `DRAG`, `UP`, `CANCEL`. Hold empty-hand RMB and move the crosshair over the world display;
+release ends the gesture, leaving the screen cancels it. After cancellation, release and press again.
+Shift-use, GUI focus, disconnect, lost heartbeats and display lifecycle changes cancel input. Host validation
+uses server-side aim, reach, front face and exact live canvas identity; the client supplies only held state.
+
+`ui.dispatch(event)` hit-tests once on Down, choosing the last painted leaf. A disabled button or passive
+leaf blocks controls below it; container gaps pass through. Buttons activate once on Down. Each gesture
+captures its target through Drag/Up/Cancel, so dragging outside a slider still clamps its value to the
+range. Up/Cancel release capture before calling handlers; exceptions propagate and drop that gesture.
+Up to eight gestures can be captured. Gesture zero with Cancel cancels all captures after queue overflow.
+Moving/resizing `ui.bounds` or calling `cancelInput()` also clears capture. Layout coordinates are fixed;
+each input event uses current enabled state, and explicit redispatch is an explicit second delivery.
+`dispatch(DisplayClick?)` remains useful for click-only programs with explicit queue policy.
+
+Queues contain at most 64 events, adjacent moves coalesce, and gestures are never persisted or replayed.
+Applications own draining and admission; process a bounded batch per update, or discard stale input when
+reconnecting controls as the SCADA example does.
+
+Evidence: `testKotlinDisplayUiVmConformance` executes layout, viewport boundaries, overlays, disabled/passive
+blocking, capture, local coordinates, cancellation and callback failures. `DisplayPointerTest` covers queue
+limits/coalescing, independent players, release/re-entry, expiry and clipping. `DisplayHostStateTest` checks
+capability revisions, little-endian input and clipped drawing. The graphical display GameTest exercises
+DSL drawing and the Guest Down/Drag/Up host bridge. The [cube example](https://github.com/CertifiedBadIdeas/Compukters/tree/dev/examples/rotating-cube)
+uses a clipped canvas and rotation slider; the SCADA example uses explicitly updated widgets and click-only dispatch.

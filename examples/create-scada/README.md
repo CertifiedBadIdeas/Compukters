@@ -12,7 +12,7 @@ The panel reads live RPM, stress/capacity and the controller's accepted target e
 
 Controls are disabled if a device is unavailable or a reading is invalid. Handles are reacquired after failure, and queued commands are discarded while disconnected and on the first recovered sample. Command errors appear on the panel. The controller returns its accepted target; observed RPM is still measured independently. STOP requests a zero target and does not disable an upstream motor. No command is sent merely because the program starts or stops.
 
-Stop the running program with **Ctrl+T** in the terminal. The last image remains on the screen, but clicks cannot execute commands after its writer lease is released. This example samples synchronously; it does not detect a loaded but mechanically disconnected gauge beyond the values Create reports.
+Stop the running program with **Ctrl+C** in the terminal. The last image remains on the screen, but clicks cannot execute commands after its writer lease is released. This example samples synchronously; it does not detect a loaded but mechanically disconnected gauge beyond the values Create reports.
 
 To verify compilation against a local real-addon bundle after staging the workspace SDK:
 
@@ -24,3 +24,8 @@ To verify compilation against a local real-addon bundle after staging the worksp
 ```
 
 Run the addon build and parent checks sequentially: the addon composite build also uses the parent's build outputs.
+
+
+The dashboard builds its `displayUi` tree once. `at` preserves explicit pixel placement and a `row`
+arranges the command buttons. Construction contracts initialize non-null widget `val` references through nested groups. Telemetry updates widget properties, then one admitted click is dispatched
+before drawing. Button handlers record command intent; the controller command remains outside the frame.

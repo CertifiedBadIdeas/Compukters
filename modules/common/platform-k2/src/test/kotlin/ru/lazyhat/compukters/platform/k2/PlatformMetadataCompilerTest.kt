@@ -32,6 +32,60 @@ import kotlin.test.assertTrue
 
 class PlatformMetadataCompilerTest {
     @Test
+    fun `compile time contracts and annotation defaults remain metadata only`() {
+        val sources =
+            listOf(
+                PlatformSource(
+                    "Contracts.kt",
+                    ImmutableBytes.of(
+                        """
+                        package kotlin.contracts
+                        interface ContractBuilder { fun returns(): Any }
+                        inline fun contract(block: ContractBuilder.() -> Unit) {}
+                        annotation class Marker(val message: String = "experimental")
+                        """.trimIndent().encodeToByteArray(),
+                    ),
+                ),
+            )
+        val metadata = PlatformMetadataCompiler().compile(PlatformModuleId("kotlin", "builtins"), sources)
+        assertTrue(metadata.declarations.any { it.symbol == "kotlin.contracts.ContractBuilder.returns" })
+        assertTrue(metadata.libraryDeclarations.isEmpty())
+        assertTrue(metadata.declarations.filter { it.symbol.endsWith(".<init>") }.all { it.defaultArguments.isEmpty() })
+    }
+
+    @Test
+    fun `mutable property accessors are executable library declarations`() {
+        val metadata =
+            PlatformMetadataCompiler().compile(
+                PlatformModuleId("sample", "setters"),
+                listOf(
+                    PlatformSource(
+                        "Setters.kt",
+                        ImmutableBytes.of(
+                            """
+                            package sample
+                            class Dial(var label: String) {
+                                var enabled: Boolean = true
+                                var value: Int = 0
+                                    set(value) { field = if (value < 0) 0 else value }
+                                var secret: Int = 0
+                                    private set(value) { field = value }
+                            }
+                            """.trimIndent().encodeToByteArray(),
+                        ),
+                    ),
+                ),
+            )
+        assertTrue(metadata.libraryDeclarations.any { it.symbol == "sample.Dial.<get-enabled>" })
+        assertTrue(metadata.libraryDeclarations.any { it.symbol == "sample.Dial.<set-enabled>" })
+        assertTrue(metadata.libraryDeclarations.any { it.symbol == "sample.Dial.<set-label>" })
+        assertTrue(metadata.libraryDeclarations.any { it.symbol == "sample.Dial.<set-value>" })
+        assertTrue(metadata.libraryDeclarations.any { it.symbol == "sample.Dial.<set-secret>" })
+        assertEquals("fun(Int):Unit", metadata.declarations.single { it.symbol == "sample.Dial.<set-value>" }.signature)
+        assertFalse("sample.Dial.<set-secret>" in metadata.exportedSymbols)
+    }
+
+    @Test
     fun `array size defaults preserve the receiver and canonical projected signature`() {
         val metadata =
             PlatformMetadataCompiler().compile(

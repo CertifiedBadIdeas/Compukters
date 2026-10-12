@@ -112,9 +112,18 @@ internal object DisplayWorldAccess {
         entity: DisplayBlockEntity,
         hit: net.minecraft.world.phys.BlockHitResult,
     ): Boolean {
-        if (hit.direction != entity.blockState.getValue(DisplayBlock.FACING)) return false
-        val surface = surface(level, entity, create = false) ?: return false
-        val panel = surface.panels.singleOrNull { it.instance.toString() == entity.checkpointIdentity } ?: return false
+        val target = pointerTarget(level, entity, hit) ?: return false
+        return target.canvas.offerClick(target.x, target.y)
+    }
+
+    fun pointerTarget(
+        level: ServerLevel,
+        entity: DisplayBlockEntity,
+        hit: net.minecraft.world.phys.BlockHitResult,
+    ): ru.lazyhat.compukters.core.display.DisplayPointerTarget? {
+        if (hit.direction != entity.blockState.getValue(DisplayBlock.FACING)) return null
+        val surface = surface(level, entity, create = false) ?: return null
+        val panel = surface.panels.singleOrNull { it.instance.toString() == entity.checkpointIdentity } ?: return null
         val local = hit.location.subtract(entity.blockPos.x.toDouble(), entity.blockPos.y.toDouble(), entity.blockPos.z.toDouble())
         val click =
             ru.lazyhat.compukters.core.display.displayClickAt(
@@ -125,8 +134,9 @@ internal object DisplayWorldAccess {
                 local.x,
                 local.y,
                 local.z,
-            ) ?: return false
-        return surface.canvas.offerClick(click.x, click.y)
+            ) ?: return null
+        return ru.lazyhat.compukters.core.display
+            .DisplayPointerTarget(surface.canvas, click.x, click.y)
     }
 
     fun surface(
@@ -429,3 +439,10 @@ internal object DisplayWorldAccess {
         PeripheralCableTopologyCache.invalidate(level)
     }
 }
+
+/** Server-only bridge for loader input adapters; geometry and screen identity stay with world access. */
+public fun displayPointerTarget(
+    level: ServerLevel,
+    entity: DisplayBlockEntity,
+    hit: net.minecraft.world.phys.BlockHitResult,
+): ru.lazyhat.compukters.core.display.DisplayPointerTarget? = DisplayWorldAccess.pointerTarget(level, entity, hit)

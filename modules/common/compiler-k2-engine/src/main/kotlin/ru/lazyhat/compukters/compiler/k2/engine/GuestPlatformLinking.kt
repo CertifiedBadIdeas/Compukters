@@ -306,7 +306,7 @@ private fun linkedPlatformSymbols(
                 val property = target.correspondingPropertySymbol?.owner ?: target.parent as? IrProperty
                 val owner = property?.parent as? IrClass
                 val fieldSymbol = property?.fqNameWhenAvailable?.asString()
-                if (owner != null && fieldSymbol != null) {
+                if (owner != null && fieldSymbol != null && property.getter?.symbol == target.symbol) {
                     fieldTarget(fieldSymbol, owner.symbol)?.let { field ->
                         if (field.static) throw UnsupportedKotlinIr(expression, "platform property getter resolves to a static field")
                         fieldsByGetter[target.symbol] = field

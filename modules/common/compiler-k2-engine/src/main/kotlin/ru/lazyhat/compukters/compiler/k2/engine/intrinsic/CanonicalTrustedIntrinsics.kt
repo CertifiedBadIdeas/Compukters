@@ -334,6 +334,9 @@ object CanonicalTrustedIntrinsics {
                 Triple("commitFrame", "fun(Int):Unit", 15u),
                 Triple("abortFrame", "fun(Int):Unit", 16u),
                 Triple("pollClick", "fun(Int):ByteArray", 17u),
+                Triple("pollPointer", "fun(Int):ByteArray", 18u),
+                Triple("lineClipped", "fun(Int,Int,Int,Int,Int,Int,Int,Int,Int,Int):Unit", 19u),
+                Triple("textClipped", "fun(Int,Int,Int,String,Int,Int,Int,Int,Int,Int):Unit", 20u),
             ).forEach { (name, signature, operation) ->
                 capability(
                     "compukter",

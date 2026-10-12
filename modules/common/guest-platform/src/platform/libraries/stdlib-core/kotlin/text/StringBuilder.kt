@@ -4,7 +4,12 @@
  * Licensed under the Apache License, Version 2.0.
  */
 
+@file:OptIn(kotlin.contracts.ExperimentalContracts::class)
+
 package kotlin.text
+
+import kotlin.contracts.InvocationKind
+import kotlin.contracts.contract
 
 /**
  * Builds mutable text by appending UTF-16 code units.
@@ -327,6 +332,7 @@ private fun checkedTextCapacity(capacity: Int): Int {
  * @return an independent snapshot of the content after the action completes normally.
  */
 public inline fun buildString(builderAction: StringBuilder.() -> Unit): String {
+    contract { callsInPlace(builderAction, InvocationKind.EXACTLY_ONCE) }
     val builder = StringBuilder()
     builder.builderAction()
     return builder.toString()
@@ -348,6 +354,7 @@ public inline fun buildString(
     capacity: Int,
     builderAction: StringBuilder.() -> Unit,
 ): String {
+    contract { callsInPlace(builderAction, InvocationKind.EXACTLY_ONCE) }
     val builder = StringBuilder(capacity)
     builder.builderAction()
     return builder.toString()

@@ -4,7 +4,12 @@
  * Licensed under the Apache License, Version 2.0.
  */
 
+@file:OptIn(kotlin.contracts.ExperimentalContracts::class)
+
 package kotlin
+
+import kotlin.contracts.InvocationKind
+import kotlin.contracts.contract
 
 /**
  * Validates an argument precondition.
@@ -17,6 +22,7 @@ package kotlin
  * @see check
  */
 public fun require(value: Boolean) {
+    contract { returns() implies value }
     if (!value) throw IllegalArgumentException("Failed requirement.")
 }
 
@@ -39,6 +45,7 @@ public inline fun require(
     value: Boolean,
     lazyMessage: () -> Any,
 ) {
+    contract { returns() implies value; callsInPlace(lazyMessage, InvocationKind.AT_MOST_ONCE) }
     if (!value) throw IllegalArgumentException(lazyMessage().toString())
 }
 
@@ -53,6 +60,7 @@ public inline fun require(
  * @see require
  */
 public fun check(value: Boolean) {
+    contract { returns() implies value }
     if (!value) throw IllegalStateException("Check failed.")
 }
 
@@ -75,6 +83,7 @@ public inline fun check(
     value: Boolean,
     lazyMessage: () -> Any,
 ) {
+    contract { returns() implies value; callsInPlace(lazyMessage, InvocationKind.AT_MOST_ONCE) }
     if (!value) throw IllegalStateException(lazyMessage().toString())
 }
 

@@ -98,7 +98,7 @@ fun loadPlatformLibraries(modules: List<PlatformModule>): LoadedPlatformLibrarie
                     !declaration.trustedExternal && declaration.signature.startsWith("fun(") &&
                         declaration.identity !in platformModule.sourceDeclarations
                 }.map { declaration ->
-                    val signature = aliases.expand(declaration.signature, declaration.symbol)
+                    val signature = canonicalCallbackSignature(aliases.expand(declaration.signature, declaration.symbol))
                     val simpleName = declaration.symbol.substringAfterLast('.')
                     val candidates =
                         library.exports.filter { export ->

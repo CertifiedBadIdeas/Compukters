@@ -61,8 +61,9 @@ internal class DisplayHostState(
         frameTasks.keys.removeIf { !it.owns(owner) }
         val response =
             if (request.capability.namespace != SCHEMA.identity.namespace || request.capability.name != SCHEMA.identity.name ||
-                request.capability.abiMajor != 1 || request.capability.abiMinor !in 0..2 ||
-                (request.operation == 17 && request.capability.abiMinor < 2)
+                request.capability.abiMajor != 1 || request.capability.abiMinor !in 0..3 ||
+                (request.operation == 17 && request.capability.abiMinor < 2) ||
+                (request.operation >= 18 && request.capability.abiMinor < 3)
             ) {
                 failure(HostFailureKind.OTHER, "Unexpected display capability")
             } else {
@@ -350,6 +351,19 @@ internal class DisplayHostState(
                     )
                 }
 
+                18 -> {
+                    canvas.acquire(owner, endpoint::leaseValid)
+                    val event = canvas.pollPointer(owner)
+                    HostResponse.ByteArraySuccess(
+                        if (event == null) {
+                            byteArrayOf()
+                        } else {
+                            val fields = intArrayOf(event.kind, event.gesture, event.x, event.y)
+                            ByteArray(16) { index -> (fields[index / 4] ushr ((index % 4) * 8)).toByte() }
+                        },
+                    )
+                }
+
                 else -> {
                     canvas.acquire(owner, endpoint::leaseValid)
                     when (request.operation) {
@@ -382,6 +396,20 @@ internal class DisplayHostState(
                             require(encoded.length <= 1536 && encoded.length % 6 == 0 && encoded.all { it in "0123456789abcdefABCDEF" })
                             val colors = IntArray(encoded.length / 6) { encoded.substring(it * 6, it * 6 + 6).toInt(16) }
                             canvas.imageRow(owner, int(0), int(1), colors)
+                        }
+
+                        19 -> {
+                            val clip =
+                                ru.lazyhat.compukters.core.display
+                                    .DisplayRegion(int(5), int(6), int(7), int(8))
+                            canvas.line(owner, int(0), int(1), int(2), int(3), int(4), clip)
+                        }
+
+                        20 -> {
+                            val clip =
+                                ru.lazyhat.compukters.core.display
+                                    .DisplayRegion(int(5), int(6), int(7), int(8))
+                            DisplayRasterFont.draw(canvas, owner, int(0), int(1), string(2), int(3), int(4), clip)
                         }
 
                         14 -> {
@@ -437,7 +465,7 @@ internal class DisplayHostState(
 
         val SCHEMA =
             HostCapabilitySchema(
-                CapabilityIdentity("compukters", "display", 1, 2),
+                CapabilityIdentity("compukters", "display", 1, 3),
                 listOf(
                     HostOperationSchema(listOf(HostValueType.I32), HostValueType.I32, true),
                     HostOperationSchema(listOf(HostValueType.STRING), HostValueType.I32, true),
@@ -478,6 +506,14 @@ internal class DisplayHostState(
                         operation(1),
                         operation(1),
                         operation(1, HostValueType.BYTE_ARRAY),
+                        operation(1, HostValueType.BYTE_ARRAY),
+                        operation(10),
+                        HostOperationSchema(
+                            listOf(HostValueType.I32, HostValueType.I32, HostValueType.I32, HostValueType.STRING) +
+                                List(6) { HostValueType.I32 },
+                            HostValueType.UNIT,
+                            true,
+                        ),
                     ),
             )
 
