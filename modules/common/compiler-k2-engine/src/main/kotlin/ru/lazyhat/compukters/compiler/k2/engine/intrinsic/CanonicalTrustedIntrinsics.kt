@@ -396,6 +396,10 @@ object CanonicalTrustedIntrinsics {
                     Triple("width", "fun():Int", false),
                     Triple("height", "fun():Int", false),
                     Triple("awaitSubmittedLineEvent", "fun(Int):Int", true),
+                    Triple("writeChar", "fun(Char):Unit", false),
+                    Triple("writeCharAt", "fun(Int,Int,Char):Unit", false),
+                    Triple("writeRange", "fun(CharArray,Int,Int):Unit", false),
+                    Triple("writeRangeAt", "fun(Int,Int,CharArray,Int,Int):Unit", false),
                 )
             terminalOperations.forEachIndexed { operation, (name, signature, blocking) ->
                 capability(

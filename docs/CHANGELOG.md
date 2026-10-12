@@ -16,6 +16,8 @@ headings so this page has one stable URL that can be shared outside the reposito
 - Guest Kotlin provides reusable `StringBuilder` and `buildString`, full `CharSequence` support for strings, builders and
   user implementations, text iteration, `take`/`drop`
   helpers, padding and repetition, plus signed and unsigned integer parsers with radices 2–36.
+  Search, whitespace checks, splitting and sizing accept `CharSequence`; specialized String overloads
+  preserve String results.
   Text operations preserve UTF-16 units and respect managed heap quotas; malformed integer text
   returns null or throws `NumberFormatException` according to the selected API.
 
@@ -31,14 +33,16 @@ headings so this page has one stable URL that can be shared outside the reposito
 
 - The built-in `cmatrix` program draws animated green terminal rain with bright stream heads,
   configurable tick delay and Ctrl+C return to the shell. Its rain uses the reproducible Guest stdlib
-  random generator with uniform bounded selection.
+  random generator with uniform bounded selection; glyph drawing creates no temporary Guest strings.
 
 - The built-in shell supports cursor editing, Unicode-aware deletion, horizontal scrolling and a bounded
   32-command history that restores unfinished input. `Ctrl+U` clears the line; `Ctrl+C` cancels input or stops
   the foreground command tree and returns to the shell. IDE Run submits a complete command atomically
   at an empty prompt; unfinished input and running editors remain protected.
 - Guest `Terminal` provides owned typed Text/Key/SubmittedLine events, named keys and modifiers, standard-library integer
-  geometry for cursor/drawing operations, terminal size observations and named palette colors. The old public
+  geometry for cursor/drawing operations, terminal size observations and named palette colors. Output accepts
+  `CharSequence`, individual `Char` values and `CharArray` ranges; char/buffer output avoids temporary Guest
+  strings, including glyphs in cmatrix and row buffers in edit. The old public
   raw event protocol is replaced; built-in shell, editor and benchmark agent use the new API.
 
 - Gradle Configuration Cache is enabled by default for built-in program generation, Minecraft classes,
