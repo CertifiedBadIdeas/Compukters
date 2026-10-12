@@ -8,7 +8,7 @@ permalink: /SABLE/
 
 # Sable addon
 
-Read a construction's position, orientation and velocity from a Kotlin program running on that construction.
+Read a construction's position, orientation, velocity and mass properties from a Kotlin program running on that construction.
 The returned snapshot is immutable, so your program can keep it while the construction continues moving.
 
 ## Install
@@ -24,7 +24,7 @@ Install Compukters: Sable alongside the base mod and upstream Sable on client an
 The base mod works without Sable. This addon does not require Compukters: Create.
 
 Addon releases use `x.y` (API compatibility line and compatible update), separately from the Compukters target line.
-For example, `compukters-sable-1.21.1-neoforge-0.6-1.1.jar` targets Compukters 0.6 and is addon version 1.1. Exact minimum
+For example, `compukters-sable-1.21.1-neoforge-0.6-1.2.jar` targets Compukters 0.6 and is addon version 1.2. Exact minimum
 versions are enforced by loader metadata. See [addon versioning]({{ '/ADDON-DEVELOPMENT/' | relative_url }}#first-party-addon-versions).
 
 ## Peripheral networks
@@ -69,6 +69,40 @@ It contains `constructionId` (UUID text), `dimension` (Minecraft dimension ID), 
 Vectors have Double x/y/z; orientation has Double x/y/z/w. The snapshot is a copy: later physics updates or removal
 of the construction do not modify it. Membership is resolved on each request; no body handle is retained.
 A world computer or unavailable construction yields a catchable IllegalStateException.
+
+## Mass properties
+
+Sable addon 1.2 adds `Physics.massProperties()`, a separate asynchronous request returning immutable
+`PhysicsMassProperties`: `constructionId`, `dimension`, `gameTick`, `mass`, `centerOfMass` and `inertiaTensor`.
+
+```kotlin
+import sable.physics.Physics
+
+fun main() {
+    val properties = Physics.massProperties()
+    println("Mass: " + properties.mass)
+    println("Plot center X: " + properties.centerOfMass.x)
+    println("Inertia about plot Y: " + properties.inertiaTensor.yy)
+}
+```
+
+The values copy Sable's **merged** mass tracker, including kinematic contraptions accounted for by Sable,
+rather than counting only blocks in the construction's own plot. `centerOfMass` uses plot coordinates;
+`inertiaTensor` is expressed in plot axes about that center, rather than in world axes or about the computer.
+The tensor exposes all nine Double components `xx`, `xy`, `xz`, `yx`, `yy`, `yz`, `zx`, `zy`, `zz`.
+The first letter is the row and the second the column: its X output is `xx * x + xy * y + xz * z`.
+This naming avoids JOML's column-first matrix accessor convention.
+
+Units are copied without conversion: Sable 2.0.6 documents mass as `kpg` and inertia as `kpg * m²` in its
+[MassData contract](https://github.com/ryanhcode/sable/blob/mc1.21.1-2.0.6-neoforge/common/src/main/java/dev/ryanhcode/sable/api/physics/mass/MassData.java).
+The center uses Minecraft block units (one metre per block). No conversion to kilograms is implied.
+
+The request copies the last mass data published by upstream, without rebuilding the tracker or advancing physics.
+`gameTick` records the request's server tick, not the last mass-recomputation tick. A retained result stays unchanged
+when the construction changes or disappears. Separate `snapshot()` and `massProperties()` calls may observe different
+ticks; they do not form an atomic pair. Use the pose transform below to transform a plot-space center into world space.
+A world computer, removed construction, uninitialized/nonpositive mass, or nonfinite mass/center/tensor yields a
+catchable `IllegalStateException`. The existing pose snapshot remains usable independently of mass initialization.
 
 ## Coordinates and timing
 

@@ -33,7 +33,10 @@ poses and exact block mappings. Run workspace and addon Gradle builds sequential
 build and shares its output directories.
 
 The snapshot adapter is request-only: no background feed, subscriptions or cached body registry. Membership is resolved
-for each request. The SDK validates bounded immutable record shapes; Rust materializes the reply in budgeted slices
+for each request. Addon 1.2 retains snapshot selector 0 and adds mass-properties selector 1: immutable merged mass,
+plot-space center and full local inertia tensor. `PhysicsMassPropertiesTest` covers component orientation,
+owned scalar copies and invalid data; `computerAssemblyAndReturn` executes both APIs through the real Guest VM.
+The SDK validates bounded immutable record shapes; Rust materializes the reply in budgeted slices
 without invoking Guest constructors. Structured responses use Runtime ABI 1.13 and bundled native C ABI 20.
 
 ### Build and test
