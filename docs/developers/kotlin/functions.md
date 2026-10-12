@@ -29,6 +29,49 @@ paired with `testKotlinNamedCallsVmConformance`.
 
 **Related work:** not scheduled
 
+## Local functions and captures
+
+**Status:** Partial.
+
+Named local functions support direct calls, recursion, nested declarations and `::local` references
+with concrete admitted Guest signatures. They can appear in ordinary functions, lambdas and class
+initializers. Omitted defaults follow the ordinary call-site rules, including defaults that read captures.
+
+```kotlin
+fun counter(seed: Int): () -> Int {
+    var count = seed
+    fun next(step: Int = 1): Int {
+        count += step
+        return count
+    }
+    return ::next
+}
+```
+
+Direct calls pass immutable captures as hidden typed arguments without allocating a managed environment.
+Mutable captured variables share the existing managed capture cells with enclosing code and lambdas.
+Escaping references retain their captures after the enclosing function returns; separate invocations and
+loop iterations retain separate cells. Local helpers forward captures needed by their callees or references.
+References allocate ordinary managed closures and remain subject to heap and execution quotas.
+
+Local declarations with their own type parameters and capture layouts that still contain enclosing
+generic parameters report `UNSUPPORTED_IR`. Local inline/suspend declarations remain unsupported.
+In class initializers, put an expression-bodied local declaration and subsequent statements on separate
+lines: the current K2 frontend can omit a statement following that declaration on the same line.
+The direct static `Tasks.launch(::worker)` path still requires an admitted top-level worker; stored function
+values follow the ordinary task callback rules.
+
+**Evidence:** `MinimalScriptLoweringTest` tests `local functions preserve recursive captures escaping
+references and defaults`, `direct immutable local captures require no managed environment` and
+`local references lower without inline normalization` and
+`unsupported local declaration shapes report target diagnostics`; `testKotlinLocalFunctionsVmConformance`
+executes the deterministic artifact from
+[`local-functions/main.kt`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/compiler-k2/src/test/resources/kotlin/local-functions/main.kt).
+`DiagnosticQueryTest` test `captured local functions resolve with source and metadata inputs` checks both
+platform input modes.
+
+**Related work:** [#755](https://github.com/CertifiedBadIdeas/Compukters/issues/755).
+
 ## Transparent blocking across project calls
 
 **Status:** Supported.
@@ -230,7 +273,7 @@ Callback-taking collection extensions are inline and admit non-local returns fro
 generic wrappers retain their concrete emitter specialization; stored callbacks retain managed ownership.
 `Tasks.launch` accepts direct, stored, and returned `() -> Unit` values. A direct top-level
 `Tasks.launch(::worker)` remains a static spawn without a closure allocation. Types unsupported elsewhere in
-Guest Kotlin, local-function and property references, constructors outside the admitted Guest class subset,
+Guest Kotlin, property references, constructors outside the admitted Guest class subset,
 other reference adaptations, and variance conversions between different function signatures remain unsupported.
 
 **Evidence:**
@@ -257,8 +300,9 @@ rejected before artifact publication`, `supported constructor references lower t
 
 **Status:** Partial.
 
-Direct calls and bounded VM call depth can represent recursion, but no Kotlin-to-VM recursive source
-conformance test defines it as a supported language contract.
+Direct calls and local function references support recursion within the VM call-depth and execution
+quotas. `testKotlinLocalFunctionsVmConformance` exercises recursive local calls and reference invocation;
+other recursive forms retain their surrounding signature and dispatch restrictions.
 
 **Related work:** not scheduled
 

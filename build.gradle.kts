@@ -563,6 +563,15 @@ registerKotlinVmConformance(
     conformanceScenario = "function-defaults",
 )
 registerKotlinVmConformance(
+    taskName = "testKotlinLocalFunctionsVmConformance",
+    taskDescription = "Executes captured Guest local functions with the pinned Compukter VM.",
+    artifactTask = ":compiler-k2:generateLocalFunctionsConformanceArtifact",
+    artifact = project(":compiler-k2").layout.buildDirectory.file("generated/conformance/kotlin-local-functions.cpkt"),
+    cargoTargetDirectory = ".toolchain/build/cargo/compiler-k2-local-functions-conformance",
+    artifactEnvironmentVariable = "COMPUKTER_KOTLIN_LOCAL_FUNCTIONS_ARTIFACT",
+    conformanceScenario = "local-functions",
+)
+registerKotlinVmConformance(
     taskName = "testKotlinDefaultFunctionReferencesVmConformance",
     taskDescription = "Executes default-adapted Guest function references with the pinned Compukter VM.",
     artifactTask = ":compiler-k2:generateDefaultFunctionReferencesConformanceArtifact",
