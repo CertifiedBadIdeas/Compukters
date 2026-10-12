@@ -11,6 +11,29 @@ permalink: /ARCHITECTURE/abi/
 
 This reference groups versioned representation boundaries by the version that introduced them. Those versions are minimum feature requirements, not a claim that older Runtime distributions implement today’s platform. The source owners below define the active contract. Before changing a wire format, inspect each producer, consumer and verifier. Runtime release pins in `build-scripts/src/main/kotlin/RuntimeBundleSupport.kt` describe published bundles separately from the local VM checkout.
 
+## Matrix shape kernels — Runtime ABI 1.19
+
+MatrixMath retains opcode 0x1e/form 0 and original selectors 1–5. Selectors 6–8 add Matrix3f
+transpose/matrix/vector products; 9–11 add Matrix3d equivalents; 12–16 add Matrix4d
+transpose/matrix/vector/point/direction operations. Three-dimensional matrix layouts contain nine
+components and vector results contain three; Double shapes require exact F64 components.
+The compiler and linker derive minimum ABI 1.19 only when these new selectors survive. Both verifiers
+reject false minimum ABI claims, wrong scalar widths/counts, arity and uninitialized inputs.
+Three-dimensional costs are 11/54/18 respectively; 4D Double costs match existing Float kernels.
+Execution snapshots operands on the native stack, permits valid destination aliases, performs no managed
+allocations and preserves scalar rounding without FMA. Container framing, native C ABI 23, platform
+encoding and checkpoint schemas remain unchanged. stdlib:core 1.19.0 supplies the matching declarations.
+
+## Double geometry and quaternion components
+
+`stdlib:core` 1.19.0 adds Vector2d/Vector3d/Vector4d and distinct Quaternionf/Quaterniond value types,
+plus explicit vector/quaternion and scalar-width conversions. Rotation3f/Rotation3d contain the corresponding
+unit quaternion, use private constructors and validate/normalize through public factories. Existing nominal inline layouts and F64
+arithmetic/math instructions express this additive source API. Platform module identities change;
+CPKT encoding, Runtime ABI, native C ABI and checkpoint schemas remain unchanged. Rebuild dependent
+library inputs with the matching platform. The [math inventory](../../developers/stdlib/math.md)
+owns numerical semantics and executable evidence.
+
 ## Sable mass observations
 
 Sable addon 1.2 appends `sable:sable` capability ABI 1.0 selector 1, `massProperties(): PhysicsMassProperties`.

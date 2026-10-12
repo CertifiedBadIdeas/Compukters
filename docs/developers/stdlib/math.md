@@ -55,7 +55,8 @@ The [ABI reference]({{ '/ARCHITECTURE/abi/#runtime-abi-116' | relative_url }}) o
 
 ## Vectors and rectangles
 
-`Vector2i`, `Vector3i` (`Int`) and `Vector2f`, `Vector3f` (`Float`) are immutable multi-field value classes.
+`Vector2i`, `Vector3i` (`Int`), `Vector2f`, `Vector3f`, `Vector4f` (`Float`) and
+`Vector2d`, `Vector3d`, `Vector4d` (`Double`, stdlib:core 1.19.0) are immutable multi-field value classes.
 They belong to `stdlib:core`, need no display/peripheral, and retain nominal equality, hashing and managed-box
 behavior when stored in collections. `Position2i`, `Size2i`, `Position2f`, `Size2f` and their 3D counterparts
 are typealiases to these vectors: they document intent without adding validation or a distinct identity.
@@ -76,6 +77,30 @@ exceeds Float. Interpolation permits extrapolation outside 0..1. Non-finite vect
 behavior. Convert pixel coordinates explicitly with `roundToInt()`, `floorToInt()` or `ceilToInt()`:
 all reject NaN and saturate beyond Int bounds; nearest rounding selects ties toward positive infinity.
 
+Double vectors retain Double components through arithmetic, dot/cross products and interpolation.
+`Vector2d`/`Vector3d` provide the same explicit integer rounding operations as their Float counterparts;
+Int and Float vectors provide `toDouble()`, and Double vectors provide explicit `toFloat()` narrowing.
+Double normalization scales finite components before computing length, so even vectors whose true
+magnitude exceeds Double can produce a unit direction; zero stays zero and non-finite inputs follow IEEE
+division behavior. `Vector4d` also provides `distanceTo`, `lerp`, `xyz`, `perspectiveDivide()` and
+`isInsideClipVolume` with the same finite-w and clip-bound rules as Vector4f.
+
+`Quaternionf` and `Quaterniond` are distinct immutable value classes with x/y/z/w Float and Double
+components respectively. Their representation matches the corresponding Vector4f/Vector4d, but nominal
+equality does not equate a quaternion with a vector. Explicit `toQuaternionf()` / `toQuaterniond()`
+and `toVector4f()` / `toVector4d()` preserve component values without normalization
+or rotation validation, including signed zero and non-finite values. This component type imposes no
+unit-quaternion precondition on construction. Hamilton `times(Quaternion)` and `conjugated()` operate
+on arbitrary components without normalization. `Quaternionf.toDouble()` widens components;
+`Quaterniond.toFloat()` explicitly narrows them.
+
+`Rotation3f`/`Rotation3d` are separate value classes containing a unit `quaternion`. Their constructors
+are private; `fromQuaternion()` rejects zero and non-finite inputs and normalizes finite nonzero components,
+including extreme magnitudes. Unit length is subject to the scalar width's floating rounding. `identity()`,
+`inverse()`, `transform(Vector3)` and rotation composition describe spatial rotations; `a * b` applies b
+first. Scalar-width conversions normalize again after widening/narrowing. Opposite-sign quaternions may
+describe the same spatial rotation but retain distinct component-based nominal equality.
+
 Rectangles expose `position`, `size`, `left`, `top`, `right`, `bottom`, `isEmpty`, containment via `in`,
 `intersects`, `intersection` and bounding `union`. Bounds are half-open: left/top included, right/bottom
 excluded. Empty rectangles contain no points, are contained by every rectangle and do not enlarge a union.
@@ -88,6 +113,19 @@ formats are unchanged; rebuild dependent libraries with the matching platform. E
 and math instructions execute the implementation.
 
 ## Matrices and homogeneous coordinates
+
+`Matrix3f`, `Matrix3d` and `Matrix4d` extend the same immutable row-major API. Three-dimensional matrices
+have nine row/column-named components (`m00` through `m22`), indexes 0..2, matrix/matrix and matrix/Vector3
+products, transposition, identity, uniform/vector scale and right-handed X/Y/Z rotations.
+A 3x3 matrix is a linear transform; it does not add homogeneous point/direction coordinates.
+Matrix4d mirrors Matrix4f with Double components, Vector3d/Vector4d and Double factory arguments.
+Projection factories reject non-finite coefficients; scaled ratios avoid intermediate overflow in
+orthographic spans and perspective depth coefficients at representable Double extremes.
+
+The new shape kernels require Runtime ABI 1.19 and retain scalar Float/Double multiplication followed
+by left-associated addition without FMA. Their exact scalar widths and component counts are verified;
+transposition preserves bits, and destination aliases are safe. Factories remain ordinary Guest code.
+
 
 `Matrix4f` and `Vector4f` are immutable Float value classes in `kotlin.math`, with nominal equality,
 hashing and managed collection storage. Construct a matrix from sixteen components in row-major order;
@@ -154,6 +192,15 @@ display Y points downward. Check positive display dimensions before mapping coor
   extents, dense and noncommuting matrix products, axis rotations, homogeneous point/direction lifting,
   projection bounds, invalid parameters, explicit division, callable references and collection storage.
   IDE `DiagnosticQueryTest` checks aliases, matrices and member completion with source and metadata-only inputs. `PlatformSignatureAliasesTest` checks signature expansion and ambiguous/cyclic rejection.
+- `testKotlinMatrixShapesVmConformance` compiles and executes `compiler-k2/src/test/resources/kotlin/matrix-shapes/main.kt`,
+  covering every new selector, dense products against scalar loops, transpose, rotations, bounds,
+  Double projections at extreme magnitudes, nominal boxes and callable references. Native matrix tests
+  cover all valid aliases, fixed costs, no managed allocations, mixed-width/old-ABI rejection and Double
+  rounding, signed zero, NaN and non-FMA behavior.
+- `testKotlinDoubleGeometryVmConformance` compiles and executes `compiler-k2/src/test/resources/kotlin/double-geometry/main.kt`,
+  covering Double precision, normalization at zero/subnormal/maximum magnitudes, rounding, non-finite inputs,
+  vector conversions, boxed nominal identity, component-preserving quaternion conversions, rotation
+  normalization/rejection, composition, inverse and transformed vectors in both scalar widths.
 - `testKotlinMathVmConformance` compiles and executes
   `modules/common/compiler-k2/src/test/resources/kotlin/math/main.kt` against the Rust VM. It exercises
   every unary and binary operation in both widths, derived library bodies, integer limits, rounding
