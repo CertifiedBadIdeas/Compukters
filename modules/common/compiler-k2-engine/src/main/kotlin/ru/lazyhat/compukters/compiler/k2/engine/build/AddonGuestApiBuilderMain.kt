@@ -87,21 +87,21 @@ fun buildAddonGuestApiBundle(
         val compiledModule =
             combined.modules.singleOrNull { it.id == contract.module }
                 ?: error("platform contains no unique addon module ${contract.module}")
-        // Value payloads need their source layouts and accessors in the consuming Guest compilation.
-        // Keep the whole addon source API together so wrappers can call value-class members safely.
-        val hasValuePayloads =
+        // Retain value layouts for record responses without replacing executable library members.
+        val valuePayloadSymbols =
             PlatformMetadataCompiler()
                 .compile(compiledModule.id, compiledModule.sources)
                 .recordCandidates
-                .any { it.valueClass }
+                .filter { it.valueClass }
+                .mapTo(mutableSetOf()) { it.symbol }
         val module =
-            if (hasValuePayloads) {
-                compiledModule.copy(
-                    sourceDeclarations = compiledModule.declarations.filterNot { it.trustedExternal }.map { it.identity },
-                )
-            } else {
-                compiledModule
-            }
+            compiledModule.copy(
+                sourceDeclarations =
+                    (
+                        compiledModule.sourceDeclarations +
+                            compiledModule.declarations.filter { it.symbol in valuePayloadSymbols }.map { it.identity }
+                    ).distinct(),
+            )
         require(module.version == contract.version) {
             "addon module ${contract.module} version ${module.version} does not match contract ${contract.version}"
         }

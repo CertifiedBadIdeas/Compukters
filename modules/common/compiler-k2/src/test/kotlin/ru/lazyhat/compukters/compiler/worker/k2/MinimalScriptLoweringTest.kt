@@ -2768,7 +2768,12 @@ class MinimalScriptLoweringTest {
                     data class Data(val point: Point, val count: Int)
                     value class Reply(val point: Vector3d, val data: Data, val label: String)
                     data class DataReply(val reply: Reply)
+                    interface TickReading { fun readTick(): Long }
+                    class TickReader(val reply: ScalarReply) : TickReading {
+                        override fun readTick(): Long = reply.tick
+                    }
                     object Observations {
+                        fun reader(reply: ScalarReply): TickReading = TickReader(reply)
                         fun scalar(): ScalarReply = Bindings.scalar()
                         fun mixed(): Reply = Bindings.mixed()
                         fun data(): DataReply = Bindings.data()
@@ -2807,6 +2812,7 @@ class MinimalScriptLoweringTest {
                                 repeat(100) {
                                     val value = Observations.scalar()
                                     check(value.point.x == 1.0 && value.point.y == 2.0 && value.point.z == 3.0 && value.tick == Long.MIN_VALUE)
+                                    check(Observations.reader(value).readTick() == value.tick)
                                 }
                                 val mixed = Observations.mixed()
                                 check(mixed.point.z == 3.0 && mixed.data.point.y == 5.0 && mixed.data.count == 7 && mixed.label == "owned")

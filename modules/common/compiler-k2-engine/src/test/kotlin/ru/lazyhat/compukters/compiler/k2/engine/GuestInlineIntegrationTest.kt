@@ -926,7 +926,7 @@ class GuestInlineIntegrationTest {
     fun `expanded library diagnostics retain original source ownership`() {
         probe(
             "import probe.identity\nfun main() { val result = identity(3) }",
-            librarySource = "package probe\ninline fun identity(value: Int): Int { val unsupported: (() -> Int)? = null; return value }",
+            librarySource = "package probe\ninline fun identity(value: Int): Int { val unsupported = object {}; return value }",
             throughSharedEntry = true,
         ) { _, _, diagnostics, artifact ->
             assertEquals(null, artifact)

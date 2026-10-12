@@ -19,6 +19,9 @@ headings so this page has one stable URL that can be shared outside the reposito
   including atomic all-face writes with `Side.ALL` as the default port-level output selection;
   its transient outputs clear when control is released.
 
+- All main, addon, development-stand and API-documentation builds use Gradle 9.8.1, with the binary distribution
+  verified against its published SHA-256.
+
 - The IDE has a named peripheral selection window with shared window controls, block item icons and project-style cards.
   Selecting a reachable device inserts its name as an undoable `const val` beneath imports in the active
   Kotlin source, with an uppercase snake-case identifier, duplicate reuse and collision suffixes.
@@ -32,6 +35,7 @@ headings so this page has one stable URL that can be shared outside the reposito
   allowing independent built-in program artifacts to compile concurrently inside the included Compukters project.
 
 - Addon SDK accepts immutable value-class host responses, nested data/value mixtures and canonical stdlib geometry.
+  Value layouts coexist with precompiled interface methods and companion providers.
   Inline record fields avoid Guest record allocations while retaining bounded copying, GC and checkpoint support.
   Sable 2.0 exposes value snapshots with Vector3d, validated Rotation3d and Matrix3d mass tensors.
 

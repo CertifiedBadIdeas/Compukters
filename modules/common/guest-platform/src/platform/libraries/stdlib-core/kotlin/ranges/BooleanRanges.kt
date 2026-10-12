@@ -24,6 +24,26 @@ internal class OpenEndBooleanRange(
     override fun isEmpty(): Boolean = start.compareTo(endExclusive) >= 0
 }
 
+/**
+ * Creates a Boolean range from this value up to [other], inclusive.
+ *
+ * Ordering is `false < true`. `false..true` contains both values.
+ * The range supports membership tests and empty checks, without iteration.
+ *
+ * @receiver the inclusive lower bound.
+ * @param other the inclusive upper bound.
+ * @return a Boolean range; empty when the lower bound exceeds [other].
+ */
 public operator fun Boolean.rangeTo(other: Boolean): ClosedRange<Boolean> = ClosedBooleanRange(this, other)
 
+/**
+ * Creates a Boolean range from this value up to [other], exclusive.
+ *
+ * Ordering is `false < true`. `false..<true` contains only `false`.
+ * The range supports membership tests and empty checks, without iteration.
+ *
+ * @receiver the inclusive lower bound.
+ * @param other the exclusive upper bound.
+ * @return a Boolean range; empty when the lower bound is at least [other].
+ */
 public operator fun Boolean.rangeUntil(other: Boolean): OpenEndRange<Boolean> = OpenEndBooleanRange(this, other)
