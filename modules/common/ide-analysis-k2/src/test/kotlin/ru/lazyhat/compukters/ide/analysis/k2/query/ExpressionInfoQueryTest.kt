@@ -23,6 +23,7 @@ import ru.lazyhat.compukters.ide.analysis.AnalysisQuery
 import ru.lazyhat.compukters.ide.analysis.AnalysisResult
 import ru.lazyhat.compukters.ide.analysis.DeclarationLocation
 import ru.lazyhat.compukters.ide.analysis.DeclarationOrigin
+import ru.lazyhat.compukters.ide.analysis.EditorExpressionInfo
 import ru.lazyhat.compukters.ide.editor.EditorRange
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -248,6 +249,97 @@ class ExpressionInfoQueryTest {
             assertTrue(signature.contains("Box<String?>"), signature)
             assertTrue(signature.contains("(Int) -> String"), signature)
             assertTrue(!signature.contains("example.deep.") && !signature.contains("kotlin."), signature)
+        }
+    }
+
+    @Test
+    fun `array hover resolves every family and exact copy overloads`() {
+        val families =
+            listOf(
+                "Boolean",
+                "Byte",
+                "Char",
+                "Short",
+                "Int",
+                "Long",
+                "Float",
+                "Double",
+                "UByte",
+                "UShort",
+                "UInt",
+                "ULong",
+            )
+        val source =
+            buildString {
+                appendLine("import kotlin.collections.*")
+                appendLine("fun main() {")
+                for ((index, type) in families.withIndex()) {
+                    appendLine("val values$index = ${type}Array(2)")
+                    appendLine("${type.lowercase()}ArrayOf()")
+                    appendLine("values$index.size")
+                    appendLine("values$index.get(0)")
+                    appendLine("values$index.set(0, values$index.get(1))")
+                    appendLine("values$index.copyOf()")
+                    appendLine("values$index.copyOf(3)")
+                    appendLine("values$index.copyInto(values$index, 1, 0, 1)")
+                }
+                appendLine("val strings = Array<String>(2) { \"item\" }")
+                appendLine("arrayOf(\"a\", \"b\")")
+                appendLine("arrayOfNulls<String>(2)")
+                appendLine("strings.size")
+                appendLine("strings.get(0)")
+                appendLine("strings.set(0, \"updated\")")
+                appendLine("strings.copyOf()")
+                appendLine("strings.copyOf(3)")
+                appendLine("strings.copyInto(strings, 1, 0, 1)")
+                appendLine("strings.copyOfRange(0, 1)")
+                appendLine("}")
+            }
+        K2QueryFixture.sourceWithGuestApi(true, "main.kt" to source).use { fixture ->
+            fun hover(site: String): EditorExpressionInfo {
+                val start = source.indexOf(site)
+                assertTrue(start >= 0, site)
+                val offset = start + if ('.' in site) site.indexOf('.') + 1 else 0
+                val result =
+                    fixture.execute(
+                        AnalysisQuery.ExpressionInfo(fixture.identity, VirtualSourcePath.kotlin("main.kt"), offset),
+                    ) as AnalysisResult.ExpressionInfo
+                val info = assertNotNull(result.value, site)
+                assertEquals("kotlin:builtins", assertIs<DeclarationOrigin.Platform>(info.origin).identity.name)
+                assertNotNull(info.documentation, site)
+                return info
+            }
+
+            fun documented(
+                site: String,
+                vararg tags: String,
+            ) {
+                val documentation = assertNotNull(hover(site).documentation)
+                tags.forEach { tag -> assertTrue(documentation.contains(tag), "$site: missing $tag in $documentation") }
+            }
+            for ((index, type) in families.withIndex()) {
+                documented("${type}Array(2)")
+                documented("${type.lowercase()}ArrayOf()", "@param elements", "@return")
+                documented("values$index.size")
+                documented("values$index.get(0)", "@param index", "@return", "@throws IndexOutOfBoundsException")
+                documented("values$index.set", "@param index", "@param value", "@throws IndexOutOfBoundsException")
+                val unchanged = assertNotNull(hover("values$index.copyOf()").documentation)
+                assertFalse(unchanged.contains("@param newSize"), unchanged)
+                documented("values$index.copyOf(3)", "@param newSize", "@throws NegativeArraySizeException")
+                documented("values$index.copyInto", "@param destinationOffset", "@param startIndex", "@param endIndex", "@return")
+            }
+            documented("Array<String>", "@param T")
+            documented("arrayOf(", "@param T", "@param elements", "@return")
+            documented("arrayOfNulls", "@param size", "@throws NegativeArraySizeException")
+            documented("strings.size")
+            documented("strings.get(0)", "@param index", "@return", "@throws IndexOutOfBoundsException")
+            documented("strings.set", "@param index", "@param value", "@throws IndexOutOfBoundsException")
+            documented("strings.copyOf()", "@param T", "@return")
+            val resized = hover("strings.copyOf(3)")
+            assertTrue(assertNotNull(resized.signature).endsWith(": Array<T?>"), resized.signature)
+            documented("strings.copyOf(3)", "@param newSize", "padding extra elements with null")
+            documented("strings.copyInto", "@param T", "@param destination", "@throws IndexOutOfBoundsException")
+            documented("strings.copyOfRange", "@param fromIndex", "@param toIndex", "Array<String>", "@throws NegativeArraySizeException")
         }
     }
 
