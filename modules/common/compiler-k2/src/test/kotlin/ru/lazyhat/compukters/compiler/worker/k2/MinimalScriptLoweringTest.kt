@@ -234,6 +234,62 @@ class MinimalScriptLoweringTest {
         }
 
     @Test
+    fun `local functions preserve recursive captures escaping references and defaults`() =
+        withAdapter { adapter ->
+            val source = repositoryFile("modules/common/compiler-k2/src/test/resources/kotlin/local-functions/main.kt").readText()
+            val result = adapter.compile(request(source))
+            val bytes = assertNotNull(result.artifact, result.diagnostics.toString()).toByteArray()
+            ArtifactReader.read(bytes)
+            assertContentEquals(bytes, assertNotNull(adapter.compile(request(source)).artifact).toByteArray())
+            System.getProperty("compukter.vm.localFunctionsArtifact")?.let { output ->
+                Path.of(output).also { it.parent.createDirectories() }.writeBytes(bytes)
+            }
+        }
+
+    @Test
+    fun `direct immutable local captures require no managed environment`() =
+        withAdapter { adapter ->
+            val result = adapter.compile(request("fun main() { val base = 7; fun add(value: Int): Int = base + value; add(5) }"))
+            val artifact = ArtifactReader.read(assertNotNull(result.artifact, result.diagnostics.toString()).toByteArray())
+            assertTrue(
+                artifact.modules
+                    .flatMap { it.blocks }
+                    .flatMap { it.instructions }
+                    .none { it is Instruction.NewObject },
+            )
+        }
+
+    @Test
+    fun `local references lower without inline normalization`() =
+        withAdapter { adapter ->
+            val sources =
+                listOf(
+                    "fun main() { val seed = 7; fun read(): Int = seed; val call: () -> Int = ::read; call() }",
+                    "fun main() { val seed = 7; fun read(value: Int = seed): Int = value; val call: () -> Int = ::read; call() }",
+                )
+            for (source in sources) {
+                val result = adapter.compile(request(source))
+                ArtifactReader.read(assertNotNull(result.artifact, result.diagnostics.toString()).toByteArray())
+            }
+        }
+
+    @Test
+    fun `unsupported local declaration shapes report target diagnostics`() =
+        withAdapter { adapter ->
+            val sources =
+                listOf(
+                    "fun main() { fun <T> read(value: T): T = value; read(1) }",
+                    "fun main() { suspend fun read(): Int = 1 }",
+                    "fun <T> make(value: T): () -> T { fun read(): T = value; return ::read }\nfun main() { make(1)() }",
+                )
+            for (source in sources) {
+                val result = adapter.compile(request(source))
+                assertNull(result.artifact)
+                assertTrue(result.diagnostics.any { it.code == "UNSUPPORTED_IR" }, result.diagnostics.toString())
+            }
+        }
+
+    @Test
     fun `random method references link without direct calls`() =
         withAdapter { adapter ->
             val source =
