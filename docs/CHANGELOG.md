@@ -51,7 +51,9 @@ headings so this page has one stable URL that can be shared outside the reposito
   Generic local functions and local helpers inside generic top-level functions specialize concrete calls,
   defaults and escaping captures; primitive arguments remain unboxed within bounded compiler expansion.
   Class `val`/`var` properties can store, replace and invoke callbacks, including concrete generic holders,
-  constructor defaults and custom/inherited accessors. Stored callbacks retain their captures.
+  constructor defaults and custom/inherited accessors. Nullable callbacks can default or reset to null,
+  use safe invocation, Elvis and smart casts, and retain separately held aliases after reset. Safe Unit
+  calls can produce a retained `Unit?` result. Stored callbacks retain their captures until unreachable.
 
 - Guest Kotlin functions accept expression default arguments using earlier parameters, receivers,
   helpers, lambdas and concrete generic types. Explicit arguments evaluate before omitted defaults;

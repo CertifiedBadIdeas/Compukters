@@ -248,11 +248,10 @@ class MinimalScriptLoweringTest {
         }
 
     @Test
-    fun `unsupported nullable and variant function fields report target diagnostics`() =
+    fun `variant function fields report target diagnostics`() =
         withAdapter { adapter ->
             val sources =
                 listOf(
-                    "class Holder(val callback: (() -> Int)?)\nfun main() { Holder(null) }",
                     "class Holder(var callback: () -> Any)\nfun main() { val call: () -> Int = { 1 }; val h = Holder { \"x\" }; h.callback = call }",
                     "class Holder(call: () -> Int) { val callback: () -> Any = call }\nfun main() { Holder { 1 } }",
                 )
@@ -260,6 +259,19 @@ class MinimalScriptLoweringTest {
                 val result = adapter.compile(request(source))
                 assertNull(result.artifact)
                 assertTrue(result.diagnostics.any { it.code == "UNSUPPORTED_IR" }, result.diagnostics.toString())
+            }
+        }
+
+    @Test
+    fun `nullable callbacks preserve safe invocation storage captures and specialization`() =
+        withAdapter { adapter ->
+            val source = repositoryFile("modules/common/compiler-k2/src/test/resources/kotlin/nullable-callbacks/main.kt").readText()
+            val result = adapter.compile(request(source))
+            val bytes = assertNotNull(result.artifact, result.diagnostics.toString()).toByteArray()
+            ArtifactReader.read(bytes)
+            assertContentEquals(bytes, assertNotNull(adapter.compile(request(source)).artifact).toByteArray())
+            System.getProperty("compukter.vm.nullableCallbacksArtifact")?.let { output ->
+                Path.of(output).also { it.parent.createDirectories() }.writeBytes(bytes)
             }
         }
 
@@ -990,18 +1002,80 @@ class MinimalScriptLoweringTest {
         }
 
     @Test
-    fun `unsupported nullable forms do not publish artifacts`() =
+    fun `nullable callable declarations discover signatures without callable expressions`() =
         withAdapter { adapter ->
-            listOf(
-                "fun main() { val operation: (() -> Unit)? = null }",
-            ).forEach { source ->
+            val sources =
+                listOf(
+                    "fun main() { var operation: (() -> Unit)? = null; operation = null }",
+                    "fun main() { val operation: ((Long) -> Double)? = null }",
+                    "fun main() { val operation: (() -> (() -> Int)?)? = null }",
+                    "class Holder(val callback: (() -> Int)? = null)\nfun main() { Holder() }",
+                )
+            for (source in sources) {
                 val result = adapter.compile(request(source))
-                val errors = result.diagnostics.filter { it.severity.name == "ERROR" }
+                ArtifactReader.read(assertNotNull(result.artifact, result.diagnostics.toString()).toByteArray())
+            }
+        }
 
-                assertNull(result.artifact, source)
-                assertEquals(1, errors.size, source)
-                assertEquals(DiagnosticCategory.TARGET, errors.single().category, source)
-                assertTrue(result.hasErrors, source)
+    @Test
+    fun `nullable Unit callback results are ordinary nullable references`() =
+        withAdapter { adapter ->
+            val source =
+                """
+                fun main() {
+                    var call: (() -> Unit)? = null
+                    val absent: Unit? = call?.invoke()
+                    call = { }
+                    val present: Unit? = call?.invoke()
+                    check(absent == null && present != null)
+                    fun absentUnit(): Unit? = null
+                    val nullableResult: (() -> Unit?)? = ::absentUnit
+                    check(nullableResult?.invoke() == null)
+                }
+                """.trimIndent()
+            val result = adapter.compile(request(source))
+            ArtifactReader.read(assertNotNull(result.artifact, result.diagnostics.toString()).toByteArray())
+        }
+
+    @Test
+    fun `nullable and nonnull callbacks share concrete interface identity`() =
+        withAdapter { adapter ->
+            val source =
+                """
+                fun required(call: () -> Int): Int = call()
+                fun optional(call: (() -> Int)?): Int = call?.invoke() ?: -1
+                fun main() { val call: () -> Int = { 3 }; required(call); optional(call); optional(null) }
+                """.trimIndent()
+            val result = adapter.compile(request(source))
+            val artifact = ArtifactReader.read(assertNotNull(result.artifact, result.diagnostics.toString()).toByteArray())
+            val parameterTypes =
+                artifact.modules
+                    .flatMap { it.types }
+                    .filterIsInstance<NominalType.Function>()
+                    .filter { it.result == ValueType.I32 }
+                    .mapNotNull { it.parameters.singleOrNull() as? ValueType.Ref }
+            assertTrue(
+                parameterTypes.any { nullable ->
+                    nullable.nullable && parameterTypes.any { !it.nullable && it.type == nullable.type }
+                },
+            )
+        }
+
+    @Test
+    fun `nullable function signature variance remains a target diagnostic`() =
+        withAdapter { adapter ->
+            val sources =
+                listOf(
+                    "fun main() { val narrow: (() -> Int)? = { 3 }; val wide: (() -> Any)? = narrow }",
+                    "fun main() { val broad: ((Any) -> Int)? = { 3 }; val narrow: ((String) -> Int)? = broad }",
+                )
+            for (source in sources) {
+                val result = adapter.compile(request(source))
+                assertNull(result.artifact)
+                assertTrue(
+                    result.diagnostics.any { it.code == "UNSUPPORTED_IR" && "function-value variance" in it.message },
+                    result.diagnostics.toString(),
+                )
             }
         }
 
@@ -1931,7 +2005,7 @@ class MinimalScriptLoweringTest {
         }
 
     @Test
-    fun `unsupported closure shapes produce stable diagnostics`() =
+    fun `nullable callback arguments accept ordinary lambdas`() =
         withAdapter { adapter ->
             val argumentLambda =
                 adapter.compile(
@@ -1942,13 +2016,7 @@ class MinimalScriptLoweringTest {
                         """.trimIndent(),
                     ),
                 )
-            assertNull(argumentLambda.artifact)
-            assertTrue(
-                argumentLambda.diagnostics.any {
-                    it.severity.name == "ERROR" && "unsupported" in it.message
-                },
-                argumentLambda.diagnostics.toString(),
-            )
+            ArtifactReader.read(assertNotNull(argumentLambda.artifact, argumentLambda.diagnostics.toString()).toByteArray())
         }
 
     @Test
