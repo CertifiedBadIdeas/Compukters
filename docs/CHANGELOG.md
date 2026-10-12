@@ -13,6 +13,9 @@ headings so this page has one stable URL that can be shared outside the reposito
 
 ## 0.6.0 — In development
 
+- The all-addon development build enables Configuration Cache and parallel execution, allowing independent
+  built-in program artifacts to compile concurrently inside the included Compukters project.
+
 - Guest stdlib provides immutable `Vector2d`, `Vector3d` and `Vector4d` with Double arithmetic,
   robust normalization and explicit conversions to/from existing vectors. Distinct `Quaternionf`/`Quaterniond`
   preserve quaternion identity and support explicit conversions with the corresponding four-dimensional vectors.
