@@ -95,7 +95,8 @@ on arbitrary components without normalization. `Quaternionf.toDouble()` widens c
 `Quaterniond.toFloat()` explicitly narrows them.
 
 `Rotation3f`/`Rotation3d` are separate value classes containing a unit `quaternion`. Their constructors
-are private; `fromQuaternion()` rejects zero and non-finite inputs and normalizes finite nonzero components,
+are private; computed read-only `x`, `y`, `z` and `w` expose the quaternion components without additional storage.
+`fromQuaternion()` rejects zero and non-finite inputs and normalizes finite nonzero components,
 including extreme magnitudes. Unit length is subject to floating rounding, rather than exact equality to
 one. `inverse()` conjugates the quaternion and preserves its existing normalization error. Composition
 normalizes again; Rotation3f computes the product with Double intermediates before storing Float components.
@@ -229,7 +230,7 @@ display Y points downward. Check positive display dimensions before mapping coor
   projection bounds, invalid parameters, explicit division, callable references and collection storage.
   IDE `DiagnosticQueryTest` checks aliases, matrices and member completion with source and metadata-only inputs. `PlatformSignatureAliasesTest` checks signature expansion and ambiguous/cyclic rejection.
 - `testKotlinRotationsVmConformance` compiles and executes `compiler-k2/src/test/resources/kotlin/rotations/main.kt`,
-  covering axis-angle normalization/rejection, signed axis turns, noncommuting composition and matrix agreement,
+  covering direct quaternion component access on both rotation types, axis-angle normalization/rejection, signed axis turns, noncommuting composition and matrix agreement,
   fromTo direction mapping, deterministic opposite-vector axes, tiny/near-opposite angles (including relative
   checks for a 1e-300 Double direction component and normal/subnormal Float components), extreme magnitudes,
   seeded direction pairs and zero/non-finite rejection,

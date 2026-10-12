@@ -57,6 +57,7 @@ data class IdeResolvedTarget(
     val deployment: IdeTargetDeploymentOperations,
     val terminal: IdeTargetTerminalOperations? = null,
     val fileSystem: IdeTargetFileSystemOperations? = null,
+    val namedPeripherals: (() -> IdeTargetReply.NamedPeripherals)? = null,
 ) {
     init {
         require(machineIdentity.isNotBlank()) { "machine identity must not be blank" }

@@ -31,6 +31,37 @@ import kotlin.test.assertTrue
 
 class ExpressionInfoQueryTest {
     @Test
+    fun `primitive hover resolves member constants and narrow extension documentation`() {
+        val source =
+            "import kotlin.experimental.inv\n" +
+                "fun inspect(i: Int, f: Float, c: Char, u: UInt, b: Boolean, small: Byte) { " +
+                "i.div(2); f.toInt(); c.code; u.shr(33); b.and(false); Float.MIN_VALUE; small.inv() }"
+        K2QueryFixture.sourceWithGuestApi(true, "main.kt" to source).use { fixture ->
+            for ((name, tags) in listOf(
+                "div" to listOf("@param other", "@return", "@throws ArithmeticException"),
+                "toInt" to listOf("@return"),
+                "code" to listOf("@see"),
+                "shr" to listOf("@param bitCount", "@return"),
+                "and" to listOf("@param other", "@return"),
+                "MIN_VALUE" to emptyList(),
+                "inv" to listOf("@receiver", "@return"),
+            )) {
+                val offset = source.lastIndexOf(name)
+                val result =
+                    fixture.execute(
+                        AnalysisQuery.ExpressionInfo(fixture.identity, VirtualSourcePath.kotlin("main.kt"), offset),
+                    ) as AnalysisResult.ExpressionInfo
+                val info = assertNotNull(result.value, name)
+                val documentation = assertNotNull(info.documentation, name)
+                assertTrue(documentation.isNotBlank(), name)
+                tags.forEach { tag -> assertTrue(documentation.contains(tag), "$name: missing $tag in $documentation") }
+                val module = assertIs<DeclarationOrigin.Platform>(info.origin).identity.name
+                assertEquals(if (name == "inv") "stdlib:core" else "kotlin:builtins", module)
+            }
+        }
+    }
+
+    @Test
     fun `hover signatures show Unit on both declaration and call`() {
         val source = "fun finish(value: Boolean) {}\nfun main() { finish(true) }"
         K2QueryFixture.source("main.kt" to source).use { fixture ->

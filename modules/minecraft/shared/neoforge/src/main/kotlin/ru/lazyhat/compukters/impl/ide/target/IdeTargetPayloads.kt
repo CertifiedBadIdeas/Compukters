@@ -102,6 +102,11 @@ internal object IdeTargetWireProtocol {
     ) {
         buffer.writeVarLong(payload.requestId)
         when (val request = payload.request) {
+            is IdeTargetRequest.NamedPeripherals -> {
+                buffer.writeByte(NAMED_PERIPHERALS)
+                buffer.writeTarget(request.target)
+            }
+
             is IdeTargetRequest.Attach -> {
                 buffer.writeByte(ATTACH)
                 buffer.writeBounded(request.claim, MAXIMUM_CLAIM_BYTES, "target claim")
@@ -188,6 +193,10 @@ internal object IdeTargetWireProtocol {
         val requestId = buffer.readVarLong()
         val request =
             when (val kind = buffer.readUnsignedByte().toInt()) {
+                NAMED_PERIPHERALS -> {
+                    IdeTargetRequest.NamedPeripherals(buffer.readTarget())
+                }
+
                 ATTACH -> {
                     IdeTargetRequest.Attach(buffer.readBounded(MAXIMUM_CLAIM_BYTES, "target claim"))
                 }
@@ -271,6 +280,17 @@ internal object IdeTargetWireProtocol {
     ) {
         buffer.writeVarLong(payload.requestId)
         when (val reply = payload.reply) {
+            is IdeTargetReply.NamedPeripherals -> {
+                buffer.writeByte(REPLY_NAMED_PERIPHERALS)
+                buffer.writeBoolean(reply.truncated)
+                buffer.writeVarInt(reply.entries.size)
+                reply.entries.forEach { entry ->
+                    buffer.writeUtf(entry.name, 64)
+                    buffer.writeUtf(entry.itemId, 256)
+                    buffer.writeBoolean(entry.duplicate)
+                }
+            }
+
             is IdeTargetReply.Attached -> {
                 buffer.writeByte(REPLY_ATTACHED)
                 buffer.writeAttachedTarget(reply.target)
@@ -342,6 +362,18 @@ internal object IdeTargetWireProtocol {
         val requestId = buffer.readVarLong()
         val reply =
             when (val kind = buffer.readUnsignedByte().toInt()) {
+                REPLY_NAMED_PERIPHERALS -> {
+                    val truncated = buffer.readBoolean()
+                    val count = buffer.readVarInt()
+                    require(count in 0..1024) { "Invalid peripheral count" }
+                    IdeTargetReply.NamedPeripherals(
+                        List(count) {
+                            IdeNamedPeripheral(buffer.readUtf(64), buffer.readUtf(256), buffer.readBoolean())
+                        },
+                        truncated,
+                    )
+                }
+
                 REPLY_ATTACHED -> {
                     IdeTargetReply.Attached(buffer.readAttachedTarget())
                 }
@@ -420,6 +452,7 @@ internal object IdeTargetWireProtocol {
     private const val FILE_STAT = 9
     private const val FILE_LIST = 10
     private const val FILE_READ = 11
+    private const val NAMED_PERIPHERALS = 12
     private const val REPLY_ATTACHED = 0
     private const val REPLY_UPLOAD_ACCEPTED = 1
     private const val REPLY_VERIFIED = 2
@@ -433,6 +466,7 @@ internal object IdeTargetWireProtocol {
     private const val REPLY_FILE_STAT = 10
     private const val REPLY_FILE_LIST = 11
     private const val REPLY_FILE_READ = 12
+    private const val REPLY_NAMED_PERIPHERALS = 13
 }
 
 internal fun RegistryFriendlyByteBuf.writeTarget(target: IdeTargetReference) {

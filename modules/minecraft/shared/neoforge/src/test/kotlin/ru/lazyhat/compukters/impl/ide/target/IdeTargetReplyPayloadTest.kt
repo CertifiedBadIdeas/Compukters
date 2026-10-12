@@ -35,14 +35,32 @@ import ru.lazyhat.compukters.ide.project.ResolvedModule
 import ru.lazyhat.compukters.ide.project.ToolchainLockIdentity
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 
 internal class IdeTargetReplyPayloadTest {
+    @Test
+    fun `peripheral payload rejects invalid registry IDs and oversized entry counts before allocation`() {
+        assertFailsWith<IllegalArgumentException> { IdeNamedPeripheral("speed", "../../invalid") }
+        assertFailsWith<IllegalArgumentException> { IdeNamedPeripheral("", "minecraft:stone") }
+        val buffer = RegistryFriendlyByteBuf(Unpooled.buffer(), RegistryAccess.EMPTY)
+        try {
+            buffer.writeVarLong(1)
+            buffer.writeByte(13)
+            buffer.writeBoolean(false)
+            buffer.writeVarInt(1025)
+            assertFailsWith<IllegalArgumentException> { IdeTargetReplyPayload.STREAM_CODEC.decode(buffer) }
+        } finally {
+            buffer.release()
+        }
+    }
+
     @Test
     fun `all target replies round trip with exact profile and typed failure`() {
         val target = target()
         val replies =
             listOf(
                 IdeTargetReply.Attached(target),
+                IdeTargetReply.NamedPeripherals(listOf(IdeNamedPeripheral("speed", "create:speedometer", true)), true),
                 IdeTargetReply.UploadAccepted,
                 IdeTargetReply.Verified(BinaryValue.of(byteArrayOf(1, 2)), target.reference(), hash(8), artifactBytes = 42),
                 IdeTargetReply.RevisionObserved(IdeExecutableRevision.Absent),

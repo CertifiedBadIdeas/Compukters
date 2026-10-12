@@ -25,6 +25,7 @@ fun rejectsRotation(block: () -> Unit) {
 
 fun main() {
     try {
+        verifyQuaternionComponents()
         verifyAxisRotations()
         verifyDirectionRotations()
         verifyInterpolation()
@@ -278,4 +279,17 @@ fun verifyRotationChains() {
         }
     }
     nearRotation(floatRotation.toDouble().angleTo(floatReference), 0.0, 2e-5)
+}
+
+fun verifyQuaternionComponents() {
+    val rotation = Rotation3d.fromQuaternion(Quaterniond(1.0, -2.0, 3.0, -4.0))
+    check(rotation.x == rotation.quaternion.x)
+    check(rotation.y == rotation.quaternion.y)
+    check(rotation.z == rotation.quaternion.z)
+    check(rotation.w == rotation.quaternion.w)
+    val floatRotation = Rotation3f.fromQuaternion(Quaternionf(1f, -2f, 3f, -4f))
+    check(floatRotation.x == floatRotation.quaternion.x)
+    check(floatRotation.y == floatRotation.quaternion.y)
+    check(floatRotation.z == floatRotation.quaternion.z)
+    check(floatRotation.w == floatRotation.quaternion.w)
 }
