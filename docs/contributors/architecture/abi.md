@@ -27,7 +27,8 @@ encoding and checkpoint schemas remain unchanged. stdlib:core 1.19.0 supplies th
 ## Double geometry and quaternion components
 
 `stdlib:core` 1.19.0 adds Vector2d/Vector3d/Vector4d and distinct Quaternionf/Quaterniond value types,
-plus explicit vector/quaternion and scalar-width conversions. Existing nominal inline layouts and F64
+plus explicit vector/quaternion and scalar-width conversions. Rotation3f/Rotation3d contain the corresponding
+unit quaternion, use private constructors and validate/normalize through public factories. Existing nominal inline layouts and F64
 arithmetic/math instructions express this additive source API. Platform module identities change;
 CPKT encoding, Runtime ABI, native C ABI and checkpoint schemas remain unchanged. Rebuild dependent
 library inputs with the matching platform. The [math inventory](../../developers/stdlib/math.md)

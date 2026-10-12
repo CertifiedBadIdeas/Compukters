@@ -18,6 +18,17 @@ public value class Quaternionf(
 ) {
     public fun toDouble(): Quaterniond = Quaterniond(x.toDouble(), y.toDouble(), z.toDouble(), w.toDouble())
 
+    /** Hamilton product; no normalization is performed. */
+    public operator fun times(other: Quaternionf): Quaternionf =
+        Quaternionf(
+            w * other.x + x * other.w + y * other.z - z * other.y,
+            w * other.y - x * other.z + y * other.w + z * other.x,
+            w * other.z + x * other.y - y * other.x + z * other.w,
+            w * other.w - x * other.x - y * other.y - z * other.z,
+        )
+
+    public fun conjugated(): Quaternionf = Quaternionf(-x, -y, -z, w)
+
     public fun toVector4f(): Vector4f = Vector4f(x, y, z, w)
 }
 
