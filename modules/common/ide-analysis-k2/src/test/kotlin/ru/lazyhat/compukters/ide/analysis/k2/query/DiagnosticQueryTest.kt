@@ -333,6 +333,13 @@ class DiagnosticQueryTest {
                 val builder: CharSequence = StringBuilder(8).append('x').append("text")
                 val text = buildString { append(builder); appendLine(42) }
                 val sequence: CharSequence = text
+                val trimmed: CharSequence = builder.trim().take(2).padEnd(4).removePrefix(builder)
+                val stringTrimmed: String = text.trim().take(2).padEnd(4).removePrefix(builder)
+                val parts: List<String> = builder.split(':')
+                val lines: List<String> = builder.lines()
+                val repeated: String = builder.repeat(2)
+                val contains: Boolean = builder.contains(sequence)
+                val position: Int = builder.indexOf("text")
                 sequence.subSequence(0, 1)
                 for (unit in sequence) { println(unit) }
                 for (char in text) { println(char) }

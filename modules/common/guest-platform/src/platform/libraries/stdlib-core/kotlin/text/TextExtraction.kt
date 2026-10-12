@@ -103,7 +103,32 @@ public fun String.substringAfterLast(
 }
 
 /** Removes prefix when present, otherwise returns this string. */
-public fun String.removePrefix(prefix: String): String = if (startsWith(prefix)) substring(prefix.length, length) else this
+public fun String.removePrefix(prefix: CharSequence): String = if (startsWith(prefix)) substring(prefix.length, length) else this
 
 /** Removes suffix when present, otherwise returns this string. */
-public fun String.removeSuffix(suffix: String): String = if (endsWith(suffix)) substring(0, length - suffix.length) else this
+public fun String.removeSuffix(suffix: CharSequence): String = if (endsWith(suffix)) substring(0, length - suffix.length) else this
+
+/** Materializes the selected UTF-16 range as an immutable String. */
+public fun CharSequence.substring(
+    startIndex: Int,
+    endIndex: Int,
+): String {
+    if (startIndex < 0 || endIndex > length || startIndex > endIndex) throw IndexOutOfBoundsException("Invalid substring range")
+    if (this is String) return substring(startIndex, endIndex)
+    val output = CharArray(endIndex - startIndex)
+    var index = 0
+    while (index < output.size) {
+        output[index] = this[startIndex + index]
+        index += 1
+    }
+    return String(output, 0, output.size)
+}
+
+public fun CharSequence.substring(startIndex: Int): String = substring(startIndex, length)
+
+public fun CharSequence.removePrefix(prefix: CharSequence): CharSequence =
+    if (startsWith(prefix)) subSequence(prefix.length, length) else subSequence(0, length)
+
+/** Removes suffix when present, otherwise returns this string. */
+public fun CharSequence.removeSuffix(suffix: CharSequence): CharSequence =
+    if (endsWith(suffix)) subSequence(0, length - suffix.length) else subSequence(0, length)

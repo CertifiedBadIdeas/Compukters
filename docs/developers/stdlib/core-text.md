@@ -70,8 +70,8 @@ Literals, concatenation, interpolation lowered as concatenation, `length`, index
 equality, direct `compareTo(String)`, the `<`, `<=`, `>`, and `>=` operators, and construction from
 `CharArray` map to verified VM operations. `compareTo` orders UTF-16 code units and returns the first
 differing code-unit difference, or the length difference for a prefix. The core library also provides
-`startsWith(prefix: String)`, `endsWith(suffix: String)`, `contains(other: String)`, and `indexOf(other:
-String, startIndex: Int = 0)` and `toIntOrNull()`. `toIntOrNull()` accepts optional `+` or `-` followed by
+`CharSequence.startsWith(prefix: CharSequence)`, `endsWith(suffix: CharSequence)`,
+`contains(other: CharSequence)`, and `indexOf(other: String, startIndex: Int = 0)` and `toIntOrNull()`. `toIntOrNull()` accepts optional `+` or `-` followed by
 ASCII decimal digits and returns null for invalid input or values outside the `Int` range. Search uses UTF-16
 code units; a negative start index begins at zero, and an empty search string returns the start index clamped
 to the string length. Case-sensitive Char search and backward `lastIndexOf` searches are also available, along
@@ -126,6 +126,15 @@ may return another `CharSequence`. Results may narrow the interface result type 
 `take`, `drop`, `takeLast`, `dropLast`, `padStart`, `padEnd` and `repeat` operate on UTF-16 units.
 Non-negative counts are required, slicing clamps counts to content length and padding never truncates.
 Padding defaults to a space; repetition checks output-length overflow before allocation.
+
+Search, emptiness/blank predicates, splitting, `lines()` and `repeat` accept `CharSequence`, including
+builders and Guest implementations. `split`/`lines` return `List<String>` and `repeat` returns `String`.
+`trim` variants, `take`/`drop` variants, padding and prefix/suffix removal have `CharSequence` overloads
+returning `CharSequence` and specialized `String` overloads retaining `String` results. Slicing delegates
+to the sequence's `subSequence`; its implementation controls snapshot/view semantics. `CharSequence.substring`
+materializes an immutable String independently of the receiver's `toString` implementation. Numeric parsing,
+replacement and delimiter-relative `substringBefore`/`substringAfter` remain String operations.
+The receiver/result contracts follow [Kotlin stdlib](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin.text/).
 
 **Evidence:** `MinimalScriptLoweringTest`, test `text stdlib preserves UTF16 cleanup search extraction and
 transformations`, executed by `testKotlinTextStdlibVmConformance`; IDE test `text builders iteration sizing and

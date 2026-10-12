@@ -16,6 +16,8 @@ headings so this page has one stable URL that can be shared outside the reposito
 - Guest Kotlin provides reusable `StringBuilder` and `buildString`, full `CharSequence` support for strings, builders and
   user implementations, text iteration, `take`/`drop`
   helpers, padding and repetition, plus signed and unsigned integer parsers with radices 2–36.
+  Search, whitespace checks, splitting and sizing accept `CharSequence`; specialized String overloads
+  preserve String results.
   Text operations preserve UTF-16 units and respect managed heap quotas; malformed integer text
   returns null or throws `NumberFormatException` according to the selected API.
 
