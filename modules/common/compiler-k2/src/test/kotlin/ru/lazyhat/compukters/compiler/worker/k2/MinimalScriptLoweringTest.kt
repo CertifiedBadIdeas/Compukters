@@ -289,6 +289,72 @@ class MinimalScriptLoweringTest {
         }
 
     @Test
+    fun `generic class captures preserve concrete owners and escaping callbacks`() =
+        withAdapter { adapter ->
+            val source = repositoryFile("modules/common/compiler-k2/src/test/resources/kotlin/generic-class-captures/main.kt").readText()
+            val result = adapter.compile(request(source))
+            val bytes = assertNotNull(result.artifact, result.diagnostics.toString()).toByteArray()
+            ArtifactReader.read(bytes)
+            assertContentEquals(bytes, assertNotNull(adapter.compile(request(source)).artifact).toByteArray())
+            System.getProperty("compukter.vm.genericClassCapturesArtifact")?.let { output ->
+                Path.of(output).also { it.parent.createDirectories() }.writeBytes(bytes)
+            }
+        }
+
+    @Test
+    fun `generic class direct local captures retain scalar signatures without environments`() =
+        withAdapter { adapter ->
+            val result =
+                adapter.compile(
+                    request(
+                        """
+                        class Holder<T>(val seed: T) {
+                            fun direct(value: T): T {
+                                fun read(): T = value
+                                return read()
+                            }
+                        }
+                        fun main() { Holder(1).direct(2) }
+                        """.trimIndent(),
+                    ),
+                )
+            val artifact = ArtifactReader.read(assertNotNull(result.artifact, result.diagnostics.toString()).toByteArray())
+            assertEquals(
+                1,
+                artifact.modules
+                    .flatMap { it.blocks }
+                    .flatMap { it.instructions }
+                    .count { it is Instruction.NewObject },
+            )
+            assertTrue(
+                artifact.modules.flatMap { it.types }.filterIsInstance<NominalType.Function>().any {
+                    it.parameters == listOf(ValueType.I32) && it.result == ValueType.I32
+                },
+            )
+        }
+
+    @Test
+    fun `expanding generic class local recursion reports bounded target diagnostics`() =
+        withAdapter { adapter ->
+            val result =
+                adapter.compile(
+                    request(
+                        """
+                        class Holder<T>(val value: T) {
+                            fun run(): Int {
+                                fun <R> grow(value: R): Int = grow(listOf(value))
+                                return grow(value)
+                            }
+                        }
+                        fun main() { Holder(1).run() }
+                        """.trimIndent(),
+                    ),
+                )
+            assertNull(result.artifact)
+            assertTrue(result.diagnostics.any { it.code == "UNSUPPORTED_IR" && "limit" in it.message }, result.diagnostics.toString())
+        }
+
+    @Test
     fun `generic local functions preserve concrete lexical captures and escaping references`() =
         withAdapter { adapter ->
             val source = repositoryFile("modules/common/compiler-k2/src/test/resources/kotlin/generic-local-functions/main.kt").readText()
@@ -5657,7 +5723,6 @@ class MinimalScriptLoweringTest {
                     "inline fun <reified T> keep(value: T): T = value\nfun main() { keep(1) }",
                     "interface Writer<in T> { fun write(value: T) }\nfun main() {}",
                     "class Box<out T>(val value: T)\nfun main() { Box(1) }",
-                    "class Box<T>(val value: T)\nfun main() { Box<(() -> Unit)?>(null) }",
                     "fun <T> erase(value: T): Any = value\nfun main() { erase(1) }",
                 )
             unsupported.forEach { source ->

@@ -1,8 +1,7 @@
 ---
 layout: default
 title: PID recompilation after source edits
-parent: Performance
-nav_exclude: true
+section: contributors
 ---
 
 # PID recompilation after source edits — 2026-10-11

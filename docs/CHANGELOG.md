@@ -59,6 +59,8 @@ headings so this page has one stable URL that can be shared outside the reposito
   stay in typed arguments. Local functions can use expression defaults and appear in class initializers.
   Generic local functions and local helpers inside generic top-level functions specialize concrete calls,
   defaults and escaping captures; primitive arguments remain unboxed within bounded compiler expansion.
+  Generic class methods and custom accessors also admit local helpers and callbacks capturing their concrete
+  owner, parameters and shared mutable locals; captured owners observe later field updates.
   Class `val`/`var` properties can store, replace and invoke callbacks, including concrete generic holders,
   constructor defaults and custom/inherited accessors. Nullable callbacks can default or reset to null,
   use safe invocation, Elvis and smart casts, and retain separately held aliases after reset. Safe Unit
@@ -107,7 +109,8 @@ headings so this page has one stable URL that can be shared outside the reposito
 
 - IDE hover displays short Kotlin signatures with explicit return types, compact documentation entries
   and source information below the documentation. Editor and long hover scrollbars support thumb dragging
-  and page clicks alongside mouse-wheel scrolling.
+  and page clicks alongside mouse-wheel scrolling. Hover documentation and Go to Declaration resolve
+  platform callback overloads to their exact attached source, including callbacks with a receiver.
   Unknown references color their complete identifier; errors and warnings underline their exact source ranges.
   Hovering a marked token shows its problems together, preserving source editing and horizontal scrolling.
   Argument hints open when typing a call or pressing Ctrl+P, wrap long signatures and emphasize the current parameter.

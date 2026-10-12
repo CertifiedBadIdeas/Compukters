@@ -72,5 +72,4 @@ shutdown, faults, reboot, VM replacement, and chunk reload do not reset it.
 Rust owns the current input snapshot, waiters, and a confirmed output mirror;
 each new VM session is seeded from Minecraft before it runs.
 
-A concise multi-side DSL is deferred until Guest Kotlin supports receiver
-lambdas.
+Use the side operations above for multi-side control. No public multi-side DSL is currently provided.

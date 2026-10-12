@@ -143,7 +143,7 @@ coordinates require explicit `roundToInt()`, `floorToInt()` or `ceilToInt()` con
 
 A `Rect2i` has nonnegative size and half-open bounds: its position is included, while right/bottom are excluded.
 `point in bounds`, intersection and bounding union follow those same bounds. Integer rectangle extents must
-fit Int. See [standard-library mathematics]({{ '/STDLIB-SUPPORT/math/' | relative_url }}) for all four vector
+fit Int. See [standard-library mathematics]({{ '/STDLIB-SUPPORT/math/' | relative_url }}) for the vector
 types, their aliases, arithmetic, floating normalization/interpolation and rounding semantics.
 
 ## Existing text programs

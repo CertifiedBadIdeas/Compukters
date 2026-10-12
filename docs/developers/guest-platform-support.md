@@ -156,8 +156,8 @@ handles with side acquisition`; `ComputerPeripheralLookupTest`; and neutral addo
 diagnostic/completion/parameter-information tests. The standalone addon GameTest
 `CreatePeripheralGameTests.namedKineticLifecycle` compiles and executes a Guest program against motor-driven
 real gauges and a rotation controller, including cable cuts, reconnection, block replacement and configurator
-conflicts. See [Create addon](https://certifiedbadideas.github.io/Compukters/CREATE/) for setup and [Create
-kinetics](https://certifiedbadideas.github.io/Compukters/CREATE-KINETICS/) for the API.
+conflicts. See [Create addon]({{ '/CREATE/' | relative_url }}) for setup and [Create
+kinetics]({{ '/CREATE-KINETICS/' | relative_url }}) for the API.
 
 ### Create Stock Ticker on Minecraft 1.21.1
 
@@ -169,7 +169,7 @@ request bounded packaging to a validated address. A request reports Create's acc
 Snapshots must be closed after use and stale device handles fail.
 
 **Evidence:** `StockTickerHostStateTest`, the independent Create addon `check`, and its packaged Guest API
-bundle. See [Create logistics](https://certifiedbadideas.github.io/Compukters/CREATE-LOGISTICS/).
+bundle. See [Create logistics]({{ '/CREATE-LOGISTICS/' | relative_url }}).
 
 ### Create steam boiler on Minecraft 1.21.1
 
@@ -182,7 +182,7 @@ stay bound to the selected Fluid Tank segment and controller.
 **Evidence:** `BoilerHostStateTest`, the independent Create addon `check`, and its packaged Guest API bundle.
 `CreateBoilerGameTests.namedBoilerLifecycle` executes a Guest program through a real non-controller tank
 segment, with water supplied through Create's fluid capability, passive heat, engine/tank changes and cable
-reconnection. See [Create boilers](https://certifiedbadideas.github.io/Compukters/CREATE-BOILERS/).
+reconnection. See [Create boilers]({{ '/CREATE-BOILERS/' | relative_url }}).
 
 ### Addon Guest API bundles
 
@@ -210,7 +210,7 @@ performs the Minecraft call on the server thread before resuming the Guest Boole
 test `sound beep lowers deterministically to a blocking Boolean capability operation`,
 [`computer.rs`](https://github.com/CertifiedBadIdeas/Compukter-VM/blob/main/src/computer.rs), sound request
 tests, and
-[`ComputerSoundGameTest`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/minecraft/v26_1/v26_1-neoforge/src/gameTest/kotlin/ru/lazyhat/compukters/impl/computer/ComputerSoundGameTest.kt).
+[`ComputerSoundGameTestScenario`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/minecraft/shared/neoforge/src/gameTest/kotlin/ru/lazyhat/compukters/impl/computer/ComputerSoundGameTestScenario.kt).
 
 ### In-world display
 
@@ -227,7 +227,7 @@ across and 10 rows per block down throughout the composite canvas, rasterized at
 `GraphicalDisplayHibernationGameTestScenario` and `TextDisplayGameTestScenario`. `DisplayHostStateTest`, tests
 `legacy text reaches the whole composite grid and crosses panel boundaries` and `legacy text keeps single panel bounds`,
 cover composite coordinates, row overflow rejection, cell replacement and unchanged single-panel limits.
-See [Display](https://certifiedbadideas.github.io/Compukters/DISPLAY/).
+See [Display]({{ '/DISPLAY/' | relative_url }}).
 
 ### Redstone GPIO
 
@@ -244,7 +244,7 @@ remains private to the runtime. Rust waiter tests, core batch-commit tests, and 
 test `redstone program lowers deterministically for vm conformance`,
 [`computer.rs`](https://github.com/CertifiedBadIdeas/Compukter-VM/blob/main/src/computer.rs), redstone tests,
 and
-[`ComputerRedstoneGameTest`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/minecraft/v26_1/v26_1-neoforge/src/gameTest/kotlin/ru/lazyhat/compukters/impl/computer/ComputerRedstoneGameTest.kt).
+[`ComputerRedstoneGameTestScenario`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/minecraft/shared/neoforge/src/gameTest/kotlin/ru/lazyhat/compukters/impl/computer/ComputerRedstoneGameTestScenario.kt).
 
 ### Typed terminal events and drawing
 

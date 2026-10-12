@@ -581,6 +581,15 @@ registerKotlinVmConformance(
     conformanceScenario = "nullable-callbacks",
 )
 registerKotlinVmConformance(
+    taskName = "testKotlinGenericClassCapturesVmConformance",
+    taskDescription = "Executes concrete Guest generic class captures with the pinned Compukter VM.",
+    artifactTask = ":compiler-k2:generateGenericClassCapturesConformanceArtifact",
+    artifact = project(":compiler-k2").layout.buildDirectory.file("generated/conformance/kotlin-generic-class-captures.cpkt"),
+    cargoTargetDirectory = ".toolchain/build/cargo/compiler-k2-generic-class-captures-conformance",
+    artifactEnvironmentVariable = "COMPUKTER_KOTLIN_GENERIC_CLASS_CAPTURES_ARTIFACT",
+    conformanceScenario = "generic-class-captures",
+)
+registerKotlinVmConformance(
     taskName = "testKotlinGenericLocalFunctionsVmConformance",
     taskDescription = "Executes generic Guest local functions with the pinned Compukter VM.",
     artifactTask = ":compiler-k2:generateGenericLocalFunctionsConformanceArtifact",

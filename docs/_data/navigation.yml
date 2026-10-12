@@ -25,9 +25,9 @@
         - title: Redstone
           url: /REDSTONE/
           description: Read signals, wait for changes, and control outputs.
-        - title: Text displays
+        - title: Displays
           url: /DISPLAY/
-          description: Put program output on a screen in the world.
+          description: Assemble screens and draw persistent text and RGB graphics.
     - title: Optional addons
       items:
         - title: Addon overview
@@ -83,6 +83,10 @@
           children:
             - title: Core and text
               url: /STDLIB-SUPPORT/core-text/
+            - title: Mathematics and geometry
+              url: /STDLIB-SUPPORT/math/
+            - title: Random numbers
+              url: /STDLIB-SUPPORT/random/
             - title: Arrays and ranges
               url: /STDLIB-SUPPORT/arrays-ranges/
             - title: Collections
@@ -122,6 +126,9 @@
         - title: Maintain addons
           url: /ADDON-CONTRIBUTING/
           description: Standalone builds, integration boundaries, and lifecycle tests.
+        - title: Publish releases
+          url: /RELEASES/
+          description: Validate tagged artifacts and publish or recover a release.
         - title: Verification
           url: /VERIFICATION/
           description: Choose focused checks and understand release gates.

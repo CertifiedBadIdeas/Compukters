@@ -27,10 +27,13 @@ current process. Guest code does not select an explicit capability mask when sta
 top-level references as static spawns; other function values cross the existing spawn boundary as one managed
 reference into a private Guest trampoline, which invokes `Function0<Unit>` through normal dynamic dispatch. The child
 frame retains that reference after the launching function returns, and shared capture cells remain VM-owned.
-Ordinary higher-order Guest calls admit non-null function values whose parameter and result types are supported by
+Ordinary higher-order Guest calls admit concrete function values, including nullable callbacks, whose parameter and result types are supported by
 Guest Kotlin. The compiler creates one managed interface per concrete signature and lowers calls through the same
 interface-call instruction, preserving unboxed primitive values and ordinary reference ownership. There is no special
-arity transition at 22 or 23 arguments in the Guest artifact.
+arity transition at 22 or 23 arguments in the Guest artifact. Safe callback invocation evaluates the receiver
+once and skips argument effects for null; outer reference nullability does not change callable interface identity.
+Concrete generic class methods prepare their lexical bodies before capture layout, so escaping callbacks can
+retain their owner or typed method locals through ordinary managed references and shared cells.
 
 ## Inline lowering
 
@@ -142,7 +145,7 @@ and then emits one acknowledged weak-power `15 -> 0` pulse per round; every tran
 Guest redstone API until its physical server-thread commit is confirmed. These workloads exist to measure aggregate
 in-world runtime cost and do not own a timing capability, privileged execution budget, or benchmark-only host path.
 See the
-[in-world VM benchmark guide](https://certifiedbadideas.github.io/Compukters/VM-BENCHMARK/) for the controlled scaling procedure.
+[in-world VM benchmark guide]({{ '/VM-BENCHMARK/' | relative_url }}) for the controlled scaling procedure.
 An operator-only harness can run up to 4096 internal headless artifacts through the same verified session and actor
 scheduler, including a phased capacity run that settles actors at terminal input, observes 100 idle ticks, samples
 their existing resource counters once, and wakes them with an ordinary Text event. It can also dispatch either ordinary

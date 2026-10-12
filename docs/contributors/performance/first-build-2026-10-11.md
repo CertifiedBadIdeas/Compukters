@@ -1,8 +1,7 @@
 ---
 layout: default
 title: First build and library prewarming
-parent: Performance
-nav_exclude: true
+section: contributors
 ---
 
 # First build and library prewarming — 2026-10-11

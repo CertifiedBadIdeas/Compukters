@@ -92,6 +92,7 @@ import org.jetbrains.kotlin.ir.util.file
 import org.jetbrains.kotlin.ir.util.fqNameWhenAvailable
 import org.jetbrains.kotlin.ir.util.isNullable
 import org.jetbrains.kotlin.ir.util.parentAsClass
+import org.jetbrains.kotlin.ir.util.patchDeclarationParents
 import org.jetbrains.kotlin.ir.util.resolveFakeOverrideMaybeAbstract
 import org.jetbrains.kotlin.ir.visitors.IrVisitorVoid
 import org.jetbrains.kotlin.name.ClassId
@@ -235,7 +236,7 @@ private data class GuestClassInstance(
         IrTypeSubstitutor(
             declaration.typeParameters.map { it.symbol },
             arguments.map { makeTypeProjection(it, Variance.INVARIANT) },
-            false,
+            true,
         )
 
     fun substitute(type: IrType): IrType = substitution.substitute(type)
@@ -280,6 +281,7 @@ private fun collectGuestClassInstances(
         substitution: (IrType) -> IrType = { it },
     ) {
         val resolved = substitution(type)
+        if (resolved.containsTypeParameter()) return
         val local = resolved.classInstance(bySymbol)
         if (local != null) {
             add(local)
@@ -307,7 +309,7 @@ private fun collectGuestClassInstances(
                         setOf("kotlin.collections.listOf", "kotlin.collections.emptyList")
                     ) {
                         val elementType = expression.typeArguments.singleOrNull()?.let(substitution)
-                        if (elementType != null) {
+                        if (elementType != null && !elementType.containsTypeParameter()) {
                             byName["kotlin.collections.ArrayList"]?.let {
                                 add(GuestClassInstance(it, listOf(elementType)))
                             }
@@ -318,13 +320,16 @@ private fun collectGuestClassInstances(
                             ?.asString(),
                     ]?.let { owner ->
                         val arguments = expression.typeArguments.map { it?.let(substitution) ?: return@let }
+                        if (arguments.any { it.containsTypeParameter() }) return@let
                         byName[owner]?.let { add(GuestClassInstance(it, arguments)) }
                     }
                     if (expression.symbol.owner.fqNameWhenAvailable
                             ?.asString() == "kotlin.collections.mutableListStorage"
                     ) {
                         val elementType = expression.typeArguments.singleOrNull()?.let(substitution)
-                        if (elementType != null && (elementType.isNullable() || GuestPrimitive.scalar(elementType) == null)) {
+                        if (elementType != null && !elementType.containsTypeParameter() &&
+                            (elementType.isNullable() || GuestPrimitive.scalar(elementType) == null)
+                        ) {
                             byName["kotlin.collections.ReferenceMutableListStorage"]?.let {
                                 add(GuestClassInstance(it, listOf(elementType)))
                             }
@@ -345,7 +350,7 @@ private fun collectGuestClassInstances(
             null,
         )
     }
-    functions.forEach { instance -> scan(instance.declaration, instance::substitute) }
+    functions.forEach { instance -> scan(instance.concreteDeclaration, instance::substitute) }
     properties.forEach { property -> scan(property.declaration, { it }) }
     while (pending.isNotEmpty()) {
         val instance = pending.removeFirst()
@@ -374,6 +379,8 @@ private data class GuestFunctionInstance(
     val arguments: List<IrType>,
     val ownerClass: GuestClassInstance? = null,
 ) {
+    var concreteDeclaration: IrSimpleFunction = declaration
+
     val substitution: IrTypeSubstitutor =
         IrTypeSubstitutor(
             declaration.typeParameters.map { it.symbol },
@@ -438,14 +445,19 @@ private fun collectGuestFunctionShapes(
         }
         closures.mapNotNull { it.expression.type.guestFunctionShape() }.forEach(::include)
         functions.forEach { instance ->
-            includeLocalTypes(instance.declaration, instance::substitute)
+            includeLocalTypes(instance.concreteDeclaration, instance::substitute)
             instance.substitute(instance.declaration.returnType).guestFunctionShape()?.let(::include)
             loweredParameters(instance.declaration, session)
                 .mapNotNull { parameter -> instance.substitute(parameter.type).guestFunctionShape() }
                 .forEach(::include)
         }
         classes.forEach { instance ->
-            includeLocalTypes(instance.declaration, instance::substitute)
+            instance.declaration.declarations.forEach { declaration ->
+                when (declaration) {
+                    is IrConstructor, is IrAnonymousInitializer -> includeLocalTypes(declaration, instance::substitute)
+                    is IrProperty -> declaration.backingField?.let { includeLocalTypes(it, instance::substitute) }
+                }
+            }
             instance.declaration.constructors.forEach { constructor ->
                 constructor.parameters.mapNotNull { instance.substitute(it.type).guestFunctionShape() }.forEach(::include)
             }
@@ -528,10 +540,131 @@ private fun collectGuestFunctionInstances(
     constructorBodies.forEach { constructor -> constructor.body?.let { scan(it, null) } }
     while (pending.isNotEmpty()) {
         val instance = pending.removeFirst()
-        instance.declaration.body?.let { scan(it, instance) }
-        instance.declaration.parameters.forEach { parameter -> parameter.defaultValue?.let { scan(it, instance) } }
+        instance.concreteDeclaration.body?.let { scan(it, instance) }
+        instance.concreteDeclaration.parameters.forEach { parameter -> parameter.defaultValue?.let { scan(it, instance) } }
     }
     return instances.toList()
+}
+
+private data class PreparedGuestFunctionBodies(
+    val functions: List<IrSimpleFunction>,
+    val classes: List<IrClass>,
+    val constructors: List<IrClass>,
+    val instances: List<GuestFunctionInstance>,
+    val classInstances: List<GuestClassInstance>,
+    val locals: Map<IrSimpleFunctionSymbol, GuestLocalFunction>,
+    val closureRoots: List<IrElement>,
+)
+
+@OptIn(UnsafeDuringIrConstructionAPI::class)
+private fun prepareGuestFunctionBodies(
+    rootFunctions: List<IrSimpleFunction>,
+    sourceClasses: List<IrClass>,
+    inlineValueClasses: InlineValueClassRegistry,
+    topLevelProperties: List<TopLevelProperty>,
+    pluginContext: IrPluginContext,
+    lexicalSpecialization: GuestLocalSpecialization,
+): PreparedGuestFunctionBodies {
+    var closureRoots: List<IrElement> =
+        rootFunctions.filter { (it.parent as? IrClass)?.typeParameters?.isNotEmpty() != true } +
+            sourceClasses.flatMap { declaration ->
+                declaration.declarations.filter {
+                    it is IrConstructor || it is IrProperty || it is IrAnonymousInitializer
+                }
+            }
+    var localFunctions = collectGuestLocalFunctions(closureRoots)
+    var userFunctions = rootFunctions + localFunctions.values.map { it.declaration }
+    val userClasses =
+        collectGuestClasses(
+            sourceClasses.filterNot {
+                inlineValueClasses.contains(it.symbol) || inlineValueClasses.isCompanion(it.symbol)
+            },
+            userFunctions,
+        ).filterNot {
+            inlineValueClasses.contains(it.symbol) || inlineValueClasses.isCompanion(it.symbol)
+        }
+    val constructorClasses =
+        userClasses.filter { declaration ->
+            declaration.kind in setOf(ClassKind.CLASS, ClassKind.OBJECT) &&
+                declaration.constructors.any { it.isPrimary }
+        }
+    var functionInstances =
+        collectGuestFunctionInstances(userFunctions, constructorClasses, lexicalVariantCount = lexicalSpecialization.variantCount)
+    val specializationClasses = (userClasses + sourceClasses.filter { inlineValueClasses.contains(it.symbol) }).distinctBy { it.symbol }
+    var allClassInstances =
+        collectGuestClassInstances(specializationClasses, functionInstances, topLevelProperties, pluginContext.irBuiltIns.anyType)
+    var classInstances = allClassInstances.filterNot { inlineValueClasses.contains(it.declaration.symbol) }
+    // Generic member bodies can call helpers whose signatures/body introduce further class instances.
+    // Discover functions and classes together until their dependencies stop adding specializations.
+    val concreteMemberBodies = linkedMapOf<GuestFunctionInstance, IrSimpleFunction>()
+    while (true) {
+        functionInstances =
+            collectGuestFunctionInstances(
+                userFunctions,
+                constructorClasses,
+                allClassInstances.flatMap { classInstance ->
+                    if (classInstance.arguments.isEmpty()) {
+                        emptyList()
+                    } else {
+                        userFunctions.filter { it.parent == classInstance.declaration }.map { function ->
+                            GuestFunctionInstance(function, emptyList(), classInstance).also { instance ->
+                                instance.concreteDeclaration =
+                                    concreteMemberBodies.getOrPut(instance) {
+                                        copyGuestFunction(
+                                            function,
+                                            emptyList(),
+                                            classInstance.declaration.typeParameters,
+                                            classInstance.arguments,
+                                        ).also { copy ->
+                                            copy.patchDeclarationParents(function.parent)
+                                            lexicalSpecialization.lower(listOf(copy), emptyList())
+                                        }
+                                    }
+                            }
+                        }
+                    }
+                },
+                lexicalVariantCount = lexicalSpecialization.variantCount,
+            )
+        closureRoots =
+            rootFunctions.flatMap { function ->
+                if ((function.parent as? IrClass)?.typeParameters?.isNotEmpty() == true) {
+                    functionInstances.filter { it.declaration === function }.map { it.concreteDeclaration }
+                } else {
+                    listOf(function)
+                }
+            } +
+            sourceClasses.flatMap { declaration ->
+                declaration.declarations
+                    .filter { it is IrConstructor || it is IrProperty || it is IrAnonymousInitializer }
+                    .flatMap { element ->
+                        if (element is IrProperty && declaration.typeParameters.isNotEmpty()) {
+                            listOfNotNull(element.backingField)
+                        } else {
+                            listOf(element)
+                        }
+                    }
+            }
+        val discoveredLocals = collectGuestLocalFunctions(closureRoots)
+        val discoveredFunctions = rootFunctions + discoveredLocals.values.map { it.declaration }
+        val discoveredClasses =
+            collectGuestClassInstances(specializationClasses, functionInstances, topLevelProperties, pluginContext.irBuiltIns.anyType)
+        val stable = discoveredClasses.toSet() == allClassInstances.toSet() && discoveredFunctions == userFunctions
+        localFunctions = discoveredLocals
+        userFunctions = discoveredFunctions
+        if (stable) break
+        allClassInstances = discoveredClasses
+        classInstances = allClassInstances.filterNot { inlineValueClasses.contains(it.declaration.symbol) }
+    }
+    return PreparedGuestFunctionBodies(
+        userFunctions,
+        userClasses,
+        constructorClasses,
+        functionInstances,
+        classInstances,
+        localFunctions,
+        closureRoots,
+    )
 }
 
 private data class GuestClosureCapture(
@@ -1391,63 +1524,23 @@ internal object KotlinProjectLowering {
                         { it.name.asString() },
                     ),
                 )
-        val closureRoots: List<IrElement> =
-            rootFunctions +
-                sourceClasses.flatMap { declaration ->
-                    declaration.declarations.filter {
-                        it is IrConstructor || it is IrProperty || it is IrAnonymousInitializer
-                    }
-                }
-        val localFunctions = collectGuestLocalFunctions(closureRoots)
-        val userFunctions = rootFunctions + localFunctions.values.map { it.declaration }
-        val closureSources = collectGuestClosures(closureRoots, session, localFunctions)
-        val writtenValues = collectWrittenGuestValues(closureRoots)
-        val captureCellDeclarations = collectCaptureCellDeclarations(closureSources, localFunctions, writtenValues)
+        val prepared =
+            prepareGuestFunctionBodies(
+                rootFunctions,
+                sourceClasses,
+                inlineValueClasses,
+                topLevelProperties,
+                pluginContext,
+                lexicalSpecialization,
+            )
+        val userFunctions = prepared.functions
+        val userClasses = prepared.classes
+        val constructorClasses = prepared.constructors
+        val functionInstances = prepared.instances
+        val classInstances = prepared.classInstances
+        val localFunctions = prepared.locals
+        val closureRoots = prepared.closureRoots
         require(userFunctions.firstOrNull() === entry)
-        val userClasses =
-            collectGuestClasses(
-                sourceClasses.filterNot {
-                    inlineValueClasses.contains(it.symbol) || inlineValueClasses.isCompanion(it.symbol)
-                },
-                userFunctions,
-            ).filterNot {
-                inlineValueClasses.contains(it.symbol) || inlineValueClasses.isCompanion(it.symbol)
-            }
-        val constructorClasses =
-            userClasses.filter { declaration ->
-                declaration.kind in setOf(ClassKind.CLASS, ClassKind.OBJECT) &&
-                    declaration.constructors.any { it.isPrimary }
-            }
-        var functionInstances =
-            collectGuestFunctionInstances(userFunctions, constructorClasses, lexicalVariantCount = lexicalSpecialization.variantCount)
-        val specializationClasses = (userClasses + sourceClasses.filter { inlineValueClasses.contains(it.symbol) }).distinctBy { it.symbol }
-        var allClassInstances =
-            collectGuestClassInstances(specializationClasses, functionInstances, topLevelProperties, pluginContext.irBuiltIns.anyType)
-        var classInstances = allClassInstances.filterNot { inlineValueClasses.contains(it.declaration.symbol) }
-        // Generic member bodies can call helpers whose signatures/body introduce further class instances.
-        // Discover functions and classes together until their dependencies stop adding specializations.
-        while (true) {
-            functionInstances =
-                collectGuestFunctionInstances(
-                    userFunctions,
-                    constructorClasses,
-                    allClassInstances.flatMap { classInstance ->
-                        if (classInstance.arguments.isEmpty()) {
-                            emptyList()
-                        } else {
-                            userFunctions.filter { it.parent == classInstance.declaration }.map { function ->
-                                GuestFunctionInstance(function, emptyList(), classInstance)
-                            }
-                        }
-                    },
-                    lexicalVariantCount = lexicalSpecialization.variantCount,
-                )
-            val discoveredClasses =
-                collectGuestClassInstances(specializationClasses, functionInstances, topLevelProperties, pluginContext.irBuiltIns.anyType)
-            if (discoveredClasses.toSet() == allClassInstances.toSet()) break
-            allClassInstances = discoveredClasses
-            classInstances = allClassInstances.filterNot { inlineValueClasses.contains(it.declaration.symbol) }
-        }
         session.recordPlatformSpecializations(
             classInstances
                 .filter { instance ->
@@ -1459,6 +1552,9 @@ internal object KotlinProjectLowering {
                         )
                 }.map(GuestClassInstance::name),
         )
+        val closureSources = collectGuestClosures(closureRoots, session, localFunctions)
+        val writtenValues = collectWrittenGuestValues(closureRoots)
+        val captureCellDeclarations = collectCaptureCellDeclarations(closureSources, localFunctions, writtenValues)
         val functionShapes = collectGuestFunctionShapes(closureSources, functionInstances, classInstances, session)
         val unitBlockShape = GuestFunctionShape(emptyList(), pluginContext.irBuiltIns.unitType)
         session.recordPlatformSpecializations(functionShapes.map { functionShapeName(it, unitBlockShape) })
@@ -1644,7 +1740,7 @@ internal object KotlinProjectLowering {
             loweredParameters(instance.declaration, session).forEach {
                 guestArrayUsage.consider(it.type, instance::substitute)
             }
-            guestArrayUsage.scan(instance.declaration, instance::substitute)
+            guestArrayUsage.scan(instance.concreteDeclaration, instance::substitute)
         }
         classInstances.forEach { instance ->
             guestArrayUsage.scan(instance.declaration, instance::substitute)
@@ -2354,7 +2450,7 @@ internal object KotlinProjectLowering {
                     try {
                         FunctionCompiler(
                             pluginContext = pluginContext,
-                            function = function,
+                            function = instance.concreteDeclaration,
                             functionId = functionId,
                             blockBase = firstBlock,
                             stringType = stringType,
