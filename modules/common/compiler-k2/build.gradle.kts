@@ -1814,6 +1814,22 @@ tasks.register<Test>("generateMatrixShapesConformanceArtifact") {
     systemProperty("compukter.vm.matrixShapesArtifact", matrixShapesConformanceArtifact.get().asFile.absolutePath)
 }
 
+val rotationsConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-rotations.cpkt")
+tasks.register<Test>("generateRotationsConformanceArtifact") {
+    description = "Compiles spatial rotation interpolation, matrix conversion and numerical stability checks."
+    group = "verification"
+    dependsOn(tasks.jar)
+    useJUnitPlatform()
+    testClassesDirs = sourceSets.test.get().output.classesDirs
+    classpath = sourceSets.test.get().runtimeClasspath
+    filter.includeTestsMatching("*spatial rotations preserve shortest arcs matrices and long chain stability*")
+    inputs.file(workerJar)
+    inputs.file("src/test/resources/kotlin/rotations/main.kt")
+    outputs.file(rotationsConformanceArtifact)
+    systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
+    systemProperty("compukter.vm.rotationsArtifact", rotationsConformanceArtifact.get().asFile.absolutePath)
+}
+
 val generateTerminalOutputConformanceArtifact = tasks.register<Test>("generateTerminalOutputConformanceArtifact") {
     description = "Compiles scalar, sequence and ranged terminal output for native conformance."
     group = "verification"

@@ -96,10 +96,31 @@ on arbitrary components without normalization. `Quaternionf.toDouble()` widens c
 
 `Rotation3f`/`Rotation3d` are separate value classes containing a unit `quaternion`. Their constructors
 are private; `fromQuaternion()` rejects zero and non-finite inputs and normalizes finite nonzero components,
-including extreme magnitudes. Unit length is subject to the scalar width's floating rounding. `identity()`,
-`inverse()`, `transform(Vector3)` and rotation composition describe spatial rotations; `a * b` applies b
-first. Scalar-width conversions normalize again after widening/narrowing. Opposite-sign quaternions may
-describe the same spatial rotation but retain distinct component-based nominal equality.
+including extreme magnitudes. Unit length is subject to floating rounding, rather than exact equality to
+one. `inverse()` conjugates the quaternion and preserves its existing normalization error. Composition
+normalizes again; Rotation3f computes the product with Double intermediates before storing Float components.
+Use Rotation3d for repeated integration requiring Double precision. Scalar-width conversions normalize again.
+Opposite-sign quaternions describe the same spatial rotation but retain distinct component-based nominal equality.
+
+`fromAxisAngle(axis, angleRadians)` normalizes a finite nonzero axis and requires a finite angle in radians;
+zero axes are rejected even for a zero angle. `rotationX/Y/Z(angleRadians)` supply the positive unit axes.
+Rotations are active, right-handed transforms of column vectors: a positive quarter turn around Z maps +X
+to +Y, around X maps +Y to +Z, and around Y maps +Z to +X. `identity()`, `transform(Vector3)` and rotation
+composition follow the same convention as matrices; `a * b` applies b first.
+
+`slerp(other, amount)` follows the shortest spatial arc with constant angular speed with respect to amount,
+up to floating rounding. Antipodal quaternion signs do not create a long path. Relative-quaternion axis/angle
+arithmetic avoids acos(dot)'s loss of tiny rotations; it does not replace small-angle spherical interpolation
+with linear interpolation. Amounts zero and one retain the exact corresponding endpoint representation.
+Finite amounts outside 0..1 extrapolate along the selected arc; NaN/infinity and an unrepresentable Double
+interpolation angle throw IllegalArgumentException. At exactly PI there are two equally short paths;
+the stored quaternion representation selects the axis. `angleTo(other)` returns the smallest spatial angle
+in radians in [0, PI], independent of the quaternion sign.
+
+`toMatrix3f()` / `toMatrix3d()` produce the matching linear rotation matrix. `toMatrix4f()` / `toMatrix4d()`
+embed it with zero translation and the last row (0,0,0,1). Matrix components are row-major and multiply column
+vectors; transform results agree up to scalar rounding and evaluation order. Float factory/interpolation/
+angle/matrix calculations use Double intermediates, with explicit Float storage at the API boundary.
 
 Rectangles expose `position`, `size`, `left`, `top`, `right`, `bottom`, `isEmpty`, containment via `in`,
 `intersects`, `intersection` and bounding `union`. Bounds are half-open: left/top included, right/bottom
@@ -192,6 +213,12 @@ display Y points downward. Check positive display dimensions before mapping coor
   extents, dense and noncommuting matrix products, axis rotations, homogeneous point/direction lifting,
   projection bounds, invalid parameters, explicit division, callable references and collection storage.
   IDE `DiagnosticQueryTest` checks aliases, matrices and member completion with source and metadata-only inputs. `PlatformSignatureAliasesTest` checks signature expansion and ambiguous/cyclic rejection.
+- `testKotlinRotationsVmConformance` compiles and executes `compiler-k2/src/test/resources/kotlin/rotations/main.kt`,
+  covering axis-angle normalization/rejection, signed axis turns, noncommuting composition and matrix agreement,
+  shortest arcs, tiny angles, antipodal signs, endpoint preservation, extrapolation and invalid amounts.
+  Seeded chains of 2048 rotations check unit length, transformed-vector length and Float drift against a
+  Double reference with the same Float inputs. This proves execution of the new library methods in the VM;
+  it is not a bit-for-bit JOML comparison.
 - `testKotlinMatrixShapesVmConformance` compiles and executes `compiler-k2/src/test/resources/kotlin/matrix-shapes/main.kt`,
   covering every new selector, dense products against scalar loops, transpose, rotations, bounds,
   Double projections at extreme magnitudes, nominal boxes and callable references. Native matrix tests

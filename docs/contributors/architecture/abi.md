@@ -28,7 +28,9 @@ encoding and checkpoint schemas remain unchanged. stdlib:core 1.19.0 supplies th
 
 `stdlib:core` 1.19.0 adds Vector2d/Vector3d/Vector4d and distinct Quaternionf/Quaterniond value types,
 plus explicit vector/quaternion and scalar-width conversions. Rotation3f/Rotation3d contain the corresponding
-unit quaternion, use private constructors and validate/normalize through public factories. Existing nominal inline layouts and F64
+unit quaternion, use private constructors and validate/normalize through public factories. Axis-angle,
+shortest-arc interpolation, angular distance and matrix conversion reuse existing inline/scalar math and
+matrix instructions; these source APIs introduce no additional Runtime/native ABI or encoding change. Existing nominal inline layouts and F64
 arithmetic/math instructions express this additive source API. Platform module identities change;
 CPKT encoding, Runtime ABI, native C ABI and checkpoint schemas remain unchanged. Rebuild dependent
 library inputs with the matching platform. The [math inventory](../../developers/stdlib/math.md)

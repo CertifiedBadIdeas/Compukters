@@ -136,6 +136,18 @@ class MinimalScriptLoweringTest {
         }
 
     @Test
+    fun `spatial rotations preserve shortest arcs matrices and long chain stability`() =
+        withAdapter { adapter ->
+            val source = repositoryFile("modules/common/compiler-k2/src/test/resources/kotlin/rotations/main.kt").readText()
+            val result = adapter.compile(request(source))
+            val bytes = assertNotNull(result.artifact, result.diagnostics.toString()).toByteArray()
+            assertEquals(AbiVersion(1u, 19u), ArtifactReader.read(bytes).minimumRuntimeAbi)
+            System.getProperty("compukter.vm.rotationsArtifact")?.let { output ->
+                Path.of(output).also { it.parent.createDirectories() }.writeBytes(bytes)
+            }
+        }
+
+    @Test
     fun `Double geometry preserves precision normalization and quaternion identity`() =
         withAdapter { adapter ->
             val source = repositoryFile("modules/common/compiler-k2/src/test/resources/kotlin/double-geometry/main.kt").readText()
