@@ -325,6 +325,41 @@ class AnalysisProtocolRoundTripTest {
     }
 
     @Test
+    fun `canonical platform sources have an independent bounded budget`() {
+        val sourceArchive = Files.createTempFile("compukters-analysis-budget-", ".jar")
+        val limits = AnalysisLimits(sourceFiles = 1, sourceFileBytes = 32, sourceBytes = 32)
+        val profile =
+            AdmittedAnalysisProfile(
+                identity.profile,
+                AdmittedAnalysisPlatform(hash(5), emptyList(), sourceArchive.toString()),
+            )
+
+        fun archive(count: Int) {
+            ZipOutputStream(Files.newOutputStream(sourceArchive)).use { output ->
+                repeat(count) { index ->
+                    output.putNextEntry(ZipEntry("api/Type$index.kt"))
+                    output.write("package api\nclass Type$index".encodeToByteArray())
+                    output.closeEntry()
+                }
+            }
+        }
+        try {
+            archive(65)
+            AnalysisProtocolContext.of(snapshot, profile, limits)
+            archive(ProtocolLimits.PLATFORM_SOURCE_FILES + 1)
+            assertFailsWith<IllegalArgumentException> { AnalysisProtocolContext.of(snapshot, profile, limits) }
+            ZipOutputStream(Files.newOutputStream(sourceArchive)).use { output ->
+                output.putNextEntry(ZipEntry("api/Large.kt"))
+                output.write(ByteArray(ProtocolLimits.PLATFORM_SOURCE_FILE_BYTES + 1) { 32 })
+                output.closeEntry()
+            }
+            assertFailsWith<IllegalArgumentException> { AnalysisProtocolContext.of(snapshot, profile, limits) }
+        } finally {
+            Files.deleteIfExists(sourceArchive)
+        }
+    }
+
+    @Test
     fun `attached platform declaration round trips against the admitted source archive`() {
         val sourcePath = VirtualSourcePath.kotlin("api/Terminal.kt")
         val sourceText = "package api\nobject Terminal { fun write(value: String) = Unit }"

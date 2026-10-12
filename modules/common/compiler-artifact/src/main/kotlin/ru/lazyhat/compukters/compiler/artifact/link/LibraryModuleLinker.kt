@@ -360,6 +360,15 @@ private fun minimumRuntimeAbi(
     modules: List<Module>,
 ): AbiVersion {
     var required = declared
+    // Canonical String's CharSequence implementation narrows subSequence's reference result.
+    if (modules.any { module ->
+            module.types.any { type ->
+                type is NominalType.Interface && module.strings[type.name.value.toInt()].toString() == "kotlin.CharSequence"
+            }
+        }
+    ) {
+        required = maxOf(required, AbiVersion(1u, 18u))
+    }
     if (hasRootSuperclassMethods(modules)) required = maxOf(required, AbiVersion(1u, 10u))
     if (modules.any { module -> module.blocks.any { block -> block.instructions.any { it.usesUnsignedSemantics() } } }) {
         required = maxOf(required, AbiVersion(1u, 14u))

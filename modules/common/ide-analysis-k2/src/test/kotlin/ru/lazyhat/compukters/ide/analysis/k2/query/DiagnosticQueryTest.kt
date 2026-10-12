@@ -300,6 +300,52 @@ class DiagnosticQueryTest {
     }
 
     @Test
+    fun `text builders iteration sizing and numeric parsing resolve with source and metadata inputs`() {
+        val source =
+            """
+            fun main() {
+                val builder: CharSequence = StringBuilder(8).append('x').append("text")
+                val text = buildString { append(builder); appendLine(42) }
+                val sequence: CharSequence = text
+                sequence.subSequence(0, 1)
+                for (unit in sequence) { println(unit) }
+                for (char in text) { println(char) }
+                val iterator: kotlin.collections.CharIterator = text.iterator()
+                iterator.nextChar()
+                val resized = text.take(3).dropLast(1).padEnd(5, '.').repeat(2)
+                val number: Long? = "7fff".toLongOrNull(16)
+                val unsigned: ULong = "ff".toULong(16)
+                try { resized.toInt() } catch (failure: NumberFormatException) { println(number.toString()) }
+            }
+            """.trimIndent()
+        for (attachedSources in listOf(false, true)) {
+            K2QueryFixture
+                .sourceWithGuestApi(
+                    attachedSources,
+                    "main.kt" to source,
+                    limits = AnalysisLimits(sourceFiles = 1),
+                    includeAddonBundle = false,
+                ).use { fixture ->
+                    val result = fixture.execute(fixture.presentation()) as AnalysisResult.Presentation
+                    val active = result.value.accept(fixture.identity) as SnapshotPresentationAcceptance.Active
+                    assertTrue(active.diagnostics.none { it.severity == EditorDiagnosticSeverity.Error }, active.diagnostics.toString())
+                }
+        }
+    }
+
+    @Test
+    fun `CharSequence implementations must provide abstract methods`() {
+        val source = "class Incomplete : CharSequence { override val length: Int get() = 0 }"
+        for (attachedSources in listOf(false, true)) {
+            K2QueryFixture.sourceWithGuestApi(attachedSources, "main.kt" to source).use { fixture ->
+                val result = fixture.execute(fixture.presentation()) as AnalysisResult.Presentation
+                val active = result.value.accept(fixture.identity) as SnapshotPresentationAcceptance.Active
+                assertTrue(active.diagnostics.any { it.severity == EditorDiagnosticSeverity.Error }, active.diagnostics.toString())
+            }
+        }
+    }
+
+    @Test
     fun `stdlib geometry aliases and vector methods resolve with source and metadata inputs`() {
         for (attachedSources in listOf(false, true)) {
             val source =

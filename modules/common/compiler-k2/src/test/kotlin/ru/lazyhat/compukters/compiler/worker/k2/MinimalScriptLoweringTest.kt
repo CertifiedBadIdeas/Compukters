@@ -93,7 +93,7 @@ class MinimalScriptLoweringTest {
             val result = adapter.compile(request(source))
             val bytes = assertNotNull(result.artifact, result.diagnostics.toString()).toByteArray()
             val artifact = ArtifactReader.read(bytes)
-            assertEquals(AbiVersion(1u, 17u), artifact.minimumRuntimeAbi)
+            assertEquals(AbiVersion(1u, 18u), artifact.minimumRuntimeAbi)
             assertEquals(
                 MatrixOperation.entries.toSet(),
                 artifact.modules
@@ -177,7 +177,7 @@ class MinimalScriptLoweringTest {
             val result = adapter.compile(request(source))
             val bytes = assertNotNull(result.artifact, result.diagnostics.toString()).toByteArray()
             val artifact = ArtifactReader.read(bytes)
-            assertEquals(AbiVersion(1u, 16u), artifact.minimumRuntimeAbi)
+            assertEquals(AbiVersion(1u, 18u), artifact.minimumRuntimeAbi)
             val instructions = artifact.modules.flatMap { it.blocks }.flatMap { it.instructions }
             for (type in listOf(ScalarValueType.F32, ScalarValueType.F64)) {
                 assertEquals(
@@ -249,7 +249,161 @@ class MinimalScriptLoweringTest {
                     require(clean.removeSuffix("::") == "alpha::beta")
                     require(clean.removePrefix("!") == clean && clean.removeSuffix("") == clean)
                 }
+                inline fun invalid(action: () -> Unit) {
+                    var rejected = false
+                    try { action() } catch (failure: IllegalArgumentException) { rejected = true }
+                    require(rejected)
+                }
+                class TextView(val text: kotlin.String) : CharSequence {
+                    override val length: Int get() = text.length
+                    override fun get(index: Int): Char = text[index]
+                    override fun subSequence(startIndex: Int, endIndex: Int): CharSequence = text.substring(startIndex, endIndex)
+                }
+                fun checkSequence(text: CharSequence) {
+                    require(text.length == 3 && text[1] == 'b')
+                    require(text.subSequence(1, 3).toString() == "bc")
+                    require(buildString { append(text) } == "abc")
+                    var copy = ""
+                    for (unit in text) { copy += unit }
+                    require(copy == "abc")
+                }
+                fun checkCharSequences() {
+                    checkSequence("abc")
+                    checkSequence(StringBuilder("abc"))
+                    checkSequence(TextView("abc"))
+                    val original: Any = "abc"
+                    require(original is CharSequence)
+                    val view = original as CharSequence
+                    require(view === original && view is kotlin.String)
+                    require(view.length == 3 && view[0] == 'a')
+                    val absent: CharSequence? = null
+                    require(absent?.length == null && absent?.subSequence(0, 0) == null)
+                    require(!((42 as Any) is CharSequence) && (42 as Any) as? CharSequence == null)
+                    val sequences = arrayOf<CharSequence>("abc", StringBuilder("abc"), TextView("abc"))
+                    for (sequence in sequences) { checkSequence(sequence) }
+                    val nullable = arrayOf<CharSequence?>("abc", null)
+                    require(nullable[0]?.length == 3 && nullable[1] == null)
+                    val primitiveIterator: Iterator<Char> = "ab".iterator()
+                    require(primitiveIterator.next() == 'a' && primitiveIterator.next() == 'b')
+                    val values = listOf<CharSequence>("abc", TextView("abc"))
+                    for (value in values) { checkSequence(value) }
+                    val builder = StringBuilder("abc")
+                    val slice = (builder as CharSequence).subSequence(1, 3)
+                    builder[1] = 'x'
+                    require(slice.toString() == "bc")
+                    val stored = (builder as CharSequence).iterator()
+                    require(stored.nextChar() == 'a')
+                    builder[1] = 'y'
+                    require(stored.nextChar() == 'y' && stored.nextChar() == 'c')
+                    val wide: Any = builder
+                    require(wide is CharSequence && (wide as CharSequence).length == 3)
+                    var rejected = false
+                    try { ("x" as CharSequence)[1] } catch (failure: IndexOutOfBoundsException) { rejected = true }
+                    require(rejected)
+                }
+                fun checkBuilding() {
+                    val builder = StringBuilder(0)
+                    require(builder.length == 0 && builder.capacity() == 0)
+                    builder.append('a').append("\uD83D\uDE00")
+                    val snapshot = builder.toString()
+                    builder[0] = 'b'
+                    builder.append(builder)
+                    require(snapshot == "a\uD83D\uDE00")
+                    require(builder.toString() == "b\uD83D\uDE00b\uD83D\uDE00")
+                    val capacity = builder.capacity()
+                    builder.clear()
+                    require(builder.length == 0 && builder.capacity() == capacity)
+                    builder.append('x').append(null as CharSequence?).appendLine(42)
+                    require(builder.toString() == "xnull42\n")
+                    builder.clear().appendRange(charArrayOf('a', 'b', 'c'), 1, 3)
+                    builder.append("abcd", 1, 3)
+                    require(builder.toString() == "bcbc")
+                    builder.setLength(1)
+                    builder.setLength(3)
+                    require(builder[0] == 'b' && builder[1] == '\u0000' && builder[2] == '\u0000')
+                    require(buildString { append('a'); appendLine("b") } == "ab\n")
+                    require(buildString(0) { append(7); append(true); append(null as Any?) } == "7truenull")
+                    require(StringBuilder("hello").toString() == "hello")
+                    invalid { StringBuilder(-1) }
+                    invalid { builder.setLength(-1) }
+                    invalid { builder.append("x", -1, 1) }
+                    invalid { builder.appendRange(charArrayOf('a'), 0, 2) }
+                    var outOfBounds = false
+                    try { builder[3] } catch (failure: IndexOutOfBoundsException) { outOfBounds = true }
+                    require(outOfBounds)
+                    // Reuse the same capacity repeatedly; snapshots must remain independent.
+                    var frame = 0
+                    while (frame < 100) {
+                        builder.clear().append('a').append('b')
+                        require(builder.toString() == "ab")
+                        frame += 1
+                    }
+                    var units = 0
+                    for (char in "a\uD83D\uDE00") { units += char.code }
+                    require(units == 'a'.code + '\uD83D'.code + '\uDE00'.code)
+                    val iterator = "x".iterator()
+                    require(iterator.hasNext() && iterator.nextChar() == 'x' && !iterator.hasNext())
+                    var exhausted = false
+                    try { iterator.next() } catch (failure: NoSuchElementException) { exhausted = true }
+                    require(exhausted)
+                }
+                fun checkSizing() {
+                    require("abc".take(2) == "ab" && "abc".drop(2) == "c")
+                    require("abc".takeLast(2) == "bc" && "abc".dropLast(2) == "a")
+                    require("abc".take(99) == "abc" && "abc".drop(99) == "")
+                    require("abc".takeLast(99) == "abc" && "abc".dropLast(99) == "")
+                    require("".take(0) == "" && "".dropLast(0) == "")
+                    require("\uD83D\uDE00".take(1) == "\uD83D")
+                    require("a".padStart(3) == "  a" && "a".padEnd(3, 'x') == "axx")
+                    require("a".padEnd(3) == "a  " && "a".padStart(3, 'x') == "xxa")
+                    require("abc".padStart(1) == "abc" && "".padEnd(0) == "")
+                    require("ab".repeat(3) == "ababab" && "ab".repeat(0) == "")
+                    require("".repeat(Int.MAX_VALUE) == "")
+                    invalid { "x".take(-1) }
+                    invalid { "x".drop(-1) }
+                    invalid { "x".takeLast(-1) }
+                    invalid { "x".dropLast(-1) }
+                    invalid { "x".padStart(-1) }
+                    invalid { "x".padEnd(-1) }
+                    invalid { "x".repeat(-1) }
+                    invalid { "ab".repeat(Int.MAX_VALUE) }
+                }
+                fun checkNumbers() {
+                    require("-2147483648".toInt() == Int.MIN_VALUE)
+                    require("2147483647".toIntOrNull() == Int.MAX_VALUE)
+                    require("2147483648".toIntOrNull() == null && "-2147483649".toIntOrNull() == null)
+                    require("-9223372036854775808".toLong() == Long.MIN_VALUE)
+                    require("9223372036854775807".toLong() == Long.MAX_VALUE)
+                    require("9223372036854775808".toLongOrNull() == null)
+                    require("-9223372036854775809".toLongOrNull() == null)
+                    require("18446744073709551615".toULong() == ULong.MAX_VALUE)
+                    require("18446744073709551616".toULongOrNull() == null)
+                    require("4294967295".toUInt() == UInt.MAX_VALUE && "4294967296".toUIntOrNull() == null)
+                    require("255".toUByte() == UByte.MAX_VALUE && "256".toUByteOrNull() == null)
+                    require("65535".toUShort() == UShort.MAX_VALUE && "65536".toUShortOrNull() == null)
+                    require("-128".toByte() == Byte.MIN_VALUE && "127".toByte() == Byte.MAX_VALUE)
+                    require("-129".toByteOrNull() == null && "128".toByteOrNull() == null)
+                    require("-32768".toShort() == Short.MIN_VALUE && "32767".toShort() == Short.MAX_VALUE)
+                    require("32768".toShortOrNull() == null && "-32769".toShortOrNull() == null)
+                    require("-80000000".toInt(16) == Int.MIN_VALUE)
+                    require("7fffffff".toInt(16) == Int.MAX_VALUE)
+                    require("FFFFFFFFFFFFFFFF".toULong(16) == ULong.MAX_VALUE)
+                    require("+101".toInt(2) == 5 && "Z".toInt(36) == 35)
+                    require("+ff".toUInt(16) == 255u && "-0".toUIntOrNull() == null)
+                    require("".toIntOrNull() == null && "+".toLongOrNull() == null)
+                    require(" 1".toIntOrNull() == null && "1_0".toIntOrNull() == null)
+                    require("0xff".toIntOrNull(16) == null && "2".toIntOrNull(2) == null)
+                    invalid { "1".toIntOrNull(1) }
+                    invalid { "".toULongOrNull(37) }
+                    var malformed = false
+                    try { "bad".toInt() } catch (failure: NumberFormatException) { malformed = true }
+                    require(malformed)
+                }
                 fun main() {
+                    checkCharSequences()
+                    checkBuilding()
+                    checkSizing()
+                    checkNumbers()
                     checkText("\t alpha::beta:: \n")
                     require("".isEmpty() && "".isBlank() && !"".isNotBlank())
                     require(" \t\r\n\u00a0\u1680\u2000\u200a\u2028\u2029\u202f\u205f\u3000".isBlank())
@@ -335,7 +489,16 @@ class MinimalScriptLoweringTest {
                     ),
                 )
             val bytes = assertNotNull(result.artifact, result.diagnostics.joinToString()).toByteArray()
+            val repeated =
+                adapter.compile(
+                    request(
+                        "project/RootString.kt" to "class String(val value: kotlin.String)",
+                        "project/main.kt" to source,
+                    ),
+                )
+            assertContentEquals(bytes, assertNotNull(repeated.artifact, repeated.diagnostics.joinToString()).toByteArray())
             val parsed = ArtifactReader.read(bytes)
+            assertEquals(AbiVersion(1u, 18u), parsed.minimumRuntimeAbi)
             for (name in listOf("kotlin.collections.ArrayList<String>", "kotlin.collections.List<String>")) {
                 assertEquals(
                     1,
@@ -734,7 +897,7 @@ class MinimalScriptLoweringTest {
 
             assertContentEquals(bytes, assertNotNull(second.artifact).toByteArray())
             // Integer arithmetic and stdoutInt retain the arithmetic exception factory.
-            assertEquals(AbiVersion(1u, 9u), artifact.minimumRuntimeAbi)
+            assertEquals(AbiVersion(1u, 18u), artifact.minimumRuntimeAbi)
             assertTrue(instructions.any { it is Instruction.Add && it.type == ScalarValueType.I64 })
             assertTrue(instructions.any { it is Instruction.Subtract && it.type == ScalarValueType.I64 })
             assertTrue(instructions.any { it is Instruction.Multiply && it.type == ScalarValueType.I64 })
@@ -761,7 +924,7 @@ class MinimalScriptLoweringTest {
                 ArtifactReader.read(
                     assertNotNull(consoleOnly.artifact, consoleOnly.diagnostics.joinToString()).toByteArray(),
                 )
-            assertEquals(AbiVersion(1u, 9u), consoleArtifact.minimumRuntimeAbi)
+            assertEquals(AbiVersion(1u, 18u), consoleArtifact.minimumRuntimeAbi)
 
             System.getProperty("compukter.vm.longArtifact")?.let { output ->
                 Path.of(output).also { it.parent.createDirectories() }.writeBytes(bytes)
@@ -821,7 +984,7 @@ class MinimalScriptLoweringTest {
 
             assertContentEquals(bytes, assertNotNull(second.artifact).toByteArray())
             // Floating division itself is nonthrowing; stdoutInt uses integer division.
-            assertEquals(AbiVersion(1u, 9u), artifact.minimumRuntimeAbi)
+            assertEquals(AbiVersion(1u, 18u), artifact.minimumRuntimeAbi)
             assertTrue(instructions.any { it is Instruction.Add && it.type == ScalarValueType.F32 })
             assertTrue(instructions.any { it is Instruction.Subtract && it.type == ScalarValueType.F32 })
             assertTrue(instructions.any { it is Instruction.Multiply && it.type == ScalarValueType.F32 })
@@ -843,7 +1006,7 @@ class MinimalScriptLoweringTest {
                 ArtifactReader.read(
                     assertNotNull(consoleOnly.artifact, consoleOnly.diagnostics.joinToString()).toByteArray(),
                 )
-            assertEquals(AbiVersion(1u, 9u), consoleArtifact.minimumRuntimeAbi)
+            assertEquals(AbiVersion(1u, 18u), consoleArtifact.minimumRuntimeAbi)
 
             System.getProperty("compukter.vm.floatArtifact")?.let { output ->
                 Path.of(output).also { it.parent.createDirectories() }.writeBytes(bytes)
@@ -902,7 +1065,7 @@ class MinimalScriptLoweringTest {
             val bytes = assertNotNull(first.artifact, first.diagnostics.joinToString()).toByteArray()
             assertContentEquals(bytes, assertNotNull(second.artifact).toByteArray())
             val artifact = ArtifactReader.read(bytes)
-            assertEquals(AbiVersion(1u, 12u), artifact.minimumRuntimeAbi)
+            assertEquals(AbiVersion(1u, 18u), artifact.minimumRuntimeAbi)
             val instructions = artifact.modules.flatMap { it.blocks.flatMap(Block::instructions) }
             assertTrue(instructions.any { it is Instruction.Add && it.type == ScalarValueType.F64 })
             assertTrue(instructions.any { it is Instruction.StringValueOf && it.type == StringValueType.F64 })
@@ -975,7 +1138,7 @@ class MinimalScriptLoweringTest {
             val result = adapter.compile(request(source))
             val bytes = assertNotNull(result.artifact, result.diagnostics.joinToString()).toByteArray()
             val artifact = ArtifactReader.read(bytes)
-            assertEquals(AbiVersion(1u, 12u), artifact.minimumRuntimeAbi)
+            assertEquals(AbiVersion(1u, 18u), artifact.minimumRuntimeAbi)
             System.getProperty("compukter.vm.doubleArrayArtifact")?.let { output ->
                 Path.of(output).also { it.parent.createDirectories() }.writeBytes(bytes)
             }
@@ -1151,7 +1314,7 @@ class MinimalScriptLoweringTest {
             assertTrue(0x50 in opcodes, "task launch must lower to task.spawn: $opcodes")
             assertTrue(0xe8 in opcodes, "task join must lower to task.join: $opcodes")
             // Tasks.launch retains IllegalArgumentException's verified factory role through require.
-            assertEquals(AbiVersion(1u, 10u), artifact.minimumRuntimeAbi)
+            assertEquals(AbiVersion(1u, 18u), artifact.minimumRuntimeAbi)
             assertEquals(0u, artifact.manifest.maximumChannels)
             assertEquals(0u, artifact.manifest.maximumChannelValues)
             assertFalse(SemanticFeature.CHANNELS in artifact.semanticFeatures)
@@ -6490,7 +6653,7 @@ class MinimalScriptLoweringTest {
             assertTrue(first.diagnostics.none { it.severity.name == "ERROR" }, first.diagnostics.toString())
             val decoded = ArtifactReader.read(artifact)
             // Output formatting retains the native arithmetic exception factory.
-            assertEquals(AbiVersion(1u, 15u), decoded.minimumRuntimeAbi)
+            assertEquals(AbiVersion(1u, 18u), decoded.minimumRuntimeAbi)
             assertTrue(SemanticFeature.ARRAY_COPY in decoded.semanticFeatures)
             System.getProperty("compukter.vm.intArrayArtifact")?.let { output ->
                 Path.of(output).also { it.parent.createDirectories() }.writeBytes(artifact)
@@ -6538,7 +6701,7 @@ class MinimalScriptLoweringTest {
             val second = adapter.compile(request(source))
             val artifact = assertNotNull(first.artifact, first.diagnostics.joinToString()).toByteArray()
             assertContentEquals(artifact, assertNotNull(second.artifact).toByteArray())
-            assertEquals(AbiVersion(1u, 9u), ArtifactReader.read(artifact).minimumRuntimeAbi)
+            assertEquals(AbiVersion(1u, 18u), ArtifactReader.read(artifact).minimumRuntimeAbi)
             System.getProperty("compukter.vm.exceptionsArtifact")?.let { output ->
                 Path.of(output).also { it.parent.createDirectories() }.writeBytes(artifact)
             }
@@ -6794,7 +6957,7 @@ class MinimalScriptLoweringTest {
             val second = adapter.compile(request(source))
             val bytes = assertNotNull(first.artifact, first.diagnostics.toString()).toByteArray()
             assertContentEquals(bytes, assertNotNull(second.artifact).toByteArray())
-            assertEquals(AbiVersion(1u, 10u), ArtifactReader.read(bytes).minimumRuntimeAbi)
+            assertEquals(AbiVersion(1u, 18u), ArtifactReader.read(bytes).minimumRuntimeAbi)
             System.getProperty("compukter.vm.exceptionsArtifact")?.let { output ->
                 Path.of("$output.arithmetic.cpkt").also { it.parent.createDirectories() }.writeBytes(bytes)
             }
@@ -6842,7 +7005,7 @@ class MinimalScriptLoweringTest {
             val second = adapter.compile(request(source))
             val bytes = assertNotNull(first.artifact, first.diagnostics.toString()).toByteArray()
             assertContentEquals(bytes, assertNotNull(second.artifact).toByteArray())
-            assertEquals(AbiVersion(1u, 10u), ArtifactReader.read(bytes).minimumRuntimeAbi)
+            assertEquals(AbiVersion(1u, 18u), ArtifactReader.read(bytes).minimumRuntimeAbi)
             System.getProperty("compukter.vm.exceptionsArtifact")?.let { output ->
                 Path.of("$output.operations.cpkt").also { it.parent.createDirectories() }.writeBytes(bytes)
             }
@@ -6919,7 +7082,7 @@ class MinimalScriptLoweringTest {
                 val bytes = assertNotNull(first.artifact, "$name: ${first.diagnostics}").toByteArray()
                 assertContentEquals(bytes, assertNotNull(second.artifact).toByteArray())
                 // The lexical Path wrapper uses inline values, introduced by runtime ABI 1.15.
-                assertEquals(AbiVersion(1u, if (name == "host-filesystem") 15u else 10u), ArtifactReader.read(bytes).minimumRuntimeAbi)
+                assertEquals(AbiVersion(1u, 18u), ArtifactReader.read(bytes).minimumRuntimeAbi)
                 System.getProperty("compukter.vm.exceptionsArtifact")?.let { output ->
                     Path.of("$output.$name.cpkt").also { it.parent.createDirectories() }.writeBytes(bytes)
                 }
@@ -7385,7 +7548,7 @@ class MinimalScriptLoweringTest {
                 """.trimIndent()
             val result = adapter.compile(request(source))
             val bytes = assertNotNull(result.artifact, result.diagnostics.toString()).toByteArray()
-            assertEquals(AbiVersion(1u, 11u), ArtifactReader.read(bytes).minimumRuntimeAbi)
+            assertEquals(AbiVersion(1u, 18u), ArtifactReader.read(bytes).minimumRuntimeAbi)
             System.getProperty("compukter.vm.hashCodeArtifact")?.let { output ->
                 Path.of(output).also { it.parent.createDirectories() }.writeBytes(bytes)
             }
@@ -7520,7 +7683,7 @@ class MinimalScriptLoweringTest {
                 """.trimIndent()
             val result = adapter.compile(request(source))
             val bytes = assertNotNull(result.artifact, result.diagnostics.toString()).toByteArray()
-            assertEquals(AbiVersion(1u, 11u), ArtifactReader.read(bytes).minimumRuntimeAbi)
+            assertEquals(AbiVersion(1u, 18u), ArtifactReader.read(bytes).minimumRuntimeAbi)
             System.getProperty("compukter.vm.toStringArtifact")?.let { output ->
                 Path.of(output).also { it.parent.createDirectories() }.writeBytes(bytes)
             }

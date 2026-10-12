@@ -20,6 +20,11 @@ package ru.lazyhat.compukters.ide.analysis.protocol
 
 object ProtocolLimits {
     const val MAX_FRAME_PAYLOAD_BYTES = 20 * 1024 * 1024
+
+    // Canonical platform sources are trusted dependencies, independent of the project budget.
+    const val PLATFORM_SOURCE_FILES = 256
+    const val PLATFORM_SOURCE_FILE_BYTES = 1024 * 1024
+    const val PLATFORM_SOURCE_BYTES = 8 * 1024 * 1024
     const val MAX_SOURCE_FILES = 4 * 1024
     const val MAX_SOURCE_FILE_BYTES = 4 * 1024 * 1024
     const val MAX_SOURCE_BYTES = 16 * 1024 * 1024

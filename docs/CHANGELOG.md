@@ -13,6 +13,12 @@ headings so this page has one stable URL that can be shared outside the reposito
 
 ## 0.6.0 — In development
 
+- Guest Kotlin provides reusable `StringBuilder` and `buildString`, full `CharSequence` support for strings, builders and
+  user implementations, text iteration, `take`/`drop`
+  helpers, padding and repetition, plus signed and unsigned integer parsers with radices 2–36.
+  Text operations preserve UTF-16 units and respect managed heap quotas; malformed integer text
+  returns null or throws `NumberFormatException` according to the selected API.
+
 - Guest Kotlin functions accept expression default arguments using earlier parameters, receivers,
   helpers, lambdas and concrete generic types. Explicit arguments evaluate before omitted defaults;
   inherited defaults preserve overriding method dispatch.

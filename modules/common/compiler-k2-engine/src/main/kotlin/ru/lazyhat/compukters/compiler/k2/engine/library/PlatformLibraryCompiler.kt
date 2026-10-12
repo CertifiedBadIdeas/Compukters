@@ -348,6 +348,19 @@ private fun ru.lazyhat.compukters.compiler.artifact.model.Artifact.withLibraryFr
                     },
                 exports =
                     typeExports + functionExports + fieldExports +
+                        lowered.types
+                            .withIndex()
+                            .filter { (_, type) ->
+                                lowered.strings[type.name.value.toInt()].toString() == "kotlin.collections.CharIterator"
+                            }.map { (index, type) ->
+                                Export(
+                                    SymbolKind.TYPE,
+                                    ExportVisibility.PUBLIC_LIBRARY,
+                                    type.name,
+                                    index.toUInt(),
+                                    TypeRef.Local(TypeId.of(index.toUInt())),
+                                )
+                            } +
                         lowered.exports.filter { export ->
                             export.kind in setOf(SymbolKind.TYPE, SymbolKind.FIELD) && export !in typeExports && export !in fieldExports
                         },

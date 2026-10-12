@@ -11,6 +11,25 @@ permalink: /ARCHITECTURE/abi/
 
 This reference groups versioned representation boundaries by the version that introduced them. Those versions are minimum feature requirements, not a claim that older Runtime distributions implement today’s platform. The source owners below define the active contract. Before changing a wire format, inspect each producer, consumer and verifier. Runtime release pins in `build-scripts/src/main/kotlin/RuntimeBundleSupport.kt` describe published bundles separately from the local VM checkout.
 
+## Guest text helpers
+
+`kotlin:builtins` 1.12.0 and `stdlib:core` 1.17.0 add canonical CharSequence, reusable StringBuilder/buildString,
+text iteration, sizing helpers and signed/unsigned integer parsing. The builder uses ordinary managed CharArray
+storage. String implements the runtime-owned CharSequence interface directly; CharIterator has one canonical
+stdlib owner. Exceptions referenced only by catch parameters are linked from the library.
+
+Runtime ABI 1.18 permits covariant reference results in virtual/interface method dispatch: the implementation
+result must be assignable to the declaration, and cannot widen nullability. Scalar results and parameters retain
+exact matching. The generated runtime's String.subSequence returns String for a CharSequence declaration;
+artifacts containing that canonical interface require 1.18. Module identities and dependent metadata change;
+bundle encoding, worker wire format, CPKT instructions, native C ABI and checkpoint schemas remain unchanged.
+The [text inventory](../../developers/stdlib/core-text.md) owns signatures, UTF-16 semantics, allocation behavior
+and parsing policy.
+
+Attached canonical platform sources use a bounded dependency budget (256 files, 1 MiB per file, 8 MiB total),
+independent of request project-source limits. The protocol client and analysis worker enforce the same bounds;
+addon sources and user project sources retain their existing requested budgets.
+
 ## Guest pseudorandom sources
 
 `stdlib:core` 1.16.0 adds `kotlin.random.Random` and signed/unsigned random extensions.
@@ -133,7 +152,7 @@ producer/consumer update; platform, compiler framing, artifacts and native ABI r
 
 | Boundary | Current representation | Owner |
 | --- | --- | --- |
-| Executable container | Format 3; matrix kernels require Runtime ABI 1.17 | `modules/common/compiler-artifact` and `host/compukter-vm/src/artifact/format.rs` |
+| Executable container | Format 3; covariant method results require Runtime ABI 1.18 | `modules/common/compiler-artifact` and `host/compukter-vm/src/artifact/format.rs` |
 | Native session transport | C ABI 23, checked by both FFM and JNI | `host/compukter-vm/ffi/src/lib.rs` and `modules/common/native-runtime` |
 | Base platform | Bundle format 9, standalone module format 5, platform ABI 3 | `PlatformBundleCodec` in `modules/common/platform-bundle` |
 | Kotlin metadata carrier | Private format 6 | `platform-k2` |

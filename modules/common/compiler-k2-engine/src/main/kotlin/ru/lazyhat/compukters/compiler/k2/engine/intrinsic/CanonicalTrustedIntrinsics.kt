@@ -68,7 +68,6 @@ object CanonicalTrustedIntrinsics {
                 primitive("kotlin", "builtins", "kotlin", "$array.iterator", "fun():$iterator")
                 primitive("kotlin", "builtins", "kotlin", primitive.arrayFactory.removePrefix("kotlin."), "fun($name):$array")
             }
-            primitive("kotlin", "builtins", "kotlin", "CharSequence.get", "fun(Int):Char")
             primitive("kotlin", "builtins", "kotlin", "Comparable.compareTo", "fun(T):Int")
             primitive("kotlin", "builtins", "kotlin", "Enum.name", "val():String")
             primitive("kotlin", "builtins", "kotlin", "Enum.ordinal", "val():Int")
@@ -150,6 +149,7 @@ object CanonicalTrustedIntrinsics {
             primitive("kotlin", "builtins", "kotlin", "String.length", "val():Int")
             primitive("kotlin", "builtins", "kotlin", "String.plus", "fun(Any?):String")
             primitive("kotlin", "builtins", "kotlin", "String.substring", "fun(Int,Int):String")
+            primitive("kotlin", "builtins", "kotlin", "String.subSequence", "fun(Int,Int):String")
             primitive("kotlin", "builtins", "kotlin", "Unit.toString", "fun():String")
             primitive("kotlin", "builtins", "kotlin", "arrayOf", "fun(T):Array<T>")
             primitive("kotlin", "builtins", "kotlin", "arrayOfNulls", "fun(Int):Array<T?>")

@@ -7,11 +7,11 @@
 package kotlin
 
 public open class Any {
-    public external open operator fun equals(other: Any?): Boolean
+    public open external operator fun equals(other: Any?): Boolean
 
-    public external open fun hashCode(): Int
+    public open external fun hashCode(): Int
 
-    public external open fun toString(): String
+    public open external fun toString(): String
 }
 
 public class Nothing private constructor()
@@ -27,10 +27,17 @@ public interface Comparable<in T> {
 public interface CharSequence {
     public val length: Int
 
-    public external operator fun get(index: Int): Char
+    public operator fun get(index: Int): Char
+
+    public fun subSequence(
+        startIndex: Int,
+        endIndex: Int,
+    ): CharSequence
 }
 
-public open class Throwable external constructor(message: String?) {
+public open class Throwable external constructor(
+    message: String?,
+) {
     public external constructor(message: String?, cause: Throwable?) : this(message)
 
     public external val message: String?
