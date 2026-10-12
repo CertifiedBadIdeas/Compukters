@@ -46,6 +46,32 @@ class DiagnosticQueryTest {
     }
 
     @Test
+    fun `captured local functions resolve with source and metadata inputs`() {
+        val source =
+            """
+            fun counter(seed: Int): () -> Int {
+                var count = seed
+                fun next(step: Int = 1): Int { count += step; return count }
+                fun read(): Int = count
+                next(read())
+                return ::next
+            }
+            fun main() {
+                fun sum(depth: Int): Int = if (depth == 0) 1 else 1 + sum(depth - 1)
+                val next = counter(sum(2))
+                check(next() == 7)
+            }
+            """.trimIndent()
+        for (attachedSources in listOf(false, true)) {
+            K2QueryFixture.sourceWithGuestApi(attachedSources, "main.kt" to source).use { fixture ->
+                val result = fixture.execute(fixture.presentation()) as AnalysisResult.Presentation
+                val active = result.value.accept(fixture.identity) as SnapshotPresentationAcceptance.Active
+                assertTrue(active.diagnostics.none { it.severity == EditorDiagnosticSeverity.Error }, active.diagnostics.toString())
+            }
+        }
+    }
+
+    @Test
     fun `default adapted function references resolve with source and metadata inputs`() {
         val source =
             """
