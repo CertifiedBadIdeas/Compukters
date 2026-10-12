@@ -56,13 +56,14 @@ class CompukterVmBuildConventionTest {
         val jniBuildScript = repoRoot().resolve("modules/common/native-runtime/jni/build.gradle.kts").readText()
         val support = repoRoot().resolve("build-scripts/src/main/kotlin/RuntimeBundleSupport.kt").readText()
 
-        assertTrue(rootBuildScript.contains("tasks.register(\"downloadCompukterRuntimeBundles\")"))
-        assertTrue(rootBuildScript.contains("RuntimeBundleDownloadSupport.download"))
+        assertTrue(rootBuildScript.contains("tasks.register<DownloadRuntimeBundles>(\"downloadCompukterRuntimeBundles\")"))
+        val taskSupport = repoRoot().resolve("build-scripts/src/main/kotlin/ReleaseCacheTasks.kt").readText()
+        assertTrue(taskSupport.contains("RuntimeBundleDownloadSupport.download"))
         listOf(ffmBuildScript, jniBuildScript).forEach { nativeBuildScript ->
             assertTrue(nativeBuildScript.contains("compukterRuntimeBundleDir"))
             assertTrue(nativeBuildScript.contains("rootProject.tasks.named(\"downloadCompukterRuntimeBundles\")"))
             assertTrue(nativeBuildScript.contains("preparePackagedReleaseRuntime"))
-            assertTrue(nativeBuildScript.contains("RuntimeBundleSupport.validateAndStage"))
+            assertTrue(nativeBuildScript.contains("tasks.register<PrepareReleaseRuntime>"))
         }
         assertTrue(ffmBuildScript.contains("RuntimeTransport.FFI"))
         assertTrue(jniBuildScript.contains("RuntimeTransport.JNI"))
