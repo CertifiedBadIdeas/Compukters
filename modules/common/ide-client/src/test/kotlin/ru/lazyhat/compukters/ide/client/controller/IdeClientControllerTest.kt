@@ -99,6 +99,21 @@ import kotlin.test.assertTrue
 
 class IdeClientControllerTest {
     @Test
+    fun `peripheral selection inserts an undoable dirty constant into active source`() {
+        val fixture = ControllerFixture(preferences = preferences("demo", "src/main.kt"))
+        fixture.startAndTick()
+        val before = fixture.textEditor().visibleLines.joinToString("\n")
+        fixture.controller.dispatch(IdeCommand.InsertPeripheralConstant("drive_speed"))
+        val inserted = fixture.textEditor().visibleLines.joinToString("\n")
+        assertTrue(inserted.contains("const val DRIVE_SPEED = \"drive_speed\""))
+        fixture.controller.dispatch(IdeCommand.InsertPeripheralConstant("drive_speed"))
+        assertEquals(inserted, fixture.textEditor().visibleLines.joinToString("\n"))
+        fixture.controller.dispatch(IdeCommand.Edit(IdeEditorInput.Undo))
+        assertEquals(before, fixture.textEditor().visibleLines.joinToString("\n"))
+        fixture.controller.close()
+    }
+
+    @Test
     fun `external project removal explicitly confirms forgetting and preserves files`() {
         val external = ProjectCatalog.open(createTempDirectory("compukters-external-ui-")).create("outside")
         val fixture = ControllerFixture()
