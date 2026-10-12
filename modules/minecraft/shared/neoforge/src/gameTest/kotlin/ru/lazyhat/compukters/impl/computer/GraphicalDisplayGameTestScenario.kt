@@ -185,7 +185,11 @@ internal object GraphicalDisplayGameTestScenario {
                     "shift-use consumed interaction",
                 )
                 player.isShiftKeyDown = false
-                other.blockState.useWithoutItem(helper.level, player, hit)
+                helper.assertTrue(
+                    other.blockState.useWithoutItem(helper.level, player, hit)
+                        == net.minecraft.world.InteractionResult.CONSUME,
+                    "front-face click should be consumed without swinging",
+                )
                 val target =
                     requireNotNull(
                         ru.lazyhat.compukters.minecraft.display

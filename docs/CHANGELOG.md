@@ -17,7 +17,8 @@ headings so this page has one stable URL that can be shared outside the reposito
 
 - Guest displays provide a lightweight declarative widget DSL with explicit pixel viewports, rows/columns,
   reusable mutable widgets, a clipped drawing canvas and a rotation-slider cube example. Server-validated
-  held-right-click gestures support captured dragging, release and cancellation without a reactive runtime.
+  held-right-click gestures support captured dragging, release and cancellation without a reactive runtime;
+  display clicks and dragging do not trigger the player's hand-swing animation.
 
 - Typed peripherals are exclusive to the acquiring program, including reads and competing processes on one
   computer. Program exit and lost connectivity release ownership. The built-in Redstone Port provides remote
