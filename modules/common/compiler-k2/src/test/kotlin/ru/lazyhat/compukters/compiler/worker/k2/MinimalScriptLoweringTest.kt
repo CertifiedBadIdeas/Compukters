@@ -2518,6 +2518,38 @@ class MinimalScriptLoweringTest {
         }
 
     @Test
+    fun `redstone port program lowers deterministically for GameTest`() =
+        withAdapter { adapter ->
+            val source =
+                """
+                import compukter.redstone.Redstone
+                import compukter.redstone.RedstonePort
+
+                fun main() {
+                    val port = RedstonePort.named("relay")
+                    require(port.front.get() == 15)
+                    port.set(3)
+                    port.set(7, side = RedstonePort.Side.RIGHT)
+                    port.top.set(12, Redstone.Power.DIRECT)
+                    port.front.await(0)
+                    port.top.set(0)
+                    port.back.set(9)
+                    require(port.front.await() == 15)
+                    port.front.awaitAtLeast(15)
+                    port.close()
+                }
+                """.trimIndent()
+            val first = adapter.compile(request(source))
+            val artifact = assertNotNull(first.artifact, first.diagnostics.joinToString()).toByteArray()
+            val second = adapter.compile(request(source))
+            assertContentEquals(artifact, assertNotNull(second.artifact).toByteArray())
+            assertTrue(first.diagnostics.none { it.severity.name == "ERROR" }, first.diagnostics.toString())
+            System.getProperty("compukter.vm.redstonePortArtifact")?.let { output ->
+                Path.of(output).also { it.parent.createDirectories() }.writeBytes(artifact)
+            }
+        }
+
+    @Test
     fun `redstone program lowers deterministically for vm conformance`() =
         withAdapter { adapter ->
             val source =

@@ -11016,6 +11016,7 @@ private fun capabilityShape(
                 "compukter" to "compiler" -> 1u
                 "compukter" to "redstone" -> 8u
                 "compukters" to "peripheral" -> 6u
+                "compukters" to "redstone-port" -> 6u
                 "compukter" to "sound" -> 1u
                 "compukters" to "display" -> 18u
                 "compukters" to "network" -> 3u

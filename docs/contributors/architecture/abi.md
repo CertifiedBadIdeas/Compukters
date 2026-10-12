@@ -299,6 +299,22 @@ implementations, Pair and populated factories in `stdlib:core` 1.11.0. Their mod
 format 5, platform ABI 3 and Runtime ABI 1.15 remain unchanged by hash collections. The current native C ABI is 23 for checkpoint transport. Programs and dependent
 platform/addon inputs must resolve the matching module identities. Hashing, generic equality, managed
 objects and specialization reuse existing instructions and representation rules.
+## Remote redstone and peripheral ownership
+
+`compukter:core` 7.4.0 adds typed `RedstonePort` discovery and six-face operations using the additive
+`compukters:redstone-port` capability ABI 1.0. Selectors 0–5 are asynchronous input read, encoded weak/direct
+output, edge wait, exact/threshold wait, handle close and atomic all-face output. Inputs and outputs use I32; levels are bounded to 0–15,
+face indices to 0–5 and encoded output to 0–31. The port's common host maintains at most 64 pending waits per
+process. Resource checkpoint format 1 stores only request identities and restores interrupted waits as I/O failures.
+No output NBT or persistent port instance descriptor is provided. Bundle/artifact encodings and C ABI 23 remain
+unchanged; programs and dependent bundles rebuild against the changed core module identity.
+
+Common typed acquisition reserves an exact endpoint identity for one running process. Other processes receive
+an unavailable host failure before reads or writes, including competing processes on the same computer and alternate
+contracts of the same device. Discovery snapshots reserve no unread devices. Process stop/reset, explicit final
+handle close and disconnected endpoint expiry release ownership. Peripheral checkpoint format 2 and the published
+addon contract JVM constructors remain unchanged; persisted handles must reacquire available exact instances.
+
 ## Computer network capability
 
 `compukter:core` 2.2.0 adds `compukters:network` ABI 1.0, with three asynchronous operations: 0 returns connection status,
