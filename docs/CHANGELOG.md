@@ -103,7 +103,8 @@ headings so this page has one stable URL that can be shared outside the reposito
 
 - IDE hover displays short Kotlin signatures with explicit return types, compact documentation entries
   and source information below the documentation. Editor and long hover scrollbars support thumb dragging
-  and page clicks alongside mouse-wheel scrolling.
+  and page clicks alongside mouse-wheel scrolling. Hover documentation and Go to Declaration resolve
+  platform callback overloads to their exact attached source, including callbacks with a receiver.
   Unknown references color their complete identifier; errors and warnings underline their exact source ranges.
   Hovering a marked token shows its problems together, preserving source editing and horizontal scrolling.
   Argument hints open when typing a call or pressing Ctrl+P, wrap long signatures and emphasize the current parameter.

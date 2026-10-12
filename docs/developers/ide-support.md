@@ -224,7 +224,9 @@ when no declaration signature is available. KDoc subjects and descriptions share
 and source information follows the documentation. Long hovers and the code editor expose mouse-draggable
 scrollbars with page clicks; editor scrolling preserves caret, selection and document revision. Hover also renders
 bounded KDoc from the exact resolved project declaration or its attached platform source, including
-declaration-name hovers. English documentation groups parameters, return values, exceptions (`@throws` and
+declaration-name hovers. Platform overload matching uses normalized type signatures, including callback
+parameters and receiver callbacks, so hover and Go to Declaration select the same attached source.
+English documentation groups parameters, return values, exceptions (`@throws` and
 `@exception`), receiver, properties, constructor, samples, related declarations, since and author into separate
 sections. `@suppress` is shown as a generated-documentation exclusion; unfamiliar tags remain visible.
 Descriptions support paragraphs, headings, lists, emphasis, inline code, displayed reference labels and fenced
@@ -240,7 +242,8 @@ documentation synthesis and full CommonMark/Dokka rendering are not claimed.
 [`ExpressionInfoQueryTest`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/ide-analysis-k2/src/test/kotlin/ru/lazyhat/compukters/ide/analysis/k2/query/ExpressionInfoQueryTest.kt),
 tests `expression query renders an inferred local type`, `expression query renders a resolved callable
 signature`, and `expression query reports a smart cast type`, `hover documentation follows resolved overload
-and declaration names`, and `hover documentation comes from exact attached platform source`;
+and declaration names`, `hover documentation comes from exact attached platform source`, and
+`callback overloads resolve exact platform documentation and navigation`;
 `AnalysisModelsTest`, tests `completion match ranges own immutable ordered unicode-safe label slices` and
 `hover documentation respects utf8 detail budget`; `AnalysisProtocolHostileInputTest`, tests `completion
 decoder rejects malformed unicode match ranges and excessive range counts` and `hover decoder bounds
