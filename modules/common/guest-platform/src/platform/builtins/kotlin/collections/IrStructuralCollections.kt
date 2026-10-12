@@ -124,20 +124,95 @@ public interface List<out T> : Collection<T> {
     public fun lastIndexOf(element: @UnsafeVariance T): Int
 }
 
+/**
+ * A read-only collection containing no duplicate elements under its equality rules.
+ *
+ * Read-only access does not guarantee immutability or a particular iteration order.
+ * [HashSet] aliases observe later mutations and allow null for nullable element types.
+ *
+ * @param T element type.
+ * @see MutableSet
+ */
 public interface Set<out T> : Collection<T>
 
+/**
+ * A read-only association from unique keys to values.
+ *
+ * Different keys may share equal values. Nullable key and value types may store null.
+ * Read-only access does not guarantee immutability; aliases of [HashMap] observe its mutations.
+ * Iteration order and view behavior follow the concrete implementation's contract.
+ *
+ * @param K key type.
+ * @param V value type.
+ * @see MutableMap
+ */
 public interface Map<K, out V> {
+    /** Number of key-value associations in this map. */
     public val size: Int
+    /**
+     * Checks whether this map contains no associations.
+     *
+     * @return true when the map is empty.
+     */
     public fun isEmpty(): Boolean
+    /**
+     * Checks whether an association exists for [key], including one whose value is null.
+     *
+     * @param key key to search for.
+     * @return true if the map contains the key.
+     * @see get
+     */
     public fun containsKey(key: K): Boolean
+    /**
+     * Checks whether any stored value equals [value].
+     *
+     * @param value value to search for, including null for nullable value types.
+     * @return true if at least one association has an equal value.
+     */
     public fun containsValue(value: @UnsafeVariance V): Boolean
+    /**
+     * Returns the value associated with [key], or null when the key is absent.
+     *
+     * A stored null is indistinguishable from an absent key in this result. Use [containsKey]
+     * to distinguish them. Also supports `map[key]` syntax.
+     *
+     * @param key key to look up.
+     * @return the associated value, or null when no association exists.
+     */
     public operator fun get(key: K): V?
+    /**
+     * Read-only set of this map's keys.
+     *
+     * [HashMap] provides a live view whose membership and size reflect later map changes.
+     */
     public val keys: Set<K>
+    /**
+     * Read-only collection of this map's values, retaining duplicates from different keys.
+     *
+     * [HashMap] provides a live view whose contents and size reflect later map changes.
+     */
     public val values: Collection<V>
+    /**
+     * Read-only set of this map's key-value entries.
+     *
+     * [HashMap] provides a live view; replacing a value updates the corresponding stored entry.
+     */
     public val entries: Set<Entry<K, V>>
 
+    /**
+     * A key-value association exposed by a map.
+     *
+     * Read-only access does not guarantee that the value is immutable or detached from the map.
+     * This Guest interface does not itself define structural entry equality, hashing or text formatting.
+     *
+     * @param K key type.
+     * @param V value type.
+     * @see MutableMap.MutableEntry
+     */
     public interface Entry<out K, out V> {
+        /** Key identifying this association. */
         public val key: K
+        /** Value associated with [key], including null for nullable value types. */
         public val value: V
     }
 }
@@ -254,14 +329,71 @@ public interface MutableList<T> : List<T>, MutableCollection<T> {
     public fun removeAt(index: Int): T
 }
 
+/**
+ * A set supporting insertion, removal and clearing without duplicate elements.
+ *
+ * Adding an equal element leaves membership unchanged and returns false. Mutations are visible
+ * through read-only [Set] aliases. Iteration order follows the concrete implementation's contract.
+ *
+ * @param T element type.
+ * @see HashSet
+ */
 public interface MutableSet<T> : Set<T>, MutableCollection<T>
 
+/**
+ * A map supporting association replacement, removal and clearing.
+ *
+ * Read-only [Map] aliases observe the same mutations. An equal existing key is associated with
+ * the new value rather than creating a second association.
+ *
+ * @param K key type.
+ * @param V value type.
+ * @see HashMap
+ */
 public interface MutableMap<K, V> : Map<K, V> {
+    /**
+     * Associates [key] with [value], replacing an existing value for an equal key.
+     *
+     * A null result may mean an absent key or a previous null value. Use [containsKey] before
+     * mutation when that distinction matters.
+     *
+     * @param key key to insert or update.
+     * @param value value to associate with the key.
+     * @return the previous value, or null when the key was absent.
+     */
     public fun put(key: K, value: V): V?
+    /**
+     * Removes the association for [key], if one exists.
+     *
+     * A null result may mean an absent key or a removed null value.
+     *
+     * @param key key whose association should be removed.
+     * @return the removed value, or null when the key was absent.
+     */
     public fun remove(key: K): V?
+    /**
+     * Removes all associations from this map.
+     *
+     * Read-only aliases observe the resulting empty map. Capacity and iterator invalidation
+     * follow the concrete implementation's contract.
+     */
     public fun clear(): Unit
 
+    /**
+     * A map entry whose associated value can be replaced without changing its key.
+     *
+     * Whether the entry is still attached to a map depends on the implementation and later mutations.
+     *
+     * @param K key type.
+     * @param V value type.
+     */
     public interface MutableEntry<K, V> : Map.Entry<K, V> {
+        /**
+         * Replaces this entry's value, leaving its key unchanged.
+         *
+         * @param newValue replacement value.
+         * @return the previous value, including null for nullable value types.
+         */
         public fun setValue(newValue: V): V
     }
 }

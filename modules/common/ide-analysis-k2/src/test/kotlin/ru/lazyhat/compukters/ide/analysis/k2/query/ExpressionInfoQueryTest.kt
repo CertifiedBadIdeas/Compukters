@@ -33,6 +33,77 @@ import kotlin.test.assertTrue
 
 class ExpressionInfoQueryTest {
     @Test
+    fun `hash collection hover resolves constructors entries factories and defaults`() {
+        val source =
+            """
+            import kotlin.collections.*
+            fun main() {
+                val map = HashMap<String, Int?>(4)
+                val view: Map<String, Int?> = map
+                map.put("a", 1)
+                map.get("a")
+                view.get("a")
+                map.keys
+                map.values
+                map.entries
+                val entry = map.entries.iterator().next() as MutableMap.MutableEntry<String, Int?>
+                entry.setValue(2)
+                entry.component1()
+                entry.component2()
+                map.set("a", 3)
+                map.getOrPut("b") { null }
+                val set = HashSet<String>(4)
+                set.add("a")
+                set.iterator()
+                emptyMap<String, Int>()
+                mapOf("a" to 1)
+                mutableMapOf("b" to 2)
+                emptySet<String>()
+                setOf("a", "a")
+                mutableSetOf("b")
+            }
+            """.trimIndent()
+        K2QueryFixture.sourceWithGuestApi(true, "main.kt" to source).use { fixture ->
+            for ((site, tags) in listOf(
+                "HashMap<String" to listOf("@param initialCapacity", "@constructor", "@throws IllegalArgumentException"),
+                "put(\"a\"" to listOf("@param key", "@param value", "@return", "@throws IllegalArgumentException"),
+                "get(\"a\")" to listOf("@param key", "@return"),
+                "view.get" to listOf("@param key", "@return"),
+                "map.keys" to emptyList(),
+                "map.values" to emptyList(),
+                "map.entries" to emptyList(),
+                "setValue(2)" to listOf("@param newValue", "@return"),
+                "component1" to listOf("@receiver", "@return"),
+                "component2" to listOf("@receiver", "@return"),
+                "set(\"a\"" to listOf("@receiver", "@param key", "@param value"),
+                "getOrPut" to listOf("@receiver", "@param key", "@param defaultValue", "@return"),
+                "HashSet<String" to listOf("@param initialCapacity", "@constructor", "@throws IllegalArgumentException"),
+                "add(\"a\")" to listOf("@param element", "@return"),
+                "set.iterator" to listOf("@return"),
+                "emptyMap<String" to listOf("@param K", "@param V", "@return"),
+                "mapOf(\"a\"" to listOf("@param pairs", "@return"),
+                "mutableMapOf" to listOf("@param pairs", "@return"),
+                "emptySet<String" to listOf("@param T", "@return"),
+                "setOf(\"a\"" to listOf("@param elements", "@return"),
+                "mutableSetOf" to listOf("@param elements", "@return"),
+            )) {
+                val offset = source.indexOf(site) + if ('.' in site) site.indexOf('.') + 1 else 0
+                val result =
+                    fixture.execute(
+                        AnalysisQuery.ExpressionInfo(fixture.identity, VirtualSourcePath.kotlin("main.kt"), offset),
+                    ) as AnalysisResult.ExpressionInfo
+                val info = assertNotNull(result.value, site)
+                val documentation = assertNotNull(info.documentation, "$site: $info")
+                tags.forEach { tag -> assertTrue(documentation.contains(tag), "$site: missing $tag in $documentation") }
+                if (site == "set(\"a\"") {
+                    assertTrue(assertNotNull(info.signature).endsWith(": Unit"), info.signature)
+                    assertFalse(documentation.contains("@return"), documentation)
+                }
+            }
+        }
+    }
+
+    @Test
     fun `callback overloads resolve exact platform documentation and navigation`() {
         val source =
             """
