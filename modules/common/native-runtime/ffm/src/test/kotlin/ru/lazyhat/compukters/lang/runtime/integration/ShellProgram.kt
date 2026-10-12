@@ -67,7 +67,8 @@ internal object ShellProgram {
         return output.toString().trimEnd('\n') + '\n'
     }
 
-    private const val GUEST_BUDGET = 64
+    // The compiled shell currently requires at least 66 guest units per slice.
+    internal const val GUEST_BUDGET = 128
     private const val MAINTENANCE_BUDGET = 64
     private const val MAXIMUM_ADVANCES = 10_000
 }

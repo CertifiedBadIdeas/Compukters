@@ -23,6 +23,7 @@ import ru.lazyhat.compukters.lang.runtime.capability.HostOperationSchema
 import ru.lazyhat.compukters.lang.runtime.capability.HostValueType
 import ru.lazyhat.compukters.lang.runtime.vm.CapabilityIdentity
 import ru.lazyhat.compukters.lang.runtime.vm.JniBridge
+import ru.lazyhat.compukters.lang.runtime.vm.VmBridgeException
 import ru.lazyhat.compukters.lang.runtime.vm.VmOutcome
 import ru.lazyhat.compukters.lang.runtime.vm.VmSession
 import ru.lazyhat.compukters.lang.runtime.vm.VmVerificationException
@@ -33,6 +34,9 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
 
+// The compiled shell currently requires at least 66 guest units per slice.
+internal const val SHELL_GUEST_BUDGET = 128
+
 class JniBridgeIntegrationTest {
     @Test
     fun `JNI retirement limit reports exact work without executing at zero allowance`() {
@@ -40,12 +44,12 @@ class JniBridgeIntegrationTest {
         val artifact = Path.of(requiredProperty("compukters.shell.artifact")).readBytes()
         VmSession.open(artifact, bridge).use { session ->
             val initial = session.resourceSnapshot().executedInstructions
-            val zero = session.advanceWithRetirementLimit(64, 64, Int.MAX_VALUE, 0)
+            val zero = session.advanceWithRetirementLimit(SHELL_GUEST_BUDGET, 64, Int.MAX_VALUE, 0)
             assertEquals(VmOutcome.SliceExhausted, zero.outcome)
             assertEquals(0L, zero.retiredInstructions)
             assertEquals(initial, session.resourceSnapshot().executedInstructions)
 
-            val one = session.advanceWithRetirementLimit(64, 64, Int.MAX_VALUE, 1)
+            val one = session.advanceWithRetirementLimit(SHELL_GUEST_BUDGET, 64, Int.MAX_VALUE, 1)
             assertEquals(1L, one.retiredInstructions)
             assertEquals(initial + 1, session.resourceSnapshot().executedInstructions)
         }
@@ -79,10 +83,13 @@ class JniBridgeIntegrationTest {
         val artifact = Path.of(requiredProperty("compukters.shell.artifact")).readBytes()
         VmSession.open(artifact, bridge).use { session ->
             val initialResources = session.resourceSnapshot()
+            val rejected = assertFailsWith<VmBridgeException> { session.advance(1, 64, Int.MAX_VALUE) }
+            assertTrue("status 11" in rejected.message.orEmpty())
+            assertEquals(initialResources, session.resourceSnapshot())
             val initialTerminal = session.terminalFullState()
 
             repeat(10_000) {
-                when (session.advance(64, 64, Int.MAX_VALUE)) {
+                when (session.advance(SHELL_GUEST_BUDGET, 64, Int.MAX_VALUE)) {
                     VmOutcome.SliceExhausted -> Unit
                     VmOutcome.WaitingForTerminalEvent -> return@repeat
                     else -> Unit

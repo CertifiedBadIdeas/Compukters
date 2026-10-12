@@ -252,7 +252,8 @@ internal object ComputerLifecycleGameTestScenario {
                 store = context.store,
                 computerId = computerId,
                 romImage = rom,
-                tickBudget = ProgramTickBudget(64, 64, 4),
+                // The compiled shell requires at least 66 guest units per slice.
+                tickBudget = ProgramTickBudget(128, 64, 4),
             ),
         ).use { computer ->
             helper.assertTrue(computer.turnOn() == ProgramComputerState.Running, "process test computer did not boot")
