@@ -48,6 +48,8 @@ headings so this page has one stable URL that can be shared outside the reposito
 - Guest Kotlin supports named local functions with direct calls, recursion, nested helpers and escaping
   references. Mutable captures share state with surrounding code and lambdas; direct immutable captures
   stay in typed arguments. Local functions can use expression defaults and appear in class initializers.
+  Generic local functions and local helpers inside generic top-level functions specialize concrete calls,
+  defaults and escaping captures; primitive arguments remain unboxed within bounded compiler expansion.
   Class `val`/`var` properties can store, replace and invoke callbacks, including concrete generic holders,
   constructor defaults and custom/inherited accessors. Stored callbacks retain their captures.
 

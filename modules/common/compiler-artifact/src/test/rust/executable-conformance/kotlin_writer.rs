@@ -149,6 +149,10 @@ fn main() {
             std::env::var("COMPUKTER_KOTLIN_FUNCTION_FIELDS_ARTIFACT")
                 .expect("function fields artifact path must be set"),
         ),
+        "generic-local-functions" => execute_primitive_program(
+            std::env::var("COMPUKTER_KOTLIN_GENERIC_LOCAL_FUNCTIONS_ARTIFACT")
+                .expect("generic local functions artifact path must be set"),
+        ),
         "local-functions" => execute_primitive_program(
             std::env::var("COMPUKTER_KOTLIN_LOCAL_FUNCTIONS_ARTIFACT")
                 .expect("local functions artifact path must be set"),

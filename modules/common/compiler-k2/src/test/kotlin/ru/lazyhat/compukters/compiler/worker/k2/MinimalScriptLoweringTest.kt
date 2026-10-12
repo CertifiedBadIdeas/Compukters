@@ -277,6 +277,58 @@ class MinimalScriptLoweringTest {
         }
 
     @Test
+    fun `generic local functions preserve concrete lexical captures and escaping references`() =
+        withAdapter { adapter ->
+            val source = repositoryFile("modules/common/compiler-k2/src/test/resources/kotlin/generic-local-functions/main.kt").readText()
+            val result = adapter.compile(request(source))
+            val bytes = assertNotNull(result.artifact, result.diagnostics.toString()).toByteArray()
+            ArtifactReader.read(bytes)
+            assertContentEquals(bytes, assertNotNull(adapter.compile(request(source)).artifact).toByteArray())
+            System.getProperty("compukter.vm.genericLocalFunctionsArtifact")?.let { output ->
+                Path.of(output).also { it.parent.createDirectories() }.writeBytes(bytes)
+            }
+        }
+
+    @Test
+    fun `generic local calls retain scalar signatures without managed allocation`() =
+        withAdapter { adapter ->
+            val result =
+                adapter.compile(
+                    request("fun main() { val seed = 7; fun <T> read(value: T): T { seed; return value }; read(3); read(4L) }"),
+                )
+            val artifact = ArtifactReader.read(assertNotNull(result.artifact, result.diagnostics.toString()).toByteArray())
+            assertTrue(
+                artifact.modules
+                    .flatMap { it.blocks }
+                    .flatMap { it.instructions }
+                    .none { it is Instruction.NewObject },
+            )
+        }
+
+    @Test
+    fun `generic local references lower without inline normalization`() =
+        withAdapter { adapter ->
+            val sources =
+                listOf(
+                    "fun main() { val seed = 7; fun <T> read(value: T, fallback: Int = seed): T = value\n val call: (Long) -> Long = ::read; call(2L) }",
+                    "fun <T> make(value: T): () -> T { fun read(): T = value\n return ::read }\nfun main() { make(1)(); make(2L)() }",
+                )
+            for (source in sources) {
+                val result = adapter.compile(request(source))
+                ArtifactReader.read(assertNotNull(result.artifact, result.diagnostics.toString()).toByteArray())
+            }
+        }
+
+    @Test
+    fun `expanding generic local recursion reports bounded target diagnostics`() =
+        withAdapter { adapter ->
+            val source = "fun main() { fun <T> grow(value: T): Int = grow(listOf(value))\n grow(1) }"
+            val result = adapter.compile(request(source))
+            assertNull(result.artifact)
+            assertTrue(result.diagnostics.any { it.code == "UNSUPPORTED_IR" && "limit" in it.message }, result.diagnostics.toString())
+        }
+
+    @Test
     fun `local functions preserve recursive captures escaping references and defaults`() =
         withAdapter { adapter ->
             val source = repositoryFile("modules/common/compiler-k2/src/test/resources/kotlin/local-functions/main.kt").readText()
@@ -321,9 +373,8 @@ class MinimalScriptLoweringTest {
         withAdapter { adapter ->
             val sources =
                 listOf(
-                    "fun main() { fun <T> read(value: T): T = value; read(1) }",
+                    "fun main() { inline fun <T> read(value: T): T = value; read(1) }",
                     "fun main() { suspend fun read(): Int = 1 }",
-                    "fun <T> make(value: T): () -> T { fun read(): T = value; return ::read }\nfun main() { make(1)() }",
                 )
             for (source in sources) {
                 val result = adapter.compile(request(source))
