@@ -88,9 +88,9 @@ the network, each published tile and the name on the first panel. Ordinary remov
 
 ## Displays
 
-`compukters:display` capability 1.1 appends graphical operations 4–16 to the original operations 0–3. Guest
-`compukter:core` 2.1.0 exposes `GraphicalDisplay`, resolution modes, RGB colors, drawing and an inline `frame`
-extension. `TextDisplay` remains source-compatible and rasterizes its 20x10 grid at HIGH density.
+`compukters:display` capability 1.2 preserves graphical operations 4–16 and the original operations 0–3,
+adding click polling at operation 17. Guest `compukter:core` 7.3.0 exposes `GraphicalDisplay`, resolution
+modes, RGB colors, drawing, typed clicks, widgets and an inline `frame` extension. `TextDisplay` remains source-compatible and rasterizes its 20x10 grid at HIGH density.
 
 A dimension-owned `DisplayStorage` SavedData contains a bounded `DisplayDirectory`: logical screen UUIDs, one
 plane and fixed rectangular geometry, actual panel UUIDs, a shared name, density and packed published RGB bytes.
@@ -233,3 +233,17 @@ construction after reload. In unthrottled GameTests on the development machine, 
 one computer on a two-block construction and 68 ms for both computers on a 29-block construction, with the second
 computer eight blocks from the assembly anchor. Cold compilation precedes the measured interval. These results do
 not bound arbitrary heaps, construction sizes, disk latency or server load.
+
+### Interactive display input
+
+Display capability 1.2 preserves operations 0–16 and appends operation 17, `pollClick(handle: I32): BYTE_ARRAY`.
+Minor 0/1 requests cannot invoke operation 17. An empty array means no event; otherwise exactly eight bytes
+contain unsigned little-endian x and y in published canvas pixels. `compukter:core` 7.3.0 wraps this private
+encoding as `GraphicalDisplay.pollClick(): DisplayClick?`, with a `Position2i` position.
+
+Empty-hand front-face right-clicks use renderer-aligned coordinates for all four orientations and add panel
+offsets in a composite canvas. Shift-use passes through. Server-thread input is a FIFO limited to 64 entries;
+overflow drops new arrivals. Input belongs to the program's exclusive writer lease. Polling claims that lease.
+Lease release/expiry, world restore, layout retirement and committed density changes clear input. Aborted
+frame density changes preserve it. Pending queue entries are never included in canvas or program resource checkpoints. Values already returned
+to Guest code are ordinary program data and follow its normal execution/checkpoint semantics.

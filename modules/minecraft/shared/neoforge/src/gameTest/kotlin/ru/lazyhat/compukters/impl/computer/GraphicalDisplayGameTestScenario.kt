@@ -155,7 +155,42 @@ internal object GraphicalDisplayGameTestScenario {
                     display.displayColor(0, 0) == 0xFFFF00 && display.displayColor(1, 0) == 0xFF00FF,
                     "Guest frame commit or exception abort failed",
                 )
-                helper.assertTrue(computer.runtimeState == ProgramComputerState.WaitingForInput, "drawing program did not exit")
+                helper.assertTrue(computer.runtimeState != ProgramComputerState.WaitingForInput, "drawing program exited before click")
+            }.thenExecute {
+                val pos = helper.absolutePos(second)
+                val hit =
+                    net.minecraft.world.phys.BlockHitResult(
+                        net.minecraft.world.phys
+                            .Vec3(pos.x + .8125, pos.y + .875, pos.z.toDouble()),
+                        Direction.NORTH,
+                        pos,
+                        false,
+                    )
+                val back =
+                    net.minecraft.world.phys.BlockHitResult(
+                        net.minecraft.world.phys
+                            .Vec3(pos.x + .2, pos.y + .2, pos.z + 1.0),
+                        Direction.SOUTH,
+                        pos,
+                        false,
+                    )
+                helper.assertTrue(
+                    other.blockState.useWithoutItem(helper.level, player, back) == net.minecraft.world.InteractionResult.PASS,
+                    "back-face use consumed interaction",
+                )
+                player.isShiftKeyDown = true
+                helper.assertTrue(
+                    other.blockState.useWithoutItem(helper.level, player, hit) == net.minecraft.world.InteractionResult.PASS,
+                    "shift-use consumed interaction",
+                )
+                player.isShiftKeyDown = false
+                other.blockState.useWithoutItem(helper.level, player, hit)
+            }.thenWaitUntil {
+                helper.assertTrue(
+                    computer.runtimeState == ProgramComputerState.WaitingForInput,
+                    "drawing program did not consume click and exit",
+                )
+                helper.assertTrue(other.displayColor(35, 18) == 0x123456, "composite click did not reach typed Guest coordinates")
             }.thenExecute {
                 helper.assertTrue(display.screenMode() == 0, "applied ultra-low mode was not retained")
                 helper.assertTrue(

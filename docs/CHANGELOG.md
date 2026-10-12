@@ -13,6 +13,11 @@ headings so this page has one stable URL that can be shared outside the reposito
 
 ## 0.6.0 — In development
 
+- Displays accept empty-hand front-face clicks in whole-screen pixel coordinates, exposed through
+  `GraphicalDisplay.pollClick()`. Input belongs to the drawing program and is bounded and transient.
+  Guest widgets provide buttons, indicators, gauges and history charts. The `create-scada` example
+  controls a Create kinetic drive with real speed/load readings, RPM commands and connection/load alarms.
+
 - Guest stdlib provides immutable `Vector2d`, `Vector3d` and `Vector4d` with Double arithmetic,
   robust normalization and explicit conversions to/from existing vectors. Distinct `Quaternionf`/`Quaterniond`
   preserve quaternion identity and support explicit conversions with the corresponding four-dimensional vectors.

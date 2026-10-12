@@ -107,6 +107,28 @@ internal object DisplayWorldAccess {
 
     private val facings = listOf(Direction.NORTH, Direction.SOUTH, Direction.WEST, Direction.EAST)
 
+    fun click(
+        level: ServerLevel,
+        entity: DisplayBlockEntity,
+        hit: net.minecraft.world.phys.BlockHitResult,
+    ): Boolean {
+        if (hit.direction != entity.blockState.getValue(DisplayBlock.FACING)) return false
+        val surface = surface(level, entity, create = false) ?: return false
+        val panel = surface.panels.singleOrNull { it.instance.toString() == entity.checkpointIdentity } ?: return false
+        val local = hit.location.subtract(entity.blockPos.x.toDouble(), entity.blockPos.y.toDouble(), entity.blockPos.z.toDouble())
+        val click =
+            ru.lazyhat.compukters.core.display.displayClickAt(
+                surface.facing,
+                panel.column,
+                panel.row,
+                surface.canvas.density,
+                local.x,
+                local.y,
+                local.z,
+            ) ?: return false
+        return surface.canvas.offerClick(click.x, click.y)
+    }
+
     fun surface(
         level: ServerLevel,
         entity: DisplayBlockEntity,
