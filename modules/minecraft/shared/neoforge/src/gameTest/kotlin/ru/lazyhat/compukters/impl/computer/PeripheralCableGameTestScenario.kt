@@ -73,6 +73,21 @@ internal object PeripheralCableGameTestScenario {
                 PeripheralNetworkGameTestFixtures.bind(helper, computer, firstDevice, secondDevice)
                 assertFound(helper, computer, "input", firstIdentity.anchor)
                 assertFound(helper, computer, "output", secondIdentity.anchor)
+                val peripherals =
+                    ru.lazyhat.compukters.minecraft.peripheral.IdePeripheralDiscovery.snapshot(
+                        level,
+                        helper.absolutePos(computer),
+                    )
+                helper.assertTrue(
+                    peripherals.entries.map { it.name } == listOf("input", "output"),
+                    "IDE discovery did not list named reachable devices",
+                )
+                helper.assertTrue(
+                    peripherals.entries.map {
+                        it.itemId
+                    } == listOf("minecraft:barrel", "minecraft:dropper"),
+                    "IDE discovery lost block item icons",
+                )
                 verifyConfiguratorSave(helper, computer, firstIdentity, secondIdentity)
             }.thenExecute {
                 // Membership is independent of cable topology.
@@ -80,6 +95,15 @@ internal object PeripheralCableGameTestScenario {
                 assertFound(helper, computer, "input", firstIdentity.anchor)
                 PeripheralNetworkGameTestFixtures.unbind(helper, firstDevice)
                 assertStatus(helper, computer, "input", ComputerPeripheralLookupStatus.MISSING)
+                val peripherals =
+                    ru.lazyhat.compukters.minecraft.peripheral.IdePeripheralDiscovery.snapshot(
+                        level,
+                        helper.absolutePos(computer),
+                    )
+                helper.assertTrue(
+                    peripherals.entries.none { it.itemId == "minecraft:barrel" },
+                    "IDE discovery retained an unbound peripheral",
+                )
                 assertFound(helper, computer, "output", secondIdentity.anchor)
             }.thenExecute {
                 PeripheralNetworkGameTestFixtures.bind(helper, computer, firstDevice)

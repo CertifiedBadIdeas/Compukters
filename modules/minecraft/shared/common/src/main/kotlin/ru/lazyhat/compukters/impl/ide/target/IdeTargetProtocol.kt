@@ -56,6 +56,10 @@ class IdeCanonicalLine private constructor(
 }
 
 sealed interface IdeTargetRequest {
+    data class NamedPeripherals(
+        val target: IdeTargetReference,
+    ) : IdeTargetRequest
+
     data class Attach(
         val claim: BinaryValue,
     ) : IdeTargetRequest
@@ -159,6 +163,15 @@ data class IdeTargetRequestEnvelope(
 }
 
 sealed interface IdeTargetReply {
+    data class NamedPeripherals(
+        val entries: List<IdeNamedPeripheral>,
+        val truncated: Boolean = false,
+    ) : IdeTargetReply {
+        init {
+            require(entries.size <= 1024)
+        }
+    }
+
     data class Attached(
         val target: IdeAttachedTarget,
     ) : IdeTargetReply

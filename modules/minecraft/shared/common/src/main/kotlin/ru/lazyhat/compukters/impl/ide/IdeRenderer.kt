@@ -80,6 +80,7 @@ object IdeRenderer {
         fileTabFirstIndex: Int = 0,
         quickOpen: IdeQuickOpenView? = null,
         statusDetails: IdeStatusDetailsView? = null,
+        peripheralPicker: IdePeripheralPickerView? = null,
         hoverScroll: Int = 0,
         hoverDocumentation: IdeHoverDocumentation? = null,
     ): IdeDrawModel {
@@ -119,6 +120,11 @@ object IdeRenderer {
             IdePageState.Opening -> Unit
             is IdePageState.Start -> output.start(page, state.target, state.busy)
             is IdePageState.Workspace -> output.workspace(page.value, state.target, state.tooling, state.busy, caretVisible)
+        }
+        if (peripheralPicker != null &&
+            state.page is IdePageState.Workspace
+        ) {
+            IdePeripheralPicker.draw(output, geometry.content, peripheralPicker)
         }
         output.terminalTool(state.target)
         output.scaleControls(uiScale, enabled = statusDetails == null && quickOpen == null && prompt == null && state.dialog == null)

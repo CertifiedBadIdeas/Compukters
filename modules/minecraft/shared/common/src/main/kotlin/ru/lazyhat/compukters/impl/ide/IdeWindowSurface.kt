@@ -30,6 +30,7 @@ internal object IdeWindowSurface {
         kind in
             setOf(
                 IdePanelKind.Dialog,
+                IdePanelKind.PeripheralSelection,
                 IdePanelKind.ProjectSelection,
                 IdePanelKind.ProjectSwitcher,
                 IdePanelKind.Tooltip,

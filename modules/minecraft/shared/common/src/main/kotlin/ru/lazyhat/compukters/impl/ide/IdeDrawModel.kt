@@ -33,6 +33,7 @@ enum class IdePanelKind {
     Status,
     Control,
     Dialog,
+    PeripheralSelection,
     ProjectSelection,
     ProjectSwitcher,
     Tooltip,
@@ -99,6 +100,10 @@ enum class IdeFillKind {
 enum class IdeScissorKind { Tree, Editor, Diagnostics, Completion, SemanticPopup, ProjectSwitcher, Tooltip }
 
 enum class IdeHitAction {
+    Peripherals,
+    PeripheralChoice,
+    PeripheralRefresh,
+    PeripheralClose,
     StatusDetails,
     QuickOpen,
     ScaleAuto,
