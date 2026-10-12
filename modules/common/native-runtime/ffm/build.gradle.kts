@@ -16,6 +16,7 @@
  * limitations under the License.
  */
 
+import java.io.File
 import java.time.Instant
 import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
@@ -73,15 +74,19 @@ val nativeResourcePath = "META-INF/natives/$nativeOs/$nativeArch/$nativeFilename
 val compukterFfiLibrary = rootProject.file(".toolchain/build/cargo/compukter-ffi/release/$nativeFilename")
 val generatedDevelopmentNativeResources = layout.buildDirectory.dir("generated/native-resources")
 val generatedReleaseNativeResources = layout.buildDirectory.dir("generated/release-native-resources")
-val runtimeBundleDirectory = providers.gradleProperty("compukterRuntimeBundleDir").map(rootProject::file)
+val runtimeBundleDirectory = run {
+    val repositoryRoot = rootProject.projectDir
+    providers.gradleProperty("compukterRuntimeBundleDir").map { path ->
+        File(path).let { if (it.isAbsolute) it else repositoryRoot.resolve(path) }
+    }
+}
 val releaseRuntimeRequested = requestsUniversalReleaseBuild(gradle)
 val compukterVmRoot = rootProject.file("host/compukter-vm")
 val runtimeBundleContract = rootProject.runtimeBundleContractProvider()
-val downloadedRuntimeBundleDirectory =
-    providers.provider {
-        rootProject.gradle.gradleUserHomeDir
-            .resolve("caches/compukters/runtime/${runtimeBundleContract.get().runtimeVersion}")
-    }
+val downloadedRuntimeBundleDirectory = run {
+    val runtimeCacheRoot = rootProject.gradle.gradleUserHomeDir.resolve("caches/compukters/runtime")
+    runtimeBundleContract.map { runtimeCacheRoot.resolve(it.runtimeVersion) }
+}
 val selectedReleaseRuntimeBundleDirectory = runtimeBundleDirectory.orElse(downloadedRuntimeBundleDirectory)
 val shellArtifact = project(":compiler-k2").layout.buildDirectory.file("generated/system/shell.cpkt")
 val blockingCallArtifact = project(":compiler-k2").layout.buildDirectory.file("generated/conformance/blocking-call.cpkt")
@@ -103,7 +108,7 @@ val preparePackagedCompukterFfi =
 val downloadCompukterRuntimeBundles = rootProject.tasks.named("downloadCompukterRuntimeBundles")
 
 val preparePackagedReleaseRuntime =
-    tasks.register("preparePackagedReleaseRuntime") {
+    tasks.register<PrepareReleaseRuntime>("preparePackagedReleaseRuntime") {
         description = "Validates and stages the pinned Linux and Windows Runtime release bundles."
         group = "build"
         dependsOn(downloadCompukterRuntimeBundles)
@@ -111,17 +116,10 @@ val preparePackagedReleaseRuntime =
         inputs.property("runtimeVersion", runtimeBundleContract.map(RuntimeBundleContract::runtimeVersion))
         inputs.property("runtimeVmCommit", runtimeBundleContract.map(RuntimeBundleContract::vmCommit))
         inputs.property("runtimeAbi", runtimeBundleContract.map(RuntimeBundleContract::ffiAbi))
-        outputs.dir(generatedReleaseNativeResources)
-        doLast {
-            val output = generatedReleaseNativeResources.get().asFile.toPath()
-            delete(output)
-            RuntimeBundleSupport.validateAndStage(
-                selectedReleaseRuntimeBundleDirectory.get().toPath(),
-                output,
-                runtimeBundleContract.get(),
-                RuntimeTransport.FFI,
-            )
-        }
+        contract.set(runtimeBundleContract)
+        bundleDirectory.set(layout.dir(selectedReleaseRuntimeBundleDirectory))
+        nativeResources.set(generatedReleaseNativeResources)
+        transport.set(RuntimeTransport.FFI)
     }
 
 val releaseRuntimeMode = runtimeBundleDirectory.isPresent || releaseRuntimeRequested

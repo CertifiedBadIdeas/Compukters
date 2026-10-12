@@ -127,6 +127,10 @@ fn main() {
         "interface-super" => k2_interface_super_calls_direct_default_bodies(),
         "mutable-fields" => k2_mutable_class_fields_preserve_aliases_and_evaluation_order(),
         "class-initialization" => k2_class_initialization_preserves_source_and_super_order(),
+        "function-defaults" => execute_primitive_program(
+            std::env::var("COMPUKTER_KOTLIN_FUNCTION_DEFAULTS_ARTIFACT")
+                .expect("function defaults artifact path must be set"),
+        ),
         "constructor-defaults" => k2_constructor_defaults_preserve_kotlin_argument_order(),
         "adapted-constructors" => k2_adapted_constructor_references_preserve_defaults_and_identity(),
         "primitives" => k2_primitives_preserve_numeric_boundaries_and_nominal_types(),
@@ -221,7 +225,8 @@ fn k2_host_failures_preserve_tasks_and_call_sites() {
     let verified = verify_artifact(Arc::from(fs::read(path).unwrap()), ArtifactLimits::default()).unwrap();
     let mut computer = ComputerMachine::start(verified, list_no_io_profile(), &[], &[]).unwrap();
     for attempt in 0..10_000 {
-        match computer.advance(64, 64, u32::MAX).unwrap() {
+        // Filesystem Path lowering requires a 66-unit block; retain bounded slices.
+        match computer.advance(128, 64, u32::MAX).unwrap() {
             ComputerAdvanceOutcome::SliceExhausted => assert!(attempt < 9999),
             ComputerAdvanceOutcome::Halted(None) => {
                 for (x, character) in "filesystem ok".chars().enumerate() {

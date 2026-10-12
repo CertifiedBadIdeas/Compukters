@@ -28,7 +28,13 @@ metadata to K2 without making the K2 implementation part of the platform format.
 ## Default arguments and loops
 
 Constant `Int` and qualified enum-entry defaults cross this bundle explicitly; compiler lowering materializes an
-omitted platform argument without a JVM-style mask dispatcher. The bundle also represents explicit null defaults and array-receiver-size defaults. Arbitrary default expressions remain limited to the documented Guest subset.
+omitted platform argument without a JVM-style mask dispatcher. The bundle also represents explicit null defaults and array-receiver-size defaults. Project function defaults use admitted Guest expressions lowered at the call site. Receivers and explicit
+arguments are evaluated and saved before temporarily binding callee and default-owner parameters. Missing
+arguments then evaluate in parameter order, with bindings and generic substitutions restored after nested
+calls. Inherited defaults use their declaring symbols while the final call retains virtual dispatch.
+Default-only generic helper calls participate in specialization discovery. Recursively expanding the same
+source default produces a bounded target diagnostic instead of unbounded compiler recursion. None of these
+source expressions are encoded into the platform bundle or require a new VM instruction.
 Canonical `IntRange` and `IntProgression` declarations let K2 resolve ascending, descending, and stepped `Int` loops.
 The compiler recognizes only their canonical `for` shape and evaluates start, end, and step once into scalar registers;
 no range or iterator object enters the VM. It validates a positive step before iteration, calculates the next index in

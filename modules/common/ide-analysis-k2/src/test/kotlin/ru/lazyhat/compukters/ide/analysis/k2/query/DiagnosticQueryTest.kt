@@ -46,6 +46,27 @@ class DiagnosticQueryTest {
     }
 
     @Test
+    fun `function expression defaults resolve with source and metadata inputs`() {
+        val source =
+            """
+            import kotlin.random.Random
+            open class Base(val number: Int) { open fun read(value: Int = number): Int = value }
+            class Derived : Base(7) { override fun read(value: Int): Int = value + 1 }
+            fun <T> choose(value: T, fallback: T = value): T = fallback
+            fun Int.offset(delta: Int = this + 1): Int = this + delta
+            fun roll(sides: Int = 6, random: Random = Random.Default): Int = random.nextInt(1, sides + 1)
+            fun main() { check(Derived().read() == 8); check(choose(2) == 2); check(3.offset() == 7); roll(random = Random(42)) }
+            """.trimIndent()
+        for (attachedSources in listOf(false, true)) {
+            K2QueryFixture.sourceWithGuestApi(attachedSources, "main.kt" to source).use { fixture ->
+                val result = fixture.execute(fixture.presentation()) as AnalysisResult.Presentation
+                val active = result.value.accept(fixture.identity) as SnapshotPresentationAcceptance.Active
+                assertTrue(active.diagnostics.none { it.severity == EditorDiagnosticSeverity.Error }, active.diagnostics.toString())
+            }
+        }
+    }
+
+    @Test
     fun `random generators and extensions resolve with source and metadata inputs`() {
         val source =
             """

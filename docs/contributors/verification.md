@@ -15,11 +15,11 @@ For long runs where console volume is undesirable, use `./gradlew-sandbox-dev-pa
 the complete combined log under `build/agent-logs/`, prints only the final Gradle summary on success, and emits a
 bounded diagnostic summary and log tail on failure without changing the command's exit code.
 
-## Configuration Cache (opt-in)
+## Configuration Cache
 
-Configuration Cache remains disabled by default: compatibility must be checked for each task graph before use.
-For built-in program generation, both Minecraft `classes` targets and the shared tooling bundle, opt in with
-`--configuration-cache`. Keep `--parallel` (the parallel wrappers already supply it) to let independent built-in
+Configuration Cache is enabled by default for repository builds. Compatibility errors remain fatal; use
+`--no-configuration-cache` only when diagnosing whether a failure depends on graph replay.
+Keep `--parallel` (the parallel wrappers already supply it) to let independent built-in
 compiler tasks execute concurrently even within the `compiler-k2` project. Local packaging with
 `:v1_21_1-neoforge:remapJar :v26_1-neoforge:jar` has also been exercised with the cache; these packaging
 tasks alone do not verify production archive contents or release readiness.
@@ -31,14 +31,17 @@ cache replay. Generated guest bundles, host contracts and built-in programs rema
 
 Cache compatibility does not imply a passing build: ordinary compilation, runtime and GameTest failures still fail
 the command. [Issue #744](https://github.com/CertifiedBadIdeas/Compukters/issues/744) tracks the global rollout and
-remaining functional verification blockers. Tagged release graphs still require their separate gate.
+remaining functional verification blockers. Strict serialization also covers workspace cleanup, dependency staging
+and both targets' development client/server graphs. Development settings preserve manual options and existing
+client server lists on replay. Tagged release graphs still require their separate gate and a compatible published
+Runtime descriptor.
 
 ```sh
-./gradlew-sandbox-dev-parallel-summary :compiler-k2:generateKotlincArtifact :compiler-k2:generateShellArtifact --configuration-cache
-./gradlew-sandbox-dev-parallel-summary :v1_21_1-neoforge:classes :v26_1-neoforge:classes --configuration-cache
-./gradlew-sandbox-dev-parallel-summary :tooling-runtime:verifyToolingRuntimeBundle --configuration-cache
-./gradlew-sandbox-dev-parallel-summary build --configuration-cache
-./gradlew-sandbox-dev-parallel-summary verifyLocalFull --configuration-cache
+./gradlew-sandbox-dev-parallel-summary :compiler-k2:generateKotlincArtifact :compiler-k2:generateShellArtifact
+./gradlew-sandbox-dev-parallel-summary :v1_21_1-neoforge:classes :v26_1-neoforge:classes
+./gradlew-sandbox-dev-parallel-summary :tooling-runtime:verifyToolingRuntimeBundle
+./gradlew-sandbox-dev-parallel-summary build
+./gradlew-sandbox-dev-parallel-summary verifyLocalFull
 ```
 
 The first run stores the task graph; repeat the same command and check for `Reusing configuration cache`.
