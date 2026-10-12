@@ -425,6 +425,7 @@ private fun collectGuestFunctionInstances(
     functions: List<IrSimpleFunction>,
     constructors: List<IrClass>,
     memberInstances: List<GuestFunctionInstance> = emptyList(),
+    lexicalVariantCount: Int = 0,
 ): List<GuestFunctionInstance> {
     functions.firstOrNull { it.parent is IrClass && it.typeParameters.isNotEmpty() }?.let { function ->
         throw UnsupportedKotlinIr(function, "generic instance methods are not supported")
@@ -435,7 +436,7 @@ private fun collectGuestFunctionInstances(
     val projectSymbols = functions.mapTo(mutableSetOf()) { it.symbol }
     val instances = linkedSetOf<GuestFunctionInstance>()
     val pending = ArrayDeque<GuestFunctionInstance>()
-    var genericVariantCount = 0
+    var genericVariantCount = lexicalVariantCount
 
     fun add(instance: GuestFunctionInstance) {
         if (instances.add(instance)) {
@@ -1326,23 +1327,30 @@ internal object KotlinProjectLowering {
                     !includeTrustedPlatformBodies &&
                         isLinkedPlatformFunction(function, session)
                 }
+        val lexicalSpecialization = GuestLocalSpecialization()
         val rootFunctions =
-            playerFunctions.sortedWith(
-                compareBy<IrSimpleFunction>(
-                    { if (it === entry) 0 else 1 },
-                    { if (it.parent is IrFile || inlineValueClasses.contains((it.parent as? IrClass)?.symbol)) 0 else 1 },
-                    { (it.parent as? IrClass)?.fqNameWhenAvailable?.asString().orEmpty() },
-                    {
-                        if ((it.parent as? IrClass)?.fqNameWhenAvailable?.asString() in specializedPlatformBaseTypes) {
-                            "<builtins-collection>"
-                        } else {
-                            session.virtualSourcePath(it.file.fileEntry.name)?.value.orEmpty()
-                        }
+            lexicalSpecialization
+                .lower(
+                    playerFunctions,
+                    sourceClasses.flatMap { declaration ->
+                        declaration.declarations.filter { it is IrConstructor || it is IrProperty || it is IrAnonymousInitializer }
                     },
-                    { it.startOffset },
-                    { it.name.asString() },
-                ),
-            )
+                ).sortedWith(
+                    compareBy<IrSimpleFunction>(
+                        { if (it === entry) 0 else 1 },
+                        { if (it.parent is IrFile || inlineValueClasses.contains((it.parent as? IrClass)?.symbol)) 0 else 1 },
+                        { (it.parent as? IrClass)?.fqNameWhenAvailable?.asString().orEmpty() },
+                        {
+                            if ((it.parent as? IrClass)?.fqNameWhenAvailable?.asString() in specializedPlatformBaseTypes) {
+                                "<builtins-collection>"
+                            } else {
+                                session.virtualSourcePath(it.file.fileEntry.name)?.value.orEmpty()
+                            }
+                        },
+                        { it.startOffset },
+                        { it.name.asString() },
+                    ),
+                )
         val closureRoots: List<IrElement> =
             rootFunctions +
                 sourceClasses.flatMap { declaration ->
@@ -1370,7 +1378,8 @@ internal object KotlinProjectLowering {
                 declaration.kind in setOf(ClassKind.CLASS, ClassKind.OBJECT) &&
                     declaration.constructors.any { it.isPrimary }
             }
-        var functionInstances = collectGuestFunctionInstances(userFunctions, constructorClasses)
+        var functionInstances =
+            collectGuestFunctionInstances(userFunctions, constructorClasses, lexicalVariantCount = lexicalSpecialization.variantCount)
         val specializationClasses = (userClasses + sourceClasses.filter { inlineValueClasses.contains(it.symbol) }).distinctBy { it.symbol }
         var allClassInstances =
             collectGuestClassInstances(specializationClasses, functionInstances, topLevelProperties, pluginContext.irBuiltIns.anyType)
@@ -1391,6 +1400,7 @@ internal object KotlinProjectLowering {
                             }
                         }
                     },
+                    lexicalVariantCount = lexicalSpecialization.variantCount,
                 )
             val discoveredClasses =
                 collectGuestClassInstances(specializationClasses, functionInstances, topLevelProperties, pluginContext.irBuiltIns.anyType)
