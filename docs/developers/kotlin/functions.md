@@ -211,7 +211,9 @@ and
 **Status:** Partial.
 
 Non-null function values using supported Guest parameter and result types are admitted in project function
-signatures and locals: values may be passed, returned, stored, and invoked. The compiler generates an
+signatures and locals: values may be passed, returned, stored, and invoked.
+Backed class `val`/`var` properties also store and replace concrete callbacks under the
+[function-valued property contract](objects.md#function-valued-properties). The compiler generates an
 interface for each distinct concrete signature without a fixed arity cut-off; artifact and VM limits still
 apply. A function value can also be passed as an argument to another function value. Nested lambdas may
 capture values through multiple lexical scopes and remain callable after the enclosing invocation returns.

@@ -521,6 +521,22 @@ val generateFunctionDefaultsConformanceArtifact = tasks.register<Test>("generate
     systemProperty("compukter.vm.functionDefaultsArtifact", functionDefaultsConformanceArtifact.get().asFile.absolutePath)
 }
 
+val functionFieldsConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-function-fields.cpkt")
+val generateFunctionFieldsConformanceArtifact = tasks.register<Test>("generateFunctionFieldsConformanceArtifact") {
+    description = "Compiles function-valued Guest class fields for pinned VM conformance."
+    group = "verification"
+    dependsOn(tasks.jar)
+    useJUnitPlatform()
+    testClassesDirs = sourceSets.test.get().output.classesDirs
+    classpath = sourceSets.test.get().runtimeClasspath
+    filter.includeTestsMatching("*function fields preserve callback ownership replacement accessors and specialization*")
+    inputs.file(workerJar)
+    inputs.file("src/test/resources/kotlin/function-fields/main.kt")
+    outputs.file(functionFieldsConformanceArtifact)
+    systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
+    systemProperty("compukter.vm.functionFieldsArtifact", functionFieldsConformanceArtifact.get().asFile.absolutePath)
+}
+
 val localFunctionsConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-local-functions.cpkt")
 val generateLocalFunctionsConformanceArtifact = tasks.register<Test>("generateLocalFunctionsConformanceArtifact") {
     description = "Compiles captured Guest local functions for pinned VM conformance."
