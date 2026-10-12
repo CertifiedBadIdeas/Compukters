@@ -19,6 +19,10 @@ headings so this page has one stable URL that can be shared outside the reposito
   Text operations preserve UTF-16 units and respect managed heap quotas; malformed integer text
   returns null or throws `NumberFormatException` according to the selected API.
 
+- Guest Kotlin functions accept expression default arguments using earlier parameters, receivers,
+  helpers, lambdas and concrete generic types. Explicit arguments evaluate before omitted defaults;
+  inherited defaults preserve overriding method dispatch.
+
 - Guest Kotlin provides `kotlin.random.Random` with reproducible Int/Long seeds, a fixed-seed shared
   default generator, signed and unsigned ranges, floating draws and byte-array filling. Generator
   state survives instruction slices and computer checkpoints.
@@ -35,8 +39,9 @@ headings so this page has one stable URL that can be shared outside the reposito
   geometry for cursor/drawing operations, terminal size observations and named palette colors. The old public
   raw event protocol is replaced; built-in shell, editor and benchmark agent use the new API.
 
-- Contributors can opt into Gradle Configuration Cache for built-in program generation, Minecraft classes,
-  shared tooling assembly and the global `build` and `verifyLocalFull` task graphs. Dependency isolation, archive and license
+- Gradle Configuration Cache is enabled by default for built-in program generation, Minecraft classes,
+  shared tooling assembly, SDK staging, development runs and the global `build` and `verifyLocalFull` task graphs.
+  Dependency isolation, archive and license
   checks remain active on replay, including detection of newly added media files. Independent built-in compiler tasks
   can run in parallel within the same project;
   cached build-version selection tracks Git tags on `HEAD`. Minecraft builds use Loom directly for common

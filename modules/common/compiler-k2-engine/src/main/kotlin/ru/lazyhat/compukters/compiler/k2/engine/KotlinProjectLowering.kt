@@ -454,6 +454,7 @@ private fun collectGuestFunctionInstances(
     while (pending.isNotEmpty()) {
         val instance = pending.removeFirst()
         instance.declaration.body?.let { scan(it, instance) }
+        instance.declaration.parameters.forEach { parameter -> parameter.defaultValue?.let { scan(it, instance) } }
     }
     return instances.toList()
 }
@@ -7074,11 +7075,7 @@ private class FunctionCompiler(
             return (destination as? Destination.Register)?.id
         }
         externalFunctions[target.symbol]?.let { external ->
-            val argumentExpressions = resolveProjectCallArguments(call, target)
-            val arguments = mutableListOf<RegisterId>()
-            argumentExpressions.zip(loweredParameters(target, session)).forEach { (argument, parameter) ->
-                arguments += compileCallArgument(argument, parameter.type, arguments)
-            }
+            val arguments = compileProjectCallArguments(call, target)
             val destination = destinationFor(target.returnType, call)
             if (target.isSuspend) {
                 val resume = createBlock()
@@ -7186,11 +7183,10 @@ private class FunctionCompiler(
             resolveClassInstance(call.dispatchReceiver?.type)?.let { receiver ->
                 (target.parent as? IrClass)?.let { resolveMemberOwner(receiver, it) } ?: receiver
             }
-        val arguments = mutableListOf<RegisterId>()
-        resolveProjectCallArguments(call, target).zip(loweredParameters(target, session)).forEach { (argument, parameter) ->
-            val parameterType = specialization?.substitute(parameter.type) ?: receiverSpecialization?.substitute(parameter.type)
-            arguments += compileCallArgument(argument, parameterType ?: parameter.type, arguments)
-        }
+        val arguments =
+            compileProjectCallArguments(call, target) { type ->
+                specialization?.substitute(type) ?: receiverSpecialization?.substitute(type) ?: type
+            }
         val destination = destinationFor(call.type, call)
         if (target.isSuspend) {
             val resume = createBlock()
@@ -7314,6 +7310,145 @@ private class FunctionCompiler(
             }.singleOrNull()
             ?: throw UnsupportedKotlinIr(call, "$operation receiver is missing")
 
+    private val defaultTypeSubstitutions = ArrayDeque<(IrType) -> IrType>()
+    private val expandingDefaults = mutableSetOf<IrValueSymbol>()
+
+    private fun defaultOwner(
+        target: IrSimpleFunction,
+        index: Int,
+    ): IrSimpleFunction? {
+        val visited = mutableSetOf<IrSimpleFunctionSymbol>()
+
+        fun find(function: IrSimpleFunction): IrSimpleFunction? {
+            if (!visited.add(function.symbol)) return null
+            if (function.parameters.getOrNull(index)?.defaultValue != null) return function
+            return function.overriddenSymbols.firstNotNullOfOrNull { find(it.owner) }
+        }
+        return find(target)
+    }
+
+    private fun compileProjectCallArguments(
+        call: IrCall,
+        target: IrSimpleFunction,
+        substitute: (IrType) -> IrType = { it },
+    ): List<RegisterId> {
+        val parameters = loweredParameters(target, session)
+        val resolved = resolveProjectCallArguments(call, target)
+        if (parameters.all { parameter ->
+                val index = target.parameters.indexOf(parameter)
+                call.arguments.getOrNull(index) != null && defaultOwner(target, index) == null
+            }
+        ) {
+            val arguments = mutableListOf<RegisterId>()
+            resolved.zip(parameters).forEach { (argument, parameter) ->
+                arguments += compileCallArgument(argument, substitute(parameter.type), arguments)
+            }
+            return arguments
+        }
+        val registers = mutableMapOf<Int, RegisterId>()
+        // Do not bind callee parameters while evaluating explicit expressions: a recursive
+        // call's arguments still refer to the caller's parameter registers.
+        val explicit = parameters.indices.filter { call.arguments.getOrNull(target.parameters.indexOf(parameters[it])) != null }
+        val order =
+            explicit.filter { parameters[it].kind != IrParameterKind.Regular } +
+                explicit.filter { parameters[it].kind == IrParameterKind.Regular }.sortedWith(
+                    compareBy(
+                        {
+                            (resolved[it] as ResolvedCallArgument.Expression).expression.startOffset.takeIf { offset ->
+                                offset >= 0
+                            } ?: Int.MAX_VALUE
+                        },
+                        { it },
+                    ),
+                )
+        order.forEach { index ->
+            val value = compileCallArgument(resolved[index], substitute(parameters[index].type))
+            registers[index] = allocate(registerValueType(value)).also { emit(Instruction.Move(it, value)) }
+        }
+        val owners =
+            parameters.indices
+                .mapNotNull { index ->
+                    defaultOwner(target, target.parameters.indexOf(parameters[index]))
+                }.distinctBy { it.symbol }
+        val bindings =
+            (listOf(target) + owners)
+                .flatMap { owner ->
+                    owner.parameters.map { it.symbol } + listOfNotNull((owner.parent as? IrClass)?.thisReceiver?.symbol)
+                }.distinct()
+        val previous = bindings.associateWith { values[it] }
+
+        fun bind() {
+            (listOf(target) + owners).forEach { owner ->
+                parameters.forEachIndexed { index, parameter ->
+                    registers[index]?.let { value ->
+                        val sourceIndex = target.parameters.indexOf(parameter)
+                        owner.parameters.getOrNull(sourceIndex)?.let { values[it.symbol] = value }
+                        if (parameter.kind == IrParameterKind.DispatchReceiver) {
+                            (owner.parent as? IrClass)?.thisReceiver?.let { values[it.symbol] = value }
+                        }
+                    }
+                }
+            }
+        }
+        return try {
+            bind()
+            parameters.forEachIndexed { index, parameter ->
+                if (index !in registers) {
+                    val owner = defaultOwner(target, target.parameters.indexOf(parameter))
+                    if (resolved[index] is ResolvedCallArgument.PlatformDefault || owner == null) {
+                        registers[index] =
+                            compileCallArgument(
+                                resolved[index],
+                                substitute(parameter.type),
+                                parameters.indices.take(index).mapNotNull(registers::get),
+                            )
+                    } else {
+                        val sourceParameter = owner.parameters[target.parameters.indexOf(parameter)]
+                        if (!expandingDefaults.add(sourceParameter.symbol)) {
+                            throw UnsupportedKotlinIr(call, "recursive default argument expansion is not supported")
+                        }
+                        val generic = projectFunctionInstance(call, target)
+                        val receiver =
+                            resolveClassInstance(call.dispatchReceiver?.type)?.let { instance ->
+                                (owner.parent as? IrClass)?.let { resolveMemberOwner(instance, it) }
+                            }
+                        // Default IR and caller register types can belong to different generic scopes.
+                        val substitutions =
+                            listOfNotNull(
+                                generic?.let { instance ->
+                                    IrTypeSubstitutor(
+                                        instance.declaration.typeParameters.map { it.symbol },
+                                        instance.arguments.map { makeTypeProjection(it, Variance.INVARIANT) },
+                                        true,
+                                    )
+                                },
+                                receiver?.let { instance ->
+                                    IrTypeSubstitutor(
+                                        instance.declaration.typeParameters.map { it.symbol },
+                                        instance.arguments.map { makeTypeProjection(it, Variance.INVARIANT) },
+                                        true,
+                                    )
+                                },
+                            )
+                        defaultTypeSubstitutions.addLast { type ->
+                            substitutions.fold(type) { result, substitution -> substitution.substitute(result) }
+                        }
+                        try {
+                            registers[index] = compileCallArgument(resolved[index], substitute(parameter.type))
+                        } finally {
+                            defaultTypeSubstitutions.removeLast()
+                            expandingDefaults.remove(sourceParameter.symbol)
+                        }
+                    }
+                    bind()
+                }
+            }
+            parameters.indices.map { registers.getValue(it) }
+        } finally {
+            previous.forEach { (symbol, value) -> if (value == null) values.remove(symbol) else values[symbol] = value }
+        }
+    }
+
     private fun resolveProjectCallArguments(
         call: IrCall,
         target: IrSimpleFunction,
@@ -7331,9 +7466,11 @@ private class FunctionCompiler(
             val index = target.parameters.indexOf(parameter)
             call.arguments.getOrNull(index)?.let(ResolvedCallArgument::Expression)
                 ?: platformDefaults.getOrNull(loweredIndex)?.let(ResolvedCallArgument::PlatformDefault)
-                ?: parameter.defaultValue
+                ?: defaultOwner(target, index)
+                    ?.parameters
+                    ?.get(index)
+                    ?.defaultValue
                     ?.expression
-                    ?.takeIf { expression -> isSupportedScalarDefault(expression) || isSupportedStringArrayDefault(expression) }
                     ?.let(ResolvedCallArgument::Expression)
                 ?: throw UnsupportedKotlinIr(
                     call,
@@ -7392,37 +7529,6 @@ private class FunctionCompiler(
                 }
             }
         }
-
-    private fun isSupportedScalarDefault(expression: IrExpression): Boolean =
-        expression is IrConst &&
-            expression.value != null &&
-            expression.type in setOf(intType, floatType, doubleType, booleanType, charType, kotlinStringType)
-
-    @OptIn(UnsafeDuringIrConstructionAPI::class)
-    private fun isSupportedStringArrayDefault(expression: IrExpression): Boolean {
-        val call = expression as? IrCall ?: return false
-        if (!guestTypes.isStringArray(call.type)) return false
-        return when (
-            call.symbol.owner.fqNameWhenAvailable
-                ?.asString()
-        ) {
-            "kotlin.emptyArray" -> {
-                call.arguments.all { it == null }
-            }
-
-            "kotlin.arrayOf" -> {
-                val arguments = call.arguments.filterNotNull()
-                arguments.isEmpty() ||
-                    (arguments.singleOrNull() as? IrVararg)
-                        ?.elements
-                        ?.all { it is IrExpression } == true
-            }
-
-            else -> {
-                false
-            }
-        }
-    }
 
     @OptIn(UnsafeDuringIrConstructionAPI::class)
     private fun compileMutableListStorage(call: IrCall): RegisterId {
@@ -9293,10 +9399,7 @@ private class FunctionCompiler(
 
     private fun resolveClassInstance(type: IrType?): GuestClassInstance? {
         if (type == null) return null
-        val resolved =
-            currentClassInstance?.substitute(currentInstance?.substitute(type) ?: type)
-                ?: currentInstance?.substitute(type)
-                ?: type
+        val resolved = resolvedType(type)
         return resolved.classInstance(
             classInstanceTypeIds.keys.associate { it.declaration.symbol to it.declaration } +
                 guestTypes.valueClassBoxes.values.associate { it.symbol to it.symbol.owner } +
@@ -9579,10 +9682,14 @@ private class FunctionCompiler(
 
     private fun trustedIntrinsic(function: IrSimpleFunction): LoweredCapabilityOperation? = resolveTrustedIntrinsic(function, session)
 
-    private fun resolvedType(type: IrType): IrType =
-        valueClassInitializerInstance?.substitute(type) ?: currentClassInstance?.substitute(currentInstance?.substitute(type) ?: type)
-            ?: currentInstance?.substitute(type)
-            ?: type
+    private fun resolvedType(type: IrType): IrType {
+        var resolved = type
+        defaultTypeSubstitutions.reversed().forEach { resolved = it(resolved) }
+        return valueClassInitializerInstance?.substitute(resolved)
+            ?: currentClassInstance?.substitute(currentInstance?.substitute(resolved) ?: resolved)
+            ?: currentInstance?.substitute(resolved)
+            ?: resolved
+    }
 
     private fun isSupportedGuestArray(type: IrType): Boolean {
         val resolved = resolvedType(type)

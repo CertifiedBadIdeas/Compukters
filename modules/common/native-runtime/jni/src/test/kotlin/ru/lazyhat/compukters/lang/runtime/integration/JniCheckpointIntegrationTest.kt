@@ -51,7 +51,7 @@ class JniCheckpointIntegrationTest {
             val before =
                 WorldFileSystemStore.open(root, bridge).use { store ->
                     VmSession.bootInStore(store, id, rom).use { session ->
-                        session.advanceWithRetirementLimit(64, 64, 64, 1)
+                        session.advanceWithRetirementLimit(SHELL_GUEST_BUDGET, 64, 64, 1)
                         val resources = session.resourceSnapshot()
                         session.checkpoint(store, id, host)
                         assertEquals(
@@ -70,7 +70,7 @@ class JniCheckpointIntegrationTest {
                     assertContentEquals(host, restored.hostStateBytes())
                     store.discardCheckpoint(id)
                     assertNull(VmSession.restoreInStore(store, id, rom))
-                    val result = session.advanceWithRetirementLimit(64, 64, 64, 1)
+                    val result = session.advanceWithRetirementLimit(SHELL_GUEST_BUDGET, 64, 64, 1)
                     assertEquals(1L, result.retiredInstructions)
                     assertEquals(before.executedInstructions + 1, session.resourceSnapshot().executedInstructions)
                     session.checkpoint(store, id, host)

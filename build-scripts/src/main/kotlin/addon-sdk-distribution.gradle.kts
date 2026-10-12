@@ -47,28 +47,16 @@ sdkProjects.forEach { path ->
         }
     }
 }
-val stageRepository = tasks.register("stageAddonDevelopmentDependencies") {
+val sdkOutputDirectory = sdkDirectory
+val stageRepository = tasks.register<StageAddonSdk>("stageAddonDevelopmentDependencies") {
     group = "addon sdk"
     description = "Stages the complete addon SDK and named development mod JARs in an isolated file repository."
     sdkProjects.forEach { dependsOn("$it:publishAllPublicationsToAddonSdkRepository") }
-    val sdkVersion = project.extensions.getByType<VersionCatalogsExtension>().named("libs").findVersion("addon-sdk").get().requiredVersion
-    val productVersion = project.version.toString()
-    val productBuildVersion = effectiveBuildVersion()
-    inputs.property("sdkVersion", sdkVersion)
-    inputs.property("modVersion", productVersion)
-    inputs.property("modBuildVersion", productBuildVersion)
-    inputs.files("tools/release/release.py", "tools/release/addon_release.py")
-    outputs.file(sdkDirectory.map { it.file("sdk.properties") })
-    outputs.dir(sdkDirectory.map { it.dir("tools") })
-    doLast {
-        project.copy {
-            from("tools/release/release.py", "tools/release/addon_release.py")
-            into(sdkDirectory.get().dir("tools"))
-        }
-        sdkDirectory.get().file("sdk.properties").asFile.writeText(
-            "format=1\nsdkVersion=$sdkVersion\nmodVersion=$productVersion\nmodBuildVersion=$productBuildVersion\n",
-        )
-    }
+    sdkVersion.set(project.extensions.getByType<VersionCatalogsExtension>().named("libs").findVersion("addon-sdk").get().requiredVersion)
+    modVersion.set(project.version.toString())
+    modBuildVersion.set(effectiveBuildVersion())
+    releaseTools.from("tools/release/release.py", "tools/release/addon_release.py")
+    sdkDirectory.set(sdkOutputDirectory)
 }
 tasks.register<Zip>("packageAddonDevelopmentDependencies") {
     group = "distribution"

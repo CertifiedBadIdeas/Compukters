@@ -60,45 +60,31 @@ val compukterVmLock = compukterVmRoot.resolve("Cargo.lock")
 
 registerCompukterVmReleaseTasks(compukterVmRoot)
 
-val releaseRuntimeBundleDirectory = providers.gradleProperty("compukterRuntimeBundleDir").map(rootProject::file)
+val releaseRuntimeBundleSupplied = providers.gradleProperty("compukterRuntimeBundleDir").isPresent
 val releaseRuntimeContract = runtimeBundleContractProvider()
-val downloadedReleaseRuntimeBundleDirectory =
-    providers.provider {
-        gradle.gradleUserHomeDir.resolve("caches/compukters/runtime/${releaseRuntimeContract.get().runtimeVersion}")
-    }
+val downloadedReleaseRuntimeBundleDirectory = run {
+    val runtimeCacheRoot = gradle.gradleUserHomeDir.resolve("caches/compukters/runtime")
+    releaseRuntimeContract.map { runtimeCacheRoot.resolve(it.runtimeVersion) }
+}
 
-tasks.register("downloadCompukterRuntimeBundles") {
+tasks.register<DownloadRuntimeBundles>("downloadCompukterRuntimeBundles") {
     description = "Downloads the pinned Linux and Windows dual-transport Runtime release assets into the Gradle cache."
     group = "build"
-    inputs.property("runtimeVersion", releaseRuntimeContract.map(RuntimeBundleContract::runtimeVersion))
-    inputs.property("runtimeReleaseTag", releaseRuntimeContract.map(RuntimeBundleContract::releaseTag))
-    inputs.property("runtimeVmCommit", releaseRuntimeContract.map(RuntimeBundleContract::vmCommit))
-    inputs.property("runtimeAbi", releaseRuntimeContract.map(RuntimeBundleContract::ffiAbi))
-    outputs.dir(downloadedReleaseRuntimeBundleDirectory)
-    onlyIf { !releaseRuntimeBundleDirectory.isPresent }
-    doLast {
-        val contract = releaseRuntimeContract.get()
-        val result =
-            RuntimeBundleDownloadSupport.download(
-                downloadedReleaseRuntimeBundleDirectory.get().toPath(),
-                contract,
-            )
-        println("Runtime ${contract.runtimeVersion}: ${result.name.lowercase()} in ${downloadedReleaseRuntimeBundleDirectory.get()}")
-    }
+    contract.set(releaseRuntimeContract)
+    inputs.property("runtimeVersion", contract.map(RuntimeBundleContract::runtimeVersion))
+    inputs.property("runtimeReleaseTag", contract.map(RuntimeBundleContract::releaseTag))
+    inputs.property("runtimeVmCommit", contract.map(RuntimeBundleContract::vmCommit))
+    inputs.property("runtimeAbi", contract.map(RuntimeBundleContract::ffiAbi))
+    bundleDirectory.set(layout.dir(downloadedReleaseRuntimeBundleDirectory))
+    val supplied = releaseRuntimeBundleSupplied
+    onlyIf { !supplied }
 }
 
 val cleanWorkspace =
-    tasks.register("cleanWorkspace") {
+    tasks.register<CleanWorkspace>("cleanWorkspace") {
         description = "Deletes repo-local build and target outputs while preserving .toolchain."
         group = "build"
-
-        doLast {
-            workspaceCleanTargets(rootProject.projectDir.toPath()).forEach { target ->
-                if (target.toFile().exists()) {
-                    delete(target.toFile())
-                }
-            }
-        }
+        workspaceRoot.set(layout.projectDirectory)
     }
 
 tasks.named<Delete>("clean") {
@@ -533,6 +519,15 @@ registerKotlinVmConformance(
     cargoTargetDirectory = ".toolchain/build/cargo/compiler-k2-constructor-defaults-conformance",
     artifactEnvironmentVariable = "COMPUKTER_KOTLIN_CONSTRUCTOR_DEFAULTS_ARTIFACT",
     conformanceScenario = "constructor-defaults",
+)
+registerKotlinVmConformance(
+    taskName = "testKotlinFunctionDefaultsVmConformance",
+    taskDescription = "Executes Guest function default expressions with the pinned Compukter VM.",
+    artifactTask = ":compiler-k2:generateFunctionDefaultsConformanceArtifact",
+    artifact = project(":compiler-k2").layout.buildDirectory.file("generated/conformance/kotlin-function-defaults.cpkt"),
+    cargoTargetDirectory = ".toolchain/build/cargo/compiler-k2-function-defaults-conformance",
+    artifactEnvironmentVariable = "COMPUKTER_KOTLIN_FUNCTION_DEFAULTS_ARTIFACT",
+    conformanceScenario = "function-defaults",
 )
 registerKotlinVmConformance(
     taskName = "testKotlinAdaptedConstructorsVmConformance",
