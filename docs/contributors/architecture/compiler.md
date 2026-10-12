@@ -42,6 +42,14 @@ invocation arguments; its source expression evaluates when the closure is constr
 therefore share scoped default evaluation and dispatch with direct calls, without mask dispatchers or a
 new artifact representation. Unsupported signature conversions retain target diagnostics.
 
+Named local functions are discovered before closure layout. A fixed-point free-value analysis includes
+captures required by local callees and referenced helpers. Direct calls prepend hidden typed capture
+arguments; reassigned variables use the same capture cells as lambdas. Local declarations are static
+artifact functions, including declarations whose K2 parent is a class initializer. References use the
+existing managed closure adapters and retain captures across the enclosing return. No new instruction or
+artifact ABI is introduced. `testKotlinLocalFunctionsVmConformance` covers recursion, default arguments,
+all primitive capture families, nested helpers, constructor initialization and independent escaping cells.
+
 Canonical `IntRange` and `IntProgression` declarations let K2 resolve ascending, descending, and stepped `Int` loops.
 The compiler recognizes only their canonical `for` shape and evaluates start, end, and step once into scalar registers;
 no range or iterator object enters the VM. It validates a positive step before iteration, calculates the next index in
