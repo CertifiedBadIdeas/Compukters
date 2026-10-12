@@ -29,7 +29,7 @@ Compukters does not execute JVM bytecode or arbitrary Kotlin/JVM libraries. Cons
 [API reference]({{ '/API/' | relative_url }}) lists core and addon declarations.
 
 The current platform includes console/terminal I/O, bounded filesystem operations, foreground processes, cooperative
-tasks and integer channels, redstone, sound and displays. Optional APIs are selected through your project's addon list.
+tasks, redstone, sound and displays. Optional APIs are selected through your project's addon list.
 
 ## Wait cooperatively
 

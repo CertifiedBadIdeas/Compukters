@@ -127,7 +127,7 @@ a multi-stage plan, or a change spanning multiple modules or repositories does n
 `verifyLocalFull` on the exact release candidate before declaring release preparation complete; fix failures and
 repeat the affected checks before re-running the release gate.
 
-Use the [in-world VM benchmark](https://certifiedbadideas.github.io/Compukters/VM-BENCHMARK/) for repeatable manual
+Use the [in-world VM benchmark]({{ '/VM-BENCHMARK/' | relative_url }}) for repeatable manual
 profiles of aggregate runnable-computer cost. Its results are environment-specific performance evidence, not a
 replacement for deterministic runtime and conformance checks.
 
@@ -278,7 +278,7 @@ release gate.
 The commands below guide selection of evidence for affected boundaries; run only the checks relevant to the change.
 Include behavioral tests for malformed input, limits, lifetime, or failure cases when those contracts are affected.
 
-See [Native runtime test coverage](https://certifiedbadideas.github.io/Compukters/NATIVE-TEST-COVERAGE/) for the semantic ownership matrix across direct Rust,
+See [Native runtime test coverage]({{ '/NATIVE-TEST-COVERAGE/' | relative_url }}) for the semantic ownership matrix across direct Rust,
 FFI, Kotlin-to-VM conformance, runtime-host integration, and NeoForge GameTests.
 
 | Changed boundary | Development evidence | Before release |

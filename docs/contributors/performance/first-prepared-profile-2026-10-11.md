@@ -1,8 +1,7 @@
 ---
 layout: default
 title: First prepared compilation profile
-parent: Performance
-nav_exclude: true
+section: contributors
 ---
 
 # First prepared compilation profile — 2026-10-11

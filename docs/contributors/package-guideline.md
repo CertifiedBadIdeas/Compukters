@@ -1,46 +1,49 @@
 ---
 layout: default
-title: Package guideline
+title: Module and package guide
 section: contributors
 permalink: /PACKAGE-GUIDELINE/
 ---
 
-# Package Guideline
+# Module and package guide
 
-Compukters product code uses the root package `ru.lazyhat.compukters`. New code must follow the current Kotlin-artifact architecture instead of recreating any removed VM, terminal, retained-display, or generic device layer.
+<a id="module-ownership"></a>
 
-## Module ownership
-
-- `compiler-artifact` owns the canonical artifact model, validation, and encoding.
-- `compiler-client` owns bounded communication with the isolated compiler worker.
-- `compiler-k2` owns Kotlin frontend/IR integration and artifact lowering.
-- `native-runtime` owns the Kotlin-facing JDK 25 FFM VM session and trusted host capabilities.
-- `core` owns loader-independent server product behavior, including `ProgramRuntimeHost` and future computer carriers.
-- `playground` owns the standalone compiler-and-VM executable used outside Minecraft.
-- `v26_1-common` owns loader-independent Minecraft 26.1 adapters.
-- `v26_1-neoforge` owns NeoForge 26.1 bootstrap, registration, resources, and loader-specific adapters.
-- `host/compukter-vm` owns verification, interpretation, memory management, quotas, VM execution, and the versioned C ABI in its `ffi` workspace member.
+Compukters product code uses the root package `ru.lazyhat.compukters`. Put a change in the layer that owns its
+behavior. The [module inventory](architecture/modules.md) lists the current modules; the
+[architecture reading map](architecture.md#reading-map) links to their detailed contracts.
 
 ## Placement rules
 
-1. Put VM semantics in `host/compukter-vm`; Kotlin modules must not implement a second interpreter or machine state model.
-2. Put server-thread lifecycle and device policy in `core`; do not expose Minecraft types there.
-3. Put Minecraft-neutral adapters in `v26_1-common` and NeoForge registration/wiring in `v26_1-neoforge`.
-4. Define network protocols next to the feature which owns them. Do not restore the removed global CC-style network package.
-5. Introduce UI, terminal rendering, and assets from a new accepted design. Do not restore the removed UI DSL, retained display, palette, font, or workbench implementation.
-6. Prefer focused feature packages such as `device/runtime/program` and the future `device/computer` over generic `utils`, `platform`, or `events` dumping grounds.
+1. Put execution, verification, managed memory and scheduling semantics in `host/compukter-vm`. Kotlin modules must
+   not implement a second interpreter or mirror mutable Guest machine state.
+2. Put loader-independent server behavior in `core`, including `ProgramRuntimeHost`. Keep Minecraft types outside
+   `modules/common`.
+3. Put shared game adapters, rendering and tests in `modules/minecraft/shared`; keep only version compatibility and
+   packaging in the `v1_21_1` and `v26_1` leaves. Follow the [target selection instructions](development.md#minecraft-development)
+   so IntelliJ indexes the canonical sources against the game version you are editing.
+4. Keep portable session models and host contracts in `native-runtime-api`, JDK 25 transport in `native-runtime-ffm`,
+   and Java 21 transport in `native-runtime-jni`. The native C ABI belongs to the Rust VM's `ffi` workspace member.
+5. Keep K2 compilation/lowering in `compiler-k2-engine` and compiler worker startup in `compiler-k2`. K2 analysis
+   belongs to `ide-analysis-k2`; neutral compiler/IDE clients and public contracts must not acquire K2 internals.
+6. Define network protocols beside the feature that owns them. Reuse existing shared UI components, colors, font
+   metrics and drawing layers; follow the UI development skill required by
+   [AGENTS.md](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/AGENTS.md).
+7. Prefer focused feature packages such as `device/runtime/program` and `impl/computer` over generic `utils`,
+   `platform` or `events` dumping grounds. Keep optional integrations in their independent addon builds.
 
 ## Product boundary
 
-The current executable path is:
+Both the client IDE and in-computer compiler produce the same executable artifact:
 
 ```text
-Kotlin source
-  -> isolated K2 worker
-  -> canonical Compukter artifact
+Guest Kotlin source
+  -> isolated K2 compiler worker
+  -> verified Compukter artifact
   -> Kotlin VM session / ProgramRuntimeHost
-  -> JDK 25 FFM / versioned Rust C ABI
-  -> Rust VM
+  -> JNI (Java 21) or FFM (JDK 25) / versioned Rust C ABI
+  -> managed Rust VM
 ```
 
-New packages should make this path clearer or add a deliberate host capability. Any competing execution path requires a new architecture decision first.
+New packages should clarify this path or add a deliberate host capability. A competing execution path requires an
+architecture decision. Check [verification](verification.md) for evidence at the boundary you change.

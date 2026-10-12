@@ -139,10 +139,10 @@ switching the version being edited. Inactive targets use generated mirrors, so
 ordinary Gradle verification continues to compile both versions from the same
 canonical content.
 
-For fast feedback, `./gradlew-sandbox-dev-parallel verifyLocalFast` runs policy,
+For fast feedback, `./gradlew-sandbox-dev-parallel-summary verifyLocalFast` runs policy,
 build-script, and a curated JVM test slice. Before treating the current checkout
-as fully verified, run `./gradlew-sandbox-dev-parallel verifyLocalFull`; it covers
-every Gradle subproject check, all registered Kotlin-to-VM conformance scenarios, Rust and FFM checks, runtime
+as fully verified, run `./gradlew-sandbox-dev-parallel-summary verifyLocalFull`; it covers
+every Gradle subproject check, all registered Kotlin-to-VM conformance scenarios, Rust, FFM and JNI checks, runtime
 integrations, the real GameTest server, and the
 production artifacts for the locally configured native platform.
 
