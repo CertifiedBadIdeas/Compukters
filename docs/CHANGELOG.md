@@ -13,6 +13,11 @@ headings so this page has one stable URL that can be shared outside the reposito
 
 ## 0.6.0 — In development
 
+- Displays accept empty-hand front-face clicks in whole-screen pixel coordinates, exposed through
+  `GraphicalDisplay.pollClick()`. Input belongs to the drawing program and is bounded and transient.
+  Guest widgets provide buttons, indicators, gauges and history charts. The `create-scada` example
+  controls a Create kinetic drive with real speed/load readings, RPM commands and connection/load alarms.
+
 - The all-addon development build enables Configuration Cache and parallel execution, allowing independent
   built-in program artifacts to compile concurrently inside the included Compukters project.
 
@@ -39,6 +44,8 @@ headings so this page has one stable URL that can be shared outside the reposito
 - Guest Kotlin supports named local functions with direct calls, recursion, nested helpers and escaping
   references. Mutable captures share state with surrounding code and lambdas; direct immutable captures
   stay in typed arguments. Local functions can use expression defaults and appear in class initializers.
+  Class `val`/`var` properties can store, replace and invoke callbacks, including concrete generic holders,
+  constructor defaults and custom/inherited accessors. Stored callbacks retain their captures.
 
 - Guest Kotlin functions accept expression default arguments using earlier parameters, receivers,
   helpers, lambdas and concrete generic types. Explicit arguments evaluate before omitted defaults;
@@ -81,7 +88,8 @@ headings so this page has one stable URL that can be shared outside the reposito
   writes; moves refuse replacement and deletion is limited to files and empty directories. Executable paths
   normalize before foreground launch.
 
-- IDE hover displays short Kotlin types with distinct signature, type, origin and wrapped documentation.
+- IDE hover displays short Kotlin signatures with explicit return types, compact documentation entries
+  and source information below the documentation.
   Unknown references color their complete identifier; errors and warnings underline their exact source ranges.
   Hovering a marked token shows its problems together, preserving source editing and horizontal scrolling.
   Argument hints open when typing a call or pressing Ctrl+P, wrap long signatures and emphasize the current parameter.

@@ -30,6 +30,7 @@ class DisplayCanvas(
     private var draft: IntArray? = null
     private var draftMode: Int = mode
     private var frameWork = 0L
+    private val clicks = ArrayDeque<DisplayClick>()
 
     /** The world adapter charges deterministic pixel work before mutation. */
     var admitWork: (Long) -> Unit = {}
@@ -61,8 +62,25 @@ class DisplayCanvas(
         connected = valid
     }
 
+    /** Input is transient and belongs to the current writer, in published pixel coordinates. */
+    fun offerClick(
+        x: Int,
+        y: Int,
+    ): Boolean {
+        expire()
+        if (writer == null || x !in 0 until width || y !in 0 until height || clicks.size >= 64) return false
+        clicks.addLast(DisplayClick(x, y))
+        return true
+    }
+
+    fun pollClick(owner: Any): DisplayClick? {
+        requireOwner(owner)
+        return clicks.removeFirstOrNull()
+    }
+
     fun release(owner: Any) {
         if (writer === owner) {
+            clicks.clear()
             writer = null
             connected = { false }
             draft = null
@@ -99,6 +117,7 @@ class DisplayCanvas(
         frameWork = 0
         if (publish) {
             check(admitMode(draftMode)) { "World display pixel budget exceeded" }
+            if (mode != draftMode) clicks.clear()
             pixels = pending
             mode = draftMode
             touch()
@@ -121,6 +140,7 @@ class DisplayCanvas(
             draft = replacement
             draftMode = requested
         } else {
+            clicks.clear()
             mode = requested
             pixels = replacement
             touch()
@@ -343,6 +363,7 @@ class DisplayCanvas(
         val restored = decodePixels(bytes)
         mode = requestedMode
         pixels = restored
+        clicks.clear()
         writer = null
         draft = null
         frameWork = 0

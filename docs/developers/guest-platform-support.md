@@ -414,3 +414,19 @@ queued data. Each computer's inbox is shared by its program scopes and holds up 
 cable mutation, endpoint replacement/reboot and participating chunk unload retire the connection and discard its data.
 Restoring a pending receive completes it with `compukter.io.IOException` rather than rebinding it to a new connection.
 See the [player network guide]({{ '/PERIPHERALS/' | relative_url }}) for setup and a two-computer echo example.
+
+## Interactive control panels
+
+`compukter:core` 7.3.0 provides `GraphicalDisplay.pollClick(): DisplayClick?`. Empty-hand right-click the
+front of a panel; `click.position` uses whole-screen pixel coordinates. Polling and rendering share one
+exclusive program lease. Input is bounded and transient; restarting, resizing or rebuilding a screen does
+not replay commands. Shift-click retains normal block interaction.
+
+`DisplayWidgets` renders buttons (returning a hit result), indicators, gauges and charts over `Rect2i`
+bounds. Pass one click to the widgets in each update and keep command execution outside the drawing frame.
+`DisplayHistory(2..1024)` stores chronological samples with fixed capacity; `Float.NaN` creates chart gaps.
+Widgets neither poll devices nor retain events. Gauges and charts require finite ordered ranges and clamp
+readings to their visual range.
+
+See the tracked [Create drive dashboard](https://github.com/CertifiedBadIdeas/Compukters/tree/dev/examples/create-scada)
+for live RPM, stress, controller commands, bounded history and connection/load alarms on a 3×3 display.

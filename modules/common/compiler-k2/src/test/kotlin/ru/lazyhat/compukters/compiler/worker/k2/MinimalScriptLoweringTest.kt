@@ -234,6 +234,43 @@ class MinimalScriptLoweringTest {
         }
 
     @Test
+    fun `function fields discover signatures without callable expressions`() =
+        withAdapter { adapter ->
+            val source = "class Holder(val callback: (Long) -> Double)\nfun main() {}"
+            val result = adapter.compile(request(source))
+            ArtifactReader.read(assertNotNull(result.artifact, result.diagnostics.toString()).toByteArray())
+        }
+
+    @Test
+    fun `unsupported nullable and variant function fields report target diagnostics`() =
+        withAdapter { adapter ->
+            val sources =
+                listOf(
+                    "class Holder(val callback: (() -> Int)?)\nfun main() { Holder(null) }",
+                    "class Holder(var callback: () -> Any)\nfun main() { val call: () -> Int = { 1 }; val h = Holder { \"x\" }; h.callback = call }",
+                    "class Holder(call: () -> Int) { val callback: () -> Any = call }\nfun main() { Holder { 1 } }",
+                )
+            for (source in sources) {
+                val result = adapter.compile(request(source))
+                assertNull(result.artifact)
+                assertTrue(result.diagnostics.any { it.code == "UNSUPPORTED_IR" }, result.diagnostics.toString())
+            }
+        }
+
+    @Test
+    fun `function fields preserve callback ownership replacement accessors and specialization`() =
+        withAdapter { adapter ->
+            val source = repositoryFile("modules/common/compiler-k2/src/test/resources/kotlin/function-fields/main.kt").readText()
+            val result = adapter.compile(request(source))
+            val bytes = assertNotNull(result.artifact, result.diagnostics.toString()).toByteArray()
+            ArtifactReader.read(bytes)
+            assertContentEquals(bytes, assertNotNull(adapter.compile(request(source)).artifact).toByteArray())
+            System.getProperty("compukter.vm.functionFieldsArtifact")?.let { output ->
+                Path.of(output).also { it.parent.createDirectories() }.writeBytes(bytes)
+            }
+        }
+
+    @Test
     fun `local functions preserve recursive captures escaping references and defaults`() =
         withAdapter { adapter ->
             val source = repositoryFile("modules/common/compiler-k2/src/test/resources/kotlin/local-functions/main.kt").readText()
@@ -2109,6 +2146,18 @@ class MinimalScriptLoweringTest {
         }
 
     @Test
+    fun `Create SCADA example compiles against the actual addon bundle`() =
+        withAdapter { adapter ->
+            val bundle =
+                checkNotNull(
+                    System.getProperty("compukters.createScadaBundle"),
+                ) { "Use compileCreateScadaExample with the actual Create bundle" }
+            val source = repositoryFile("examples/create-scada/src/main.kt").readText()
+            val result = adapter.compile(request(listOf("project/main.kt" to source), WorkerLimits(), addonPath = Path.of(bundle)))
+            assertNotNull(result.artifact, result.diagnostics.joinToString())
+        }
+
+    @Test
     fun `graphical display API lowers modes RGB images and exception safe frames`() =
         withAdapter { adapter ->
             val source =
@@ -2118,6 +2167,9 @@ class MinimalScriptLoweringTest {
                 import compukter.display.Colors
                 import compukter.display.rgb
                 import compukter.display.frame
+                import compukter.display.DisplayHistory
+                import compukter.display.DisplayWidgets
+                import compukter.concurrent.Tasks
                 import kotlin.math.*
 
                 fun main() {
@@ -2141,6 +2193,23 @@ class MinimalScriptLoweringTest {
                     screen.frame { pixel(0 xy 0, Colors.YELLOW) }
                     try { screen.frame { pixel(1, 0, Colors.CYAN); throw IllegalArgumentException("abort") } }
                     catch (error: IllegalArgumentException) { screen.pixel(1, 0, Colors.MAGENTA) }
+                    val history = DisplayHistory(3)
+                    history.add(1f); history.add(Float.NaN); history.add(2f); history.add(3f)
+                    require(history.size == 3 && history[0] != history[0] && history[2] == 3f)
+                    val widgets = DisplayWidgets(screen)
+                    val bounds = (0 xy 8) sized (8 by 8)
+                    require(!widgets.button(bounds, "", null))
+                    require(widgets.button(bounds, "", compukter.display.DisplayClick(0 xy 8)))
+                    require(!widgets.button(bounds, "", compukter.display.DisplayClick(8 xy 8)))
+                    require(!widgets.button(bounds, "", compukter.display.DisplayClick(0 xy 8), false))
+                    widgets.gauge(bounds, Float.NaN, 0f, 100f)
+                    widgets.chart(bounds, history, 0f, 10f)
+                    println("CLICK-READY")
+                    var click = screen.pollClick()
+                    while (click == null) { Tasks.sleepTicks(1); click = screen.pollClick() }
+                    require(click.position == Vector2i(35, 18))
+                    require(!widgets.button(bounds, "", click, false))
+                    screen.pixel(click.position, 0x123456)
                 }
                 """.trimIndent()
             val result = adapter.compile(request(source))
@@ -9734,9 +9803,15 @@ class MinimalScriptLoweringTest {
         sources: List<Pair<String, String>>,
         limits: WorkerLimits,
         includeAddonFixture: Boolean = false,
+        addonPath: Path? = null,
     ): CompileRequest {
         val addon =
-            if (includeAddonFixture) {
+            if (addonPath != null) {
+                AddonGuestApiBundleCodec.decode(
+                    java.nio.file.Files
+                        .readAllBytes(addonPath),
+                )
+            } else if (includeAddonFixture) {
                 AddonGuestApiBundleCodec.decode(
                     java.nio.file.Files
                         .readAllBytes(Path.of(checkNotNull(System.getProperty("compukters.addonGuestApiFixture")))),

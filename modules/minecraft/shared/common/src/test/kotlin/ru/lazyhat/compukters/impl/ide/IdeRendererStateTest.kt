@@ -1495,7 +1495,9 @@ class IdeRendererStateTest {
         assertTrue(hover.any { "kotlin.Int" in it.value })
         assertTrue(hover.any { "std.core" in it.value })
         assertTrue(hover.all { it.codeFont === IdeCodeFontProfile.DEFAULT })
-        assertEquals(listOf(12, 12), hover.zipWithNext { first, second -> second.y - first.y })
+        assertTrue(hover.none { it.value.startsWith("Type:") })
+        assertEquals(hover.maxOf { it.y }, hover.single { "std.core" in it.value }.y)
+        assertEquals(listOf(24), hover.zipWithNext { first, second -> second.y - first.y })
         val hoverBounds = requireNotNull(hover.first().clip)
         val popupPanel = model.panels.single { it.bounds == hoverBounds }
         assertTrue(

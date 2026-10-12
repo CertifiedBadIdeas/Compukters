@@ -46,6 +46,33 @@ class DiagnosticQueryTest {
     }
 
     @Test
+    fun `function fields resolve with source and metadata inputs`() {
+        val source =
+            """
+            class Counter(val next: () -> Int)
+            class Holder<T>(var callback: (T) -> T)
+            fun counter(): Counter {
+                var count = 0
+                fun next(): Int { count += 1; return count }
+                return Counter(::next)
+            }
+            fun main() {
+                val value = counter()
+                val holder = Holder<Int> { it + value.next() }
+                holder.callback = { it * 2 }
+                check(holder.callback(3) == 6)
+            }
+            """.trimIndent()
+        for (attachedSources in listOf(false, true)) {
+            K2QueryFixture.sourceWithGuestApi(attachedSources, "main.kt" to source).use { fixture ->
+                val result = fixture.execute(fixture.presentation()) as AnalysisResult.Presentation
+                val active = result.value.accept(fixture.identity) as SnapshotPresentationAcceptance.Active
+                assertTrue(active.diagnostics.none { it.severity == EditorDiagnosticSeverity.Error }, active.diagnostics.toString())
+            }
+        }
+    }
+
+    @Test
     fun `captured local functions resolve with source and metadata inputs`() {
         val source =
             """
@@ -418,6 +445,8 @@ class DiagnosticQueryTest {
                 """
                 import kotlin.math.*
                 import compukter.display.GraphicalDisplay
+                import compukter.display.DisplayWidgets
+                import compukter.display.DisplayHistory
                 fun main() {
                     val point: Position2i = 10 xy 20
                     val size: Size2i = 80 by 24
@@ -425,6 +454,14 @@ class DiagnosticQueryTest {
                     val fractional: Vector2f = (3f xy 4f).normalized()
                     val volume: Position3i = Vector3i(1, 2, 3)
                     val screen = GraphicalDisplay.named("panel")
+                    val widgets = DisplayWidgets(screen)
+                    val click = screen.pollClick()
+                    widgets.button(bounds, "Control", click, true)
+                    widgets.gauge(bounds, 50f, 0f, 100f)
+                    val history = DisplayHistory(32)
+                    history.add(10f)
+                    widgets.chart(bounds, history, 0f, 100f)
+                    if (click != null) screen.pixel(click.position, 0xFFFFFF)
                     screen.fillRect(bounds, 0xFF0000)
                     screen.text(point, "Ready", scale = 2)
                     check(screen.size.x > 0)
