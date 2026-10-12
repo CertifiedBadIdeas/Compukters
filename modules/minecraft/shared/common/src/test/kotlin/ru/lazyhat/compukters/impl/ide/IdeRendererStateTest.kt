@@ -792,8 +792,18 @@ class IdeRendererStateTest {
         val model = IdeRenderer.extract(workspaceState(editor, IdeBuildState.Idle), geometry())
         val lines = model.text.filter { it.kind == IdeTextKind.Hover }
         assertTrue(lines.any { it.value == "Readable KDoc 😀." })
-        assertTrue(lines.any { it.value.startsWith("@param value") })
-        assertTrue(lines.last().value.endsWith('…'))
+        assertTrue(lines.any { it.value == "Parameters" })
+        assertTrue(lines.any { it.value == "  value" })
+        assertTrue(lines.last().value.endsWith("Scroll"))
+        assertTrue(model.hoverScrollMaximum > 0)
+        val scrolled = IdeRenderer.extract(workspaceState(editor, IdeBuildState.Idle), geometry(), hoverScroll = model.hoverScrollMaximum)
+        assertTrue(
+            scrolled.text
+                .filter { it.kind == IdeTextKind.Hover }
+                .last()
+                .value
+                .contains("${model.hoverScrollMaximum + 1}–"),
+        )
         assertTrue(lines.size <= 20)
         assertTrue(
             lines.all {

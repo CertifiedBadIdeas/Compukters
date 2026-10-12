@@ -220,10 +220,18 @@ keywords outside unqualified Kotlin code`.
 
 Hover-style queries render inferred local types, resolved signatures, and smart-cast types using K2 short names,
 including generic, nullable and function types. The popup separates signature, type, origin and documentation. Hover also renders
-bounded plain-text KDoc from the exact resolved project declaration or its attached platform source, including
-declaration-name hovers. Documentation wraps within the editor and is truncated with an ellipsis when the
-bounded popup height is exhausted; it does not execute HTML, fetch external content or synthesize inherited
-documentation.
+bounded KDoc from the exact resolved project declaration or its attached platform source, including
+declaration-name hovers. English documentation groups parameters, return values, exceptions (`@throws` and
+`@exception`), receiver, properties, constructor, samples, related declarations, since and author into separate
+sections. `@suppress` is shown as a generated-documentation exclusion; unfamiliar tags remain visible.
+Descriptions support paragraphs, headings, lists, emphasis, inline code, displayed reference labels and fenced
+or indented code examples. Long documentation wraps and scrolls inside the popup without scrolling the source;
+layouts are cached per hover and width. Source KDoc highlights tags, subjects, links, inline code and fenced
+Kotlin code while preserving comment editing behavior. Models separate tag identities and subjects from English
+presentation labels for future localization; only English is implemented.
+Reference labels and `@sample` identifiers are displayed, but clicking documentation links and automatically
+embedding referenced sample bodies are not implemented. HTML execution, external content fetching, inherited
+documentation synthesis and full CommonMark/Dokka rendering are not claimed.
 
 **Evidence:**
 [`ExpressionInfoQueryTest`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/ide-analysis-k2/src/test/kotlin/ru/lazyhat/compukters/ide/analysis/k2/query/ExpressionInfoQueryTest.kt),
@@ -235,7 +243,9 @@ and declaration names`, and `hover documentation comes from exact attached platf
 decoder rejects malformed unicode match ranges and excessive range counts` and `hover decoder bounds
 documentation independently`; `CompletionIntegrationTest`, test `forked worker returns semantic completion`;
 `IdeRendererStateTest`, tests `completion highlights exact name fragments and preserves unicode positions and
-result alignment` and `hover documentation wraps unicode paragraphs and bounds long content`.
+result alignment` and `hover documentation wraps unicode paragraphs and bounds long content`; `KDocDocumentTest`,
+`IdeKDocPresentationTest`, `KotlinLineLexerTest` (documentation styles and fence state), and
+`IncrementalKotlinHighlighterTest`.
 
 **Related work:** [#675](https://github.com/CertifiedBadIdeas/Compukters/issues/675).
 

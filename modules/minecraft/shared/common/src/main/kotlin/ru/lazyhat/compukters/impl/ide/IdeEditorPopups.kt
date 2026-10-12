@@ -19,7 +19,6 @@
 package ru.lazyhat.compukters.impl.ide
 
 import ru.lazyhat.compukters.ide.analysis.CompletionKind
-import ru.lazyhat.compukters.ide.analysis.DeclarationOrigin
 import ru.lazyhat.compukters.ide.client.analysis.IdeAnalysisState
 import ru.lazyhat.compukters.ide.client.analysis.IdeDeclarationTarget
 import ru.lazyhat.compukters.ide.client.analysis.IdeParameterInfoState
@@ -71,49 +70,58 @@ internal class IdeEditorPopups(
         val maximumRows = minOf(20, (availableHeight - POPUP_VERTICAL_PADDING) / font.cellHeight)
         if (maximumRows <= 0) return
         val maximumColumns = minOf(80, ((geometry.editor.width - POPUP_HORIZONTAL_PADDING) / font.cellWidth).coerceAtLeast(1))
-        val content =
-            buildList {
-                hover.info.signature?.let { add(it to IdeColors.ACCENT) }
-                add("Type: ${hover.info.renderedType}" to IdeColors.TEXT)
-                hover.info.origin?.let { origin ->
-                    add(
-                        when (origin) {
-                            DeclarationOrigin.Project -> "Project source"
-                            is DeclarationOrigin.Platform -> "Library · ${origin.identity.name}"
-                        } to IdeColors.MUTED,
-                    )
-                }
-                hover.info.documentation?.let { documentation ->
-                    add("" to IdeColors.TEXT)
-                    add(documentation.replace("\t", "    ") to IdeColors.TEXT)
-                }
-            }
-        val lines =
-            content
-                .flatMap { (value, color) ->
-                    IdePopupText.wrap(value, maximumColumns, maximumRows + 1).map { range ->
-                        value.substring(range.startUtf16, range.endUtf16).trimEnd() to color
-                    }
-                }.toMutableList()
-        if (lines.size > maximumRows) {
-            lines.subList(maximumRows, lines.size).clear()
-            lines[lines.lastIndex] = popupText(lines.last().first + "…") to lines.last().second
-        }
+        val documentation = output.hoverDocumentation?.takeIf { it.info == hover.info } ?: IdeHoverDocumentation(hover.info)
+        val lines = documentation.lines(maximumColumns)
         if (lines.isEmpty()) return
+        val scrolling = lines.size > maximumRows
+        if (scrolling && maximumRows < 2) return
+        val visibleRows = if (scrolling) maximumRows - 1 else lines.size
+        val maximumScroll = (lines.size - visibleRows).coerceAtLeast(0)
+        val first = output.hoverScroll.coerceIn(0, maximumScroll)
+        val visible = lines.subList(first, first + visibleRows)
         val requestedWidth =
             maxOf(
                 SEMANTIC_POPUP_MINIMUM_WIDTH,
-                lines.maxOf { visualColumns(it.first) } * font.cellWidth + POPUP_HORIZONTAL_PADDING,
+                documentation.widthColumns * font.cellWidth + POPUP_HORIZONTAL_PADDING,
             )
-        val popup = geometry.anchoredPopup(anchor, requestedWidth, lines.size * font.cellHeight + POPUP_VERTICAL_PADDING)
+        val popup =
+            geometry.anchoredPopup(
+                anchor,
+                requestedWidth,
+                (visibleRows + if (scrolling) 1 else 0) * font.cellHeight + POPUP_VERTICAL_PADDING,
+            )
         semanticPopupPanel(popup.bounds)
-        lines.forEachIndexed { index, (value, color) ->
+        output.hoverViewport(popup.bounds, maximumScroll)
+        visible.forEachIndexed { index, line ->
+            var x = popup.bounds.left + 4
+            val y = popup.bounds.top + POPUP_VERTICAL_PADDING / 2 + font.glyphDrawOffsetY + index * font.cellHeight
+            if (line.code) {
+                output.fill(
+                    IdeFillDraw(
+                        IdeFillKind.Background,
+                        IdeRect(
+                            x,
+                            y - font.glyphDrawOffsetY,
+                            popup.bounds.right - 4,
+                            y - font.glyphDrawOffsetY + font.cellHeight,
+                        ),
+                        IdeColors.PANEL,
+                        Z_POPUP + 1,
+                    ),
+                )
+            }
+            for (span in line.spans) {
+                output.code(IdeTextKind.Hover, span.text, x, y, span.color, popup.bounds, z = Z_POPUP_TEXT)
+                x += visualColumns(span.text) * font.cellWidth
+            }
+        }
+        if (scrolling) {
             output.code(
                 IdeTextKind.Hover,
-                value,
+                "${first + 1}–${first + visibleRows} / ${lines.size} · Scroll",
                 popup.bounds.left + 4,
-                popup.bounds.top + POPUP_VERTICAL_PADDING / 2 + font.glyphDrawOffsetY + index * font.cellHeight,
-                color,
+                popup.bounds.top + POPUP_VERTICAL_PADDING / 2 + font.glyphDrawOffsetY + visibleRows * font.cellHeight,
+                IdeColors.MUTED,
                 popup.bounds,
                 z = Z_POPUP_TEXT,
             )

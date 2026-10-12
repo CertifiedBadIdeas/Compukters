@@ -245,6 +245,8 @@ data class IdeDrawModel(
     val scissors: List<IdeScissorDraw>,
     val hitTargets: List<IdeHitTarget>,
     val icons: List<IdeIconDraw>,
+    val hoverBounds: IdeRect? = null,
+    val hoverScrollMaximum: Int = 0,
     val bottomScrollMaximum: Int = 0,
     val gitScrollMaximum: Int? = null,
     val gitPreviewScrollMaximum: Int? = null,

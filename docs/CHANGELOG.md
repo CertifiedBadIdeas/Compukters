@@ -434,7 +434,9 @@ listed in [Kotlin support](developers/kotlin-support.md) and [standard library s
   return types, including safe-call and literal receivers. Call insertion reuses delimiters, chooses parentheses
   or a trailing lambda, and places the caret at the first required input; imports and caret placement undo together.
 - Identifier matching supports case-insensitive word fragments and CamelCase with prefix ranking and highlighted
-  matches. Interpolation suggests visible variables after `$`. Hover shows bounded KDoc from project and attached
+  matches. Interpolation suggests visible variables after `$`. Hover shows structured English KDoc with parameter,
+  return, exception and other documentation sections, Markdown prose and code examples, and scrolling for long text.
+  The editor highlights KDoc tags, subjects, links and code. Documentation comes from project and attached
   library declarations. Completion temporarily pauses diagnostic passes while retaining unrelated problems.
 - Peripheral provider values use a dedicated color and `P` completion badge; device type references retain class
   presentation. Installed-addon APIs participate in completion, imports, parameter information and navigation;

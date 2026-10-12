@@ -76,7 +76,10 @@ underneath it.
 
 Hover a declaration or expression to see its signature, inferred type and available documentation.
 Types use short Kotlin names, including nested generics, nullable types and function types. The popup separates
-signature, type, source and documentation, and wraps long text within the editor.
+signature, type, source and documentation. English KDoc groups parameters, return values, exceptions and
+other tags into labeled sections, with readable lists, inline code and code examples. Move the pointer into
+long documentation and use the mouse wheel to read the remaining content; scrolling there leaves the source
+in place. KDoc tags, parameter subjects, references and code examples are also highlighted in the editor.
 
 Unknown references color the complete identifier. Errors and warnings underline the exact affected source range;
 a mismatched property initializer marks its value. Hover a marked token to read the overlapping problems together.

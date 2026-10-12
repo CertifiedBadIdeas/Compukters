@@ -32,6 +32,11 @@ object KotlinLineLexer {
         return Scanner(input, startState).scan()
     }
 
+    fun scan(
+        text: String,
+        startState: KotlinLexicalState = KotlinLexicalState(),
+    ): KotlinLexicalLine = Scanner(LineInput(text.length) { text[it] }, startState).scan()
+
     private class Scanner(
         private val input: LineInput,
         private val startState: KotlinLexicalState,
@@ -66,6 +71,7 @@ object KotlinLineLexer {
 
         private fun scanBlockComment(initialDepth: Int) {
             val start = offset
+            val documentation = if (initialDepth == 0) input.matches(offset, "/**") else state.inKDoc
             var depth = initialDepth
             if (depth == 0) {
                 depth = 1
@@ -88,8 +94,102 @@ object KotlinLineLexer {
                     }
                 }
             }
-            add(start, offset, KotlinLexicalKind.BlockComment)
-            state = KotlinLexicalState(blockCommentDepth = depth)
+            val firstSpan = spans.size
+            val fence =
+                if (documentation) {
+                    scanKDoc(start, offset, state.kdocFence)
+                } else {
+                    add(start, offset, KotlinLexicalKind.BlockComment)
+                    null
+                }
+            if (documentation) for (index in firstSpan until spans.size) spans[index] = spans[index].copy(inDocumentation = true)
+            state =
+                KotlinLexicalState(blockCommentDepth = depth, inKDoc = documentation && depth > 0, kdocFence = fence.takeIf { depth > 0 })
+        }
+
+        private fun scanKDoc(
+            start: Int,
+            end: Int,
+            priorFence: String?,
+        ): String? {
+            val text = buildString { for (index in start until end) append(input[index]) }
+            var contentStart = 0
+            if (text.startsWith("/**")) contentStart = 3
+            while (contentStart < text.length && text[contentStart].isWhitespace()) contentStart++
+            if (text.getOrNull(contentStart) == '*' && text.getOrNull(contentStart + 1) != '/') contentStart++
+            while (contentStart < text.length && text[contentStart].isWhitespace()) contentStart++
+            val contentEnd = if (text.endsWith("*/")) text.length - 2 else text.length
+            if (contentStart >= contentEnd) {
+                add(start, end, KotlinLexicalKind.BlockComment)
+                return priorFence
+            }
+            val body = text.substring(contentStart, contentEnd)
+            val marker = body.takeWhile { it == body.first() }.takeIf { body.first() == '`' || body.first() == '~' }
+            if (marker != null && marker.length >= 3) {
+                add(start, end, KotlinLexicalKind.KDocCode)
+                return if (priorFence ==
+                    null
+                ) {
+                    marker
+                } else if (marker.first() == priorFence.first() && marker.length >= priorFence.length &&
+                    body.drop(marker.length).isBlank()
+                ) {
+                    null
+                } else {
+                    priorFence
+                }
+            }
+            if (priorFence != null) {
+                add(start, start + contentStart, KotlinLexicalKind.BlockComment)
+                val code = scan(body)
+                var cursor = 0
+                for (span in code.spans) {
+                    add(start + contentStart + cursor, start + contentStart + span.startUtf16, KotlinLexicalKind.KDocCode)
+                    add(start + contentStart + span.startUtf16, start + contentStart + span.endUtf16, span.kind)
+                    cursor = span.endUtf16
+                }
+                add(start + contentStart + cursor, start + contentEnd, KotlinLexicalKind.KDocCode)
+                add(start + contentEnd, end, KotlinLexicalKind.BlockComment)
+                return priorFence
+            }
+            val highlights = mutableListOf<LexicalSpan>()
+            val tag = Regex("^@([A-Za-z]+)(?=\\s|\\[|$)").find(body)
+            if (tag != null) {
+                highlights += LexicalSpan(contentStart, contentStart + tag.value.length, KotlinLexicalKind.KDocTag)
+                val kind =
+                    ru.lazyhat.compukters.ide.documentation.KDocTagKind.entries
+                        .firstOrNull { tag.groupValues[1] in it.names }
+                if (kind?.hasSubject == true) {
+                    val tail = body.substring(tag.value.length)
+                    val subject = Regex("^\\s*(\\[[^]]*]|[^\\s]+)").find(tail)?.groups?.get(1)
+                    if (subject !=
+                        null
+                    ) {
+                        highlights +=
+                            LexicalSpan(
+                                contentStart + tag.value.length + subject.range.first,
+                                contentStart + tag.value.length + subject.range.last + 1,
+                                KotlinLexicalKind.KDocSubject,
+                            )
+                    }
+                }
+            }
+            for (match in Regex("`+[^`]+`+|\\[[^]\\r\\n]+](?:\\[[^]]*]|\\([^)]*\\))?").findAll(body)) {
+                val from = contentStart + match.range.first
+                val to = contentStart + match.range.last + 1
+                if (highlights.none { it.startUtf16 < to && it.endUtf16 > from }) {
+                    highlights +=
+                        LexicalSpan(from, to, if (match.value.startsWith('`')) KotlinLexicalKind.KDocCode else KotlinLexicalKind.KDocLink)
+                }
+            }
+            var cursor = 0
+            for (span in highlights.sortedBy { it.startUtf16 }) {
+                add(start + cursor, start + span.startUtf16, KotlinLexicalKind.BlockComment)
+                add(start + span.startUtf16, start + span.endUtf16, span.kind)
+                cursor = span.endUtf16
+            }
+            add(start + cursor, end, KotlinLexicalKind.BlockComment)
+            return null
         }
 
         private fun scanMultilineString() {
