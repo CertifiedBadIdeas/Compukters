@@ -64,8 +64,8 @@ bindings are scoped to default evaluation, including nested calls. Primary const
 these ordinary call-site rules.
 
 A cycle that requires recursively expanding the same default at compile time reports `UNSUPPORTED_IR`;
-recursive calls supplying explicit arguments remain supported. Callable references retain their documented
-adaptation limits. Separately compiled platform APIs publish the existing constant `Int`, enum-entry,
+recursive calls supplying explicit arguments remain supported. References may omit trailing defaults under
+the adaptation rules below. Separately compiled platform APIs publish the existing constant `Int`, enum-entry,
 null and array-receiver-size payloads; arbitrary source expressions do not cross bundle metadata.
 
 **Evidence:**
@@ -177,7 +177,25 @@ invoked, including with an inferred `KFunction` type. Only invocation is support
 not. Bound references to ordinary Guest instance methods also work: the receiver expression is evaluated once,
 retained by the function value, and dispatched virtually or through its interface when invoked. Unbound
 instance-method references (`Type::method`) accept the receiver as their first argument and use the same
-runtime dispatch. References to supported Guest primary constructors (`::Type`) can be stored, passed,
+runtime dispatch.
+
+An expected function type may omit trailing default parameters of non-generic top-level and instance
+functions. For example, `fun roll(sides: Int = 6): Int = sides` can be referenced as
+`val draw: () -> Int = ::roll`. Bound method references retain their receiver once; unbound references
+keep the receiver as their first invocation argument. Defaults evaluate freshly on each invocation,
+using earlier supplied values, inherited declarations and ordinary virtual/interface dispatch. Supported
+concrete generic class receivers and value-class arguments/results retain their existing representation.
+Platform references use the same published default payloads as direct calls, including array-size defaults.
+These adapters reuse ordinary managed closures and call lowering. Generic function references, extension
+references, erased stateless platform receivers and Unit/suspend/vararg conversions remain outside this
+adaptation subset. Direct `Tasks.launch` reference restrictions remain unchanged; stored callable values
+follow the existing task-launch rules.
+
+**Evidence:** `default adapted function references preserve invocation defaults and receivers`, executed
+by `testKotlinDefaultFunctionReferencesVmConformance`; `unrelated function reference adaptations remain
+target diagnostics` and IDE `default adapted function references resolve with source and metadata inputs`.
+
+References to supported Guest primary constructors (`::Type`) can be stored, passed,
 returned, and invoked, including zero- and multi-argument constructors. An expected function type may omit
 trailing constructor parameters with supported defaults. Each invocation evaluates those defaults and
 constructs a fresh instance through the existing class layout. Each lambda evaluation creates an ordinary
@@ -213,7 +231,7 @@ generic wrappers retain their concrete emitter specialization; stored callbacks 
 `Tasks.launch` accepts direct, stored, and returned `() -> Unit` values. A direct top-level
 `Tasks.launch(::worker)` remains a static spawn without a closure allocation. Types unsupported elsewhere in
 Guest Kotlin, local-function and property references, constructors outside the admitted Guest class subset,
-other adapted references, and variance conversions between different function signatures remain unsupported.
+other reference adaptations, and variance conversions between different function signatures remain unsupported.
 
 **Evidence:**
 [`MinimalScriptLoweringTest`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/compiler-k2/src/test/kotlin/ru/lazyhat/compukters/compiler/worker/k2/MinimalScriptLoweringTest.kt),

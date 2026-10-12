@@ -155,6 +155,39 @@ class MinimalScriptLoweringTest {
         }
 
     @Test
+    fun `default adapted function references preserve invocation defaults and receivers`() =
+        withAdapter { adapter ->
+            val source =
+                repositoryFile(
+                    "modules/common/compiler-k2/src/test/resources/kotlin/default-function-references/main.kt",
+                ).readText()
+            val result = adapter.compile(request(source))
+            val bytes = assertNotNull(result.artifact, result.diagnostics.toString()).toByteArray()
+            ArtifactReader.read(bytes)
+            assertContentEquals(bytes, assertNotNull(adapter.compile(request(source)).artifact).toByteArray())
+            System.getProperty("compukter.vm.defaultFunctionReferencesArtifact")?.let { output ->
+                Path.of(output).also { it.parent.createDirectories() }.writeBytes(bytes)
+            }
+        }
+
+    @Test
+    fun `unrelated function reference adaptations remain target diagnostics`() =
+        withAdapter { adapter ->
+            val sources =
+                listOf(
+                    "fun value(x: Int = 1): Int = x\nfun main() { val call: () -> Unit = ::value; call() }",
+                    "fun value(vararg xs: Int): Int = xs.size\nfun main() { val call: (Int) -> Int = ::value; call(1) }",
+                    "fun Int.value(x: Int = 1): Int = this + x\nfun main() { val call: () -> Int = 2::value; call() }",
+                    "fun <T> value(x: T, y: T = x): T = y\nfun main() { val call: (Int) -> Int = ::value; call(1) }",
+                )
+            for (source in sources) {
+                val result = adapter.compile(request(source))
+                assertNull(result.artifact)
+                assertTrue(result.diagnostics.any { it.code == "UNSUPPORTED_IR" }, result.diagnostics.toString())
+            }
+        }
+
+    @Test
     fun `random method references link without direct calls`() =
         withAdapter { adapter ->
             val source =
