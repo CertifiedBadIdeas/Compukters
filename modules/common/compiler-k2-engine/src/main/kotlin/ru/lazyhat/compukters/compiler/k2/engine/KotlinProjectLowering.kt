@@ -84,6 +84,7 @@ import org.jetbrains.kotlin.ir.types.IrTypeProjection
 import org.jetbrains.kotlin.ir.types.IrTypeSubstitutor
 import org.jetbrains.kotlin.ir.types.impl.makeTypeProjection
 import org.jetbrains.kotlin.ir.types.isNothing
+import org.jetbrains.kotlin.ir.types.isUnit
 import org.jetbrains.kotlin.ir.types.makeNotNull
 import org.jetbrains.kotlin.ir.util.constructors
 import org.jetbrains.kotlin.ir.util.defaultType
@@ -485,6 +486,7 @@ private data class GuestClosureSource(
     val boundReceiver: IrExpression?,
     val ordinal: Int,
     val captures: List<IrValueDeclaration>,
+    val boundParameter: IrValueSymbol? = null,
 )
 
 private data class GuestFunctionShape(
@@ -2172,7 +2174,7 @@ internal object KotlinProjectLowering {
                             listOfNotNull(
                                 source.boundReceiver?.let { receiver ->
                                     GuestClosureCapture(
-                                        symbol = null,
+                                        symbol = source.boundParameter,
                                         initialValue = receiver,
                                         fieldId = FieldId.of(nextClosureField++.toUInt()),
                                         type =
@@ -2189,6 +2191,7 @@ internal object KotlinProjectLowering {
                                                 platformScalars,
                                                 receiver,
                                                 shapeInterfaceTypes,
+                                                classInstanceTypeIds = classInstanceTypeIds,
                                             ).let { guestTypes.heapType(receiver.type, it) },
                                         cell = null,
                                     )
@@ -5236,7 +5239,7 @@ private class FunctionCompiler(
     private var currentBlock = 0
     private val sourceParameters =
         when (function) {
-            is IrSimpleFunction -> loweredParameters(function, session)
+            is IrSimpleFunction -> loweredParameters(function, session).filterNot { it.symbol in captureFields }
             is IrConstructor -> function.parameters.filter { it.kind == IrParameterKind.Regular }
             else -> throw UnsupportedKotlinIr(function, "unsupported function declaration")
         }
@@ -10078,13 +10081,55 @@ private fun collectGuestClosures(
             }
             if (shape == null || referenceTarget.isSuspend ||
                 substituted(referenceTarget.returnType) != shape.result ||
-                sourceParameters != shape.parameters ||
                 (instanceMethod && dispatchReceiver == null) ||
                 referenceTarget.parameters.any {
                     it.kind != IrParameterKind.DispatchReceiver && it.kind != IrParameterKind.Regular
                 }
             ) {
                 throw UnsupportedKotlinIr(expression, "function reference signature is not supported")
+            }
+            if (sourceParameters != shape.parameters) {
+                val adapter =
+                    when (expression) {
+                        is IrRichFunctionReference -> expression.invokeFunction
+                        is IrFunctionReference -> expression.symbol.owner as? IrSimpleFunction
+                        else -> null
+                    }
+                val statement = (adapter?.body as? IrBlockBody)?.statements?.singleOrNull()
+                val adapterCall =
+                    (statement as? IrReturn)?.value as? IrCall
+                        ?: (statement as? IrCall)?.takeIf { shape.result.isUnit() && it.type.isUnit() }
+                val boundCount = if (boundReceiver == null) 0 else 1
+                val adapterParameters = adapter?.parameters.orEmpty()
+                val supplied = adapterCall?.arguments?.filterNotNull().orEmpty()
+                val firstMissing = adapterCall?.arguments?.indexOfFirst { it == null } ?: -1
+                if (adapter == null || adapter.isSuspend || adapter.typeParameters.isNotEmpty() ||
+                    referenceTarget.typeParameters.isNotEmpty() || erasedReceiver ||
+                    adapter.returnType != shape.result ||
+                    adapterParameters.any { it.kind != IrParameterKind.Regular } ||
+                    adapterParameters.drop(boundCount).map { it.type } != shape.parameters ||
+                    shape.parameters != sourceParameters.take(shape.arity) ||
+                    (boundCount == 1 && adapterParameters.firstOrNull()?.type != boundReceiver?.type) ||
+                    adapterCall?.symbol != referenceTarget.symbol ||
+                    adapterCall.arguments.size != referenceTarget.parameters.size ||
+                    supplied.map { (it as? IrGetValue)?.symbol } != adapterParameters.map { it.symbol } ||
+                    firstMissing < 0 ||
+                    referenceTarget.parameters.take(firstMissing).count { it.kind != IrParameterKind.Regular } !=
+                    referenceTarget.parameters.count { it.kind != IrParameterKind.Regular } ||
+                    adapterCall.arguments.drop(firstMissing).any { it != null }
+                ) {
+                    throw UnsupportedKotlinIr(expression, "function reference default adaptation is not supported")
+                }
+                return@mapIndexed GuestClosureSource(
+                    expression,
+                    adapter,
+                    null,
+                    null,
+                    boundReceiver,
+                    ordinal,
+                    emptyList(),
+                    adapterParameters.firstOrNull()?.symbol.takeIf { boundCount == 1 },
+                )
             }
             return@mapIndexed GuestClosureSource(expression, null, referenceTarget, null, boundReceiver, ordinal, emptyList())
         }
