@@ -253,6 +253,108 @@ class ExpressionInfoQueryTest {
     }
 
     @Test
+    fun `range hover resolves progression bounds interfaces and widened operators`() {
+        val families = listOf("Int", "Long", "Char", "UInt", "ULong")
+        val source =
+            buildString {
+                appendLine("import kotlin.ranges.*")
+                appendLine("fun main() {")
+                for ((index, type) in families.withIndex()) {
+                    val first = if (type == "Char") "'a'" else "3.to$type()"
+                    val last = if (type == "Char") "'f'" else "7.to$type()"
+                    val step = if (type == "Long" || type == "ULong") "2L" else "2"
+                    appendLine("val range$index = ${type}Range($first, $last)")
+                    appendLine("range$index.start; range$index.endInclusive; range$index.endExclusive")
+                    appendLine("range$index.contains($first); range$index.isEmpty()")
+                    appendLine("val progression$index = ${type}Progression($first, $last, $step)")
+                    appendLine("progression$index.first; progression$index.last; progression$index.step")
+                    appendLine("progression$index.isEmpty(); progression$index.iterator(); progression$index.step($step)")
+                }
+                for (type in listOf("Byte", "Short", "Int", "Long", "UByte", "UShort", "UInt", "ULong")) {
+                    appendLine("val value$type: $type = 3.to$type()")
+                }
+                appendLine("val valueChar = 'a'")
+                for (group in listOf(listOf("Byte", "Short", "Int", "Long"), listOf("UByte", "UShort", "UInt", "ULong"), listOf("Char"))) {
+                    for (left in group) {
+                        for (right in group) {
+                            for (operation in listOf("rangeTo", "rangeUntil", "until", "downTo")) {
+                                appendLine("value$left.$operation(value$right)")
+                            }
+                        }
+                    }
+                }
+                appendLine("}")
+                appendLine("fun bounds(closed: ClosedRange<Int>, open: OpenEndRange<Int>, floating: ClosedFloatingPointRange<Float>) {")
+                appendLine("closed.start; closed.endInclusive; closed.contains(4); closed.isEmpty()")
+                appendLine("open.start; open.endExclusive; open.contains(4); open.isEmpty()")
+                appendLine("1.0f.rangeTo(2.0f)")
+                appendLine("floating.lessThanOrEquals(1.0f, 2.0f)")
+                appendLine("1.0f.rangeUntil(2.0f); 1.0.rangeTo(2.0); 1.0.rangeUntil(2.0)")
+                appendLine("false.rangeTo(true); false.rangeUntil(true)")
+                appendLine("}")
+            }
+        K2QueryFixture.sourceWithGuestApi(true, "main.kt" to source).use { fixture ->
+            fun documented(
+                site: String,
+                symbol: String,
+                vararg tags: String,
+            ) {
+                val start = source.indexOf(site)
+                assertTrue(start >= 0, site)
+                val offset = start + site.indexOf(symbol)
+                val result =
+                    fixture.execute(
+                        AnalysisQuery.ExpressionInfo(fixture.identity, VirtualSourcePath.kotlin("main.kt"), offset),
+                    ) as AnalysisResult.ExpressionInfo
+                val info = assertNotNull(result.value, site)
+                assertEquals("stdlib:core", assertIs<DeclarationOrigin.Platform>(info.origin, "$site: $info").identity.name)
+                val documentation = assertNotNull(info.documentation, "$site: $info")
+                tags.forEach { tag -> assertTrue(documentation.contains(tag), "$site: missing $tag in $documentation") }
+            }
+            for ((index, type) in families.withIndex()) {
+                documented("${type}Range(", "${type}Range", "@constructor", "@param first", "@param last")
+                documented(
+                    "${type}Progression(",
+                    "${type}Progression",
+                    "@param endInclusive",
+                    "@param step",
+                    "@throws IllegalArgumentException",
+                )
+                for (property in listOf("start", "endInclusive")) documented("range$index.$property", property)
+                documented("range$index.endExclusive", "endExclusive", "@throws IllegalStateException")
+                documented("range$index.contains", "contains", "@param value", "@return")
+                documented("range$index.isEmpty", "isEmpty", "@return")
+                for (property in listOf("first", "last", "step")) documented("progression$index.$property", property)
+                documented("progression$index.isEmpty", "isEmpty", "@return")
+                documented("progression$index.iterator", "iterator", "@return", "NoSuchElementException")
+                documented("progression$index.step(", "step", "@receiver", "@param step", "@throws IllegalArgumentException")
+            }
+            for (group in listOf(listOf("Byte", "Short", "Int", "Long"), listOf("UByte", "UShort", "UInt", "ULong"), listOf("Char"))) {
+                for (left in group) {
+                    for (right in group) {
+                        for (operation in listOf("rangeTo", "rangeUntil", "until", "downTo")) {
+                            documented("value$left.$operation(value$right)", operation, "@receiver", "@param other", "@return")
+                        }
+                    }
+                }
+            }
+            for ((receiver, bound) in listOf("closed" to "endInclusive", "open" to "endExclusive")) {
+                documented("$receiver.start", "start")
+                documented("$receiver.$bound", bound)
+                documented("$receiver.contains", "contains", "@param value", "@return")
+                documented("$receiver.isEmpty", "isEmpty", "@return")
+            }
+            documented("floating.lessThanOrEquals", "lessThanOrEquals", "@param left", "@param right", "@return", "NaN")
+            for (site in listOf("1.0f.rangeTo", "1.0f.rangeUntil", "1.0.rangeTo", "1.0.rangeUntil")) {
+                documented(site, site.substringAfterLast('.'), "@param other", "@return", "NaN")
+            }
+            for (operation in listOf("rangeTo", "rangeUntil")) {
+                documented("false.$operation", operation, "@param other", "@return", "false < true")
+            }
+        }
+    }
+
+    @Test
     fun `array hover resolves every family and exact copy overloads`() {
         val families =
             listOf(
