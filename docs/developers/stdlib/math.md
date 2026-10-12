@@ -224,12 +224,12 @@ display Y points downward. Check positive display dimensions before mapping coor
 
 ## Evidence and maintenance
 
-- `testKotlinGeometryVmConformance` compiles and executes `compiler-k2/src/test/resources/kotlin/geometry/main.kt`,
+- `testKotlinGeometryVmConformance` compiles and executes `modules/common/compiler-k2/src/test/resources/kotlin/geometry/main.kt`,
   covering arithmetic/aliases, normalization at zero and Float extremes, rounding, half-open bounds, invalid
   extents, dense and noncommuting matrix products, axis rotations, homogeneous point/direction lifting,
   projection bounds, invalid parameters, explicit division, callable references and collection storage.
   IDE `DiagnosticQueryTest` checks aliases, matrices and member completion with source and metadata-only inputs. `PlatformSignatureAliasesTest` checks signature expansion and ambiguous/cyclic rejection.
-- `testKotlinRotationsVmConformance` compiles and executes `compiler-k2/src/test/resources/kotlin/rotations/main.kt`,
+- `testKotlinRotationsVmConformance` compiles and executes `modules/common/compiler-k2/src/test/resources/kotlin/rotations/main.kt`,
   covering direct quaternion component access on both rotation types, axis-angle normalization/rejection, signed axis turns, noncommuting composition and matrix agreement,
   fromTo direction mapping, deterministic opposite-vector axes, tiny/near-opposite angles (including relative
   checks for a 1e-300 Double direction component and normal/subnormal Float components), extreme magnitudes,
@@ -238,12 +238,12 @@ display Y points downward. Check positive display dimensions before mapping coor
   Seeded chains of 2048 rotations check unit length, transformed-vector length and Float drift against a
   Double reference with the same Float inputs. This proves execution of the new library methods in the VM;
   it is not a bit-for-bit JOML comparison.
-- `testKotlinMatrixShapesVmConformance` compiles and executes `compiler-k2/src/test/resources/kotlin/matrix-shapes/main.kt`,
+- `testKotlinMatrixShapesVmConformance` compiles and executes `modules/common/compiler-k2/src/test/resources/kotlin/matrix-shapes/main.kt`,
   covering every new selector, dense products against scalar loops, transpose, rotations, bounds,
   Double projections at extreme magnitudes, nominal boxes and callable references. Native matrix tests
   cover all valid aliases, fixed costs, no managed allocations, mixed-width/old-ABI rejection and Double
   rounding, signed zero, NaN and non-FMA behavior.
-- `testKotlinDoubleGeometryVmConformance` compiles and executes `compiler-k2/src/test/resources/kotlin/double-geometry/main.kt`,
+- `testKotlinDoubleGeometryVmConformance` compiles and executes `modules/common/compiler-k2/src/test/resources/kotlin/double-geometry/main.kt`,
   covering Double precision, normalization at zero/subnormal/maximum magnitudes, rounding, non-finite inputs,
   vector conversions, boxed nominal identity, component-preserving quaternion conversions, rotation
   normalization/rejection, composition, inverse and transformed vectors in both scalar widths.
@@ -259,7 +259,7 @@ display Y points downward. Check positive display dimensions before mapping coor
 - IDE `CompletionQueryTest` and `DiagnosticQueryTest` cover typed math overloads, extensions and callable
   references with both attached sources and metadata-only platform inputs.
 
-Source owners: `guest-platform/src/platform/libraries/stdlib-core/kotlin/math`,
+Source owners: `modules/common/guest-platform/src/platform/libraries/stdlib-core/kotlin/math`,
 `CanonicalTrustedIntrinsics`, `KotlinProjectLowering`, artifact `MathOperation`, and VM `execution/math.rs`.
 
 Related work: [#708](https://github.com/CertifiedBadIdeas/Compukters/issues/708),
