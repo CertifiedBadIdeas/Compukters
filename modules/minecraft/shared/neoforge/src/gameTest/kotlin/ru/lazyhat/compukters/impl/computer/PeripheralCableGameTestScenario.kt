@@ -80,7 +80,7 @@ internal object PeripheralCableGameTestScenario {
                     )
                 helper.assertTrue(
                     peripherals.entries.map { it.name } == listOf("input", "output"),
-                    "IDE discovery did not list named reachable devices",
+                    "IDE discovery did not list named reachable devices: ${peripherals.entries}",
                 )
                 helper.assertTrue(
                     peripherals.entries.map {

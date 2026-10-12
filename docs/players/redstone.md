@@ -88,7 +88,7 @@ fun main() {
     val relay = RedstonePort.named("relay")
     try {
         relay.front.awaitAtLeast(7)
-        relay.right.set(15, Redstone.Power.DIRECT)
+        relay.set(15, Redstone.Power.DIRECT, side = RedstonePort.Side.RIGHT)
         relay.front.await(0)
     } finally {
         relay.close()
@@ -96,10 +96,9 @@ fun main() {
 }
 ```
 
-`front`, `back`, `left`, `right`, `top` and `bottom` expose `get()`, `set()`, `await()`, `await(level)` and
+`front`, `back`, `left`, `right`, `top` and `bottom` expose `get()`, `await()`, `await(level)` and
 `awaitAtLeast(level)`. `relay.set(15)` writes all six faces at once; the default is
-`side = RedstonePort.Side.ALL`. Use `relay.set(7, side = RedstonePort.Side.TOP)` for a selected face, or keep
-`relay.top.set(7)`. `RedstonePort.Side` includes `ALL`, `FRONT`, `BACK`, `LEFT`, `RIGHT`, `TOP`, `BOTTOM`;
+`side = RedstonePort.Side.ALL`. Use `relay.set(7, side = RedstonePort.Side.TOP)` for a selected face. `RedstonePort.Side` includes `ALL`, `FRONT`, `BACK`, `LEFT`, `RIGHT`, `TOP`, `BOTTOM`;
 it selects outputs and is separate from `compukter.peripheral.Side`, which selects an adjacent device.
 Levels and power modes match the computer API. Port operations, including `get()`, suspend
 for host I/O. Inputs are sampled each server tick; edge waits do not replay earlier changes. The port does not

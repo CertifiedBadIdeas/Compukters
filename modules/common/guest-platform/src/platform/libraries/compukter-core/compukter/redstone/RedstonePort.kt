@@ -45,14 +45,10 @@ public value class RedstonePort internal constructor(private val handle: Int) : 
     }
 }
 
-/** Faces are relative to the port's front, independently of the computer's facing. */
+/** Input readings and waits relative to the port's front, independently of the computer's facing. */
 public value class RedstonePortSide internal constructor(private val handle: Int, private val index: Int) {
     /** Asynchronous host I/O returning the latest server-tick input sample. */
     public fun get(): Int = RedstonePortBindings.input(handle, index)
-
-    public fun set(level: Int, power: Redstone.Power = Redstone.Power.WEAK) {
-        RedstonePortBindings.setOutput(handle, index, checkedPortLevel(level) or if (power == Redstone.Power.DIRECT) 16 else 0)
-    }
 
     /** Wait for a newly sampled change; zero is a valid result. */
     public fun await(): Int = RedstonePortBindings.awaitChange(handle, index)
