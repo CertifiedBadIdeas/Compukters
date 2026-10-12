@@ -31,6 +31,20 @@ import kotlin.test.assertTrue
 
 class ExpressionInfoQueryTest {
     @Test
+    fun `hover signatures show Unit on both declaration and call`() {
+        val source = "fun finish(value: Boolean) {}\nfun main() { finish(true) }"
+        K2QueryFixture.source("main.kt" to source).use { fixture ->
+            for (offset in listOf(source.indexOf("finish"), source.lastIndexOf("finish"))) {
+                val result =
+                    fixture.execute(
+                        AnalysisQuery.ExpressionInfo(fixture.identity, VirtualSourcePath.kotlin("main.kt"), offset),
+                    ) as AnalysisResult.ExpressionInfo
+                assertEquals("fun finish(value: Boolean): Unit", assertNotNull(result.value).signature)
+            }
+        }
+    }
+
+    @Test
     fun `hover uses short names in nested generic nullable and function types`() {
         val source = "package example.deep\nclass Box<T>\nfun convert(input: Box<String?>, fn: (Int) -> String): Box<String?> = input"
         K2QueryFixture.source("main.kt" to source).use { fixture ->

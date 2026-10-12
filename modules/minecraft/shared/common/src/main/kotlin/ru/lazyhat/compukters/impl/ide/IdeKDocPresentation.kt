@@ -45,9 +45,25 @@ internal object IdeKDocPresentation {
                 if (isNotEmpty()) add(line(""))
                 add(line(label(kind), IdeColors.MUTED))
                 for (tag in tags) {
-                    tag.subject?.let { add(line("  $it", IdeColors.ACCENT)) }
-                    if (kind == KDocTagKind.Unknown) add(line("@${tag.sourceName}", IdeColors.MUTED))
-                    addAll(markdown(tag.description))
+                    val description = markdown(tag.description)
+                    val subject = if (kind == KDocTagKind.Unknown) "@${tag.sourceName}" else tag.subject
+                    if (subject == null) {
+                        addAll(description)
+                    } else {
+                        val prefix = IdeDocumentationSpan("  $subject", IdeColors.ACCENT)
+                        val first = description.firstOrNull()
+                        if (first != null && !first.code && first.text.isNotEmpty()) {
+                            add(
+                                IdeDocumentationLine(
+                                    listOf(prefix, IdeDocumentationSpan(" — ", IdeColors.MUTED)) + first.spans,
+                                ),
+                            )
+                            addAll(description.drop(1))
+                        } else {
+                            add(IdeDocumentationLine(listOf(prefix)))
+                            addAll(description)
+                        }
+                    }
                 }
             }
         }
