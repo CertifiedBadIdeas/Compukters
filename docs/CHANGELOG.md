@@ -22,6 +22,9 @@ headings so this page has one stable URL that can be shared outside the reposito
   `Matrix3f`, `Matrix3d` and `Matrix4d` provide row-major transforms and bounded native matrix kernels;
   Double variants retain Double precision through multiplication and projection.
 
+- IDE tooling loads canonical platform navigation sources under a separate bounded budget,
+  so expanding the standard library does not consume the user project or addon source budgets.
+
 - Guest Kotlin provides reusable `StringBuilder` and `buildString`, full `CharSequence` support for strings, builders and
   user implementations, text iteration, `take`/`drop`
   helpers, padding and repetition, plus signed and unsigned integer parsers with radices 2–36.
