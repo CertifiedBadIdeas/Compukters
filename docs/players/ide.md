@@ -9,7 +9,8 @@ permalink: /IDE/
 # IDE projects and Git
 
 Open the IDE with **Ctrl+I** while looking at a computer, or from its terminal. The attached computer is the deployment
-target; the project and its Git repository live on your own Minecraft client. This page includes unreleased 0.5.0 work.
+target; the project and its Git repository live on your own Minecraft client. These instructions describe this documentation revision; see the
+[changelog]({{ '/CHANGELOG/' | relative_url }}) for published features.
 
 ## Select named peripherals
 

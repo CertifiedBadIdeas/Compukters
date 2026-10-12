@@ -187,6 +187,12 @@ heap. IDE `nullable callbacks resolve with source and metadata inputs` covers bo
 
 **Related work:** [#760](https://github.com/CertifiedBadIdeas/Compukters/issues/760), [#757](https://github.com/CertifiedBadIdeas/Compukters/issues/757).
 
+Generic class methods and custom accessors can return callbacks and local function references with
+concrete owner capture layouts. Capturing `this` keeps the same owner alive and observes field mutations;
+captured method locals follow the ordinary shared-cell rules. See [local functions](functions.md#local-functions-and-captures)
+and `testKotlinGenericClassCapturesVmConformance` for executed evidence. Generic constructor bodies, backing-field
+initializers and init blocks with lexical captures remain outside that extension.
+
 ## Sealed interfaces, data classes, and stateless enums
 
 **Status:** Partial.

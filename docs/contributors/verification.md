@@ -274,7 +274,7 @@ release gate.
 The commands below guide selection of evidence for affected boundaries; run only the checks relevant to the change.
 Include behavioral tests for malformed input, limits, lifetime, or failure cases when those contracts are affected.
 
-See [Native runtime test coverage](https://certifiedbadideas.github.io/Compukters/NATIVE-TEST-COVERAGE/) for the semantic ownership matrix across direct Rust,
+See [Native runtime test coverage]({{ '/NATIVE-TEST-COVERAGE/' | relative_url }}) for the semantic ownership matrix across direct Rust,
 FFI, Kotlin-to-VM conformance, runtime-host integration, and NeoForge GameTests.
 
 | Changed boundary | Development evidence | Before release |
