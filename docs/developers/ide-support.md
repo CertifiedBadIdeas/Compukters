@@ -221,7 +221,8 @@ keywords outside unqualified Kotlin code`.
 Hover-style queries render inferred local types, resolved signatures, and smart-cast types using K2 short names,
 including generic, nullable and function types. The popup shows the declaration signature with its return type (including `Unit`), or the inferred type
 when no declaration signature is available. KDoc subjects and descriptions share a row when space allows,
-and source information follows the documentation. Hover also renders
+and source information follows the documentation. Long hovers and the code editor expose mouse-draggable
+scrollbars with page clicks; editor scrolling preserves caret, selection and document revision. Hover also renders
 bounded KDoc from the exact resolved project declaration or its attached platform source, including
 declaration-name hovers. English documentation groups parameters, return values, exceptions (`@throws` and
 `@exception`), receiver, properties, constructor, samples, related declarations, since and author into separate

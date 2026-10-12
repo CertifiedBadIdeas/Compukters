@@ -69,7 +69,7 @@ internal class IdeEditorPopups(
         val availableHeight = maxOf(anchor.top - geometry.editor.top, geometry.editor.bottom - anchor.bottom)
         val maximumRows = minOf(20, (availableHeight - POPUP_VERTICAL_PADDING) / font.cellHeight)
         if (maximumRows <= 0) return
-        val maximumColumns = minOf(80, ((geometry.editor.width - POPUP_HORIZONTAL_PADDING) / font.cellWidth).coerceAtLeast(1))
+        val maximumColumns = minOf(80, ((geometry.editor.width - POPUP_HORIZONTAL_PADDING - 10) / font.cellWidth).coerceAtLeast(1))
         val documentation = output.hoverDocumentation?.takeIf { it.info == hover.info } ?: IdeHoverDocumentation(hover.info)
         val lines = documentation.lines(maximumColumns)
         if (lines.isEmpty()) return
@@ -82,7 +82,7 @@ internal class IdeEditorPopups(
         val requestedWidth =
             maxOf(
                 SEMANTIC_POPUP_MINIMUM_WIDTH,
-                documentation.widthColumns * font.cellWidth + POPUP_HORIZONTAL_PADDING,
+                documentation.widthColumns * font.cellWidth + POPUP_HORIZONTAL_PADDING + if (scrolling) 10 else 0,
             )
         val popup =
             geometry.anchoredPopup(
@@ -92,6 +92,18 @@ internal class IdeEditorPopups(
             )
         semanticPopupPanel(popup.bounds)
         output.hoverViewport(popup.bounds, maximumScroll)
+        if (scrolling) {
+            output.scrollbar(
+                IdeScrollbar(
+                    IdeScrollTarget.Hover,
+                    IdeRect(popup.bounds.right - 10, popup.bounds.top + 4, popup.bounds.right - 2, popup.bounds.bottom - 4),
+                    first,
+                    maximumScroll,
+                    visibleRows,
+                ),
+                Z_POPUP_TEXT + 1,
+            )
+        }
         visible.forEachIndexed { index, line ->
             var x = popup.bounds.left + 4
             val y = popup.bounds.top + POPUP_VERTICAL_PADDING / 2 + font.glyphDrawOffsetY + index * font.cellHeight

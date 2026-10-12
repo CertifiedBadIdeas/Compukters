@@ -18,6 +18,7 @@
 
 package ru.lazyhat.compukters.compiler.worker.k2
 
+import ru.lazyhat.compukters.addon.api.AddonGuestApiBundle
 import ru.lazyhat.compukters.addon.api.AddonGuestApiBundleCodec
 import ru.lazyhat.compukters.compiler.artifact.model.AbiVersion
 import ru.lazyhat.compukters.compiler.artifact.model.ArrayStorage
@@ -41,6 +42,10 @@ import ru.lazyhat.compukters.compiler.artifact.model.TypeRef
 import ru.lazyhat.compukters.compiler.artifact.model.Utf16Literal
 import ru.lazyhat.compukters.compiler.artifact.model.ValueType
 import ru.lazyhat.compukters.compiler.artifact.read.ArtifactReader
+import ru.lazyhat.compukters.compiler.k2.engine.build.AddonAbiLock
+import ru.lazyhat.compukters.compiler.k2.engine.build.AddonAuthoringContract
+import ru.lazyhat.compukters.compiler.k2.engine.build.buildAddonGuestApiBundle
+import ru.lazyhat.compukters.compiler.k2.engine.build.resolveAddonContract
 import ru.lazyhat.compukters.compiler.project.ProjectSnapshotLoader
 import ru.lazyhat.compukters.compiler.project.ProjectSource
 import ru.lazyhat.compukters.compiler.worker.protocol.BinaryValue
@@ -55,6 +60,7 @@ import ru.lazyhat.compukters.compiler.worker.protocol.TrustedBundlePayload
 import ru.lazyhat.compukters.compiler.worker.protocol.VirtualSourcePath
 import ru.lazyhat.compukters.compiler.worker.protocol.WorkerIdentity
 import ru.lazyhat.compukters.compiler.worker.protocol.WorkerLimits
+import ru.lazyhat.compukters.platform.k2.build.PlatformMetadataCompiler
 import java.nio.file.Path
 import java.security.MessageDigest
 import kotlin.io.path.createDirectories
@@ -271,6 +277,58 @@ class MinimalScriptLoweringTest {
         }
 
     @Test
+    fun `generic local functions preserve concrete lexical captures and escaping references`() =
+        withAdapter { adapter ->
+            val source = repositoryFile("modules/common/compiler-k2/src/test/resources/kotlin/generic-local-functions/main.kt").readText()
+            val result = adapter.compile(request(source))
+            val bytes = assertNotNull(result.artifact, result.diagnostics.toString()).toByteArray()
+            ArtifactReader.read(bytes)
+            assertContentEquals(bytes, assertNotNull(adapter.compile(request(source)).artifact).toByteArray())
+            System.getProperty("compukter.vm.genericLocalFunctionsArtifact")?.let { output ->
+                Path.of(output).also { it.parent.createDirectories() }.writeBytes(bytes)
+            }
+        }
+
+    @Test
+    fun `generic local calls retain scalar signatures without managed allocation`() =
+        withAdapter { adapter ->
+            val result =
+                adapter.compile(
+                    request("fun main() { val seed = 7; fun <T> read(value: T): T { seed; return value }; read(3); read(4L) }"),
+                )
+            val artifact = ArtifactReader.read(assertNotNull(result.artifact, result.diagnostics.toString()).toByteArray())
+            assertTrue(
+                artifact.modules
+                    .flatMap { it.blocks }
+                    .flatMap { it.instructions }
+                    .none { it is Instruction.NewObject },
+            )
+        }
+
+    @Test
+    fun `generic local references lower without inline normalization`() =
+        withAdapter { adapter ->
+            val sources =
+                listOf(
+                    "fun main() { val seed = 7; fun <T> read(value: T, fallback: Int = seed): T = value\n val call: (Long) -> Long = ::read; call(2L) }",
+                    "fun <T> make(value: T): () -> T { fun read(): T = value\n return ::read }\nfun main() { make(1)(); make(2L)() }",
+                )
+            for (source in sources) {
+                val result = adapter.compile(request(source))
+                ArtifactReader.read(assertNotNull(result.artifact, result.diagnostics.toString()).toByteArray())
+            }
+        }
+
+    @Test
+    fun `expanding generic local recursion reports bounded target diagnostics`() =
+        withAdapter { adapter ->
+            val source = "fun main() { fun <T> grow(value: T): Int = grow(listOf(value))\n grow(1) }"
+            val result = adapter.compile(request(source))
+            assertNull(result.artifact)
+            assertTrue(result.diagnostics.any { it.code == "UNSUPPORTED_IR" && "limit" in it.message }, result.diagnostics.toString())
+        }
+
+    @Test
     fun `local functions preserve recursive captures escaping references and defaults`() =
         withAdapter { adapter ->
             val source = repositoryFile("modules/common/compiler-k2/src/test/resources/kotlin/local-functions/main.kt").readText()
@@ -315,9 +373,8 @@ class MinimalScriptLoweringTest {
         withAdapter { adapter ->
             val sources =
                 listOf(
-                    "fun main() { fun <T> read(value: T): T = value; read(1) }",
+                    "fun main() { inline fun <T> read(value: T): T = value; read(1) }",
                     "fun main() { suspend fun read(): Int = 1 }",
-                    "fun <T> make(value: T): () -> T { fun read(): T = value; return ::read }\nfun main() { make(1)() }",
                 )
             for (source in sources) {
                 val result = adapter.compile(request(source))
@@ -2527,6 +2584,90 @@ class MinimalScriptLoweringTest {
             assertTrue(artifact.modules.any { module -> module.types.any { it is NominalType.InlineValue } })
             System.getProperty("compukter.vm.mfvcArtifact")?.let { output ->
                 Path.of(output).also { it.parent.createDirectories() }.writeBytes(bytes)
+            }
+        }
+
+    @Test
+    fun `addon value responses preserve direct nested and managed layouts`() =
+        withAdapter { adapter ->
+            val root = createTempDirectory("compukters-value-reply-")
+            try {
+                root.resolve("fixturevalues/Records.kt").also { it.parent.createDirectories() }.writeText(
+                    """
+                    package fixturevalues
+                    import kotlin.math.Vector3d
+                    value class ScalarReply(val point: Vector3d, val tick: Long)
+                    value class Tiny(val number: Int)
+                    value class Point(val x: Double, val y: Double)
+                    data class Data(val point: Point, val count: Int)
+                    value class Reply(val point: Vector3d, val data: Data, val label: String)
+                    data class DataReply(val reply: Reply)
+                    object Observations {
+                        fun scalar(): ScalarReply = Bindings.scalar()
+                        fun mixed(): Reply = Bindings.mixed()
+                        fun data(): DataReply = Bindings.data()
+                        fun tiny(): Tiny = Bindings.tiny()
+                    }
+                    private object Bindings {
+                        external fun data(): DataReply
+                        external fun mixed(): Reply
+                        external fun scalar(): ScalarReply
+                        external fun tiny(): Tiny
+                    }
+                    """.trimIndent(),
+                )
+                val base = K2CompilerAdapter.loadPackagedPlatform()
+                val stdlib = base.modules.single { it.id.toString() == "stdlib:core" }
+                val trusted =
+                    PlatformMetadataCompiler()
+                        .compile(stdlib.id, stdlib.sources)
+                        .recordCandidates
+                        .filter { it.symbol == "kotlin.math.Vector3d" && it.rejection == null }
+                val resolved =
+                    resolveAddonContract(
+                        root,
+                        AddonAuthoringContract("fixturevalues", "1.0.0"),
+                        AddonAbiLock.empty(),
+                        base.modules.map { it.id },
+                        trusted,
+                    )
+                val addon = AddonGuestApiBundleCodec.decode(buildAddonGuestApiBundle(base, root, resolved.contract))
+                val result =
+                    adapter.compile(
+                        request(
+                            """
+                            import fixturevalues.*
+                            fun main() {
+                                repeat(100) {
+                                    val value = Observations.scalar()
+                                    check(value.point.x == 1.0 && value.point.y == 2.0 && value.point.z == 3.0 && value.tick == Long.MIN_VALUE)
+                                }
+                                val mixed = Observations.mixed()
+                                check(mixed.point.z == 3.0 && mixed.data.point.y == 5.0 && mixed.data.count == 7 && mixed.label == "owned")
+                                val boxed: Any = mixed
+                                check(boxed is Reply && (boxed as Reply).label == "owned")
+                                val data = Observations.data()
+                                check(data.reply.data.point.x == 4.0 && data.reply.point.z == 3.0 && data.reply.label == "owned")
+                                check(Observations.tiny().number == 42)
+                            }
+                            """.trimIndent(),
+                            addonOverride = addon,
+                        ),
+                    )
+                val bytes = assertNotNull(result.artifact, result.diagnostics.joinToString()).toByteArray()
+                val artifact = ArtifactReader.read(bytes)
+                assertEquals(AbiVersion(1u, 20u), artifact.minimumRuntimeAbi)
+                val downgraded =
+                    ru.lazyhat.compukters.compiler.artifact.write.ArtifactWriter.write(
+                        artifact.copy(minimumRuntimeAbi = AbiVersion(1u, 19u)),
+                    )
+                assertTrue(downgraded is ru.lazyhat.compukters.compiler.artifact.write.ArtifactWriteResult.Failure)
+                assertTrue(downgraded.errors.any { "1.20" in it.detail })
+                System.getProperty("compukters.addon.values.artifact")?.let { output ->
+                    Path.of(output).also { it.parent.createDirectories() }.writeBytes(bytes)
+                }
+            } finally {
+                root.toFile().deleteRecursively()
             }
         }
 
@@ -9795,7 +9936,8 @@ class MinimalScriptLoweringTest {
         source: String,
         limits: WorkerLimits = WorkerLimits(),
         includeAddonFixture: Boolean = false,
-    ): CompileRequest = request(listOf("project/main.kt" to source), limits, includeAddonFixture)
+        addonOverride: AddonGuestApiBundle? = null,
+    ): CompileRequest = request(listOf("project/main.kt" to source), limits, includeAddonFixture, addonOverride = addonOverride)
 
     private fun request(vararg sources: Pair<String, String>): CompileRequest = request(sources.toList(), WorkerLimits(), false)
 
@@ -9804,9 +9946,10 @@ class MinimalScriptLoweringTest {
         limits: WorkerLimits,
         includeAddonFixture: Boolean = false,
         addonPath: Path? = null,
+        addonOverride: AddonGuestApiBundle? = null,
     ): CompileRequest {
         val addon =
-            if (addonPath != null) {
+            addonOverride ?: if (addonPath != null) {
                 AddonGuestApiBundleCodec.decode(
                     java.nio.file.Files
                         .readAllBytes(addonPath),
@@ -9819,6 +9962,7 @@ class MinimalScriptLoweringTest {
             } else {
                 null
             }
+
         val addonModuleIdentity =
             addon?.let {
                 TrustedBundleIdentity.of(it.moduleDescriptor.id.toString(), Hash256.of(it.identity.contentHash.toByteArray()))

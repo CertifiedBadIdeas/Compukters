@@ -84,6 +84,7 @@ data class PlatformRecordCandidate(
     val symbol: String,
     val fields: List<PlatformRecordField>,
     val rejection: String?,
+    val valueClass: Boolean = false,
 )
 
 data class PlatformRecordField(
@@ -275,32 +276,56 @@ class PlatformMetadataCompiler {
                         val symbol = listOf(packageName, requireNotNull(klass.name)).filter(String::isNotEmpty).joinToString(".")
                         val rejection =
                             when {
-                                !klass.hasModifier(KtTokens.DATA_KEYWORD) -> "must be a data class"
+                                !klass.hasModifier(KtTokens.DATA_KEYWORD) && !klass.hasModifier(KtTokens.VALUE_KEYWORD) -> {
+                                    "must be a data or value class"
+                                }
 
                                 klass.hasModifier(
                                     KtTokens.PRIVATE_KEYWORD,
-                                ) || klass.hasModifier(KtTokens.INTERNAL_KEYWORD) -> "must be public"
+                                ) || (klass.hasModifier(KtTokens.INTERNAL_KEYWORD) && !klass.hasModifier(KtTokens.VALUE_KEYWORD)) -> {
+                                    "must be public, or an internal value payload"
+                                }
 
-                                klass.typeParameters.isNotEmpty() -> "cannot have type parameters"
+                                klass.typeParameters.isNotEmpty() -> {
+                                    "cannot have type parameters"
+                                }
 
-                                klass.superTypeListEntries.isNotEmpty() -> "cannot declare supertypes"
+                                klass.superTypeListEntries.isNotEmpty() -> {
+                                    "cannot declare supertypes"
+                                }
 
-                                klass.declarations.isNotEmpty() -> "cannot contain a class body or initializers"
+                                klass.hasModifier(KtTokens.DATA_KEYWORD) && klass.declarations.isNotEmpty() -> {
+                                    "cannot contain a class body or initializers"
+                                }
+
+                                klass.declarations.any {
+                                    it is KtClassInitializer || (it is KtProperty && (it.initializer != null || it.hasDelegate()))
+                                } -> {
+                                    "cannot contain stored body properties or initializers"
+                                }
 
                                 listOf(KtTokens.PRIVATE_KEYWORD, KtTokens.INTERNAL_KEYWORD, KtTokens.PROTECTED_KEYWORD).any {
                                     klass.primaryConstructor?.hasModifier(it) ==
                                         true
-                                } -> "must have a public constructor"
+                                } -> {
+                                    "must have a public constructor"
+                                }
 
-                                klass.primaryConstructorParameters.isEmpty() -> "must declare at least one field"
+                                klass.primaryConstructorParameters.isEmpty() -> {
+                                    "must declare at least one field"
+                                }
 
                                 klass.primaryConstructorParameters.any {
                                     it.valOrVarKeyword?.node?.elementType != KtTokens.VAL_KEYWORD || it.defaultValue != null ||
                                         it.hasModifier(KtTokens.PRIVATE_KEYWORD) || it.hasModifier(KtTokens.INTERNAL_KEYWORD) ||
                                         it.hasModifier(KtTokens.VARARG_KEYWORD) || it.typeReference == null
-                                } -> "must use public val fields without defaults or varargs"
+                                } -> {
+                                    "must use public val fields without defaults or varargs"
+                                }
 
-                                else -> null
+                                else -> {
+                                    null
+                                }
                             }
                         val fields =
                             klass.primaryConstructorParameters.map { parameter ->
@@ -318,7 +343,7 @@ class PlatformMetadataCompiler {
                                     }
                                 PlatformRecordField(parameter.name.orEmpty(), type)
                             }
-                        recordCandidates += PlatformRecordCandidate(symbol, fields, rejection)
+                        recordCandidates += PlatformRecordCandidate(symbol, fields, rejection, klass.hasModifier(KtTokens.VALUE_KEYWORD))
                     }
                     file.declarations.forEach { declaration ->
                         declarations += collect(module, source.path, packageName, emptyList(), declaration = declaration)

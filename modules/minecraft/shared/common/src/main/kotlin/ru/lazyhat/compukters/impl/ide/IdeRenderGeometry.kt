@@ -81,8 +81,8 @@ class IdeRenderGeometry private constructor(
     val fileTabs: IdeRect? = null,
 ) {
     val supported: Boolean = fallback != IdeGeometryFallback.Unsupported
-    val codeColumns: Int = editor.width / font.cellWidth
-    val codeRows: Int = editor.height / font.cellHeight
+    val codeColumns: Int = ((editor.width - IDE_SCROLLBAR_SIZE) / font.cellWidth).coerceAtLeast(1)
+    val codeRows: Int = ((editor.height - IDE_SCROLLBAR_SIZE) / font.cellHeight).coerceAtLeast(1)
 
     fun treeWidthAt(pointerX: Int): Int {
         check(supported && treeVisible) { "project tree is not visible" }

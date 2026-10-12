@@ -10,22 +10,14 @@ import org.jetbrains.kotlin.ir.IrElement
 import org.jetbrains.kotlin.ir.declarations.IrClass
 import org.jetbrains.kotlin.ir.declarations.IrFile
 import org.jetbrains.kotlin.ir.declarations.IrSimpleFunction
-import org.jetbrains.kotlin.ir.declarations.IrTypeParametersContainer
 import org.jetbrains.kotlin.ir.expressions.IrCall
 import org.jetbrains.kotlin.ir.symbols.IrTypeParameterSymbol
 import org.jetbrains.kotlin.ir.symbols.UnsafeDuringIrConstructionAPI
 import org.jetbrains.kotlin.ir.types.IrSimpleType
 import org.jetbrains.kotlin.ir.types.IrType
 import org.jetbrains.kotlin.ir.types.IrTypeProjection
-import org.jetbrains.kotlin.ir.types.IrTypeSubstitutor
-import org.jetbrains.kotlin.ir.types.impl.makeTypeProjection
-import org.jetbrains.kotlin.ir.util.DeepCopyIrTreeWithSymbols
-import org.jetbrains.kotlin.ir.util.DeepCopySymbolRemapper
-import org.jetbrains.kotlin.ir.util.DeepCopyTypeRemapper
-import org.jetbrains.kotlin.ir.util.TypeRemapper
 import org.jetbrains.kotlin.ir.util.patchDeclarationParents
 import org.jetbrains.kotlin.ir.visitors.IrVisitorVoid
-import org.jetbrains.kotlin.types.Variance
 
 /** Typed body copies for common inlining; enclosing generic owners keep their emitter specialization. */
 @OptIn(UnsafeDuringIrConstructionAPI::class)
@@ -106,28 +98,7 @@ internal class GuestInlineSpecialization(
         val original = key.declaration
         val parent = original.parent as? IrFile
         requireNotNull(parent) { "generic inline specialization currently requires a top-level declaration" }
-        val symbols = DeepCopySymbolRemapper()
-        original.accept(symbols, null)
-        val substitution =
-            IrTypeSubstitutor(
-                original.typeParameters.map { it.symbol },
-                key.arguments.map { makeTypeProjection(it, Variance.INVARIANT) },
-                false,
-            )
-        val copiedTypes = DeepCopyTypeRemapper(symbols)
-        val types =
-            object : TypeRemapper {
-                override fun enterScope(irTypeParametersContainer: IrTypeParametersContainer) =
-                    copiedTypes.enterScope(irTypeParametersContainer)
-
-                override fun leaveScope() = copiedTypes.leaveScope()
-
-                override fun remapType(type: IrType): IrType = copiedTypes.remapType(substitution.substitute(type))
-            }
-        val copier = DeepCopyIrTreeWithSymbols(symbols, types)
-        copiedTypes.deepCopy = copier
-        val copy = original.transform(copier, null) as IrSimpleFunction
-        copy.typeParameters = emptyList()
+        val copy = copyGuestFunction(original, key.arguments)
         copy.patchDeclarationParents(parent)
         copies[key] = copy
         active += key

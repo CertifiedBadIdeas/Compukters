@@ -538,6 +538,22 @@ val generateFunctionFieldsConformanceArtifact = tasks.register<Test>("generateFu
     systemProperty("compukter.vm.functionFieldsArtifact", functionFieldsConformanceArtifact.get().asFile.absolutePath)
 }
 
+val genericLocalFunctionsConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-generic-local-functions.cpkt")
+val generateGenericLocalFunctionsConformanceArtifact = tasks.register<Test>("generateGenericLocalFunctionsConformanceArtifact") {
+    description = "Compiles generic Guest local functions for pinned VM conformance."
+    group = "verification"
+    dependsOn(tasks.jar)
+    useJUnitPlatform()
+    testClassesDirs = sourceSets.test.get().output.classesDirs
+    classpath = sourceSets.test.get().runtimeClasspath
+    filter.includeTestsMatching("*generic local functions preserve concrete lexical captures and escaping references*")
+    inputs.file(workerJar)
+    inputs.file("src/test/resources/kotlin/generic-local-functions/main.kt")
+    outputs.file(genericLocalFunctionsConformanceArtifact)
+    systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
+    systemProperty("compukter.vm.genericLocalFunctionsArtifact", genericLocalFunctionsConformanceArtifact.get().asFile.absolutePath)
+}
+
 val localFunctionsConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-local-functions.cpkt")
 val generateLocalFunctionsConformanceArtifact = tasks.register<Test>("generateLocalFunctionsConformanceArtifact") {
     description = "Compiles captured Guest local functions for pinned VM conformance."
@@ -1893,4 +1909,18 @@ tasks.register<Test>("compileCreateScadaExample") {
     inputs.file(workerJar)
     systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
     bundle.orNull?.let { systemProperty("compukters.createScadaBundle", file(it).absolutePath) }
+}
+
+val generateAddonValueResponsesConformanceArtifact = tasks.register<Test>("generateAddonValueResponsesConformanceArtifact") {
+    description = "Compiles nested addon value responses and managed mixtures for VM conformance."
+    group = "verification"
+    dependsOn(tasks.jar)
+    useJUnitPlatform()
+    testClassesDirs = sourceSets.test.get().output.classesDirs
+    classpath = sourceSets.test.get().runtimeClasspath
+    filter.includeTestsMatching("*addon value responses preserve direct nested and managed layouts*")
+    val artifact = layout.buildDirectory.file("generated/conformance/addon-values.cpkt")
+    outputs.file(artifact)
+    systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
+    systemProperty("compukters.addon.values.artifact", artifact.get().asFile.absolutePath)
 }
