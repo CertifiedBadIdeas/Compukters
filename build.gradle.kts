@@ -343,6 +343,16 @@ registerKotlinVmConformance(
 )
 
 registerKotlinVmConformance(
+    taskName = "testKotlinRotationsVmConformance",
+    taskDescription = "Executes rotation factories, shortest-arc interpolation and long seeded chains.",
+    artifactTask = ":compiler-k2:generateRotationsConformanceArtifact",
+    artifact = project(":compiler-k2").layout.buildDirectory.file("generated/conformance/kotlin-rotations.cpkt"),
+    cargoTargetDirectory = ".toolchain/build/cargo/compiler-k2-math-conformance",
+    artifactEnvironmentVariable = "COMPUKTER_KOTLIN_ROTATIONS_ARTIFACT",
+    conformanceScenario = "rotations",
+)
+
+registerKotlinVmConformance(
     taskName = "testKotlinRandomVmConformance",
     taskDescription = "Executes Guest random ranges, reproducibility, quota slices and checkpoint restoration.",
     artifactTask = ":compiler-k2:generateRandomConformanceArtifact",

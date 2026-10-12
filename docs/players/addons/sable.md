@@ -114,6 +114,35 @@ For a plot-space point `p`, the world transform is:
 world = position + orientation.rotate(scale * (p - rotationPoint))
 ```
 
+### Orientation conventions and Guest rotations
+
+The adapter copies JOML quaternion components in **x, y, z, w** order: x/y/z form the vector part,
+w is the scalar part. It does not reorder components or conjugate the pose orientation.
+JOML's unit-quaternion transform uses the same active column-vector convention as Guest Rotation3d;
+see [Quaterniond transformUnit](https://joml-ci.github.io/JOML/apidocs/org/joml/Quaterniondc.html#transformUnit(double,double,double,org.joml.Vector3d)).
+A positive quarter turn around plot +Z maps plot +X to world +Y when the axes initially coincide.
+The inverse rotation maps world directions back to plot axes; scale and pivot are separate operations.
+
+The current Sable snapshot still exposes PhysicsRotation components. With stdlib:core 1.19, convert that
+owned observation explicitly to a validated spatial rotation:
+
+```kotlin
+import kotlin.math.Quaterniond
+import kotlin.math.Rotation3d
+import kotlin.math.Vector3d
+
+val q = snapshot.orientation
+val rotation = Rotation3d.fromQuaternion(Quaterniond(q.x, q.y, q.z, q.w))
+val worldDirection = rotation.transform(Vector3d(1.0, 0.0, 0.0))
+val plotDirection = rotation.inverse().transform(worldDirection)
+```
+
+The factory normalizes finite nonzero input and rejects zero/non-finite components. Rotation unit length
+is approximate within Double rounding. This conversion does not change the snapshot's observation tick,
+apply scale/translation, or silently invert the quaternion. Use non-identity rotations around distinct axes
+when testing an adapter; an identity-only test cannot detect a swapped component or reversed rotation.
+The planned SDK/Sable value-response migration is separate from this explicit conversion.
+
 Positions use Minecraft block units (Sable treats one block as one metre). Solver `linearVelocity` is the body's
 global velocity in metres per second, not velocity at the computer. `angularVelocity` is global angular velocity in
 radians per second. These values use Sable's physics handle, rather than the pose-difference velocity fields.
