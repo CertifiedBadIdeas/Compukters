@@ -136,13 +136,15 @@ val verifyDevelopmentMods = tasks.register("verifyDevelopmentMods") {
     group = "verification"
     dependsOn(baseMod, addonMods.values)
     inputs.files(baseMod, addonMods.values)
+    val selectedBaseMod = baseMod
+    val selectedAddonMods = addonMods.toMap()
     doLast {
-        addonMods.forEach { (id, archive) ->
+        selectedAddonMods.forEach { (id, archive) ->
             ZipFile(archive.singleFile).use { zip ->
                 val metadata = checkNotNull(zip.getEntry("META-INF/neoforge.mods.toml"))
                 val text = zip.getInputStream(metadata).bufferedReader().use { it.readText() }
                 check(text.contains("modId=\"compukters_$id\"")) { "incorrect addon archive for $id" }
-                val other = addonMods.keys - id
+                val other = selectedAddonMods.keys - id
                 check(zip.entries().asSequence().none { entry ->
                     other.any { entry.name.startsWith("ru/lazyhat/compukters/integration/$it/") }
                 }) {
@@ -150,15 +152,16 @@ val verifyDevelopmentMods = tasks.register("verifyDevelopmentMods") {
                 }
             }
         }
-        check(baseMod.singleFile.isFile) { "base development mod is missing" }
+        check(selectedBaseMod.singleFile.isFile) { "base development mod is missing" }
     }
 }
 val verifyPhysicsMods = tasks.register("verifyPhysicsMods") {
     group = "verification"
     description = "Verify the exact Aeronautics bundle and Propulsion mods used by every development run."
-    inputs.files(physicsMods, aeronauticsLibraries)
+    val selectedPhysicsMods = files(physicsMods, aeronauticsLibraries)
+    inputs.files(selectedPhysicsMods)
     doLast {
-        val ids = (physicsMods.files + aeronauticsLibraries.files).map { archive ->
+        val ids = selectedPhysicsMods.files.map { archive ->
             ZipFile(archive).use { zip ->
                 val metadata = checkNotNull(zip.getEntry("META-INF/neoforge.mods.toml"))
                 val text = zip.getInputStream(metadata).bufferedReader().use { it.readText() }
@@ -169,7 +172,7 @@ val verifyPhysicsMods = tasks.register("verifyPhysicsMods") {
         check(ids.toSet() == setOf("aeronautics_bundled", "aeronautics", "offroad", "simulated", "createpropulsion")) {
             "incomplete physics runtime: $ids"
         }
-        logger.lifecycle("Development physics mods: ${ids.sorted().joinToString()}")
+        this.logger.lifecycle("Development physics mods: ${ids.sorted().joinToString()}")
     }
 }
 tasks.named("check") { dependsOn(verifyDevelopmentMods, verifyPhysicsMods, gameTest.classesTaskName) }

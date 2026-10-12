@@ -17,10 +17,12 @@ bounded diagnostic summary and log tail on failure without changing the command'
 
 ## Configuration Cache
 
-Configuration Cache is enabled by default for repository builds. Compatibility errors remain fatal; use
-`--no-configuration-cache` only when diagnosing whether a failure depends on graph replay.
-Keep `--parallel` (the parallel wrappers already supply it) to let independent built-in
-compiler tasks execute concurrently even within the `compiler-k2` project. Local packaging with
+Configuration Cache is enabled by default for the main repository and the `addons/dev` composite build.
+Compatibility errors remain fatal; use `--no-configuration-cache` only when diagnosing whether a failure
+depends on graph replay. Configuration Cache allows independent built-in compiler tasks to execute concurrently
+even within the `compiler-k2` project, including on the first cache write. `--parallel` alone only enables
+parallel execution across projects. The top-level build selects these settings; an included build does not
+enable Configuration Cache for its caller. Use `--max-workers=N` to bound concurrent work. Local packaging with
 `:v1_21_1-neoforge:remapJar :v26_1-neoforge:jar` has also been exercised with the cache; these packaging
 tasks alone do not verify production archive contents or release readiness.
 

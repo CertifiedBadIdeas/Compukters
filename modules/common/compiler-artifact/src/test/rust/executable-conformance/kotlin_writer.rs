@@ -142,6 +142,10 @@ fn main() {
         "interface-super" => k2_interface_super_calls_direct_default_bodies(),
         "mutable-fields" => k2_mutable_class_fields_preserve_aliases_and_evaluation_order(),
         "class-initialization" => k2_class_initialization_preserves_source_and_super_order(),
+        "function-fields" => execute_primitive_program(
+            std::env::var("COMPUKTER_KOTLIN_FUNCTION_FIELDS_ARTIFACT")
+                .expect("function fields artifact path must be set"),
+        ),
         "local-functions" => execute_primitive_program(
             std::env::var("COMPUKTER_KOTLIN_LOCAL_FUNCTIONS_ARTIFACT")
                 .expect("local functions artifact path must be set"),

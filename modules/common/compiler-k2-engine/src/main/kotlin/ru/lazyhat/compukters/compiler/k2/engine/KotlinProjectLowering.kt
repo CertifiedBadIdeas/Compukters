@@ -386,6 +386,40 @@ private data class GuestFunctionInstance(
     }
 }
 
+@OptIn(UnsafeDuringIrConstructionAPI::class)
+private fun collectGuestFunctionShapes(
+    closures: List<GuestClosureSource>,
+    functions: List<GuestFunctionInstance>,
+    classes: List<GuestClassInstance>,
+    session: CompilationSession,
+): List<GuestFunctionShape> =
+    buildList {
+        fun include(shape: GuestFunctionShape) {
+            if (shape in this) return
+            add(shape)
+            (shape.parameters + shape.result).mapNotNull(IrType::guestFunctionShape).forEach(::include)
+        }
+        closures.mapNotNull { it.expression.type.guestFunctionShape() }.forEach(::include)
+        functions.forEach { instance ->
+            instance.substitute(instance.declaration.returnType).guestFunctionShape()?.let(::include)
+            loweredParameters(instance.declaration, session)
+                .mapNotNull { parameter -> instance.substitute(parameter.type).guestFunctionShape() }
+                .forEach(::include)
+        }
+        classes.forEach { instance ->
+            instance.declaration.constructors.forEach { constructor ->
+                constructor.parameters.mapNotNull { instance.substitute(it.type).guestFunctionShape() }.forEach(::include)
+            }
+            instance.declaration.declarations.filterIsInstance<IrProperty>().forEach { property ->
+                property.backingField
+                    ?.type
+                    ?.let(instance::substitute)
+                    ?.guestFunctionShape()
+                    ?.let(::include)
+            }
+        }
+    }
+
 private fun collectGuestFunctionInstances(
     functions: List<IrSimpleFunction>,
     constructors: List<IrClass>,
@@ -1374,21 +1408,7 @@ internal object KotlinProjectLowering {
                         )
                 }.map(GuestClassInstance::name),
         )
-        val functionShapes =
-            buildList {
-                fun include(shape: GuestFunctionShape) {
-                    if (shape in this) return
-                    add(shape)
-                    (shape.parameters + shape.result).mapNotNull(IrType::guestFunctionShape).forEach(::include)
-                }
-                closureSources.mapNotNull { it.expression.type.guestFunctionShape() }.forEach(::include)
-                functionInstances.forEach { instance ->
-                    instance.substitute(instance.declaration.returnType).guestFunctionShape()?.let(::include)
-                    loweredParameters(instance.declaration, session)
-                        .mapNotNull { parameter -> instance.substitute(parameter.type).guestFunctionShape() }
-                        .forEach(::include)
-                }
-            }
+        val functionShapes = collectGuestFunctionShapes(closureSources, functionInstances, classInstances, session)
         val unitBlockShape = GuestFunctionShape(emptyList(), pluginContext.irBuiltIns.unitType)
         session.recordPlatformSpecializations(functionShapes.filter { it != unitBlockShape }.map { functionShapeName(it, unitBlockShape) })
         val usesFunction0Unit = unitBlockShape in functionShapes
@@ -2021,6 +2041,7 @@ internal object KotlinProjectLowering {
                 inlineValueClasses,
                 platformScalars,
                 externalClassTypes,
+                shapeInterfaceTypes,
             )
         val classLayoutsByInstance = classLayouts.associateBy(GuestClassLayout::instance)
         val classLayoutsBySymbol =
@@ -2730,6 +2751,7 @@ internal object KotlinProjectLowering {
                         inlineValueClasses,
                         platformScalars,
                         parameter,
+                        functionTypes = shapeInterfaceTypes,
                         classInstanceTypeIds = classInstanceTypeIds,
                     )
                 }
@@ -3048,6 +3070,7 @@ internal object KotlinProjectLowering {
                                     inlineValueClasses,
                                     platformScalars,
                                     parameter,
+                                    functionTypes = shapeInterfaceTypes,
                                     classInstanceTypeIds = classInstanceTypeIds,
                                 )
                             },
@@ -3423,6 +3446,7 @@ internal object KotlinProjectLowering {
                                     inlineValueClasses,
                                     platformScalars,
                                     parameter,
+                                    functionTypes = shapeInterfaceTypes,
                                     classInstanceTypeIds = classInstanceTypeIds,
                                 )
                             },
@@ -4098,6 +4122,7 @@ internal object KotlinProjectLowering {
         inlineValueClasses: InlineValueClassRegistry,
         platformScalars: PlatformScalarRegistry,
         externalClassTypes: Map<IrClassSymbol, TypeRef.Imported>,
+        functionTypes: Map<GuestFunctionShape, TypeRef.Local>,
     ): List<GuestClassLayout> {
         var nextField = 0u
         return classes.map { instance ->
@@ -4168,6 +4193,7 @@ internal object KotlinProjectLowering {
                             inlineValueClasses,
                             platformScalars,
                             property,
+                            functionTypes = functionTypes,
                             classInstanceTypeIds = classInstanceTypeIds,
                         )
                     GuestFieldLayout(
@@ -5445,6 +5471,7 @@ private class FunctionCompiler(
                 val receiver =
                     statement.receiver?.let(::compileExpression)
                         ?: throw UnsupportedKotlinIr(statement, "instance field receiver is missing")
+                rejectFunctionVariance(statement.value.type, statement.symbol.owner.type, statement)
                 val value = compileExpression(statement.value, statement.symbol.owner.type)
                 emit(Instruction.FieldSet(receiver, FieldRef.Local(field.id), storedValue(value, statement.value.type, field.type)))
             }
@@ -5718,6 +5745,7 @@ private class FunctionCompiler(
                     val initializer =
                         declaration.backingField?.initializer?.expression
                             ?: throw UnsupportedKotlinIr(declaration, "class field initializer is missing")
+                    rejectFunctionVariance(initializer.type, requireNotNull(field.property.backingField).type, initializer)
                     val value = compileExpression(initializer, field.property.backingField?.type)
                     emit(
                         Instruction.FieldSet(
@@ -6854,7 +6882,10 @@ private class FunctionCompiler(
                 throw UnsupportedKotlinIr(call, "function-value call has the wrong number of arguments")
             }
             val receiver = compileExpression(receiverExpression)
-            val values = arguments.map(::compileExpression)
+            val values =
+                arguments.mapIndexed { index, argument ->
+                    compileCallArgument(ResolvedCallArgument.Expression(argument), shape.parameters[index])
+                }
             val destination = destinationFor(call.type, call)
             emit(
                 Instruction.CallInterface(
@@ -6985,7 +7016,9 @@ private class FunctionCompiler(
                     ?: throw UnsupportedKotlinIr(call, "property setter value is missing")
             val receiver = compileExpression(receiverExpression)
             val parameterType = target.parameters.single { it.kind == IrParameterKind.Regular }.type
-            val value = compileExpression(valueExpression, receiverClassInstance?.substitute(parameterType) ?: parameterType)
+            val expectedType = receiverClassInstance?.substitute(parameterType) ?: parameterType
+            rejectFunctionVariance(valueExpression.type, expectedType, valueExpression)
+            val value = compileExpression(valueExpression, expectedType)
             emit(Instruction.FieldSet(receiver, FieldRef.Local(field.id), storedValue(value, valueExpression.type, field.type)))
             return null
         }
