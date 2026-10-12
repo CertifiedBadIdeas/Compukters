@@ -128,7 +128,7 @@ suite was rerun for this profiling-only stage.
 published. Raw JFR recordings are retained locally under `build/reports/benchmarks/first-prepared-profile/`
 and `build/reports/benchmarks/first-prepared-phases/`; their hashes are recorded in provenance.
 
-Compile each Kotlin probe with the pinned payload's Kotlin CLI compiler, targeting JVM 17, using its compiler
+Compile each Kotlin probe with the pinned payload's Kotlin CLI compiler, using `-jvm-target 17`, using its compiler
 profile classpath. Arguments are project root, fresh output directory, tooling payload root, followed by addon
 bundle paths for PID; omit addon paths for the editor. `FirstPreparedProfileKt` enables its own recording and
 writes `profile.jfr`. The method-enabled source must be compiled separately: it declares the same marker class
