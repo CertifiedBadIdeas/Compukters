@@ -30,6 +30,8 @@ import ru.lazyhat.compukters.impl.ide.IdeDrawLayers.Z_TEXT
 /** Per-assembly primitive collector; controls share their visual and interactive bounds. */
 internal open class IdeDrawBuilder(
     protected val font: IdeCodeFontProfile,
+    val hoverScroll: Int = 0,
+    val hoverDocumentation: IdeHoverDocumentation? = null,
 ) {
     protected val panels = mutableListOf<IdePanelDraw>()
     protected val text = mutableListOf<IdeTextDraw>()
@@ -42,6 +44,16 @@ internal open class IdeDrawBuilder(
     protected var gitPreviewBounds: IdeRect? = null
     protected val gitFieldFocusScroll = mutableMapOf<IdeGitField, Int>()
     protected var bottomScrollMaximum = 0
+    private var hoverBounds: IdeRect? = null
+    private var hoverScrollMaximum = 0
+
+    fun hoverViewport(
+        bounds: IdeRect,
+        maximum: Int,
+    ) {
+        hoverBounds = bounds
+        hoverScrollMaximum = maximum
+    }
 
     fun disableTargets() {
         for (index in hitTargets.indices) hitTargets[index] = hitTargets[index].copy(enabled = false)
@@ -171,6 +183,8 @@ internal open class IdeDrawBuilder(
             scissors.toList(),
             hitTargets.toList(),
             icons.toList(),
+            hoverBounds = hoverBounds,
+            hoverScrollMaximum = hoverScrollMaximum,
             bottomScrollMaximum = bottomScrollMaximum,
             gitScrollMaximum = gitScrollMaximum,
             gitPreviewScrollMaximum = gitPreviewScrollMaximum,

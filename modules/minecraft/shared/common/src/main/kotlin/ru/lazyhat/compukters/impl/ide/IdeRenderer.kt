@@ -80,6 +80,8 @@ object IdeRenderer {
         fileTabFirstIndex: Int = 0,
         quickOpen: IdeQuickOpenView? = null,
         statusDetails: IdeStatusDetailsView? = null,
+        hoverScroll: Int = 0,
+        hoverDocumentation: IdeHoverDocumentation? = null,
     ): IdeDrawModel {
         val output =
             Builder(
@@ -93,6 +95,8 @@ object IdeRenderer {
                 projectSwitcherOpen,
                 projectFirstRow,
                 fileTabFirstIndex,
+                hoverScroll,
+                hoverDocumentation,
             )
         if (state.page == IdePageState.Opening) {
             output.background()
@@ -144,7 +148,9 @@ object IdeRenderer {
         private val projectSwitcherOpen: Boolean,
         private val projectFirstRow: Int,
         private val fileTabFirstIndex: Int,
-    ) : IdeDrawBuilder(font) {
+        hoverScroll: Int,
+        hoverDocumentation: IdeHoverDocumentation?,
+    ) : IdeDrawBuilder(font, hoverScroll, hoverDocumentation) {
         fun background() {
             fills += IdeFillDraw(IdeFillKind.Background, geometry.viewport, IdeColors.DIM, Z_BACKGROUND)
         }

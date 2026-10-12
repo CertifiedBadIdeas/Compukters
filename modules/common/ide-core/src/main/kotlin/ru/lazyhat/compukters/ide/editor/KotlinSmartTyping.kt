@@ -160,9 +160,13 @@ class KotlinSmartTyping(
         val lineStart = document.line(lineIndex).startUtf16
         val relative = offset - lineStart
         val line = highlighter.snapshot().lines[lineIndex]
-        line.spans.firstOrNull { span -> relative >= span.startUtf16 && relative < span.endUtf16 }?.let { return it.kind }
+        line.spans
+            .firstOrNull { span ->
+                relative >= span.startUtf16 && relative < span.endUtf16
+            }?.let { return if (it.inDocumentation) KotlinLexicalKind.BlockComment else it.kind }
         if (relative != line.sourceLengthUtf16) return null
         val trailing = line.spans.lastOrNull()?.takeIf { it.endUtf16 == relative } ?: return null
+        if (trailing.inDocumentation && line.endState.inKDoc) return KotlinLexicalKind.BlockComment
         return when (trailing.kind) {
             KotlinLexicalKind.LineComment -> trailing.kind
             KotlinLexicalKind.BlockComment -> trailing.kind.takeIf { line.endState.blockCommentDepth > 0 }

@@ -27,6 +27,17 @@ import kotlin.test.assertTrue
 
 class KotlinSmartTypingTest {
     @Test
+    fun `KDoc subjects and fenced Kotlin tokens retain comment typing behavior`() {
+        for (source in listOf("/** @param[value]", "/**\n * ```kotlin\n * val value")) {
+            fixture(source) { document, typing ->
+                document.setCaret(document.length)
+                typing.type("(")
+                assertEquals(source + "(", document.materialize())
+            }
+        }
+    }
+
+    @Test
     fun `pairs wrap and tracked closers remain distinct from ordinary source`() {
         fixture("call") { document, typing ->
             assertTrue(document.setCaret(document.length))

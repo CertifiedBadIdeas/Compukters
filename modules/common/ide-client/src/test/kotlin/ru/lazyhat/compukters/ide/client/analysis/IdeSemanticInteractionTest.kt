@@ -104,6 +104,34 @@ class IdeSemanticInteractionTest {
     }
 
     @Test
+    fun `larger packaged source budget preserves smaller addon limits across additions`() {
+        val packaged = AnalysisModuleIdentity("stdlib:core", hash(3))
+        val path = VirtualSourcePath.kotlin("base.kt")
+        val first = addonPayload("first", "first.kt" to "a")
+        val second = addonPayload("second", "second.kt" to "b")
+        val catalog =
+            IdeAttachedSourceCatalog.of(
+                mapOf(packaged to mapOf(path to "large packaged source", VirtualSourcePath.kotlin("other.kt") to "other")),
+                maximumModules = 3,
+                maximumFiles = 2,
+                maximumFileBytes = 64,
+                maximumTotalBytes = 128,
+                maximumAddonFiles = 1,
+                maximumAddonFileBytes = 1,
+                maximumAddonTotalBytes = 1,
+            )
+        val combined = catalog.withAddonBundles(listOf(first))
+        assertEquals("large packaged source", combined.text(packaged, path))
+        assertEquals(
+            "a",
+            combined.text(AnalysisModuleIdentity("first:api", first.identity.hash), VirtualSourcePath.kotlin("first/first.kt")),
+        )
+        assertFailsWith<IllegalArgumentException> { combined.withAddonBundles(listOf(second)) }
+        assertFailsWith<IllegalArgumentException> { catalog.withAddonBundles(listOf(first, second)) }
+        assertFailsWith<IllegalArgumentException> { catalog.withAddonBundles(listOf(addonPayload("large", "large.kt" to "ab"))) }
+    }
+
+    @Test
     fun `token range admits the complete identifier around a UTF-16 offset`() {
         assertEquals(EditorRange(4, 10), KotlinSourceTokenRange.find("val answer = 42", 7))
         assertEquals(EditorRange(4, 14), KotlinSourceTokenRange.find("val `odd name` = 1", 8))
