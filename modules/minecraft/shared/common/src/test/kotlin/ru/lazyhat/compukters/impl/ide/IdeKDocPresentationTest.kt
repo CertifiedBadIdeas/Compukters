@@ -70,7 +70,10 @@ class IdeKDocPresentationTest {
         )) {
             assertTrue(lines.any { it.text == section && it.spans.single().color == IdeColors.MUTED }, section)
         }
-        assertTrue(lines.any { it.text == "  data" && it.spans.single().color == IdeColors.ACCENT })
+        val parameter = lines.single { it.text == "  data — message bytes" }
+        assertEquals(IdeColors.ACCENT, parameter.spans.first().color)
+        assertTrue(lines.any { it.text == "  Failure — cannot send" })
+        assertTrue(lines.any { it.text == "  OtherFailure — connection closed" })
     }
 
     @Test

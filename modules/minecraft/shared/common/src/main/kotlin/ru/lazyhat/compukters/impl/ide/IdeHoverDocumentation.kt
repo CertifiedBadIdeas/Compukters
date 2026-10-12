@@ -34,19 +34,19 @@ class IdeHoverDocumentation(
         if (cachedColumns == columns) return cachedLines
         val content =
             buildList {
-                info.signature?.let { add(IdeDocumentationLine(listOf(IdeDocumentationSpan(it, IdeColors.ACCENT)))) }
-                add(IdeDocumentationLine(listOf(IdeDocumentationSpan("Type: ${info.renderedType}"))))
+                add(IdeDocumentationLine(listOf(IdeDocumentationSpan(info.signature ?: info.renderedType, IdeColors.ACCENT))))
+                info.documentation?.takeIf { it.isNotBlank() }?.let {
+                    add(IdeDocumentationLine(emptyList()))
+                    addAll(IdeKDocPresentation.lines(it))
+                }
                 info.origin?.let { origin ->
                     val label =
                         when (origin) {
                             DeclarationOrigin.Project -> "Project source"
                             is DeclarationOrigin.Platform -> "Library · ${origin.identity.name}"
                         }
-                    add(IdeDocumentationLine(listOf(IdeDocumentationSpan(label, IdeColors.MUTED))))
-                }
-                info.documentation?.let {
                     add(IdeDocumentationLine(emptyList()))
-                    addAll(IdeKDocPresentation.lines(it))
+                    add(IdeDocumentationLine(listOf(IdeDocumentationSpan(label, IdeColors.MUTED))))
                 }
             }
         val lines =
