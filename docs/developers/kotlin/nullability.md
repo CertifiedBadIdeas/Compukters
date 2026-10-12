@@ -22,12 +22,12 @@ This page describes the current checkout, including unreleased work. [Status and
 fields, function parameters, and results. `null` can initialize these values or be passed and returned in a
 typed reference context. Nullable value classes use the [nominal managed wrappers](objects.md) for their
 layouts; all twelve nullable primitives retain their [distinct nominal boxes](primitives.md). Nullable
-function values remain outside this subset.
+function values use the [callable reference contract](functions.md#lambdas-local-functions-and-function-references).
+`Unit?` uses a reference to the canonical Unit singleton or null, including results of safe Unit calls.
 
 **Evidence:**
 [`MinimalScriptLoweringTest`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/compiler-k2/src/test/kotlin/ru/lazyhat/compukters/compiler/worker/k2/MinimalScriptLoweringTest.kt),
-tests `nullable references lower null comparisons Elvis and reference safe calls` and `unsupported nullable
-forms do not publish artifacts`, paired with
+test `nullable references lower null comparisons Elvis and reference safe calls`, paired with
 [`kotlin_writer.rs`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/compiler-artifact/src/test/rust/executable-conformance/kotlin_writer.rs),
 scenario `nullable-references`.
 
@@ -55,12 +55,12 @@ a supported reference type. Both operators evaluate the left side once and skip 
 with an Int result, such as `text?.length`, produce a boxed `Int?`. Nullable primitive results use their
 distinct nominal scalar wrappers; non-null assertions (`!!`) on nullable value classes recover the direct
 layout and are exercised by `testKotlinMfvcVmConformance`. Non-null assertions on references preserve values and throw `NullPointerException` for null, including
-statically-null references, in `testKotlinNullableCollectionsVmConformance`. Nullable-function shapes are
-still rejected by the focused negative fixture. Int-result safe-call evidence:
+statically-null references, in `testKotlinNullableCollectionsVmConformance`. Nullable callbacks support safe
+invocation, smart casts and assertions in `testKotlinNullableCallbacksVmConformance`, including Unit?,
+all primitive result families and skipped argument effects. Int-result safe-call evidence:
 `testKotlinNullableCollectionsVmConformance`. Reference-result evidence:
 [`MinimalScriptLoweringTest`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/compiler-k2/src/test/kotlin/ru/lazyhat/compukters/compiler/worker/k2/MinimalScriptLoweringTest.kt),
-tests `nullable references lower null comparisons Elvis and reference safe calls` and `unsupported nullable
-forms do not publish artifacts`, paired with
+test `nullable references lower null comparisons Elvis and reference safe calls`, paired with
 [`kotlin_writer.rs`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/compiler-artifact/src/test/rust/executable-conformance/kotlin_writer.rs),
 scenario `nullable-references`.
 

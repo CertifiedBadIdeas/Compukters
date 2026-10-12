@@ -51,13 +51,16 @@ scalar types and nullable signatures compile through the canonical platform` in 
 **Status:** Partial.
 
 `Unit` function results and non-returning intrinsics and the explicit [exception forms](nullability.md) are
-admitted. A Unit value can pass through `Any` as a managed singleton and convert to `kotlin.Unit`; broader
-Nothing inference remains outside this support claim.
+admitted. A Unit value can pass through `Any` as a managed singleton and convert to `kotlin.Unit`.
+`Unit?`, including [safe callback results](functions.md#lambdas-local-functions-and-function-references),
+uses that singleton or null. Ordinary non-null Unit value storage/equality and broader Nothing inference
+remain outside this support claim.
 
 **Evidence:**
 [`MinimalScriptLoweringTest`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/compiler-k2/src/test/kotlin/ru/lazyhat/compukters/compiler/worker/k2/MinimalScriptLoweringTest.kt),
 tests `ordinary zero argument Unit main lowers deterministically` and `typed process v2 facade lowers without
-public capability masks or suspend calls`.
+public capability masks or suspend calls`, plus `nullable Unit callback results are ordinary nullable references`
+and `testKotlinNullableCallbacksVmConformance` for nullable Unit results.
 
 **Related work:** not scheduled
 
