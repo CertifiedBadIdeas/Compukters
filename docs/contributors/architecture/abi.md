@@ -11,6 +11,25 @@ permalink: /ARCHITECTURE/abi/
 
 This reference groups versioned representation boundaries by the version that introduced them. Those versions are minimum feature requirements, not a claim that older Runtime distributions implement today’s platform. The source owners below define the active contract. Before changing a wire format, inspect each producer, consumer and verifier. Runtime release pins in `build-scripts/src/main/kotlin/RuntimeBundleSupport.kt` describe published bundles separately from the local VM checkout.
 
+## Value-class host responses — Runtime ABI 1.20
+
+Asynchronous structured replies admit nominal inline destinations and flattened value boxes, including nested
+value/data mixtures. Registered logical record trees match verified physical component layouts; field names,
+nominal identity, nullability, widths and reference types remain checked. Existing data-record replies remain supported.
+The compiler/linker require ABI 1.20 for inline replies and conservatively for structured replies in artifacts containing
+value boxes. Both verifiers reject inline capability destinations claiming an older ABI.
+
+Publication stages at most the bounded expanded record fields, charges each component, roots staged references across
+GC and saves partial progress in checkpoints. It copies the complete result into the suspended frame atomically.
+Pure inline record fields allocate no Guest record objects; Strings, data fields and explicit reference contexts
+retain their managed representations. Guest constructors are not executed by the host, so constrained values use a
+raw safe payload followed by a Guest factory. Canonical stdlib geometry requires exact trusted schemas.
+
+Runtime 0.23.1 implements this support, retaining native C ABI 23, CPKT 3.0, CAGB 3, capability schema wire version 2
+and response tag 8. Logical checkpoint envelope/schema advances to 4 for pending inline record state; older envelopes
+cold boot while retaining published files. Sable addon 2.0 uses Vector3d/Matrix3d and value snapshots, with
+Rotation3d created by its validating Guest factory.
+
 ## Matrix shape kernels — Runtime ABI 1.19
 
 MatrixMath retains opcode 0x1e/form 0 and original selectors 1–5. Selectors 6–8 add Matrix3f

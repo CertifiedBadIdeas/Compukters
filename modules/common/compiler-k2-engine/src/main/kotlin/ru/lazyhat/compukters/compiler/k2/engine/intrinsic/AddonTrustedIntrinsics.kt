@@ -61,6 +61,7 @@ object AddonTrustedIntrinsics {
                             ),
                             binding.operation.toUInt(),
                             if (operation.asynchronous) IntrinsicBlockingMode.VM_TASK else IntrinsicBlockingMode.NONE,
+                            recordResult = operation.resultRecord != null,
                         ),
                     )
             }

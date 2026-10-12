@@ -150,6 +150,7 @@ import ru.lazyhat.compukters.compiler.artifact.model.Utf16Literal
 import ru.lazyhat.compukters.compiler.artifact.model.Utf16LiteralId
 import ru.lazyhat.compukters.compiler.artifact.model.ValueType
 import ru.lazyhat.compukters.compiler.artifact.model.hasStructuredHostResponse
+import ru.lazyhat.compukters.compiler.artifact.model.hasValueHostResponse
 import ru.lazyhat.compukters.compiler.artifact.model.usesUnsignedSemantics
 import ru.lazyhat.compukters.compiler.artifact.pool.ConstantPoolBuilder
 import ru.lazyhat.compukters.compiler.artifact.write.ArtifactWriter
@@ -3697,6 +3698,10 @@ internal object KotlinProjectLowering {
         return Artifact(
             minimumRuntimeAbi =
                 when {
+                    modules.hasValueHostResponse() -> {
+                        AbiVersion(1u, 20u)
+                    }
+
                     modules.any { module ->
                         module.blocks.any { block ->
                             block.instructions.any {
@@ -7153,7 +7158,21 @@ private class FunctionCompiler(
                     .filter { (parameter, _) -> parameter.kind == IrParameterKind.Regular }
                     .map { (_, argument) -> compileExpression(requireNotNull(argument)) }
             val capability = requireNotNull(capabilityIds[intrinsic.capability])
-            val destination = if (intrinsic.terminal) Destination.Unit else destinationFor(call.type, call)
+            val recordBox =
+                if (intrinsic.recordResult) {
+                    guestTypes
+                        .valueClassBox(
+                            resolvedType(call.type),
+                        )?.takeIf { it.inlineType == null }
+                } else {
+                    null
+                }
+            val destination =
+                when {
+                    intrinsic.terminal -> Destination.Unit
+                    recordBox != null -> Destination.Register(allocate(ValueType.Ref(false, recordBox.type)))
+                    else -> destinationFor(call.type, call)
+                }
             if (intrinsic.blocking == IntrinsicBlockingMode.VM_TASK) {
                 val resume = createBlock()
                 emit(
@@ -7170,7 +7189,8 @@ private class FunctionCompiler(
                 emit(Instruction.CapabilityCallSync(destination, capability, intrinsic.operation, arguments))
             }
             if (intrinsic.terminal) emit(Instruction.Unreachable)
-            return (destination as? Destination.Register)?.id
+            val result = (destination as? Destination.Register)?.id
+            return if (recordBox != null) unboxValueClass(requireNotNull(result), recordBox) else result
         }
         externalFunctions[target.symbol]?.let { external ->
             val arguments = compileProjectCallArguments(call, target)
@@ -10765,6 +10785,7 @@ private fun resolveTrustedIntrinsic(
         handler.operation,
         handler.blocking,
         handler.terminal,
+        handler.recordResult,
     )
 }
 

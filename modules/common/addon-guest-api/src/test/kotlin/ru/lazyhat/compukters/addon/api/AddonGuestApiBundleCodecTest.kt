@@ -218,6 +218,22 @@ class AddonGuestApiBundleCodecTest {
         }
     }
 
+    @Test
+    fun `canonical geometry records require exact trusted shapes`() {
+        val vector = CanonicalAddonRecordSchemas.schemas.getValue("kotlin.math.Vector3d")
+        val original = bundle(result = AddonCapabilityValueType.RECORD, signature = "fun(Int):kotlin.math.Vector3d", resultRecord = vector)
+        assertEquals(original, AddonGuestApiBundleCodec.decode(AddonGuestApiBundleCodec.encode(original)))
+        for (invalid in listOf(
+            AddonRecordSchema(vector.typeName, vector.fields.reversed()),
+            AddonRecordSchema(vector.typeName, vector.fields.map { it.copy(type = AddonCapabilityValueType.F32) }),
+            AddonRecordSchema("kotlin.math.Rotation3d", vector.fields),
+        )) {
+            assertFailsWith<IllegalArgumentException> {
+                bundle(result = AddonCapabilityValueType.RECORD, signature = "fun(Int):${invalid.typeName}", resultRecord = invalid)
+            }
+        }
+    }
+
     private fun bundle(
         source: String = SOURCE,
         result: AddonCapabilityValueType = AddonCapabilityValueType.I32,

@@ -62,16 +62,20 @@ attached-target compilation.
 
 **Status:** Supported.
 
-One host request can return a bounded immutable data record with non-null scalar or nested-record fields. The
-SDK checks pure data declarations, generates typed host mirrors and retains the nominal field shape in the
+One host request can return bounded immutable data/value records with non-null scalar or nested-record fields.
+The SDK checks constructor-safe declarations and canonical stdlib geometry, generates typed host mirrors and retains the nominal field shape in the
 addon ABI. Native admission validates the destination layout; resume copies the response, and normal budgeted
 advancement materializes rooted nodes without Guest constructors. Arrays, nullable fields, record arguments
-and cyclic records are unsupported. Structured programs require Runtime ABI 1.13.
+and cyclic records are unsupported. Ordinary data replies require Runtime ABI 1.13; value replies require 1.20.
+Inline value fields avoid Guest record allocations, with staged references rooted across GC and checkpoint restoration.
 
 **Evidence:** `ArtifactValidatorTest`, test `structured host responses require ABI 1 13 while String responses
-remain compatible`,
+remain compatible`, `MinimalScriptLoweringTest` test `addon value responses preserve direct nested and managed layouts`
+and `testKotlinAddonValueResponsesVmConformance`,
 [`session_tests.rs`](https://github.com/CertifiedBadIdeas/Compukter-VM/blob/main/src/execution/session_tests.rs),
-tests `records_copy_validate_and_publish_only_after_budgeted_materialization`,
+tests `inline_records_copy_nested_values_without_snapshot_or_vector_allocations`,
+`checkpoint_resumes_inline_record_components_and_staged_references`,
+`records_copy_validate_and_publish_only_after_budgeted_materialization`,
 `record_admission_requires_runtime_and_exact_nested_layout`,
 `record_allocation_failure_is_budgeted_bounded_and_releases_unpublished_storage` and
 `other_task_responses_do_not_replace_an_incomplete_record_frame`, plus

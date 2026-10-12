@@ -234,7 +234,13 @@ object AddonGuestApiBundleCodec {
         }
         schemas.flatMap(AddonCapabilitySchema::operations).forEach { operation ->
             fun validateRecord(record: AddonRecordSchema) {
-                require(record.typeName.startsWith("$addon.")) { "record response escapes addon namespace" }
+                require(
+                    (record.typeName.startsWith("$addon.") && !record.typeName.startsWith("kotlin.")) ||
+                        (
+                            record == CanonicalAddonRecordSchemas.schemas[record.typeName] &&
+                                module.dependencies.any { it.toString() == "stdlib:core" }
+                        ),
+                ) { "record response escapes addon namespace or changes canonical geometry" }
                 record.fields.forEach { it.record?.let(::validateRecord) }
             }
             operation.resultRecord?.let(::validateRecord)

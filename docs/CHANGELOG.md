@@ -21,6 +21,10 @@ headings so this page has one stable URL that can be shared outside the reposito
 - The all-addon development build enables Configuration Cache and parallel execution, allowing independent
   built-in program artifacts to compile concurrently inside the included Compukters project.
 
+- Addon SDK accepts immutable value-class host responses, nested data/value mixtures and canonical stdlib geometry.
+  Inline record fields avoid Guest record allocations while retaining bounded copying, GC and checkpoint support.
+  Sable 2.0 exposes value snapshots with Vector3d, validated Rotation3d and Matrix3d mass tensors.
+
 - Guest stdlib provides immutable `Vector2d`, `Vector3d` and `Vector4d` with Double arithmetic,
   robust normalization and explicit conversions to/from existing vectors. Distinct `Quaternionf`/`Quaterniond`
   preserve quaternion identity and support explicit conversions with the corresponding four-dimensional vectors.
