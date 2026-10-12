@@ -90,8 +90,16 @@ components respectively. Their representation matches the corresponding Vector4f
 equality does not equate a quaternion with a vector. Explicit `toQuaternionf()` / `toQuaterniond()`
 and `toVector4f()` / `toVector4d()` preserve component values without normalization
 or rotation validation, including signed zero and non-finite values. This component type imposes no
-unit-quaternion precondition on construction. `Quaternionf.toDouble()` widens components;
+unit-quaternion precondition on construction. Hamilton `times(Quaternion)` and `conjugated()` operate
+on arbitrary components without normalization. `Quaternionf.toDouble()` widens components;
 `Quaterniond.toFloat()` explicitly narrows them.
+
+`Rotation3f`/`Rotation3d` are separate value classes containing a unit `quaternion`. Their constructors
+are private; `fromQuaternion()` rejects zero and non-finite inputs and normalizes finite nonzero components,
+including extreme magnitudes. Unit length is subject to the scalar width's floating rounding. `identity()`,
+`inverse()`, `transform(Vector3)` and rotation composition describe spatial rotations; `a * b` applies b
+first. Scalar-width conversions normalize again after widening/narrowing. Opposite-sign quaternions may
+describe the same spatial rotation but retain distinct component-based nominal equality.
 
 Rectangles expose `position`, `size`, `left`, `top`, `right`, `bottom`, `isEmpty`, containment via `in`,
 `intersects`, `intersection` and bounding `union`. Bounds are half-open: left/top included, right/bottom
@@ -191,7 +199,8 @@ display Y points downward. Check positive display dimensions before mapping coor
   rounding, signed zero, NaN and non-FMA behavior.
 - `testKotlinDoubleGeometryVmConformance` compiles and executes `compiler-k2/src/test/resources/kotlin/double-geometry/main.kt`,
   covering Double precision, normalization at zero/subnormal/maximum magnitudes, rounding, non-finite inputs,
-  vector conversions, boxed nominal identity and component-preserving Quaterniond conversions.
+  vector conversions, boxed nominal identity, component-preserving quaternion conversions, rotation
+  normalization/rejection, composition, inverse and transformed vectors in both scalar widths.
 - `testKotlinMathVmConformance` compiles and executes
   `modules/common/compiler-k2/src/test/resources/kotlin/math/main.kt` against the Rust VM. It exercises
   every unary and binary operation in both widths, derived library bodies, integer limits, rounding

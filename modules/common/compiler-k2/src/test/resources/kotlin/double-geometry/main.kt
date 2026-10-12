@@ -13,7 +13,7 @@ fun rejected(block: () -> Unit) {
 }
 
 fun main() {
-    try { verifyDoubleVectors(); println("double geometry ok") }
+    try { verifyDoubleVectors(); verifyRotations(); println("double geometry ok") }
     catch (error: Throwable) { println(error.message ?: "unknown Double geometry failure"); throw error }
 }
 
@@ -112,4 +112,53 @@ fun verifyDoubleVectors() {
     expect(mutableSetOf(axis, Vector3d(1.0, 0.0, 0.0)).size == 1, 56)
     val normalize: () -> Vector3d = precise::normalized
     expect(normalize() == axis, 57)
+}
+
+
+fun verifyRotations() {
+    val vector = Vector3d(1.0, 2.0, 3.0)
+    val identity = Rotation3d.identity()
+    expect(identity.transform(vector) == vector, 100)
+    expect(identity.quaternion == Quaterniond(0.0, 0.0, 0.0, 1.0), 101)
+    val turn = Rotation3d.fromQuaternion(Quaterniond(0.0, 0.0, 1.0, 1.0))
+    nearDouble(turn.quaternion.toVector4d().length, 1.0)
+    nearDouble(turn.transform(Vector3d(1.0, 0.0, 0.0)).x, 0.0)
+    nearDouble(turn.transform(Vector3d(1.0, 0.0, 0.0)).y, 1.0)
+    val undone = turn.inverse().transform(turn.transform(vector))
+    nearDouble(undone.x, vector.x); nearDouble(undone.y, vector.y); nearDouble(undone.z, vector.z)
+    val twice = (turn * turn).transform(Vector3d(1.0, 0.0, 0.0))
+    nearDouble(twice.x, -1.0); nearDouble(twice.y, 0.0)
+    for (size in listOf(Double.MAX_VALUE, Double.MIN_VALUE, 1.0e-300)) {
+        val rotation = Rotation3d.fromQuaternion(Quaterniond(size, size, size, size))
+        expect(rotation.quaternion == Quaterniond(0.5, 0.5, 0.5, 0.5), 102)
+    }
+    rejected { Rotation3d.fromQuaternion(Quaterniond(0.0, 0.0, 0.0, 0.0)) }
+    for (bad in listOf(Double.NaN, Double.POSITIVE_INFINITY, Double.NEGATIVE_INFINITY)) {
+        rejected { Rotation3d.fromQuaternion(Quaterniond(bad, 0.0, 0.0, 1.0)) }
+    }
+    val floatIdentity = Rotation3f.identity()
+    expect(floatIdentity.transform(Vector3f(1f, 2f, 3f)) == Vector3f(1f, 2f, 3f), 103)
+    val floatTurn = Rotation3f.fromQuaternion(Quaternionf(0f, 0f, 1f, 1f))
+    val rotated = floatTurn.transform(Vector3f(1f, 0f, 0f))
+    expect(abs(rotated.x) < 2e-6f && abs(rotated.y - 1f) < 2e-6f, 104)
+    val floatUndone = floatTurn.inverse().transform(rotated)
+    expect(abs(floatUndone.x - 1f) < 2e-6f && abs(floatUndone.y) < 2e-6f, 105)
+    val floatTwice = (floatTurn * floatTurn).transform(Vector3f(1f, 0f, 0f))
+    expect(abs(floatTwice.x + 1f) < 2e-6f && abs(floatTwice.y) < 2e-6f, 106)
+    for (size in listOf(Float.MAX_VALUE, Float.MIN_VALUE)) {
+        expect(Rotation3f.fromQuaternion(Quaternionf(size, size, size, size)).quaternion == Quaternionf(0.5f, 0.5f, 0.5f, 0.5f), 107)
+    }
+    rejected { Rotation3f.fromQuaternion(Quaternionf(0f, 0f, 0f, 0f)) }
+    for (bad in listOf(Float.NaN, Float.POSITIVE_INFINITY, Float.NEGATIVE_INFINITY)) {
+        rejected { Rotation3f.fromQuaternion(Quaternionf(0f, bad, 0f, 1f)) }
+    }
+    nearDouble(floatTurn.toDouble().quaternion.toVector4d().length, 1.0)
+    expect(abs(turn.toFloat().quaternion.toVector4f().length - 1f) < 2e-6f, 108)
+    val rotationBox: Any = identity
+    val quaternionBox: Any = identity.quaternion
+    expect(rotationBox != quaternionBox && rotationBox == Rotation3d.identity(), 109)
+    val transform: (Vector3d) -> Vector3d = turn::transform
+    nearDouble(transform(Vector3d(1.0, 0.0, 0.0)).y, 1.0)
+    // Arbitrary quaternions stay unconstrained: Hamilton multiplication is ordinary scalar arithmetic.
+    expect(Quaterniond(1.0, 0.0, 0.0, 0.0) * Quaterniond(0.0, 1.0, 0.0, 0.0) == Quaterniond(0.0, 0.0, 1.0, 0.0), 110)
 }

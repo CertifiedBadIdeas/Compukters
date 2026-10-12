@@ -16,6 +16,8 @@ headings so this page has one stable URL that can be shared outside the reposito
 - Guest stdlib provides immutable `Vector2d`, `Vector3d` and `Vector4d` with Double arithmetic,
   robust normalization and explicit conversions to/from existing vectors. Distinct `Quaternionf`/`Quaterniond`
   preserve quaternion identity and support explicit conversions with the corresponding four-dimensional vectors.
+  `Rotation3f`/`Rotation3d` represent spatial rotations through normalized quaternions, with composition,
+  inverse and vector transforms.
   `Matrix3f`, `Matrix3d` and `Matrix4d` provide row-major transforms and bounded native matrix kernels;
   Double variants retain Double precision through multiplication and projection.
 
