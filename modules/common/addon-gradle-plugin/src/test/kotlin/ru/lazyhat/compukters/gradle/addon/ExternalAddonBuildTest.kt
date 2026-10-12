@@ -122,9 +122,13 @@ class ExternalAddonBuildTest {
                 )
             }
 
-            runner(project, "updateCompuktersAddonAbiLock").build()
+            runner(project, "updateCompuktersAddonAbiLock", "--configuration-cache").build()
             runner(project, "verifyCompuktersApiClasspath").build()
-            runner(project, "jar").build()
+            runner(project, "jar", "--configuration-cache").build()
+            Files.delete(project.resolve("build/compukters-addon/external-addon.cagb"))
+            val replay = runner(project, "jar", "--configuration-cache").build()
+            assertTrue(replay.output.contains("Reusing configuration cache"), replay.output)
+            assertEquals(org.gradle.testkit.runner.TaskOutcome.SUCCESS, replay.task(":assembleCompuktersAddon")?.outcome)
 
             assertTrue(project.resolve("src/compuktersAddon/addon.lock").toFile().isFile)
             assertTrue(
@@ -147,12 +151,12 @@ class ExternalAddonBuildTest {
 
     private fun runner(
         project: Path,
-        task: String,
+        vararg arguments: String,
     ): GradleRunner =
         GradleRunner
             .create()
             .withProjectDir(project.toFile())
-            .withArguments("--stacktrace", task)
+            .withArguments("--stacktrace", *arguments)
             .withPluginClasspath()
             .forwardOutput()
 }
