@@ -185,6 +185,17 @@ object CanonicalTrustedIntrinsics {
             primitive("stdlib", "core", "kotlin.math", "matrixVectorPrimitive", "fun(Matrix4f,Vector4f):Vector4f")
             primitive("stdlib", "core", "kotlin.math", "matrixPointPrimitive", "fun(Matrix4f,Vector3f):Vector4f")
             primitive("stdlib", "core", "kotlin.math", "matrixDirectionPrimitive", "fun(Matrix4f,Vector3f):Vector4f")
+            primitive("stdlib", "core", "kotlin.math", "matrix3fTransposePrimitive", "fun(Matrix3f):Matrix3f")
+            primitive("stdlib", "core", "kotlin.math", "matrix3fMultiplyPrimitive", "fun(Matrix3f,Matrix3f):Matrix3f")
+            primitive("stdlib", "core", "kotlin.math", "matrix3fVectorPrimitive", "fun(Matrix3f,Vector3f):Vector3f")
+            primitive("stdlib", "core", "kotlin.math", "matrix3dTransposePrimitive", "fun(Matrix3d):Matrix3d")
+            primitive("stdlib", "core", "kotlin.math", "matrix3dMultiplyPrimitive", "fun(Matrix3d,Matrix3d):Matrix3d")
+            primitive("stdlib", "core", "kotlin.math", "matrix3dVectorPrimitive", "fun(Matrix3d,Vector3d):Vector3d")
+            primitive("stdlib", "core", "kotlin.math", "matrix4dTransposePrimitive", "fun(Matrix4d):Matrix4d")
+            primitive("stdlib", "core", "kotlin.math", "matrix4dMultiplyPrimitive", "fun(Matrix4d,Matrix4d):Matrix4d")
+            primitive("stdlib", "core", "kotlin.math", "matrix4dVectorPrimitive", "fun(Matrix4d,Vector4d):Vector4d")
+            primitive("stdlib", "core", "kotlin.math", "matrix4dPointPrimitive", "fun(Matrix4d,Vector3d):Vector4d")
+            primitive("stdlib", "core", "kotlin.math", "matrix4dDirectionPrimitive", "fun(Matrix4d,Vector3d):Vector4d")
             listOf("Float", "Double").forEach { type ->
                 listOf(
                     "sin",

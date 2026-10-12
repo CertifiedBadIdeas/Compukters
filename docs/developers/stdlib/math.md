@@ -106,6 +106,19 @@ and math instructions execute the implementation.
 
 ## Matrices and homogeneous coordinates
 
+`Matrix3f`, `Matrix3d` and `Matrix4d` extend the same immutable row-major API. Three-dimensional matrices
+have nine row/column-named components (`m00` through `m22`), indexes 0..2, matrix/matrix and matrix/Vector3
+products, transposition, identity, uniform/vector scale and right-handed X/Y/Z rotations.
+A 3x3 matrix is a linear transform; it does not add homogeneous point/direction coordinates.
+Matrix4d mirrors Matrix4f with Double components, Vector3d/Vector4d and Double factory arguments.
+Projection factories reject non-finite coefficients; scaled ratios avoid intermediate overflow in
+orthographic spans and perspective depth coefficients at representable Double extremes.
+
+The new shape kernels require Runtime ABI 1.19 and retain scalar Float/Double multiplication followed
+by left-associated addition without FMA. Their exact scalar widths and component counts are verified;
+transposition preserves bits, and destination aliases are safe. Factories remain ordinary Guest code.
+
+
 `Matrix4f` and `Vector4f` are immutable Float value classes in `kotlin.math`, with nominal equality,
 hashing and managed collection storage. Construct a matrix from sixteen components in row-major order;
 `m00` through `m33` name row and column, and `matrix[row, column]` reads indexes 0..3.
@@ -171,6 +184,11 @@ display Y points downward. Check positive display dimensions before mapping coor
   extents, dense and noncommuting matrix products, axis rotations, homogeneous point/direction lifting,
   projection bounds, invalid parameters, explicit division, callable references and collection storage.
   IDE `DiagnosticQueryTest` checks aliases, matrices and member completion with source and metadata-only inputs. `PlatformSignatureAliasesTest` checks signature expansion and ambiguous/cyclic rejection.
+- `testKotlinMatrixShapesVmConformance` compiles and executes `compiler-k2/src/test/resources/kotlin/matrix-shapes/main.kt`,
+  covering every new selector, dense products against scalar loops, transpose, rotations, bounds,
+  Double projections at extreme magnitudes, nominal boxes and callable references. Native matrix tests
+  cover all valid aliases, fixed costs, no managed allocations, mixed-width/old-ABI rejection and Double
+  rounding, signed zero, NaN and non-FMA behavior.
 - `testKotlinDoubleGeometryVmConformance` compiles and executes `compiler-k2/src/test/resources/kotlin/double-geometry/main.kt`,
   covering Double precision, normalization at zero/subnormal/maximum magnitudes, rounding, non-finite inputs,
   vector conversions, boxed nominal identity and component-preserving Quaterniond conversions.

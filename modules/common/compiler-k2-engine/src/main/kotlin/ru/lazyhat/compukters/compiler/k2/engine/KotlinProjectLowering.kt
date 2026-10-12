@@ -3649,6 +3649,17 @@ internal object KotlinProjectLowering {
         return Artifact(
             minimumRuntimeAbi =
                 when {
+                    modules.any { module ->
+                        module.blocks.any { block ->
+                            block.instructions.any {
+                                it is Instruction.MatrixMath &&
+                                    it.operation.runtimeMinor >= 19u
+                            }
+                        }
+                    } -> {
+                        AbiVersion(1u, 19u)
+                    }
+
                     // Canonical String implements CharSequence with a covariant subSequence result.
                     modules.any { module ->
                         module.types.any {
@@ -8241,6 +8252,17 @@ private class FunctionCompiler(
                     "matrixVectorPrimitive" -> MatrixOperation.MULTIPLY_VECTOR
                     "matrixPointPrimitive" -> MatrixOperation.TRANSFORM_POINT
                     "matrixDirectionPrimitive" -> MatrixOperation.TRANSFORM_DIRECTION
+                    "matrix3fTransposePrimitive" -> MatrixOperation.TRANSPOSE_3F
+                    "matrix3fMultiplyPrimitive" -> MatrixOperation.MULTIPLY_MATRIX_3F
+                    "matrix3fVectorPrimitive" -> MatrixOperation.MULTIPLY_VECTOR_3F
+                    "matrix3dTransposePrimitive" -> MatrixOperation.TRANSPOSE_3D
+                    "matrix3dMultiplyPrimitive" -> MatrixOperation.MULTIPLY_MATRIX_3D
+                    "matrix3dVectorPrimitive" -> MatrixOperation.MULTIPLY_VECTOR_3D
+                    "matrix4dTransposePrimitive" -> MatrixOperation.TRANSPOSE_4D
+                    "matrix4dMultiplyPrimitive" -> MatrixOperation.MULTIPLY_MATRIX_4D
+                    "matrix4dVectorPrimitive" -> MatrixOperation.MULTIPLY_VECTOR_4D
+                    "matrix4dPointPrimitive" -> MatrixOperation.TRANSFORM_POINT_4D
+                    "matrix4dDirectionPrimitive" -> MatrixOperation.TRANSFORM_DIRECTION_4D
                     else -> null
                 }
             if (operation != null) {
