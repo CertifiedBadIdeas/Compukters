@@ -21,6 +21,7 @@ package ru.lazyhat.compukters.ide.analysis.k2.query
 import ru.lazyhat.compukters.compiler.worker.protocol.VirtualSourcePath
 import ru.lazyhat.compukters.ide.analysis.AnalysisQuery
 import ru.lazyhat.compukters.ide.analysis.AnalysisResult
+import ru.lazyhat.compukters.ide.analysis.DeclarationLocation
 import ru.lazyhat.compukters.ide.analysis.DeclarationOrigin
 import ru.lazyhat.compukters.ide.editor.EditorRange
 import kotlin.test.Test
@@ -31,6 +32,59 @@ import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
 class ExpressionInfoQueryTest {
+    @Test
+    fun `callback overloads resolve exact platform documentation and navigation`() {
+        val source =
+            """
+            import kotlin.collections.*
+            import kotlin.text.*
+            fun main() {
+                val list: List<Int> = listOf(1, 2)
+                val iterable: Iterable<Int> = list
+                list.lastOrNull { it > 0 }
+                iterable.lastOrNull { it > 0 }
+                list.lastOrNull()
+                iterable.lastOrNull()
+                list.map { listOf(it) }
+                iterable.map { listOf(it) }
+                buildString { append("a") }
+                buildString(4) { append("b") }
+            }
+            """.trimIndent()
+        K2QueryFixture.sourceWithGuestApi(true, "main.kt" to source).use { fixture ->
+            for ((site, file, parameter) in listOf(
+                Triple("list.lastOrNull {", "Lists.kt", "predicate"),
+                Triple("iterable.lastOrNull {", "Iterables.kt", "predicate"),
+                Triple("list.lastOrNull()", "Lists.kt", null),
+                Triple("iterable.lastOrNull()", "Iterables.kt", null),
+                Triple("list.map", "Iterables.kt", "transform"),
+                Triple("iterable.map", "Iterables.kt", "transform"),
+                Triple("buildString {", "StringBuilder.kt", "builderAction"),
+                Triple("buildString(4)", "StringBuilder.kt", "builderAction"),
+            )) {
+                val offset = source.indexOf(site) + if ('.' in site) site.indexOf('.') + 1 else 0
+                val hover =
+                    fixture.execute(
+                        AnalysisQuery.ExpressionInfo(fixture.identity, VirtualSourcePath.kotlin("main.kt"), offset),
+                    ) as AnalysisResult.ExpressionInfo
+                val info = assertNotNull(hover.value, site)
+                val documentation = assertNotNull(info.documentation, "$site: $info")
+                assertEquals("stdlib:core", assertIs<DeclarationOrigin.Platform>(info.origin, site).identity.name)
+                if (parameter != null) assertTrue(documentation.contains("@param $parameter"), documentation)
+                if (parameter == null) assertFalse(documentation.contains("@param predicate"), documentation)
+                if (parameter == "predicate") assertTrue(assertNotNull(info.signature).contains("(T) -> Boolean"), info.signature)
+                if (site == "buildString(4)") assertTrue(documentation.contains("@param capacity"), documentation)
+                if (site == "buildString {") assertFalse(documentation.contains("@param capacity"), documentation)
+                val navigation =
+                    fixture.execute(
+                        AnalysisQuery.Declaration(fixture.identity, VirtualSourcePath.kotlin("main.kt"), offset),
+                    ) as AnalysisResult.Declaration
+                val target = assertIs<DeclarationLocation.Source>(navigation.locations.single(), site)
+                assertTrue(target.path.value.endsWith("/$file"), "$site: $target")
+            }
+        }
+    }
+
     @Test
     fun `list hover distinguishes mutable overloads read only contracts and selection functions`() {
         val source =
