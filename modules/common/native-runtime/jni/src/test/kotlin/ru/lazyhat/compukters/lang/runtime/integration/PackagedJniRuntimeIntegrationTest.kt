@@ -39,7 +39,7 @@ class PackagedJniRuntimeIntegrationTest {
         val artifact = Path.of(requiredProperty("compukters.shell.artifact")).readBytes()
         VmSession.open(artifact).use { session ->
             val initial = session.resourceSnapshot()
-            session.advance(64, 64, Int.MAX_VALUE)
+            session.advance(SHELL_GUEST_BUDGET, 64, Int.MAX_VALUE)
             assertTrue(session.resourceSnapshot().executedInstructions > initial.executedInstructions)
         }
     }

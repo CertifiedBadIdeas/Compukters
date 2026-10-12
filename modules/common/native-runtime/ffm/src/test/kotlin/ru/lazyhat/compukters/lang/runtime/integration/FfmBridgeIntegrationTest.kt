@@ -26,6 +26,7 @@ import ru.lazyhat.compukters.lang.runtime.vm.CapabilityIdentity
 import ru.lazyhat.compukters.lang.runtime.vm.FfmBridge
 import ru.lazyhat.compukters.lang.runtime.vm.TerminalState
 import ru.lazyhat.compukters.lang.runtime.vm.TerminalUpdate
+import ru.lazyhat.compukters.lang.runtime.vm.VmBridgeException
 import ru.lazyhat.compukters.lang.runtime.vm.VmDeploymentConflictException
 import ru.lazyhat.compukters.lang.runtime.vm.VmExecutableRevision
 import ru.lazyhat.compukters.lang.runtime.vm.VmOutcome
@@ -82,7 +83,10 @@ class FfmBridgeIntegrationTest {
             val artifact = Path.of(requiredProperty("compukters.shell.artifact")).readBytes()
             VmSession.open(artifact, bridge).use { session ->
                 val initial = session.resourceSnapshot()
-                session.advance(64, 64, Int.MAX_VALUE)
+                val rejected = assertFailsWith<VmBridgeException> { session.advance(1, 64, Int.MAX_VALUE) }
+                assertTrue("status 11" in rejected.message.orEmpty())
+                assertEquals(initial, session.resourceSnapshot())
+                session.advance(ShellProgram.GUEST_BUDGET, 64, Int.MAX_VALUE)
                 val advanced = session.resourceSnapshot()
 
                 assertTrue(initial.heapCapacityBytes > 0)
@@ -101,12 +105,12 @@ class FfmBridgeIntegrationTest {
             val artifact = Path.of(requiredProperty("compukters.shell.artifact")).readBytes()
             VmSession.open(artifact, bridge).use { session ->
                 val initial = session.resourceSnapshot().executedInstructions
-                val zero = session.advanceWithRetirementLimit(64, 64, Int.MAX_VALUE, 0)
+                val zero = session.advanceWithRetirementLimit(ShellProgram.GUEST_BUDGET, 64, Int.MAX_VALUE, 0)
                 assertEquals(VmOutcome.SliceExhausted, zero.outcome)
                 assertEquals(0L, zero.retiredInstructions)
                 assertEquals(initial, session.resourceSnapshot().executedInstructions)
 
-                val one = session.advanceWithRetirementLimit(64, 64, Int.MAX_VALUE, 1)
+                val one = session.advanceWithRetirementLimit(ShellProgram.GUEST_BUDGET, 64, Int.MAX_VALUE, 1)
                 assertEquals(1L, one.retiredInstructions)
                 assertEquals(initial + 1, session.resourceSnapshot().executedInstructions)
             }
@@ -204,7 +208,7 @@ class FfmBridgeIntegrationTest {
 
     private fun advanceUntilWaiting(session: VmSession) {
         repeat(10_000) {
-            when (val outcome = session.advance(64, 64, Int.MAX_VALUE)) {
+            when (val outcome = session.advance(ShellProgram.GUEST_BUDGET, 64, Int.MAX_VALUE)) {
                 VmOutcome.SliceExhausted -> Unit
                 VmOutcome.WaitingForTerminalEvent -> return
                 else -> error("unexpected VM outcome: $outcome")
@@ -215,7 +219,7 @@ class FfmBridgeIntegrationTest {
 
     private fun advanceUntilHalted(session: VmSession) {
         repeat(10_000) {
-            when (val outcome = session.advance(64, 64, Int.MAX_VALUE)) {
+            when (val outcome = session.advance(ShellProgram.GUEST_BUDGET, 64, Int.MAX_VALUE)) {
                 VmOutcome.SliceExhausted -> Unit
                 is VmOutcome.Halted -> return
                 else -> error("unexpected VM outcome: $outcome")
