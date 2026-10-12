@@ -180,17 +180,32 @@ internal object GraphicalDisplayGameTestScenario {
                 )
                 player.isShiftKeyDown = true
                 helper.assertTrue(
-                    other.blockState.useWithoutItem(helper.level, player, hit) == net.minecraft.world.InteractionResult.PASS,
+                    other.blockState.useWithoutItem(helper.level, player, hit)
+                        == net.minecraft.world.InteractionResult.PASS,
                     "shift-use consumed interaction",
                 )
                 player.isShiftKeyDown = false
                 other.blockState.useWithoutItem(helper.level, player, hit)
+                val target =
+                    requireNotNull(
+                        ru.lazyhat.compukters.minecraft.display
+                            .displayPointerTarget(helper.level, other, hit),
+                    )
+                val input =
+                    ru.lazyhat.compukters.core.display
+                        .DisplayPointerController()
+                input.update(player.uuid, 0, true, target)
+                input.update(player.uuid, 1, true, target.copy(x = target.x + 1))
+                input.update(player.uuid, 2, false, null)
             }.thenWaitUntil {
                 helper.assertTrue(
                     computer.runtimeState == ProgramComputerState.WaitingForInput,
                     "drawing program did not consume click and exit",
                 )
                 helper.assertTrue(other.displayColor(35, 18) == 0x123456, "composite click did not reach typed Guest coordinates")
+                helper.assertTrue(other.displayColor(36, 18) == 0x654321, "pointer lifecycle did not traverse the Guest binding")
+                helper.assertTrue(display.displayColor(14, 6) == 0x00FF00, "local canvas RGB image did not use its viewport offset")
+                helper.assertTrue(display.displayColor(24, 4) == 0x101820, "canvas drawing escaped its viewport")
             }.thenExecute {
                 helper.assertTrue(display.screenMode() == 0, "applied ultra-low mode was not retained")
                 helper.assertTrue(

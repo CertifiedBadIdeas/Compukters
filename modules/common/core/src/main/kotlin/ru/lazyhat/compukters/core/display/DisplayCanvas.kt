@@ -31,6 +31,7 @@ class DisplayCanvas(
     private var draftMode: Int = mode
     private var frameWork = 0L
     private val clicks = ArrayDeque<DisplayClick>()
+    private val pointer = DisplayPointerQueue()
 
     /** The world adapter charges deterministic pixel work before mutation. */
     var admitWork: (Long) -> Unit = {}
@@ -73,6 +74,23 @@ class DisplayCanvas(
         return true
     }
 
+    fun offerPointer(event: DisplayPointerEvent): Boolean {
+        expire()
+        if (writer == null) return false
+        if (event.kind <= 1 && (event.x !in 0 until width || event.y !in 0 until height)) return false
+        return pointer.offer(event)
+    }
+
+    fun pointerActive(gesture: Int): Boolean {
+        expire()
+        return pointer.contains(gesture)
+    }
+
+    fun pollPointer(owner: Any): DisplayPointerEvent? {
+        requireOwner(owner)
+        return pointer.poll()
+    }
+
     fun pollClick(owner: Any): DisplayClick? {
         requireOwner(owner)
         return clicks.removeFirstOrNull()
@@ -81,6 +99,7 @@ class DisplayCanvas(
     fun release(owner: Any) {
         if (writer === owner) {
             clicks.clear()
+            pointer.clear()
             writer = null
             connected = { false }
             draft = null
@@ -117,7 +136,10 @@ class DisplayCanvas(
         frameWork = 0
         if (publish) {
             check(admitMode(draftMode)) { "World display pixel budget exceeded" }
-            if (mode != draftMode) clicks.clear()
+            if (mode != draftMode) {
+                clicks.clear()
+                pointer.cancel()
+            }
             pixels = pending
             mode = draftMode
             touch()
@@ -141,6 +163,7 @@ class DisplayCanvas(
             draftMode = requested
         } else {
             clicks.clear()
+            pointer.cancel()
             mode = requested
             pixels = replacement
             touch()
@@ -191,17 +214,23 @@ class DisplayCanvas(
         x1: Int,
         y1: Int,
         color: Int,
+        clip: DisplayRegion? = null,
     ) {
         requireOwner(owner)
         requireColor(color)
         val aw = activeWidth(owner)
         val ah = activeHeight(owner)
+        val left = maxOf(0L, clip?.x?.toLong() ?: 0L).coerceAtMost(aw.toLong()).toInt()
+        val top = maxOf(0L, clip?.y?.toLong() ?: 0L).coerceAtMost(ah.toLong()).toInt()
+        val right = minOf(aw.toLong(), clip?.right ?: aw.toLong()).coerceAtLeast(0).toInt()
+        val bottom = minOf(ah.toLong(), clip?.bottom ?: ah.toLong()).coerceAtLeast(0).toInt()
+        if (left >= right || top >= bottom) return
         val dx = x1.toDouble() - x0
         val dy = y1.toDouble() - y0
         var start = 0.0
         var end = 1.0
         val p = doubleArrayOf(-dx, dx, -dy, dy)
-        val q = doubleArrayOf(x0.toDouble(), aw - 1.0 - x0, y0.toDouble(), ah - 1.0 - y0)
+        val q = doubleArrayOf(x0.toDouble() - left, right - 1.0 - x0, y0.toDouble() - top, bottom - 1.0 - y0)
         for (i in p.indices) {
             if (p[i] == 0.0) {
                 if (q[i] < 0.0) return
@@ -211,10 +240,10 @@ class DisplayCanvas(
                 if (start > end) return
             }
         }
-        var x = (x0 + start * dx).roundToInt().coerceIn(0, aw - 1)
-        var y = (y0 + start * dy).roundToInt().coerceIn(0, ah - 1)
-        val ex = (x0 + end * dx).roundToInt().coerceIn(0, aw - 1)
-        val ey = (y0 + end * dy).roundToInt().coerceIn(0, ah - 1)
+        var x = (x0 + start * dx).roundToInt().coerceIn(left, right - 1)
+        var y = (y0 + start * dy).roundToInt().coerceIn(top, bottom - 1)
+        val ex = (x0 + end * dx).roundToInt().coerceIn(left, right - 1)
+        val ey = (y0 + end * dy).roundToInt().coerceIn(top, bottom - 1)
         val ax = abs(ex - x)
         val ay = -abs(ey - y)
         val sx = if (x < ex) 1 else -1
@@ -268,6 +297,7 @@ class DisplayCanvas(
         w: Int,
         h: Int,
         color: Int,
+        clip: DisplayRegion? = null,
         visible: (Int, Int) -> Boolean,
     ) {
         requireOwner(owner)
@@ -279,10 +309,15 @@ class DisplayCanvas(
         val top = y.toLong().coerceIn(0, ah.toLong()).toInt()
         val right = (x.toLong() + w).coerceIn(0, aw.toLong()).toInt()
         val bottom = (y.toLong() + h).coerceIn(0, ah.toLong()).toInt()
-        charge((right - left).toLong() * (bottom - top))
+        val clippedLeft = maxOf(left.toLong(), clip?.x?.toLong() ?: 0L).coerceIn(0, aw.toLong()).toInt()
+        val clippedTop = maxOf(top.toLong(), clip?.y?.toLong() ?: 0L).coerceIn(0, ah.toLong()).toInt()
+        val clippedRight = minOf(right.toLong(), clip?.right ?: aw.toLong()).coerceIn(0, aw.toLong()).toInt()
+        val clippedBottom = minOf(bottom.toLong(), clip?.bottom ?: ah.toLong()).coerceIn(0, ah.toLong()).toInt()
+        if (clippedLeft >= clippedRight || clippedTop >= clippedBottom) return
+        charge((clippedRight - clippedLeft).toLong() * (clippedBottom - clippedTop))
         val target = target()
-        for (py in top until bottom) {
-            for (px in left until right) {
+        for (py in clippedTop until clippedBottom) {
+            for (px in clippedLeft until clippedRight) {
                 if (visible((px.toLong() - x).toInt(), (py.toLong() - y).toInt())) target[py * aw + px] = color
             }
         }
@@ -364,6 +399,7 @@ class DisplayCanvas(
         mode = requestedMode
         pixels = restored
         clicks.clear()
+        pointer.clear()
         writer = null
         draft = null
         frameWork = 0

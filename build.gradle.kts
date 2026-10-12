@@ -1547,3 +1547,13 @@ registerKotlinVmConformance(
     artifactEnvironmentVariable = "COMPUKTER_ADDON_VALUES_ARTIFACT",
     conformanceScenario = "addon-values",
 )
+
+registerKotlinVmConformance(
+    taskName = "testKotlinDisplayUiVmConformance",
+    taskDescription = "Executes declarative display layout, viewport hit testing and pointer capture.",
+    artifactTask = ":compiler-k2:generateDisplayUiConformanceArtifact",
+    artifact = project(":compiler-k2").layout.buildDirectory.file("generated/conformance/kotlin-display-ui.cpkt"),
+    cargoTargetDirectory = ".toolchain/build/cargo/compiler-k2-display-ui-conformance",
+    artifactEnvironmentVariable = "COMPUKTER_KOTLIN_DISPLAY_UI_ARTIFACT",
+    conformanceScenario = "display-ui",
+)

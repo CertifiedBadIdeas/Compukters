@@ -772,3 +772,29 @@ overflow drops new arrivals. Input belongs to the program's exclusive writer lea
 Lease release/expiry, world restore, layout retirement and committed density changes clear input. Aborted
 frame density changes preserve it. Pending queue entries are never included in canvas or program resource checkpoints. Values already returned
 to Guest code are ordinary program data and follow its normal execution/checkpoint semantics.
+
+
+## Display capability 1.3
+
+`compukters:display` 1.3 preserves operations 0–17 and appends three host operations; schema wire encoding,
+Runtime ABI 1.20, C ABI 23 and CPKT 3 remain unchanged. Guest module `compukter:core` is 7.4.0.
+
+| Operation | Arguments | Result |
+| --- | --- | --- |
+| 18 `pollPointer` | handle: I32 | BYTE_ARRAY |
+| 19 `lineClipped` | handle, x0, y0, x1, y1, color, clipX, clipY, clipWidth, clipHeight: I32 | UNIT |
+| 20 `textClipped` | handle, x, y: I32; text: STRING; color, scale, clipX, clipY, clipWidth, clipHeight: I32 | UNIT |
+
+Polling returns an empty array or exactly 16 bytes: four signed little-endian I32 fields kind, gesture,
+x and y. Kinds are Down=0, Drag=1, Up=2, Cancel=3. Positive IDs identify independent transient gestures;
+Cancel with ID 0 cancels every capture. Coordinates use published whole-screen pixels. Input shares the
+program's exclusive display lease, is bounded to 64 queued events and eight active gestures, coalesces
+adjacent moves and cancels all gestures on overflow. Release/reset never replay events; a published density
+change emits cancellation while an aborted density change preserves the stream.
+
+Clipping rectangles have nonnegative sizes and intersect the active canvas using Long endpoint arithmetic.
+Line clipping occurs before bounded rasterization; text masks charge and touch only the intersected region.
+Operations 18–20 reject capability minors below 3. Existing operations remain available at their previous
+minimum minors. Kotlin source declarations and compiled export linking include mutable property accessors.
+Callback source syntax is normalized to canonical function types during linking; source metadata preserves
+extension-function receivers. Callback interfaces share specialization identity across library boundaries.

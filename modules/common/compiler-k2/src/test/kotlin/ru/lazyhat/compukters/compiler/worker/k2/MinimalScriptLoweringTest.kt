@@ -2271,6 +2271,14 @@ class MinimalScriptLoweringTest {
         }
 
     @Test
+    fun `cube slider example compiles against the canonical Guest platform`() =
+        withAdapter { adapter ->
+            val source = repositoryFile("examples/rotating-cube/src/main.kt").readText()
+            val result = adapter.compile(request(source))
+            assertNotNull(result.artifact, result.diagnostics.joinToString())
+        }
+
+    @Test
     fun `Create SCADA example compiles against the actual addon bundle`() =
         withAdapter { adapter ->
             val bundle =
@@ -2280,6 +2288,17 @@ class MinimalScriptLoweringTest {
             val source = repositoryFile("examples/create-scada/src/main.kt").readText()
             val result = adapter.compile(request(listOf("project/main.kt" to source), WorkerLimits(), addonPath = Path.of(bundle)))
             assertNotNull(result.artifact, result.diagnostics.joinToString())
+        }
+
+    @Test
+    fun `declarative display UI preserves viewport layout capture and callback boundaries`() =
+        withAdapter { adapter ->
+            val source = repositoryFile("modules/common/compiler-k2/src/test/resources/kotlin/display-ui/main.kt").readText()
+            val result = adapter.compile(request(source))
+            val bytes = assertNotNull(result.artifact, result.diagnostics.joinToString()).toByteArray()
+            System.getProperty("compukter.vm.displayUiArtifact")?.let { output ->
+                Path.of(output).also { it.parent.createDirectories() }.writeBytes(bytes)
+            }
         }
 
     @Test
@@ -2329,12 +2348,35 @@ class MinimalScriptLoweringTest {
                     require(!widgets.button(bounds, "", compukter.display.DisplayClick(0 xy 8), false))
                     widgets.gauge(bounds, Float.NaN, 0f, 100f)
                     widgets.chart(bounds, history, 0f, 10f)
+                    var actions = 0
+                    val ui = compukter.display.displayUi((4 xy 4) sized (20 by 12)) {
+                        canvas(30 by 20) {
+                            onDraw = {
+                                clear(Colors.BLACK)
+                                line(-100, 0, 100, 0, Colors.RED)
+                                text(0, 0, "Clipped", Colors.WHITE)
+                                image(10 xy 2, 2 by 1, intArrayOf(Colors.GREEN, Colors.BLUE))
+                            }
+                        }
+                        button("", 4 by 4) { onClick = { actions++ } }
+                    }
+                    screen.frame { ui.draw(this) }
+                    require(actions == 0)
                     println("CLICK-READY")
                     var click = screen.pollClick()
                     while (click == null) { Tasks.sleepTicks(1); click = screen.pollClick() }
                     require(click.position == Vector2i(35, 18))
                     require(!widgets.button(bounds, "", click, false))
                     screen.pixel(click.position, 0x123456)
+                    var pointer = screen.pollPointer()
+                    while (pointer == null) { Tasks.sleepTicks(1); pointer = screen.pollPointer() }
+                    require(pointer.kind == compukter.display.DisplayPointerKind.DOWN && pointer.position == Vector2i(35, 18))
+                    val gesture = pointer.gesture
+                    pointer = screen.pollPointer()
+                    require(pointer != null && pointer.kind == compukter.display.DisplayPointerKind.DRAG && pointer.gesture == gesture && pointer.position == Vector2i(36, 18))
+                    pointer = screen.pollPointer()
+                    require(pointer != null && pointer.kind == compukter.display.DisplayPointerKind.UP && pointer.gesture == gesture)
+                    screen.pixel(36 xy 18, 0x654321)
                 }
                 """.trimIndent()
             val result = adapter.compile(request(source))

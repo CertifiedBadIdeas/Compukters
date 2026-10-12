@@ -1940,3 +1940,31 @@ val generateAddonValueResponsesConformanceArtifact = tasks.register<Test>("gener
     systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
     systemProperty("compukters.addon.values.artifact", artifact.get().asFile.absolutePath)
 }
+
+val displayUiConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-display-ui.cpkt")
+tasks.register<Test>("generateDisplayUiConformanceArtifact") {
+    group = "verification"
+    description = "Compiles declarative display layout, pointer capture and callbacks."
+    dependsOn(tasks.jar)
+    useJUnitPlatform()
+    testClassesDirs = sourceSets.test.get().output.classesDirs
+    classpath = sourceSets.test.get().runtimeClasspath
+    filter.includeTestsMatching("*declarative display UI preserves viewport layout capture and callback boundaries*")
+    inputs.file(workerJar)
+    inputs.file("src/test/resources/kotlin/display-ui/main.kt")
+    outputs.file(displayUiConformanceArtifact)
+    systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
+    systemProperty("compukter.vm.displayUiArtifact", displayUiConformanceArtifact.get().asFile.absolutePath)
+}
+
+tasks.register<Test>("compileRotatingCubeExample") {
+    group = "verification"
+    dependsOn(tasks.jar)
+    useJUnitPlatform()
+    testClassesDirs = sourceSets.test.get().output.classesDirs
+    classpath = sourceSets.test.get().runtimeClasspath
+    filter.includeTestsMatching("*cube slider example compiles against the canonical Guest platform*")
+    inputs.file(workerJar)
+    inputs.file(rootProject.file("examples/rotating-cube/src/main.kt"))
+    systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
+}
