@@ -46,6 +46,32 @@ class DiagnosticQueryTest {
     }
 
     @Test
+    fun `default adapted function references resolve with source and metadata inputs`() {
+        val source =
+            """
+            import kotlin.random.Random
+            fun roll(sides: Int = 6): Int = sides
+            open class Base { open fun read(value: Int = 7): Int = value }
+            class Derived : Base() { override fun read(value: Int): Int = value + 1 }
+            fun main() {
+                val draw: () -> Int = ::roll
+                val member: () -> Int = Derived()::read
+                val unbound: (Base) -> Int = Base::read
+                val fill: (ByteArray) -> ByteArray = Random(0)::nextBytes
+                check(draw() == 6 && member() == 8 && unbound(Derived()) == 8)
+                fill(ByteArray(3))
+            }
+            """.trimIndent()
+        for (attachedSources in listOf(false, true)) {
+            K2QueryFixture.sourceWithGuestApi(attachedSources, "main.kt" to source).use { fixture ->
+                val result = fixture.execute(fixture.presentation()) as AnalysisResult.Presentation
+                val active = result.value.accept(fixture.identity) as SnapshotPresentationAcceptance.Active
+                assertTrue(active.diagnostics.none { it.severity == EditorDiagnosticSeverity.Error }, active.diagnostics.toString())
+            }
+        }
+    }
+
+    @Test
     fun `function expression defaults resolve with source and metadata inputs`() {
         val source =
             """
