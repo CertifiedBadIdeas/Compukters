@@ -306,3 +306,9 @@ constructors. This applies to direct construction and constructor references. Ex
 `testKotlinGeometryVmConformance` exercises source and precompiled rectangle validation; the focused
 `MinimalScriptLoweringTest` case `value class initializer literals are retained without an ordinary constructor body`
 protects initializer-only strings and exception imports.
+
+
+Platform libraries export mutable property accessors, including custom setter validation and
+side effects. Private setters remain inaccessible from external Kotlin source. `PlatformMetadataCompilerTest` exercises setter
+metadata; `testKotlinDisplayUiVmConformance` executes the validated slider setter and viewport setter
+cancellation through the compiled Guest library.

@@ -609,7 +609,8 @@ class PlatformMetadataCompiler {
         val getter =
             (declaration as? KtProperty)
                 ?.takeIf { property ->
-                    property.getter?.hasBody() == true || property.hasModifier(KtTokens.ABSTRACT_KEYWORD) ||
+                    property.getter?.hasBody() == true ||
+                        (!external && property.isVar && ownerHasDispatchReceiver) || property.hasModifier(KtTokens.ABSTRACT_KEYWORD) ||
                         (property.parent.parent as? KtClass)?.isInterface() == true
                 }?.let { property ->
                     val receiver =
@@ -624,7 +625,9 @@ class PlatformMetadataCompiler {
                             signature = "fun($receiver):${property.typeReference?.text?.canonicalType() ?: "?"}",
                         ),
                         private,
-                        hasBody = property.getter?.hasBody() == true,
+                        hasBody =
+                            !external && !property.hasModifier(KtTokens.ABSTRACT_KEYWORD) &&
+                                (property.parent.parent as? KtClass)?.isInterface() != true,
                         libraryKind = PlatformLibraryDeclarationKind.FUNCTION,
                         requiresSource = requiresSource,
                         abstractMember =
@@ -632,6 +635,41 @@ class PlatformMetadataCompiler {
                                 (property.parent.parent as? KtClass)?.isInterface() == true,
                     )
                 }
+        val mutableProperty =
+            when (declaration) {
+                is KtProperty -> declaration.isVar && !external
+                is KtParameter -> declaration.hasValOrVar() && declaration.valOrVarKeyword?.node?.elementType == KtTokens.VAR_KEYWORD
+                else -> false
+            }
+        val setter =
+            if (mutableProperty) {
+                val property = declaration as? KtProperty
+                val receiver =
+                    property
+                        ?.receiverTypeReference
+                        ?.text
+                        ?.canonicalType()
+                        ?.plus(".")
+                        .orEmpty()
+                val type =
+                    when (declaration) {
+                        is KtProperty -> declaration.typeReference?.text?.canonicalType()
+                        is KtParameter -> declaration.typeReference?.text?.canonicalType()
+                        else -> null
+                    } ?: "?"
+                ParsedDeclaration(
+                    platformDeclaration.copy(
+                        symbol = (listOf(packageName).filter(String::isNotEmpty) + owners + "<set-$name>").joinToString("."),
+                        signature = "fun($receiver$type):Unit",
+                    ),
+                    private || property?.setter?.hasModifier(KtTokens.PRIVATE_KEYWORD) == true,
+                    hasBody = true,
+                    libraryKind = PlatformLibraryDeclarationKind.FUNCTION,
+                    requiresSource = requiresSource,
+                )
+            } else {
+                null
+            }
         val singleton =
             if (managedObject) {
                 ParsedDeclaration(
@@ -644,7 +682,7 @@ class PlatformMetadataCompiler {
             } else {
                 null
             }
-        return listOf(parsed) + listOfNotNull(getter, singleton) + nested
+        return listOf(parsed) + listOfNotNull(getter, setter, singleton) + nested
     }
 
     private fun defaultArguments(
