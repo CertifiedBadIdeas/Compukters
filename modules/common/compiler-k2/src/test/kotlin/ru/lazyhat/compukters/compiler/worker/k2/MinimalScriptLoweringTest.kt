@@ -128,6 +128,33 @@ class MinimalScriptLoweringTest {
         }
 
     @Test
+    fun `function defaults preserve expression evaluation bindings and dispatch`() =
+        withAdapter { adapter ->
+            val source = repositoryFile("modules/common/compiler-k2/src/test/resources/kotlin/function-defaults/main.kt").readText()
+            val result = adapter.compile(request(source))
+            val bytes = assertNotNull(result.artifact, result.diagnostics.toString()).toByteArray()
+            ArtifactReader.read(bytes)
+            val repeated = adapter.compile(request(source))
+            assertContentEquals(bytes, assertNotNull(repeated.artifact, repeated.diagnostics.toString()).toByteArray())
+            System.getProperty("compukter.vm.functionDefaultsArtifact")?.let { output ->
+                Path.of(output).also { it.parent.createDirectories() }.writeBytes(bytes)
+            }
+        }
+
+    @Test
+    fun `recursive default expansion publishes a bounded diagnostic`() =
+        withAdapter { adapter ->
+            val result = adapter.compile(request("fun loop(value: Int = loop()): Int = value\nfun main() { loop() }"))
+            assertNull(result.artifact)
+            assertTrue(
+                result.diagnostics.any {
+                    it.code == "UNSUPPORTED_IR" && "recursive default argument expansion" in it.message
+                },
+                result.diagnostics.toString(),
+            )
+        }
+
+    @Test
     fun `random method references link without direct calls`() =
         withAdapter { adapter ->
             val source =
