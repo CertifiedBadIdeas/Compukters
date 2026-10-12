@@ -233,8 +233,9 @@ and
 
 **Status:** Partial.
 
-Non-null function values using supported Guest parameter and result types are admitted in project function
-signatures and locals: values may be passed, returned, stored, and invoked.
+Function values using supported Guest parameter and result types are admitted in project function
+signatures and locals: values may be passed, returned, stored, and invoked. Nullable callbacks use the
+same concrete callable interface with nullable reference storage; they can be initialized or reset to `null`.
 Backed class `val`/`var` properties also store and replace concrete callbacks under the
 [function-valued property contract](objects.md#function-valued-properties). The compiler generates an
 interface for each distinct concrete signature without a fixed arity cut-off; artifact and VM limits still
@@ -246,6 +247,30 @@ not. Bound references to ordinary Guest instance methods also work: the receiver
 retained by the function value, and dispatched virtually or through its interface when invoked. Unbound
 instance-method references (`Type::method`) accept the receiver as their first argument and use the same
 runtime dispatch.
+
+Nullable callbacks support `?.invoke()`, Elvis, null comparisons, stable smart casts and non-null
+assertions. A safe invocation evaluates its receiver once and skips argument evaluation when absent;
+`!!` throws a catchable `NullPointerException` for null. Nullable primitive results use the ordinary
+nominal boxes. A safe Unit callback result can be retained as `Unit?`, using the canonical Unit singleton
+or null. Non-null calls retain their scalar/Unit calling convention. Callback captures and generic local
+owners follow the same typed capture-cell rules as non-null function values.
+
+```kotlin
+class Controller {
+    var onUpdate: (() -> Unit)? = null
+    fun update() { onUpdate?.invoke() }
+}
+```
+
+**Evidence:** `nullable callbacks preserve safe invocation storage captures and specialization`,
+`nullable callable declarations discover signatures without callable expressions`,
+`nullable and nonnull callbacks share concrete interface identity`,
+`nullable Unit callback results are ordinary nullable references` and
+`nullable function signature variance remains a target diagnostic` in `MinimalScriptLoweringTest`.
+`testKotlinNullableCallbacksVmConformance` executes
+[`nullable-callbacks/main.kt`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/compiler-k2/src/test/resources/kotlin/nullable-callbacks/main.kt),
+including all twelve primitive signatures, generic captures and a 64 KiB heap pressure test.
+IDE test `nullable callbacks resolve with source and metadata inputs` checks both platform modes.
 
 An expected function type may omit trailing default parameters of non-generic top-level and instance
 functions. For example, `fun roll(sides: Int = 6): Int = sides` can be referenced as
@@ -305,13 +330,13 @@ other reference adaptations, and variance conversions between different function
 [`MinimalScriptLoweringTest`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/compiler-k2/src/test/kotlin/ru/lazyhat/compukters/compiler/worker/k2/MinimalScriptLoweringTest.kt),
 tests `supported function values lower to managed closures and shared capture cells` (including nested
 closures and shared mutable captures), `task launch accepts direct stored and returned Unit lambdas`,
-`unsupported closure shapes produce stable diagnostics`, `direct top level ordinary task lowers to spawn and
+`nullable callback arguments accept ordinary lambdas`, `direct top level ordinary task lowers to spawn and
 join`, `task launch rejects unsupported local and bound references`, `function value variance conversion is
 rejected before artifact publication`, `supported constructor references lower to ordinary function values`,
 `default adapted constructor references lower to managed function values`; root tasks `testKotlinFunctionValuesVmConformance` and
 `testKotlinAdaptedConstructorsVmConformance`.
 
-**Related work:** [#627](https://github.com/CertifiedBadIdeas/Compukters/issues/627),
+**Related work:** [#760](https://github.com/CertifiedBadIdeas/Compukters/issues/760), [#627](https://github.com/CertifiedBadIdeas/Compukters/issues/627),
 [#631](https://github.com/CertifiedBadIdeas/Compukters/issues/631),
 [#628](https://github.com/CertifiedBadIdeas/Compukters/issues/628),
 [#632](https://github.com/CertifiedBadIdeas/Compukters/issues/632),

@@ -67,6 +67,17 @@ managed field references preserve closure/capture reachability without new runti
 invocation lowers arguments using the expected parameter types, including typed null arguments.
 `testKotlinFunctionFieldsVmConformance` exercises these paths.
 
+Callable shape identity ignores outer reference nullability. Nullable-only local declarations participate
+in signature discovery, including recursively nested callable parameter/result types; nullable backing
+fields and parameters use the same generated interface. Exact signature checks admit typed null and
+reference nullability changes while still rejecting variance between different signatures. Constructor
+default evaluation scopes its concrete class type substitution before checking and compiling expressions.
+Safe invocation reuses normal K2 null branches and existing reference instructions. Safe Unit results use
+the canonical managed Unit singleton or null, while direct Unit calls retain their zero-slot result.
+`testKotlinNullableCallbacksVmConformance` executes callback replacement/reset under a 64 KiB heap, keeping
+an older alias live across 200 allocations of 12 KiB captured arrays with mutable capture cells. No artifact
+encoding, instruction or GC protocol change is introduced.
+
 Canonical `IntRange` and `IntProgression` declarations let K2 resolve ascending, descending, and stepped `Int` loops.
 The compiler recognizes only their canonical `for` shape and evaluates start, end, and step once into scalar registers;
 no range or iterator object enters the VM. It validates a positive step before iteration, calculates the next index in

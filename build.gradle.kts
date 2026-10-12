@@ -572,6 +572,15 @@ registerKotlinVmConformance(
     conformanceScenario = "function-fields",
 )
 registerKotlinVmConformance(
+    taskName = "testKotlinNullableCallbacksVmConformance",
+    taskDescription = "Executes nullable Guest callbacks with the pinned Compukter VM.",
+    artifactTask = ":compiler-k2:generateNullableCallbacksConformanceArtifact",
+    artifact = project(":compiler-k2").layout.buildDirectory.file("generated/conformance/kotlin-nullable-callbacks.cpkt"),
+    cargoTargetDirectory = ".toolchain/build/cargo/compiler-k2-nullable-callbacks-conformance",
+    artifactEnvironmentVariable = "COMPUKTER_KOTLIN_NULLABLE_CALLBACKS_ARTIFACT",
+    conformanceScenario = "nullable-callbacks",
+)
+registerKotlinVmConformance(
     taskName = "testKotlinGenericLocalFunctionsVmConformance",
     taskDescription = "Executes generic Guest local functions with the pinned Compukter VM.",
     artifactTask = ":compiler-k2:generateGenericLocalFunctionsConformanceArtifact",
