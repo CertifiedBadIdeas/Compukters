@@ -155,12 +155,12 @@ private fun loadPlatformSourceLengths(
         val lengths = linkedMapOf<VirtualSourcePath, Int>()
         ZipFile(path.toFile()).use { archive ->
             archive.entries().asSequence().filterNot { it.isDirectory }.filter { it.name.endsWith(".kt") }.forEach { entry ->
-                require(sourceCount < limits.sourceFiles) { "platform source count exceeds analysis limit" }
-                val bytes = archive.getInputStream(entry).use { it.readNBytes(limits.sourceFileBytes + 1) }
-                require(bytes.size <= limits.sourceFileBytes) { "platform source file exceeds analysis limit" }
+                require(sourceCount < ProtocolLimits.PLATFORM_SOURCE_FILES) { "platform source count exceeds analysis limit" }
+                val bytes = archive.getInputStream(entry).use { it.readNBytes(ProtocolLimits.PLATFORM_SOURCE_FILE_BYTES + 1) }
+                require(bytes.size <= ProtocolLimits.PLATFORM_SOURCE_FILE_BYTES) { "platform source file exceeds analysis limit" }
                 sourceCount += 1
                 totalBytes += bytes.size
-                require(totalBytes <= limits.sourceBytes) { "platform source bytes exceed analysis limit" }
+                require(totalBytes <= ProtocolLimits.PLATFORM_SOURCE_BYTES) { "platform source bytes exceed analysis limit" }
                 val sourcePath = VirtualSourcePath.kotlin(entry.name)
                 require(lengths.put(sourcePath, decodeStrictUtf8(BinaryValue.of(bytes)).length) == null) {
                     "duplicate platform source path: ${entry.name}"
