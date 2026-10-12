@@ -24,6 +24,7 @@ import compukter.terminal.Terminal
 import compukter.terminal.TerminalColor
 import kotlin.math.Rect2i
 import kotlin.math.Vector2i
+import kotlin.random.Random
 
 /** Terminal rain using bounded column state and incremental cell updates. */
 fun main(args: Array<String>) {
@@ -40,10 +41,10 @@ fun main(args: Array<String>) {
     val width = size.x
     val height = size.y
     val columns = (width + 1) / 2
-    val random = RainRandom()
-    val heads = IntArray(columns) { -random.next(height) }
-    val lengths = IntArray(columns) { 4 + random.next(height) }
-    val speeds = IntArray(columns) { 1 + random.next(3) }
+    val random = Random(0x43A791)
+    val heads = IntArray(columns) { -random.nextInt(height) }
+    val lengths = IntArray(columns) { 4 + random.nextInt(height) }
+    val speeds = IntArray(columns) { 1 + random.nextInt(3) }
     val glyphs = CharArray(columns) { random.glyph() }
     val moving = BooleanArray(columns)
     var frame = 0
@@ -62,8 +63,8 @@ fun main(args: Array<String>) {
                 val tail = heads[column] - lengths[column]
                 if (tail >= 0 && tail < height) Terminal.fill(Rect2i(Vector2i(column * 2, tail), Vector2i(1, 1)))
                 if (heads[column] >= height + lengths[column]) {
-                    heads[column] = -random.next(height)
-                    lengths[column] = 4 + random.next(height)
+                    heads[column] = -random.nextInt(height)
+                    lengths[column] = 4 + random.nextInt(height)
                 }
             }
         }
@@ -98,17 +99,8 @@ private fun usage() {
     Stderr.write("usage: cmatrix [delay 1..20 ticks] (default 2; Ctrl+C exits)\n")
 }
 
-/** Repeatable pseudo-random state stays in the Guest heap, including through hibernation. */
-private class RainRandom {
-    private var state = 0x43A791
-
-    fun next(bound: Int): Int {
-        state = state * 1664525 + 1013904223
-        return (state ushr 1) % bound
-    }
-
-    fun glyph(): Char {
-        val alphabet = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz@#$%&*+-=<>"
-        return alphabet[next(alphabet.length)]
-    }
+/** Select a glyph with the same seeded source as the column animation. */
+private fun Random.glyph(): Char {
+    val alphabet = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz@#$%&*+-=<>"
+    return alphabet[nextInt(alphabet.length)]
 }
