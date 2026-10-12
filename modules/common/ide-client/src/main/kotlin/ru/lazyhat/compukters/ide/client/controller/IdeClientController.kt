@@ -93,6 +93,7 @@ import ru.lazyhat.compukters.ide.editor.EditorEditResult
 import ru.lazyhat.compukters.ide.editor.EditorRange
 import ru.lazyhat.compukters.ide.editor.EditorTextEdit
 import ru.lazyhat.compukters.ide.editor.KotlinSmartTyping
+import ru.lazyhat.compukters.ide.editor.PeripheralConstantInsertion
 import ru.lazyhat.compukters.ide.editor.ProjectEditHistory
 import ru.lazyhat.compukters.ide.git.GitCancellation
 import ru.lazyhat.compukters.ide.git.GitCredentials
@@ -290,6 +291,10 @@ class IdeClientController(
             return
         }
         when (command) {
+            is IdeCommand.InsertPeripheralConstant -> {
+                insertPeripheralConstant(command.name)
+            }
+
             is IdeCommand.ImportProject -> {
                 createProject(
                     IdeProjectRequest
@@ -1220,6 +1225,30 @@ class IdeClientController(
             analysisCoordinator?.caretMoved(document.caretOffset)
             analysisCoordinator?.dismissCompletion()
             refreshAnalysisState()
+        }
+        publishWorkspace()
+    }
+
+    private fun insertPeripheralConstant(name: String) {
+        if (attachedSourcePreview != null || computerPreview != null || binary != null) return
+        val active = editor ?: return
+        if (!active.path.isKotlinSource || name.isBlank()) return
+        val source = active.document.materialize()
+        val insertion =
+            PeripheralConstantInsertion
+                .plan(source, name) ?: return
+        val text = source.substring(0, insertion.offset) + insertion.text + source.substring(insertion.offset)
+        val caret = active.document.caretOffset.let { if (it >= insertion.offset) it + insertion.text.length else it }
+        when (val edit = active.document.replaceAll(text, caret)) {
+            is EditorEditResult.Applied -> {
+                active.lastEditMillis = clock.nowMillis()
+                visibleLatency.editApplied(active.document.revision)
+                updateAnalysis(active, null, edit.change)
+            }
+
+            else -> {
+                Unit
+            }
         }
         publishWorkspace()
     }

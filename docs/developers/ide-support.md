@@ -341,7 +341,10 @@ functions across project files`; `NavigationAndReferencesTest`, `IdeAnalysisCoor
 binding preservation, then updates bounded document buffers as one project-wide undo/redo group. Unopened
 files are loaded and unsaved sources participate in analysis; source, revision, disk and manifest/lock checks
 reject stale plans. Saving uses the existing autosave/conflict workflow. Library symbols, `main`, inheritance
-and operator/infix declarations are rejected, as are projects with analysis errors.
+and operator declarations are rejected. Infix calls, ordinary calls and callable references participate
+in rename. Existing semantic errors may remain when their messages and shifted source ranges are preserved;
+new errors or changed reference bindings reject the whole operation. Syntax errors and errors without
+source ranges remain unsupported because complete reference validation cannot be guaranteed.
 
 **Evidence:** `RenameQueryTest`, `NavigationAndReferencesTest`, `AnalysisWorkerControllerTest`,
 `ProjectEditHistoryTest`, and `IdeClientControllerTest`.

@@ -33,6 +33,9 @@ internal object IdeTargetClientNetwork : IdeClientTargetTransport {
     private var current: IdeTargetRequestBroker? = null
     private var currentTerminal: IdeTargetTerminalClient? = null
 
+    fun namedPeripherals(target: IdeTargetReference): CompletableFuture<IdeTargetReply>? =
+        current?.request(IdeTargetRequest.NamedPeripherals(target))
+
     override fun openPort(): NetworkIdeTargetPort {
         disconnect()
         val broker =

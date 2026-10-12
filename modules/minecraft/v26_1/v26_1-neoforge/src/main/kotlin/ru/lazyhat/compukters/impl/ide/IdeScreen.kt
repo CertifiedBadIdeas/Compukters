@@ -90,6 +90,7 @@ internal class IdeScreen(
 
                 override fun closeSession() = session.close()
             },
+            peripheralRequest = ru.lazyhat.compukters.impl.ide.target.IdeTargetClientNetwork::namedPeripherals,
         )
 
     override fun setInitialFocus() = Unit
@@ -196,6 +197,24 @@ internal class IdeScreen(
         }
 
         override fun icon(draw: IdeIconDraw) {
+            draw.itemId?.let { id ->
+                val item =
+                    net.minecraft.core.registries.BuiltInRegistries.ITEM.getValue(
+                        ru.lazyhat.compukters.impl.compat.Identifier
+                            .parse(id),
+                    )
+                val stack =
+                    net.minecraft.world.item
+                        .ItemStack(item)
+                graphics.pose().pushMatrix()
+                graphics.pose().translate(draw.bounds.left.toFloat(), draw.bounds.top.toFloat())
+                val scale = minOf(draw.bounds.width, draw.bounds.height) / 16f
+                graphics.pose().scale(scale, scale)
+                graphics.item(stack, 0, 0)
+                graphics.pose().popMatrix()
+                return
+            }
+
             val sprite = IdeToolbarIconAtlas.sprite(draw)
             graphics.blit(
                 RenderPipelines.GUI_TEXTURED,

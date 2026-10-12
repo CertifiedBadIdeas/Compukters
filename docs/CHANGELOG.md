@@ -13,6 +13,10 @@ headings so this page has one stable URL that can be shared outside the reposito
 
 ## 0.6.0 — In development
 
+- The IDE has a named peripheral selection window with shared window controls, block item icons and project-style cards.
+  Selecting a reachable device inserts its name as an undoable `const val` beneath imports in the active
+  Kotlin source, with an uppercase snake-case identifier, duplicate reuse and collision suffixes.
+
 - Displays accept empty-hand front-face clicks in whole-screen pixel coordinates, exposed through
   `GraphicalDisplay.pollClick()`. Input belongs to the drawing program and is bounded and transient.
   Guest widgets provide buttons, indicators, gauges and history charts. The `create-scada` example
@@ -30,7 +34,8 @@ headings so this page has one stable URL that can be shared outside the reposito
   preserve quaternion identity and support explicit conversions with the corresponding four-dimensional vectors.
   `Rotation3f`/`Rotation3d` represent spatial rotations through normalized quaternions, with composition,
   inverse, axis-angle and direction-to-direction factories, shortest-arc spherical interpolation, angular distance,
-  vector transforms and matrix conversion. Float rotations use Double intermediates for composition.
+  vector transforms, matrix conversion and read-only quaternion component access through `x`, `y`, `z`, `w`.
+  Float rotations use Double intermediates for composition.
   `Matrix3f`, `Matrix3d` and `Matrix4d` provide row-major transforms and bounded native matrix kernels;
   Double variants retain Double precision through multiplication and projection.
 
@@ -447,8 +452,10 @@ listed in [Kotlin support](developers/kotlin-support.md) and [standard library s
   and `F2` / `Shift+F2` navigation use matching source text and reject stale locations. Method declarations show
   non-zero project usage counts that distinguish overloads and remain stable during unrelated edits.
 - `Shift+F6` renames supported project symbols across files and unsaved buffers after K2 checks collisions and
-  bindings. The change is undoable across affected files; library symbols, `main` and unsupported convention or
-  inheritance declarations remain outside this action.
+  bindings, including infix calls and callable references. Unrelated semantic errors can remain, while new
+  errors, reference capture and stale sources reject the entire operation. The change is undoable across
+  affected files; syntax errors, library symbols, `main`, operator and inheritance declarations remain outside
+  this action.
 - Caret placement highlights resolved declarations/references, including interpolation; typing hides semantic
   occurrence marks until the caret is explicitly moved. Text selection highlights literal occurrences, while
   `Ctrl+F` provides case-sensitive search, a counter and Enter/Shift+Enter navigation in writable or read-only files.

@@ -31,9 +31,11 @@ import ru.lazyhat.compukters.ide.client.target.IdeAttachedTarget
 import ru.lazyhat.compukters.ide.client.target.IdeTargetState
 import ru.lazyhat.compukters.ide.project.fs.ProjectPath
 import ru.lazyhat.compukters.impl.ide.target.IdeTargetReference
+import ru.lazyhat.compukters.impl.ide.target.IdeTargetReply
 import ru.lazyhat.compukters.impl.ide.target.IdeTargetTerminalClient
 import ru.lazyhat.compukters.impl.ide.target.IdeTargetTerminalState
 import ru.lazyhat.compukters.impl.ui.CompuktersUiViewport
+import java.util.concurrent.CompletableFuture
 
 /** Minecraft-specific effects; screen state and routing are owned by the shared controller. */
 interface IdeScreenHost {
@@ -74,6 +76,9 @@ class IdeScreenController(
     targetTerminal: IdeTargetTerminalClient,
     private val visibleLatency: IdeVisibleLatencyTrace,
     private val host: IdeScreenHost,
+    private val peripheralRequest: (
+        IdeTargetReference,
+    ) -> CompletableFuture<IdeTargetReply>? = { null },
 ) {
     private val overlays =
         IdeLocalOverlays(
@@ -108,6 +113,10 @@ class IdeScreenController(
     private var pointerX: Double? = null
     private var pointerY: Double? = null
     private var projectSwitcherOpen = false
+    private var peripheralPicker: IdePeripheralPickerView? = null
+    private var peripheralFuture: CompletableFuture<IdeTargetReply>? = null
+    private var peripheralTarget: IdeTargetReference? = null
+
     private var fileTabFirstIndex = 0
     private var lastActiveTab: ProjectPath? = null
     private var lastFileTabWidth = 0
@@ -139,6 +148,26 @@ class IdeScreenController(
             input.pointerClicked(uiEvent.x(), uiEvent.y(), uiEvent.modifiers(), pointerContext(geometry), doubleClick)
             host.clearFocus()
             return true
+        }
+        peripheralPicker?.takeIf { !projectSwitcherOpen && !terminalOverlay.visible }?.let {
+            if (IdePeripheralPicker.bounds(geometry.content).contains(uiEvent.x(), uiEvent.y())) {
+                val hit =
+                    presentation(geometry).model.hitTargets.asReversed().firstOrNull { target ->
+                        target.bounds.contains(uiEvent.x(), uiEvent.y())
+                    }
+                if (uiEvent.button() == 0 && hit?.enabled == true) {
+                    if (hit.action == IdeHitAction.PeripheralChoice) {
+                        it.entries.getOrNull(hit.choiceIndex ?: -1)?.let { entry ->
+                            controller.dispatch(IdeCommand.InsertPeripheralConstant(entry.name))
+                        }
+                    } else {
+                        activateUiAction(hit.action)
+                    }
+                }
+                input.pointerActivity()
+                host.clearFocus()
+                return true
+            }
         }
         if (projectSwitcherOpen) {
             val switcherContext = pointerContext(geometry)
@@ -315,6 +344,13 @@ class IdeScreenController(
         synchronizeQuickOpen()
         if (overlays.scroll(uiMouseX, uiMouseY, scrollX, scrollY, geometry.panel)) return true
         if (controller.viewState().dialog != null) return true
+        peripheralPicker?.takeIf { !projectSwitcherOpen && !terminalOverlay.visible }?.let { view ->
+            if (IdePeripheralPicker.bounds(geometry.content).contains(uiMouseX, uiMouseY)) {
+                val maximum = (view.entries.size - IdePeripheralPicker.visibleRows(geometry.content)).coerceAtLeast(0)
+                peripheralPicker = view.copy(firstRow = (view.firstRow - scrollY.toInt()).coerceIn(0, maximum))
+                return true
+            }
+        }
         val hoverModel = presentation(geometry).model
         if (hoverViewport.scroll(hoverModel, uiMouseX, uiMouseY, scrollY)) return true
         if (terminalOverlay.visible && terminalOverlayGeometry(geometry).panel.contains(uiMouseX, uiMouseY)) return true
@@ -367,6 +403,10 @@ class IdeScreenController(
             event.modifiers and IdeModifier.ALT == 0 && focusArea != IdeFocusArea.Terminal
         ) {
             return openQuickOpen()
+        }
+        if (event.key == IdeKeyCode.ESCAPE && peripheralPicker != null && !projectSwitcherOpen && !terminalOverlay.visible) {
+            closePeripherals()
+            return true
         }
         if (event.key == IdeKeyCode.ESCAPE && projectSwitcherOpen) {
             projectSwitcherOpen = false
@@ -421,6 +461,7 @@ class IdeScreenController(
     fun tick() {
         if (sessionClosed || controller.isClosed()) return
         controller.tick()
+        pollPeripherals()
         terminalOverlay.setTarget(
             controller
                 .viewState()
@@ -552,6 +593,20 @@ class IdeScreenController(
                 explorerDrag = input.explorerDragVisual,
                 projectFirstRow = input.projectFirstRow,
                 fileTabFirstIndex = fileTabFirstIndex,
+                peripheralPicker =
+                    peripheralPicker
+                        ?.takeIf {
+                            !overlays.active && state.dialog == null && !projectSwitcherOpen &&
+                                !terminalOverlay.visible
+                        }?.copy(
+                            writable =
+                                (workspace?.editor as? IdeEditorView.Text)?.let {
+                                    !it.readOnly && it.path?.value?.endsWith(
+                                        ".kt",
+                                    ) == true
+                                } ==
+                                    true,
+                        ),
                 projectSwitcherOpen = projectSwitcherOpen && !overlays.active && state.dialog == null,
                 uiScale = preferences.uiScale(),
                 viewportSupported = viewport.supported,
@@ -561,8 +616,102 @@ class IdeScreenController(
         return IdePresentationSnapshot(state, geometry, model, treeFirstRow)
     }
 
+    private fun closePeripherals() {
+        peripheralPicker = null
+        peripheralFuture?.cancel(false)
+        peripheralFuture = null
+        peripheralTarget = null
+    }
+
+    private fun refreshPeripherals() {
+        peripheralFuture?.cancel(false)
+        peripheralFuture = null
+        peripheralTarget =
+            controller
+                .viewState()
+                .target
+                .attachedTarget()
+                ?.let { IdeTargetReference(it.id, it.profile) }
+        val target = peripheralTarget
+        if (target == null) {
+            peripheralPicker = IdePeripheralPickerView(message = "Attach to a computer")
+            return
+        }
+        peripheralFuture = peripheralRequest(target)
+        peripheralPicker =
+            IdePeripheralPickerView(
+                loading = peripheralFuture != null,
+                message =
+                    if (peripheralFuture ==
+                        null
+                    ) {
+                        "Discovery unavailable"
+                    } else {
+                        null
+                    },
+            )
+    }
+
+    private fun pollPeripherals() {
+        if (peripheralPicker == null) return
+        if (controller.viewState().page !is IdePageState.Workspace) {
+            closePeripherals()
+            return
+        }
+        val target =
+            controller
+                .viewState()
+                .target
+                .attachedTarget()
+                ?.let { IdeTargetReference(it.id, it.profile) }
+        if (target != peripheralTarget) {
+            refreshPeripherals()
+            return
+        }
+        val future = peripheralFuture ?: return
+        if (!future.isDone) return
+        peripheralFuture = null
+        val reply = runCatching { future.join() }.getOrNull()
+        peripheralPicker =
+            when (reply) {
+                is IdeTargetReply.NamedPeripherals -> {
+                    IdePeripheralPickerView(
+                        reply.entries,
+                        if (reply.truncated) "List truncated" else null,
+                    )
+                }
+
+                is IdeTargetReply.Failed -> {
+                    IdePeripheralPickerView(message = reply.failure.detail)
+                }
+
+                else -> {
+                    IdePeripheralPickerView(message = "Peripheral discovery failed")
+                }
+            }
+    }
+
     private fun activateUiAction(action: IdeHitAction): Boolean {
         when (action) {
+            IdeHitAction.Peripherals -> {
+                if (peripheralPicker != null) {
+                    closePeripherals()
+                } else {
+                    projectSwitcherOpen = false
+                    terminalOverlay.hide()
+                    peripheralPicker = IdePeripheralPickerView()
+                    refreshPeripherals()
+                }
+            }
+
+            IdeHitAction.PeripheralRefresh -> {
+                refreshPeripherals()
+            }
+
+            IdeHitAction.PeripheralClose -> {
+                closePeripherals()
+            }
+
             IdeHitAction.StatusDetails -> {
                 val state = controller.viewState()
                 val workspace = (state.page as? IdePageState.Workspace)?.value ?: return false
@@ -778,6 +927,7 @@ class IdeScreenController(
     }
 
     private fun closeSession() {
+        closePeripherals()
         if (sessionClosed) return
         sessionClosed = true
         host.closeSession()

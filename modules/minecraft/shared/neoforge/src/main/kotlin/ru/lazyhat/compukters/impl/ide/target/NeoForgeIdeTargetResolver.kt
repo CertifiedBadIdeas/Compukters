@@ -95,6 +95,12 @@ internal class NeoForgeIdeTargetResolver(
                         submitKey = { key, action, modifiers -> entity.submitTerminalKeyAsync(key, action, modifiers).awaitServerResult() },
                         submitText = { entity.submitTerminalTextAsync(it).awaitServerResult() },
                     ),
+                namedPeripherals = {
+                    ru.lazyhat.compukters.minecraft.peripheral.IdePeripheralDiscovery.snapshot(
+                        serverPlayer.level() as net.minecraft.server.level.ServerLevel,
+                        position,
+                    )
+                },
                 fileSystem =
                     IdeTargetFileSystemOperations(
                         stat = { entity.fileStatAsync(it).awaitServerResult() },

@@ -36,6 +36,36 @@ import kotlin.test.assertTrue
 
 class IdeScreenControllerTest {
     @Test
+    fun `peripheral toolbar opens an independent workspace window and escape closes it`() {
+        Fixture().use { fixture ->
+            fixture.controller.dispatch(IdeCommand.CreateProject("demo"))
+            fixture.awaitWorkspace()
+            val ui = fixture.ui
+            val control =
+                ui
+                    .frame(0, 0)
+                    .model.hitTargets
+                    .single { it.action == IdeHitAction.Peripherals }
+            val viewport = fixture.host.viewport()
+            ui.mouseClicked(
+                IdePointerInput(viewport.toMinecraftX(control.bounds.left + 2.0), viewport.toMinecraftY(control.bounds.top + 2.0), 0, 0),
+                false,
+            )
+            val model = ui.frame(0, 0).model
+            assertTrue(model.panels.any { it.kind == IdePanelKind.PeripheralSelection })
+            assertTrue(model.text.any { it.value == "Attach to a computer" })
+            assertFalse(model.panels.any { it.kind == IdePanelKind.Dialog })
+            assertTrue(ui.keyPressed(IdeKeyInput(IdeKeyCode.ESCAPE)))
+            assertFalse(
+                ui
+                    .frame(0, 0)
+                    .model.panels
+                    .any { it.kind == IdePanelKind.PeripheralSelection },
+            )
+        }
+    }
+
+    @Test
     fun `scaled editor scrollbar dragging changes viewport without moving caret or selection`() {
         Fixture().use { fixture ->
             fixture.controller.dispatch(IdeCommand.CreateProject("demo"))

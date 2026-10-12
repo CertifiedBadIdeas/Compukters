@@ -28,6 +28,9 @@ If investigation localizes the owning behavior below the Minecraft adapter, cont
 `compukters-runtime-change`, `compukters-abi-change`, or `compukters-language-feature` rather than duplicating the fix
 in the loader layer.
 
+For player-facing UI, also apply [compukters-ui-development](../compukters-ui-development/SKILL.md) before editing.
+It identifies the shared controls, theme, font metrics, drawing layers and visual evidence requirements.
+
 ## Select Evidence
 
 - Use ordinary module tests for pure adapters, codecs, geometry, input transforms, and lifecycle state machines.
