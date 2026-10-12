@@ -803,6 +803,21 @@ val generateRedstoneConformanceArtifact = tasks.register<Test>("generateRedstone
     systemProperty("compukter.vm.redstoneArtifact", redstoneConformanceArtifact.get().asFile.absolutePath)
 }
 
+val redstonePortArtifact = layout.buildDirectory.file("generated/conformance/redstone-port.cpkt")
+val generateRedstonePortConformanceArtifact = tasks.register<Test>("generateRedstonePortConformanceArtifact") {
+    description = "Compiles the deterministic remote redstone program for GameTest conformance."
+    group = "verification"
+    dependsOn(tasks.jar)
+    useJUnitPlatform()
+    testClassesDirs = sourceSets.test.get().output.classesDirs
+    classpath = sourceSets.test.get().runtimeClasspath
+    filter.includeTestsMatching("*redstone port program lowers deterministically for GameTest*")
+    inputs.file(workerJar)
+    outputs.file(redstonePortArtifact)
+    systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
+    systemProperty("compukter.vm.redstonePortArtifact", redstonePortArtifact.get().asFile.absolutePath)
+}
+
 val generateSoundConformanceArtifact = tasks.register<Test>("generateSoundConformanceArtifact") {
     description = "Compiles the deterministic sound program for GameTest conformance."
     group = "verification"
