@@ -28,7 +28,10 @@ public value class Rotation3f private constructor(
     /** Smallest spatial angle in [0, PI], independent of the quaternion's sign. */
     public fun angleTo(other: Rotation3f): Float = toDouble().angleTo(other.toDouble()).toFloat()
 
-    /** Shortest-arc interpolation with Double intermediates; finite amounts outside 0..1 extrapolate. */
+    /**
+     * Shortest-arc interpolation with Double intermediates; finite amounts outside 0..1 extrapolate.
+     * Huge angles lose trigonometric argument precision. Near PI the shortest direction can switch.
+     */
     public fun slerp(other: Rotation3f, amount: Float): Rotation3f {
         if (amount == 0f) return this
         if (amount == 1f) return other

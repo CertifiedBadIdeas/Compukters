@@ -26,6 +26,7 @@ fun rejectsRotation(block: () -> Unit) {
 fun main() {
     try {
         verifyAxisRotations()
+        verifyDirectionRotations()
         verifyInterpolation()
         verifyRotationChains()
         println("rotations ok")
@@ -87,6 +88,63 @@ fun verifyAxisRotations() {
     vectorNear(fromAxis(y, quarter).transform(z), x)
     val matrices: () -> Matrix3d = rotation::toMatrix3d
     vectorNear(matrices() * vector, rotation.transform(vector))
+}
+
+fun verifyDirectionRotations() {
+    val x = Vector3d(1.0, 0.0, 0.0)
+    val y = Vector3d(0.0, 1.0, 0.0)
+    val z = Vector3d(0.0, 0.0, 1.0)
+    val identity = Rotation3d.identity()
+    vectorNear(Rotation3d.fromTo(x, y).transform(x), y)
+    vectorNear(Rotation3d.fromTo(y, z).transform(y), z)
+    vectorNear(Rotation3d.fromTo(z, x).transform(z), x)
+    check(Rotation3d.fromTo(x, x * 17.0) == identity)
+    for (source in listOf(x, y, z, Vector3d(1.0, 1.0, 1.0), Vector3d(2.0, -3.0, 7.0))) {
+        val opposite = Rotation3d.fromTo(source, -source)
+        vectorNear(opposite.transform(source.normalized()), -source.normalized())
+        nearRotation(identity.angleTo(opposite), PI)
+        check(opposite == Rotation3d.fromTo(source, -source))
+    }
+    // For +X the least aligned axis is +Y, so the deterministic half-turn axis is +Z.
+    vectorNear(Rotation3d.fromTo(x, -x).quaternion.toVector4d().xyz, z)
+    for (size in listOf(Double.MIN_VALUE, 1e-300, 1.0, Double.MAX_VALUE)) {
+        vectorNear(Rotation3d.fromTo(Vector3d(size, 0.0, 0.0), Vector3d(0.0, -size, 0.0)).transform(x), -y)
+        vectorNear(Rotation3d.fromTo(Vector3d(size, size, size), Vector3d(-size, size, -size)).transform(Vector3d(1.0, 1.0, 1.0).normalized()), Vector3d(-1.0, 1.0, -1.0).normalized())
+    }
+    // Tiny departures must not be collapsed by an epsilon or acos(dot).
+    for (sign in listOf(-1.0, 1.0)) {
+        val parallelTarget = Vector3d(1.0, sign * 1e-12, 0.0).normalized()
+        val nearParallel = Rotation3d.fromTo(x, parallelTarget)
+        vectorNear(nearParallel.transform(x), parallelTarget, 1e-26)
+        nearRotation(identity.angleTo(nearParallel), 1e-12, 1e-26)
+        val oppositeTarget = Vector3d(-1.0, sign * 1e-12, 0.0).normalized()
+        val nearOpposite = Rotation3d.fromTo(x, oppositeTarget)
+        vectorNear(nearOpposite.transform(x), oppositeTarget)
+        check(nearOpposite.quaternion.z * sign > 0.0)
+    }
+    val random = Random(754)
+    for (i in 0..63) {
+        val from = Vector3d(random.nextDouble() - 0.5, random.nextDouble() - 0.5, random.nextDouble() - 0.5)
+        val to = Vector3d(random.nextDouble() - 0.5, random.nextDouble() - 0.5, random.nextDouble() - 0.5)
+        val a = from.normalized()
+        val b = to.normalized()
+        val rotation = Rotation3d.fromTo(from, to)
+        vectorNear(rotation.transform(a), b)
+        nearRotation(identity.angleTo(rotation), atan2((a cross b).length, a dot b))
+        nearRotation(rotation.transform(from).length, from.length)
+        vectorNear(rotation.inverse().transform(b), a)
+    }
+    val zero = Vector3d(0.0, 0.0, 0.0)
+    rejectsRotation { Rotation3d.fromTo(zero, x) }
+    rejectsRotation { Rotation3d.fromTo(x, zero) }
+    for (bad in listOf(Double.NaN, Double.POSITIVE_INFINITY, Double.NEGATIVE_INFINITY)) {
+        for (invalid in listOf(Vector3d(bad, 1.0, 0.0), Vector3d(1.0, bad, 0.0), Vector3d(1.0, 0.0, bad))) {
+            rejectsRotation { Rotation3d.fromTo(invalid, x) }
+            rejectsRotation { Rotation3d.fromTo(x, invalid) }
+        }
+    }
+    val factory: (Vector3d, Vector3d) -> Rotation3d = Rotation3d::fromTo
+    vectorNear(factory(x, y).transform(x), y)
 }
 
 fun verifyInterpolation() {

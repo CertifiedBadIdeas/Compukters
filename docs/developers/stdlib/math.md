@@ -108,13 +108,26 @@ Rotations are active, right-handed transforms of column vectors: a positive quar
 to +Y, around X maps +Y to +Z, and around Y maps +Z to +X. `identity()`, `transform(Vector3)` and rotation
 composition follow the same convention as matrices; `a * b` applies b first.
 
+`Rotation3d.fromTo(from, to)` creates the shortest rotation mapping the direction of `from` to the
+direction of `to`. Both vectors must be finite and nonzero; their magnitudes are ignored and normalization
+supports subnormal and extreme finite components. The rotation preserves vector lengths, so it does not
+map unequal magnitudes onto each other or determine a ship's roll from one direction alone. Parallel
+directions return identity. For exactly opposite normalized directions, the rotation axis is `from`
+crossed with the coordinate axis least aligned with it (smallest absolute component, ties X then Y then Z).
+That choice is deterministic, but the shortest rotation cannot be continuous around antiparallel directions.
+Other directions use the cross product and atan2 to retain tiny angles without an epsilon cutoff.
+
 `slerp(other, amount)` follows the shortest spatial arc with constant angular speed with respect to amount,
 up to floating rounding. Antipodal quaternion signs do not create a long path. Relative-quaternion axis/angle
 arithmetic avoids acos(dot)'s loss of tiny rotations; it does not replace small-angle spherical interpolation
 with linear interpolation. Amounts zero and one retain the exact corresponding endpoint representation.
-Finite amounts outside 0..1 extrapolate along the selected arc; NaN/infinity and an unrepresentable Double
-interpolation angle throw IllegalArgumentException. At exactly PI there are two equally short paths;
-the stored quaternion representation selects the axis. `angleTo(other)` returns the smallest spatial angle
+Finite amounts outside 0..1 extrapolate along the selected arc **provided the scaled interpolation angle
+is representable**. NaN/infinity and an unrepresentable Double interpolation angle throw IllegalArgumentException.
+For extremely large arguments, trigonometric argument precision is not guaranteed, so finite output does
+not imply an accurate extrapolated orientation. At exactly PI there are two equally short paths;
+the stored quaternion representation selects the axis. Near PI, small changes in the target components
+can switch the shortest direction and cause a discontinuous interpolation trajectory; this API does not
+track a previous trajectory to resolve that ambiguity. `angleTo(other)` returns the smallest spatial angle
 in radians in [0, PI], independent of the quaternion sign.
 
 `toMatrix3f()` / `toMatrix3d()` produce the matching linear rotation matrix. `toMatrix4f()` / `toMatrix4d()`
@@ -215,6 +228,8 @@ display Y points downward. Check positive display dimensions before mapping coor
   IDE `DiagnosticQueryTest` checks aliases, matrices and member completion with source and metadata-only inputs. `PlatformSignatureAliasesTest` checks signature expansion and ambiguous/cyclic rejection.
 - `testKotlinRotationsVmConformance` compiles and executes `compiler-k2/src/test/resources/kotlin/rotations/main.kt`,
   covering axis-angle normalization/rejection, signed axis turns, noncommuting composition and matrix agreement,
+  fromTo direction mapping, deterministic opposite-vector axes, tiny/near-opposite angles, extreme magnitudes,
+  seeded direction pairs and zero/non-finite rejection,
   shortest arcs, tiny angles, antipodal signs, endpoint preservation, extrapolation and invalid amounts.
   Seeded chains of 2048 rotations check unit length, transformed-vector length and Float drift against a
   Double reference with the same Float inputs. This proves execution of the new library methods in the VM;
