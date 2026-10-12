@@ -102,9 +102,51 @@ tests `string_content_operations_use_kotlin_utf16_semantics`,
 
 **Related work:** #676
 
-Only the documented parsing helper `String.toIntOrNull()` is available. Additional numeric parsers,
-regex, locale-sensitive conversion, Unicode category APIs and general formatting are outside
-this inventory. [Mathematics](math.md) owns `kotlin.math`. Primitive operators and conversions are listed under [numeric semantics]({{ '/KOTLIN-SUPPORT/primitives/' | relative_url }}).
+### Text building, sizing and iteration
+
+**Status:** Supported.
+
+`StringBuilder(capacity: Int = 16)` owns a growable `CharArray`; the `StringBuilder(content: String)` factory
+initializes it from text. `length`, indexed `get`/`set`, `capacity()`, `ensureCapacity`, `setLength`, `clear`,
+`append`, `appendRange(CharArray, startIndex, endIndex)`, `appendLine` and `toString` are available.
+Appending a Char writes directly into the buffer; appending text copies UTF-16 units. Appending an `Any?`
+uses its ordinary `toString()` conversion; null becomes `null`. Clearing retains the backing capacity;
+`setLength` fills newly exposed units with NUL. `toString()` creates an independent immutable snapshot.
+Growth and snapshots remain subject to Guest heap quotas. `buildString` has receiver-lambda overloads
+with and without an initial capacity and supports inline non-local returns.
+
+`CharSequence` is a canonical interface implemented by `String`, `StringBuilder` and Guest classes.
+It exposes `length`, indexed `get` and `subSequence`. Interface calls, casts/type checks, nullable
+references and generic collections preserve the original value; strings do not acquire a wrapper.
+`String` and the builder return immutable `String` snapshots from `subSequence`; Guest implementations
+may return another `CharSequence`. Results may narrow the interface result type through covariance.
+
+`CharSequence.iterator(): CharIterator` supports both direct `for` loops and stored iterators, including
+`nextChar()`. Iterators are ordinary managed objects. Iteration visits UTF-16 code units; exhausted reads throw `NoSuchElementException`.
+`take`, `drop`, `takeLast`, `dropLast`, `padStart`, `padEnd` and `repeat` operate on UTF-16 units.
+Non-negative counts are required, slicing clamps counts to content length and padding never truncates.
+Padding defaults to a space; repetition checks output-length overflow before allocation.
+
+**Evidence:** `MinimalScriptLoweringTest`, test `text stdlib preserves UTF16 cleanup search extraction and
+transformations`, executed by `testKotlinTextStdlibVmConformance`; IDE test `text builders iteration sizing and
+numeric parsing resolve with source and metadata inputs`.
+
+### Integer parsing
+
+**Status:** Supported.
+
+`toByte`, `toShort`, `toInt`, `toLong`, `toUByte`, `toUShort`, `toUInt`, `toULong` and their `OrNull` variants
+accept decimal text or an explicit radix from 2 through 36. Digits and letters are ASCII, case-insensitive;
+whitespace, separators and base prefixes are rejected. Signed forms accept a leading `+` or `-`; unsigned
+forms accept `+` but reject `-`, including `-0`. Overflow returns null for `OrNull` forms and throws
+`NumberFormatException` for ordinary forms. Invalid radices always throw `IllegalArgumentException`,
+including on empty input. `NumberFormatException` derives from `IllegalArgumentException`.
+
+**Evidence:** the same text conformance test exercises signed minima/maxima, unsigned maxima, overflow,
+radices, signs, malformed text and exception types.
+
+Floating-point parsers, regex, locale-sensitive conversion, Unicode category APIs and general formatting
+are outside this inventory. [Mathematics](math.md) owns `kotlin.math`. Primitive operators and conversions are listed under [numeric semantics]({{ '/KOTLIN-SUPPORT/primitives/' | relative_url }}).
 
 ## Value text and hashing
 

@@ -810,6 +810,27 @@ private class InlineValueClassRegistry private constructor(
     }
 }
 
+private fun charSequenceSignature(
+    name: String,
+    receiver: TypeRef,
+    id: StringId,
+): NominalType.Function =
+    NominalType.Function(
+        id,
+        false,
+        when (name) {
+            "<get-length>" -> ValueType.I32
+            "get" -> ValueType.Char
+            else -> ValueType.Ref(false, receiver)
+        },
+        listOf(ValueType.Ref(false, receiver)) +
+            when (name) {
+                "get" -> listOf(ValueType.I32)
+                "subSequence" -> listOf(ValueType.I32, ValueType.I32)
+                else -> emptyList()
+            },
+    )
+
 private fun scalarStringForm(type: ValueType): StringValueType =
     when (type) {
         ValueType.I32 -> StringValueType.I32
@@ -849,7 +870,13 @@ private const val UNIT_INSTANCE_IMPORT = 47u
 private const val ANY_TO_STRING_IMPORT = 48u
 private const val ANY_HASH_CODE_IMPORT = 49u
 private const val ANY_EQUALS_IMPORT = 50u
-private const val RUNTIME_IMPORT_COUNT = 57
+private const val CHAR_SEQUENCE_RUNTIME_TYPE = 39u
+private const val CHAR_SEQUENCE_IMPORT = 57u
+private const val CHAR_SEQUENCE_LENGTH_IMPORT = 58u
+private const val RUNTIME_IMPORT_COUNT = 61
+private const val CHAR_SEQUENCE_NAME = "kotlin.CharSequence"
+private val charSequenceMethods = listOf("<get-length>", "get", "subSequence")
+private val charSequenceMemberNames = charSequenceMethods.map { "$CHAR_SEQUENCE_NAME.$it" }
 private const val UNIT_INSTANCE_NAME = "kotlin.Unit.INSTANCE"
 private const val ANY_TO_STRING_NAME = "kotlin.Any.toString"
 private const val ANY_HASH_CODE_NAME = "kotlin.Any.hashCode"
@@ -869,7 +896,7 @@ private val scalarBoxes = GuestPrimitive.entries.map(::ScalarBox)
 private val runtimeMemberNames =
     listOf(INT_BOX_VALUE_NAME, THROWABLE_MESSAGE_NAME, THROWABLE_CAUSE_NAME) +
         scalarBoxes.drop(1).take(5).map { it.name } + UNIT_INSTANCE_NAME + ANY_TO_STRING_NAME + ANY_HASH_CODE_NAME + ANY_EQUALS_NAME +
-        scalarBoxes.drop(6).map { it.name }
+        scalarBoxes.drop(6).map { it.name } + CHAR_SEQUENCE_NAME + charSequenceMemberNames
 private const val INT_BOX_VALUE_NAME = "kotlin.Int.<boxed-value>"
 private const val THROWABLE_MESSAGE_NAME = "kotlin.Throwable.message"
 private const val THROWABLE_CAUSE_NAME = "kotlin.Throwable.cause"
@@ -954,6 +981,9 @@ private fun mapGuestValueType(
     }
     ((type as? IrSimpleType)?.classifier as? IrClassSymbol)?.owner?.runtimeExceptionType()?.let {
         return ValueType.Ref(nullable = type.isNullable(), type = TypeRef.Imported(ImportId.of(it)))
+    }
+    if (((type as? IrSimpleType)?.classifier as? IrClassSymbol)?.owner?.fqNameWhenAvailable?.asString() == CHAR_SEQUENCE_NAME) {
+        return ValueType.Ref(type.isNullable(), TypeRef.Imported(ImportId.of(CHAR_SEQUENCE_IMPORT)))
     }
     if (type.isNullable()) {
         val stringClass = (pluginContext.irBuiltIns.stringType as IrSimpleType).classifier
@@ -1159,28 +1189,7 @@ internal object KotlinProjectLowering {
                 }
             }
         (functions + properties).filterNot(::isCollectionSource).forEach { it.accept(collectionUsage, null) }
-        val collectionInterfaceClasses =
-            specializedCollectionInterfaces.mapNotNull { name ->
-                val classId =
-                    when (name) {
-                        "kotlin.collections.Map.Entry" -> {
-                            ClassId
-                                .topLevel(FqName("kotlin.collections.Map"))
-                                .createNestedClassId(Name.identifier("Entry"))
-                        }
-
-                        "kotlin.collections.MutableMap.MutableEntry" -> {
-                            ClassId
-                                .topLevel(FqName("kotlin.collections.MutableMap"))
-                                .createNestedClassId(Name.identifier("MutableEntry"))
-                        }
-
-                        else -> {
-                            ClassId.topLevel(FqName(name))
-                        }
-                    }
-                pluginContext.referenceClass(classId)?.owner
-            }
+        val collectionInterfaceClasses = canonicalPlatformBaseClasses(pluginContext, session)
         val sourceClasses =
             (classes + collectionInterfaceClasses)
                 .distinctBy { it.symbol }
@@ -1192,7 +1201,7 @@ internal object KotlinProjectLowering {
                         isCollectionSource(declaration)
                 }.filterNot {
                     !includeTrustedPlatformBodies &&
-                        it.fqNameWhenAvailable?.asString() !in specializedCollectionInterfaces &&
+                        it.fqNameWhenAvailable?.asString() !in specializedPlatformBaseTypes &&
                         it.fqNameWhenAvailable?.asString() !in session.sourcePlatformSymbols &&
                         session.trustedPlatformModule(it.file.fileEntry.name) != null
                 }.filterNot { declaration ->
@@ -1268,7 +1277,7 @@ internal object KotlinProjectLowering {
                         function.isGeneratedDataValueMethod()
                 }.filterNot { function ->
                     !includeTrustedPlatformBodies &&
-                        (function.parent as? IrClass)?.fqNameWhenAvailable?.asString() !in specializedCollectionInterfaces &&
+                        (function.parent as? IrClass)?.fqNameWhenAvailable?.asString() !in specializedPlatformBaseTypes &&
                         function.fqNameWhenAvailable?.asString() !in session.sourcePlatformSymbols &&
                         function.correspondingPropertySymbol
                             ?.owner
@@ -1286,7 +1295,7 @@ internal object KotlinProjectLowering {
                     { if (it.parent is IrFile || inlineValueClasses.contains((it.parent as? IrClass)?.symbol)) 0 else 1 },
                     { (it.parent as? IrClass)?.fqNameWhenAvailable?.asString().orEmpty() },
                     {
-                        if ((it.parent as? IrClass)?.fqNameWhenAvailable?.asString() in specializedCollectionInterfaces) {
+                        if ((it.parent as? IrClass)?.fqNameWhenAvailable?.asString() in specializedPlatformBaseTypes) {
                             "<builtins-collection>"
                         } else {
                             session.virtualSourcePath(it.file.fileEntry.name)?.value.orEmpty()
@@ -1361,7 +1370,7 @@ internal object KotlinProjectLowering {
                 .filter { instance ->
                     (instance.arguments.isNotEmpty() || instance.declaration.hasParameterizedSupertype()) &&
                         (
-                            instance.declaration.fqNameWhenAvailable?.asString() in specializedCollectionInterfaces ||
+                            instance.declaration.fqNameWhenAvailable?.asString() in specializedPlatformBaseTypes ||
                                 session.trustedPlatformModule(instance.declaration.file.fileEntry.name) != null ||
                                 session.virtualSourcePath(instance.declaration.file.fileEntry.name) in session.sourcePlatformPaths
                         )
@@ -1921,7 +1930,7 @@ internal object KotlinProjectLowering {
             val imported = externalBoxTypes[box] ?: externalClassTypes[box.symbol]
             if (imported == null) {
                 box.type =
-                    TypeRef.Local(TypeId.of((externalFunctionTypeBase + externalFunctionImports.size + 3 + localBoxTypeCount).toUInt()))
+                    TypeRef.Local(TypeId.of((externalFunctionTypeBase + externalFunctionImports.size + 6 + localBoxTypeCount).toUInt()))
                 localBoxTypeCount += 4 + valueClassInterfaceMethods(box.symbol).size
             } else {
                 box.type = imported
@@ -1937,7 +1946,7 @@ internal object KotlinProjectLowering {
                 box.field = box.payloadFields.first()
             }
         }
-        var nextInlineType = externalFunctionTypeBase + externalFunctionImports.size + 3 + localBoxTypeCount
+        var nextInlineType = externalFunctionTypeBase + externalFunctionImports.size + 6 + localBoxTypeCount
         guestTypes.valueClassBoxes.toSortedMap().values.filter { it.scalar == ValueType.Unit }.forEach { box ->
             box.inlineType =
                 ValueType.Inline(
@@ -3052,7 +3061,11 @@ internal object KotlinProjectLowering {
                         parentInstance?.let { parent ->
                             classInstanceTypeIds[parent]?.let { parent.declaration.symbol to TypeRef.Local(it) }
                         } ?: ((resolved as? IrSimpleType)?.classifier as? IrClassSymbol)?.let { symbol ->
-                            externalClassTypes[symbol]?.let { symbol to it }
+                            if (symbol.owner.fqNameWhenAvailable?.asString() == CHAR_SEQUENCE_NAME) {
+                                symbol to TypeRef.Imported(ImportId.of(CHAR_SEQUENCE_IMPORT))
+                            } else {
+                                externalClassTypes[symbol]?.let { symbol to it }
+                            }
                         }
                     }
                 val bridgeInterfaces =
@@ -3478,7 +3491,14 @@ internal object KotlinProjectLowering {
                                     ValueType.Ref(false, TypeRef.Imported(ImportId.of(ANY_RUNTIME_TYPE))),
                                     ValueType.Ref(true, TypeRef.Imported(ImportId.of(ANY_RUNTIME_TYPE))),
                                 ),
-                        ) + valueClassBoxArtifacts.types +
+                        ) +
+                        charSequenceMethods.map { name ->
+                            charSequenceSignature(
+                                name,
+                                TypeRef.Imported(ImportId.of(CHAR_SEQUENCE_IMPORT)),
+                                requireNotNull(metadataIds["$CHAR_SEQUENCE_NAME.$name"]),
+                            )
+                        } + valueClassBoxArtifacts.types +
                         guestTypes.valueClassBoxes.values
                             .filter { it.inlineType?.type is TypeRef.Local }
                             .sortedBy {
@@ -3487,71 +3507,7 @@ internal object KotlinProjectLowering {
                 constants = constants,
                 fields = artifactFields + valueClassBoxArtifacts.fields,
                 imports =
-                    runtimeTypeNames.indices.map { index ->
-                        runtimeTypeImport(index, requireNotNull(metadataIds[runtimeTypeNames[index]]), libraryHash)
-                    } +
-                        Import(
-                            kind = SymbolKind.FIELD,
-                            targetModule = ModuleId.of(1u),
-                            targetName = requireNotNull(metadataIds[INT_BOX_VALUE_NAME]),
-                            expectedSignature = TypeRef.Imported(ImportId.of(INT_BOX_RUNTIME_TYPE)),
-                            targetModuleHash = libraryHash,
-                        ) +
-                        listOf(THROWABLE_MESSAGE_NAME, THROWABLE_CAUSE_NAME).map { name ->
-                            Import(
-                                kind = SymbolKind.FIELD,
-                                targetModule = ModuleId.of(1u),
-                                targetName = requireNotNull(metadataIds[name]),
-                                expectedSignature = TypeRef.Imported(ImportId.of(2u)),
-                                targetModuleHash = libraryHash,
-                            )
-                        } +
-                        scalarBoxes.drop(1).take(5).map { box ->
-                            Import(
-                                SymbolKind.FIELD,
-                                ModuleId.of(1u),
-                                requireNotNull(metadataIds[box.name]),
-                                TypeRef.Imported(ImportId.of(box.type)),
-                                libraryHash,
-                            )
-                        } +
-                        Import(
-                            SymbolKind.FIELD,
-                            ModuleId.of(1u),
-                            requireNotNull(metadataIds[UNIT_INSTANCE_NAME]),
-                            TypeRef.Imported(ImportId.of(UNIT_RUNTIME_TYPE)),
-                            libraryHash,
-                        ) +
-                        Import(
-                            SymbolKind.FUNCTION,
-                            ModuleId.of(1u),
-                            requireNotNull(metadataIds[ANY_TO_STRING_NAME]),
-                            TypeRef.Local(TypeId.of((externalFunctionTypeBase + externalFunctionImports.size).toUInt())),
-                            libraryHash,
-                        ) +
-                        Import(
-                            SymbolKind.FUNCTION,
-                            ModuleId.of(1u),
-                            requireNotNull(metadataIds[ANY_HASH_CODE_NAME]),
-                            TypeRef.Local(TypeId.of((externalFunctionTypeBase + externalFunctionImports.size + 1).toUInt())),
-                            libraryHash,
-                        ) +
-                        Import(
-                            SymbolKind.FUNCTION,
-                            ModuleId.of(1u),
-                            requireNotNull(metadataIds[ANY_EQUALS_NAME]),
-                            TypeRef.Local(TypeId.of((externalFunctionTypeBase + externalFunctionImports.size + 2).toUInt())),
-                            libraryHash,
-                        ) +
-                        scalarBoxes.drop(6).map { box ->
-                            Import(
-                                SymbolKind.FIELD,
-                                ModuleId.of(1u),
-                                requireNotNull(metadataIds[box.name]),
-                                TypeRef.Imported(ImportId.of(box.type)),
-                                libraryHash,
-                            )
-                        } +
+                    runtimeImports(metadataIds, libraryHash, externalFunctionTypeBase + externalFunctionImports.size) +
                         externalTypeImports.entries
                             .sortedBy { (_, target) -> target.sortKey }
                             .mapIndexed { index, (_, target) ->
@@ -3689,6 +3645,16 @@ internal object KotlinProjectLowering {
         return Artifact(
             minimumRuntimeAbi =
                 when {
+                    // Canonical String implements CharSequence with a covariant subSequence result.
+                    modules.any { module ->
+                        module.types.any {
+                            it is NominalType.Interface &&
+                                module.strings[it.name.value.toInt()].toString() == "kotlin.CharSequence"
+                        }
+                    } -> {
+                        AbiVersion(1u, 18u)
+                    }
+
                     modules.any { module -> module.blocks.any { block -> block.instructions.any { it is Instruction.MatrixMath } } } -> {
                         AbiVersion(1u, 17u)
                     }
@@ -3980,6 +3946,11 @@ internal object KotlinProjectLowering {
         fun isSupported(sourceType: IrType): Boolean {
             val type = instance.substitute(sourceType)
             if (GuestPrimitive.scalar(type) != null || GuestPrimitive.array(type) != null) return true
+            if (((type as? IrSimpleType)?.classifier as? IrClassSymbol)?.owner?.fqNameWhenAvailable?.asString() ==
+                CHAR_SEQUENCE_NAME
+            ) {
+                return true
+            }
             if (((type as? IrSimpleType)?.classifier as? IrClassSymbol)?.owner?.runtimeExceptionType() != null) return true
             val stringClass = (pluginContext.irBuiltIns.stringType as IrSimpleType).classifier
             if (type.isNullable()) {
@@ -4154,33 +4125,86 @@ internal object KotlinProjectLowering {
     }
 
     private fun kotlinLibrary(): Module {
-        val names = (runtimeTypeNames + runtimeMemberNames + listOf("toString", "hashCode", "equals", "<unit-init>")).sorted()
+        val names =
+            (
+                runtimeTypeNames + runtimeMemberNames +
+                    listOf(
+                        "toString",
+                        "hashCode",
+                        "equals",
+                        "<unit-init>",
+                    ) + charSequenceMethods
+            ).sorted()
         val ids = names.withIndex().associate { (index, name) -> name to StringId.of(index.toUInt()) }
         val anyType = TypeRef.Local(TypeId.of(ANY_RUNTIME_TYPE))
         val string = ValueType.Ref(false, TypeRef.Local(TypeId.of(STRING_RUNTIME_TYPE)))
         val unit = ValueType.Ref(false, TypeRef.Local(TypeId.of(UNIT_RUNTIME_TYPE)))
         val owners = listOf(ANY_RUNTIME_TYPE, STRING_RUNTIME_TYPE) + scalarBoxes.map { it.type } + UNIT_RUNTIME_TYPE
-        val methods = owners.flatMap { owner -> listOf(owner to "toString", owner to "hashCode", owner to "equals") }
-        val blockCounts = methods.map { (owner, name) -> if (owner == DOUBLE_BOX_RUNTIME_TYPE && name == "equals") 6u else 3u }
+        val methods =
+            owners.flatMap { owner ->
+                listOf(owner to "toString", owner to "hashCode", owner to "equals") +
+                    if (owner == STRING_RUNTIME_TYPE) charSequenceMethods.map { owner to it } else emptyList()
+            }
+        val methodStarts = owners.associateWith { owner -> methods.indexOfFirst { it.first == owner }.toUInt() }
+        val runtimeTypeCount = runtimeTypeNames.size + 1
+        val textType = TypeRef.Local(TypeId.of(CHAR_SEQUENCE_RUNTIME_TYPE))
+        val blockCounts =
+            methods.map { (owner, name) ->
+                if (name in
+                    charSequenceMethods
+                ) {
+                    1u
+                } else if (owner == DOUBLE_BOX_RUNTIME_TYPE && name == "equals") {
+                    6u
+                } else {
+                    3u
+                }
+            }
         val blockStarts = blockCounts.runningFold(0u, UInt::plus)
         val initializerId = methods.size.toUInt()
         val signatures =
             methods.map { (owner, name) ->
-                NominalType.Function(
-                    requireNotNull(ids[name]),
-                    false,
-                    when (name) {
-                        "toString" -> string
-                        "equals" -> ValueType.Bool
-                        else -> ValueType.I32
-                    },
-                    listOf(ValueType.Ref(false, TypeRef.Local(TypeId.of(owner)))) +
-                        if (name == "equals") listOf(ValueType.Ref(true, anyType)) else emptyList(),
-                )
-            } + NominalType.Function(requireNotNull(ids["<unit-init>"]), false, ValueType.Unit, emptyList())
+                if (name in charSequenceMethods) {
+                    val signature = charSequenceSignature(name, TypeRef.Local(TypeId.of(STRING_RUNTIME_TYPE)), requireNotNull(ids[name]))
+                    signature.copy(result = if (name == "subSequence") string else signature.result)
+                } else {
+                    NominalType.Function(
+                        requireNotNull(ids[name]),
+                        false,
+                        when (name) {
+                            "toString" -> string
+                            "equals" -> ValueType.Bool
+                            else -> ValueType.I32
+                        },
+                        listOf(ValueType.Ref(false, TypeRef.Local(TypeId.of(owner)))) +
+                            if (name == "equals") listOf(ValueType.Ref(true, anyType)) else emptyList(),
+                    )
+                }
+            } + NominalType.Function(requireNotNull(ids["<unit-init>"]), false, ValueType.Unit, emptyList()) +
+                charSequenceMethods.map { charSequenceSignature(it, textType, requireNotNull(ids[it])) }
         val blocks =
             methods.flatMapIndexed { index, (owner, name) ->
                 val receiver = RegisterId.of(0u)
+                if (name in charSequenceMethods) {
+                    val parameterCount =
+                        if (name == "<get-length>") {
+                            1u
+                        } else if (name == "get") {
+                            2u
+                        } else {
+                            3u
+                        }
+                    val result = RegisterId.of(parameterCount)
+                    val operation =
+                        when (name) {
+                            "<get-length>" -> Instruction.StringLength(result, receiver)
+                            "get" -> Instruction.StringGet(result, receiver, RegisterId.of(1u))
+                            else -> Instruction.StringSubstring(result, receiver, RegisterId.of(1u), RegisterId.of(2u))
+                        }
+                    return@flatMapIndexed listOf(
+                        Block(FunctionId.of(index.toUInt()), false, listOf(operation, Instruction.Return(Destination.Register(result)))),
+                    )
+                }
                 val destination = RegisterId.of(1u)
                 if (name == "equals") {
                     val other = RegisterId.of(1u)
@@ -4411,6 +4435,8 @@ internal object KotlinProjectLowering {
                             } else {
                                 emptyList()
                             }
+                    } else if (name in charSequenceMethods) {
+                        emptyList()
                     } else {
                         listOf(receiverType, if (name == "toString") string else ValueType.I32) +
                             scalarBoxes.filter { it.type == owner }.map { it.valueType }
@@ -4418,10 +4444,24 @@ internal object KotlinProjectLowering {
                 Function(
                     TypeRef.Local(TypeId.of(owner)),
                     requireNotNull(ids[name]),
-                    TypeRef.Local(TypeId.of((runtimeTypeNames.size + index).toUInt())),
+                    TypeRef.Local(TypeId.of((runtimeTypeCount + index).toUInt())),
                     setOf(FunctionFlag.VIRTUAL),
-                    values.map(FunctionValue::scalar),
-                    if (name == "equals") 2u else 1u,
+                    (
+                        if (name in
+                            charSequenceMethods
+                        ) {
+                            signatures[index].parameters + signatures[index].result
+                        } else {
+                            values
+                        }
+                    ).map(FunctionValue::scalar),
+                    if (name in charSequenceMethods) {
+                        signatures[index].parameters.size.toUInt()
+                    } else if (name == "equals") {
+                        2u
+                    } else {
+                        1u
+                    },
                     BlockId.of(blockStarts[index]),
                     blockCounts[index],
                     0u,
@@ -4431,7 +4471,7 @@ internal object KotlinProjectLowering {
                 Function(
                     TypeRef.Local(TypeId.of(UNIT_RUNTIME_TYPE)),
                     requireNotNull(ids["<unit-init>"]),
-                    TypeRef.Local(TypeId.of(runtimeTypeNames.size.toUInt() + initializerId)),
+                    TypeRef.Local(TypeId.of(runtimeTypeCount.toUInt() + initializerId)),
                     setOf(FunctionFlag.STATIC),
                     listOf(FunctionValue.scalar(unit)),
                     0u,
@@ -4440,11 +4480,28 @@ internal object KotlinProjectLowering {
                     0u,
                     0u,
                 )
+        val textDeclarations =
+            charSequenceMethods.mapIndexed { index, name ->
+                val signatureId = runtimeTypeCount.toUInt() + initializerId + 1u + index.toUInt()
+                val signature = signatures[(initializerId + 1u + index.toUInt()).toInt()]
+                Function(
+                    textType,
+                    requireNotNull(ids[name]),
+                    TypeRef.Local(TypeId.of(signatureId)),
+                    setOf(FunctionFlag.ABSTRACT, FunctionFlag.VIRTUAL),
+                    signature.parameters.map(FunctionValue::scalar),
+                    signature.parameters.size.toUInt(),
+                    BlockId.of(0u),
+                    0u,
+                    0u,
+                    0u,
+                )
+            }
         return Module(
             name = requireNotNull(ids["kotlin.Any"]),
             utf16Literals = listOf(Utf16Literal.of(*"kotlin.Unit".map { it.code }.toIntArray())),
             constants = listOf(Constant.Bool(false), Constant.StringLiteral(Utf16LiteralId.of(0u))),
-            functions = functions,
+            functions = functions + textDeclarations,
             blocks = blocks,
             kind = ModuleKind.LIBRARY,
             strings = names.map(MetadataText::of),
@@ -4455,8 +4512,9 @@ internal object KotlinProjectLowering {
                         name = requireNotNull(ids["kotlin.String"]),
                         final = true,
                         superType = anyType,
+                        interfaces = listOf(textType),
                         methodStart = 3u,
-                        methodCount = 3u,
+                        methodCount = 6u,
                     ),
                     NominalType.Class(
                         name = requireNotNull(ids["kotlin.Throwable"]),
@@ -4467,7 +4525,6 @@ internal object KotlinProjectLowering {
                     ),
                     NominalType.Class(
                         name = requireNotNull(ids["kotlin.IllegalArgumentException"]),
-                        final = true,
                         superType = TypeRef.Local(TypeId.of(8u)),
                         runtimeExceptionKind = ru.lazyhat.compukters.compiler.artifact.model.RuntimeExceptionKind.ILLEGAL_ARGUMENT,
                     ),
@@ -4479,7 +4536,7 @@ internal object KotlinProjectLowering {
                         superType = anyType,
                         fieldStart = 0u,
                         fieldCount = 1u,
-                        methodStart = 6u,
+                        methodStart = requireNotNull(methodStarts[INT_BOX_RUNTIME_TYPE]),
                         methodCount = 3u,
                     ),
                     NominalType.Class(name = requireNotNull(ids["kotlin.Exception"]), superType = TypeRef.Local(TypeId.of(2u))),
@@ -4536,7 +4593,7 @@ internal object KotlinProjectLowering {
                             superType = anyType,
                             fieldStart = (index + 3).toUInt(),
                             fieldCount = 1u,
-                            methodStart = ((index + 3) * 3).toUInt(),
+                            methodStart = requireNotNull(methodStarts[box.type]),
                             methodCount = 3u,
                         )
                     } +
@@ -4546,7 +4603,7 @@ internal object KotlinProjectLowering {
                         superType = anyType,
                         fieldStart = 8u,
                         fieldCount = 1u,
-                        methodStart = ((owners.size - 1) * 3).toUInt(),
+                        methodStart = requireNotNull(methodStarts[UNIT_RUNTIME_TYPE]),
                         methodCount = 4u,
                         initializer = FunctionId.of(initializerId),
                     ) +
@@ -4562,7 +4619,7 @@ internal object KotlinProjectLowering {
                             superType = anyType,
                             fieldStart = box.fieldIndex,
                             fieldCount = 1u,
-                            methodStart = ((index + 8) * 3).toUInt(),
+                            methodStart = requireNotNull(methodStarts[box.type]),
                             methodCount = 3u,
                         )
                     } +
@@ -4573,7 +4630,8 @@ internal object KotlinProjectLowering {
                             superType = anyType,
                             storage = primitive.arrayStorage,
                         )
-                    } + signatures,
+                    } + NominalType.Interface(requireNotNull(ids[CHAR_SEQUENCE_NAME]), methodStart = initializerId + 1u, methodCount = 3u) +
+                    signatures,
             fields =
                 listOf(
                     Field(
@@ -4625,7 +4683,7 @@ internal object KotlinProjectLowering {
                     },
             exports =
                 (
-                    runtimeTypeNames.mapIndexed { index, name ->
+                    (runtimeTypeNames + CHAR_SEQUENCE_NAME).mapIndexed { index, name ->
                         Export(
                             kind = SymbolKind.TYPE,
                             visibility = ExportVisibility.PUBLIC_LIBRARY,
@@ -4671,25 +4729,117 @@ internal object KotlinProjectLowering {
                             ExportVisibility.PUBLIC_LIBRARY,
                             requireNotNull(ids[ANY_TO_STRING_NAME]),
                             0u,
-                            TypeRef.Local(TypeId.of(runtimeTypeNames.size.toUInt() + 0u)),
+                            TypeRef.Local(TypeId.of(runtimeTypeCount.toUInt() + 0u)),
                         ) +
                         Export(
                             SymbolKind.FUNCTION,
                             ExportVisibility.PUBLIC_LIBRARY,
                             requireNotNull(ids[ANY_HASH_CODE_NAME]),
                             1u,
-                            TypeRef.Local(TypeId.of(runtimeTypeNames.size.toUInt() + 1u)),
+                            TypeRef.Local(TypeId.of(runtimeTypeCount.toUInt() + 1u)),
                         ) +
                         Export(
                             SymbolKind.FUNCTION,
                             ExportVisibility.PUBLIC_LIBRARY,
                             requireNotNull(ids[ANY_EQUALS_NAME]),
                             2u,
-                            TypeRef.Local(TypeId.of(runtimeTypeNames.size.toUInt() + 2u)),
-                        )
+                            TypeRef.Local(TypeId.of(runtimeTypeCount.toUInt() + 2u)),
+                        ) +
+                        charSequenceMemberNames.mapIndexed { index, name ->
+                            Export(
+                                SymbolKind.FUNCTION,
+                                ExportVisibility.PUBLIC_LIBRARY,
+                                requireNotNull(ids[name]),
+                                initializerId + 1u + index.toUInt(),
+                                TypeRef.Local(
+                                    TypeId.of(runtimeTypeCount.toUInt() + initializerId + 1u + index.toUInt()),
+                                ),
+                            )
+                        }
                 ).sortedWith(compareBy({ it.kind.ordinal }, { names[it.name.value.toInt()] })),
         )
     }
+
+    private fun runtimeImports(
+        metadataIds: Map<String, StringId>,
+        libraryHash: ByteArray,
+        functionTypeBase: Int,
+    ): List<Import> =
+        runtimeTypeNames.indices.map { index ->
+            runtimeTypeImport(index, requireNotNull(metadataIds[runtimeTypeNames[index]]), libraryHash)
+        } +
+            Import(
+                kind = SymbolKind.FIELD,
+                targetModule = ModuleId.of(1u),
+                targetName = requireNotNull(metadataIds[INT_BOX_VALUE_NAME]),
+                expectedSignature = TypeRef.Imported(ImportId.of(INT_BOX_RUNTIME_TYPE)),
+                targetModuleHash = libraryHash,
+            ) +
+            listOf(THROWABLE_MESSAGE_NAME, THROWABLE_CAUSE_NAME).map { name ->
+                Import(
+                    kind = SymbolKind.FIELD,
+                    targetModule = ModuleId.of(1u),
+                    targetName = requireNotNull(metadataIds[name]),
+                    expectedSignature = TypeRef.Imported(ImportId.of(2u)),
+                    targetModuleHash = libraryHash,
+                )
+            } +
+            scalarBoxes.drop(1).take(5).map { box ->
+                Import(
+                    SymbolKind.FIELD,
+                    ModuleId.of(1u),
+                    requireNotNull(metadataIds[box.name]),
+                    TypeRef.Imported(ImportId.of(box.type)),
+                    libraryHash,
+                )
+            } +
+            Import(
+                SymbolKind.FIELD,
+                ModuleId.of(1u),
+                requireNotNull(metadataIds[UNIT_INSTANCE_NAME]),
+                TypeRef.Imported(ImportId.of(UNIT_RUNTIME_TYPE)),
+                libraryHash,
+            ) +
+            Import(
+                SymbolKind.FUNCTION,
+                ModuleId.of(1u),
+                requireNotNull(metadataIds[ANY_TO_STRING_NAME]),
+                TypeRef.Local(TypeId.of((functionTypeBase).toUInt())),
+                libraryHash,
+            ) +
+            Import(
+                SymbolKind.FUNCTION,
+                ModuleId.of(1u),
+                requireNotNull(metadataIds[ANY_HASH_CODE_NAME]),
+                TypeRef.Local(TypeId.of((functionTypeBase + 1).toUInt())),
+                libraryHash,
+            ) +
+            Import(
+                SymbolKind.FUNCTION,
+                ModuleId.of(1u),
+                requireNotNull(metadataIds[ANY_EQUALS_NAME]),
+                TypeRef.Local(TypeId.of((functionTypeBase + 2).toUInt())),
+                libraryHash,
+            ) +
+            scalarBoxes.drop(6).map { box ->
+                Import(
+                    SymbolKind.FIELD,
+                    ModuleId.of(1u),
+                    requireNotNull(metadataIds[box.name]),
+                    TypeRef.Imported(ImportId.of(box.type)),
+                    libraryHash,
+                )
+            } +
+            runtimeTypeImport(CHAR_SEQUENCE_IMPORT.toInt(), requireNotNull(metadataIds[CHAR_SEQUENCE_NAME]), libraryHash) +
+            charSequenceMemberNames.mapIndexed { index, name ->
+                Import(
+                    SymbolKind.FUNCTION,
+                    ModuleId.of(1u),
+                    requireNotNull(metadataIds[name]),
+                    TypeRef.Local(TypeId.of((functionTypeBase + 3 + index).toUInt())),
+                    libraryHash,
+                )
+            }
 
     private fun runtimeTypeImport(
         index: Int,
@@ -4866,6 +5016,7 @@ private fun linkedPlatformSymbols(
         object : IrVisitorVoid() {
             override fun visitElement(element: IrElement) {
                 if (element is IrExpression) considerType(element.type)
+                if (element is IrValueDeclaration) considerType(element.type)
                 if (element is IrClass) element.superTypes.forEach(::considerType)
                 element.acceptChildren(this, null)
             }
@@ -5113,8 +5264,16 @@ private class FunctionCompiler(
             emit(Instruction.Return(Destination.Register(result)))
         } else if ((function as? IrSimpleFunction)?.isGeneratedDataValueMethod() == true) {
             if (function.name.asString() == "hashCode") compileDataHash() else compileDataEquals()
+        } else if (function is IrConstructor &&
+            constructorDeclaration?.fqNameWhenAvailable?.asString() == "kotlin.collections.CharIterator" &&
+            function.body == null
+        ) {
+            // Canonical abstract iterator storage has no state or executable initialization.
+            emit(Instruction.Return(Destination.Unit))
         } else {
-            val body = function.body as? IrBlockBody ?: throw UnsupportedKotlinIr(function, "function body is not a block")
+            val body =
+                function.body as? IrBlockBody
+                    ?: throw UnsupportedKotlinIr(function, "function body is not a block: ${function.fqNameWhenAvailable}")
             body.statements.forEach(::compileStatement)
         }
         if (blocks[currentBlock].instructions.lastOrNull()?.isTerminator() != true) {
@@ -5452,6 +5611,7 @@ private class FunctionCompiler(
         if (constructorDeclaration == null) throw UnsupportedKotlinIr(call, "delegating constructor call is outside a constructor")
         val target = call.symbol.owner
         if (target.parentAsClass.fqNameWhenAvailable?.asString() == "kotlin.Any") return
+        if (target.parentAsClass.fqNameWhenAvailable?.asString() == "kotlin.collections.CharIterator") return
         if (target.parentAsClass.fqNameWhenAvailable?.asString() == "kotlin.Throwable") {
             val arguments = compileExceptionArguments(target, call.arguments, call)
             emit(Instruction.FieldSet(RegisterId.of(0u), FieldRef.Imported(ImportId.of(THROWABLE_MESSAGE_IMPORT)), arguments.first))
@@ -5583,7 +5743,7 @@ private class FunctionCompiler(
                 ?.asString()
                 .orEmpty()
         if (!sourceName.startsWith("kotlin.collections.Hash") && sourceName !in hashCollectionInterfaces) return
-        if (targetName !in specializedCollectionInterfaces) return
+        if (targetName !in specializedPlatformBaseTypes) return
         val source = resolveClassInstance(expression.type) ?: return
         val target = resolveClassInstance(expectedType) ?: return
         val inherited = resolveMemberOwner(source, target.declaration) ?: return
@@ -6950,6 +7110,23 @@ private class FunctionCompiler(
             if (target.returnType.isNothing()) emit(Instruction.Unreachable)
             return (destination as? Destination.Register)?.id
         }
+        if ((target.parent as? IrClass)?.fqNameWhenAvailable?.asString() == CHAR_SEQUENCE_NAME) {
+            val index = charSequenceMethods.indexOf(target.name.asString())
+            if (index >= 0) {
+                val arguments = call.arguments.filterNotNull().map(::compileExpression)
+                val destination = allocate(valueType(call.type, call))
+                emit(
+                    Instruction.CallInterface(
+                        Destination.Register(destination),
+                        FunctionRef.Imported(
+                            ImportId.of(CHAR_SEQUENCE_LENGTH_IMPORT + index.toUInt()),
+                        ),
+                        arguments,
+                    ),
+                )
+                return destination
+            }
+        }
         compileCompareToPredicate(call, target)?.let { return it }
         val targetId = projectFunctionId(call, target)
         if (targetId == null) {
@@ -8017,7 +8194,7 @@ private class FunctionCompiler(
         if (arguments.size == 2 && argumentExpressions[0].type == kotlinStringType && name == "get") {
             return result(ValueType.Char) { Instruction.StringGet(it, arguments[0], arguments[1]) }
         }
-        if (arguments.size == 3 && argumentExpressions[0].type == kotlinStringType && name == "substring") {
+        if (arguments.size == 3 && argumentExpressions[0].type == kotlinStringType && name in setOf("substring", "subSequence")) {
             prepareAllocationBlock()
             return result(stringType) { Instruction.StringSubstring(it, arguments[0], arguments[1], arguments[2]) }
         }
@@ -9482,7 +9659,12 @@ private class FunctionCompiler(
         // A nested Nothing expression can transfer control before its caller writes a result.
         if (isTerminated()) return
         val source = activeSource
-        val path = session.originalSourcePath(source) ?: session.virtualSourcePath(function.file.fileEntry.name)
+        val path =
+            if (source.startOffset < 0 || source.endOffset < source.startOffset) {
+                null
+            } else {
+                session.originalSourcePath(source) ?: session.virtualSourcePath(function.file.fileEntry.name)
+            }
         if (path != null && source.startOffset >= 0 && source.endOffset >= source.startOffset) {
             val position = session.sourcePosition(path, source.startOffset)
             val entry =
@@ -9946,8 +10128,35 @@ private val hashCollectionInterfaces =
         "kotlin.collections.MutableMap.MutableEntry",
     )
 
-private val specializedCollectionInterfaces =
+private fun canonicalPlatformBaseClasses(
+    pluginContext: IrPluginContext,
+    session: CompilationSession,
+): List<IrClass> =
+    specializedPlatformBaseTypes.filter { name -> session.platformTypes.none { it.symbol == name } }.mapNotNull { name ->
+        val classId =
+            when (name) {
+                "kotlin.collections.Map.Entry" -> {
+                    ClassId
+                        .topLevel(FqName("kotlin.collections.Map"))
+                        .createNestedClassId(Name.identifier("Entry"))
+                }
+
+                "kotlin.collections.MutableMap.MutableEntry" -> {
+                    ClassId
+                        .topLevel(FqName("kotlin.collections.MutableMap"))
+                        .createNestedClassId(Name.identifier("MutableEntry"))
+                }
+
+                else -> {
+                    ClassId.topLevel(FqName(name))
+                }
+            }
+        pluginContext.referenceClass(classId)?.owner
+    }
+
+private val specializedPlatformBaseTypes =
     setOf(
+        "kotlin.collections.CharIterator",
         "kotlin.collections.Iterable",
         "kotlin.collections.Iterator",
         "kotlin.collections.Collection",
@@ -9997,7 +10206,7 @@ private fun loweredParameters(
     session: CompilationSession,
 ) = if (
     (function.parent as? IrClass)?.fqNameWhenAvailable?.asString() in
-    specializedCollectionInterfaces
+    specializedPlatformBaseTypes
 ) {
     function.parameters
 } else if (
@@ -10183,6 +10392,9 @@ private class GuestArrayUsageCollector(
         }
         val runtimeType =
             when {
+                ((element as? IrSimpleType)?.classifier as? IrClassSymbol)?.owner?.fqNameWhenAvailable?.asString() ==
+                    CHAR_SEQUENCE_NAME -> CHAR_SEQUENCE_IMPORT
+
                 element.isKotlinAny() -> ANY_RUNTIME_TYPE
 
                 element.isNullableScalar() -> element.nullableScalarRuntimeType()
