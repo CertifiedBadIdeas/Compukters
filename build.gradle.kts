@@ -521,6 +521,15 @@ registerKotlinVmConformance(
     conformanceScenario = "constructor-defaults",
 )
 registerKotlinVmConformance(
+    taskName = "testKotlinFunctionDefaultsVmConformance",
+    taskDescription = "Executes Guest function default expressions with the pinned Compukter VM.",
+    artifactTask = ":compiler-k2:generateFunctionDefaultsConformanceArtifact",
+    artifact = project(":compiler-k2").layout.buildDirectory.file("generated/conformance/kotlin-function-defaults.cpkt"),
+    cargoTargetDirectory = ".toolchain/build/cargo/compiler-k2-function-defaults-conformance",
+    artifactEnvironmentVariable = "COMPUKTER_KOTLIN_FUNCTION_DEFAULTS_ARTIFACT",
+    conformanceScenario = "function-defaults",
+)
+registerKotlinVmConformance(
     taskName = "testKotlinAdaptedConstructorsVmConformance",
     taskDescription = "Executes adapted Guest constructor references with the pinned Compukter VM.",
     artifactTask = ":compiler-k2:generateAdaptedConstructorsConformanceArtifact",

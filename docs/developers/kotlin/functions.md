@@ -46,17 +46,34 @@ test `k2_ordinary_project_call_resumes_across_async_capability`.
 
 **Status:** Partial.
 
-Platform APIs may publish constant `Int` or qualified enum-entry defaults, which direct platform calls lower
-without JVM mask dispatchers. Omitted `Array<String>` parameters in project functions are supported only for
-direct `emptyArray()` or direct `arrayOf` call defaults. Primary constructors evaluate supported Guest default
-expressions at ordinary call sites after explicit arguments; general project function defaults remain limited
-to the documented forms.
+Direct calls to project top-level, member and extension functions evaluate defaults using the supported
+Guest expression subset. Defaults can read earlier parameters and receivers, call helpers, construct
+arrays/objects or capture earlier parameters in lambdas. Concrete generic specializations and inherited
+member defaults use the same rules; overriding implementations still dispatch normally.
+
+```kotlin
+import kotlin.random.Random
+
+fun roll(sides: Int = 6, random: Random = Random.Default): Int =
+    random.nextInt(1, sides + 1)
+```
+
+Receivers evaluate once, followed by all explicit arguments in source order, then omitted defaults in
+parameter order. Defaults run on each invocation and only for omitted arguments. Temporary parameter
+bindings are scoped to default evaluation, including nested calls. Primary constructor defaults retain
+these ordinary call-site rules.
+
+A cycle that requires recursively expanding the same default at compile time reports `UNSUPPORTED_IR`;
+recursive calls supplying explicit arguments remain supported. Callable references retain their documented
+adaptation limits. Separately compiled platform APIs publish the existing constant `Int`, enum-entry,
+null and array-receiver-size payloads; arbitrary source expressions do not cross bundle metadata.
 
 **Evidence:**
 [`MinimalScriptLoweringTest`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/compiler-k2/src/test/kotlin/ru/lazyhat/compukters/compiler/worker/k2/MinimalScriptLoweringTest.kt),
 tests `sound beep lowers deterministically to a blocking Boolean capability operation`, `string arrays support
 copyOfRange and supported default arguments`, and `primary constructor defaults preserve argument order and
-earlier parameters` paired with `testKotlinConstructorDefaultsVmConformance`;
+earlier parameters` paired with `testKotlinConstructorDefaultsVmConformance`, and `function defaults preserve
+expression evaluation bindings and dispatch` paired with `testKotlinFunctionDefaultsVmConformance`;
 [`ParameterInfoQueryTest`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/ide-analysis-k2/src/test/kotlin/ru/lazyhat/compukters/ide/analysis/k2/query/ParameterInfoQueryTest.kt),
 test `parameter info exposes a platform Int default`.
 
