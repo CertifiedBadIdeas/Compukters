@@ -37,6 +37,7 @@ data class IdeIconDraw(
     val bounds: IdeRect,
     val color: Int,
     val zIndex: Int,
+    val itemId: String? = null,
 )
 
 data class IdeToolbarIconSprite(

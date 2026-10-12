@@ -332,3 +332,17 @@ interaction belong here; backend changes belong in the Minecraft version adapter
 viewport. `IdeTextFieldLayout` supplies the same code-point geometry to painting and pointer input; `IdePromptGeometry`
 keeps the field rectangle shared with the dialog. Closing or advancing a prompt releases its document and history.
 The component uses the existing editor engine without Minecraft types or version-specific widgets.
+
+## IDE named peripheral selection
+
+The workspace picker requests a bounded snapshot through the existing IDE target request broker. The server validates
+its player-owned target lease and exact profile before consulting the resolved computer's discovery callback.
+Discovery uses the same direct/network reachability and name directory as Guest lookup on the server thread, without
+loading chunks. Each entry carries only its name, duplicate-name flag and block item registry ID; the client resolves
+and renders the item at 32×32. Request tag 12 and reply tag 13 extend the game transport additively; existing tags and
+Guest/worker ABIs are unchanged. At most 1024 entries, 64 UTF-16 name units and 256 item-ID units are admitted.
+
+The screen owns the window and pending future, polls completion on the client tick, and rejects responses after a
+target change or screen closure. Refresh rebuilds the list; disconnected/local targets show an attachment prompt.
+Source insertion belongs to the IDE controller and the pure ide-core helper, retains headers/imports and line endings,
+and commits one undoable document edit. It uses the active writable Kotlin buffer and existing analysis/autosave flow.

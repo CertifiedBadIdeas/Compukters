@@ -13,6 +13,10 @@ headings so this page has one stable URL that can be shared outside the reposito
 
 ## 0.6.0 — In development
 
+- The IDE has a named peripheral selection window with block item icons and project-style cards.
+  Selecting a reachable device inserts its name as an undoable `const val` beneath imports in the active
+  Kotlin source, with an uppercase snake-case identifier, duplicate reuse and collision suffixes.
+
 - Displays accept empty-hand front-face clicks in whole-screen pixel coordinates, exposed through
   `GraphicalDisplay.pollClick()`. Input belongs to the drawing program and is bounded and transient.
   Guest widgets provide buttons, indicators, gauges and history charts. The `create-scada` example

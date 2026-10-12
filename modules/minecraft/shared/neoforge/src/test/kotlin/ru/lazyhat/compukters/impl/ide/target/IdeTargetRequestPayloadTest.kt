@@ -49,6 +49,7 @@ internal class IdeTargetRequestPayloadTest {
                 IdeTargetRequest.SubmitCanonicalLine(target, IdeCanonicalLine.of(charArrayOf('a', '\uD83D', '\uDE00'))),
                 IdeTargetRequest.Heartbeat(target),
                 IdeTargetRequest.Detach(target),
+                IdeTargetRequest.NamedPeripherals(target),
             )
 
         requests.forEachIndexed { index, request ->

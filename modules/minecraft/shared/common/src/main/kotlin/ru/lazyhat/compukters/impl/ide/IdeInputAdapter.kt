@@ -584,6 +584,10 @@ class IdeInputAdapter(
                 uiActions.activate(action)
             }
 
+            IdeHitAction.Peripherals,
+            IdeHitAction.PeripheralChoice,
+            IdeHitAction.PeripheralRefresh,
+            IdeHitAction.PeripheralClose,
             IdeHitAction.ScaleAuto,
             IdeHitAction.ScaleTwo,
             IdeHitAction.ScaleThree,

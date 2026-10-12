@@ -51,6 +51,7 @@ internal object IdeToolbar {
                     null
                 } else {
                     when (action) {
+                        IdeHitAction.Peripherals -> "Devices"
                         IdeHitAction.Build -> "Build"
                         IdeHitAction.Run -> "Run"
                         IdeHitAction.Cancel, IdeHitAction.GitCancel -> "Cancel"
@@ -71,7 +72,13 @@ internal object IdeToolbar {
                     IdeColors.TEXT
                 }
             val iconBounds = if (label == null) bounds else IdeRect(bounds.left + 2, bounds.top, bounds.left + 24, bounds.bottom)
-            output.icon(IdeIconDraw(icon, iconBounds, color, Z_TEXT))
+            if (action == IdeHitAction.Peripherals) {
+                val x = iconBounds.left + (iconBounds.width - 16) / 2
+                val y = iconBounds.top + (iconBounds.height - 16) / 2
+                output.icon(IdeIconDraw(icon, IdeRect(x, y, x + 16, y + 16), color, Z_TEXT, "compukters:display"))
+            } else {
+                output.icon(IdeIconDraw(icon, iconBounds, color, Z_TEXT))
+            }
             if (label !=
                 null
             ) {
@@ -111,6 +118,7 @@ internal object IdeToolbar {
             formatTooltip,
             selected = formatBusy,
         )
+        action(IdeIconKind.Resolve, IdeHitAction.Peripherals, tooltip = "Named peripherals")
         action(IdeIconKind.Resolve, IdeHitAction.Resolve, toolingReady, toolingUnavailable ?: "Resolve dependencies")
         if (IdeBusyOperation.Clone in busy || IdeBusyOperation.Git in busy) {
             action(IdeIconKind.Cancel, IdeHitAction.GitCancel, tooltip = "Cancel Git operation")

@@ -11,6 +11,23 @@ permalink: /IDE/
 Open the IDE with **Ctrl+I** while looking at a computer, or from its terminal. The attached computer is the deployment
 target; the project and its Git repository live on your own Minecraft client. This page includes unreleased 0.5.0 work.
 
+## Select named peripherals
+
+With a computer attached, open **Devices** in the workspace toolbar. The separate window lists reachable named
+peripherals with 32×32 block item icons. Scroll through the cards and use **Refresh** after renaming, reconnecting or
+replacing a device. Unnamed devices are omitted; duplicate names are shown but cannot be selected.
+
+Open a writable project Kotlin source, then click a card. The IDE inserts a string constant immediately beneath
+its imports, before the existing code. For example, selecting `drive_speed` adds:
+
+```kotlin
+const val DRIVE_SPEED = "drive_speed"
+```
+
+The value is the exact peripheral name. Repeated selection reuses a matching constant; identifier collisions get
+suffixes such as `DRIVE_SPEED_2`. Insertion remains an unsaved editor change and can be undone with **Ctrl+Z**.
+Use the constant in your provider lookup, for example `Speedometer.named(DRIVE_SPEED)`.
+
 ## Create, open, clone and switch
 
 **Create** makes a project beneath `<game directory>/compukters/ide/projects` with `compukter.toml` and `src/main.kt`.
