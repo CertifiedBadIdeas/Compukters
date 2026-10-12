@@ -187,9 +187,9 @@ I/O, processes, and redstone are admitted through bounded runtime contracts.
 
 ## Next steps
 
-- Connect a program to the world with [Redstone GPIO](https://certifiedbadideas.github.io/Compukters/REDSTONE/).
-- Put program output on an in-world [Text display](https://certifiedbadideas.github.io/Compukters/DISPLAY/).
+- Connect a program to the world with [Redstone GPIO]({{ '/REDSTONE/' | relative_url }}).
+- Put program output on an in-world [Display]({{ '/DISPLAY/' | relative_url }}).
 - Explore kinetics, Stock Tickers, and boilers in the [Create addon guide]({{ '/CREATE/' | relative_url }}).
-- Check exact language support in the [Guest Kotlin support matrix](https://certifiedbadideas.github.io/Compukters/KOTLIN-SUPPORT/).
-- Contributors can continue with [Architecture](https://certifiedbadideas.github.io/Compukters/ARCHITECTURE/) and [Verification](https://certifiedbadideas.github.io/Compukters/VERIFICATION/).
+- Check exact language support in the [Guest Kotlin support matrix]({{ '/KOTLIN-SUPPORT/' | relative_url }}).
+- Contributors can continue with [Architecture]({{ '/ARCHITECTURE/' | relative_url }}) and [Verification]({{ '/VERIFICATION/' | relative_url }}).
 - Report a reproducible problem through [GitHub Issues](https://github.com/CertifiedBadIdeas/Compukters/issues).

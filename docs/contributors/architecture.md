@@ -40,7 +40,11 @@ Guest programs target Compukter bytecode. The built-in graph is `kotlin:builtins
 
 `platform-bundle` owns portable declarations and identities. `platform-k2` adapts that data to the pinned K2 frontend. `compiler-k2-engine` lowers admitted Kotlin IR and links verified library fragments; `compiler-artifact` owns executable encoding and validation. Isolated compiler and analysis workers keep K2 internals out of the mod runtime and public contracts.
 
-Compiler and IDE sessions share native language settings, including the K2 frontend switch for multi-field value classes. Direct MFVC values use nominal inline layouts in compact frames; reference contexts use managed boxes. Their new layouts require Runtime ABI 1.15. Detailed semantics and constraints live in [compiler ownership](architecture/compiler.md) and [Guest Kotlin support](../developers/kotlin-support.md).
+Compiler and IDE sessions share native language settings, including the K2 frontend switch for multi-field value
+classes. Direct MFVC values use nominal inline layouts in compact frames; reference contexts use managed boxes.
+Nominal inline layouts were introduced in Runtime ABI 1.15; newer operations can require a later ABI. See the
+[ABI reference](architecture/abi.md) for feature-specific requirements. Detailed semantics and constraints live in
+[compiler ownership](architecture/compiler.md) and [Guest Kotlin support](../developers/kotlin-support.md).
 
 ## Server compilation
 

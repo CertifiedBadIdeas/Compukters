@@ -14,7 +14,7 @@ Compukters provides native Guest Kotlin libraries, not a Kotlin/JVM classpath. T
 | Topic | Contents |
 | --- | --- |
 | [Core and text](stdlib/core-text.md) | Scope functions, preconditions, text search/transformation, parsing, text and hashes |
-| [Mathematics](stdlib/math.md) | Portable Float/Double math, integer helpers, rounding and IEEE edge semantics |
+| [Mathematics](stdlib/math.md) | Scalar math, vectors, rectangles, matrices, rotations, rounding and IEEE edge semantics |
 | [Random numbers](stdlib/random.md) | Reproducible seeded and shared generators, bounded draws and byte filling |
 | [Arrays and ranges](stdlib/arrays-ranges.md) | All twelve primitive arrays, reference arrays, copying and stored progressions |
 | [Collections](stdlib/collections.md) | Lists, primitive specializations, selection, mutation and iterable helpers |

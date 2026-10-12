@@ -7,7 +7,7 @@ permalink: /LINKS/
 
 # Reference links
 
-## Textures
+## Texture editing
 
-1. https://www.piskelapp.com - Free online sprite editor
-2. LibreSprite - Free and open source sprite editor for animated sprites and pixel art. https://libresprite.github.io/
+- [Piskel](https://www.piskelapp.com): online sprite editor.
+- [LibreSprite](https://libresprite.github.io/): desktop editor for animated sprites and pixel art.

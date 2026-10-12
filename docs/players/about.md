@@ -17,9 +17,9 @@ for the features included in a published release.
 
 ## Status
 
-The compiler, canonical artifact, JDK 25 FFM session, managed Rust VM, standalone
+The compiler, canonical artifact, Java 21 JNI and JDK 25 FFM transports, managed Rust VM, standalone
 playground, loader-independent `ProgramRuntimeHost`, and server computer block
-form an executable vertical slice. A computer starts the source-visible no-std
+form the executable platform. A computer starts the source-visible no-std
 `system/programs/boot.kt` from `/rom/boot`; boot launches `/rom/shell`, and the
 shell can run verified extensionless programs in the foreground through
 `Process.run`. The ordinary `/rom/kotlinc` program compiles one `.kt` source
