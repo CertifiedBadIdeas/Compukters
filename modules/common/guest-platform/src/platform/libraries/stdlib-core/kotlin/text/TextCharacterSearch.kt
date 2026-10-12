@@ -7,7 +7,7 @@
 package kotlin.text
 
 /** Finds the first matching character at or after startIndex, clamped to zero. */
-public fun String.indexOf(
+public fun CharSequence.indexOf(
     char: Char,
     startIndex: Int = 0,
 ): Int {
@@ -20,13 +20,13 @@ public fun String.indexOf(
 }
 
 /** Returns whether this string contains char. */
-public fun String.contains(char: Char): Boolean = indexOf(char) >= 0
+public fun CharSequence.contains(char: Char): Boolean = indexOf(char) >= 0
 
 /** Finds the last matching character. */
-public fun String.lastIndexOf(char: Char): Int = lastIndexOf(char, length - 1)
+public fun CharSequence.lastIndexOf(char: Char): Int = lastIndexOf(char, length - 1)
 
 /** Searches backwards from startIndex for char. */
-public fun String.lastIndexOf(
+public fun CharSequence.lastIndexOf(
     char: Char,
     startIndex: Int,
 ): Int {
@@ -39,10 +39,10 @@ public fun String.lastIndexOf(
 }
 
 /** Finds the last matching substring, starting at the last character. */
-public fun String.lastIndexOf(string: String): Int = lastIndexOf(string, length - 1)
+public fun CharSequence.lastIndexOf(string: String): Int = lastIndexOf(string, length - 1)
 
 /** Searches backwards from startIndex for string, comparing UTF-16 code units. */
-public fun String.lastIndexOf(
+public fun CharSequence.lastIndexOf(
     string: String,
     startIndex: Int,
 ): Int {

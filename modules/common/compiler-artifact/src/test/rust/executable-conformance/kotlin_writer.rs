@@ -8,6 +8,8 @@ use compukter_vm::{
 
 #[path = "random.rs"]
 mod random;
+#[path = "terminal_output.rs"]
+mod terminal_output;
 
 fn main() {
     let mut arguments = std::env::args().skip(1);
@@ -25,6 +27,7 @@ fn main() {
             k2_assert_prints(&mut session, ["geometry ok\n"], 1024);
         },
         "random" => random::execute(),
+        "terminal-output" => terminal_output::execute(),
         "math" => {
             let mut session = k2_stdio_session_with_heap("COMPUKTER_KOTLIN_MATH_ARTIFACT", 1, 256 * 1024);
             k2_assert_prints(&mut session, ["math ok\n"], 1024);
@@ -1930,7 +1933,7 @@ fn k2_int_array_executes_specialized_storage_and_traps() {
     }
 }
 
-fn terminal_operations() -> [OperationSchema<'static>; 19] {
+fn terminal_operations() -> [OperationSchema<'static>; 23] {
     [
         OperationSchema::synchronous(&[HostValueType::String], HostValueType::Unit),
         OperationSchema::synchronous(&[], HostValueType::Unit),
@@ -1973,6 +1976,10 @@ fn terminal_operations() -> [OperationSchema<'static>; 19] {
         OperationSchema::synchronous(&[], HostValueType::I32),
         OperationSchema::synchronous(&[], HostValueType::I32),
         OperationSchema::asynchronous(&[HostValueType::I32], HostValueType::I32),
+        OperationSchema::synchronous(&[HostValueType::Char], HostValueType::Unit),
+        OperationSchema::synchronous(&[HostValueType::I32, HostValueType::I32, HostValueType::Char], HostValueType::Unit),
+        OperationSchema::synchronous(&[HostValueType::CharArrayRange { start: 1, end: 2 }, HostValueType::I32, HostValueType::I32], HostValueType::Unit),
+        OperationSchema::synchronous(&[HostValueType::I32, HostValueType::I32, HostValueType::CharArrayRange { start: 3, end: 4 }, HostValueType::I32, HostValueType::I32], HostValueType::Unit),
     ]
 }
 
@@ -1993,7 +2000,7 @@ fn execute_int_array_artifact(bytes: &[u8], mode: i32) -> IntArrayExecution {
     let verified = verify_artifact(Arc::from(bytes.to_vec()), ArtifactLimits::default())
         .expect("pinned VM must verify K2 IntArray output");
     let operations = terminal_operations();
-    let binding = CapabilityBinding::new("compukter", "terminal", 2, 2, &operations);
+    let binding = CapabilityBinding::new("compukter", "terminal", 2, 3, &operations);
     let profile = ExecutionProfile {
         heap_bytes: 1024 * 1024,
         frame_storage_bytes: 1024 * 1024,
@@ -2128,7 +2135,7 @@ fn k2_string_array_entry_executes_exact_utf16_arguments() {
     let verified = verify_artifact(Arc::from(bytes), ArtifactLimits::default())
         .expect("pinned VM must verify K2 argv output");
     let operations = terminal_operations();
-    let binding = CapabilityBinding::new("compukter", "terminal", 2, 2, &operations);
+    let binding = CapabilityBinding::new("compukter", "terminal", 2, 3, &operations);
     let profile = ExecutionProfile {
         heap_bytes: 1024 * 1024,
         frame_storage_bytes: 1024 * 1024,
@@ -2192,7 +2199,7 @@ fn k2_string_materialization_executes_char_arrays_and_scalar_templates() {
     let verified = verify_artifact(Arc::from(bytes), ArtifactLimits::default())
         .expect("pinned VM must verify K2 subset output");
     let operations = terminal_operations();
-    let binding = CapabilityBinding::new("compukter", "terminal", 2, 2, &operations);
+    let binding = CapabilityBinding::new("compukter", "terminal", 2, 3, &operations);
     let profile = ExecutionProfile {
         heap_bytes: 1024 * 1024,
         frame_storage_bytes: 1024 * 1024,
@@ -2263,7 +2270,7 @@ fn k2_ordinary_project_call_resumes_across_async_capability() {
     let verified = verify_artifact(Arc::from(bytes), ArtifactLimits::default())
         .expect("pinned VM must verify K2 transparent-call output");
     let operations = terminal_operations();
-    let binding = CapabilityBinding::new("compukter", "terminal", 2, 2, &operations);
+    let binding = CapabilityBinding::new("compukter", "terminal", 2, 3, &operations);
     let profile = ExecutionProfile {
         heap_bytes: 1024 * 1024,
         frame_storage_bytes: 1024 * 1024,
@@ -2325,7 +2332,7 @@ fn execute_when_artifact(bytes: &[u8], key: i32) -> Vec<u16> {
     let verified = verify_artifact(Arc::from(bytes.to_vec()), ArtifactLimits::default())
         .expect("pinned VM must verify K2 when output");
     let operations = terminal_operations();
-    let binding = CapabilityBinding::new("compukter", "terminal", 2, 2, &operations);
+    let binding = CapabilityBinding::new("compukter", "terminal", 2, 3, &operations);
     let profile = ExecutionProfile {
         heap_bytes: 1024 * 1024,
         frame_storage_bytes: 1024 * 1024,

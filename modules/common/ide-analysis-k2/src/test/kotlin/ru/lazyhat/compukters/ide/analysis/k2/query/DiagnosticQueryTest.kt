@@ -333,6 +333,20 @@ class DiagnosticQueryTest {
                 val builder: CharSequence = StringBuilder(8).append('x').append("text")
                 val text = buildString { append(builder); appendLine(42) }
                 val sequence: CharSequence = text
+                val trimmed: CharSequence = builder.trim().take(2).padEnd(4).removePrefix(builder)
+                val stringTrimmed: String = text.trim().take(2).padEnd(4).removePrefix(builder)
+                val parts: List<String> = builder.split(':')
+                val lines: List<String> = builder.lines()
+                val repeated: String = builder.repeat(2)
+                val contains: Boolean = builder.contains(sequence)
+                val position: Int = builder.indexOf("text")
+                compukter.terminal.Terminal.write(builder)
+                compukter.terminal.Terminal.write('x')
+                compukter.terminal.Terminal.write(charArrayOf('x'))
+                compukter.terminal.Terminal.write(charArrayOf('x'), 0, 1)
+                compukter.terminal.Terminal.writeAt(kotlin.math.Vector2i(0, 0), builder)
+                compukter.terminal.Terminal.writeAt(kotlin.math.Vector2i(0, 0), 'x')
+                compukter.terminal.Terminal.writeAt(kotlin.math.Vector2i(0, 0), charArrayOf('x'), 0, 1)
                 sequence.subSequence(0, 1)
                 for (unit in sequence) { println(unit) }
                 for (char in text) { println(char) }

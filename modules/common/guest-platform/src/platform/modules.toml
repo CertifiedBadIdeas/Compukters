@@ -6,12 +6,12 @@ sources = ["builtins/kotlin/**/*.kt"]
 
 [[module]]
 id = "stdlib:core"
-version = "1.17.0"
+version = "1.18.0"
 dependencies = ["kotlin:builtins"]
 sources = ["libraries/stdlib-core/**/*.kt"]
 
 [[module]]
 id = "compukter:core"
-version = "7.1.0"
+version = "7.2.0"
 dependencies = ["stdlib:core"]
 sources = ["libraries/compukter-core/**/*.kt"]
