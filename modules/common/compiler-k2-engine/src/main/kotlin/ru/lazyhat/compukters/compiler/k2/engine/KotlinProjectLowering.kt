@@ -400,14 +400,33 @@ private fun collectGuestFunctionShapes(
             add(shape)
             (shape.parameters + shape.result).mapNotNull(IrType::guestFunctionShape).forEach(::include)
         }
+
+        fun includeLocalTypes(
+            element: IrElement,
+            substitute: (IrType) -> IrType,
+        ) {
+            element.accept(
+                object : IrVisitorVoid() {
+                    override fun visitElement(element: IrElement) = element.acceptChildren(this, null)
+
+                    override fun visitVariable(declaration: IrVariable) {
+                        if (declaration.type.guestFunctionShape() != null) substitute(declaration.type).guestFunctionShape()?.let(::include)
+                        super.visitVariable(declaration)
+                    }
+                },
+                null,
+            )
+        }
         closures.mapNotNull { it.expression.type.guestFunctionShape() }.forEach(::include)
         functions.forEach { instance ->
+            includeLocalTypes(instance.declaration, instance::substitute)
             instance.substitute(instance.declaration.returnType).guestFunctionShape()?.let(::include)
             loweredParameters(instance.declaration, session)
                 .mapNotNull { parameter -> instance.substitute(parameter.type).guestFunctionShape() }
                 .forEach(::include)
         }
         classes.forEach { instance ->
+            includeLocalTypes(instance.declaration, instance::substitute)
             instance.declaration.constructors.forEach { constructor ->
                 constructor.parameters.mapNotNull { instance.substitute(it.type).guestFunctionShape() }.forEach(::include)
             }
@@ -1005,6 +1024,7 @@ private fun mapGuestValueType(
             resolveUnderlyingType = resolveUnderlyingType,
         )
     }
+    if (type.isNullableUnit()) return ValueType.Ref(true, TypeRef.Imported(ImportId.of(UNIT_RUNTIME_TYPE)))
     if (type.isNullable() && (type as? IrSimpleType)?.classifier == pluginContext.irBuiltIns.nothingClass) {
         return ValueType.Ref(true, TypeRef.Imported(ImportId.of(ANY_RUNTIME_TYPE)))
     }
@@ -1029,7 +1049,8 @@ private fun mapGuestValueType(
         val guestClass = (type as? IrSimpleType)?.classifier as? IrClassSymbol
         val guestInstance = type.classInstance(classInstanceTypeIds.keys.associate { it.declaration.symbol to it.declaration })
         if (guestTypes.valueClassBox(type) == null && !type.isKotlinAny() && guestClass != stringClass &&
-            guestClass !in classTypeIds && guestClass !in externalClassTypes && guestInstance !in classInstanceTypeIds
+            guestClass !in classTypeIds && guestClass !in externalClassTypes && guestInstance !in classInstanceTypeIds &&
+            functionTypes.forType(type) == null
         ) {
             throw UnsupportedKotlinIr(
                 element,
@@ -1088,7 +1109,7 @@ private fun mapGuestValueType(
             } else if (guestTypes.guestArrayType(type) != null) {
                 requireNotNull(guestTypes.guestArrayType(type))
             } else if (functionTypes.forType(type) != null) {
-                ValueType.Ref(nullable = false, type = requireNotNull(functionTypes.forType(type)))
+                ValueType.Ref(nullable = type.isNullable(), type = requireNotNull(functionTypes.forType(type)))
             } else if (type is IrSimpleType && type.classifier is IrClassSymbol) {
                 val classifier = type.classifier as IrClassSymbol
                 val inline = inlineValueClasses[classifier]
@@ -4046,7 +4067,11 @@ internal object KotlinProjectLowering {
 
         fun isSupported(sourceType: IrType): Boolean {
             val type = instance.substitute(sourceType)
-            if (GuestPrimitive.scalar(type) != null || GuestPrimitive.array(type) != null) return true
+            if (GuestPrimitive.scalar(type) != null || GuestPrimitive.array(type) != null ||
+                functionTypes.forType(type) != null || type.isNullableUnit()
+            ) {
+                return true
+            }
             if (((type as? IrSimpleType)?.classifier as? IrClassSymbol)?.owner?.fqNameWhenAvailable?.asString() ==
                 CHAR_SEQUENCE_NAME
             ) {
@@ -5791,7 +5816,9 @@ private class FunctionCompiler(
     ): RegisterId {
         if (expectedType != null) validateHashCollectionView(expression, expectedType)
         val source =
-            if (resolvedType(expression.type) == unitType && expectedType?.let { resolvedType(it).isKotlinAny() } == true) {
+            if (resolvedType(expression.type) == unitType &&
+                expectedType?.let { resolvedType(it).isKotlinAny() || resolvedType(it).isNullableUnit() } == true
+            ) {
                 if (expression !is IrGetObjectValue) compileStatement(expression)
                 loadUnitReference()
             } else {
@@ -6267,8 +6294,20 @@ private class FunctionCompiler(
                     val default =
                         parameter.defaultValue?.expression
                             ?: throw UnsupportedKotlinIr(source, "constructor argument ${parameter.name} is missing")
-                    rejectFunctionVariance(default.type, instance.substitute(parameter.type), default)
-                    values[parameter.symbol] = compileExpression(default, parameter.type)
+                    val substitution =
+                        IrTypeSubstitutor(
+                            instance.declaration.typeParameters.map { it.symbol },
+                            instance.arguments.map { makeTypeProjection(it, Variance.INVARIANT) },
+                            true,
+                        )
+                    defaultTypeSubstitutions.addLast(substitution::substitute)
+                    try {
+                        val expectedType = instance.substitute(parameter.type)
+                        rejectFunctionVariance(default.type, expectedType, default)
+                        values[parameter.symbol] = compileExpression(default, expectedType)
+                    } finally {
+                        defaultTypeSubstitutions.removeLast()
+                    }
                 }
             }
             parameters.map { (_, parameter) ->
@@ -6613,8 +6652,15 @@ private class FunctionCompiler(
         expectedType: IrType,
         element: IrElement,
     ) {
-        val actual = resolvedType(actualType).guestFunctionShape()
-        val expected = resolvedType(expectedType).guestFunctionShape()
+        val resolvedActual = resolvedType(actualType)
+        val resolvedExpected = resolvedType(expectedType)
+        if ((resolvedActual as? IrSimpleType)?.classifier == pluginContext.irBuiltIns.nothingClass &&
+            (!resolvedActual.isNullable() || resolvedExpected.isNullable())
+        ) {
+            return
+        }
+        val actual = resolvedActual.guestFunctionShape()
+        val expected = resolvedExpected.guestFunctionShape()
         if (actual != expected && (actual != null || expected != null)) {
             throw UnsupportedKotlinIr(element, "function-value variance conversions are not supported")
         }
@@ -10048,6 +10094,8 @@ private fun IrType.isNullableString(): Boolean =
     isNullable() &&
         ((this as? IrSimpleType)?.classifier as? IrClassSymbol)?.owner?.fqNameWhenAvailable?.asString() == "kotlin.String"
 
+private fun IrType.isNullableUnit(): Boolean = isNullable() && makeNotNull().isUnit()
+
 private fun IrType.isNullableScalar(): Boolean = isNullable() && GuestPrimitive.scalar(this) != null
 
 private fun IrType.nullableScalarRuntimeType(): UInt = requireNotNull(GuestPrimitive.scalar(this)).boxType
@@ -10059,7 +10107,6 @@ private fun IrType.isKotlinAny(): Boolean =
 @OptIn(UnsafeDuringIrConstructionAPI::class)
 private fun IrType.guestFunctionShape(): GuestFunctionShape? {
     val simple = this as? IrSimpleType ?: return null
-    if (simple.isNullable()) return null
     val owner = (simple.classifier as? IrClassSymbol)?.owner ?: return null
     val name = owner.fqNameWhenAvailable?.asString() ?: return null
     val arity =

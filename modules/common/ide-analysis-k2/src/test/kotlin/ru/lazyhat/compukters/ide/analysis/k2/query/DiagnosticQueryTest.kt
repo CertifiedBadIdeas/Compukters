@@ -46,6 +46,42 @@ class DiagnosticQueryTest {
     }
 
     @Test
+    fun `nullable callbacks resolve with source and metadata inputs`() {
+        val source =
+            """
+            class Controller {
+                var onUpdate: (() -> Unit)? = null
+                fun update() { onUpdate?.invoke() }
+            }
+            class Holder<T>(var callback: ((T) -> T)? = null)
+            fun <T> make(value: T): (() -> T)? {
+                fun read(): T = value
+                return ::read
+            }
+            fun main() {
+                val controller = Controller()
+                controller.onUpdate = { }
+                controller.update()
+                controller.onUpdate = null
+                val holder = Holder<Int>()
+                holder.callback = { it + 1 }
+                check(holder.callback?.invoke(2) == 3)
+                holder.callback = null
+                val read = make(7)
+                if (read != null) check(read() == 7)
+                check((read ?: { 0 })() == 7)
+            }
+            """.trimIndent()
+        for (attachedSources in listOf(false, true)) {
+            K2QueryFixture.sourceWithGuestApi(attachedSources, "main.kt" to source).use { fixture ->
+                val result = fixture.execute(fixture.presentation()) as AnalysisResult.Presentation
+                val active = result.value.accept(fixture.identity) as SnapshotPresentationAcceptance.Active
+                assertTrue(active.diagnostics.none { it.severity == EditorDiagnosticSeverity.Error }, active.diagnostics.toString())
+            }
+        }
+    }
+
+    @Test
     fun `function fields resolve with source and metadata inputs`() {
         val source =
             """

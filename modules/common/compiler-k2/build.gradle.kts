@@ -538,6 +538,22 @@ val generateFunctionFieldsConformanceArtifact = tasks.register<Test>("generateFu
     systemProperty("compukter.vm.functionFieldsArtifact", functionFieldsConformanceArtifact.get().asFile.absolutePath)
 }
 
+val nullableCallbacksConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-nullable-callbacks.cpkt")
+val generateNullableCallbacksConformanceArtifact = tasks.register<Test>("generateNullableCallbacksConformanceArtifact") {
+    description = "Compiles nullable Guest callbacks for pinned VM conformance."
+    group = "verification"
+    dependsOn(tasks.jar)
+    useJUnitPlatform()
+    testClassesDirs = sourceSets.test.get().output.classesDirs
+    classpath = sourceSets.test.get().runtimeClasspath
+    filter.includeTestsMatching("*nullable callbacks preserve safe invocation storage captures and specialization*")
+    inputs.file(workerJar)
+    inputs.file("src/test/resources/kotlin/nullable-callbacks/main.kt")
+    outputs.file(nullableCallbacksConformanceArtifact)
+    systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
+    systemProperty("compukter.vm.nullableCallbacksArtifact", nullableCallbacksConformanceArtifact.get().asFile.absolutePath)
+}
+
 val genericLocalFunctionsConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-generic-local-functions.cpkt")
 val generateGenericLocalFunctionsConformanceArtifact = tasks.register<Test>("generateGenericLocalFunctionsConformanceArtifact") {
     description = "Compiles generic Guest local functions for pinned VM conformance."

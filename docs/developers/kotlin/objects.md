@@ -143,10 +143,11 @@ by `qualified interface super calls use direct default bodies` and `testKotlinIn
 
 ## Function-valued properties
 
-**Status:** Supported for concrete non-null callable signatures.
+**Status:** Supported for concrete callable signatures with nullable or non-null storage.
 
 Guest classes can store callbacks in backed `val` and `var` properties, initialize them from constructor
 arguments or body expressions, read them through aliases, replace mutable callbacks and invoke them.
+Nullable callback properties can default to `null`, be reset, and invoked safely through `?.invoke()`.
 Custom and inherited/interface accessors retain ordinary property dispatch. Concrete generic owners
 specialize callback parameter/result types, including scalar and Guest object types. Constructor defaults
 can build callbacks that capture earlier constructor parameters.
@@ -168,17 +169,23 @@ Fields hold managed references to the existing callable interfaces. Stored callb
 objects and shared mutable cells after their enclosing function returns. Replacing a callback preserves
 any separately retained old reference; unreachable closures follow ordinary managed heap collection.
 Calling a property evaluates its receiver once. Call arguments use the signature's expected types,
-including nullable parameter types; the callback value itself must be non-null. Nullable callable
-storage and conversions between different callable signatures remain unsupported.
+including nullable parameter types. Nullable and non-null references share the same concrete callable
+interface. Safe invocation skips argument effects for null; separately retained aliases continue to call
+the original closure after a field is reset. Unreachable captures are reclaimed by ordinary managed GC,
+not immediately on reset. Conversions between different callable signatures remain unsupported.
 
 **Evidence:** `MinimalScriptLoweringTest` tests `function fields preserve callback ownership replacement
 accessors and specialization`, `function fields discover signatures without callable expressions` and
-`unsupported nullable and variant function fields report target diagnostics`;
+`variant function fields report target diagnostics`;
 `testKotlinFunctionFieldsVmConformance` executes
 [`function-fields/main.kt`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/compiler-k2/src/test/resources/kotlin/function-fields/main.kt).
 `DiagnosticQueryTest` test `function fields resolve with source and metadata inputs` covers both platform input modes.
 
-**Related work:** [#757](https://github.com/CertifiedBadIdeas/Compukters/issues/757).
+`testKotlinNullableCallbacksVmConformance` also exercises nullable constructor defaults, generic fields,
+custom and interface accessors, reset/alias behavior and repeated captured-array replacement on a 64 KiB
+heap. IDE `nullable callbacks resolve with source and metadata inputs` covers both platform input modes.
+
+**Related work:** [#760](https://github.com/CertifiedBadIdeas/Compukters/issues/760), [#757](https://github.com/CertifiedBadIdeas/Compukters/issues/757).
 
 ## Sealed interfaces, data classes, and stateless enums
 
