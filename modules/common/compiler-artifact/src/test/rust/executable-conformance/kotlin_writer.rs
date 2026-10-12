@@ -221,7 +221,8 @@ fn k2_host_failures_preserve_tasks_and_call_sites() {
     let verified = verify_artifact(Arc::from(fs::read(path).unwrap()), ArtifactLimits::default()).unwrap();
     let mut computer = ComputerMachine::start(verified, list_no_io_profile(), &[], &[]).unwrap();
     for attempt in 0..10_000 {
-        match computer.advance(64, 64, u32::MAX).unwrap() {
+        // Filesystem Path lowering requires a 66-unit block; retain bounded slices.
+        match computer.advance(128, 64, u32::MAX).unwrap() {
             ComputerAdvanceOutcome::SliceExhausted => assert!(attempt < 9999),
             ComputerAdvanceOutcome::Halted(None) => {
                 for (x, character) in "filesystem ok".chars().enumerate() {
