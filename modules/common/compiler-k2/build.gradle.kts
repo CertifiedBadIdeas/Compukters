@@ -521,6 +521,22 @@ val generateFunctionDefaultsConformanceArtifact = tasks.register<Test>("generate
     systemProperty("compukter.vm.functionDefaultsArtifact", functionDefaultsConformanceArtifact.get().asFile.absolutePath)
 }
 
+val localFunctionsConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-local-functions.cpkt")
+val generateLocalFunctionsConformanceArtifact = tasks.register<Test>("generateLocalFunctionsConformanceArtifact") {
+    description = "Compiles captured Guest local functions for pinned VM conformance."
+    group = "verification"
+    dependsOn(tasks.jar)
+    useJUnitPlatform()
+    testClassesDirs = sourceSets.test.get().output.classesDirs
+    classpath = sourceSets.test.get().runtimeClasspath
+    filter.includeTestsMatching("*local functions preserve recursive captures escaping references and defaults*")
+    inputs.file(workerJar)
+    inputs.file("src/test/resources/kotlin/local-functions/main.kt")
+    outputs.file(localFunctionsConformanceArtifact)
+    systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
+    systemProperty("compukter.vm.localFunctionsArtifact", localFunctionsConformanceArtifact.get().asFile.absolutePath)
+}
+
 val defaultFunctionReferencesConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-default-function-references.cpkt")
 val generateDefaultFunctionReferencesConformanceArtifact = tasks.register<Test>("generateDefaultFunctionReferencesConformanceArtifact") {
     description = "Compiles default-adapted Guest function references for pinned VM conformance."

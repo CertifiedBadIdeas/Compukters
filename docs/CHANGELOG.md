@@ -30,6 +30,10 @@ headings so this page has one stable URL that can be shared outside the reposito
   Text operations preserve UTF-16 units and respect managed heap quotas; malformed integer text
   returns null or throws `NumberFormatException` according to the selected API.
 
+- Guest Kotlin supports named local functions with direct calls, recursion, nested helpers and escaping
+  references. Mutable captures share state with surrounding code and lambdas; direct immutable captures
+  stay in typed arguments. Local functions can use expression defaults and appear in class initializers.
+
 - Guest Kotlin functions accept expression default arguments using earlier parameters, receivers,
   helpers, lambdas and concrete generic types. Explicit arguments evaluate before omitted defaults;
   inherited defaults preserve overriding method dispatch.

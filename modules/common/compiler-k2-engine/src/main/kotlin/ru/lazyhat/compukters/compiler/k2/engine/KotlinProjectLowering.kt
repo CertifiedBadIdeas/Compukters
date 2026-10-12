@@ -1291,7 +1291,7 @@ internal object KotlinProjectLowering {
                     !includeTrustedPlatformBodies &&
                         isLinkedPlatformFunction(function, session)
                 }
-        val userFunctions =
+        val rootFunctions =
             playerFunctions.sortedWith(
                 compareBy<IrSimpleFunction>(
                     { if (it === entry) 0 else 1 },
@@ -1309,22 +1309,17 @@ internal object KotlinProjectLowering {
                 ),
             )
         val closureRoots: List<IrElement> =
-            userFunctions +
+            rootFunctions +
                 sourceClasses.flatMap { declaration ->
                     declaration.declarations.filter {
                         it is IrConstructor || it is IrProperty || it is IrAnonymousInitializer
                     }
                 }
-        val closureSources = collectGuestClosures(closureRoots, session)
+        val localFunctions = collectGuestLocalFunctions(closureRoots)
+        val userFunctions = rootFunctions + localFunctions.values.map { it.declaration }
+        val closureSources = collectGuestClosures(closureRoots, session, localFunctions)
         val writtenValues = collectWrittenGuestValues(closureRoots)
-        val captureCellDeclarations =
-            closureSources
-                .flatMap { it.captures }
-                .filterIsInstance<IrVariable>()
-                .filter { it.isVar && it.symbol in writtenValues }
-                .associateByTo(linkedMapOf()) { it.symbol }
-                .values
-                .toList()
+        val captureCellDeclarations = collectCaptureCellDeclarations(closureSources, localFunctions, writtenValues)
         require(userFunctions.firstOrNull() === entry)
         val userClasses =
             collectGuestClasses(
@@ -1589,7 +1584,9 @@ internal object KotlinProjectLowering {
             functionInstances.associateWith { instance ->
                 val function = instance.declaration
                 val bridgeName = CollectionReadBridges.methodName(function)
-                if (bridgeName != null) {
+                if (function.symbol in localFunctions) {
+                    "<local-${localFunctions.getValue(function.symbol).ordinal}-${function.name.asString()}>"
+                } else if (bridgeName != null) {
                     bridgeName
                 } else if (instance.ownerClass != null) {
                     function.name.asString()
@@ -1604,7 +1601,8 @@ internal object KotlinProjectLowering {
             if (includeTrustedPlatformBodies) {
                 functionInstances
                     .filter { instance ->
-                        instance.arguments.isEmpty() && instance.ownerClass?.arguments.isNullOrEmpty()
+                        instance.arguments.isEmpty() && instance.ownerClass?.arguments.isNullOrEmpty() &&
+                            instance.declaration.symbol !in localFunctions
                     }.associateWith { instance ->
                         ru.lazyhat.compukters.compiler.k2.engine.library.platformFunctionExportName(
                             requireNotNull(instance.declaration.fqNameWhenAvailable).asString(),
@@ -2131,6 +2129,24 @@ internal object KotlinProjectLowering {
             }
         val captureCellLayoutsBySymbol: Map<IrValueSymbol, GuestCaptureCellLayout> =
             captureCellLayouts.associateBy { it.declaration.symbol }
+        val localCaptureTypes =
+            localCaptureParameterTypes(localFunctions, captureCellLayoutsBySymbol) { declaration ->
+                valueType(
+                    declaration.type,
+                    pluginContext,
+                    guestTypes,
+                    stringType,
+                    charArrayType,
+                    stringArrayType,
+                    classTypeIds,
+                    externalClassTypes,
+                    inlineValueClasses,
+                    platformScalars,
+                    declaration,
+                    shapeInterfaceTypes,
+                    classInstanceTypeIds = classInstanceTypeIds,
+                )
+            }
         val closureLayouts =
             closureSources.map { source ->
                 GuestClosureLayout(
@@ -2204,7 +2220,8 @@ internal object KotlinProjectLowering {
             userFunctions
                 .filter { function ->
                     val owner = function.parent as? IrClass
-                    owner?.symbol in classLayoutsBySymbol && !inlineValueClasses.contains(owner?.symbol)
+                    function.symbol !in localFunctions &&
+                        owner?.symbol in classLayoutsBySymbol && !inlineValueClasses.contains(owner?.symbol)
                 }.groupBy { function -> (function.parent as IrClass).symbol }
         val genericMemberFunctionsByOwner =
             functionInstances.filter { it.ownerClass != null }.groupBy { requireNotNull(it.ownerClass) }
@@ -2322,6 +2339,9 @@ internal object KotlinProjectLowering {
                             taskLaunchTrampolineFunctionId = taskLaunchTrampolineFunctionId,
                             closureLayouts = closureLayoutsByExpression,
                             captureCells = captureCellLayoutsBySymbol,
+                            localFunctions = localFunctions,
+                            leadingParameterTypes = localCaptureTypes[function.symbol].orEmpty(),
+                            localCaptureSymbols = localFunctions[function.symbol]?.captures.orEmpty().map { it.symbol },
                         ).compile()
                     } catch (unsupported: UnsupportedKotlinIr) {
                         if (session.virtualSourcePath(function.file.fileEntry.name)?.value?.startsWith("platform/") == true) {
@@ -2351,25 +2371,26 @@ internal object KotlinProjectLowering {
                     classInstanceTypeIds,
                 )
             val parameterTypes =
-                loweredParameters(function, session).map {
-                    valueType(
-                        it.type,
-                        pluginContext,
-                        guestTypes,
-                        stringType,
-                        charArrayType,
-                        stringArrayType,
-                        classTypeIds,
-                        externalClassTypes,
-                        inlineValueClasses,
-                        platformScalars,
-                        it,
-                        shapeInterfaceTypes,
-                        instance,
-                        classInstanceTypeIds,
-                    )
-                }
-            val ownerClass = function.parent as? IrClass
+                localCaptureTypes[function.symbol].orEmpty() +
+                    loweredParameters(function, session).map {
+                        valueType(
+                            it.type,
+                            pluginContext,
+                            guestTypes,
+                            stringType,
+                            charArrayType,
+                            stringArrayType,
+                            classTypeIds,
+                            externalClassTypes,
+                            inlineValueClasses,
+                            platformScalars,
+                            it,
+                            shapeInterfaceTypes,
+                            instance,
+                            classInstanceTypeIds,
+                        )
+                    }
+            val ownerClass = (function.parent as? IrClass)?.takeUnless { function.symbol in localFunctions }
             val memberOwner =
                 instance.ownerClass?.takeUnless { inlineValueClasses.contains(it.declaration.symbol) }?.let { owner ->
                     TypeRef.Local(requireNotNull(classInstanceTypeIds[owner]))
@@ -2616,6 +2637,7 @@ internal object KotlinProjectLowering {
                         taskLaunchTrampolineFunctionId = taskLaunchTrampolineFunctionId,
                         closureLayouts = closureLayoutsByExpression,
                         captureCells = captureCellLayoutsBySymbol,
+                        localFunctions = localFunctions,
                         currentClassInstance =
                             layout.constructorTarget?.let { symbol ->
                                 val result = layout.shape.result as IrSimpleType
@@ -2770,6 +2792,7 @@ internal object KotlinProjectLowering {
                     taskLaunchTrampolineFunctionId = taskLaunchTrampolineFunctionId,
                     closureLayouts = closureLayoutsByExpression,
                     captureCells = captureCellLayoutsBySymbol,
+                    localFunctions = localFunctions,
                     leadingParameterTypes = listOf(receiverType),
                     constructorOwner = layout,
                     constructorDeclaration = declaration,
@@ -2941,24 +2964,25 @@ internal object KotlinProjectLowering {
                             classInstanceTypeIds,
                         ),
                     parameters =
-                        loweredParameters(function, session).map {
-                            valueType(
-                                it.type,
-                                pluginContext,
-                                guestTypes,
-                                stringType,
-                                charArrayType,
-                                stringArrayType,
-                                classTypeIds,
-                                externalClassTypes,
-                                inlineValueClasses,
-                                platformScalars,
-                                it,
-                                shapeInterfaceTypes,
-                                instance,
-                                classInstanceTypeIds,
-                            )
-                        },
+                        localCaptureTypes[function.symbol].orEmpty() +
+                            loweredParameters(function, session).map {
+                                valueType(
+                                    it.type,
+                                    pluginContext,
+                                    guestTypes,
+                                    stringType,
+                                    charArrayType,
+                                    stringArrayType,
+                                    classTypeIds,
+                                    externalClassTypes,
+                                    inlineValueClasses,
+                                    platformScalars,
+                                    it,
+                                    shapeInterfaceTypes,
+                                    instance,
+                                    classInstanceTypeIds,
+                                )
+                            },
                 )
             }
         val closureFunctionTypes =
@@ -3842,6 +3866,29 @@ internal object KotlinProjectLowering {
     }
 
     @OptIn(UnsafeDuringIrConstructionAPI::class)
+    private fun collectCaptureCellDeclarations(
+        closures: List<GuestClosureSource>,
+        locals: Map<IrSimpleFunctionSymbol, GuestLocalFunction>,
+        written: Set<IrValueSymbol>,
+    ): List<IrVariable> =
+        (closures.flatMap { it.captures } + locals.values.flatMap { it.captures })
+            .filterIsInstance<IrVariable>()
+            .filter { it.isVar && it.symbol in written }
+            .distinctBy { it.symbol }
+
+    private fun localCaptureParameterTypes(
+        locals: Map<IrSimpleFunctionSymbol, GuestLocalFunction>,
+        cells: Map<IrValueSymbol, GuestCaptureCellLayout>,
+        valueType: (IrValueDeclaration) -> ValueType,
+    ): Map<IrSimpleFunctionSymbol, List<ValueType>> =
+        locals.mapValues { (_, local) ->
+            local.captures.map { declaration ->
+                cells[declaration.symbol]?.let { cell ->
+                    ValueType.Ref(nullable = false, type = TypeRef.Local(cell.typeId))
+                } ?: valueType(declaration)
+            }
+        }
+
     private fun artifactFunctionName(
         function: IrSimpleFunction,
         pluginContext: IrPluginContext,
@@ -5231,6 +5278,8 @@ private class FunctionCompiler(
     private val taskLaunchTrampolineFunctionId: FunctionId?,
     private val closureLayouts: Map<IrExpression, GuestClosureLayout>,
     private val captureCells: Map<IrValueSymbol, GuestCaptureCellLayout>,
+    private val localFunctions: Map<IrSimpleFunctionSymbol, GuestLocalFunction> = emptyMap(),
+    private val localCaptureSymbols: List<IrValueSymbol> = emptyList(),
     private val leadingParameterTypes: List<ValueType> = emptyList(),
     private val captureFields: Map<IrValueSymbol, GuestClosureCapture> = emptyMap(),
     private val closureReceiver: RegisterId? = null,
@@ -5256,6 +5305,7 @@ private class FunctionCompiler(
         }
 
     fun compile(): CompiledFunction {
+        localCaptureSymbols.forEachIndexed { index, symbol -> values[symbol] = RegisterId.of(index.toUInt()) }
         sourceParameters.forEachIndexed { index, parameter ->
             values[parameter.symbol] = RegisterId.of((leadingParameterTypes.size + index).toUInt())
         }
@@ -5468,6 +5518,7 @@ private class FunctionCompiler(
             }
 
             is IrSimpleFunction -> {
+                if (statement.symbol in localFunctions) return
                 if (closureLayouts.values.any { layout ->
                         layout.function === statement && layout.expression.constructorReferenceTarget() != null
                     }
@@ -7197,10 +7248,19 @@ private class FunctionCompiler(
             resolveClassInstance(call.dispatchReceiver?.type)?.let { receiver ->
                 (target.parent as? IrClass)?.let { resolveMemberOwner(receiver, it) } ?: receiver
             }
-        val arguments =
-            compileProjectCallArguments(call, target) { type ->
-                specialization?.substitute(type) ?: receiverSpecialization?.substitute(type) ?: type
+        val captures =
+            localFunctions[target.symbol]?.captures.orEmpty().map { declaration ->
+                if (declaration.symbol in captureCells) {
+                    loadCellReference(declaration.symbol, call)
+                } else {
+                    loadValue(declaration.symbol, call)
+                }
             }
+        val arguments =
+            captures +
+                compileProjectCallArguments(call, target) { type ->
+                    specialization?.substitute(type) ?: receiverSpecialization?.substitute(type) ?: type
+                }
         val destination = destinationFor(call.type, call)
         if (target.isSuspend) {
             val resume = createBlock()
@@ -10025,6 +10085,7 @@ private fun collectWrittenGuestValues(roots: List<IrElement>): Set<IrValueSymbol
 private fun collectGuestClosures(
     functions: List<IrElement>,
     session: CompilationSession,
+    localFunctions: Map<IrSimpleFunctionSymbol, GuestLocalFunction>,
 ): List<GuestClosureSource> {
     val expressions = mutableListOf<IrExpression>()
     val collector =
@@ -10040,7 +10101,7 @@ private fun collectGuestClosures(
 
             override fun visitRichFunctionReference(expression: IrRichFunctionReference) {
                 val target = expression.reflectionTargetSymbol?.owner as? IrSimpleFunction
-                if (expression.reflectionTargetSymbol == null ||
+                if (expression.reflectionTargetSymbol == null || target?.symbol in localFunctions ||
                     (target?.parent is IrFile && expression.boundValues.isEmpty()) ||
                     target?.parent is IrClass ||
                     (expression.constructorReferenceTarget() != null && expression.boundValues.isEmpty())
@@ -10052,7 +10113,8 @@ private fun collectGuestClosures(
 
             override fun visitFunctionReference(expression: IrFunctionReference) {
                 val target = (expression.reflectionTarget?.owner ?: expression.symbol.owner) as? IrSimpleFunction
-                if ((target?.parent is IrFile && expression.arguments.all { it == null }) ||
+                if ((target?.symbol in localFunctions && expression.arguments.all { it == null }) ||
+                    (target?.parent is IrFile && expression.arguments.all { it == null }) ||
                     (
                         target?.parent is IrClass &&
                             (expression.boundReferenceReceiver(target) != null || expression.arguments.all { it == null })
@@ -10065,13 +10127,13 @@ private fun collectGuestClosures(
             }
         }
     functions.forEach { it.accept(collector, null) }
-    return expressions.mapIndexed { ordinal, expression ->
+    return expressions.distinct().mapIndexed { ordinal, expression ->
         val referenceTarget =
             when (expression) {
                 is IrRichFunctionReference -> expression.reflectionTargetSymbol?.owner as? IrSimpleFunction
                 is IrFunctionReference -> (expression.reflectionTarget?.owner ?: expression.symbol.owner) as? IrSimpleFunction
                 else -> null
-            }
+            }.takeUnless { it?.symbol in localFunctions }
         if (referenceTarget != null) {
             val shape = expression.type.guestFunctionShape()
             val sourceReceiver = expression.boundReferenceReceiver(referenceTarget)
@@ -10228,6 +10290,11 @@ private fun collectGuestClosures(
                     expression.invokeFunction
                 }
 
+                is IrFunctionReference -> {
+                    expression.symbol.owner as? IrSimpleFunction
+                        ?: throw UnsupportedKotlinIr(expression, "unsupported local function reference")
+                }
+
                 else -> {
                     throw UnsupportedKotlinIr(expression, "unsupported function reference")
                 }
@@ -10269,6 +10336,13 @@ private fun collectGuestClosures(
             object : IrVisitorVoid() {
                 override fun visitElement(element: IrElement) {
                     element.acceptChildren(this, null)
+                }
+
+                override fun visitCall(expression: IrCall) {
+                    localFunctions[expression.symbol]?.captures.orEmpty().forEach { declaration ->
+                        if (declaration.symbol !in owned) captures.putIfAbsent(declaration.symbol, declaration)
+                    }
+                    super.visitCall(expression)
                 }
 
                 override fun visitGetValue(expression: IrGetValue) {
