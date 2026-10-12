@@ -20,6 +20,8 @@ package ru.lazyhat.compukters.ide.analysis.k2.query
 
 import com.intellij.openapi.application.ReadAction
 import com.intellij.openapi.progress.ProgressManager
+import com.intellij.psi.PsiErrorElement
+import com.intellij.psi.util.PsiTreeUtil
 import org.jetbrains.kotlin.analysis.api.KaExperimentalApi
 import org.jetbrains.kotlin.analysis.api.KaSession
 import org.jetbrains.kotlin.analysis.api.analyze
@@ -32,9 +34,11 @@ import org.jetbrains.kotlin.analysis.api.symbols.KaSymbol
 import org.jetbrains.kotlin.idea.references.mainReference
 import org.jetbrains.kotlin.lexer.KotlinLexer
 import org.jetbrains.kotlin.lexer.KtTokens
+import org.jetbrains.kotlin.psi.KtExperimentalApi
 import org.jetbrains.kotlin.psi.KtNameReferenceExpression
 import org.jetbrains.kotlin.psi.KtNamedDeclaration
 import org.jetbrains.kotlin.psi.KtNamedFunction
+import org.jetbrains.kotlin.psi.KtOperationReferenceExpression
 import org.jetbrains.kotlin.psi.KtSimpleNameExpression
 import org.jetbrains.kotlin.psi.KtTreeVisitorVoid
 import ru.lazyhat.compukters.compiler.worker.protocol.VirtualSourcePath
@@ -43,6 +47,7 @@ import ru.lazyhat.compukters.ide.analysis.AnalysisResult
 import ru.lazyhat.compukters.ide.analysis.AnalysisResultLimits
 import ru.lazyhat.compukters.ide.analysis.DeclarationLocation
 import ru.lazyhat.compukters.ide.analysis.DeclarationOrigin
+import ru.lazyhat.compukters.ide.analysis.EditorDiagnostic
 import ru.lazyhat.compukters.ide.analysis.EditorDiagnosticSeverity
 import ru.lazyhat.compukters.ide.analysis.k2.standalone.AdmittedK2Snapshot
 import ru.lazyhat.compukters.ide.analysis.protocol.AnalysisLimits
@@ -74,10 +79,13 @@ internal object RenameQuery {
             }
         snapshot.preview(changedTexts, limits) { candidate ->
             ReadAction.run<RuntimeException> {
-                requireNoErrors(candidate, limits)
+                val shifts = edits.mapValues { (_, ranges) -> RenameOffsetShift(ranges, query.newName.length) }
+                val expectedErrors = prepared.errors.map { it.shift(shifts) }.toMutableList()
+                errors(candidate, limits).forEach { error ->
+                    rejectUnless(expectedErrors.remove(error), "The new name introduces an analysis error: ${error.message}")
+                }
                 val actual = bindings(candidate, limits)
                 val editedSites = prepared.locations.toSet()
-                val shifts = edits.mapValues { (_, ranges) -> RenameOffsetShift(ranges, query.newName.length) }
                 val expected =
                     prepared.bindings.map { binding ->
                         binding.copy(
@@ -105,7 +113,7 @@ internal object RenameQuery {
         snapshot: AdmittedK2Snapshot,
         limits: AnalysisLimits,
     ): PreparedRename {
-        requireNoErrors(snapshot, limits)
+        val originalErrors = errors(snapshot, limits)
         val file = requireNotNull(snapshot.files[query.path])
         val target =
             analyze(file) {
@@ -130,7 +138,6 @@ internal object RenameQuery {
                     KtTokens.OPEN_KEYWORD,
                     KtTokens.ABSTRACT_KEYWORD,
                     KtTokens.OPERATOR_KEYWORD,
-                    KtTokens.INFIX_KEYWORD,
                 ).any(owner::hasModifier)
             },
             "Inheritance and convention-based declarations are not supported yet",
@@ -147,23 +154,36 @@ internal object RenameQuery {
             ).distinct()
                 .sortedWith(compareBy({ it.path.value }, { it.range.startUtf16 }))
         if (locations.size > limits.references) throw AnalysisOutputLimitException("rename references exceed negotiated limit")
-        return PreparedRename(locations, allBindings)
+        return PreparedRename(locations, allBindings, originalErrors)
     }
 
-    private fun requireNoErrors(
+    private fun errors(
         snapshot: AdmittedK2Snapshot,
         limits: AnalysisLimits,
-    ) {
-        snapshot.files.forEach { (path, file) ->
-            ProgressManager.checkCanceled()
-            analyze(file) {
-                val error = DiagnosticQuery.collect(this, path, file, limits).firstOrNull { it.severity == EditorDiagnosticSeverity.Error }
-                rejectUnless(error == null, "Rename requires a project without analysis errors: ${path.value}: ${error?.message}")
+    ): List<EditorDiagnostic> =
+        buildList {
+            snapshot.files.forEach { (path, file) ->
+                ProgressManager.checkCanceled()
+                rejectUnless(
+                    PsiTreeUtil.findChildOfType(file, PsiErrorElement::class.java) == null,
+                    "Repair syntax errors before Rename: ${path.value}",
+                )
+                analyze(file) {
+                    DiagnosticQuery
+                        .collect(this, path, file, limits)
+                        .filter { it.severity == EditorDiagnosticSeverity.Error }
+                        .forEach { error ->
+                            rejectUnless(error.range != null, "Rename cannot validate an error without a source range")
+                            if (size >= limits.diagnostics) {
+                                throw AnalysisOutputLimitException("rename diagnostic count exceeds negotiated limit")
+                            }
+                            add(error)
+                        }
+                }
             }
         }
-    }
 
-    @OptIn(KaExperimentalApi::class)
+    @OptIn(KaExperimentalApi::class, KtExperimentalApi::class)
     private fun bindings(
         snapshot: AdmittedK2Snapshot,
         limits: AnalysisLimits,
@@ -176,7 +196,14 @@ internal object RenameQuery {
                     object : KtTreeVisitorVoid() {
                         override fun visitSimpleNameExpression(expression: KtSimpleNameExpression) {
                             ProgressManager.checkCanceled()
-                            if (expression is KtNameReferenceExpression) {
+                            // Infix calls use operation references, unlike ordinary calls and named arguments.
+                            // Symbolic operators remain excluded from editable sites.
+                            if (expression is KtNameReferenceExpression ||
+                                (
+                                    expression is KtOperationReferenceExpression &&
+                                        expression.getReferencedNameElementType() == KtTokens.IDENTIFIER
+                                )
+                            ) {
                                 if (result.size >=
                                     limits.semanticTokens
                                 ) {
@@ -231,6 +258,7 @@ internal object RenameQuery {
 private data class PreparedRename(
     val locations: List<DeclarationLocation.Source>,
     val bindings: List<Binding>,
+    val errors: List<EditorDiagnostic>,
 )
 
 private data class Binding(
@@ -286,3 +314,9 @@ private fun rejectUnless(
 internal class RenameAdmissionException(
     message: String,
 ) : RuntimeException(message)
+
+private fun EditorDiagnostic.shift(shifts: Map<VirtualSourcePath, RenameOffsetShift>): EditorDiagnostic {
+    val shift = shifts[path] ?: return this
+    val original = range ?: return this
+    return copy(range = EditorRange(shift.offset(original.startUtf16), shift.offset(original.endUtf16)))
+}
