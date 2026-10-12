@@ -52,8 +52,14 @@ private object DisplayBindings {
     external fun imageRow(handle: Int, x: Int, y: Int, encoded: String)
     external fun beginFrame(handle: Int)
     external fun commitFrame(handle: Int)
+    external fun pollClick(handle: Int): ByteArray
     external fun abortFrame(handle: Int)
 }
+
+/** A front-face empty-hand click in published whole-screen pixel coordinates. */
+public value class DisplayClick(
+    val position: Position2i,
+)
 
 /** Pixels per installed block; the same density also applies to holes in the canvas. */
 public enum class DisplayMode {
@@ -106,6 +112,20 @@ public value class GraphicalDisplay internal constructor(private val handle: Int
             DisplayMode.HIGH -> 3
         }
         DisplayBindings.setMode(handle, value)
+    }
+
+    /** Takes the oldest click, or null. Claims this program's exclusive display lease. */
+    public fun pollClick(): DisplayClick? {
+        val bytes = DisplayBindings.pollClick(handle)
+        if (bytes.size == 0) return null
+        check(bytes.size == 8)
+        val x =
+            (bytes[0].toInt() and 255) or ((bytes[1].toInt() and 255) shl 8) or
+                ((bytes[2].toInt() and 255) shl 16) or ((bytes[3].toInt() and 255) shl 24)
+        val y =
+            (bytes[4].toInt() and 255) or ((bytes[5].toInt() and 255) shl 8) or
+                ((bytes[6].toInt() and 255) shl 16) or ((bytes[7].toInt() and 255) shl 24)
+        return DisplayClick(Vector2i(x, y))
     }
 
     public fun clear(color: Int = 0x000000) { DisplayBindings.fill(handle, color) }

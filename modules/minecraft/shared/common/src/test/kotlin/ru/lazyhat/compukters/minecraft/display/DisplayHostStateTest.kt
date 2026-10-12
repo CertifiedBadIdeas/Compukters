@@ -20,6 +20,51 @@ import kotlin.test.assertTrue
 
 class DisplayHostStateTest {
     @Test
+    fun `older display capability minors retain drawing but cannot poll input`() {
+        val endpoint = FakeDisplayEndpoint()
+        val host = DisplayHostState({ endpoint }, { DisplayResolution.Found(endpoint) })
+        val handle = assertIs<HostResponse.IntSuccess>(host.call(0, VmValue.I32(0))).value
+        for (minor in 0..1) {
+            fun invoke(
+                operation: Int,
+                arguments: List<VmValue>,
+            ): HostResponse =
+                assertIs<ProgramAddonDispatch.Completed>(
+                    host.dispatch(
+                        ProgramAddonRequest(
+                            VmHostRequestIdentity(1, 1),
+                            ru.lazyhat.compukters.lang.runtime.vm
+                                .CapabilityIdentity("compukters", "display", 1, minor),
+                            operation,
+                            arguments,
+                        ),
+                    ),
+                ).response
+            assertIs<HostResponse.Failure>(invoke(17, listOf(VmValue.I32(handle))))
+            assertEquals(HostResponse.UnitSuccess, invoke(8, listOf(VmValue.I32(handle), VmValue.I32(123))))
+        }
+    }
+
+    @Test
+    fun `click polling claims the writer and encodes FIFO coordinates without sharing or replay`() {
+        val endpoint = FakeDisplayEndpoint()
+        val host = DisplayHostState({ endpoint }, { DisplayResolution.Found(endpoint) })
+        val handle = assertIs<HostResponse.IntSuccess>(host.call(0, VmValue.I32(0))).value
+        assertEquals(0, assertIs<HostResponse.ByteArraySuccess>(host.call(17, VmValue.I32(handle))).value.size)
+        assertTrue(endpoint.canvas.offerClick(12, 9))
+        val other = DisplayHostState({ endpoint }, { DisplayResolution.Found(endpoint) })
+        val otherHandle = assertIs<HostResponse.IntSuccess>(other.call(0, VmValue.I32(0))).value
+        assertIs<HostResponse.Failure>(other.call(17, VmValue.I32(otherHandle)))
+        kotlin.test.assertContentEquals(
+            byteArrayOf(12, 0, 0, 0, 9, 0, 0, 0),
+            assertIs<HostResponse.ByteArraySuccess>(host.call(17, VmValue.I32(handle))).value,
+        )
+        endpoint.canvas.offerClick(1, 1)
+        host.reset()
+        assertEquals(0, assertIs<HostResponse.ByteArraySuccess>(other.call(17, VmValue.I32(otherHandle))).value.size)
+    }
+
+    @Test
     fun `named and adjacent handles write one exact display and reset preserves it`() {
         val endpoint = FakeDisplayEndpoint()
         val host = DisplayHostState({ endpoint }, { DisplayResolution.Found(endpoint) })

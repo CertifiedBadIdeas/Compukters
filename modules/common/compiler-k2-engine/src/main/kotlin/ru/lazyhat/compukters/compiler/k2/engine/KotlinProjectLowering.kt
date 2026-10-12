@@ -10724,7 +10724,7 @@ private fun capabilityShape(
         ?: PlatformCapabilityShape(
             when (capability.namespace to capability.name) {
                 "compukter" to "terminal" -> 3
-                "compukters" to "display" -> 1
+                "compukters" to "display" -> 2
                 else -> 0
             },
             when (capability.namespace to capability.name) {
@@ -10736,7 +10736,7 @@ private fun capabilityShape(
                 "compukter" to "redstone" -> 8u
                 "compukters" to "peripheral" -> 6u
                 "compukter" to "sound" -> 1u
-                "compukters" to "display" -> 17u
+                "compukters" to "display" -> 18u
                 "compukters" to "network" -> 3u
                 "compukter" to "timer" -> 1u
                 else -> error("unknown Compukters capability ${capability.namespace}:${capability.name}")

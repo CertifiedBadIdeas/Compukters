@@ -61,7 +61,8 @@ internal class DisplayHostState(
         frameTasks.keys.removeIf { !it.owns(owner) }
         val response =
             if (request.capability.namespace != SCHEMA.identity.namespace || request.capability.name != SCHEMA.identity.name ||
-                request.capability.abiMajor != 1 || request.capability.abiMinor !in 0..1
+                request.capability.abiMajor != 1 || request.capability.abiMinor !in 0..2 ||
+                (request.operation == 17 && request.capability.abiMinor < 2)
             ) {
                 failure(HostFailureKind.OTHER, "Unexpected display capability")
             } else {
@@ -334,6 +335,21 @@ internal class DisplayHostState(
                     HostResponse.IntSuccess(canvas.activeMode(owner))
                 }
 
+                17 -> {
+                    canvas.acquire(owner, endpoint::leaseValid)
+                    val click = canvas.pollClick(owner)
+                    HostResponse.ByteArraySuccess(
+                        if (click == null) {
+                            byteArrayOf()
+                        } else {
+                            ByteArray(8) { index ->
+                                val value = if (index < 4) click.x else click.y
+                                (value ushr ((index % 4) * 8)).toByte()
+                            }
+                        },
+                    )
+                }
+
                 else -> {
                     canvas.acquire(owner, endpoint::leaseValid)
                     when (request.operation) {
@@ -421,7 +437,7 @@ internal class DisplayHostState(
 
         val SCHEMA =
             HostCapabilitySchema(
-                CapabilityIdentity("compukters", "display", 1, 1),
+                CapabilityIdentity("compukters", "display", 1, 2),
                 listOf(
                     HostOperationSchema(listOf(HostValueType.I32), HostValueType.I32, true),
                     HostOperationSchema(listOf(HostValueType.STRING), HostValueType.I32, true),
@@ -461,6 +477,7 @@ internal class DisplayHostState(
                         operation(1),
                         operation(1),
                         operation(1),
+                        operation(1, HostValueType.BYTE_ARRAY),
                     ),
             )
 
