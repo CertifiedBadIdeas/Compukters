@@ -1,0 +1,18 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "redstone",
+  "pattern": [
+    "IRI",
+    "RQR",
+    "IRI"
+  ],
+  "key": {
+    "I": "minecraft:iron_ingot",
+    "R": "minecraft:redstone",
+    "Q": "minecraft:quartz"
+  },
+  "result": {
+    "id": "compukters:redstone_port",
+    "count": 1
+  }
+}

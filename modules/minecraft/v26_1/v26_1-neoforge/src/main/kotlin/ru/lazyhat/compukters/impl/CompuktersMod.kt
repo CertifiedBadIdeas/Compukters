@@ -55,6 +55,8 @@ class CompuktersMod(
         val native = requireNativeRuntime()
         CompuktersRegistry.register(eventBus)
         DisplayPeripheralIntegration.register()
+        ru.lazyhat.compukters.minecraft.redstone.RedstonePortIntegration
+            .register()
         ru.lazyhat.compukters.minecraft.peripheral.PeripheralNetworkAccess.install(
             ru.lazyhat.compukters.impl.peripheral.PeripheralInstanceStamps::stamp,
             CompuktersServerConfig::peripheralAccessRadius,
@@ -69,6 +71,8 @@ class CompuktersMod(
                 .register()
         }
         NeoForge.EVENT_BUS.addListener(ru.lazyhat.compukters.impl.peripheral.PeripheralNetworkLifecycle::onChunkLoad)
+        NeoForge.EVENT_BUS.addListener(ru.lazyhat.compukters.impl.peripheral.PeripheralOwnershipLifecycle::beforeServerTick)
+        NeoForge.EVENT_BUS.addListener(ru.lazyhat.compukters.impl.peripheral.PeripheralOwnershipLifecycle::onServerStopped)
         NeoForge.EVENT_BUS.addListener(ru.lazyhat.compukters.impl.network.ComputerCableLifecycle::onChunkLoad)
         NeoForge.EVENT_BUS.addListener(ru.lazyhat.compukters.impl.network.ComputerCableLifecycle::onChunkUnload)
         NeoForge.EVENT_BUS.addListener(ru.lazyhat.compukters.impl.network.ComputerCableLifecycle::onLevelUnload)

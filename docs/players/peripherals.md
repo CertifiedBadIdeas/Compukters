@@ -9,7 +9,7 @@ permalink: /PERIPHERALS/
 # Peripherals and networks
 
 A computer can reach devices directly on its six faces or through a remotely bound peripheral network. A device API belongs to
-the integration that provides it: displays are built into Compukters, while Create and Propulsion devices need their
+the integration that provides it: displays and Redstone Ports are built into Compukters, while Create and Propulsion devices need their
 corresponding addons.
 
 ## Connect a device
@@ -105,7 +105,7 @@ across hibernation or server restarts; a restored waiting receive reports interr
 
 ## Typed discovery
 
-Device classes also act as providers. For example, `TextDisplay`, Create's `Speedometer`, `Stressometer`,
+Device classes also act as providers. For example, `TextDisplay`, `RedstonePort`, Create's `Speedometer`, `Stressometer`,
 `RotationController`, `StockTicker` and `Boiler`, and Propulsion's `CreativeThruster` and
 `CreativeVectorThruster` share these methods:
 
@@ -147,6 +147,17 @@ Use typed providers and the common `Side` instead. Create and Propulsion use add
 Rebuild dependent Guest bundles and programs against the updated
 platform; exact bundle versions and hashes still govern compiled artifacts.
 
+## One program owns a device
+
+Acquiring a typed device reserves it exclusively for that running program, including read-only use. Another
+program receives `compukter.io.IOException` while it is busy, even on the same computer. VM tasks inside one
+program share its handles; a child process has its own ownership and cannot borrow its suspended parent's device.
+
+Discovery snapshots do not reserve unread devices. Selecting entries, including entries passed to predicates,
+acquires handles. The program retains these handles until its device API closes them, the program exits, or
+connectivity is lost. A second typed view of the same device does not bypass ownership. After hibernation,
+restoring a persistent handle requires the device to be reachable and available again.
+
 ## Device handles have a lifetime
 
 A handle refers to the device you acquired, not whichever block later occupies its position. Removing, replacing,
@@ -157,6 +168,7 @@ stale handles remain stale; an address alone never identifies a replacement devi
 
 | Device | Guide |
 | --- | --- |
+| Redstone Port | [Redstone]({{ '/REDSTONE/' | relative_url }}) |
 | Text display | [Display]({{ '/DISPLAY/' | relative_url }}) |
 | Create gauges and rotation controller | [Kinetics]({{ '/CREATE-KINETICS/' | relative_url }}) |
 | Create Stock Ticker | [Logistics]({{ '/CREATE-LOGISTICS/' | relative_url }}) |

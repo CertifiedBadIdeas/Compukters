@@ -35,6 +35,8 @@ kotlin.target.compilations.named(gameTest.name) {
 
 tasks.named<ProcessResources>(gameTest.processResourcesTaskName) {
     dependsOn(":compiler-k2:generateRedstoneConformanceArtifact")
+    dependsOn(":compiler-k2:generateRedstonePortConformanceArtifact")
+    from(project(":compiler-k2").layout.buildDirectory.file("generated/conformance/redstone-port.cpkt")) { into("fixtures") }
     dependsOn(":compiler-k2:generateSoundConformanceArtifact")
     dependsOn(":compiler-k2:generateDisplayConformanceArtifact")
     dependsOn(":compiler-k2:generateNetworkConformanceArtifacts")

@@ -13,6 +13,12 @@ headings so this page has one stable URL that can be shared outside the reposito
 
 ## 0.6.0 — In development
 
+- Typed peripherals are exclusive to the acquiring program, including reads and competing processes on one
+  computer. Program exit and lost connectivity release ownership. The built-in Redstone Port provides remote
+  six-face input sampling, asynchronous waits and weak/direct output control through peripheral networks,
+  including atomic all-face writes with `Side.ALL` as the default port-level output selection;
+  its transient outputs clear when control is released.
+
 - The IDE has a named peripheral selection window with shared window controls, block item icons and project-style cards.
   Selecting a reachable device inserts its name as an undoable `const val` beneath imports in the active
   Kotlin source, with an uppercase snake-case identifier, duplicate reuse and collision suffixes.

@@ -56,5 +56,6 @@
   "message.compukters.cable.loop": "Кабельной линии нужны два конца: замыкание в кольцо запрещено.",
   "message.compukters.cable.too_many_computers": "Кабельная линия может соединить только два компьютера.",
   "message.compukters.cable.limit_reached": "Кабельная линия слишком длинная.",
-  "message.compukters.cable.unloaded": "Перед продолжением линии загрузите соседние чанки."
+  "message.compukters.cable.unloaded": "Перед продолжением линии загрузите соседние чанки.",
+  "block.compukters.redstone_port": "Редстоун-порт"
 }

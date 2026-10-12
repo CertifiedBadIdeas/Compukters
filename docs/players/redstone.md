@@ -73,3 +73,40 @@ Rust owns the current input snapshot, waiters, and a confirmed output mirror;
 each new VM session is seeded from Minecraft before it runs.
 
 Use the side operations above for multi-side control. No public multi-side DSL is currently provided.
+
+## Remote Redstone Port
+
+The Redstone Port is a separate six-face peripheral. Connect it with the Peripheral Configurator and give it a
+name, or place it next to a computer. No addon is required. Its sides follow the port's front face rather than the
+computer's facing.
+
+```kotlin
+import compukter.redstone.Redstone
+import compukter.redstone.RedstonePort
+
+fun main() {
+    val relay = RedstonePort.named("relay")
+    try {
+        relay.front.awaitAtLeast(7)
+        relay.right.set(15, Redstone.Power.DIRECT)
+        relay.front.await(0)
+    } finally {
+        relay.close()
+    }
+}
+```
+
+`front`, `back`, `left`, `right`, `top` and `bottom` expose `get()`, `set()`, `await()`, `await(level)` and
+`awaitAtLeast(level)`. `relay.set(15)` writes all six faces at once; the default is
+`side = RedstonePort.Side.ALL`. Use `relay.set(7, side = RedstonePort.Side.TOP)` for a selected face, or keep
+`relay.top.set(7)`. `RedstonePort.Side` includes `ALL`, `FRONT`, `BACK`, `LEFT`, `RIGHT`, `TOP`, `BOTTOM`;
+it selects outputs and is separate from `compukter.peripheral.Side`, which selects an adjacent device.
+Levels and power modes match the computer API. Port operations, including `get()`, suspend
+for host I/O. Inputs are sampled each server tick; edge waits do not replay earlier changes. The port does not
+passively conduct power between its faces.
+
+Acquisition is exclusive to one running program, as for all typed peripherals. Closing the final handle, program
+exit, loss of connectivity, removal or unload clears all outputs. Port output levels and pending waits are
+transient: they are not restored from saves. After hibernation a retained port handle is stale and a waiting
+operation reports `compukter.io.IOException`; reacquire the port explicitly. This lifetime applies to the remote
+port; the computer's own GPIO retains its existing persisted output register.
