@@ -44,6 +44,7 @@ against the canonical runtime module.
 Project `object` and `companion object` declarations lower to managed classes with one lazily initialized
 static instance. Supported field initialization, methods, identity and interface dispatch share that instance.
 A companion can implement a concrete generic interface, including inherited methods with typed predicates.
+Addon modules retain ordinary executable methods as precompiled imports alongside source value layouts.
 Addon objects implementing interfaces export their instance and nominal type; selected addon source templates
 specialize through the same boundary as base library templates. Existing platform namespace objects without
 supertypes retain their static facade representation.
