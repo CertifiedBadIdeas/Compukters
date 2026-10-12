@@ -25,7 +25,9 @@ the [generated Guest API reference]({{ '/guest-api/' | relative_url }}).
 Guest receiver types, including nullable references. Both receiver and receiver-free `run` are available. They
 are inline: direct lambdas support non-local returns; `let` and `also` receive `it`, while `run`, `with`, and
 `apply` use a receiver lambda. `apply` and `also` return the original receiver; `takeIf` and `takeUnless`
-evaluate the predicate once and return the original receiver or null.
+evaluate the predicate once and return the original receiver or null. Their blocks have
+`EXACTLY_ONCE` contracts, allowing definite initialization inside a scope block. `repeat` has an
+`UNKNOWN` calls-in-place count because non-positive counts skip its action.
 
 **Evidence:** `testKotlinScopeVmConformance` and `MinimalScriptLoweringTest`, test `stdlib scope functions
 execute with inline receiver and nullable semantics`.
@@ -52,7 +54,8 @@ execute with inline receiver and nullable semantics`.
 `IllegalStateException`. Both Boolean preconditions accept inline lazy `() -> Any` messages, matching the
 stdlib signature. The body runs once on failure, then its result converts through virtual `toString`; both
 body and conversion exceptions propagate unchanged. Successful conditions evaluate neither the body nor the
-conversion. `Any` is non-null; use a nullable value's `toString()` explicitly for a nullable message.
+conversion. `returns() implies value` enables caller null/type smart casts after successful
+`require`/`check`; lazy-message callbacks have an `AT_MOST_ONCE` contract. `Any` is non-null; use a nullable value's `toString()` explicitly for a nullable message.
 
 **Evidence:** `assertions and exhaustive reference when share exceptions for vm execution`
 (`testKotlinExceptionsVmConformance`) and `toString dispatch and lazy Any messages preserve values and effects
@@ -207,3 +210,6 @@ canonical IDE semantics` with hashCode diagnostics/completion. Typed value hashi
 the nullable extension belongs to `stdlib:core` 1.7.0.
 
 **Related work:** [#684](https://github.com/CertifiedBadIdeas/Compukters/issues/684)
+
+Scope, assertion and `buildString` contract evidence: `testKotlinContractsVmConformance`.
+Both `buildString` overloads invoke their builder action `EXACTLY_ONCE` on normal completion.

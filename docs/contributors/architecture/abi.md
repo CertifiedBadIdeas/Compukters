@@ -815,3 +815,7 @@ by FIR and are excluded from the separate executable-call default model. The pla
 encoding, worker protocol, CPKT instructions and Runtime ABI do not change. Definite assignment
 uses ordinary registers and capture cells; reference cells awaiting assignment have nullable
 storage and typed reads.
+
+`stdlib:core` 1.20.0 publishes scope/assertion/buildString effects, and `compukter:core` 7.5.0
+publishes synchronous display frame and nested UI construction effects. Existing native K2 metadata
+carries these effects for compiler and IDE consumers, including when SDK sources are detached.
