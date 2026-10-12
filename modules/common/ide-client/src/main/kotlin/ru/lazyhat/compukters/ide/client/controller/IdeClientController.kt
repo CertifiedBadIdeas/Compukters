@@ -3203,6 +3203,7 @@ class IdeClientController(
             admittedAnalysisState(this),
             find = find.view(document),
             occurrenceRanges = occurrenceRanges(document, highlighter.snapshot()),
+            maximumVisualWidth = document.maximumVisualWidth(),
             gitLineChanges = if (inspectedPath == path && inspectedRevision == document.revision) gitLineChanges else emptyList(),
         )
     }
@@ -3233,6 +3234,7 @@ class IdeClientController(
             readOnly = true,
             find = find.view(document),
             occurrenceRanges = occurrenceRanges(document, highlighter.snapshot()),
+            maximumVisualWidth = document.maximumVisualWidth(),
         )
     }
 
@@ -3262,6 +3264,7 @@ class IdeClientController(
             readOnly = true,
             find = find.view(document),
             occurrenceRanges = occurrenceRanges(document, highlighter.snapshot()),
+            maximumVisualWidth = document.maximumVisualWidth(),
         )
     }
 

@@ -76,6 +76,7 @@ data class CapabilityOperationHandler(
     val operation: UInt,
     val blocking: IntrinsicBlockingMode,
     val terminal: Boolean = false,
+    val recordResult: Boolean = false,
 ) : TrustedIntrinsicHandler
 
 data class TrustedIntrinsicRegistration(

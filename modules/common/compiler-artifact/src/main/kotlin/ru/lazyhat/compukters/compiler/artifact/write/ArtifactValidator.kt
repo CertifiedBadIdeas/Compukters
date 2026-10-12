@@ -49,6 +49,7 @@ import ru.lazyhat.compukters.compiler.artifact.model.TypeId
 import ru.lazyhat.compukters.compiler.artifact.model.TypeRef
 import ru.lazyhat.compukters.compiler.artifact.model.ValueType
 import ru.lazyhat.compukters.compiler.artifact.model.hasStructuredHostResponse
+import ru.lazyhat.compukters.compiler.artifact.model.hasValueHostResponse
 import ru.lazyhat.compukters.compiler.artifact.model.usesUnsignedSemantics
 
 internal fun validateArtifact(
@@ -565,6 +566,9 @@ internal fun validateArtifact(
         }
     ) {
         add(ArtifactWriteErrorCode.INVALID_RANGE, "unsigned numeric forms require minimum runtime ABI 1.14")
+    }
+    if (artifact.minimumRuntimeAbi < AbiVersion(1u, 20u) && artifact.modules.hasValueHostResponse()) {
+        add(ArtifactWriteErrorCode.INCOMPATIBLE_FEATURE_SET, "value host responses require minimum runtime ABI 1.20")
     }
     if (artifact.minimumRuntimeAbi < AbiVersion(1u, 13u) && artifact.modules.any { it.hasStructuredHostResponse() }) {
         add(ArtifactWriteErrorCode.INVALID_RANGE, "Structured host responses require minimum runtime ABI 1.13")

@@ -44,8 +44,19 @@ internal open class IdeDrawBuilder(
     protected var gitPreviewBounds: IdeRect? = null
     protected val gitFieldFocusScroll = mutableMapOf<IdeGitField, Int>()
     protected var bottomScrollMaximum = 0
+    private val scrollbars = mutableListOf<IdeScrollbar>()
     private var hoverBounds: IdeRect? = null
     private var hoverScrollMaximum = 0
+
+    fun scrollbar(
+        bar: IdeScrollbar,
+        zIndex: Int,
+    ) {
+        if (bar.maximum <= 0 || bar.track.width <= 4 || bar.track.height <= 4) return
+        scrollbars += bar
+        fill(IdeFillDraw(IdeFillKind.Background, bar.track, IdeColors.PANEL, zIndex))
+        fill(IdeFillDraw(IdeFillKind.Background, bar.thumb, IdeColors.MUTED, zIndex + 1))
+    }
 
     fun hoverViewport(
         bounds: IdeRect,
@@ -183,6 +194,7 @@ internal open class IdeDrawBuilder(
             scissors.toList(),
             hitTargets.toList(),
             icons.toList(),
+            scrollbars = scrollbars.toList(),
             hoverBounds = hoverBounds,
             hoverScrollMaximum = hoverScrollMaximum,
             bottomScrollMaximum = bottomScrollMaximum,

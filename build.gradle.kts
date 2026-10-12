@@ -572,6 +572,15 @@ registerKotlinVmConformance(
     conformanceScenario = "function-fields",
 )
 registerKotlinVmConformance(
+    taskName = "testKotlinGenericLocalFunctionsVmConformance",
+    taskDescription = "Executes generic Guest local functions with the pinned Compukter VM.",
+    artifactTask = ":compiler-k2:generateGenericLocalFunctionsConformanceArtifact",
+    artifact = project(":compiler-k2").layout.buildDirectory.file("generated/conformance/kotlin-generic-local-functions.cpkt"),
+    cargoTargetDirectory = ".toolchain/build/cargo/compiler-k2-generic-local-functions-conformance",
+    artifactEnvironmentVariable = "COMPUKTER_KOTLIN_GENERIC_LOCAL_FUNCTIONS_ARTIFACT",
+    conformanceScenario = "generic-local-functions",
+)
+registerKotlinVmConformance(
     taskName = "testKotlinLocalFunctionsVmConformance",
     taskDescription = "Executes captured Guest local functions with the pinned Compukter VM.",
     artifactTask = ":compiler-k2:generateLocalFunctionsConformanceArtifact",
@@ -1519,3 +1528,13 @@ registerKotlinVmConformance(
     ),
 )
 tasks.named("testKotlinTerminalOutputVmConformance") { dependsOn(":compiler-k2:generateCmatrixArtifact") }
+
+registerKotlinVmConformance(
+    taskName = "testKotlinAddonValueResponsesVmConformance",
+    taskDescription = "Executes inline addon responses, nested managed mixtures and ordinary boxing.",
+    artifactTask = ":compiler-k2:generateAddonValueResponsesConformanceArtifact",
+    artifact = project(":compiler-k2").layout.buildDirectory.file("generated/conformance/addon-values.cpkt"),
+    cargoTargetDirectory = ".toolchain/build/cargo/compiler-k2-addon-values-conformance",
+    artifactEnvironmentVariable = "COMPUKTER_ADDON_VALUES_ARTIFACT",
+    conformanceScenario = "addon-values",
+)

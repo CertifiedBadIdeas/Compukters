@@ -35,6 +35,10 @@ internal class IdeHoverViewport {
         documentation = value?.let { IdeHoverDocumentation(it.info) }
     }
 
+    fun move(position: Int) {
+        scroll = position.coerceAtLeast(0)
+    }
+
     fun scroll(
         model: IdeDrawModel,
         x: Double,

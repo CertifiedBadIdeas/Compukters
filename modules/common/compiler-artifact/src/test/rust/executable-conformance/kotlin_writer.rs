@@ -10,6 +10,8 @@ use compukter_vm::{
 mod random;
 #[path = "terminal_output.rs"]
 mod terminal_output;
+#[path = "addon_values.rs"]
+mod addon_values;
 
 fn main() {
     let mut arguments = std::env::args().skip(1);
@@ -40,6 +42,7 @@ fn main() {
         },
         "random" => random::execute(),
         "terminal-output" => terminal_output::execute(),
+        "addon-values" => addon_values::execute(),
         "math" => {
             let mut session = k2_stdio_session_with_heap("COMPUKTER_KOTLIN_MATH_ARTIFACT", 1, 256 * 1024);
             k2_assert_prints(&mut session, ["math ok\n"], 1024);
@@ -145,6 +148,10 @@ fn main() {
         "function-fields" => execute_primitive_program(
             std::env::var("COMPUKTER_KOTLIN_FUNCTION_FIELDS_ARTIFACT")
                 .expect("function fields artifact path must be set"),
+        ),
+        "generic-local-functions" => execute_primitive_program(
+            std::env::var("COMPUKTER_KOTLIN_GENERIC_LOCAL_FUNCTIONS_ARTIFACT")
+                .expect("generic local functions artifact path must be set"),
         ),
         "local-functions" => execute_primitive_program(
             std::env::var("COMPUKTER_KOTLIN_LOCAL_FUNCTIONS_ARTIFACT")

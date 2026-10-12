@@ -54,10 +54,26 @@ Escaping references retain their captures after the enclosing function returns; 
 loop iterations retain separate cells. Local helpers forward captures needed by their callees or references.
 References allocate ordinary managed closures and remain subject to heap and execution quotas.
 
-Local declarations with their own type parameters and capture layouts that still contain enclosing
-generic parameters report `UNSUPPORTED_IR`. Local inline/suspend declarations remain unsupported.
-In class initializers, put an expression-bodied local declaration and subsequent statements on separate
-lines: the current K2 frontend can omit a statement following that declaration on the same line.
+Local functions with their own type parameters specialize inferred or explicit concrete arguments,
+including all twelve primitive families, nullable values and admitted references. Local helpers inside
+generic top-level functions also specialize their enclosing captures before layout; defaults and escaping
+references retain the concrete types. Generic callers of these owners use the same lexical specialization.
+Direct primitive calls stay unboxed; each invocation retains its own mutable capture cells.
+
+```kotlin
+fun main() {
+    fun <T> twice(value: T, transform: (T) -> T): T =
+        transform(transform(value))
+    check(twice(3) { it + 1 } == 5)
+}
+```
+
+Lexical and ordinary generic function variants share the existing 256-variant budget; lexical expansion
+also has a depth limit of 64. Type-growing recursion reports `UNSUPPORTED_IR` rather than creating
+unbounded code. Generic class-owned capture layouts remain outside this extension. Local inline/suspend
+and reified declarations remain unsupported.
+Put an expression-bodied local declaration and subsequent statements on separate lines:
+the current K2 frontend can omit a statement following that declaration on the same line.
 The direct static `Tasks.launch(::worker)` path still requires an admitted top-level worker; stored function
 values follow the ordinary task callback rules.
 
@@ -69,8 +85,15 @@ executes the deterministic artifact from
 [`local-functions/main.kt`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/compiler-k2/src/test/resources/kotlin/local-functions/main.kt).
 `DiagnosticQueryTest` test `captured local functions resolve with source and metadata inputs` checks both
 platform input modes.
+`MinimalScriptLoweringTest` also tests `generic local functions preserve concrete lexical captures and
+escaping references`, `generic local calls retain scalar signatures without managed allocation`,
+`generic local references lower without inline normalization` and `expanding generic local recursion
+reports bounded target diagnostics`. `testKotlinGenericLocalFunctionsVmConformance` executes
+[`generic-local-functions/main.kt`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/compiler-k2/src/test/resources/kotlin/generic-local-functions/main.kt).
+`DiagnosticQueryTest` test `generic local functions resolve with source and metadata inputs` checks both
+platform modes.
 
-**Related work:** [#755](https://github.com/CertifiedBadIdeas/Compukters/issues/755).
+**Related work:** [#758](https://github.com/CertifiedBadIdeas/Compukters/issues/758), [#755](https://github.com/CertifiedBadIdeas/Compukters/issues/755).
 
 ## Transparent blocking across project calls
 

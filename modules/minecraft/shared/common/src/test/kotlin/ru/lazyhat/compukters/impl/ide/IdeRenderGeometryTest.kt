@@ -88,8 +88,8 @@ class IdeRenderGeometryTest {
         assertEquals(IdeRect(205, 46, 960, 397), geometry.editor)
         assertEquals(IdeRect(205, 397, 960, 402), geometry.diagnosticsSplitter)
         assertEquals(IdeRect(205, 402, 960, 522), geometry.diagnostics)
-        assertEquals(125, geometry.codeColumns)
-        assertEquals(29, geometry.codeRows)
+        assertEquals(124, geometry.codeColumns)
+        assertEquals(28, geometry.codeRows)
         assertEquals(0, geometry.panel.left % 2, "1920 physical pixels at GUI scale 2 maps deterministically to 960 GUI pixels")
     }
 
@@ -125,8 +125,8 @@ class IdeRenderGeometryTest {
             IdeRenderGeometry.compute(960, 540, 180, 120, diagnosticsExpanded = false, treeVisible = false, font = font)
         assertFalse(geometry.treeVisible)
         assertFalse(geometry.diagnosticsExpanded)
-        assertEquals(geometry.editor.width / font.cellWidth, geometry.codeColumns)
-        assertEquals(geometry.editor.height / font.cellHeight, geometry.codeRows)
+        assertEquals((geometry.editor.width - IDE_SCROLLBAR_SIZE) / font.cellWidth, geometry.codeColumns)
+        assertEquals((geometry.editor.height - IDE_SCROLLBAR_SIZE) / font.cellHeight, geometry.codeRows)
     }
 
     @Test

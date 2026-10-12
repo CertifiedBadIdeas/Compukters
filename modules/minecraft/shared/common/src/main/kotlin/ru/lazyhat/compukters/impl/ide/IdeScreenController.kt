@@ -202,7 +202,15 @@ class IdeScreenController(
             input.pointerActivity()
             return true
         }
-        if (presentation(geometry).model.hoverBounds?.contains(uiEvent.x(), uiEvent.y()) == true) return true
+        val scrollModel = presentation(geometry).model
+        val bars =
+            if (scrollModel.hoverBounds?.contains(uiEvent.x(), uiEvent.y()) == true) {
+                scrollModel.scrollbars.filter { it.target == IdeScrollTarget.Hover }
+            } else {
+                scrollModel.scrollbars
+            }
+        if (uiEvent.button() == 0 && scrollbarInteraction.press(bars, uiEvent.x(), uiEvent.y(), ::moveScrollbar)) return true
+        if (scrollModel.hoverBounds?.contains(uiEvent.x(), uiEvent.y()) == true) return true
         val pointerContext = pointerContext(geometry)
         if (input.explorerPressed(uiEvent.x(), uiEvent.y(), uiEvent.modifiers(), pointerContext)) {
             focusArea = IdeFocusArea.Tree
@@ -268,7 +276,11 @@ class IdeScreenController(
         val geometry = geometry()
         synchronizeQuickOpen()
         if (overlays.drag(uiEvent, geometry.panel)) return true
-        if (controller.viewState().dialog != null) return true
+        if (controller.viewState().dialog != null) {
+            scrollbarInteraction.release()
+            return true
+        }
+        if (scrollbarInteraction.drag(uiEvent.x(), uiEvent.y(), ::moveScrollbar)) return true
         if (terminalOverlay.visible && terminalOverlayGeometry(geometry).panel.contains(uiEvent.x(), uiEvent.y())) return true
         if (splitters.drag(uiEvent.x().toInt(), uiEvent.y().toInt(), geometry)) return true
         if (input.explorerDragged(uiEvent.x(), uiEvent.y(), pointerContext(geometry))) return true
@@ -288,6 +300,7 @@ class IdeScreenController(
         if (!viewport.supported) return true
         val uiEvent = event.map(viewport)
         synchronizeQuickOpen()
+        if (scrollbarInteraction.release()) return true
         if (overlays.release()) return true
         if (controller.viewState().dialog != null) return true
         if (splitters.release()) return true
@@ -295,7 +308,27 @@ class IdeScreenController(
         return false
     }
 
+    private fun moveScrollbar(
+        target: IdeScrollTarget,
+        position: Int,
+    ) {
+        if (target == IdeScrollTarget.Hover) {
+            hoverViewport.move(position)
+            return
+        }
+        val workspace = (controller.viewState().page as? IdePageState.Workspace)?.value ?: return
+        val editor = workspace.editor as? IdeEditorView.Text ?: return
+        controller.dispatch(
+            IdeCommand.ScrollEditor(
+                if (target == IdeScrollTarget.EditorLines) position - editor.firstVisibleLine else 0,
+                if (target == IdeScrollTarget.EditorColumns) position - editor.firstVisibleColumn else 0,
+            ),
+        )
+    }
+
     private val hoverViewport = IdeHoverViewport()
+    private val scrollbarInteraction = IdeScrollbarInteraction()
+    private var scrollbarDocument: Pair<ru.lazyhat.compukters.ide.client.state.IdeEditorSource, Long>? = null
 
     fun mouseScrolled(
         mouseX: Double,
@@ -342,7 +375,7 @@ class IdeScreenController(
             val uiY = viewport.toVirtualY(mouseY)
             pointerX = uiX
             pointerY = uiY
-            if (overlays.active) return
+            if (overlays.active || scrollbarInteraction.active) return
             if (presentation().model.hoverBounds?.contains(uiX, uiY) == true) return
             val modifiers = if (controlDown) IdeModifier.CONTROL else 0
             input.pointerMoved(
@@ -538,6 +571,10 @@ class IdeScreenController(
         val treeFirstRow = admittedTreeFirstRow(geometry, state)
         val workspace = (state.page as? IdePageState.Workspace)?.value
         val analysis = (workspace?.editor as? IdeEditorView.Text)?.analysis as? IdeAnalysisState.Active
+        val editor = workspace?.editor as? IdeEditorView.Text
+        val document = editor?.let { it.source to it.contentRevision }
+        if (document != scrollbarDocument) scrollbarInteraction.release()
+        scrollbarDocument = document
         val hover = analysis?.interaction as? IdeSemanticInteraction.Hover
         hoverViewport.admit(hover)
         val model =

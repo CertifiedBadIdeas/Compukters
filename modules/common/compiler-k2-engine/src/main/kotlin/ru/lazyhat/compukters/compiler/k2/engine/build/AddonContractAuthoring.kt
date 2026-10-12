@@ -27,6 +27,7 @@ import ru.lazyhat.compukters.platform.bundle.PlatformDeclaration
 import ru.lazyhat.compukters.platform.bundle.PlatformModuleId
 import ru.lazyhat.compukters.platform.bundle.PlatformSource
 import ru.lazyhat.compukters.platform.k2.build.PlatformMetadataCompiler
+import ru.lazyhat.compukters.platform.k2.build.PlatformRecordCandidate
 import ru.lazyhat.compukters.worker.value.ImmutableBytes
 import java.nio.file.Files
 import java.nio.file.Path
@@ -191,6 +192,7 @@ fun resolveAddonContract(
     authoring: AddonAuthoringContract,
     currentLock: AddonAbiLock,
     dependencies: List<PlatformModuleId> = emptyList(),
+    trustedRecords: List<PlatformRecordCandidate> = emptyList(),
 ): ResolvedAddonContract {
     val sources = discoverAuthoringSources(sourceRoot)
     require(sources.isNotEmpty()) { "addon module ${authoring.module} has no Kotlin sources" }
@@ -211,7 +213,7 @@ fun resolveAddonContract(
                     name
                 }
             }.toSet()
-    val records = resolveAddonRecordSchemas(authoring.addon, recordReturns, metadata.recordCandidates)
+    val records = resolveAddonRecordSchemas(authoring.addon, recordReturns, metadata.recordCandidates, trustedRecords)
     require(external.isNotEmpty()) { "addon ${authoring.addon} contains no external declarations" }
     external.forEach { declaration -> AddonCapabilitySignature.parse(declaration.signature, records.keys) }
 

@@ -36,4 +36,5 @@ internal data class LoweredCapabilityOperation(
     val operation: UInt,
     val blocking: IntrinsicBlockingMode,
     val terminal: Boolean,
+    val recordResult: Boolean,
 )

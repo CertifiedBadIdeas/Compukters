@@ -262,20 +262,29 @@ produces no distributable umbrella mod; adding another addon does not introduce 
 
 ## Structured host results
 
-Current workspace tooling accepts an asynchronous binding returning a public immutable data record in the addon's
-namespace. Declare non-null `val` fields containing Int, Long, Float, Double, Boolean, Char, String or other supported
-records. Records must have no type parameters, superclass, custom body, constructor defaults or initialization logic.
-Arrays, nullable fields, record arguments and cyclic record graphs are outside this initial contract.
+Workspace tooling accepts asynchronous bindings returning immutable data or value records. Use non-null `val`
+constructor fields containing Int, Long, Float, Double, Boolean, Char, String or supported nested records.
+Data records must be public and have an empty body; value records may also be internal wire payloads and contain
+methods or computed properties. Type parameters, supertypes, stored body properties, constructor defaults,
+initializers, arrays, nullable fields, record arguments and cycles are rejected.
+
+Canonical constructor-safe stdlib geometry is also supported: Vector2i/3i, Vector2f/3f/4f, Vector2d/3d/4d,
+Quaternionf/d and Matrix3f/d/4f/d. Their exact field shapes and stdlib dependency are verified; addons cannot
+impersonate these types. Constrained values such as Rotation3d must be constructed through their Guest factory
+from a raw Quaterniond payload, preserving normalization and validation.
 
 The SDK generates a JVM mirror DTO, an ordered nominal schema and its typed response encoder. Authors return the
 mirror through `AddonCallResult`; no reflection, handwritten operation numbers or Guest constructors are involved.
 The ABI lock records the complete nested shape, so changing field order, name or type requires a reviewed ABI update.
 Record bundles use CAGB 3 / lock format 2; scalar-only contracts retain their earlier encoding. Programs returning
-records require Runtime ABI 1.13; runtime transports require C ABI 20.
+ordinary data records require Runtime ABI 1.13. Value record responses require Runtime ABI 1.20;
+current runtime transports use C ABI 23.
 
 Limits are 8 nesting levels, 32 record/String nodes, 64 expanded fields, 4096 aggregate UTF-16 code units and a 64 KiB
 response. The native boundary validates and copies caller-owned responses. Normal VM advancement allocates rooted
-objects and Strings in slices, then publishes the root atomically. The host does not execute Guest construction code.
+Strings and ordinary data objects in slices, then publishes the root atomically. Inline value roots and
+nested inline fields create no Guest record objects; Strings and data fields still use managed storage.
+Passing a value into Any, nullable or other reference contexts uses the ordinary value box. The host does not execute Guest construction code.
 See [the Sable addon](https://github.com/CertifiedBadIdeas/Compukters-sable/tree/main) for a complete nested record
 API and its real assembly/return GameTest.
 

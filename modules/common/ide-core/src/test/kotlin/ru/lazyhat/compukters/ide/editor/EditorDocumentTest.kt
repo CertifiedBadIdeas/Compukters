@@ -28,6 +28,19 @@ import kotlin.test.assertTrue
 
 class EditorDocumentTest {
     @Test
+    fun `whole document width follows edits and undo including tabs and surrogate pairs`() {
+        val editor = EditorDocument("a\t😀\nshort")
+        assertEquals(5, editor.maximumVisualWidth())
+        assertTrue(editor.setCaret(editor.length))
+        assertEquals(5, editor.maximumVisualWidth())
+        editor.selectAll()
+        assertIs<EditorEditResult.Applied>(editor.type("x"))
+        assertEquals(1, editor.maximumVisualWidth())
+        assertIs<EditorEditResult.Applied>(editor.undo())
+        assertEquals(5, editor.maximumVisualWidth())
+    }
+
+    @Test
     fun `atomic edit rejects a caret inside a surrogate pair without modifying text`() {
         val editor = EditorDocument("old")
         assertIs<EditorEditResult.Rejected>(editor.replaceRanges(EditorRange(0, 3), "😀", emptyList(), 1))
