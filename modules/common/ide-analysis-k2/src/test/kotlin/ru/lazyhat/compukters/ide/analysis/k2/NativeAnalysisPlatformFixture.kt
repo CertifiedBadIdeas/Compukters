@@ -47,7 +47,9 @@ internal fun testAdmittedPlatform(
     val addon = AddonGuestApiBundleCodec.decode(addonBytes)
     val modules =
         if (selectAllModules) {
-            (listOf(platform.builtins) + platform.modules + addon.moduleDescriptor).sortedBy { it.id }.map { module ->
+            val selected =
+                listOf(platform.builtins) + platform.modules + listOfNotNull(addon.moduleDescriptor.takeIf { includeAddonBundle })
+            selected.sortedBy { it.id }.map { module ->
                 AdmittedAnalysisModule(
                     AnalysisModuleIdentity(
                         module.id.toString(),

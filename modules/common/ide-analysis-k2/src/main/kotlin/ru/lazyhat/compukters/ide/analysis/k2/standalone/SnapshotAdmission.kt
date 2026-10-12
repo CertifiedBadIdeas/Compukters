@@ -31,6 +31,7 @@ import ru.lazyhat.compukters.ide.analysis.AnalysisModuleIdentity
 import ru.lazyhat.compukters.ide.analysis.AnalysisSnapshotIdentity
 import ru.lazyhat.compukters.ide.analysis.k2.query.GlobalCompletionIndex
 import ru.lazyhat.compukters.ide.analysis.protocol.OpenSnapshotRequest
+import ru.lazyhat.compukters.ide.analysis.protocol.ProtocolLimits
 import ru.lazyhat.compukters.platform.bundle.PlatformBundle
 import ru.lazyhat.compukters.platform.bundle.PlatformBundleCodec
 import ru.lazyhat.compukters.platform.bundle.PlatformModuleGraph
@@ -177,7 +178,7 @@ internal class SnapshotAdmission(
                         )
                 }
             val platformSourceFiles =
-                attachedSourceRoot?.let { loadPlatformSourceFiles(environment, it, request) }.orEmpty() +
+                attachedSourceRoot?.let { loadPlatformSourceFiles(environment, it) }.orEmpty() +
                     loadAddonSourceFiles(environment, addonBundles, request)
             return IncrementalK2Workspace(
                 request.identity,
@@ -232,7 +233,6 @@ internal class SnapshotAdmission(
     private fun loadPlatformSourceFiles(
         environment: K2ProjectEnvironment,
         sourceArchive: Path,
-        request: OpenSnapshotRequest,
     ): Map<VirtualSourcePath, KtFile> {
         val root =
             requireNotNull(StandardFileSystems.jar().findFileByPath("$sourceArchive!/")) {
@@ -248,11 +248,11 @@ internal class SnapshotAdmission(
                 return
             }
             if (file.extension != "kt") return
-            require(sourceCount < request.limits.sourceFiles) { "platform source count exceeds analysis limit" }
-            require(file.length <= request.limits.sourceFileBytes) { "platform source file exceeds analysis limit" }
+            require(sourceCount < ProtocolLimits.PLATFORM_SOURCE_FILES) { "platform source count exceeds analysis limit" }
+            require(file.length <= ProtocolLimits.PLATFORM_SOURCE_FILE_BYTES) { "platform source file exceeds analysis limit" }
             sourceCount += 1
             totalBytes += file.length
-            require(totalBytes <= request.limits.sourceBytes) { "platform source bytes exceed analysis limit" }
+            require(totalBytes <= ProtocolLimits.PLATFORM_SOURCE_BYTES) { "platform source bytes exceed analysis limit" }
             val path = VirtualSourcePath.kotlin(file.path.removePrefix(root.path).removePrefix("/"))
             val psi = PsiManager.getInstance(environment.session.project).findFile(file) as? KtFile
             requireNotNull(psi) { "platform source is not Kotlin PSI: ${path.value}" }
