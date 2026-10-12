@@ -24,6 +24,7 @@ import org.jetbrains.kotlin.analysis.api.analyze
 import org.jetbrains.kotlin.analysis.api.components.expressionType
 import org.jetbrains.kotlin.analysis.api.components.render
 import org.jetbrains.kotlin.analysis.api.components.resolveSymbol
+import org.jetbrains.kotlin.analysis.api.renderer.declarations.KaCallableReturnTypeFilter
 import org.jetbrains.kotlin.analysis.api.renderer.declarations.impl.KaDeclarationRendererForSource
 import org.jetbrains.kotlin.analysis.api.renderer.types.impl.KaTypeRendererForSource
 import org.jetbrains.kotlin.analysis.api.symbols.KaCallableSymbol
@@ -43,6 +44,12 @@ import ru.lazyhat.compukters.ide.analysis.protocol.AnalysisLimits
 import ru.lazyhat.compukters.ide.editor.EditorRange
 
 internal object ExpressionInfoQuery {
+    @OptIn(KaExperimentalApi::class)
+    private val hoverDeclarationRenderer =
+        KaDeclarationRendererForSource.WITH_SHORT_NAMES.with {
+            returnTypeFilter = KaCallableReturnTypeFilter.ALWAYS
+        }
+
     @OptIn(KaExperimentalApi::class)
     fun execute(
         query: AnalysisQuery.ExpressionInfo,
@@ -85,7 +92,7 @@ internal object ExpressionInfoQuery {
                             ),
                             signature =
                                 declarationSymbol
-                                    .render(KaDeclarationRendererForSource.WITH_SHORT_NAMES)
+                                    .render(hoverDeclarationRenderer)
                                     .let { value -> requiredBoundedUtf8(value, limits.detailTextBytes, "callable signature") },
                             origin =
                                 DeclarationOriginMapper
@@ -104,7 +111,7 @@ internal object ExpressionInfoQuery {
                     val symbol = expressions.filterIsInstance<KtNameReferenceExpression>().firstOrNull()?.resolveSymbol()
                     val signature =
                         symbol
-                            ?.render(KaDeclarationRendererForSource.WITH_SHORT_NAMES)
+                            ?.render(hoverDeclarationRenderer)
                             ?.let { value -> requiredBoundedUtf8(value, limits.detailTextBytes, "callable signature") }
                     val origin =
                         symbol
