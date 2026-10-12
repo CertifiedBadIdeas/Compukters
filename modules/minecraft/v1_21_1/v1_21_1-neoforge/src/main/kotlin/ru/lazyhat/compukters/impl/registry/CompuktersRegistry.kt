@@ -37,12 +37,14 @@ import ru.lazyhat.compukters.core.MOD_ID
 import ru.lazyhat.compukters.impl.computer.NeoForgeComputerBlockEntity
 import ru.lazyhat.compukters.impl.display.NeoForgeDisplayBlockEntity
 import ru.lazyhat.compukters.impl.peripheral.NeoForgePeripheralConfiguratorItem
+import ru.lazyhat.compukters.impl.redstone.NeoForgeRedstonePortBlockEntity
 import ru.lazyhat.compukters.impl.terminal.TerminalNetwork
 import ru.lazyhat.compukters.minecraft.computer.ComputerBlock
 import ru.lazyhat.compukters.minecraft.display.DisplayBlock
 import ru.lazyhat.compukters.minecraft.peripheral.PeripheralCableBlock
 import ru.lazyhat.compukters.minecraft.peripheral.PeripheralCableBlocks
 import ru.lazyhat.compukters.minecraft.peripheral.PeripheralConfiguratorItem
+import ru.lazyhat.compukters.minecraft.redstone.RedstonePortBlock
 import java.util.function.Supplier
 
 object CompuktersRegistry {
@@ -80,6 +82,22 @@ object CompuktersRegistry {
 
     val DISPLAY_ITEM: DeferredItem<BlockItem> = items.registerSimpleBlockItem(DISPLAY)
 
+    val REDSTONE_PORT: DeferredBlock<RedstonePortBlock> =
+        blocks.register(
+            "redstone_port",
+            Supplier {
+                RedstonePortBlock(
+                    BlockBehaviour.Properties.of().strength(2.0f),
+                    ::NeoForgeRedstonePortBlockEntity,
+                    Supplier {
+                        REDSTONE_PORT_BLOCK_ENTITY.get()
+                    },
+                )
+            },
+        )
+
+    val REDSTONE_PORT_ITEM: DeferredItem<BlockItem> = items.registerSimpleBlockItem(REDSTONE_PORT)
+
     val PERIPHERAL_CABLE: DeferredBlock<PeripheralCableBlock> =
         blocks.register(
             "peripheral_cable",
@@ -116,6 +134,7 @@ object CompuktersRegistry {
                     .displayItems { _, output ->
                         output.accept(COMPUTER_ITEM.get())
                         output.accept(DISPLAY_ITEM.get())
+                        output.accept(REDSTONE_PORT_ITEM.get())
                         output.accept(PERIPHERAL_CABLE_ITEM.get())
                         output.accept(PERIPHERAL_CONFIGURATOR_ITEM.get())
                     }.build()
@@ -134,6 +153,14 @@ object CompuktersRegistry {
         blockEntities.register(
             "display",
             Supplier { BlockEntityType.Builder.of(::NeoForgeDisplayBlockEntity, DISPLAY.get()).build(null) },
+        )
+
+    val REDSTONE_PORT_BLOCK_ENTITY: DeferredHolder<BlockEntityType<*>, BlockEntityType<NeoForgeRedstonePortBlockEntity>> =
+        blockEntities.register(
+            "redstone_port",
+            Supplier {
+                BlockEntityType.Builder.of(::NeoForgeRedstonePortBlockEntity, REDSTONE_PORT.get()).build(null)
+            },
         )
 
     fun register(eventBus: IEventBus) {

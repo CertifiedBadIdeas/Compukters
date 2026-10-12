@@ -55,6 +55,7 @@ class ComputerPeripheralRuntime internal constructor(
                     .putLong(position.asLong())
                     .array()
             },
+            ownership = ComputerPeripheralOwnership.forServer(level.server),
             decodeLocation = { bytes ->
                 require(bytes.size == 8)
                 BlockPos.of(

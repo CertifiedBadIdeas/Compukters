@@ -1,0 +1,65 @@
+{
+  "parent": "minecraft:block/cube",
+  "textures": {
+    "particle": "compukters:block/compukter/side",
+    "case": "compukters:block/compukter/side",
+    "port": "minecraft:block/redstone_block"
+  },
+  "elements": [
+    {
+      "from": [
+        0,
+        0,
+        0
+      ],
+      "to": [
+        16,
+        16,
+        16
+      ],
+      "faces": {
+        "north": {
+          "texture": "#case",
+          "cullface": "north"
+        },
+        "south": {
+          "texture": "#case",
+          "cullface": "south"
+        },
+        "east": {
+          "texture": "#case",
+          "cullface": "east"
+        },
+        "west": {
+          "texture": "#case",
+          "cullface": "west"
+        },
+        "up": {
+          "texture": "#case",
+          "cullface": "up"
+        },
+        "down": {
+          "texture": "#case",
+          "cullface": "down"
+        }
+      }
+    },
+    {
+      "from": [
+        4,
+        4,
+        -0.01
+      ],
+      "to": [
+        12,
+        12,
+        0
+      ],
+      "faces": {
+        "north": {
+          "texture": "#port"
+        }
+      }
+    }
+  ]
+}

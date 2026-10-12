@@ -79,5 +79,6 @@
   "message.compukters.cable.loop": "A cable line must have two ends; loops cannot connect computers.",
   "message.compukters.cable.too_many_computers": "A cable line can connect only two computers.",
   "message.compukters.cable.limit_reached": "This cable line is too large.",
-  "message.compukters.cable.unloaded": "Load the neighboring chunks before extending this cable line."
+  "message.compukters.cable.unloaded": "Load the neighboring chunks before extending this cable line.",
+  "block.compukters.redstone_port": "Redstone Port"
 }

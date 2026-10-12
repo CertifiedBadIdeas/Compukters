@@ -16,6 +16,10 @@ import ru.lazyhat.compukters.minecraft.peripheral.ComputerPeripheralLookup
 
 /** Addons pin the exact physical instance here; the base also verifies reachability before every typed access. */
 interface CompuktersPeripheralEndpoint {
+    /**
+     * Return the same identity object for every resolution/contract of one logical device.
+     * Typed acquisition uses referential identity for exclusive program ownership, including reads.
+     */
     val identity: Any
 
     fun valid(): Boolean

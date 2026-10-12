@@ -162,6 +162,20 @@ contract object identity before exposing a retained endpoint. Invalidity latches
 replacement instances, and reset discards state without reusing tokens. World discovery order and face/name lookup
 belong to the Minecraft adapter. Addons retain ownership of device operations and capability schemas.
 
+`PeripheralOwnership` is shared by all program sessions on a Minecraft server, across computers and dimensions.
+Handle acquisition reserves an exact logical instance exclusively for that program, before reads or writes.
+Contract aliases share the same ownership key; unread snapshot entries are not reserved. Program stop and reset
+release retained leases; a server tick expires disconnected endpoints even without Guest operations. Server stop
+clears the registry. Device adapters may implement `PeripheralHandleLease` for acquisition/release effects.
+
+The built-in Redstone Port uses `compukter:redstone_port` and additive `compukters:redstone-port` capability ABI 1.0:
+`input(Int,Int):Int`, `setOutput(Int,Int,Int):Unit`, `awaitChange(Int,Int):Int`,
+`awaitLevel(Int,Int,Int,Int):Int`, `close(Int):Unit`, `setAllOutput(Int,Int):Unit`. All operations are asynchronous.
+The ALL output operation commits all faces before one changed-face neighbor notification. The common host owns waiters;
+the server block entity samples six inputs and owns transient output levels. The final handle release clears
+outputs and notifies neighbors. No output NBT or persistent endpoint stamp is supplied; interrupted hibernation
+waits fail rather than replaying control. The existing artifact and native transport ABI is unchanged.
+
 Evidence: `PeripheralSessionTest`, `PeripheralProgramHostTest`, and
 `canonical peripheral companion specializes shared typed queries` through `testKotlinPeripheralQueriesVmConformance`,
 including predicate short-circuiting, imported Peripheral upcasts, nullable absence, strict exceptions and snapshot

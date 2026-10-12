@@ -27,6 +27,16 @@ import net.minecraft.gametest.framework.TestEnvironmentDefinition
 import net.minecraft.network.chat.Component
 import net.minecraft.network.chat.MutableComponent
 
+internal class RedstonePortGameTest(
+    testData: TestData<Holder<TestEnvironmentDefinition<*>>>,
+) : GameTestInstance(testData) {
+    override fun run(helper: GameTestHelper) = RedstonePortGameTestScenario.run(helper)
+
+    override fun codec(): MapCodec<out GameTestInstance> = MapCodec.unit(this)
+
+    override fun typeDescription(): MutableComponent = Component.literal("Compukters process-owned redstone port")
+}
+
 internal class PeripheralTransferGameTest(
     testData: TestData<Holder<TestEnvironmentDefinition<*>>>,
 ) : GameTestInstance(testData) {

@@ -229,6 +229,18 @@ across and 10 rows per block down throughout the composite canvas, rasterized at
 cover composite coordinates, row overflow rejection, cell replacement and unchanged single-panel limits.
 See [Display]({{ '/DISPLAY/' | relative_url }}).
 
+### Remote Redstone Port
+
+`RedstonePort` is a typed built-in provider exposing six `RedstonePortSide` values with input reads, weak/direct
+outputs, edge/exact/threshold waits and `close()`. Port-level `set` defaults to `RedstonePort.Side.ALL` and
+updates all faces atomically; a specific enum side or the per-face facade selects one output. All operations suspend for bounded server host I/O.
+The additive `compukters:redstone-port` capability is ABI 1.0. Acquisition is process-exclusive through the shared
+peripheral registry; output levels and waits are transient. The computer's own GPIO remains a separate API.
+
+Evidence is provided by `RedstonePortHostTest`, `RedstonePortStateTest`, `PeripheralOwnershipTest`, the deterministic
+`redstone port program lowers deterministically for GameTest` fixture and `RedstonePortGameTestScenario`.
+See [Redstone]({{ '/REDSTONE/' | relative_url }}) and the `examples/redstone-port` project.
+
 ### Redstone GPIO
 
 **Status:** Supported.

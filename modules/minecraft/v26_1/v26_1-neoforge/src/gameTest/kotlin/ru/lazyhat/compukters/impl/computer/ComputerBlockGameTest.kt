@@ -53,6 +53,10 @@ object ComputerBlockGameTest {
                 0,
             )
         event.registerTest(
+            Identifier.fromNamespaceAndPath(MOD_ID, "redstone_port"),
+            RedstonePortGameTest(testData("redstone_port")),
+        )
+        event.registerTest(
             Identifier.fromNamespaceAndPath(MOD_ID, "peripheral_transfer"),
             PeripheralTransferGameTest(testData("peripheral_transfer")),
         )

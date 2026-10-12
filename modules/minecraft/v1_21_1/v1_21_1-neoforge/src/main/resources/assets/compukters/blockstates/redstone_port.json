@@ -1,0 +1,20 @@
+{
+  "variants": {
+    "facing=north": {
+      "model": "compukters:block/redstone_port",
+      "y": 0
+    },
+    "facing=east": {
+      "model": "compukters:block/redstone_port",
+      "y": 90
+    },
+    "facing=south": {
+      "model": "compukters:block/redstone_port",
+      "y": 180
+    },
+    "facing=west": {
+      "model": "compukters:block/redstone_port",
+      "y": 270
+    }
+  }
+}
