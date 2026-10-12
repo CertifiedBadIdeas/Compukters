@@ -35,6 +35,13 @@ calls. Inherited defaults use their declaring symbols while the final call retai
 Default-only generic helper calls participate in specialization discovery. Recursively expanding the same
 source default produces a bounded target diagnostic instead of unbounded compiler recursion. None of these
 source expressions are encoded into the platform bundle or require a new VM instruction.
+
+Default-only function-reference adaptations compile the checked K2 adapter body with the ordinary
+function compiler. A bound leading adapter parameter maps to a closure capture and is excluded from
+invocation arguments; its source expression evaluates when the closure is constructed. Adapter calls
+therefore share scoped default evaluation and dispatch with direct calls, without mask dispatchers or a
+new artifact representation. Unsupported signature conversions retain target diagnostics.
+
 Canonical `IntRange` and `IntProgression` declarations let K2 resolve ascending, descending, and stepped `Int` loops.
 The compiler recognizes only their canonical `for` shape and evaluates start, end, and step once into scalar registers;
 no range or iterator object enters the VM. It validates a positive step before iteration, calculates the next index in

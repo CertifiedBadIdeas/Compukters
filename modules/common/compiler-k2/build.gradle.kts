@@ -521,6 +521,22 @@ val generateFunctionDefaultsConformanceArtifact = tasks.register<Test>("generate
     systemProperty("compukter.vm.functionDefaultsArtifact", functionDefaultsConformanceArtifact.get().asFile.absolutePath)
 }
 
+val defaultFunctionReferencesConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-default-function-references.cpkt")
+val generateDefaultFunctionReferencesConformanceArtifact = tasks.register<Test>("generateDefaultFunctionReferencesConformanceArtifact") {
+    description = "Compiles default-adapted Guest function references for pinned VM conformance."
+    group = "verification"
+    dependsOn(tasks.jar)
+    useJUnitPlatform()
+    testClassesDirs = sourceSets.test.get().output.classesDirs
+    classpath = sourceSets.test.get().runtimeClasspath
+    filter.includeTestsMatching("*default adapted function references preserve invocation defaults and receivers*")
+    inputs.file(workerJar)
+    inputs.file("src/test/resources/kotlin/default-function-references/main.kt")
+    outputs.file(defaultFunctionReferencesConformanceArtifact)
+    systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
+    systemProperty("compukter.vm.defaultFunctionReferencesArtifact", defaultFunctionReferencesConformanceArtifact.get().asFile.absolutePath)
+}
+
 val generateAdaptedConstructorsConformanceArtifact = tasks.register<Test>("generateAdaptedConstructorsConformanceArtifact") {
     description = "Compiles adapted Guest constructor references for pinned VM conformance."
     group = "verification"

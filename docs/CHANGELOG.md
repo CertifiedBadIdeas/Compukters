@@ -22,6 +22,8 @@ headings so this page has one stable URL that can be shared outside the reposito
 - Guest Kotlin functions accept expression default arguments using earlier parameters, receivers,
   helpers, lambdas and concrete generic types. Explicit arguments evaluate before omitted defaults;
   inherited defaults preserve overriding method dispatch.
+  Function references can omit trailing default parameters; bound receivers are captured once and
+  defaults evaluate on every invocation, including inherited method and platform array defaults.
 
 - Guest Kotlin provides `kotlin.random.Random` with reproducible Int/Long seeds, a fixed-seed shared
   default generator, signed and unsigned ranges, floating draws and byte-array filling. Generator
