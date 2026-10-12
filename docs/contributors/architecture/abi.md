@@ -34,6 +34,8 @@ result must be assignable to the declaration, and cannot widen nullability. Scal
 exact matching. The generated runtime's String.subSequence returns String for a CharSequence declaration;
 artifacts containing that canonical interface require 1.18. Module identities and dependent metadata change;
 bundle encoding, worker wire format, CPKT instructions, native C ABI and checkpoint schemas remain unchanged.
+`stdlib:core` 1.18.0 aligns supported text helper receivers with CharSequence and retains
+specialized String-result overloads; no further Runtime or representation change is required.
 The [text inventory](../../developers/stdlib/core-text.md) owns signatures, UTF-16 semantics, allocation behavior
 and parsing policy.
 
@@ -74,6 +76,17 @@ length, controls and Unicode, and rejects queued/active input. Ordinary raw wait
 canonical `readln()` keeps its existing contract. The pending operation/limit and kind-3 continuation
 are already represented in session checkpoints; text uses existing active-event storage. Native C ABI,
 checkpoint schema and encoding stay unchanged.
+
+`compukter:core` 7.2.0 adds `write`/`writeAt` overloads for Char and selected CharArray ranges;
+text overloads accept CharSequence. Terminal ABI 2.3 appends synchronous selectors 19 `(Char) -> Unit`,
+20 `(I32,I32,Char) -> Unit`, 21 `(CharArray,I32,I32) -> Unit` and
+22 `(I32,I32,CharArray,I32,I32) -> Unit`. Artifacts declare 23 operations; ABI 2.0–2.2 remain admitted.
+CharArray ranges are argument-only host schemas whose bounds reference I32 arguments. Native admission
+checks the array and bound types; preparation rechecks ranges, copies only selected units into the existing
+bounded UTF-16 snapshot and charges ordinary dynamic cost and host code-unit quotas. The snapshot uses
+existing String wire values without allocating a managed Guest String. The internal checkpoint host-schema
+enum appends tag 10; existing preparation state and snapshot slot encoding are retained and validated on
+restore. Native C ABI, executable instructions and Runtime ABI remain unchanged.
 
 Terminal keys C (67) and U (85) extend the admitted wire key set. Ctrl+C replaces Ctrl+T as the reserved foreground
 interruption; it reuses status 130 and existing ProcessExited lifecycle events. At an idle prompt the press reaches

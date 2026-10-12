@@ -340,6 +340,13 @@ class DiagnosticQueryTest {
                 val repeated: String = builder.repeat(2)
                 val contains: Boolean = builder.contains(sequence)
                 val position: Int = builder.indexOf("text")
+                compukter.terminal.Terminal.write(builder)
+                compukter.terminal.Terminal.write('x')
+                compukter.terminal.Terminal.write(charArrayOf('x'))
+                compukter.terminal.Terminal.write(charArrayOf('x'), 0, 1)
+                compukter.terminal.Terminal.writeAt(kotlin.math.Vector2i(0, 0), builder)
+                compukter.terminal.Terminal.writeAt(kotlin.math.Vector2i(0, 0), 'x')
+                compukter.terminal.Terminal.writeAt(kotlin.math.Vector2i(0, 0), charArrayOf('x'), 0, 1)
                 sequence.subSequence(0, 1)
                 for (unit in sequence) { println(unit) }
                 for (char in text) { println(char) }

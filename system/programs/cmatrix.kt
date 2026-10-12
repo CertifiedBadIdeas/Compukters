@@ -58,7 +58,7 @@ fun main(args: Array<String>) {
             moving[column] = (frame + column) % speeds[column] == 0
             if (moving[column]) {
                 val head = heads[column]
-                if (head >= 0 && head < height) Terminal.writeAt(Vector2i(column * 2, head), glyphs[column].toString())
+                if (head >= 0 && head < height) Terminal.writeAt(Vector2i(column * 2, head), glyphs[column])
                 heads[column] = head + 1
                 val tail = heads[column] - lengths[column]
                 if (tail >= 0 && tail < height) Terminal.fill(Rect2i(Vector2i(column * 2, tail), Vector2i(1, 1)))
@@ -74,7 +74,7 @@ fun main(args: Array<String>) {
             val head = heads[column]
             if (moving[column] && head >= 0 && head < height) {
                 glyphs[column] = random.glyph()
-                Terminal.writeAt(Vector2i(column * 2, head), glyphs[column].toString())
+                Terminal.writeAt(Vector2i(column * 2, head), glyphs[column])
             }
         }
         frame = (frame + 1) % 6
