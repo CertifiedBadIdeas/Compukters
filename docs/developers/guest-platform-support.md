@@ -268,8 +268,9 @@ integer vectors. `setCursor(position)` and `writeAt(position, text)` accept posi
 Drawing stays bounded by the native grid. Positional drawing does not move the stream cursor.
 `write(text)`, `erasePrevious()`, `clear()` and `setCursorVisible(visible)` remain available.
 `write` and `writeAt` accept `CharSequence`, `Char` and `CharArray` (whole buffer or explicit
-`startIndex`, exclusive `endIndex`). String output uses its existing direct path; other sequences
-materialize their indexed contents. Char and buffer output create no temporary Guest String.
+`startIndex`, exclusive `endIndex`). Sequence output uses `toString()`: Strings retain their existing
+value and other sequences provide their string representation. Custom sequences should override
+`toString()` to return their text. Char and buffer output create no temporary Guest String.
 Ranges check `0 <= startIndex <= endIndex <= buffer.size`; invalid ranges throw
 `IndexOutOfBoundsException` before drawing. Native preparation copies only selected UTF-16 units,
 with existing host quotas and sliced cost accounting; the backing array can be reused immediately

@@ -7287,9 +7287,9 @@ class MinimalScriptLoweringTest {
                 import kotlin.math.*
                 class OutputView : CharSequence {
                     override val length: Int get() = 1
-                    override fun get(index: Int): Char = 'C'
-                    override fun subSequence(startIndex: Int, endIndex: Int): CharSequence = "C"
-                    override fun toString(): String = "wrong"
+                    override fun get(index: Int): Char = 'X'
+                    override fun subSequence(startIndex: Int, endIndex: Int): CharSequence = "X"
+                    override fun toString(): String = "C"
                 }
                 fun main() {
                     Terminal.clear()
@@ -7305,6 +7305,7 @@ class MinimalScriptLoweringTest {
                     Terminal.writeAt(Vector2i(0, 4), '\uD83D')
                     Terminal.writeAt(Vector2i(1, 4), charArrayOf('D'))
                     Terminal.writeAt(Vector2i(2, 4), StringBuilder("E"))
+                    Terminal.writeAt(Vector2i(4, 4), OutputView())
                     Terminal.write(charArrayOf())
                     Terminal.writeAt(Vector2i(3, 4), buffer, 4, 4)
                     var rejected = 0
