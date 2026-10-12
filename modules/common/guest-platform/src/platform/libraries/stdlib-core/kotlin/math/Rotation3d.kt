@@ -32,8 +32,9 @@ public value class Rotation3d private constructor(
     }
 
     /**
-     * Interpolate along the shortest arc; finite amounts outside 0..1 extrapolate along that arc.
-     * Zero/one preserve the exact endpoint representation. The scaled interpolation angle must be finite.
+     * Interpolate along the shortest arc; finite amounts outside 0..1 extrapolate if the scaled angle is finite.
+     * Zero/one preserve the exact endpoint representation. Huge angles lose trigonometric argument precision.
+     * At PI the shortest arc is ambiguous; near PI small changes can switch the selected direction.
      */
     public fun slerp(other: Rotation3d, amount: Double): Rotation3d {
         if (!(amount >= -Double.MAX_VALUE && amount <= Double.MAX_VALUE)) {
@@ -81,6 +82,43 @@ public value class Rotation3d private constructor(
 
     public companion object {
         public fun identity(): Rotation3d = Rotation3d(Quaterniond(0.0, 0.0, 0.0, 1.0))
+
+        /**
+         * Shortest rotation from one finite nonzero direction to another; magnitudes are ignored.
+         * Parallel directions return identity. Opposite directions use from crossed with the coordinate
+         * axis whose absolute component in from is smallest (ties prefer X, then Y, then Z).
+         * This antiparallel axis is deterministic, but no continuous choice exists around that case.
+         */
+        public fun fromTo(from: Vector3d, to: Vector3d): Rotation3d {
+            if (!(from.x >= -Double.MAX_VALUE && from.x <= Double.MAX_VALUE &&
+                    from.y >= -Double.MAX_VALUE && from.y <= Double.MAX_VALUE &&
+                    from.z >= -Double.MAX_VALUE && from.z <= Double.MAX_VALUE &&
+                    to.x >= -Double.MAX_VALUE && to.x <= Double.MAX_VALUE &&
+                    to.y >= -Double.MAX_VALUE && to.y <= Double.MAX_VALUE &&
+                    to.z >= -Double.MAX_VALUE && to.z <= Double.MAX_VALUE)
+            ) {
+                throw IllegalArgumentException("Direction rotation requires finite vectors.")
+            }
+            if ((from.x == 0.0 && from.y == 0.0 && from.z == 0.0) ||
+                (to.x == 0.0 && to.y == 0.0 && to.z == 0.0)
+            ) {
+                throw IllegalArgumentException("Direction rotation requires nonzero vectors.")
+            }
+            val source = from.normalized()
+            val target = to.normalized()
+            val axis = source cross target
+            val sine = axis.length
+            val cosine = source dot target
+            if (sine != 0.0) return fromAxisAngle(axis, atan2(sine, cosine))
+            if (cosine >= 0.0) return identity()
+            val x = abs(source.x)
+            val y = abs(source.y)
+            val z = abs(source.z)
+            val basis = if (x <= y && x <= z) Vector3d(1.0, 0.0, 0.0)
+                else if (y <= z) Vector3d(0.0, 1.0, 0.0)
+                else Vector3d(0.0, 0.0, 1.0)
+            return fromAxisAngle(source cross basis, PI)
+        }
 
         /** Right-handed axis-angle rotation. The axis must be finite and nonzero; the angle is in radians. */
         public fun fromAxisAngle(axis: Vector3d, angleRadians: Double): Rotation3d {
