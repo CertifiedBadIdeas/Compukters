@@ -1142,7 +1142,7 @@ class IdeRendererStateTest {
         val line = model.fills.single { it.kind == IdeFillKind.CurrentLine }
         assertEquals(IdeColors.CURRENT_LINE, line.color)
         assertEquals(bounds.editor.left, line.bounds.left)
-        assertEquals(bounds.editor.right, line.bounds.right)
+        assertEquals(bounds.editor.right - IDE_SCROLLBAR_SIZE, line.bounds.right)
         assertEquals(bounds.editor.top, line.bounds.top)
         assertTrue(line.zIndex < model.fills.single { it.kind == IdeFillKind.WordOccurrence }.zIndex)
         assertFalse(model.fills.any { it.kind == IdeFillKind.Caret })

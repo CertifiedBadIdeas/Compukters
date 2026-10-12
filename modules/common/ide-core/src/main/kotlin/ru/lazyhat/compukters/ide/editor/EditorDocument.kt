@@ -73,9 +73,15 @@ class EditorDocument(
     /** Returns the exact UTF-16 offset of a logical line, preserving LF versus CRLF accounting. */
     fun lineStartOffset(index: Int): Int = lines.line(index).startUtf16
 
+    private var widthRevision = -1L
+    private var cachedMaximumWidth = 0
+
     fun maximumVisualWidth(): Int {
+        if (widthRevision == revision) return cachedMaximumWidth
         var maximum = 0
         repeat(lineCount) { maximum = maxOf(maximum, lines.visualWidth(it)) }
+        widthRevision = revision
+        cachedMaximumWidth = maximum
         return maximum
     }
 

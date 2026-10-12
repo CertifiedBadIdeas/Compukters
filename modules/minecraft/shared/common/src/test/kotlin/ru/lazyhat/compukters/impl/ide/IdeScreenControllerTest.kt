@@ -66,6 +66,51 @@ class IdeScreenControllerTest {
     }
 
     @Test
+    fun `scaled editor scrollbar dragging changes viewport without moving caret or selection`() {
+        Fixture().use { fixture ->
+            fixture.controller.dispatch(IdeCommand.CreateProject("demo"))
+            fixture.awaitWorkspace()
+            val path =
+                ru.lazyhat.compukters.ide.project.fs.ProjectPath
+                    .file("src/scroll.kt")
+            fixture.createFile(path, (0 until 180).joinToString("\n") { "// " + "x".repeat(240) })
+            fixture.controller.dispatch(IdeCommand.OpenFile(path))
+            fixture.awaitFile(path)
+
+            fun editor() = (fixture.controller.viewState().page as IdePageState.Workspace).value.editor as IdeEditorView.Text
+            val before = editor()
+            val viewport = fixture.host.viewport()
+            for (target in listOf(IdeScrollTarget.EditorLines, IdeScrollTarget.EditorColumns)) {
+                val bar =
+                    fixture.ui
+                        .frame(0, 0)
+                        .model.scrollbars
+                        .single { it.target == target }
+                val x = (bar.thumb.left + bar.thumb.right) / 2.0
+                val y = (bar.thumb.top + bar.thumb.bottom) / 2.0
+                assertTrue(fixture.ui.mouseClicked(IdePointerInput(viewport.toMinecraftX(x), viewport.toMinecraftY(y), 0, 0), false))
+                assertTrue(
+                    fixture.ui.mouseDragged(
+                        IdePointerInput(
+                            viewport.toMinecraftX(bar.track.right + 50.0),
+                            viewport.toMinecraftY(bar.track.bottom + 50.0),
+                            0,
+                            0,
+                        ),
+                    ),
+                )
+                assertTrue(fixture.ui.mouseReleased(IdePointerInput(0.0, 0.0, 0, 0)))
+                assertEquals(before.caretUtf16, editor().caretUtf16)
+                assertEquals(before.selectionStartUtf16, editor().selectionStartUtf16)
+                assertEquals(before.contentRevision, editor().contentRevision)
+            }
+            assertTrue(editor().firstVisibleLine > 0)
+            assertTrue(editor().firstVisibleColumn > 0)
+            assertTrue(editor().maximumVisualWidth >= 240)
+        }
+    }
+
+    @Test
     fun `scaled project action opens a modal prompt and escape returns to the page`() {
         Fixture().use { fixture ->
             val create =
@@ -503,12 +548,15 @@ class IdeScreenControllerTest {
             assertTrue(controller.viewState().page is IdePageState.Start)
         }
 
-        fun createFile(path: ru.lazyhat.compukters.ide.project.fs.ProjectPath) {
+        fun createFile(
+            path: ru.lazyhat.compukters.ide.project.fs.ProjectPath,
+            text: String = "// Test file\n",
+        ) {
             root
                 .resolve("projects/demo")
                 .resolve(path.value)
                 .toFile()
-                .writeText("// Test file\n")
+                .writeText(text)
         }
 
         fun awaitWorkspace() = await { controller.viewState().page is IdePageState.Workspace }

@@ -22,8 +22,12 @@ headings so this page has one stable URL that can be shared outside the reposito
   Guest widgets provide buttons, indicators, gauges and history charts. The `create-scada` example
   controls a Create kinetic drive with real speed/load readings, RPM commands and connection/load alarms.
 
-- The all-addon development build enables Configuration Cache and parallel execution, allowing independent
-  built-in program artifacts to compile concurrently inside the included Compukters project.
+- The all-addon development build uses Loom directly and enables Configuration Cache and parallel execution,
+  allowing independent built-in program artifacts to compile concurrently inside the included Compukters project.
+
+- Addon SDK accepts immutable value-class host responses, nested data/value mixtures and canonical stdlib geometry.
+  Inline record fields avoid Guest record allocations while retaining bounded copying, GC and checkpoint support.
+  Sable 2.0 exposes value snapshots with Vector3d, validated Rotation3d and Matrix3d mass tensors.
 
 - Guest stdlib provides immutable `Vector2d`, `Vector3d` and `Vector4d` with Double arithmetic,
   robust normalization and explicit conversions to/from existing vectors. Distinct `Quaternionf`/`Quaterniond`
@@ -48,6 +52,8 @@ headings so this page has one stable URL that can be shared outside the reposito
 - Guest Kotlin supports named local functions with direct calls, recursion, nested helpers and escaping
   references. Mutable captures share state with surrounding code and lambdas; direct immutable captures
   stay in typed arguments. Local functions can use expression defaults and appear in class initializers.
+  Generic local functions and local helpers inside generic top-level functions specialize concrete calls,
+  defaults and escaping captures; primitive arguments remain unboxed within bounded compiler expansion.
   Class `val`/`var` properties can store, replace and invoke callbacks, including concrete generic holders,
   constructor defaults and custom/inherited accessors. Stored callbacks retain their captures.
 
@@ -93,7 +99,8 @@ headings so this page has one stable URL that can be shared outside the reposito
   normalize before foreground launch.
 
 - IDE hover displays short Kotlin signatures with explicit return types, compact documentation entries
-  and source information below the documentation.
+  and source information below the documentation. Editor and long hover scrollbars support thumb dragging
+  and page clicks alongside mouse-wheel scrolling.
   Unknown references color their complete identifier; errors and warnings underline their exact source ranges.
   Hovering a marked token shows its problems together, preserving source editing and horizontal scrolling.
   Argument hints open when typing a call or pressing Ctrl+P, wrap long signatures and emphasize the current parameter.
@@ -442,8 +449,10 @@ listed in [Kotlin support](developers/kotlin-support.md) and [standard library s
   and `F2` / `Shift+F2` navigation use matching source text and reject stale locations. Method declarations show
   non-zero project usage counts that distinguish overloads and remain stable during unrelated edits.
 - `Shift+F6` renames supported project symbols across files and unsaved buffers after K2 checks collisions and
-  bindings. The change is undoable across affected files; library symbols, `main` and unsupported convention or
-  inheritance declarations remain outside this action.
+  bindings, including infix calls and callable references. Unrelated semantic errors can remain, while new
+  errors, reference capture and stale sources reject the entire operation. The change is undoable across
+  affected files; syntax errors, library symbols, `main`, operator and inheritance declarations remain outside
+  this action.
 - Caret placement highlights resolved declarations/references, including interpolation; typing hides semantic
   occurrence marks until the caret is explicitly moved. Text selection highlights literal occurrences, while
   `Ctrl+F` provides case-sensitive search, a counter and Enter/Shift+Enter navigation in writable or read-only files.

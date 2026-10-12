@@ -27,14 +27,19 @@ internal fun resolveAddonRecordSchemas(
     addon: String,
     resultTypes: Set<String>,
     candidates: List<PlatformRecordCandidate>,
+    trustedCandidates: List<PlatformRecordCandidate> = emptyList(),
 ): Map<String, AddonRecordSchema> {
-    val byName = candidates.associateBy { it.symbol }
+    require(candidates.none { it.symbol.startsWith("kotlin.") || it.symbol in trustedCandidates.map(PlatformRecordCandidate::symbol) }) {
+        "addon response cannot impersonate a canonical platform type"
+    }
+    val trustedNames = trustedCandidates.mapTo(mutableSetOf(), PlatformRecordCandidate::symbol)
+    val byName = (candidates + trustedCandidates).associateBy { it.symbol }
     val completed = linkedMapOf<String, AddonRecordSchema>()
     val active = mutableSetOf<String>()
 
     fun resolve(name: String): AddonRecordSchema {
         completed[name]?.let { return it }
-        require(name.startsWith("$addon.")) { "record response escapes addon namespace: $name" }
+        require(name.startsWith("$addon.") || name in trustedNames) { "record response escapes addon namespace: $name" }
         require(active.add(name)) { "cyclic record response: $name" }
         require(active.size <= AddonRecordSchema.MAXIMUM_DEPTH) { "record nesting exceeds limit" }
         val candidate = requireNotNull(byName[name]) { "unknown record response type: $name" }
@@ -59,7 +64,14 @@ internal fun resolveAddonRecordSchemas(
                 }
             }
         active.remove(name)
-        return AddonRecordSchema(name, fields).also { completed[name] = it }
+        return AddonRecordSchema(name, fields).also { schema ->
+            if (name in trustedNames) {
+                require(schema == ru.lazyhat.compukters.addon.api.CanonicalAddonRecordSchemas.schemas[name]) {
+                    "canonical response type has an unsupported shape: $name"
+                }
+            }
+            completed[name] = schema
+        }
     }
     resultTypes.sorted().forEach { raw ->
         val matches = byName.keys.filter { it == raw || it.substringAfterLast('.') == raw }
@@ -69,3 +81,6 @@ internal fun resolveAddonRecordSchemas(
     }
     return completed
 }
+
+/** Only public constructor-safe geometry from the base stdlib module can cross as raw host values. */
+internal val canonicalRecordTypes = ru.lazyhat.compukters.addon.api.CanonicalAddonRecordSchemas.schemas.keys

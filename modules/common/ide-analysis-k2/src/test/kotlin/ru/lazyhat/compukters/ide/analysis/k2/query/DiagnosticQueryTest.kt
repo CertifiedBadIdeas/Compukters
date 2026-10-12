@@ -73,6 +73,32 @@ class DiagnosticQueryTest {
     }
 
     @Test
+    fun `generic local functions resolve with source and metadata inputs`() {
+        val source =
+            """
+            fun <T> make(value: T): () -> T {
+                var current = value
+                fun <R> keep(other: R, chosen: T = current): T { current = chosen; return current }
+                fun read(): T = keep(1)
+                return ::read
+            }
+            fun main() {
+                fun <T> twice(value: T, transform: (T) -> T): T = transform(transform(value))
+                val id: (Int) -> Int = ::twiceInt
+                check(twice(make(3)()) { id(it) } == 5)
+            }
+            fun twiceInt(value: Int): Int = value + 1
+            """.trimIndent()
+        for (attachedSources in listOf(false, true)) {
+            K2QueryFixture.sourceWithGuestApi(attachedSources, "main.kt" to source).use { fixture ->
+                val result = fixture.execute(fixture.presentation()) as AnalysisResult.Presentation
+                val active = result.value.accept(fixture.identity) as SnapshotPresentationAcceptance.Active
+                assertTrue(active.diagnostics.none { it.severity == EditorDiagnosticSeverity.Error }, active.diagnostics.toString())
+            }
+        }
+    }
+
+    @Test
     fun `captured local functions resolve with source and metadata inputs`() {
         val source =
             """

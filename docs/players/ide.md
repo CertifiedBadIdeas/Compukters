@@ -91,11 +91,14 @@ underneath it.
 
 ## Kotlin information and problems
 
+The code editor has vertical and horizontal scrollbars when the document exceeds the visible area.
+Drag a thumb to move through the file, or click its track to move one page. Scrolling does not change
+the caret or selection. The thumb size and position show how much of the document is visible and where you are.
+
 Hover a declaration or expression to see its signature, inferred type and available documentation.
-Types use short Kotlin names, including nested generics, nullable types and function types. The popup separates
-signature, type, source and documentation. English KDoc groups parameters, return values, exceptions and
+Types use short Kotlin names, including nested generics, nullable types and function types. The popup shows the return type in its signature and source information below the documentation. English KDoc groups parameters, return values, exceptions and
 other tags into labeled sections, with readable lists, inline code and code examples. Move the pointer into
-long documentation and use the mouse wheel to read the remaining content; scrolling there leaves the source
+long documentation and use the mouse wheel or drag its scrollbar to read the remaining content; scrolling there leaves the source
 in place. KDoc tags, parameter subjects, references and code examples are also highlighted in the editor.
 
 Unknown references color the complete identifier. Errors and warnings underline the exact affected source range;

@@ -44,7 +44,12 @@ internal class IdeEditorRenderer(
         caretVisible: Boolean,
         diagnostics: IdeDiagnostics,
     ) {
-        val bounds = geometry.editor
+        val bounds =
+            geometry.editor.copy(
+                right = geometry.editor.right - IDE_SCROLLBAR_SIZE,
+                bottom =
+                    geometry.editor.bottom - IDE_SCROLLBAR_SIZE,
+            )
         editor.find?.let { IdeFindRenderer(output, geometry).draw(it) }
         output.scissor(IdeScissorDraw(IdeScissorKind.Editor, bounds, Z_CLIP))
         val rows = source.visibleRows
@@ -178,6 +183,36 @@ internal class IdeEditorRenderer(
                 }
             }
         }
+        output.scrollbar(
+            IdeScrollbar(
+                IdeScrollTarget.EditorLines,
+                IdeRect(
+                    geometry.editor.right - IDE_SCROLLBAR_SIZE,
+                    geometry.editor.top,
+                    geometry.editor.right,
+                    geometry.editor.bottom - IDE_SCROLLBAR_SIZE,
+                ),
+                editor.firstVisibleLine,
+                maxOf(editor.firstVisibleLine, editor.totalLines - geometry.codeRows),
+                geometry.codeRows,
+            ),
+            Z_TEXT + 1,
+        )
+        output.scrollbar(
+            IdeScrollbar(
+                IdeScrollTarget.EditorColumns,
+                IdeRect(
+                    source.codeLeft,
+                    geometry.editor.bottom - IDE_SCROLLBAR_SIZE,
+                    geometry.editor.right - IDE_SCROLLBAR_SIZE,
+                    geometry.editor.bottom,
+                ),
+                editor.firstVisibleColumn,
+                maxOf(editor.firstVisibleColumn, editor.maximumVisualWidth - (source.codeBounds.width / font.cellWidth).coerceAtLeast(1)),
+                (source.codeBounds.width / font.cellWidth).coerceAtLeast(1),
+            ),
+            Z_TEXT + 1,
+        )
         IdeEditorPopups(output, geometry, source).draw(editor, diagnostics)
     }
 

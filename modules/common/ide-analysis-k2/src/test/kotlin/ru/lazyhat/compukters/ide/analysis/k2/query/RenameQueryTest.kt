@@ -30,6 +30,63 @@ import kotlin.test.assertFailsWith
 
 class RenameQueryTest {
     @Test
+    fun `rename distinguishes infix overloads across files with an unrelated error`() {
+        val api =
+            "package sample\ninfix fun Int.target(other: Int) = this + other\n" +
+                "infix fun String.target(other: String) = this + other"
+        val usage = "package sample\nfun use() { val a = 1 target 2; val b = \"a\" target \"b\" }"
+        val broken = "fun broken() = unknown()"
+        K2QueryFixture.source("api.kt" to api, "use.kt" to usage, "broken.kt" to broken).use { fixture ->
+            val locations = fixture.rename("api.kt", api.indexOf("target"), "`when`").locations
+            assertEquals(
+                listOf("api.kt", "use.kt"),
+                locations.map { (it as ru.lazyhat.compukters.ide.analysis.DeclarationLocation.Source).path.value },
+            )
+            assertEquals(api, fixture.text("api.kt"))
+            assertEquals(usage, fixture.text("use.kt"))
+            assertEquals(broken, fixture.text("broken.kt"))
+        }
+    }
+
+    @Test
+    fun `rename tolerates unrelated errors while preserving unresolved bindings`() {
+        val source = "fun target() = 1\nfun use() = target()\nfun broken() = missing()"
+        K2QueryFixture.source("main.kt" to source).use { fixture ->
+            assertEquals(2, fixture.rename("main.kt", source.indexOf("target"), "longerName").locations.size)
+            assertFailsWith<RenameAdmissionException> {
+                fixture.rename("main.kt", source.indexOf("target"), "missing")
+            }
+            assertEquals(source, fixture.text("main.kt"))
+        }
+    }
+
+    @Test
+    fun `rename rejects new conflicts despite existing errors and rejects syntax errors`() {
+        val source = "fun target() = 1\nfun other() = 2\nfun broken() = missing()"
+        K2QueryFixture.source("main.kt" to source).use { fixture ->
+            assertFailsWith<RenameAdmissionException> { fixture.rename("main.kt", source.indexOf("target"), "other") }
+            assertEquals(source, fixture.text("main.kt"))
+        }
+        val malformed = "fun target() = 1\nfun broken("
+        K2QueryFixture.source("main.kt" to malformed).use { fixture ->
+            assertFailsWith<RenameAdmissionException> { fixture.rename("main.kt", malformed.indexOf("target"), "renamed") }
+            assertEquals(malformed, fixture.text("main.kt"))
+        }
+    }
+
+    @Test
+    fun `rename includes infix calls ordinary calls and callable references`() {
+        val source =
+            "infix fun Int.target(other: Int) = this + other\n" +
+                "fun use() { val a = 1 target 2; val b = 1.target(2); val c = 1::target }"
+        K2QueryFixture.source("main.kt" to source).use { fixture ->
+            assertEquals(4, fixture.rename("main.kt", source.indexOf("target"), "combine").locations.size)
+            assertEquals(4, fixture.rename("main.kt", source.indexOf(" target 2") + 1, "combine").locations.size)
+            assertEquals(source, fixture.text("main.kt"))
+        }
+    }
+
+    @Test
     fun `rename preserves class constructor and named parameter bindings`() {
         val source =
             "class Target(val value: Int)\nfun take(item: Target) = item.value\n" +

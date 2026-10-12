@@ -42,6 +42,15 @@ invocation arguments; its source expression evaluates when the closure is constr
 therefore share scoped default evaluation and dispatch with direct calls, without mask dispatchers or a
 new artifact representation. Unsupported signature conversions retain target diagnostics.
 
+Before capture discovery, `GuestLocalSpecialization` materializes concrete generic local declarations
+and generic top-level lexical owners, including their generic callers. It shares typed IR deep-copying
+with inline specialization: each owner copy remaps its lexical symbols and substitutes only that owner's
+type parameters, leaving nested generic parameters for their own specialization. Recursive calls reuse
+cached concrete variants; calls that change type arguments discover distinct variants. This gives closures
+and mutable cells concrete per-owner layouts before managed types are assigned. The lexical pass shares
+the 256 function-variant budget with ordinary emitter specialization and bounds expansion depth to 64.
+`testKotlinGenericLocalFunctionsVmConformance` exercises these paths without a runtime or ABI change.
+
 Named local functions are discovered before closure layout. A fixed-point free-value analysis includes
 captures required by local callees and referenced helpers. Direct calls prepend hidden typed capture
 arguments; reassigned variables use the same capture cells as lambdas. Local declarations are static
