@@ -285,36 +285,13 @@ tasks.named("buildProductionUniversalJar") {
     dependsOn(verifyProductionJar)
 }
 
-fun captureReleaseGit(vararg arguments: String): String {
-    val process =
-        ProcessBuilder("git", *arguments)
-            .directory(rootProject.projectDir)
-            .redirectErrorStream(true)
-            .start()
-    val output = process.inputStream.bufferedReader().readText().trimEnd()
-    check(process.waitFor() == 0) { "git ${arguments.toList()} failed: $output" }
-    return output
-}
-
 val verifyUniversalReleaseState =
-    tasks.register("verifyUniversalReleaseState") {
+    tasks.register<VerifyUniversalReleaseState>("verifyUniversalReleaseState") {
         description = "Requires the exact clean tagged state used to assemble a universal 1.21.1 release."
         group = "verification"
-        doLast {
-            validateUniversalReleaseState(
-                UniversalReleaseState(
-                    version = rootProject.version.toString(),
-                    runtimeBundlesConfigured = releaseRuntimeMode,
-                    headTags =
-                        captureReleaseGit("tag", "--points-at", "HEAD")
-                            .lineSequence()
-                            .filter(String::isNotBlank)
-                            .toSet(),
-                    worktreeStatus = captureReleaseGit("status", "--porcelain"),
-                    submoduleStatus = captureReleaseGit("submodule", "status", "--recursive"),
-                ),
-            )
-        }
+        repositoryRoot.set(rootProject.layout.projectDirectory)
+        productVersion.set(rootProject.version.toString())
+        runtimeBundlesConfigured.set(releaseRuntimeMode)
     }
 
 tasks.register("buildReleaseUniversalJar") {

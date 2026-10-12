@@ -106,9 +106,8 @@ fun parseRuntimeBundleContract(text: String): RuntimeBundleContract {
 }
 
 fun Project.runtimeBundleContractProvider(): Provider<RuntimeBundleContract> {
-    val releaseFile = rootProject.layout.file(
-        providers.gradleProperty("compukterRuntimeReleaseFile")
-            .orElse("config/runtime-release.properties").map(rootProject::file),
+    val releaseFile = rootProject.layout.projectDirectory.file(
+        providers.gradleProperty("compukterRuntimeReleaseFile").orElse("config/runtime-release.properties"),
     )
     return providers.fileContents(releaseFile).asText.map(::parseRuntimeBundleContract)
 }
