@@ -153,6 +153,7 @@ object AddonGuestApiLimits {
     const val MAXIMUM_BUNDLE_BYTES: Int = 4 * 1024 * 1024
     const val MAXIMUM_CATALOG_BYTES: Long = 16L * 1024 * 1024
     const val MAXIMUM_METADATA_BYTES: Int = 2 * 1024 * 1024
+    const val MAXIMUM_EXPANDED_METADATA_BYTES: Int = 8 * 1024 * 1024
     const val MAXIMUM_SOURCE_BYTES: Int = 2 * 1024 * 1024
     const val MAXIMUM_ARCHIVE_ENTRIES: Int = 512
     const val MAXIMUM_SOURCE_FILES: Int = 256

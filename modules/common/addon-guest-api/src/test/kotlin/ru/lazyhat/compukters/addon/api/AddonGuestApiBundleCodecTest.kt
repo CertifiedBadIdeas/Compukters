@@ -38,6 +38,28 @@ import kotlin.test.assertNull
 
 class AddonGuestApiBundleCodecTest {
     @Test
+    fun `metadata archives bound compressed and expanded sizes separately`() {
+        val baseline = bundle()
+
+        fun assemble(metadata: ByteArray): AddonGuestApiBundle =
+            AddonGuestApiBundleCodec.assemble(
+                baseline.identity.id,
+                baseline.identity.platformAbi,
+                baseline.moduleDescriptor.copy(metadata = ImmutableBytes.of(metadata)),
+                baseline.capabilitySchemas,
+                baseline.bindings,
+            )
+        val large = assemble(ByteArray(3 * 1024 * 1024))
+        assertEquals(large, AddonGuestApiBundleCodec.decode(AddonGuestApiBundleCodec.encode(large)))
+        assertFailsWith<IllegalArgumentException> {
+            assemble(ByteArray(AddonGuestApiLimits.MAXIMUM_EXPANDED_METADATA_BYTES + 1))
+        }
+        val incompressible = ByteArray(AddonGuestApiLimits.MAXIMUM_METADATA_BYTES + 4096)
+        java.util.Random(0).nextBytes(incompressible)
+        assertFailsWith<IllegalArgumentException> { assemble(incompressible) }
+    }
+
+    @Test
     fun `binary capability signatures and bundle round trips preserve byte array results`() {
         assertEquals(
             AddonCapabilitySignature(listOf(AddonCapabilityValueType.BYTE_ARRAY), AddonCapabilityValueType.BYTE_ARRAY),

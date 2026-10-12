@@ -398,3 +398,44 @@ test `direct top level ordinary task lowers to spawn and join`, executed by
 
 Value-class method and constructor references, typed callbacks and capture storage follow the [value-class
 contract]({{ '/KOTLIN-SUPPORT/objects/' | relative_url }}).
+
+## Compile-time contracts
+
+**Status:** Supported for classic Kotlin effects.
+
+Guest code can use `kotlin.contracts.contract` at the beginning of a function body, with
+`@OptIn(ExperimentalContracts::class)` on a declaration or file. Supported effects are
+`callsInPlace` with `EXACTLY_ONCE`, `AT_MOST_ONCE`, `AT_LEAST_ONCE` or `UNKNOWN`, `returns()`,
+`returns(true/false/null)`, `returnsNotNull()` and `SimpleEffect.implies`. K2 validates the
+restricted conditions (parameter/receiver null and type checks, Boolean parameters and logical
+combinations), placement and legal uses. Extended effects such as `holdsIn`, reverse `implies`
+and `returnsResultOf` are unavailable.
+
+`EXACTLY_ONCE` enables definite assignment of local `val` and `var` inside a synchronous callback;
+`AT_LEAST_ONCE` can initialize a `var`, while `AT_MOST_ONCE` alone does not establish initialization.
+A nullable `var` assigned a non-null value inside a callback does not thereby acquire a non-null
+smart cast after the call. Prefer a non-null local declared without an initializer when the block
+establishes its value. Conditional return effects support separate null/type smart casts.
+
+K2 serializes contract effects into native platform metadata. Contract descriptions and their DSL
+are compile-time declarations: they produce no runtime builder, effect objects, calls or VM
+instructions. Annotation class tokens do not provide runtime reflection. Locals without initializers
+retain K2's definite-assignment checks; captured assignments use existing managed cells. Uninitialized
+reference cells have nullable storage, and reads recover the declared type. Read-only locals assigned
+before a closure is created retain ordinary capture-by-value behavior.
+
+Contracts are promises by a function author, not a proof that arbitrary implementations keep them and
+not a host safety boundary. A calls-in-place promise excludes invoking or retaining the callback after
+the function returns. Deferred callbacks such as `onClick` and `onDraw` have no such promise. Host
+validation, artifact verification and VM resource limits remain authoritative.
+
+**Evidence:** `MinimalScriptLoweringTest`, tests `classic contracts preserve initialization conditional
+effects and compile time erasure`, `contract descriptions emit the same executable instructions as plain
+functions` and `invalid contract effects and insufficient initialization guarantees are rejected`;
+`testKotlinContractsVmConformance`. Metadata-only declarations/defaults are covered by
+`PlatformMetadataCompilerTest`, test `compile time contracts and annotation defaults remain metadata only`.
+
+Platform effects on scope functions, preconditions, `buildString`, display `frame` and UI construction
+are available without opting in at call sites. `DiagnosticQueryTest`, test `classic contracts and platform
+construction effects resolve with source and metadata inputs`, covers IDE diagnostics with and without
+attached SDK sources. Nested UI initialization executes in `testKotlinDisplayUiVmConformance`.

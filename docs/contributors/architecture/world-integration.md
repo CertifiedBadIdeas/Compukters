@@ -261,3 +261,18 @@ overflow drops new arrivals. Input belongs to the program's exclusive writer lea
 Lease release/expiry, world restore, layout retirement and committed density changes clear input. Aborted
 frame density changes preserve it. Pending queue entries are never included in canvas or program resource checkpoints. Values already returned
 to Guest code are ordinary program data and follow its normal execution/checkpoint semantics.
+
+
+### World-display pointer gestures
+
+The physical client sends a held-use heartbeat while empty-hand RMB is down and no GUI is open, and one
+release message on transition. The server derives aim/range/face/panel offsets from the actual player,
+never accepting client coordinates. A bounded controller keeps at most 64 player records and eight
+captures per canvas; only initial Down acquires a target. Moves across panels in the same exact canvas
+retain capture; leaving the screen cancels until release, and five missing ticks cancel stale capture.
+Disconnect and server shutdown release controller state. The client bridge is shared by both target
+families and registration is on the dedicated-server payload path as well.
+
+Guest `pollPointer` and legacy `pollClick` are independent transient queues. The widget tree consumes only
+explicitly supplied events; no Minecraft-side mirror of widget state exists. Drawing regions are carried
+per command, so there is no ambient clipping stack to restore across frame or VM checkpoint boundaries.

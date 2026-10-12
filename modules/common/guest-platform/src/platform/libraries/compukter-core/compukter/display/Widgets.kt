@@ -30,8 +30,8 @@ public class DisplayHistory(
 }
 
 /** Stateless widgets: the caller polls input and owns telemetry, commands and frame publication. */
-public class DisplayWidgets(
-    private val display: GraphicalDisplay,
+public value class DisplayWidgets(
+    private val display: CanvasScope,
 ) {
     public fun button(
         bounds: Rect2i,
@@ -124,3 +124,7 @@ private fun historyValues(capacity: Int): FloatArray {
     require(capacity in 2..1024)
     return FloatArray(capacity)
 }
+
+/** Uses whole-screen coordinates; passing a CanvasScope directly gives local clipped widgets. */
+public fun DisplayWidgets(display: GraphicalDisplay): DisplayWidgets =
+    DisplayWidgets(display.canvas(Rect2i(kotlin.math.Vector2i(0, 0), kotlin.math.Vector2i(Int.MAX_VALUE, Int.MAX_VALUE))))

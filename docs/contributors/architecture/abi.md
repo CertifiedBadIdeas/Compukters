@@ -30,6 +30,13 @@ and response tag 8. Logical checkpoint envelope/schema advances to 4 for pending
 cold boot while retaining published files. Sable addon 2.0 uses Vector3d/Matrix3d and value snapshots, with
 Rotation3d created by its validating Guest factory.
 
+Addon metadata archives retain executable library members alongside source value layouts. The compressed
+metadata archive remains bounded to 2 MiB and the complete bundle to 4 MiB; expanded metadata has a separate
+8 MiB budget, enforced during bounded entry reads and across the archive. Source archives retain their 2 MiB
+compressed and expanded limits. This accommodates compiled platform dependencies without removing addon methods;
+CAGB encoding and capability schemas remain unchanged. `AddonGuestApiBundleCodecTest` exercises round trips
+with expanded metadata above 2 MiB and rejection of either exceeded budget.
+
 ## Matrix shape kernels — Runtime ABI 1.19
 
 MatrixMath retains opcode 0x1e/form 0 and original selectors 1–5. Selectors 6–8 add Matrix3f
@@ -788,3 +795,43 @@ overflow drops new arrivals. Input belongs to the program's exclusive writer lea
 Lease release/expiry, world restore, layout retirement and committed density changes clear input. Aborted
 frame density changes preserve it. Pending queue entries are never included in canvas or program resource checkpoints. Values already returned
 to Guest code are ordinary program data and follow its normal execution/checkpoint semantics.
+
+
+## Display capability 1.3
+
+`compukters:display` 1.3 preserves operations 0–17 and appends three host operations; schema wire encoding,
+Runtime ABI 1.20, C ABI 23 and CPKT 3 remain unchanged. Guest module `compukter:core` is 7.4.0.
+
+| Operation | Arguments | Result |
+| --- | --- | --- |
+| 18 `pollPointer` | handle: I32 | BYTE_ARRAY |
+| 19 `lineClipped` | handle, x0, y0, x1, y1, color, clipX, clipY, clipWidth, clipHeight: I32 | UNIT |
+| 20 `textClipped` | handle, x, y: I32; text: STRING; color, scale, clipX, clipY, clipWidth, clipHeight: I32 | UNIT |
+
+Polling returns an empty array or exactly 16 bytes: four signed little-endian I32 fields kind, gesture,
+x and y. Kinds are Down=0, Drag=1, Up=2, Cancel=3. Positive IDs identify independent transient gestures;
+Cancel with ID 0 cancels every capture. Coordinates use published whole-screen pixels. Input shares the
+program's exclusive display lease, is bounded to 64 queued events and eight active gestures, coalesces
+adjacent moves and cancels all gestures on overflow. Release/reset never replay events; a published density
+change emits cancellation while an aborted density change preserves the stream.
+
+Clipping rectangles have nonnegative sizes and intersect the active canvas using Long endpoint arithmetic.
+Line clipping occurs before bounded rasterization; text masks charge and touch only the intersected region.
+Operations 18–20 reject capability minors below 3. Existing operations remain available at their previous
+minimum minors. Kotlin source declarations and compiled export linking include mutable property accessors.
+Callback source syntax is normalized to canonical function types during linking; source metadata preserves
+extension-function receivers. Callback interfaces share specialization identity across library boundaries.
+
+### Classic Kotlin contracts
+
+`kotlin:builtins` 1.13.0 supplies the structural `kotlin.contracts` DSL, opt-in annotations and
+annotation class tokens. K2's existing native metadata serialization preserves classic effects;
+these compiler declarations have no library runtime exports. Annotation defaults are serialized
+by FIR and are excluded from the separate executable-call default model. The platform bundle
+encoding, worker protocol, CPKT instructions and Runtime ABI do not change. Definite assignment
+uses ordinary registers and capture cells; reference cells awaiting assignment have nullable
+storage and typed reads.
+
+`stdlib:core` 1.20.0 publishes scope/assertion/buildString effects, and `compukter:core` 7.5.0
+publishes synchronous display frame and nested UI construction effects. Existing native K2 metadata
+carries these effects for compiler and IDE consumers, including when SDK sources are detached.

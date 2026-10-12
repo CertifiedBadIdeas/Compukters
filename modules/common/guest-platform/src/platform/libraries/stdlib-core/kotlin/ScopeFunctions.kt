@@ -4,7 +4,12 @@
  * Licensed under the Apache License, Version 2.0.
  */
 
+@file:OptIn(kotlin.contracts.ExperimentalContracts::class)
+
 package kotlin
+
+import kotlin.contracts.InvocationKind
+import kotlin.contracts.contract
 
 /**
  * Calls [action] with each index from zero until [times], or not at all for non-positive counts.
@@ -23,6 +28,7 @@ public inline fun repeat(
     times: Int,
     action: (Int) -> Unit,
 ) {
+    contract { callsInPlace(action) }
     var index = 0
     while (index < times) {
         action(index)
@@ -49,7 +55,10 @@ public inline fun repeat(
  * @see run
  * @see also
  */
-public inline fun <T, R> T.let(block: (T) -> R): R = block(this)
+public inline fun <T, R> T.let(block: (T) -> R): R {
+    contract { callsInPlace(block, InvocationKind.EXACTLY_ONCE) }
+    return block(this)
+}
 
 /**
  * Calls [block] with this value as its receiver and returns its result.
@@ -66,7 +75,10 @@ public inline fun <T, R> T.let(block: (T) -> R): R = block(this)
  * @see let
  * @see apply
  */
-public inline fun <T, R> T.run(block: T.() -> R): R = block()
+public inline fun <T, R> T.run(block: T.() -> R): R {
+    contract { callsInPlace(block, InvocationKind.EXACTLY_ONCE) }
+    return block()
+}
 
 /**
  * Calls [block] without a receiver and returns its result.
@@ -86,7 +98,10 @@ public inline fun <T, R> T.run(block: T.() -> R): R = block()
  * @param block computation to run once.
  * @return the value produced by [block].
  */
-public inline fun <R> run(block: () -> R): R = block()
+public inline fun <R> run(block: () -> R): R {
+    contract { callsInPlace(block, InvocationKind.EXACTLY_ONCE) }
+    return block()
+}
 
 /**
  * Calls [block] with [receiver] as its receiver and returns its result.
@@ -104,7 +119,10 @@ public inline fun <R> run(block: () -> R): R = block()
 public inline fun <T, R> with(
     receiver: T,
     block: T.() -> R,
-): R = receiver.block()
+): R {
+    contract { callsInPlace(block, InvocationKind.EXACTLY_ONCE) }
+    return receiver.block()
+}
 
 /**
  * Calls [block] with this value as its receiver and returns this value.
@@ -128,6 +146,7 @@ public inline fun <T, R> with(
  * @see run
  */
 public inline fun <T> T.apply(block: T.() -> Unit): T {
+    contract { callsInPlace(block, InvocationKind.EXACTLY_ONCE) }
     block()
     return this
 }
@@ -147,6 +166,7 @@ public inline fun <T> T.apply(block: T.() -> Unit): T {
  * @see let
  */
 public inline fun <T> T.also(block: (T) -> Unit): T {
+    contract { callsInPlace(block, InvocationKind.EXACTLY_ONCE) }
     block(this)
     return this
 }
@@ -168,7 +188,10 @@ public inline fun <T> T.also(block: (T) -> Unit): T {
  * @return the original receiver when accepted, or null when rejected.
  * @see takeUnless
  */
-public inline fun <T> T.takeIf(predicate: (T) -> Boolean): T? = if (predicate(this)) this else null
+public inline fun <T> T.takeIf(predicate: (T) -> Boolean): T? {
+    contract { callsInPlace(predicate, InvocationKind.EXACTLY_ONCE) }
+    return if (predicate(this)) this else null
+}
 
 /**
  * Returns this value when [predicate] is false, or null otherwise.
@@ -183,4 +206,7 @@ public inline fun <T> T.takeIf(predicate: (T) -> Boolean): T? = if (predicate(th
  * @return the original receiver when the predicate is false, or null when it is true.
  * @see takeIf
  */
-public inline fun <T> T.takeUnless(predicate: (T) -> Boolean): T? = if (!predicate(this)) this else null
+public inline fun <T> T.takeUnless(predicate: (T) -> Boolean): T? {
+    contract { callsInPlace(predicate, InvocationKind.EXACTLY_ONCE) }
+    return if (!predicate(this)) this else null
+}

@@ -30,6 +30,7 @@ internal object DisplayRasterFont {
         text: String,
         color: Int,
         scale: Int,
+        clip: ru.lazyhat.compukters.core.display.DisplayRegion? = null,
     ) {
         require(scale in 1..8)
         DisplayCanvas.requireColor(color)
@@ -49,7 +50,7 @@ internal object DisplayRasterFont {
         }
         val width = (lines.maxOfOrNull { it.size } ?: 0) * cellWidth
         val height = lines.size * cellHeight
-        canvas.mask(owner, x, y, width, height, color) { px, py ->
+        canvas.mask(owner, x, y, width, height, color, clip) { px, py ->
             val glyph = lines[py / cellHeight].getOrNull(px / cellWidth)
             glyph?.get((py % cellHeight) * cellWidth + (px % cellWidth)) == true
         }
