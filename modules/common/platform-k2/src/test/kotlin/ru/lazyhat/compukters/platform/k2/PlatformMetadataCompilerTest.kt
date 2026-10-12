@@ -32,6 +32,28 @@ import kotlin.test.assertTrue
 
 class PlatformMetadataCompilerTest {
     @Test
+    fun `compile time contracts and annotation defaults remain metadata only`() {
+        val sources =
+            listOf(
+                PlatformSource(
+                    "Contracts.kt",
+                    ImmutableBytes.of(
+                        """
+                        package kotlin.contracts
+                        interface ContractBuilder { fun returns(): Any }
+                        inline fun contract(block: ContractBuilder.() -> Unit) {}
+                        annotation class Marker(val message: String = "experimental")
+                        """.trimIndent().encodeToByteArray(),
+                    ),
+                ),
+            )
+        val metadata = PlatformMetadataCompiler().compile(PlatformModuleId("kotlin", "builtins"), sources)
+        assertTrue(metadata.declarations.any { it.symbol == "kotlin.contracts.ContractBuilder.returns" })
+        assertTrue(metadata.libraryDeclarations.isEmpty())
+        assertTrue(metadata.declarations.filter { it.symbol.endsWith(".<init>") }.all { it.defaultArguments.isEmpty() })
+    }
+
+    @Test
     fun `mutable property accessors are executable library declarations`() {
         val metadata =
             PlatformMetadataCompiler().compile(

@@ -40,6 +40,10 @@ fn main() {
             let mut session = k2_stdio_session_with_heap("COMPUKTER_KOTLIN_ROTATIONS_ARTIFACT", 1, 256 * 1024);
             k2_assert_prints(&mut session, ["rotations ok\n"], 1024);
         },
+        "contracts" => {
+            let mut session = k2_stdio_session_with_heap("COMPUKTER_KOTLIN_CONTRACTS_ARTIFACT", 1, 256 * 1024);
+            k2_assert_prints(&mut session, ["contracts ok\n"], 1024);
+        },
         "display-ui" => {
             let mut session = k2_stdio_session_with_heap("COMPUKTER_KOTLIN_DISPLAY_UI_ARTIFACT", 1, 256 * 1024);
             k2_assert_prints(&mut session, ["display ui ok\n"], 1024);

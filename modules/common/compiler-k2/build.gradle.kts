@@ -1984,3 +1984,19 @@ tasks.register<Test>("compileRotatingCubeExample") {
     inputs.file(rootProject.file("examples/rotating-cube/src/main.kt"))
     systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
 }
+
+val contractsConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-contracts.cpkt")
+tasks.register<Test>("generateContractsConformanceArtifact") {
+    group = "verification"
+    description = "Compiles classic contract effects and definitely initialized local variables."
+    dependsOn(tasks.jar)
+    useJUnitPlatform()
+    testClassesDirs = sourceSets.test.get().output.classesDirs
+    classpath = sourceSets.test.get().runtimeClasspath
+    filter.includeTestsMatching("*classic contracts preserve initialization conditional effects and compile time erasure*")
+    inputs.file(workerJar)
+    inputs.file("src/test/resources/kotlin/contracts/main.kt")
+    outputs.file(contractsConformanceArtifact)
+    systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
+    systemProperty("compukter.vm.contractsArtifact", contractsConformanceArtifact.get().asFile.absolutePath)
+}

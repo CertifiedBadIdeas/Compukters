@@ -6,7 +6,7 @@
 
 package kotlin
 
-internal interface Annotation
+public interface Annotation
 
 internal enum class DeprecationLevel {
     WARNING,

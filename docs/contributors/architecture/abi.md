@@ -805,3 +805,13 @@ Operations 18–20 reject capability minors below 3. Existing operations remain 
 minimum minors. Kotlin source declarations and compiled export linking include mutable property accessors.
 Callback source syntax is normalized to canonical function types during linking; source metadata preserves
 extension-function receivers. Callback interfaces share specialization identity across library boundaries.
+
+### Classic Kotlin contracts
+
+`kotlin:builtins` 1.13.0 supplies the structural `kotlin.contracts` DSL, opt-in annotations and
+annotation class tokens. K2's existing native metadata serialization preserves classic effects;
+these compiler declarations have no library runtime exports. Annotation defaults are serialized
+by FIR and are excluded from the separate executable-call default model. The platform bundle
+encoding, worker protocol, CPKT instructions and Runtime ABI do not change. Definite assignment
+uses ordinary registers and capture cells; reference cells awaiting assignment have nullable
+storage and typed reads.
