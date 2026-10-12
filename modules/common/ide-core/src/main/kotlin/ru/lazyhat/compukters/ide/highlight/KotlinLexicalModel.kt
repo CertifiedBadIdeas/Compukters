@@ -30,6 +30,10 @@ enum class KotlinLexicalKind {
     MultilineString,
     LineComment,
     BlockComment,
+    KDocTag,
+    KDocSubject,
+    KDocLink,
+    KDocCode,
     Annotation,
     Operator,
 }
@@ -38,6 +42,7 @@ data class LexicalSpan(
     val startUtf16: Int,
     val endUtf16: Int,
     val kind: KotlinLexicalKind,
+    val inDocumentation: Boolean = false,
 ) {
     init {
         require(startUtf16 >= 0) { "lexical span start must be non-negative" }
@@ -48,6 +53,8 @@ data class LexicalSpan(
 data class KotlinLexicalState(
     val blockCommentDepth: Int = 0,
     val inMultilineString: Boolean = false,
+    val inKDoc: Boolean = false,
+    val kdocFence: String? = null,
 ) {
     init {
         require(blockCommentDepth >= 0) { "block-comment depth must be non-negative" }

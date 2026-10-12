@@ -26,6 +26,31 @@ import kotlin.test.assertTrue
 
 class KotlinLineLexerTest {
     @Test
+    fun `KDoc tags subjects links and inline code have documentation styles`() {
+        val source = "/** @param[value] uses [Peer.send] and `bytes` */"
+        val tokens = KotlinLineLexer.scan(source).spans.map { source.substring(it.startUtf16, it.endUtf16) to it.kind }
+        assertTrue("@param" to KotlinLexicalKind.KDocTag in tokens)
+        assertTrue("[value]" to KotlinLexicalKind.KDocSubject in tokens)
+        assertTrue("[Peer.send]" to KotlinLexicalKind.KDocLink in tokens)
+        assertTrue("`bytes`" to KotlinLexicalKind.KDocCode in tokens)
+        assertTrue(KotlinLineLexer.scan(source).spans.all { it.inDocumentation })
+        assertTrue(KotlinLineLexer.scan("/* @param value [Peer] */").spans.all { it.kind == KotlinLexicalKind.BlockComment })
+    }
+
+    @Test
+    fun `KDoc fences carry state and suppress tag styling inside examples`() {
+        val open = KotlinLineLexer.scan("/**")
+        val fence = KotlinLineLexer.scan(" * ```kotlin", open.endState)
+        val example = KotlinLineLexer.scan(" * @param literal", fence.endState)
+        assertTrue(example.spans.none { it.kind == KotlinLexicalKind.KDocTag })
+        assertTrue(example.spans.all { it.inDocumentation })
+        val close = KotlinLineLexer.scan(" * ```", example.endState)
+        val tag = KotlinLineLexer.scan(" * @return result", close.endState)
+        assertTrue(tag.spans.any { it.kind == KotlinLexicalKind.KDocTag })
+        assertEquals(KotlinLexicalState(), KotlinLineLexer.scan(" */ val result = 1", tag.endState).endState)
+    }
+
+    @Test
     fun `highlights value class modifier while preserving identifier and literal boundaries`() {
         val source = "value class Id(val raw: Int); values; `value`; \"value\"; /* value */ // value"
         val tokens = scan(source).spans.map { source.substring(it.startUtf16, it.endUtf16) to it.kind }
