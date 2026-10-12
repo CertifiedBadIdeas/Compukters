@@ -6,6 +6,7 @@
 
 package ru.lazyhat.compukters.core.device.runtime.peripheral
 
+import ru.lazyhat.compukters.api.addon.ProgramAddonCompletion
 import ru.lazyhat.compukters.api.addon.ProgramAddonDispatch
 import ru.lazyhat.compukters.api.addon.ProgramAddonHost
 import ru.lazyhat.compukters.api.addon.ProgramAddonRequest
@@ -73,6 +74,12 @@ class PeripheralProgramHost(
     }
 
     override fun checkpoint(): ByteArray = session.checkpoint()
+
+    override fun poll(maximumCompletions: Int): List<ProgramAddonCompletion> {
+        require(maximumCompletions > 0)
+        session.expire()
+        return emptyList()
+    }
 
     override fun restoreCheckpoint(state: ByteArray) = session.restoreCheckpoint(state)
 
