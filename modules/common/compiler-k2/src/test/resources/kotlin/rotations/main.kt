@@ -112,6 +112,15 @@ fun verifyDirectionRotations() {
         vectorNear(Rotation3d.fromTo(Vector3d(size, size, size), Vector3d(-size, size, -size)).transform(Vector3d(1.0, 1.0, 1.0).normalized()), Vector3d(-1.0, 1.0, -1.0).normalized())
     }
     // Tiny departures must not be collapsed by an epsilon or acos(dot).
+    val tinyTarget = Vector3d(1.0, 1e-300, 0.0)
+    val tinyRotation = Rotation3d.fromTo(x, tinyTarget)
+    val tinyResult = tinyRotation.transform(x)
+    // Relative checks ensure that zero cannot pass an absolute tolerance much larger than the angle.
+    nearRotation(tinyResult.y / tinyTarget.y, 1.0, 2e-15)
+    nearRotation(identity.angleTo(tinyRotation) / 1e-300, 1.0, 2e-15)
+    nearRotation(tinyRotation.quaternion.z / 5e-301, 1.0, 2e-15)
+    check(tinyResult.x == 1.0 && tinyResult.z == 0.0)
+    check(tinyRotation != identity)
     for (sign in listOf(-1.0, 1.0)) {
         val parallelTarget = Vector3d(1.0, sign * 1e-12, 0.0).normalized()
         val nearParallel = Rotation3d.fromTo(x, parallelTarget)
@@ -133,6 +142,9 @@ fun verifyDirectionRotations() {
         nearRotation(identity.angleTo(rotation), atan2((a cross b).length, a dot b))
         nearRotation(rotation.transform(from).length, from.length)
         vectorNear(rotation.inverse().transform(b), a)
+        val floatRotation = Rotation3f.fromTo(from.toFloat(), to.toFloat())
+        vectorNear(floatRotation.transform(from.toFloat().normalized()).toDouble(), to.toFloat().normalized().toDouble(), 5e-7)
+        nearRotation(Rotation3f.identity().angleTo(floatRotation).toDouble(), identity.angleTo(rotation), 5e-7)
     }
     val zero = Vector3d(0.0, 0.0, 0.0)
     rejectsRotation { Rotation3d.fromTo(zero, x) }
@@ -145,6 +157,40 @@ fun verifyDirectionRotations() {
     }
     val factory: (Vector3d, Vector3d) -> Rotation3d = Rotation3d::fromTo
     vectorNear(factory(x, y).transform(x), y)
+    val floatX = x.toFloat()
+    val floatY = y.toFloat()
+    val floatIdentity = Rotation3f.identity()
+    vectorNear(Rotation3f.fromTo(floatX, floatY).transform(floatX).toDouble(), y, 3e-7)
+    vectorNear(Rotation3f.fromTo(floatX, -floatX).transform(floatX).toDouble(), -x, 3e-7)
+    check(Rotation3f.fromTo(floatX, floatX * 17f) == floatIdentity)
+    for (size in listOf(Float.MIN_VALUE, Float.MAX_VALUE)) {
+        vectorNear(Rotation3f.fromTo(Vector3f(size, 0f, 0f), Vector3f(0f, -size, 0f)).transform(floatX).toDouble(), -y, 3e-7)
+    }
+    for (component in listOf(1e-30f, Float.MIN_VALUE * 4f)) {
+        val target = Vector3f(1f, component, 0f)
+        val rotation = Rotation3f.fromTo(floatX, target)
+        val result = rotation.transform(floatX)
+        nearRotation((result.y / component).toDouble(), 1.0, 2e-7)
+        nearRotation((floatIdentity.angleTo(rotation) / component).toDouble(), 1.0, 2e-7)
+        check(result.x == 1f && result.z == 0f && rotation != floatIdentity)
+    }
+    for (sign in listOf(-1f, 1f)) {
+        val target = Vector3f(-1f, sign * 1e-5f, 0f).normalized()
+        val rotation = Rotation3f.fromTo(floatX, target)
+        vectorNear(rotation.transform(floatX).toDouble(), target.toDouble(), 3e-7)
+        check(rotation.quaternion.z * sign > 0f)
+    }
+    val floatZero = Vector3f(0f, 0f, 0f)
+    rejectsRotation { Rotation3f.fromTo(floatZero, floatX) }
+    rejectsRotation { Rotation3f.fromTo(floatX, floatZero) }
+    for (bad in listOf(Float.NaN, Float.POSITIVE_INFINITY, Float.NEGATIVE_INFINITY)) {
+        for (invalid in listOf(Vector3f(bad, 1f, 0f), Vector3f(1f, bad, 0f), Vector3f(1f, 0f, bad))) {
+            rejectsRotation { Rotation3f.fromTo(invalid, floatX) }
+            rejectsRotation { Rotation3f.fromTo(floatX, invalid) }
+        }
+    }
+    val floatFactory: (Vector3f, Vector3f) -> Rotation3f = Rotation3f::fromTo
+    vectorNear(floatFactory(floatX, floatY).transform(floatX).toDouble(), y, 3e-7)
 }
 
 fun verifyInterpolation() {

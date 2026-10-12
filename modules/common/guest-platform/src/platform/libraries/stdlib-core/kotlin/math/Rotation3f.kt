@@ -62,6 +62,14 @@ public value class Rotation3f private constructor(
     public companion object {
         public fun identity(): Rotation3f = Rotation3f(Quaternionf(0f, 0f, 0f, 1f))
 
+        /**
+         * Shortest rotation between finite nonzero directions, with Double intermediates and Float storage.
+         * Magnitudes are ignored. Parallel directions return identity; opposite directions choose the
+         * source crossed with its least aligned coordinate axis (ties X, then Y, then Z), as in Rotation3d.
+         */
+        public fun fromTo(from: Vector3f, to: Vector3f): Rotation3f =
+            Rotation3d.fromTo(from.toDouble(), to.toDouble()).toFloat()
+
         /** Right-handed axis-angle rotation. The axis must be finite and nonzero; the angle is in radians. */
         public fun fromAxisAngle(axis: Vector3f, angleRadians: Float): Rotation3f =
             Rotation3d.fromAxisAngle(axis.toDouble(), angleRadians.toDouble()).toFloat()

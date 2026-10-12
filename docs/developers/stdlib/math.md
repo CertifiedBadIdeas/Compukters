@@ -108,14 +108,16 @@ Rotations are active, right-handed transforms of column vectors: a positive quar
 to +Y, around X maps +Y to +Z, and around Y maps +Z to +X. `identity()`, `transform(Vector3)` and rotation
 composition follow the same convention as matrices; `a * b` applies b first.
 
-`Rotation3d.fromTo(from, to)` creates the shortest rotation mapping the direction of `from` to the
-direction of `to`. Both vectors must be finite and nonzero; their magnitudes are ignored and normalization
+`Rotation3f.fromTo(from, to)` / `Rotation3d.fromTo(from, to)` create the shortest rotation mapping the
+direction of `from` to the direction of `to`. Both vectors must be finite and nonzero; their magnitudes are ignored and normalization
 supports subnormal and extreme finite components. The rotation preserves vector lengths, so it does not
 map unequal magnitudes onto each other or determine a ship's roll from one direction alone. Parallel
 directions return identity. For exactly opposite normalized directions, the rotation axis is `from`
 crossed with the coordinate axis least aligned with it (smallest absolute component, ties X then Y then Z).
 That choice is deterministic, but the shortest rotation cannot be continuous around antiparallel directions.
 Other directions use the cross product and atan2 to retain tiny angles without an epsilon cutoff.
+The Float variant uses Double intermediates and narrows the final quaternion; representable direction
+changes are subject to Float component rounding, including underflow for tiny quaternion components.
 
 `slerp(other, amount)` follows the shortest spatial arc with constant angular speed with respect to amount,
 up to floating rounding. Antipodal quaternion signs do not create a long path. Relative-quaternion axis/angle
@@ -228,7 +230,8 @@ display Y points downward. Check positive display dimensions before mapping coor
   IDE `DiagnosticQueryTest` checks aliases, matrices and member completion with source and metadata-only inputs. `PlatformSignatureAliasesTest` checks signature expansion and ambiguous/cyclic rejection.
 - `testKotlinRotationsVmConformance` compiles and executes `compiler-k2/src/test/resources/kotlin/rotations/main.kt`,
   covering axis-angle normalization/rejection, signed axis turns, noncommuting composition and matrix agreement,
-  fromTo direction mapping, deterministic opposite-vector axes, tiny/near-opposite angles, extreme magnitudes,
+  fromTo direction mapping, deterministic opposite-vector axes, tiny/near-opposite angles (including relative
+  checks for a 1e-300 Double direction component and normal/subnormal Float components), extreme magnitudes,
   seeded direction pairs and zero/non-finite rejection,
   shortest arcs, tiny angles, antipodal signs, endpoint preservation, extrapolation and invalid amounts.
   Seeded chains of 2048 rotations check unit length, transformed-vector length and Float drift against a
