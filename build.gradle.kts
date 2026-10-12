@@ -563,6 +563,15 @@ registerKotlinVmConformance(
     conformanceScenario = "function-defaults",
 )
 registerKotlinVmConformance(
+    taskName = "testKotlinFunctionFieldsVmConformance",
+    taskDescription = "Executes function-valued Guest fields with the pinned Compukter VM.",
+    artifactTask = ":compiler-k2:generateFunctionFieldsConformanceArtifact",
+    artifact = project(":compiler-k2").layout.buildDirectory.file("generated/conformance/kotlin-function-fields.cpkt"),
+    cargoTargetDirectory = ".toolchain/build/cargo/compiler-k2-function-fields-conformance",
+    artifactEnvironmentVariable = "COMPUKTER_KOTLIN_FUNCTION_FIELDS_ARTIFACT",
+    conformanceScenario = "function-fields",
+)
+registerKotlinVmConformance(
     taskName = "testKotlinLocalFunctionsVmConformance",
     taskDescription = "Executes captured Guest local functions with the pinned Compukter VM.",
     artifactTask = ":compiler-k2:generateLocalFunctionsConformanceArtifact",

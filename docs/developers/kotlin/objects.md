@@ -141,6 +141,45 @@ by `qualified interface super calls use direct default bodies` and `testKotlinIn
 [#641](https://github.com/CertifiedBadIdeas/Compukters/issues/641), and
 [#642](https://github.com/CertifiedBadIdeas/Compukters/issues/642).
 
+## Function-valued properties
+
+**Status:** Supported for concrete non-null callable signatures.
+
+Guest classes can store callbacks in backed `val` and `var` properties, initialize them from constructor
+arguments or body expressions, read them through aliases, replace mutable callbacks and invoke them.
+Custom and inherited/interface accessors retain ordinary property dispatch. Concrete generic owners
+specialize callback parameter/result types, including scalar and Guest object types. Constructor defaults
+can build callbacks that capture earlier constructor parameters.
+
+```kotlin
+class Counter(val next: () -> Int)
+
+fun counter(): Counter {
+    var count = 0
+    fun next(): Int {
+        count += 1
+        return count
+    }
+    return Counter(::next)
+}
+```
+
+Fields hold managed references to the existing callable interfaces. Stored callbacks retain captured
+objects and shared mutable cells after their enclosing function returns. Replacing a callback preserves
+any separately retained old reference; unreachable closures follow ordinary managed heap collection.
+Calling a property evaluates its receiver once. Call arguments use the signature's expected types,
+including nullable parameter types; the callback value itself must be non-null. Nullable callable
+storage and conversions between different callable signatures remain unsupported.
+
+**Evidence:** `MinimalScriptLoweringTest` tests `function fields preserve callback ownership replacement
+accessors and specialization`, `function fields discover signatures without callable expressions` and
+`unsupported nullable and variant function fields report target diagnostics`;
+`testKotlinFunctionFieldsVmConformance` executes
+[`function-fields/main.kt`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/compiler-k2/src/test/resources/kotlin/function-fields/main.kt).
+`DiagnosticQueryTest` test `function fields resolve with source and metadata inputs` covers both platform input modes.
+
+**Related work:** [#757](https://github.com/CertifiedBadIdeas/Compukters/issues/757).
+
 ## Sealed interfaces, data classes, and stateless enums
 
 **Status:** Partial.

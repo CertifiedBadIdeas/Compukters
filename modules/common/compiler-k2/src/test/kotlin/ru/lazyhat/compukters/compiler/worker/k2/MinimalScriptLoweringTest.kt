@@ -234,6 +234,43 @@ class MinimalScriptLoweringTest {
         }
 
     @Test
+    fun `function fields discover signatures without callable expressions`() =
+        withAdapter { adapter ->
+            val source = "class Holder(val callback: (Long) -> Double)\nfun main() {}"
+            val result = adapter.compile(request(source))
+            ArtifactReader.read(assertNotNull(result.artifact, result.diagnostics.toString()).toByteArray())
+        }
+
+    @Test
+    fun `unsupported nullable and variant function fields report target diagnostics`() =
+        withAdapter { adapter ->
+            val sources =
+                listOf(
+                    "class Holder(val callback: (() -> Int)?)\nfun main() { Holder(null) }",
+                    "class Holder(var callback: () -> Any)\nfun main() { val call: () -> Int = { 1 }; val h = Holder { \"x\" }; h.callback = call }",
+                    "class Holder(call: () -> Int) { val callback: () -> Any = call }\nfun main() { Holder { 1 } }",
+                )
+            for (source in sources) {
+                val result = adapter.compile(request(source))
+                assertNull(result.artifact)
+                assertTrue(result.diagnostics.any { it.code == "UNSUPPORTED_IR" }, result.diagnostics.toString())
+            }
+        }
+
+    @Test
+    fun `function fields preserve callback ownership replacement accessors and specialization`() =
+        withAdapter { adapter ->
+            val source = repositoryFile("modules/common/compiler-k2/src/test/resources/kotlin/function-fields/main.kt").readText()
+            val result = adapter.compile(request(source))
+            val bytes = assertNotNull(result.artifact, result.diagnostics.toString()).toByteArray()
+            ArtifactReader.read(bytes)
+            assertContentEquals(bytes, assertNotNull(adapter.compile(request(source)).artifact).toByteArray())
+            System.getProperty("compukter.vm.functionFieldsArtifact")?.let { output ->
+                Path.of(output).also { it.parent.createDirectories() }.writeBytes(bytes)
+            }
+        }
+
+    @Test
     fun `local functions preserve recursive captures escaping references and defaults`() =
         withAdapter { adapter ->
             val source = repositoryFile("modules/common/compiler-k2/src/test/resources/kotlin/local-functions/main.kt").readText()
