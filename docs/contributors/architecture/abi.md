@@ -348,8 +348,9 @@ loading; missing, replaced or unidentifiable instances produce stale handles. A 
 rebinds an old handle to a replacement. Panel identities live in block-entity persistence and canvas identities in dimension SavedData. Display resource
 format 4 restores writer leases and bounded private frames (including owning task and cumulative work) after
 peripheral admission, without replaying published pixels or overwriting another active writer. Readers accept
-formats 2 and 3; legacy format-2 rows are consumed but never replayed. `compukters:display` 1.1 retains operations
-0–3 and appends operations 4–16. `compukter:core` is now 2.2.0 with the separate network capability; display operation selectors remain unchanged.
+formats 2 and 3; legacy format-2 rows are consumed but never replayed. `compukters:display` 1.2 preserves
+operations 0–16 and adds bounded click polling at operation 17. `compukter:core` 7.3.0 exposes the typed input
+facade and reusable drawing widgets; the separate network capability retains its selectors.
 
 The Minecraft addon SDK optionally accepts `CompuktersPersistentPeripheralEndpoint`, extending the existing
 endpoint interface with a persisted exact-device stamp (at most 128 UTF-8 bytes). The base adapter forwards
@@ -738,3 +739,17 @@ The transfer consumer admits only the autonomous composition in both schemas;
 an external component mode requires an explicit contract extension. This inventory does not change Runtime ABI,
 worker protocols or the packaged tooling manifest. See [release publication](../releases.md) and the
 [transfer contract](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/tools/release/README.md).
+
+### Interactive display input
+
+Display capability 1.2 preserves operations 0–16 and appends operation 17, `pollClick(handle: I32): BYTE_ARRAY`.
+Minor 0/1 requests cannot invoke operation 17. An empty array means no event; otherwise exactly eight bytes
+contain unsigned little-endian x and y in published canvas pixels. `compukter:core` 7.3.0 wraps this private
+encoding as `GraphicalDisplay.pollClick(): DisplayClick?`, with a `Position2i` position.
+
+Empty-hand front-face right-clicks use renderer-aligned coordinates for all four orientations and add panel
+offsets in a composite canvas. Shift-use passes through. Server-thread input is a FIFO limited to 64 entries;
+overflow drops new arrivals. Input belongs to the program's exclusive writer lease. Polling claims that lease.
+Lease release/expiry, world restore, layout retirement and committed density changes clear input. Aborted
+frame density changes preserve it. Pending queue entries are never included in canvas or program resource checkpoints. Values already returned
+to Guest code are ordinary program data and follow its normal execution/checkpoint semantics.

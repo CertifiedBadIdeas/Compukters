@@ -295,6 +295,7 @@ tasks.test {
     inputs.dir(rootProject.layout.projectDirectory.dir("examples/inventory-report/src"))
     dependsOn(tasks.jar)
     filter.excludeTestsMatching("ru.lazyhat.compukters.compiler.worker.integration.*")
+    filter.excludeTestsMatching("*Create SCADA example compiles against the actual addon bundle*")
     inputs.file(workerJar)
     inputs.files(addonGuestApiFixtureBundle)
     systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
@@ -519,6 +520,22 @@ val generateFunctionDefaultsConformanceArtifact = tasks.register<Test>("generate
     outputs.file(functionDefaultsConformanceArtifact)
     systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
     systemProperty("compukter.vm.functionDefaultsArtifact", functionDefaultsConformanceArtifact.get().asFile.absolutePath)
+}
+
+val functionFieldsConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-function-fields.cpkt")
+val generateFunctionFieldsConformanceArtifact = tasks.register<Test>("generateFunctionFieldsConformanceArtifact") {
+    description = "Compiles function-valued Guest class fields for pinned VM conformance."
+    group = "verification"
+    dependsOn(tasks.jar)
+    useJUnitPlatform()
+    testClassesDirs = sourceSets.test.get().output.classesDirs
+    classpath = sourceSets.test.get().runtimeClasspath
+    filter.includeTestsMatching("*function fields preserve callback ownership replacement accessors and specialization*")
+    inputs.file(workerJar)
+    inputs.file("src/test/resources/kotlin/function-fields/main.kt")
+    outputs.file(functionFieldsConformanceArtifact)
+    systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
+    systemProperty("compukter.vm.functionFieldsArtifact", functionFieldsConformanceArtifact.get().asFile.absolutePath)
 }
 
 val localFunctionsConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-local-functions.cpkt")
@@ -1859,4 +1876,21 @@ val generateTerminalOutputConformanceArtifact = tasks.register<Test>("generateTe
     outputs.file(artifact)
     systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
     systemProperty("compukters.terminal.output.artifact", artifact.get().asFile.absolutePath)
+}
+
+// Optional real-addon example gate: pass the bundle produced by Create's assembleCompuktersAddon.
+tasks.register<Test>("compileCreateScadaExample") {
+    group = "verification"
+    description = "Compiles the tracked SCADA example against an actual Create addon bundle."
+    dependsOn(tasks.jar)
+    useJUnitPlatform()
+    testClassesDirs = sourceSets.test.get().output.classesDirs
+    classpath = sourceSets.test.get().runtimeClasspath
+    filter.includeTestsMatching("*Create SCADA example compiles against the actual addon bundle*")
+    val bundle = providers.gradleProperty("compuktersCreateGuestApiBundle")
+    inputs.file(bundle)
+    inputs.file(rootProject.file("examples/create-scada/src/main.kt"))
+    inputs.file(workerJar)
+    systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
+    bundle.orNull?.let { systemProperty("compukters.createScadaBundle", file(it).absolutePath) }
 }

@@ -50,6 +50,14 @@ existing managed closure adapters and retain captures across the enclosing retur
 artifact ABI is introduced. `testKotlinLocalFunctionsVmConformance` covers recursion, default arguments,
 all primitive capture families, nested helpers, constructor initialization and independent escaping cells.
 
+Callable signature discovery also visits concrete constructor parameter and backing-field types before
+class layout. Constructor signatures and fields use the same generated callable interfaces as locals and
+ordinary function parameters. Field writes preserve the existing exact-signature policy, including default
+accessors, custom backing-field writes and body initializers. Generic owners substitute their concrete types;
+managed field references preserve closure/capture reachability without new runtime instructions. Callable
+invocation lowers arguments using the expected parameter types, including typed null arguments.
+`testKotlinFunctionFieldsVmConformance` exercises these paths.
+
 Canonical `IntRange` and `IntProgression` declarations let K2 resolve ascending, descending, and stepped `Int` loops.
 The compiler recognizes only their canonical `for` shape and evaluates start, end, and step once into scalar registers;
 no range or iterator object enters the VM. It validates a positive step before iteration, calculates the next index in
