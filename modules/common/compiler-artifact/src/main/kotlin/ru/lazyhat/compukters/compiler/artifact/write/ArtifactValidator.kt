@@ -534,11 +534,20 @@ internal fun validateArtifact(
                 block.instructions.any { it is Instruction.StringValueOf && it.type == StringValueType.F32 }
             }
         }
-    artifact.modules.flatMap { it.blocks }.flatMap { it.instructions }.filterIsInstance<Instruction.MatrixMath>().forEach {
-        if (artifact.minimumRuntimeAbi < AbiVersion(1u, it.operation.runtimeMinor)) {
-            add(ArtifactWriteErrorCode.INVALID_RANGE, "matrix ${it.operation} requires minimum runtime ABI 1.${it.operation.runtimeMinor}")
+    artifact.modules
+        .asSequence()
+        .flatMap {
+            it.blocks.asSequence()
+        }.flatMap { it.instructions.asSequence() }
+        .filterIsInstance<Instruction.MatrixMath>()
+        .forEach {
+            if (artifact.minimumRuntimeAbi < AbiVersion(1u, it.operation.runtimeMinor)) {
+                add(
+                    ArtifactWriteErrorCode.INVALID_RANGE,
+                    "matrix ${it.operation} requires minimum runtime ABI 1.${it.operation.runtimeMinor}",
+                )
+            }
         }
-    }
     if (artifact.minimumRuntimeAbi < AbiVersion(1u, 16u) &&
         artifact.modules.any { module ->
             module.blocks.any { block ->
