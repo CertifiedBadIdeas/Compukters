@@ -26,6 +26,14 @@ fn main() {
             let mut session = k2_stdio_session_with_heap("COMPUKTER_KOTLIN_GEOMETRY_ARTIFACT", 1, 256 * 1024);
             k2_assert_prints(&mut session, ["geometry ok\n"], 1024);
         },
+        "double-geometry" => {
+            let mut session = k2_stdio_session_with_heap("COMPUKTER_KOTLIN_DOUBLE_GEOMETRY_ARTIFACT", 1, 256 * 1024);
+            k2_assert_prints(&mut session, ["double geometry ok\n"], 1024);
+        },
+        "matrix-shapes" => {
+            let mut session = k2_stdio_session_with_heap("COMPUKTER_KOTLIN_MATRIX_SHAPES_ARTIFACT", 1, 256 * 1024);
+            k2_assert_prints(&mut session, ["matrix shapes ok\n"], 1024);
+        },
         "random" => random::execute(),
         "terminal-output" => terminal_output::execute(),
         "math" => {

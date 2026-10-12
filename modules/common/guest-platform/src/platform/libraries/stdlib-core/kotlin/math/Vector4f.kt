@@ -25,6 +25,8 @@ public value class Vector4f(
 
     public infix fun dot(other: Vector4f): Float = x * other.x + y * other.y + z * other.z + w * other.w
 
+    public fun toDouble(): Vector4d = Vector4d(x.toDouble(), y.toDouble(), z.toDouble(), w.toDouble())
+
     public val xyz: Vector3f get() = Vector3f(x, y, z)
 
     public val length: Float get() = hypot(hypot(x.toDouble(), y.toDouble()), hypot(z.toDouble(), w.toDouble())).toFloat()

@@ -95,7 +95,7 @@ class MinimalScriptLoweringTest {
             val artifact = ArtifactReader.read(bytes)
             assertEquals(AbiVersion(1u, 18u), artifact.minimumRuntimeAbi)
             assertEquals(
-                MatrixOperation.entries.toSet(),
+                MatrixOperation.entries.filter { it.runtimeMinor == 17u.toUShort() }.toSet(),
                 artifact.modules
                     .flatMap { it.blocks }
                     .flatMap { it.instructions }
@@ -110,6 +110,40 @@ class MinimalScriptLoweringTest {
                             .of(output),
                         bytes,
                     )
+            }
+        }
+
+    @Test
+    fun `additional matrix shapes lower to typed native kernels`() =
+        withAdapter { adapter ->
+            val source = repositoryFile("modules/common/compiler-k2/src/test/resources/kotlin/matrix-shapes/main.kt").readText()
+            val result = adapter.compile(request(source))
+            val bytes = assertNotNull(result.artifact, result.diagnostics.toString()).toByteArray()
+            val artifact = ArtifactReader.read(bytes)
+            assertEquals(AbiVersion(1u, 19u), artifact.minimumRuntimeAbi)
+            assertEquals(
+                MatrixOperation.entries.filter { it.runtimeMinor == 19u.toUShort() }.toSet(),
+                artifact.modules
+                    .flatMap { it.blocks }
+                    .flatMap { it.instructions }
+                    .filterIsInstance<Instruction.MatrixMath>()
+                    .map { it.operation }
+                    .toSet(),
+            )
+            System.getProperty("compukter.vm.matrixShapesArtifact")?.let { output ->
+                Path.of(output).also { it.parent.createDirectories() }.writeBytes(bytes)
+            }
+        }
+
+    @Test
+    fun `Double geometry preserves precision normalization and quaternion identity`() =
+        withAdapter { adapter ->
+            val source = repositoryFile("modules/common/compiler-k2/src/test/resources/kotlin/double-geometry/main.kt").readText()
+            val result = adapter.compile(request(source))
+            val bytes = assertNotNull(result.artifact, result.diagnostics.toString()).toByteArray()
+            ArtifactReader.read(bytes)
+            System.getProperty("compukter.vm.doubleGeometryArtifact")?.let { output ->
+                Path.of(output).also { it.parent.createDirectories() }.writeBytes(bytes)
             }
         }
 

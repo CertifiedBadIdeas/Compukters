@@ -34,6 +34,8 @@ public value class Vector2i(
         )
 
     public fun toFloat(): Vector2f = Vector2f(x.toFloat(), y.toFloat())
+
+    public fun toDouble(): Vector2d = Vector2d(x.toDouble(), y.toDouble())
 }
 
 public operator fun Int.times(vector: Vector2i): Vector2i = vector * this
@@ -87,6 +89,8 @@ public value class Vector2f(
     public fun floorToInt(): Vector2i = Vector2i(floorComponent(x), floorComponent(y))
 
     public fun ceilToInt(): Vector2i = Vector2i(ceilComponent(x), ceilComponent(y))
+
+    public fun toDouble(): Vector2d = Vector2d(x.toDouble(), y.toDouble())
 }
 
 public operator fun Float.times(vector: Vector2f): Vector2f = vector * this
@@ -128,6 +132,8 @@ public value class Vector3i(
         )
 
     public fun toFloat(): Vector3f = Vector3f(x.toFloat(), y.toFloat(), z.toFloat())
+
+    public fun toDouble(): Vector3d = Vector3d(x.toDouble(), y.toDouble(), z.toDouble())
 }
 
 public operator fun Int.times(vector: Vector3i): Vector3i = vector * this
@@ -192,6 +198,8 @@ public value class Vector3f(
     public fun floorToInt(): Vector3i = Vector3i(floorComponent(x), floorComponent(y), floorComponent(z))
 
     public fun ceilToInt(): Vector3i = Vector3i(ceilComponent(x), ceilComponent(y), ceilComponent(z))
+
+    public fun toDouble(): Vector3d = Vector3d(x.toDouble(), y.toDouble(), z.toDouble())
 }
 
 public operator fun Float.times(vector: Vector3f): Vector3f = vector * this
