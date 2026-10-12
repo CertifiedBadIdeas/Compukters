@@ -134,9 +134,11 @@ headings so this page has one stable URL that can be shared outside the reposito
   Diagnostics, semantic highlighting and completion retain revision checks; existing presentation follows edits
   while new results are pending. Worker cancellation no longer blocks typing on pipe writes.
 
-- Compukters: Sable 1.1 supports peripheral networks between shore devices and moving constructions. Access follows
+- Compukters: Sable 1.2 supports peripheral networks between shore devices and moving constructions. Access follows
   real world distance, including rotation and scale; assembly and return preserve bindings, names and complete display
   images. Partial display transfers split into panels with their published tiles and network membership.
+  `Physics.massProperties()` exposes immutable merged mass, plot-space center of mass and the full inertia tensor
+  for Guest flight-control calculations while retaining the existing pose snapshot API.
 
 - The IDE prepares resolved compiler libraries in the background when opening a project and after dependency or
   target-profile changes. Repeated Guest compilation reuses that library analysis, semantic hashes and export
