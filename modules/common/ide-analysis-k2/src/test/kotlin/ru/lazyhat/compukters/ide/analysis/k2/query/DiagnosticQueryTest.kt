@@ -109,6 +109,40 @@ class DiagnosticQueryTest {
     }
 
     @Test
+    fun `generic class captures resolve with source and metadata inputs`() {
+        val source =
+            """
+            class Holder<T>(var value: T) {
+                fun reader(): () -> T {
+                    fun read(): T = value
+                    return ::read
+                }
+                fun cell(seed: T): () -> T {
+                    var local = seed
+                    return { val saved = local; local = value; saved }
+                }
+            }
+            fun main() {
+                val ints = Holder(3)
+                val read = ints.reader()
+                ints.value = 7
+                check(read() == 7)
+                val wide = Holder(3L).cell(5L)
+                check(wide() == 5L)
+                val nullable = Holder<Int?>(null).reader()
+                check(nullable() == null)
+            }
+            """.trimIndent()
+        for (attachedSources in listOf(false, true)) {
+            K2QueryFixture.sourceWithGuestApi(attachedSources, "main.kt" to source).use { fixture ->
+                val result = fixture.execute(fixture.presentation()) as AnalysisResult.Presentation
+                val active = result.value.accept(fixture.identity) as SnapshotPresentationAcceptance.Active
+                assertTrue(active.diagnostics.none { it.severity == EditorDiagnosticSeverity.Error }, active.diagnostics.toString())
+            }
+        }
+    }
+
+    @Test
     fun `generic local functions resolve with source and metadata inputs`() {
         val source =
             """

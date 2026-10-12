@@ -70,8 +70,32 @@ fun main() {
 
 Lexical and ordinary generic function variants share the existing 256-variant budget; lexical expansion
 also has a depth limit of 64. Type-growing recursion reports `UNSUPPORTED_IR` rather than creating
-unbounded code. Generic class-owned capture layouts remain outside this extension. Local inline/suspend
-and reified declarations remain unsupported.
+unbounded code. Methods and custom accessors of concrete generic classes also receive independent
+symbol-remapped bodies before capture layout. Named local helpers, lambdas and escaping references may
+capture `this`, concrete parameters and locals, or shared mutable cells. Captured `this` observes later
+field changes; capturing a parameter retains its value. Different method invocations retain independent
+cells. Generic constructor bodies, backing-field initializers and init blocks with lexical captures, methods with their own type parameters,
+and local inline/suspend/reified declarations remain outside this extension.
+
+```kotlin
+class Holder<T>(var value: T) {
+    fun reader(): () -> T {
+        fun read(): T = value
+        return ::read
+    }
+}
+```
+
+**Evidence:** `generic class captures preserve concrete owners and escaping callbacks`,
+`generic class direct local captures retain scalar signatures without environments` and
+`expanding generic class local recursion reports bounded target diagnostics` in `MinimalScriptLoweringTest`.
+`testKotlinGenericClassCapturesVmConformance` executes
+[`generic-class-captures/main.kt`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/compiler-k2/src/test/resources/kotlin/generic-class-captures/main.kt):
+all twelve primitive families, nullable and object values, local/member recursion, interface dispatch,
+custom accessors, bound/unbound references and shared cells. A 64 KiB heap retains an older owner callback
+across 200 allocations of 12 KiB arrays. IDE test `generic class captures resolve with source and metadata inputs`
+checks both platform modes. Related work: [#762](https://github.com/CertifiedBadIdeas/Compukters/issues/762).
+
 Put an expression-bodied local declaration and subsequent statements on separate lines:
 the current K2 frontend can omit a statement following that declaration on the same line.
 The direct static `Tasks.launch(::worker)` path still requires an admitted top-level worker; stored function

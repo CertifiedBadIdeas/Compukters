@@ -7,7 +7,9 @@
 package ru.lazyhat.compukters.compiler.k2.engine
 
 import org.jetbrains.kotlin.ir.IrElement
+import org.jetbrains.kotlin.ir.declarations.IrClass
 import org.jetbrains.kotlin.ir.declarations.IrFile
+import org.jetbrains.kotlin.ir.declarations.IrParameterKind
 import org.jetbrains.kotlin.ir.declarations.IrSimpleFunction
 import org.jetbrains.kotlin.ir.expressions.IrBlockBody
 import org.jetbrains.kotlin.ir.expressions.IrCall
@@ -71,6 +73,14 @@ internal class GuestLocalSpecialization {
             override fun visitElement(element: IrElement) = element.acceptChildren(this, null)
 
             override fun visitSimpleFunction(declaration: IrSimpleFunction) {
+                // Generic member bodies are visited after their concrete owner copy is prepared.
+                if (declaration.parent is IrClass &&
+                    declaration.parameters.any {
+                        it.kind == IrParameterKind.DispatchReceiver && it.type.containsTypeParameter()
+                    }
+                ) {
+                    return
+                }
                 if (declaration.isGuestLocalFunction() && declaration.typeParameters.isNotEmpty()) {
                     if (declaration.isInline || declaration.isSuspend || declaration.typeParameters.any { it.isReified }) {
                         throw UnsupportedKotlinIr(declaration, "inline, suspend and reified local functions are not supported")
@@ -167,7 +177,7 @@ internal class GuestLocalSpecialization {
     }
 }
 
-private fun IrType.containsTypeParameter(): Boolean =
+internal fun IrType.containsTypeParameter(): Boolean =
     this is IrSimpleType &&
         (classifier is IrTypeParameterSymbol || arguments.any { (it as? IrTypeProjection)?.type?.containsTypeParameter() == true })
 
