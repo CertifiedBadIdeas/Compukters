@@ -445,8 +445,10 @@ listed in [Kotlin support](developers/kotlin-support.md) and [standard library s
   and `F2` / `Shift+F2` navigation use matching source text and reject stale locations. Method declarations show
   non-zero project usage counts that distinguish overloads and remain stable during unrelated edits.
 - `Shift+F6` renames supported project symbols across files and unsaved buffers after K2 checks collisions and
-  bindings. The change is undoable across affected files; library symbols, `main` and unsupported convention or
-  inheritance declarations remain outside this action.
+  bindings, including infix calls and callable references. Unrelated semantic errors can remain, while new
+  errors, reference capture and stale sources reject the entire operation. The change is undoable across
+  affected files; syntax errors, library symbols, `main`, operator and inheritance declarations remain outside
+  this action.
 - Caret placement highlights resolved declarations/references, including interpolation; typing hides semantic
   occurrence marks until the caret is explicitly moved. Text selection highlights literal occurrences, while
   `Ctrl+F` provides case-sensitive search, a counter and Enter/Shift+Enter navigation in writable or read-only files.
