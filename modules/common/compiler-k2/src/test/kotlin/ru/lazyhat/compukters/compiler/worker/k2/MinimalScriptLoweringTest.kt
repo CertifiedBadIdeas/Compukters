@@ -7245,6 +7245,50 @@ class MinimalScriptLoweringTest {
         }
 
     @Test
+    fun `terminal output preserves scalar sequence and buffer contracts`() =
+        withAdapter { adapter ->
+            val source =
+                """
+                import compukter.terminal.*
+                import kotlin.math.*
+                class OutputView : CharSequence {
+                    override val length: Int get() = 1
+                    override fun get(index: Int): Char = 'C'
+                    override fun subSequence(startIndex: Int, endIndex: Int): CharSequence = "C"
+                    override fun toString(): String = "wrong"
+                }
+                fun main() {
+                    Terminal.clear()
+                    Terminal.setColors(TerminalColor.LIGHT_GREEN, TerminalColor.BLUE)
+                    Terminal.setCursor(Vector2i(2, 1))
+                    Terminal.write('A')
+                    val buffer = charArrayOf('!', '\uD83D', '\uDE00', 'Z', '!')
+                    Terminal.write(buffer, 1, 4)
+                    Terminal.write(StringBuilder("B"))
+                    Terminal.write(OutputView())
+                    require(Terminal.cursor == Vector2i(7, 1))
+                    Terminal.writeAt(Vector2i(50, 3), buffer, 1, 4)
+                    Terminal.writeAt(Vector2i(0, 4), '\uD83D')
+                    Terminal.writeAt(Vector2i(1, 4), charArrayOf('D'))
+                    Terminal.writeAt(Vector2i(2, 4), StringBuilder("E"))
+                    Terminal.write(charArrayOf())
+                    Terminal.writeAt(Vector2i(3, 4), buffer, 4, 4)
+                    var rejected = 0
+                    try { Terminal.write(buffer, -1, 2) } catch (failure: IndexOutOfBoundsException) { rejected += 1 }
+                    try { Terminal.writeAt(Vector2i(0, 5), buffer, 3, 2) } catch (failure: IndexOutOfBoundsException) { rejected += 1 }
+                    try { Terminal.write(buffer, 0, 6) } catch (failure: IndexOutOfBoundsException) { rejected += 1 }
+                    require(rejected == 3 && Terminal.cursor == Vector2i(7, 1))
+                    buffer[1] = 'x'
+                }
+                """.trimIndent()
+            val result = adapter.compile(request(source))
+            val artifact = assertNotNull(result.artifact, result.diagnostics.joinToString()).toByteArray()
+            System.getProperty("compukters.terminal.output.artifact")?.let { output ->
+                Path.of(output).also { it.parent.createDirectories() }.writeBytes(artifact)
+            }
+        }
+
+    @Test
     fun `typed terminal facade lowers observations events and rejects removed APIs`() =
         withAdapter { adapter ->
             val bodies =
@@ -7261,8 +7305,8 @@ class MinimalScriptLoweringTest {
                 val decoded = ArtifactReader.read(bytes)
                 val strings = decoded.modules.first().strings
                 val terminal = decoded.capabilities.single { strings[it.name.value.toInt()].toString() == "terminal" }
-                assertEquals(AbiVersion(2u, 2u), terminal.abi)
-                assertEquals(19u, terminal.operationCount)
+                assertEquals(AbiVersion(2u, 3u), terminal.abi)
+                assertEquals(23u, terminal.operationCount)
             }
             for (body in listOf(
                 "Terminal.awaitEvent()",
@@ -9258,7 +9302,14 @@ class MinimalScriptLoweringTest {
             assertOrdinaryEntry(artifact)
             assertTrue(first.diagnostics.none { it.severity.name == "ERROR" }, first.diagnostics.toString())
             System.getProperty("compukters.cmatrix.artifact")?.let { output ->
-                Path.of(output).also { it.parent.createDirectories() }.writeBytes(artifact)
+                val path = Path.of(output).also { it.parent.createDirectories() }
+                path.writeBytes(artifact)
+                val baselineSource = source.replace("glyphs[column])", "glyphs[column].toString())")
+                require(baselineSource != source)
+                val baseline = adapter.compile(request("system/programs/cmatrix.kt" to baselineSource))
+                path
+                    .resolveSibling(path.fileName.toString() + ".strings.cpkt")
+                    .writeBytes(assertNotNull(baseline.artifact, baseline.diagnostics.joinToString()).toByteArray())
             }
         }
 

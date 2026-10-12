@@ -1435,6 +1435,7 @@ val generateCmatrixArtifact = tasks.register<Test>("generateCmatrixArtifact") {
     inputs.file(rootProject.file("system/programs/cmatrix.kt"))
     inputs.file(workerJar)
     outputs.file(cmatrixArtifact)
+    outputs.file(cmatrixArtifact.map { it.asFile.resolveSibling("${it.asFile.name}.strings.cpkt") })
     systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
     systemProperty("compukters.cmatrix.artifact", cmatrixArtifact.get().asFile.absolutePath)
 }
@@ -1779,4 +1780,19 @@ tasks.register<Test>("generateGeometryConformanceArtifact") {
     outputs.file(geometryConformanceArtifact)
     systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
     systemProperty("compukter.vm.geometryArtifact", geometryConformanceArtifact.get().asFile.absolutePath)
+}
+
+val generateTerminalOutputConformanceArtifact = tasks.register<Test>("generateTerminalOutputConformanceArtifact") {
+    description = "Compiles scalar, sequence and ranged terminal output for native conformance."
+    group = "verification"
+    dependsOn(tasks.jar)
+    useJUnitPlatform()
+    testClassesDirs = sourceSets.test.get().output.classesDirs
+    classpath = sourceSets.test.get().runtimeClasspath
+    filter.includeTestsMatching("*terminal output preserves scalar sequence and buffer contracts*")
+    inputs.file(workerJar)
+    val artifact = layout.buildDirectory.file("generated/conformance/terminal-output.cpkt")
+    outputs.file(artifact)
+    systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
+    systemProperty("compukters.terminal.output.artifact", artifact.get().asFile.absolutePath)
 }

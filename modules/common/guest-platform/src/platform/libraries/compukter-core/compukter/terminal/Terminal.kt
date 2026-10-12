@@ -97,8 +97,27 @@ public object Terminal {
     public val cursor: Position2i get() = Vector2i(TerminalBindings.cursorX(), TerminalBindings.cursorY())
     public val size: Size2i get() = Vector2i(TerminalBindings.width(), TerminalBindings.height())
 
-    public fun write(text: String) {
-        TerminalBindings.write(text)
+    public fun write(text: CharSequence) {
+        TerminalBindings.write(if (text is String) text else text.substring(0, text.length))
+    }
+
+    /** Writes one UTF-16 unit. An isolated surrogate is rendered as a replacement character. */
+    public fun write(character: Char) {
+        TerminalBindings.writeChar(character)
+    }
+
+    /** Writes the selected UTF-16 range without materializing a Guest String. */
+    public fun write(buffer: CharArray) {
+        write(buffer, 0, buffer.size)
+    }
+
+    public fun write(
+        buffer: CharArray,
+        startIndex: Int,
+        endIndex: Int,
+    ) {
+        checkTerminalRange(buffer, startIndex, endIndex)
+        TerminalBindings.writeRange(buffer, startIndex, endIndex)
     }
 
     public fun erasePrevious() {
@@ -126,9 +145,33 @@ public object Terminal {
 
     public fun writeAt(
         position: Position2i,
-        text: String,
+        text: CharSequence,
     ) {
-        TerminalBindings.writeAt(position.x, position.y, text)
+        TerminalBindings.writeAt(position.x, position.y, if (text is String) text else text.substring(0, text.length))
+    }
+
+    public fun writeAt(
+        position: Position2i,
+        character: Char,
+    ) {
+        TerminalBindings.writeCharAt(position.x, position.y, character)
+    }
+
+    public fun writeAt(
+        position: Position2i,
+        buffer: CharArray,
+    ) {
+        writeAt(position, buffer, 0, buffer.size)
+    }
+
+    public fun writeAt(
+        position: Position2i,
+        buffer: CharArray,
+        startIndex: Int,
+        endIndex: Int,
+    ) {
+        checkTerminalRange(buffer, startIndex, endIndex)
+        TerminalBindings.writeRangeAt(position.x, position.y, buffer, startIndex, endIndex)
     }
 
     public fun fill(rectangle: Rect2i) {
@@ -290,6 +333,28 @@ private object TerminalBindings {
         character: Char,
     )
 
+    external fun writeChar(character: Char)
+
+    external fun writeCharAt(
+        x: Int,
+        y: Int,
+        character: Char,
+    )
+
+    external fun writeRange(
+        buffer: CharArray,
+        startIndex: Int,
+        endIndex: Int,
+    )
+
+    external fun writeRangeAt(
+        x: Int,
+        y: Int,
+        buffer: CharArray,
+        startIndex: Int,
+        endIndex: Int,
+    )
+
     external fun cursorX(): Int
 
     external fun cursorY(): Int
@@ -297,4 +362,14 @@ private object TerminalBindings {
     external fun width(): Int
 
     external fun height(): Int
+}
+
+private fun checkTerminalRange(
+    buffer: CharArray,
+    startIndex: Int,
+    endIndex: Int,
+) {
+    if (startIndex < 0 || endIndex < startIndex || endIndex > buffer.size) {
+        throw IndexOutOfBoundsException("Invalid terminal buffer range")
+    }
 }

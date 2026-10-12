@@ -246,7 +246,7 @@ and
 
 **Status:** Supported.
 
-`compukter:core` 7.1.0 replaces the raw public event protocol with `Terminal.readEvent()`.
+`compukter:core` 7.2.0 replaces the raw public event protocol with `Terminal.readEvent()`.
 It blocks until input arrives and returns an owned `TerminalEvent.Text(text)` or
 `TerminalEvent.Key(key, action, modifiers)`. `TerminalKey` and `TerminalKeyAction` are enums;
 `TerminalModifiers` exposes `shift`, `control`, `alt` and `superKey` Boolean properties.
@@ -267,6 +267,15 @@ integer vectors. `setCursor(position)` and `writeAt(position, text)` accept posi
 `setColors(foreground, background)` accepts `TerminalColor` values from the fixed 16-color palette.
 Drawing stays bounded by the native grid. Positional drawing does not move the stream cursor.
 `write(text)`, `erasePrevious()`, `clear()` and `setCursorVisible(visible)` remain available.
+`write` and `writeAt` accept `CharSequence`, `Char` and `CharArray` (whole buffer or explicit
+`startIndex`, exclusive `endIndex`). String output uses its existing direct path; other sequences
+materialize their indexed contents. Char and buffer output create no temporary Guest String.
+Ranges check `0 <= startIndex <= endIndex <= buffer.size`; invalid ranges throw
+`IndexOutOfBoundsException` before drawing. Native preparation copies only selected UTF-16 units,
+with existing host quotas and sliced cost accounting; the backing array can be reused immediately
+after the call. Surrogate pairs must appear in one text/range call; an isolated surrogate, including
+a single Char, renders U+FFFD. Range writes retain ordinary stream controls or positional clipping.
+Built-in `cmatrix` draws Char glyphs and `edit` writes its reusable row buffer directly.
 
 ```kotlin
 import compukter.terminal.*
@@ -290,7 +299,9 @@ Plain C/U text remains normal input; the client maps Ctrl+C and Ctrl+U as key ev
 
 **Evidence:**
 [`MinimalScriptLoweringTest`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/compiler-k2/src/test/kotlin/ru/lazyhat/compukters/compiler/worker/k2/MinimalScriptLoweringTest.kt),
-tests `typed terminal facade lowers observations events and rejects removed APIs`,
+tests `terminal output preserves scalar sequence and buffer contracts`
+(`testKotlinTerminalOutputVmConformance`, including 100 identical cmatrix frames with lower Guest heap/cost),
+`typed terminal facade lowers observations events and rejects removed APIs`,
 `checked in shell compiles deterministically` and `checked in editor compiles deterministically`;
 [`ProgramRuntimeHostIntegrationTest`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/core/src/nativeIntegrationTest/kotlin/ru/lazyhat/compukters/core/device/runtime/program/integration/ProgramRuntimeHostIntegrationTest.kt),
 tests `builtin shell edits scalar boundaries and restores history drafts`,

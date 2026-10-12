@@ -272,6 +272,9 @@ fun registerKotlinVmConformance(
             description = taskDescription
             group = "verification"
             dependsOn(artifactTask)
+            inputs.file(compukterVmManifest)
+            inputs.file(compukterVmLock)
+            inputs.dir(compukterVmRoot.resolve("src"))
             inputs.file(compilerArtifactVmConformanceHarness)
             inputs.file(compilerArtifactVmConformanceLock)
             inputs.files(fileTree(compilerArtifactVmConformanceSource.parentFile) { include("*.rs") })
@@ -1453,3 +1456,18 @@ tasks.register<Exec>("benchmarkCollectionReuse") {
     )
     environment("CARGO_TARGET_DIR", rootProject.file(".toolchain/build/cargo/collection-benchmark").absolutePath)
 }
+
+registerKotlinVmConformance(
+    taskName = "testKotlinTerminalOutputVmConformance",
+    taskDescription = "Executes bounded UTF-16 terminal output and deterministic cmatrix rendering.",
+    artifactTask = ":compiler-k2:generateTerminalOutputConformanceArtifact",
+    artifact = project(":compiler-k2").layout.buildDirectory.file("generated/conformance/terminal-output.cpkt"),
+    cargoTargetDirectory = ".toolchain/build/cargo/compiler-k2-terminal-output-conformance",
+    artifactEnvironmentVariable = "COMPUKTER_TERMINAL_OUTPUT_ARTIFACT",
+    conformanceScenario = "terminal-output",
+    additionalArtifacts = mapOf(
+        "COMPUKTER_CMATRIX_ARTIFACT" to project(":compiler-k2").layout.buildDirectory.file("generated/system/cmatrix.cpkt"),
+        "COMPUKTER_CMATRIX_STRINGS_ARTIFACT" to project(":compiler-k2").layout.buildDirectory.file("generated/system/cmatrix.cpkt.strings.cpkt"),
+    ),
+)
+tasks.named("testKotlinTerminalOutputVmConformance") { dependsOn(":compiler-k2:generateCmatrixArtifact") }

@@ -541,8 +541,8 @@ private fun editRender(
     Terminal.fill(Rect2i(Vector2i(0, 0), Terminal.size))
     Terminal.writeAt(Vector2i(0, 0), "Compukters edit  " + path + if (dirty) " *" else "")
     repeat(16) { row ->
-        val text = editVisibleLine(buffer, state, rowOffset + row, columnOffset, rowBuffer)
-        if (text.isNotEmpty()) Terminal.writeAt(Vector2i(0, row + 1), text)
+        val units = editVisibleLine(buffer, state, rowOffset + row, columnOffset, rowBuffer)
+        if (units > 0) Terminal.writeAt(Vector2i(0, row + 1), rowBuffer, 0, units)
     }
     val cursorLine = editCursorLine(buffer, state)
     val cursorColumn = editCursorColumn(buffer, state)
@@ -564,7 +564,7 @@ private fun editVisibleLine(
     line: Int,
     columnOffset: Int,
     rowBuffer: CharArray,
-): String {
+): Int {
     var index = editLineStart(buffer, state, line)
     val length = editLogicalLength(buffer, state)
     var skipped = 0
@@ -585,7 +585,7 @@ private fun editVisibleLine(
         index = index + width
         cells = cells + 1
     }
-    return rowBuffer.concatToString(0, units)
+    return units
 }
 
 private fun editSave(
