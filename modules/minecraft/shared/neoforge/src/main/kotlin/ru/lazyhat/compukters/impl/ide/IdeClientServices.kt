@@ -47,6 +47,7 @@ import ru.lazyhat.compukters.ide.analysis.protocol.AdmittedAnalysisPlatform
 import ru.lazyhat.compukters.ide.analysis.protocol.AdmittedAnalysisProfile
 import ru.lazyhat.compukters.ide.analysis.protocol.AnalysisLimits
 import ru.lazyhat.compukters.ide.analysis.protocol.AnalysisWorkerIdentity
+import ru.lazyhat.compukters.ide.analysis.protocol.ProtocolLimits
 import ru.lazyhat.compukters.ide.client.IdeClientLimits
 import ru.lazyhat.compukters.ide.client.analysis.IdeAnalysisCoordinator
 import ru.lazyhat.compukters.ide.client.analysis.IdeAnalysisInputLoader
@@ -568,12 +569,12 @@ internal object ProductionIdeApplicationFactory {
         val platformSources = linkedMapOf<VirtualSourcePath, String>()
         ZipFile(sourceRoot.toFile()).use { archive ->
             archive.entries().asSequence().filterNot { it.isDirectory }.filter { it.name.endsWith(".kt") }.forEach { entry ->
-                require(sourceCount < limits.sourceFiles) { "platform source count exceeds analysis limit" }
-                val bytes = archive.getInputStream(entry).use { it.readNBytes(limits.sourceFileBytes + 1) }
-                require(bytes.size <= limits.sourceFileBytes) { "platform source file exceeds analysis limit" }
+                require(sourceCount < ProtocolLimits.PLATFORM_SOURCE_FILES) { "platform source count exceeds analysis limit" }
+                val bytes = archive.getInputStream(entry).use { it.readNBytes(ProtocolLimits.PLATFORM_SOURCE_FILE_BYTES + 1) }
+                require(bytes.size <= ProtocolLimits.PLATFORM_SOURCE_FILE_BYTES) { "platform source file exceeds analysis limit" }
                 sourceCount = Math.incrementExact(sourceCount)
                 totalBytes = Math.addExact(totalBytes, bytes.size.toLong())
-                require(totalBytes <= limits.sourceBytes.toLong()) { "platform source bytes exceed analysis limit" }
+                require(totalBytes <= ProtocolLimits.PLATFORM_SOURCE_BYTES.toLong()) { "platform source bytes exceed analysis limit" }
                 val path = VirtualSourcePath.kotlin(entry.name)
                 val text = bytes.decodeToString(throwOnInvalidSequence = true)
                 require(platformSources.put(path, text) == null) { "duplicate platform source path: ${entry.name}" }
@@ -588,9 +589,12 @@ internal object ProductionIdeApplicationFactory {
         return IdeAttachedSourceCatalog.of(
             sources,
             limits.modules,
-            limits.sourceFiles,
-            limits.sourceFileBytes,
-            limits.sourceBytes,
+            ProtocolLimits.PLATFORM_SOURCE_FILES,
+            ProtocolLimits.PLATFORM_SOURCE_FILE_BYTES,
+            ProtocolLimits.PLATFORM_SOURCE_BYTES,
+            maximumAddonFiles = limits.sourceFiles,
+            maximumAddonFileBytes = limits.sourceFileBytes,
+            maximumAddonTotalBytes = limits.sourceBytes,
         )
     }
 

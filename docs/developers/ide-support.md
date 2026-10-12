@@ -29,6 +29,19 @@ physical paths are bounded`.
 
 ## IDE and tooling
 
+### Canonical platform source admission
+
+Navigation source loading uses the same canonical platform budget as the analysis protocol and worker:
+256 Kotlin files, 1 MiB per file and 8 MiB total. These trusted base sources are independent of the project
+and addon budgets. Project limits continue to bound user sources, and attached addon sources retain their
+own separate pool with the configured addon limits, including across successive bundle additions.
+
+**Evidence:** `IdeClientServicesTest`, tests `attached canonical sources use the platform budget rather than
+the project budget`, `attached canonical archive still rejects too many platform files` and
+`prepares distinct compiler and analysis workers from one shared bundle`; `IdeSemanticInteractionTest`,
+test `larger packaged source budget preserves smaller addon limits across additions`;
+`AnalysisProtocolRoundTripTest`, test `canonical platform sources have an independent bounded budget`.
+
 ### Local projects and Git
 
 **Status:** Implemented; in-client visual observation pending for [#703](https://github.com/CertifiedBadIdeas/Compukters/issues/703).

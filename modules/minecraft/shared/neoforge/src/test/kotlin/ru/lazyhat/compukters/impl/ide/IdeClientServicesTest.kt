@@ -27,6 +27,7 @@ import ru.lazyhat.compukters.compiler.worker.protocol.WorkerLimits
 import ru.lazyhat.compukters.ide.analysis.AnalysisModuleIdentity
 import ru.lazyhat.compukters.ide.analysis.protocol.AdmittedAnalysisPlatform
 import ru.lazyhat.compukters.ide.analysis.protocol.AnalysisLimits
+import ru.lazyhat.compukters.ide.analysis.protocol.ProtocolLimits
 import ru.lazyhat.compukters.ide.client.analysis.IdeVisibleLatencyKind
 import ru.lazyhat.compukters.ide.client.analysis.IdeVisibleLatencyTrace
 import ru.lazyhat.compukters.ide.client.controller.IdeClientTooling
@@ -96,6 +97,100 @@ internal class IdeClientServicesTest {
 
         assertEquals(text, catalog.text(identity, VirtualSourcePath.kotlin("compukter/api/Sample.kt")))
         archive.parent.toFile().deleteRecursively()
+    }
+
+    @Test
+    fun `attached canonical sources use the platform budget rather than the project budget`() {
+        val archive = createTempDirectory("compukters-attached-budget-").resolve("sources.jar")
+        val identity = AnalysisModuleIdentity("stdlib:core", hash(7))
+        val count = AnalysisLimits().sourceFiles + 1
+        val paths = (0 until count).map { "api/Type$it.kt" }
+        val text = "package api\nclass Example"
+        try {
+            ZipOutputStream(
+                java.nio.file.Files
+                    .newOutputStream(archive),
+            ).use { output ->
+                paths.forEach { path ->
+                    output.putNextEntry(ZipEntry(path))
+                    output.write(text.encodeToByteArray())
+                    output.closeEntry()
+                }
+            }
+            for (limits in listOf(AnalysisLimits(), AnalysisLimits(sourceFiles = 1, sourceFileBytes = 1, sourceBytes = 1, modules = 1))) {
+                val catalog = ProductionIdeApplicationFactory.loadAttachedSources(mapOf(identity to paths.toSet()), archive, limits)
+                paths.forEach { path -> assertEquals(text, catalog.text(identity, VirtualSourcePath.kotlin(path))) }
+            }
+        } finally {
+            archive.parent.toFile().deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `attached canonical archive still rejects too many platform files`() {
+        val archive = createTempDirectory("compukters-attached-over-budget-").resolve("sources.jar")
+        try {
+            ZipOutputStream(
+                java.nio.file.Files
+                    .newOutputStream(archive),
+            ).use { output ->
+                repeat(ProtocolLimits.PLATFORM_SOURCE_FILES + 1) { index ->
+                    output.putNextEntry(ZipEntry("api/Type$index.kt"))
+                    output.write("class Type$index".encodeToByteArray())
+                    output.closeEntry()
+                }
+            }
+            val failure =
+                assertFailsWith<IllegalArgumentException> {
+                    ProductionIdeApplicationFactory.loadAttachedSources(emptyMap(), archive, AnalysisLimits())
+                }
+            assertEquals("platform source count exceeds analysis limit", failure.message)
+        } finally {
+            archive.parent.toFile().deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `attached canonical archive retains per file and total byte bounds`() {
+        val archive = createTempDirectory("compukters-attached-byte-budget-").resolve("sources.jar")
+
+        fun writeArchive(
+            count: Int,
+            bytesPerFile: Int,
+        ) {
+            val content = ByteArray(bytesPerFile) { 32 }
+            ZipOutputStream(
+                java.nio.file.Files
+                    .newOutputStream(archive),
+            ).use { output ->
+                repeat(count) { index ->
+                    output.putNextEntry(ZipEntry("api/Type$index.kt"))
+                    output.write(content)
+                    output.closeEntry()
+                }
+            }
+        }
+        try {
+            writeArchive(1, ProtocolLimits.PLATFORM_SOURCE_FILE_BYTES + 1)
+            assertEquals(
+                "platform source file exceeds analysis limit",
+                assertFailsWith<IllegalArgumentException> {
+                    ProductionIdeApplicationFactory.loadAttachedSources(emptyMap(), archive, AnalysisLimits())
+                }.message,
+            )
+            writeArchive(
+                ProtocolLimits.PLATFORM_SOURCE_BYTES / ProtocolLimits.PLATFORM_SOURCE_FILE_BYTES + 1,
+                ProtocolLimits.PLATFORM_SOURCE_FILE_BYTES,
+            )
+            assertEquals(
+                "platform source bytes exceed analysis limit",
+                assertFailsWith<IllegalArgumentException> {
+                    ProductionIdeApplicationFactory.loadAttachedSources(emptyMap(), archive, AnalysisLimits())
+                }.message,
+            )
+        } finally {
+            archive.parent.toFile().deleteRecursively()
+        }
     }
 
     @Test

@@ -140,9 +140,9 @@ sealed interface IdeSemanticInteraction {
 class IdeAttachedSourceCatalog private constructor(
     private val sources: Map<AnalysisModuleIdentity, Map<VirtualSourcePath, String>>,
     private val maximumModules: Int,
-    private val maximumFiles: Int,
-    private val maximumFileBytes: Int,
-    private val maximumTotalBytes: Int,
+    private val maximumAddonFiles: Int,
+    private val maximumAddonFileBytes: Int,
+    private val maximumAddonTotalBytes: Int,
     private val packagedSources: Map<AnalysisModuleIdentity, Map<VirtualSourcePath, String>> = sources,
 ) {
     fun text(
@@ -173,13 +173,13 @@ class IdeAttachedSourceCatalog private constructor(
         // Retain that distinction when attaching navigation sources, including chained additions.
         val addonSources = sources.filterKeys { it !in packagedSources } + additions
         val admittedAddons =
-            of(addonSources, maximumModules - packagedSources.size, maximumFiles, maximumFileBytes, maximumTotalBytes)
+            of(addonSources, maximumModules - packagedSources.size, maximumAddonFiles, maximumAddonFileBytes, maximumAddonTotalBytes)
         return IdeAttachedSourceCatalog(
             Collections.unmodifiableMap(packagedSources + admittedAddons.sources),
             maximumModules,
-            maximumFiles,
-            maximumFileBytes,
-            maximumTotalBytes,
+            maximumAddonFiles,
+            maximumAddonFileBytes,
+            maximumAddonTotalBytes,
             packagedSources,
         )
     }
@@ -187,17 +187,24 @@ class IdeAttachedSourceCatalog private constructor(
     companion object {
         fun empty(): IdeAttachedSourceCatalog = IdeAttachedSourceCatalog(emptyMap(), 0, 0, 0, 0)
 
+        /** Admit packaged sources with their own bounds; retain separate bounds for future addon additions. */
         fun of(
             sources: Map<AnalysisModuleIdentity, Map<VirtualSourcePath, String>>,
             maximumModules: Int,
             maximumFiles: Int,
             maximumFileBytes: Int,
             maximumTotalBytes: Int,
+            maximumAddonFiles: Int = maximumFiles,
+            maximumAddonFileBytes: Int = maximumFileBytes,
+            maximumAddonTotalBytes: Int = maximumTotalBytes,
         ): IdeAttachedSourceCatalog {
             require(maximumModules >= 0) { "attached source module limit must not be negative" }
             require(maximumFiles >= 0) { "attached source file limit must not be negative" }
             require(maximumFileBytes >= 0) { "attached source file byte limit must not be negative" }
             require(maximumTotalBytes >= 0) { "attached source total byte limit must not be negative" }
+            require(maximumAddonFiles >= 0) { "attached addon source file limit must not be negative" }
+            require(maximumAddonFileBytes >= 0) { "attached addon source file byte limit must not be negative" }
+            require(maximumAddonTotalBytes >= 0) { "attached addon source total byte limit must not be negative" }
             require(sources.size <= maximumModules) { "attached source module count exceeds limit" }
             var files = 0
             var totalBytes = 0L
@@ -219,9 +226,9 @@ class IdeAttachedSourceCatalog private constructor(
             return IdeAttachedSourceCatalog(
                 Collections.unmodifiableMap(admitted),
                 maximumModules,
-                maximumFiles,
-                maximumFileBytes,
-                maximumTotalBytes,
+                maximumAddonFiles,
+                maximumAddonFileBytes,
+                maximumAddonTotalBytes,
             )
         }
     }
