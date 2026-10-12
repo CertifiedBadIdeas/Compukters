@@ -10,6 +10,13 @@ import ru.lazyhat.compukters.api.addon.ResourceCheckpointReader
 import ru.lazyhat.compukters.api.addon.ResourceCheckpointWriter
 import ru.lazyhat.compukters.lang.runtime.vm.HostFailureKind
 
+/** Optional ownership acquired by retained handles, never by discovery snapshots. */
+interface PeripheralHandleLease {
+    fun acquire()
+
+    fun release()
+}
+
 /** A logical device location. It is not a live handle and never identifies a replacement instance. */
 data class PeripheralIdentity<I : Any>(
     val providerId: String,
@@ -69,7 +76,33 @@ class PeripheralSession<I : Any>(
     private val maximumSnapshotEntries: Int = 1_024,
     private val encodeLocation: (I) -> ByteArray = { error("Peripheral location encoding is unavailable") },
     private val decodeLocation: (ByteArray) -> I = { error("Peripheral location decoding is unavailable") },
+    private val ownership: PeripheralOwnership = PeripheralOwnership(),
 ) {
+    /** Preserve the constructor ABI used by compiled integrations. */
+    constructor(
+        contracts: List<PeripheralContract<I, *>>,
+        discover: () -> List<PeripheralIdentity<I>>,
+        side: (Int) -> List<PeripheralIdentity<I>>,
+        lookupName: (String, String) -> PeripheralIdentity<I>?,
+        maximumHandles: Int = 1_024,
+        maximumSnapshots: Int = 4,
+        maximumSnapshotEntries: Int = 1_024,
+        encodeLocation: (I) -> ByteArray = { error("Peripheral location encoding is unavailable") },
+        decodeLocation: (ByteArray) -> I = { error("Peripheral location decoding is unavailable") },
+    ) : this(
+        contracts,
+        discover,
+        side,
+        lookupName,
+        maximumHandles,
+        maximumSnapshots,
+        maximumSnapshotEntries,
+        encodeLocation,
+        decodeLocation,
+        PeripheralOwnership(),
+    )
+
+    private val owner = Any()
     private val contracts = contracts.associateBy { it.id }
     private val handles = linkedMapOf<Int, Retained<I>>()
     private val snapshots = linkedMapOf<Int, List<Retained<I>>>()
@@ -143,8 +176,9 @@ class PeripheralSession<I : Any>(
         if (contracts[contract.id] !== contract) invalid("Peripheral contract is not registered in this program")
         val retained = handles[handle] ?: stale("Unknown or expired peripheral handle")
         if (retained.contract !== contract) invalid("Peripheral handle belongs to a different contract")
-        if (!retained.endpoint.valid()) {
+        if (!retained.acquired || !retained.endpoint.valid()) {
             handles.remove(handle)
+            retained.release()
             stale("Peripheral was removed, replaced, disconnected, or unloaded")
         }
         // Contract identity was checked above; only its typed resolver can create the endpoint.
@@ -157,7 +191,7 @@ class PeripheralSession<I : Any>(
         handle: Int,
     ) {
         endpoint(contract, handle)
-        handles.remove(handle)
+        handles.remove(handle)?.release()
     }
 
     fun checkpoint(): ByteArray {
@@ -201,7 +235,7 @@ class PeripheralSession<I : Any>(
             val endpoint =
                 candidate?.endpoint?.takeIf { it.persistentIdentity == stamp }
                     ?: PeripheralEndpoint(Unit, Any()) { false }
-            return Retained(contract, identity, endpoint)
+            return Retained(contract, identity, endpoint, ownership, owner)
         }
         val restoredHandles = linkedMapOf<Int, Retained<I>>()
         repeat(reader.count(maximumHandles)) {
@@ -219,14 +253,35 @@ class PeripheralSession<I : Any>(
         reset()
         nextHandle = handleCursor
         nextSnapshot = snapshotCursor
-        handles.putAll(restoredHandles)
+        try {
+            restoredHandles.forEach { (id, retained) ->
+                retained.acquire()
+                handles[id] = retained
+            }
+        } catch (failure: Throwable) {
+            reset()
+            throw failure
+        }
         snapshots.putAll(restoredSnapshots)
     }
 
     fun reset() {
         snapshots.clear()
+        handles.values.forEach { it.release() }
         handles.clear()
         // Do not reuse issued tokens even when a host resets within the same program.
+    }
+
+    /** Release unavailable devices even when Guest code is not making device calls. */
+    fun expire() {
+        val iterator = handles.iterator()
+        while (iterator.hasNext()) {
+            val retained = iterator.next().value
+            if (!retained.acquired || !retained.endpoint.valid()) {
+                iterator.remove()
+                retained.release()
+            }
+        }
     }
 
     private fun contract(id: String): PeripheralContract<I, *> = contracts[id] ?: unavailable("Peripheral contract is not installed")
@@ -234,17 +289,18 @@ class PeripheralSession<I : Any>(
     private fun resolve(
         contract: PeripheralContract<I, *>,
         identity: PeripheralIdentity<I>,
-    ): Retained<I>? = contract.resolve(identity)?.takeIf { it.valid() }?.let { Retained(contract, identity, it) }
+    ): Retained<I>? = contract.resolve(identity)?.takeIf { it.valid() }?.let { Retained(contract, identity, it, ownership, owner) }
 
     private fun retain(retained: Retained<I>): Int {
         if (!retained.endpoint.valid()) stale("Peripheral snapshot device is no longer available")
-        handles.entries.removeIf { !it.value.endpoint.valid() }
+        expire()
         handles.entries
             .firstOrNull { (_, existing) ->
                 existing.contract === retained.contract && existing.endpoint.identity === retained.endpoint.identity
             }?.let { return it.key }
         if (handles.size >= maximumHandles) unavailable("Peripheral handle limit reached")
         val id = nextId(nextHandle, "handle")
+        retained.acquire()
         nextHandle += 1
         handles[id] = retained
         return id
@@ -264,7 +320,34 @@ class PeripheralSession<I : Any>(
         val contract: PeripheralContract<I, *>,
         val identity: PeripheralIdentity<I>,
         val endpoint: PeripheralEndpoint<*>,
-    )
+        private val ownership: PeripheralOwnership,
+        private val owner: Any,
+    ) {
+        var acquired = false
+            private set
+
+        fun acquire() {
+            check(!acquired)
+            ownership.acquire(endpoint.identity, owner, this, endpoint::valid, ::release)
+            try {
+                (endpoint.value as? PeripheralHandleLease)?.acquire()
+                acquired = true
+            } catch (failure: Throwable) {
+                ownership.release(endpoint.identity, this)
+                throw failure
+            }
+        }
+
+        fun release() {
+            if (!acquired) return
+            acquired = false
+            try {
+                (endpoint.value as? PeripheralHandleLease)?.release()
+            } finally {
+                ownership.release(endpoint.identity, this)
+            }
+        }
+    }
 
     private fun invalid(detail: String): Nothing = throw PeripheralFailure(HostFailureKind.OTHER, detail)
 
