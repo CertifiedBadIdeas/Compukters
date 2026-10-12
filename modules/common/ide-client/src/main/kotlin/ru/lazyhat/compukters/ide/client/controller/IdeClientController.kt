@@ -852,6 +852,12 @@ class IdeClientController(
         refreshComputerFiles()
     }
 
+    /** Lifecycle state for hosts that may still receive callbacks during application shutdown. */
+    fun isClosed(): Boolean {
+        checkOwner()
+        return closed
+    }
+
     fun isCloseReady(): Boolean {
         checkOwner()
         return closeReady

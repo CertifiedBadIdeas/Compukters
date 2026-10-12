@@ -54,6 +54,7 @@ headings so this page has one stable URL that can be shared outside the reposito
   share subtle borders and rounded corners; the embedded terminal shares the standalone terminal background
   and IDE window chrome and focus accent.
   Attached addon sources have a separate bounded allowance, so bundled library sources do not exhaust it.
+  Closed IDE screens ignore late ticks during screen transitions and client shutdown.
 
 - Guest Kotlin specializes `Array<T>` for all twelve non-null primitive families with dense, unboxed
   element storage, including constructors, indexed access, direct loops and concrete generic functions/classes.

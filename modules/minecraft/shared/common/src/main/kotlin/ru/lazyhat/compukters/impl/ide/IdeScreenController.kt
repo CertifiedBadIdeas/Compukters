@@ -370,7 +370,7 @@ class IdeScreenController(
         input.cancelExplorerDrag()
         splitters.focusLost()
         terminalOverlay.focusLost()
-        if (!sessionClosed) controller.dispatch(IdeCommand.EditorFocusLost)
+        if (!sessionClosed && !controller.isClosed()) controller.dispatch(IdeCommand.EditorFocusLost)
         if (!returningToParent) {
             host.abandonParent()
             closeSession()
@@ -378,6 +378,7 @@ class IdeScreenController(
     }
 
     fun tick() {
+        if (sessionClosed || controller.isClosed()) return
         controller.tick()
         terminalOverlay.setTarget(
             controller
