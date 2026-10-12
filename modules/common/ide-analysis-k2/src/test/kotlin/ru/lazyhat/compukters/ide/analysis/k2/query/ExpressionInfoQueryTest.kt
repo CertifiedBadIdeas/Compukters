@@ -132,7 +132,11 @@ class ExpressionInfoQueryTest {
                         ) as AnalysisResult.ExpressionInfo
                     ).value,
                 )
-            assertEquals("Returns this value when [predicate] is true, or null otherwise.", info.documentation)
+            val documentation = assertNotNull(info.documentation)
+            assertTrue(documentation.startsWith("Returns this value when [predicate] is true, or null otherwise."))
+            assertTrue(documentation.contains("@receiver "))
+            assertTrue(documentation.contains("@param predicate "))
+            assertTrue(documentation.contains("@return "))
         }
     }
 
