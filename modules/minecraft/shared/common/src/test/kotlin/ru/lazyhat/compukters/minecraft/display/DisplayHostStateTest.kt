@@ -20,6 +20,96 @@ import kotlin.test.assertTrue
 
 class DisplayHostStateTest {
     @Test
+    fun `pointer polling uses bounded little endian fields and requires capability minor three`() {
+        val endpoint = FakeDisplayEndpoint()
+        val host = DisplayHostState({ endpoint }, { DisplayResolution.Found(endpoint) })
+        val handle = assertIs<HostResponse.IntSuccess>(host.call(0, VmValue.I32(0))).value
+        assertEquals(0, assertIs<HostResponse.ByteArraySuccess>(host.call(18, VmValue.I32(handle))).value.size)
+        assertTrue(
+            endpoint.canvas.offerPointer(
+                ru.lazyhat.compukters.core.display
+                    .DisplayPointerEvent(0, 0x123456, 12, 9),
+            ),
+        )
+        kotlin.test.assertContentEquals(
+            byteArrayOf(0, 0, 0, 0, 0x56, 0x34, 0x12, 0, 12, 0, 0, 0, 9, 0, 0, 0),
+            assertIs<HostResponse.ByteArraySuccess>(host.call(18, VmValue.I32(handle))).value,
+        )
+        val old =
+            ProgramAddonRequest(
+                VmHostRequestIdentity(1, 1),
+                ru.lazyhat.compukters.lang.runtime.vm
+                    .CapabilityIdentity("compukters", "display", 1, 2),
+                18,
+                listOf(VmValue.I32(handle)),
+            )
+        assertIs<HostResponse.Failure>(assertIs<ProgramAddonDispatch.Completed>(host.dispatch(old)).response)
+        host.reset()
+        val replacement = assertIs<HostResponse.IntSuccess>(host.call(0, VmValue.I32(0))).value
+        assertEquals(0, assertIs<HostResponse.ByteArraySuccess>(host.call(18, VmValue.I32(replacement))).value.size)
+    }
+
+    @Test
+    fun `clipped line and text operations preserve pixels outside their explicit region`() {
+        val endpoint = FakeDisplayEndpoint()
+        val host = DisplayHostState({ endpoint }, { DisplayResolution.Found(endpoint) })
+        val handle = assertIs<HostResponse.IntSuccess>(host.call(0, VmValue.I32(0))).value
+        host.call(8, VmValue.I32(handle), VmValue.I32(0x123456))
+        assertEquals(
+            HostResponse.UnitSuccess,
+            host.call(
+                19,
+                VmValue.I32(handle),
+                VmValue.I32(-100),
+                VmValue.I32(5),
+                VmValue.I32(100),
+                VmValue.I32(5),
+                VmValue.I32(0xFF0000),
+                VmValue.I32(4),
+                VmValue.I32(5),
+                VmValue.I32(3),
+                VmValue.I32(2),
+            ),
+        )
+        assertEquals(0xFF0000, endpoint.canvas.pixelAt(4, 5))
+        assertEquals(0x123456, endpoint.canvas.pixelAt(3, 5))
+        assertEquals(0x123456, endpoint.canvas.pixelAt(7, 5))
+        assertEquals(
+            HostResponse.UnitSuccess,
+            host.call(
+                20,
+                VmValue.I32(handle),
+                VmValue.I32(0),
+                VmValue.I32(0),
+                VmValue.StringValue("WWW"),
+                VmValue.I32(0x00FF00),
+                VmValue.I32(1),
+                VmValue.I32(4),
+                VmValue.I32(5),
+                VmValue.I32(3),
+                VmValue.I32(2),
+            ),
+        )
+        assertEquals(0x123456, endpoint.canvas.pixelAt(3, 5))
+        assertEquals(0x123456, endpoint.canvas.pixelAt(7, 5))
+        assertIs<HostResponse.Failure>(
+            host.call(
+                19,
+                VmValue.I32(handle),
+                VmValue.I32(0),
+                VmValue.I32(0),
+                VmValue.I32(1),
+                VmValue.I32(1),
+                VmValue.I32(0),
+                VmValue.I32(0),
+                VmValue.I32(0),
+                VmValue.I32(-1),
+                VmValue.I32(2),
+            ),
+        )
+    }
+
+    @Test
     fun `older display capability minors retain drawing but cannot poll input`() {
         val endpoint = FakeDisplayEndpoint()
         val host = DisplayHostState({ endpoint }, { DisplayResolution.Found(endpoint) })

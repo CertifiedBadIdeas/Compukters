@@ -21,6 +21,7 @@ object DisplayClientBootstrap {
         @Suppress("UNUSED_PARAMETER") event: net.neoforged.neoforge.client.event.ClientTickEvent.Post,
     ) {
         DisplayTextureCache.cleanup()
+        DisplayPointerClient.tick()
     }
 
     private fun registerRenderers(event: EntityRenderersEvent.RegisterRenderers) {

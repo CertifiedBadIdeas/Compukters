@@ -53,6 +53,9 @@ private object DisplayBindings {
     external fun beginFrame(handle: Int)
     external fun commitFrame(handle: Int)
     external fun pollClick(handle: Int): ByteArray
+    external fun pollPointer(handle: Int): ByteArray
+    external fun lineClipped(handle: Int, x0: Int, y0: Int, x1: Int, y1: Int, color: Int, clipX: Int, clipY: Int, clipWidth: Int, clipHeight: Int)
+    external fun textClipped(handle: Int, x: Int, y: Int, text: String, color: Int, scale: Int, clipX: Int, clipY: Int, clipWidth: Int, clipHeight: Int)
     external fun abortFrame(handle: Int)
 }
 
@@ -60,6 +63,27 @@ private object DisplayBindings {
 public value class DisplayClick(
     val position: Position2i,
 )
+
+/** Pointer lifecycle; Cancel with gesture zero cancels every captured gesture. */
+public enum class DisplayPointerKind { DOWN, DRAG, UP, CANCEL }
+
+public value class DisplayPointerEvent internal constructor(private val tag: Int, val gesture: Int, val position: Position2i) {
+    public val kind: DisplayPointerKind
+        get() = when (tag) {
+            0 -> DisplayPointerKind.DOWN
+            1 -> DisplayPointerKind.DRAG
+            2 -> DisplayPointerKind.UP
+            else -> DisplayPointerKind.CANCEL
+        }
+}
+
+public fun DisplayPointerEvent(kind: DisplayPointerKind, gesture: Int, position: Position2i): DisplayPointerEvent =
+    DisplayPointerEvent(when (kind) {
+        DisplayPointerKind.DOWN -> 0
+        DisplayPointerKind.DRAG -> 1
+        DisplayPointerKind.UP -> 2
+        DisplayPointerKind.CANCEL -> 3
+    }, gesture, position)
 
 /** Pixels per installed block; the same density also applies to holes in the canvas. */
 public enum class DisplayMode {
@@ -126,6 +150,29 @@ public value class GraphicalDisplay internal constructor(private val handle: Int
             (bytes[4].toInt() and 255) or ((bytes[5].toInt() and 255) shl 8) or
                 ((bytes[6].toInt() and 255) shl 16) or ((bytes[7].toInt() and 255) shl 24)
         return DisplayClick(Vector2i(x, y))
+    }
+
+    /** Polls transient held-right-click input in whole-screen coordinates, independently of pollClick. */
+    public fun pollPointer(): DisplayPointerEvent? {
+        val bytes = DisplayBindings.pollPointer(handle)
+        if (bytes.size == 0) return null
+        check(bytes.size == 16)
+        val code = pointerInt(bytes, 0)
+        val kind = when (code) {
+            0 -> DisplayPointerKind.DOWN
+            1 -> DisplayPointerKind.DRAG
+            2 -> DisplayPointerKind.UP
+            else -> { check(code == 3); DisplayPointerKind.CANCEL }
+        }
+        return DisplayPointerEvent(kind, pointerInt(bytes, 4), Vector2i(pointerInt(bytes, 8), pointerInt(bytes, 12)))
+    }
+
+    internal fun lineClipped(start: Position2i, end: Position2i, color: Int, clip: Rect2i) {
+        DisplayBindings.lineClipped(handle, start.x, start.y, end.x, end.y, color, clip.left, clip.top, clip.size.x, clip.size.y)
+    }
+
+    internal fun textClipped(position: Position2i, text: String, color: Int, scale: Int, clip: Rect2i) {
+        DisplayBindings.textClipped(handle, position.x, position.y, text, color, scale, clip.left, clip.top, clip.size.x, clip.size.y)
     }
 
     public fun clear(color: Int = 0x000000) { DisplayBindings.fill(handle, color) }
@@ -209,3 +256,7 @@ public inline fun GraphicalDisplay.frame(block: GraphicalDisplay.() -> Unit) {
         if (!completed) abortFrame()
     }
 }
+
+private fun pointerInt(bytes: ByteArray, offset: Int): Int =
+    (bytes[offset].toInt() and 255) or ((bytes[offset + 1].toInt() and 255) shl 8) or
+        ((bytes[offset + 2].toInt() and 255) shl 16) or ((bytes[offset + 3].toInt() and 255) shl 24)
