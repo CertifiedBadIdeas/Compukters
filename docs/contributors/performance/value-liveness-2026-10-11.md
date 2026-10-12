@@ -1,8 +1,7 @@
 ---
 layout: default
 title: Value liveness with indexed bitsets
-parent: Performance
-nav_exclude: true
+section: contributors
 ---
 
 # Value liveness with indexed bitsets — 2026-10-11

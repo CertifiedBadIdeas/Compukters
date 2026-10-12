@@ -1,8 +1,7 @@
 ---
 layout: default
 title: Guest editor first compilation
-parent: Performance
-nav_exclude: true
+section: contributors
 ---
 
 # Guest editor first compilation — 2026-10-11

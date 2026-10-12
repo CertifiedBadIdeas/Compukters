@@ -31,7 +31,8 @@ unbind it before joining a different network. Names must be unique within the ne
 
 The network persists independently of its computers. After replacing a computer, select the existing network by
 clicking one of its peripherals, then bind the new computer. Other members keep their bindings and names. A replacement
-peripheral does not inherit the removed block's membership.
+peripheral does not normally inherit the removed block's membership. A matching display panel placed inside an
+existing screen automatically rejoins that screen and its network; see [Display]({{ '/DISPLAY/' | relative_url }}).
 
 Each computer can reach loaded peripherals in the same dimension within 64 blocks of itself, measured in three dimensions.
 The server can configure this through `peripherals.access_radius` (1–1,024 blocks). Joining a distant member is allowed:
@@ -56,11 +57,10 @@ import compukter.display.TextDisplay
 fun main() {
     val screen = TextDisplay.named("panel")
     screen.writeAt(0, 0, "Connected")
-    readln() // Keep the program alive while it owns the output.
 }
 ```
 
-An adjacent display can instead be opened with `TextDisplay.at(Side.front)`. Follow the
+The published image remains visible after the program exits. An adjacent display can instead be opened with `TextDisplay.at(Side.front)`. Follow the
 [display guide]({{ '/DISPLAY/' | relative_url }}) for bounds and output ownership.
 
 ## Send messages between computers

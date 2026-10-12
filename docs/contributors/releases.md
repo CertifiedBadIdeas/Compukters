@@ -28,13 +28,16 @@ only after a pushed release tag passes archive and inventory verification.
 
 Publish the matching native Runtime first. The mod's Runtime contract in
 `config/runtime-release.properties` selects the published Runtime version and its
-release commit. The mod accepts every revision of native ABI 21; the selected
+release commit. The current JNI and FFM transports require native C ABI 23; a compatible selected
 release need not match the development VM submodule commit. To select another
 compatible revision, provide its descriptor with `-PcompukterRuntimeReleaseFile=/path/to/runtime-release.properties`.
 The selected identity must match the published Linux/Windows assets and their manifests. A source-built
 native that implements newer artifact reader features does not establish that an
 older published bundle supports those features. Keep these contracts aligned when
 preparing the candidate; missing or mismatched Runtime assets stop the release.
+The checked-in descriptor currently selects Runtime 0.22.0, while this checkout requires ABI 23. Before tagged
+packaging, select a compatible published Runtime 0.23.x descriptor; the old default does not establish release
+readiness. Check the selected version and commit against `config/runtime-release.properties` when preparing a candidate.
 Both mod JARs record the selected native release at `META-INF/compukters/runtime.properties`.
 Inventory schema 4 records that actual component separately from the source submodule revision;
 the transfer tool retains readers for inventories 1, 2 and 3 when resuming their publication.

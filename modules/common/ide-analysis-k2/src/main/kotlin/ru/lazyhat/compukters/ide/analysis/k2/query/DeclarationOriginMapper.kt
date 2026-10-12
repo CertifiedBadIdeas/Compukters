@@ -131,17 +131,22 @@ internal fun KaSession.canonicalPlatformSignature(symbol: KaFunctionSymbol): Str
         symbol.valueParameters
             .map { it.returnType }
             .joinToString(",") { type ->
-                type.render(KaTypeRendererForSource.WITH_SHORT_NAMES, Variance.INVARIANT)
+                type.render(KaTypeRendererForSource.WITH_SHORT_NAMES, Variance.INVARIANT).canonicalPlatformTypeText()
             }
-    val result = symbol.returnType.render(KaTypeRendererForSource.WITH_SHORT_NAMES, Variance.INVARIANT)
+    val result = symbol.returnType.render(KaTypeRendererForSource.WITH_SHORT_NAMES, Variance.INVARIANT).canonicalPlatformTypeText()
     val receiver =
         symbol.receiverParameter
             ?.returnType
             ?.render(KaTypeRendererForSource.WITH_SHORT_NAMES, Variance.INVARIANT)
+            ?.canonicalPlatformTypeText()
             ?.let { "$it." }
             .orEmpty()
     return "fun($receiver$parameters):$result"
 }
+
+// PlatformMetadataCompiler indexes source type syntax without whitespace or use-site variance.
+// Normalize nested generics and callback syntax the same way without changing displayed signatures.
+private fun String.canonicalPlatformTypeText(): String = replace(Regex("\\b(out|in)\\s+"), "").replace(Regex("\\s+"), "")
 
 private fun KaSymbol.stableId(): String? =
     when (this) {

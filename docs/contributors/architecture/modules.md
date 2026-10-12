@@ -44,11 +44,14 @@ existing Gradle project paths and artifact names remain flat and stable.
 | `minecraft/shared/neoforge` | Canonical NeoForge integration sources, resources, and tests compiled against every supported loader target |
 | `v1_21_1-common` | Minecraft 1.21.1 compatibility adapters over the shared computer carrier |
 | `v1_21_1-addon-neoforge-api` | Thin NeoForge 1.21.1 addon SDK adapter |
+| `addons/sable` | Standalone construction observation addon, typed physics snapshots, and focused lifecycle tests |
+| `addons/propulsion` | Standalone creative engine and vector-thrust addon, control leases, and focused lifecycle tests |
+| `addons/dev` | Combined development stand and verification composition for independent addons |
 | `addons/create` | Standalone Gradle build for the independently packaged Create 6.0.x Guest API bundle, kinetic-device adapter, bounded host state, and focused tests |
 | `v1_21_1-neoforge` | NeoForge 1.21.1 compatibility adapters, Java 21 JNI packaging, and production archive |
 | `v26_1-common` | Minecraft 26.1 compatibility adapters over the shared computer carrier |
 | `v26_1-addon-neoforge-api` | Thin NeoForge 26.1.2 addon SDK adapter |
-| `v26_1-neoforge` | NeoForge 26.1 compatibility adapters, client UI, GameTests, resources, and production archive |
+| `v26_1-neoforge` | NeoForge 26.1.2 compatibility adapters, Java 25 FFM packaging, and production archive |
 | `host/compukter-vm` | Artifact verification, managed Rust execution runtime, and VM-owned versioned C ABI in its `ffi` workspace member |
 
 Ownership rules:
