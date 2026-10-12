@@ -30,7 +30,8 @@ headings so this page has one stable URL that can be shared outside the reposito
   preserve quaternion identity and support explicit conversions with the corresponding four-dimensional vectors.
   `Rotation3f`/`Rotation3d` represent spatial rotations through normalized quaternions, with composition,
   inverse, axis-angle and direction-to-direction factories, shortest-arc spherical interpolation, angular distance,
-  vector transforms and matrix conversion. Float rotations use Double intermediates for composition.
+  vector transforms, matrix conversion and read-only quaternion component access through `x`, `y`, `z`, `w`.
+  Float rotations use Double intermediates for composition.
   `Matrix3f`, `Matrix3d` and `Matrix4d` provide row-major transforms and bounded native matrix kernels;
   Double variants retain Double precision through multiplication and projection.
 

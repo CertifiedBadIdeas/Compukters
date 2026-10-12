@@ -13,6 +13,22 @@ package kotlin.math
 public value class Rotation3d private constructor(
     val quaternion: Quaterniond,
 ) {
+    /** The quaternion's x component. */
+    public val x: Double
+        get() = quaternion.x
+
+    /** The quaternion's y component. */
+    public val y: Double
+        get() = quaternion.y
+
+    /** The quaternion's z component. */
+    public val z: Double
+        get() = quaternion.z
+
+    /** The quaternion's w component. */
+    public val w: Double
+        get() = quaternion.w
+
     /** Composition applying other first, then this rotation. */
     public operator fun times(other: Rotation3d): Rotation3d = fromQuaternion(quaternion * other.quaternion)
 
