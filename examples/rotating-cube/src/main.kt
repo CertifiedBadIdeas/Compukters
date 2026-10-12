@@ -83,7 +83,7 @@ fun main() {
         }
     val axisBits = intArrayOf(1, 2, 4)
     val axisColors = intArrayOf(0xFF6688, 0x66EEAA, 0x66BBFF)
-    var angle = 0f
+    val rotationControl: UiSlider
     val ui = displayUi(Rect2i(12 xy 12, uiSize)) {
         column(spacing = 6) {
             text("Hold RMB and aim to rotate", uiSize.x by 14) { color = 0x66BBFF }
@@ -98,9 +98,7 @@ fun main() {
                     }
                 }
             }
-            slider(uiSize.x by 20, 0f, (PI * 2.0).toFloat()) {
-                onValueChange = { angle = it }
-            }
+            rotationControl = slider(uiSize.x by 20, 0f, (PI * 2.0).toFloat())
         }
     }
     println("Cube slider on ${screen.width}x${screen.height}; hold RMB and aim; Ctrl+C stops")
@@ -111,7 +109,7 @@ fun main() {
             ui.dispatch(event)
             count++
         }
-        val orientation = Rotation3f.fromAxisAngle(Vector3f(0.7f, 1f, 0.3f), angle)
+        val orientation = Rotation3f.fromAxisAngle(Vector3f(0.7f, 1f, 0.3f), rotationControl.value)
         val transform = viewProjection * orientation.toMatrix4f()
         for (index in 0 until 8) projected[index] = project(transform * corners[index], viewport)
         screen.frame {

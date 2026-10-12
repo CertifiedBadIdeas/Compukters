@@ -4,7 +4,12 @@
  * Licensed under the Apache License, Version 2.0.
  */
 
+@file:OptIn(kotlin.contracts.ExperimentalContracts::class)
+
 package compukter.display
+
+import kotlin.contracts.InvocationKind
+import kotlin.contracts.contract
 
 import compukter.peripheral.Peripheral
 import compukter.peripheral.TypedPeripheralProvider
@@ -246,6 +251,7 @@ public value class GraphicalDisplay internal constructor(private val handle: Int
 
 /** Publishes all enclosed changes together; exceptions discard the pending frame. Nested frames fail. */
 public inline fun GraphicalDisplay.frame(block: GraphicalDisplay.() -> Unit) {
+    contract { callsInPlace(block, InvocationKind.EXACTLY_ONCE) }
     beginFrame()
     var completed = false
     try {

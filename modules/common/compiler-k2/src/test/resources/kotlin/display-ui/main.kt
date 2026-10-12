@@ -23,10 +23,10 @@ fun main() {
     var first = 0
     var second = 0
     var draws = 0
-    var button: UiButton? = null
-    var slider: UiSlider? = null
-    var canvas: UiCanvas? = null
-    var builder: UiBuilder? = null
+    val button: UiButton
+    val slider: UiSlider
+    val canvas: UiCanvas
+    val builder: UiBuilder
     var localPoint = Vector2i(0, 0)
     var cancelled = 0
     val ui = displayUi(Rect2i(100 xy 50, 80 by 80)) {
@@ -61,27 +61,27 @@ fun main() {
     check(ui.dispatch(DisplayClick(100 xy 50)) && first == 1)
     check(!ui.dispatch(DisplayClick(110 xy 50))) // row gap, half-open edge
     check(ui.dispatch(DisplayClick(112 xy 50)) && second == 1)
-    button!!.enabled = false
+    button.enabled = false
     check(ui.dispatch(DisplayClick(112 xy 50)) && second == 1)
     check(ui.dispatch(DisplayClick(100 xy 90)) && first == 1 && second == 1)
     check(ui.dispatch(DisplayClick(120 xy 90)) && first == 1)
     check(!ui.dispatch(DisplayClick(180 xy 50))) // viewport right edge
     check(draws == 0)
-    button!!.label = "updated"
-    check(button!!.label == "updated")
+    button.label = "updated"
+    check(button.label == "updated")
     var changes = 0
-    slider!!.onValueChange = { changes++ }
-    slider!!.value = -100f
-    check(slider!!.value == -1f && changes == 0)
-    slider!!.value = 100f
-    check(slider!!.value == 1f && changes == 0)
+    slider.onValueChange = { changes++ }
+    slider.value = -100f
+    check(slider.value == -1f && changes == 0)
+    slider.value = 100f
+    check(slider.value == 1f && changes == 0)
     var invalidValue = false
-    try { slider!!.value = Float.NaN } catch (error: IllegalArgumentException) { invalidValue = true }
-    check(invalidValue && slider!!.value == 1f)
+    try { slider.value = Float.NaN } catch (error: IllegalArgumentException) { invalidValue = true }
+    check(invalidValue && slider.value == 1f)
     check(ui.dispatch(DisplayPointerEvent(DisplayPointerKind.DOWN, 1, 110 xy 64)))
-    check(slider!!.value == 0f)
+    check(slider.value == 0f)
     check(ui.dispatch(DisplayPointerEvent(DisplayPointerKind.DRAG, 1, 179 xy 100)))
-    check(slider!!.value == 1f && changes == 2) // capture outside slider bounds
+    check(slider.value == 1f && changes == 2) // capture outside slider bounds
     check(ui.dispatch(DisplayPointerEvent(DisplayPointerKind.UP, 1, 179 xy 100)))
     check(!ui.dispatch(DisplayPointerEvent(DisplayPointerKind.DRAG, 1, 100 xy 64)))
     check(ui.dispatch(DisplayPointerEvent(DisplayPointerKind.DOWN, 2, 141 xy 52)))
@@ -96,7 +96,7 @@ fun main() {
     ui.dispatch(DisplayPointerEvent(DisplayPointerKind.CANCEL, 0, 0 xy 0))
     check(!ui.dispatch(DisplayPointerEvent(DisplayPointerKind.UP, 3, 0 xy 0)))
     var rejected = false
-    try { builder!!.button("late", 1 by 1) } catch (error: IllegalStateException) { rejected = true }
+    try { builder.button("late", 1 by 1) } catch (error: IllegalStateException) { rejected = true }
     check(rejected)
     val failures = displayUi(Rect2i(0 xy 0, 10 by 10)) {
         button("error", 10 by 10) { onClick = { throw IllegalArgumentException("handler") } }

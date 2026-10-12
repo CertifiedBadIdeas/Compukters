@@ -437,15 +437,19 @@ for live RPM, stress, controller commands, bounded history and connection/load a
 
 ### Declarative display UI
 
-`compukter:core` 7.4.0 adds a small persistent widget tree. `displayUi(bounds) { ... }` builds it once;
+`compukter:core` supplies a small persistent widget tree. `displayUi(bounds) { ... }` builds it once;
 `bounds` is a screen-space `Rect2i` that can be moved/resized explicitly. `row(spacing)`, `column(spacing)`
 and `at(position)` determine fixed pixel layout. Leaf sizes are explicit, containers derive their content
 extents, and resizing the viewport clips content rather than rebuilding/reflowing it. Retain returned
 `UiText`, `UiButton`, `UiIndicator`, `UiGauge`, `UiChart`, `UiSlider` or `UiCanvas` references to update
-properties. There is no dependency tracking, recomposition, polling or background scheduler.
+properties. Construction blocks on `displayUi`, `row`, `column` and `at` have `EXACTLY_ONCE`
+contracts, so nested blocks can initialize non-null local `val` references. Optional nullable widget
+configuration blocks have no definite-initialization guarantee; assign the returned widget instead.
+Deferred input/drawing handlers have no calls-in-place contract. There is no dependency tracking,
+recomposition, polling or background scheduler.
 
 ```kotlin
-var angle = 0f
+val rotation: UiSlider
 val ui = displayUi(Rect2i(12 xy 12, 168 by 160)) {
     column(spacing = 8) {
         canvas(168 by 132) {
@@ -455,13 +459,12 @@ val ui = displayUi(Rect2i(12 xy 12, 168 by 160)) {
                 line(0, 0, size.x - 1, size.y - 1, Colors.CYAN)
             }
         }
-        slider(168 by 20, 0f, (PI * 2.0).toFloat()) {
-            onValueChange = { angle = it }
-        }
+        rotation = slider(168 by 20, 0f, (PI * 2.0).toFloat())
     }
 }
 // In the program's update loop:
 ui.dispatch(screen.pollPointer())
+val angle = rotation.value // Non-null reference initialized during construction.
 screen.frame { clear(Colors.BLACK); ui.draw(this) }
 ```
 

@@ -31,6 +31,46 @@ import kotlin.test.assertTrue
 
 class DiagnosticQueryTest {
     @Test
+    fun `classic contracts and platform construction effects resolve with source and metadata inputs`() {
+        val source =
+            """
+            @file:OptIn(kotlin.contracts.ExperimentalContracts::class)
+            import kotlin.contracts.*
+            import compukter.display.*
+            import kotlin.math.*
+            fun text(value: Any?): Boolean {
+                contract { returns(true) implies (value is String) }
+                return value is String
+            }
+            fun main() {
+                val name: String
+                run { name = "panel" }
+                check(name.length == 5)
+                val widget: UiSlider
+                val ui = displayUi(Rect2i(0 xy 0, 80 by 80)) {
+                    column { row { widget = slider(20 by 10) } }
+                }
+                widget.value = 0.5f
+                val length: Int
+                buildString { length = 3; append("abc") }
+                check(length == 3)
+                val value: Any? = "text"
+                if (text(value)) check(value.length == 4)
+                val required: String? = "ok"
+                require(required != null)
+                check(required.length == 2)
+            }
+            """.trimIndent()
+        for (attachedSources in listOf(false, true)) {
+            K2QueryFixture.sourceWithGuestApi(attachedSources, "main.kt" to source).use { fixture ->
+                val result = fixture.execute(fixture.presentation()) as AnalysisResult.Presentation
+                val active = result.value.accept(fixture.identity) as SnapshotPresentationAcceptance.Active
+                assertTrue(active.diagnostics.none { it.severity == EditorDiagnosticSeverity.Error }, active.diagnostics.toString())
+            }
+        }
+    }
+
+    @Test
     fun `unresolved identifiers carry a distinct highlight with their full token range`() {
         val source = "fun main() { missingSymbol() }"
         K2QueryFixture.source("main.kt" to source).use { fixture ->

@@ -16,7 +16,12 @@
  * limitations under the License.
  */
 
+@file:OptIn(kotlin.contracts.ExperimentalContracts::class)
+
 package compukter.display
+
+import kotlin.contracts.InvocationKind
+import kotlin.contracts.contract
 
 import kotlin.math.Position2i
 import kotlin.math.Rect2i
@@ -227,14 +232,24 @@ public class UiBuilder internal constructor(private val direction: Int, private 
         return element
     }
 
-    public fun row(spacing: Int = 0, block: UiBuilder.() -> Unit): UiElement = group(1, spacing, Vector2i(0, 0), block)
+    public fun row(spacing: Int = 0, block: UiBuilder.() -> Unit): UiElement {
+        contract { callsInPlace(block, InvocationKind.EXACTLY_ONCE) }
+        return group(1, spacing, Vector2i(0, 0), block)
+    }
 
-    public fun column(spacing: Int = 0, block: UiBuilder.() -> Unit): UiElement = group(2, spacing, Vector2i(0, 0), block)
+    public fun column(spacing: Int = 0, block: UiBuilder.() -> Unit): UiElement {
+        contract { callsInPlace(block, InvocationKind.EXACTLY_ONCE) }
+        return group(2, spacing, Vector2i(0, 0), block)
+    }
 
     /** Offsets a group relative to its parent; row/column flow adds its offset before this position. */
-    public fun at(position: Position2i, block: UiBuilder.() -> Unit): UiElement = group(0, 0, position, block)
+    public fun at(position: Position2i, block: UiBuilder.() -> Unit): UiElement {
+        contract { callsInPlace(block, InvocationKind.EXACTLY_ONCE) }
+        return group(0, 0, position, block)
+    }
 
     private fun group(direction: Int, spacing: Int, position: Position2i, block: UiBuilder.() -> Unit): UiElement {
+        contract { callsInPlace(block, InvocationKind.EXACTLY_ONCE) }
         if (closed) throw IllegalStateException("UI construction has finished")
         val builder = UiBuilder(direction, spacing)
         builder.block()
@@ -351,6 +366,7 @@ public class DisplayUi internal constructor(bounds: Rect2i, private val root: Ui
 
 /** Build once, then retain widget references for explicit updates. Root/leaf viewports clip drawing. */
 public fun displayUi(bounds: Rect2i, block: UiBuilder.() -> Unit): DisplayUi {
+    contract { callsInPlace(block, InvocationKind.EXACTLY_ONCE) }
     val builder = UiBuilder(0, 0)
     builder.block()
     return DisplayUi(bounds, builder.finish())

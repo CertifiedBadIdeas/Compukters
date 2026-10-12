@@ -434,3 +434,8 @@ effects and compile time erasure`, `contract descriptions emit the same executab
 functions` and `invalid contract effects and insufficient initialization guarantees are rejected`;
 `testKotlinContractsVmConformance`. Metadata-only declarations/defaults are covered by
 `PlatformMetadataCompilerTest`, test `compile time contracts and annotation defaults remain metadata only`.
+
+Platform effects on scope functions, preconditions, `buildString`, display `frame` and UI construction
+are available without opting in at call sites. `DiagnosticQueryTest`, test `classic contracts and platform
+construction effects resolve with source and metadata inputs`, covers IDE diagnostics with and without
+attached SDK sources. Nested UI initialization executes in `testKotlinDisplayUiVmConformance`.

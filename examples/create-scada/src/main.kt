@@ -42,18 +42,18 @@ fun runDashboard(iterations: Int = -1) {
     var previouslyConnected = false
     var requested: Int? = null
     var currentTarget = 0
-    var connection: UiIndicator? = null
-    var speedText: UiText? = null
-    var targetText: UiText? = null
-    var controlIndicator: UiIndicator? = null
-    var shaftIndicator: UiIndicator? = null
-    var loadText: UiText? = null
-    var loadGauge: UiGauge? = null
-    var alarm: UiIndicator? = null
-    var slower: UiButton? = null
-    var faster: UiButton? = null
-    var stop: UiButton? = null
-    var resume: UiButton? = null
+    val connection: UiIndicator
+    val speedText: UiText
+    val targetText: UiText
+    val controlIndicator: UiIndicator
+    val shaftIndicator: UiIndicator
+    val loadText: UiText
+    val loadGauge: UiGauge
+    val alarm: UiIndicator
+    val slower: UiButton
+    val faster: UiButton
+    val stop: UiButton
+    val resume: UiButton
     val ui = displayUi(area(0, 0, 384, 384)) {
         at(12 xy 10) { text("CREATE DRIVE", 360 by 24) { color = 0xDAEAF4; scale = 2 } }
         at(12 xy 42) { connection = indicator("NO TELEMETRY", 360 by 14) }
@@ -118,21 +118,21 @@ fun runDashboard(iterations: Int = -1) {
         previouslyConnected = connected
         currentTarget = target
         requested = null
-        connection!!.label = if (connected) "CONNECTED" else "NO TELEMETRY"
-        connection!!.color = if (connected) Colors.GREEN else Colors.RED
-        speedText!!.text = "Speed: " + if (finite(rpm)) "${rpm.toInt()} rpm" else "--"
-        targetText!!.text = "Target: " + if (connected) "$target rpm" else "--"
-        controlIndicator!!.color = if (connected && target != 0) Colors.CYAN else 0x687D8C
-        shaftIndicator!!.color = if (finite(rpm) && abs(rpm) > .01f) Colors.GREEN else 0x687D8C
-        loadText!!.text = "Load: " + if (finite(load)) "${load.toInt()}%" else "--"
-        loadGauge!!.value = load
-        loadGauge!!.color = if (load >= ALARM_LOAD) Colors.RED else Colors.GREEN
-        slower!!.enabled = connected
-        faster!!.enabled = connected
-        stop!!.enabled = connected
-        resume!!.enabled = connected && target == 0
-        alarm!!.label = if (!connected) "ALARM: TELEMETRY LOST" else if (load >= ALARM_LOAD) "ALARM: HIGH LOAD" else "STATUS: NORMAL"
-        alarm!!.color = if (!connected || load >= ALARM_LOAD) Colors.RED else Colors.GREEN
+        connection.label = if (connected) "CONNECTED" else "NO TELEMETRY"
+        connection.color = if (connected) Colors.GREEN else Colors.RED
+        speedText.text = "Speed: " + if (finite(rpm)) "${rpm.toInt()} rpm" else "--"
+        targetText.text = "Target: " + if (connected) "$target rpm" else "--"
+        controlIndicator.color = if (connected && target != 0) Colors.CYAN else 0x687D8C
+        shaftIndicator.color = if (finite(rpm) && abs(rpm) > .01f) Colors.GREEN else 0x687D8C
+        loadText.text = "Load: " + if (finite(load)) "${load.toInt()}%" else "--"
+        loadGauge.value = load
+        loadGauge.color = if (load >= ALARM_LOAD) Colors.RED else Colors.GREEN
+        slower.enabled = connected
+        faster.enabled = connected
+        stop.enabled = connected
+        resume.enabled = connected && target == 0
+        alarm.label = if (!connected) "ALARM: TELEMETRY LOST" else if (load >= ALARM_LOAD) "ALARM: HIGH LOAD" else "STATUS: NORMAL"
+        alarm.color = if (!connected || load >= ALARM_LOAD) Colors.RED else Colors.GREEN
         ui.dispatch(click)
         screen.frame {
             clear(0x101820)
