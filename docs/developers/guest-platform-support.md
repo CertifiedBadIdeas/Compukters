@@ -233,7 +233,7 @@ See [Display]({{ '/DISPLAY/' | relative_url }}).
 
 `RedstonePort` is a typed built-in provider exposing six `RedstonePortSide` values with input reads, weak/direct
 outputs, edge/exact/threshold waits and `close()`. Port-level `set` defaults to `RedstonePort.Side.ALL` and
-updates all faces atomically; a specific enum side or the per-face facade selects one output. All operations suspend for bounded server host I/O.
+updates all faces atomically; a specific enum side selects one output. Per-face facades expose only input readings and waits. All operations suspend for bounded server host I/O.
 The additive `compukters:redstone-port` capability is ABI 1.0. Acquisition is process-exclusive through the shared
 peripheral registry; output levels and waits are transient. The computer's own GPIO remains a separate API.
 

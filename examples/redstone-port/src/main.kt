@@ -12,9 +12,9 @@ fun main() {
     try {
         while (true) {
             relay.front.awaitAtLeast(7)
-            relay.right.set(15, Redstone.Power.DIRECT)
+            relay.set(15, Redstone.Power.DIRECT, side = RedstonePort.Side.RIGHT)
             relay.front.await(0)
-            relay.right.set(0)
+            relay.set(0, side = RedstonePort.Side.RIGHT)
         }
     } finally {
         relay.close()
