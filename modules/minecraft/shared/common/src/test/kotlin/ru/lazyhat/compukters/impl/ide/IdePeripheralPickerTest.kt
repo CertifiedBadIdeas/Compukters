@@ -26,6 +26,75 @@ import kotlin.test.assertTrue
 
 class IdePeripheralPickerTest {
     @Test
+    fun `window painter keeps shared button surfaces and borders visible above picker background`() {
+        val geometry = IdeRenderGeometry.compute(960, 540, 180, 120, true, true, IdeCodeFontProfile.DEFAULT)
+        for (view in listOf(
+            IdePeripheralPickerView(),
+            IdePeripheralPickerView(loading = true),
+            IdePeripheralPickerView(listOf(IdeNamedPeripheral("speed", "create:speedometer")), writable = true),
+        )) {
+            val output = IdeDrawBuilder(geometry.font)
+            IdePeripheralPicker.draw(output, geometry.content, view)
+            val model = output.build()
+            val fills = mutableListOf<Pair<IdeRect, Int>>()
+            val canvas =
+                object : IdeCanvas {
+                    override fun fill(
+                        bounds: IdeRect,
+                        color: Int,
+                    ) {
+                        fills += bounds to color
+                    }
+
+                    override fun icon(draw: IdeIconDraw) = Unit
+
+                    override fun text(draw: IdeTextDraw) = Unit
+
+                    override fun terminal(
+                        state: ru.lazyhat.compukters.lang.runtime.vm.TerminalState,
+                        geometry: ru.lazyhat.compukters.impl.terminal.TerminalGridGeometry,
+                        nowMillis: Long,
+                    ) = Unit
+                }
+            val frame =
+                IdeScreenFrame(
+                    ru.lazyhat.compukters.impl.ui.CompuktersUiViewport
+                        .admitIde(1920, 1080, 2),
+                    geometry,
+                    model,
+                    ru.lazyhat.compukters.impl.ide.target.IdeTargetTerminalState.Closed,
+                    false,
+                    false,
+                )
+            IdeFramePainter.paint(frame, canvas, 0)
+
+            fun pixel(
+                x: Int,
+                y: Int,
+            ) = fills
+                .last { (bounds, _) ->
+                    x >= bounds.left && x < bounds.right && y >= bounds.top &&
+                        y < bounds.bottom
+                }.second
+            for (target in model.hitTargets) {
+                assertEquals(
+                    if (target.enabled) IdeColors.CONTROL else IdeColors.PANEL_ALT,
+                    pixel(
+                        target.bounds.left + 2,
+                        target.bounds.top + 2,
+                    ),
+                    target.action.name,
+                )
+                assertEquals(
+                    if (target.enabled) IdeColors.CONTROL_BORDER else IdeColors.BORDER,
+                    pixel(target.bounds.left, target.bounds.top),
+                    target.action.name,
+                )
+            }
+        }
+    }
+
+    @Test
     fun `picker draws project sized cards doubled icons and disables ambiguous names`() {
         val output = IdeDrawBuilder(IdeCodeFontProfile.DEFAULT)
         val area = IdeRect(0, 0, 800, 500)
