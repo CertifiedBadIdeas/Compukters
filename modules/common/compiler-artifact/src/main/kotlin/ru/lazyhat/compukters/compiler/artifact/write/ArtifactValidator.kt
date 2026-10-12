@@ -534,10 +534,10 @@ internal fun validateArtifact(
                 block.instructions.any { it is Instruction.StringValueOf && it.type == StringValueType.F32 }
             }
         }
-    if (artifact.minimumRuntimeAbi < AbiVersion(1u, 17u) &&
-        artifact.modules.any { module -> module.blocks.any { block -> block.instructions.any { it is Instruction.MatrixMath } } }
-    ) {
-        add(ArtifactWriteErrorCode.INVALID_RANGE, "matrix math requires minimum runtime ABI 1.17")
+    artifact.modules.flatMap { it.blocks }.flatMap { it.instructions }.filterIsInstance<Instruction.MatrixMath>().forEach {
+        if (artifact.minimumRuntimeAbi < AbiVersion(1u, it.operation.runtimeMinor)) {
+            add(ArtifactWriteErrorCode.INVALID_RANGE, "matrix ${it.operation} requires minimum runtime ABI 1.${it.operation.runtimeMinor}")
+        }
     }
     if (artifact.minimumRuntimeAbi < AbiVersion(1u, 16u) &&
         artifact.modules.any { module ->
@@ -1375,15 +1375,17 @@ internal fun validateArtifact(
                                 val value = register(id, role) as? ValueType.Inline
                                 val identity = value?.let { resolveType(moduleIndex, it.type) }
                                 val layout = identity?.let { artifact.modules[it.module].types[it.type] } as? NominalType.InlineValue
-                                if (layout == null || layout.components.size != count || layout.components.any { it != ValueType.F32 }) {
+                                if (layout == null || layout.components.size != count ||
+                                    layout.components.any { it != instruction.operation.scalarType.valueType }
+                                ) {
                                     add(
                                         ArtifactWriteErrorCode.INVALID_RANGE,
-                                        "matrix $role requires $count F32 inline components",
+                                        "matrix $role requires $count ${instruction.operation.scalarType} inline components",
                                         location,
                                     )
                                 }
                             }
-                            checkLayout(instruction.left, "left", 16)
+                            checkLayout(instruction.left, "left", instruction.operation.leftComponents)
                             checkLayout(instruction.destination, "destination", instruction.operation.resultComponents)
                             val count = instruction.operation.rightComponents
                             if ((count == null) != (instruction.right == null)) {

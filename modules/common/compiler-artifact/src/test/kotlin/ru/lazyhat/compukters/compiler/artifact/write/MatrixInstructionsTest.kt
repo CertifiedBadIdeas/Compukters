@@ -67,7 +67,7 @@ class MatrixInstructionsTest {
                     .single()
             val frame = encodeInstruction(instruction, 64).bytes
             val offset = (0..bytes.size - frame.size).single { start -> frame.indices.all { bytes[start + it] == frame[it] } }
-            for ((relative, value) in listOf(1 to 1, 4 to 0, 4 to 6, 4 to if (operation == MatrixOperation.TRANSPOSE) 2 else 1)) {
+            for ((relative, value) in listOf(1 to 1, 4 to 0, 4 to 255, 4 to if (operation == MatrixOperation.TRANSPOSE) 2 else 1)) {
                 val invalid = bytes.copyOf()
                 invalid[offset + relative] = value.toByte()
                 val payloadEnd = invalid.size - 32
@@ -87,9 +87,11 @@ class MatrixInstructionsTest {
             val artifact = fixture(operation)
             assertTrue(validateArtifact(artifact, ArtifactWriteLimits()).isEmpty())
             assertTrue(
-                validateArtifact(artifact.copy(minimumRuntimeAbi = AbiVersion(1u, 16u)), ArtifactWriteLimits()).any {
-                    "1.17" in
-                        it.detail
+                validateArtifact(
+                    artifact.copy(minimumRuntimeAbi = AbiVersion(1u, (operation.runtimeMinor - 1u).toUShort())),
+                    ArtifactWriteLimits(),
+                ).any {
+                    "runtime ABI" in it.detail
                 },
             )
             val module = artifact.modules.single()
@@ -144,40 +146,61 @@ class MatrixInstructionsTest {
     private fun r(id: UInt) = RegisterId.of(id)
 
     private fun fixture(operation: MatrixOperation): Artifact {
-        val rightCount = operation.rightComponents ?: 16
+        val rightCount = operation.rightComponents ?: operation.leftComponents
         val instruction = Instruction.MatrixMath(operation, r(3u), r(1u), if (operation.rightComponents != null) r(2u) else null)
         val instructions =
             listOf(
                 Instruction.Const(r(0u), ConstantId.of(0u)),
-                Instruction.InlineConstruct(r(1u), List(16) { r(0u) }),
+                Instruction.InlineConstruct(r(1u), List(operation.leftComponents) { r(0u) }),
                 Instruction.InlineConstruct(r(2u), List(rightCount) { r(0u) }),
                 instruction,
                 Instruction.Return(Destination.Unit),
             )
         val original = minimalArtifact(instructions)
         val module = original.modules.single()
-        val counts = listOf(16, rightCount, operation.resultComponents)
+        val counts = listOf(operation.leftComponents, rightCount, operation.resultComponents)
         return ReferenceLiveness.derive(
             original.copy(
-                minimumRuntimeAbi = AbiVersion(1u, 17u),
+                minimumRuntimeAbi = AbiVersion(1u, operation.runtimeMinor),
                 manifest = Manifest.minimal(instructions.sumOf { encodeInstruction(it, 64).fixedCost }),
                 modules =
                     listOf(
                         module.copy(
-                            types = module.types + counts.map { NominalType.InlineValue(StringId.of(1u), List(it) { ValueType.F32 }) },
-                            constants = listOf(Constant.F32(1f.toBits().toUInt())),
+                            types =
+                                module.types +
+                                    counts.map { NominalType.InlineValue(StringId.of(1u), List(it) { operation.scalarType.valueType }) },
+                            constants =
+                                listOf(
+                                    if (operation.scalarType ==
+                                        ScalarValueType.F32
+                                    ) {
+                                        Constant.F32(1f.toBits().toUInt())
+                                    } else {
+                                        Constant.F64(1.0.toBits().toULong())
+                                    },
+                                ),
                             functions =
                                 listOf(
                                     module.functions.single().copy(
                                         values =
-                                            listOf(FunctionValue.scalar(ValueType.F32)) +
+                                            listOf(FunctionValue.scalar(operation.scalarType.valueType)) +
                                                 counts.mapIndexed {
                                                     index,
                                                     count,
                                                     ->
                                                     FunctionValue(
                                                         ValueType.Inline(TypeRef.Local(TypeId.of((index + 1).toUInt()))),
-                                                        PhysicalShape(List(count) { PhysicalAtom.F32 }),
+                                                        PhysicalShape(
+                                                            List(count) {
+                                                                if (operation.scalarType ==
+                                                                    ScalarValueType.F32
+                                                                ) {
+                                                                    PhysicalAtom.F32
+                                                                } else {
+                                                                    PhysicalAtom.F64
+                                                                }
+                                                            },
+                                                        ),
                                                     )
                                                 },
                                     ),

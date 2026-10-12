@@ -391,7 +391,7 @@ private fun minimumRuntimeAbi(
     modules.asSequence().flatMap { module -> module.blocks.asSequence() }.flatMap { block -> block.instructions.asSequence() }.forEach {
         when (it) {
             is Instruction.MatrixMath -> {
-                required = maxOf(required, AbiVersion(1u, 17u))
+                required = maxOf(required, AbiVersion(1u, it.operation.runtimeMinor))
             }
 
             is Instruction.MathUnary, is Instruction.MathBinary -> {

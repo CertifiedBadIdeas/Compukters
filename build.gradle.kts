@@ -333,6 +333,16 @@ registerKotlinVmConformance(
 )
 
 registerKotlinVmConformance(
+    taskName = "testKotlinMatrixShapesVmConformance",
+    taskDescription = "Executes typed native Matrix3f, Matrix3d and Matrix4d kernels.",
+    artifactTask = ":compiler-k2:generateMatrixShapesConformanceArtifact",
+    artifact = project(":compiler-k2").layout.buildDirectory.file("generated/conformance/kotlin-matrix-shapes.cpkt"),
+    cargoTargetDirectory = ".toolchain/build/cargo/compiler-k2-math-conformance",
+    artifactEnvironmentVariable = "COMPUKTER_KOTLIN_MATRIX_SHAPES_ARTIFACT",
+    conformanceScenario = "matrix-shapes",
+)
+
+registerKotlinVmConformance(
     taskName = "testKotlinRandomVmConformance",
     taskDescription = "Executes Guest random ranges, reproducibility, quota slices and checkpoint restoration.",
     artifactTask = ":compiler-k2:generateRandomConformanceArtifact",
