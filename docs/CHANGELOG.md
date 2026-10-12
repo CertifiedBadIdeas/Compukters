@@ -21,6 +21,10 @@ headings so this page has one stable URL that can be shared outside the reposito
 - The all-addon development build uses Loom directly and enables Configuration Cache and parallel execution,
   allowing independent built-in program artifacts to compile concurrently inside the included Compukters project.
 
+- Addon SDK accepts immutable value-class host responses, nested data/value mixtures and canonical stdlib geometry.
+  Inline record fields avoid Guest record allocations while retaining bounded copying, GC and checkpoint support.
+  Sable 2.0 exposes value snapshots with Vector3d, validated Rotation3d and Matrix3d mass tensors.
+
 - Guest stdlib provides immutable `Vector2d`, `Vector3d` and `Vector4d` with Double arithmetic,
   robust normalization and explicit conversions to/from existing vectors. Distinct `Quaternionf`/`Quaterniond`
   preserve quaternion identity and support explicit conversions with the corresponding four-dimensional vectors.
@@ -44,6 +48,8 @@ headings so this page has one stable URL that can be shared outside the reposito
 - Guest Kotlin supports named local functions with direct calls, recursion, nested helpers and escaping
   references. Mutable captures share state with surrounding code and lambdas; direct immutable captures
   stay in typed arguments. Local functions can use expression defaults and appear in class initializers.
+  Generic local functions and local helpers inside generic top-level functions specialize concrete calls,
+  defaults and escaping captures; primitive arguments remain unboxed within bounded compiler expansion.
   Class `val`/`var` properties can store, replace and invoke callbacks, including concrete generic holders,
   constructor defaults and custom/inherited accessors. Stored callbacks retain their captures.
 
@@ -89,7 +95,8 @@ headings so this page has one stable URL that can be shared outside the reposito
   normalize before foreground launch.
 
 - IDE hover displays short Kotlin signatures with explicit return types, compact documentation entries
-  and source information below the documentation.
+  and source information below the documentation. Editor and long hover scrollbars support thumb dragging
+  and page clicks alongside mouse-wheel scrolling.
   Unknown references color their complete identifier; errors and warnings underline their exact source ranges.
   Hovering a marked token shows its problems together, preserving source editing and horizontal scrolling.
   Argument hints open when typing a call or pressing Ctrl+P, wrap long signatures and emphasize the current parameter.

@@ -28,6 +28,26 @@ import kotlin.test.assertFailsWith
 
 class AddonContractAuthoringTest {
     @Test
+    fun `addon identity cannot authorize impersonated Kotlin value records`() {
+        val metadata =
+            ru.lazyhat.compukters.platform.k2.build.PlatformMetadataCompiler().compile(
+                ru.lazyhat.compukters.platform.bundle
+                    .PlatformModuleId("kotlin", "api"),
+                listOf(
+                    ru.lazyhat.compukters.platform.bundle.PlatformSource(
+                        "kotlin/math/Fake.kt",
+                        ru.lazyhat.compukters.worker.value.ImmutableBytes.of(
+                            "package kotlin.math; value class Rotation3d(val x: Double)".encodeToByteArray(),
+                        ),
+                    ),
+                ),
+            )
+        assertFailsWith<IllegalArgumentException> {
+            resolveAddonRecordSchemas("kotlin", setOf("Rotation3d"), metadata.recordCandidates)
+        }
+    }
+
+    @Test
     fun `generated addon hosts complete all scalar result kinds`() =
         withSources(
             """
@@ -267,6 +287,45 @@ class AddonContractAuthoringTest {
         ).forEach { shape ->
             assertFailsWith<IllegalArgumentException>(shape) {
                 AddonAbiLock.parse(listOf("lock 2", "record fixture.Snapshot $shape"))
+            }
+        }
+    }
+
+    @Test
+    fun `value record responses admit methods and mixed nesting but reject constructor effects`() {
+        withSources(
+            """
+            package fixture.physics
+            value class Vector(val x: Double, val y: Double) { fun sum(): Double = x + y }
+            data class Data(val vector: Vector)
+            value class Snapshot(val data: Data, val label: String)
+            private object Bindings { external fun snapshot(): Snapshot }
+            """.trimIndent(),
+        ) { root ->
+            val resolved = resolveAddonContract(root, contract(), AddonAbiLock.empty())
+            val schema =
+                resolved.contract.schemas
+                    .single()
+                    .operations
+                    .single()
+                    .resultRecord!!
+            assertEquals(
+                "fixture.physics.Vector",
+                schema.fields[0]
+                    .record!!
+                    .fields[0]
+                    .record!!
+                    .typeName,
+            )
+        }
+        for (shape in listOf(
+            "value class Snapshot(val x: Double) { init { require(x > 0.0) } }",
+            "value class Snapshot private constructor(val x: Double)",
+            "value class Snapshot(val x: Double) { val stored: Int = 1 }",
+            "value class Snapshot(val x: Double?)",
+        )) {
+            withSources("package fixture.physics; $shape; private object Bindings { external fun snapshot(): Snapshot }") { root ->
+                assertFailsWith<IllegalArgumentException> { resolveAddonContract(root, contract(), AddonAbiLock.empty()) }
             }
         }
     }

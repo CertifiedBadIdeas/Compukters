@@ -334,3 +334,20 @@ fun Module.hasStructuredHostResponse(): Boolean =
             name != "kotlin.String"
         }
     }
+
+/** Value reply layouts require the Runtime ABI that admits inline and flattened boxed records. */
+fun List<Module>.hasValueHostResponse(): Boolean =
+    any { module ->
+        module.blocks.any { block ->
+            block.instructions.filterIsInstance<Instruction.CapabilityCallAsync>().any { call ->
+                val destination = call.destination as? Destination.Register
+                val function = module.functions.getOrNull(block.owner.value.toInt())
+                destination != null && function?.values?.getOrNull(destination.id.value.toInt())?.semanticType is ValueType.Inline
+            }
+        }
+    } || (
+        any { it.hasStructuredHostResponse() } &&
+            any { module ->
+                module.fields.any { module.strings.getOrNull(it.name.value.toInt())?.toString() == "<boxed-value>" }
+            }
+    )

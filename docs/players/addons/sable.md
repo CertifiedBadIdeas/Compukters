@@ -66,13 +66,13 @@ fun main() {
 `Physics.snapshot()` makes one asynchronous host request and returns a typed immutable `PhysicsSnapshot`.
 It contains `constructionId` (UUID text), `dimension` (Minecraft dimension ID), `gameTick` (Long), `paused` (Boolean),
 `position`, `orientation`, `scale`, `rotationPoint`, `linearVelocity` and `angularVelocity`.
-Vectors have Double x/y/z; orientation has Double x/y/z/w. The snapshot is a copy: later physics updates or removal
+The snapshot is a value class. Vectors use `kotlin.math.Vector3d`; orientation uses validated `Rotation3d`. The snapshot is a copy: later physics updates or removal
 of the construction do not modify it. Membership is resolved on each request; no body handle is retained.
 A world computer or unavailable construction yields a catchable IllegalStateException.
 
 ## Mass properties
 
-Sable addon 1.2 adds `Physics.massProperties()`, a separate asynchronous request returning immutable
+Sable addon 2.0 provides `Physics.massProperties()`, a separate asynchronous request returning immutable
 `PhysicsMassProperties`: `constructionId`, `dimension`, `gameTick`, `mass`, `centerOfMass` and `inertiaTensor`.
 
 ```kotlin
@@ -82,16 +82,16 @@ fun main() {
     val properties = Physics.massProperties()
     println("Mass: " + properties.mass)
     println("Plot center X: " + properties.centerOfMass.x)
-    println("Inertia about plot Y: " + properties.inertiaTensor.yy)
+    println("Inertia about plot Y: " + properties.inertiaTensor.m11)
 }
 ```
 
 The values copy Sable's **merged** mass tracker, including kinematic contraptions accounted for by Sable,
 rather than counting only blocks in the construction's own plot. `centerOfMass` uses plot coordinates;
 `inertiaTensor` is expressed in plot axes about that center, rather than in world axes or about the computer.
-The tensor exposes all nine Double components `xx`, `xy`, `xz`, `yx`, `yy`, `yz`, `zx`, `zy`, `zz`.
-The first letter is the row and the second the column: its X output is `xx * x + xy * y + xz * z`.
-This naming avoids JOML's column-first matrix accessor convention.
+The tensor uses `kotlin.math.Matrix3d`, with row-major components `m00` through `m22` and standard matrix/vector
+operations. `PhysicsMassProperties` is a value class. Tensor X output is `m00 * x + m01 * y + m02 * z`,
+matching the Guest matrix convention and adapting JOML's column-first accessors.
 
 Units are copied without conversion: Sable 2.0.6 documents mass as `kpg` and inertia as `kpg * m²` in its
 [MassData contract](https://github.com/ryanhcode/sable/blob/mc1.21.1-2.0.6-neoforge/common/src/main/java/dev/ryanhcode/sable/api/physics/mass/MassData.java).
@@ -123,25 +123,21 @@ see [Quaterniond transformUnit](https://joml-ci.github.io/JOML/apidocs/org/joml/
 A positive quarter turn around plot +Z maps plot +X to world +Y when the axes initially coincide.
 The inverse rotation maps world directions back to plot axes; scale and pivot are separate operations.
 
-The current Sable snapshot still exposes PhysicsRotation components. With stdlib:core 1.19, convert that
-owned observation explicitly to a validated spatial rotation:
+Sable addon 2.0 exposes the validated rotation directly:
 
 ```kotlin
-import kotlin.math.Quaterniond
-import kotlin.math.Rotation3d
 import kotlin.math.Vector3d
 
-val q = snapshot.orientation
-val rotation = Rotation3d.fromQuaternion(Quaterniond(q.x, q.y, q.z, q.w))
+val rotation = snapshot.orientation
 val worldDirection = rotation.transform(Vector3d(1.0, 0.0, 0.0))
 val plotDirection = rotation.inverse().transform(worldDirection)
+val q = rotation.quaternion // raw x/y/z/w components when needed
 ```
 
-The factory normalizes finite nonzero input and rejects zero/non-finite components. Rotation unit length
-is approximate within Double rounding. This conversion does not change the snapshot's observation tick,
-apply scale/translation, or silently invert the quaternion. Use non-identity rotations around distinct axes
-when testing an adapter; an identity-only test cannot detect a swapped component or reversed rotation.
-The planned SDK/Sable value-response migration is separate from this explicit conversion.
+The Guest adapter calls `Rotation3d.fromQuaternion()`: it normalizes finite nonzero input and rejects zero or
+non-finite components. Unit length is approximate within Double rounding. Conversion retains the observation tick,
+scale, translation and quaternion direction. Snapshot/vector/tensor value layouts do not allocate Guest record objects;
+UUID and dimension Strings retain owned storage. This replaces PhysicsVector, PhysicsRotation and PhysicsInertiaTensor.
 
 Positions use Minecraft block units (Sable treats one block as one metre). Solver `linearVelocity` is the body's
 global velocity in metres per second, not velocity at the computer. `angularVelocity` is global angular velocity in

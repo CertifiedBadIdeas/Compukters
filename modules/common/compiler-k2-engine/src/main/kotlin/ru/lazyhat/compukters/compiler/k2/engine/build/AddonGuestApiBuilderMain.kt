@@ -34,6 +34,7 @@ import ru.lazyhat.compukters.platform.bundle.PlatformBundleCodec
 import ru.lazyhat.compukters.platform.bundle.PlatformModule
 import ru.lazyhat.compukters.platform.bundle.PlatformModuleId
 import ru.lazyhat.compukters.platform.bundle.PlatformSource
+import ru.lazyhat.compukters.platform.k2.build.PlatformMetadataCompiler
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.StandardCopyOption
@@ -83,9 +84,24 @@ fun buildAddonGuestApiBundle(
                     PlatformCapabilityShape(schema.identity.abiMinor, schema.operations.size.toUInt())
             }
         val combined = PlatformBundleBuilder(registry, capabilities, capabilityShapes).build(workspace, descriptor)
-        val module =
+        val compiledModule =
             combined.modules.singleOrNull { it.id == contract.module }
                 ?: error("platform contains no unique addon module ${contract.module}")
+        // Value payloads need their source layouts and accessors in the consuming Guest compilation.
+        // Keep the whole addon source API together so wrappers can call value-class members safely.
+        val hasValuePayloads =
+            PlatformMetadataCompiler()
+                .compile(compiledModule.id, compiledModule.sources)
+                .recordCandidates
+                .any { it.valueClass }
+        val module =
+            if (hasValuePayloads) {
+                compiledModule.copy(
+                    sourceDeclarations = compiledModule.declarations.filterNot { it.trustedExternal }.map { it.identity },
+                )
+            } else {
+                compiledModule
+            }
         require(module.version == contract.version) {
             "addon module ${contract.module} version ${module.version} does not match contract ${contract.version}"
         }
@@ -121,7 +137,16 @@ fun main(args: Array<String>) {
     val base = PlatformBundleCodec.decode(Files.readAllBytes(platformInput))
     val authoring = AddonAuthoringContract.parse(descriptor.readLines())
     val currentLock = if (Files.exists(abiLock)) AddonAbiLock.parse(abiLock.readLines()) else AddonAbiLock.empty()
-    val resolved = resolveAddonContract(sourceRoot, authoring, currentLock, base.modules.map(PlatformModule::id))
+    val trustedRecords =
+        base.modules
+            .singleOrNull { it.id == PlatformModuleId("stdlib", "core") }
+            ?.let { module ->
+                PlatformMetadataCompiler()
+                    .compile(module.id, module.sources)
+                    .recordCandidates
+                    .filter { it.symbol in canonicalRecordTypes && it.valueClass && it.rejection == null }
+            }.orEmpty()
+    val resolved = resolveAddonContract(sourceRoot, authoring, currentLock, base.modules.map(PlatformModule::id), trustedRecords)
     val updateLock = arguments["--update-abi-lock"]?.toBooleanStrict() ?: false
     if (updateLock) {
         writeAtomically(abiLock, resolved.expectedLock.render().encodeToByteArray())
