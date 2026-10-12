@@ -6,7 +6,7 @@
 
 package kotlin.text
 
-public fun String.startsWith(prefix: String): Boolean {
+public fun CharSequence.startsWith(prefix: CharSequence): Boolean {
     if (prefix.length > length) return false
     var index = 0
     while (index < prefix.length) {
@@ -16,7 +16,7 @@ public fun String.startsWith(prefix: String): Boolean {
     return true
 }
 
-public fun String.endsWith(suffix: String): Boolean {
+public fun CharSequence.endsWith(suffix: CharSequence): Boolean {
     val offset = length - suffix.length
     if (offset < 0) return false
     var index = 0
@@ -27,9 +27,19 @@ public fun String.endsWith(suffix: String): Boolean {
     return true
 }
 
-public fun String.contains(other: String): Boolean = indexOf(other) >= 0
+public fun CharSequence.contains(other: CharSequence): Boolean {
+    val lastCandidate = length - other.length
+    var candidate = 0
+    while (candidate <= lastCandidate) {
+        var index = 0
+        while (index < other.length && this[candidate + index] == other[index]) index += 1
+        if (index == other.length) return true
+        candidate += 1
+    }
+    return false
+}
 
-public fun String.indexOf(
+public fun CharSequence.indexOf(
     other: String,
     startIndex: Int = 0,
 ): Int {

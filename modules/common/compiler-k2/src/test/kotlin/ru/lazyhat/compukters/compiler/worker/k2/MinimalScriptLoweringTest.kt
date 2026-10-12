@@ -300,10 +300,44 @@ class MinimalScriptLoweringTest {
                     for (unit in text) { copy += unit }
                     require(copy == "abc")
                 }
+                fun checkSequenceHelpers(text: CharSequence) {
+                    require(text.isNotEmpty() && text.isNotBlank())
+                    require(text.startsWith(StringBuilder(" a")) && text.endsWith(TextView(" ")))
+                    require(text.contains(StringBuilder("::")) && text.contains('b'))
+                    require(text.indexOf("abc") == 1 && text.lastIndexOf("abc") == 6)
+                    require(text.indexOf('b') == 2 && text.lastIndexOf('b') == 7)
+                    require(text.trim().toString() == "abc::abc")
+                    require(text.trimStart().trimEnd().toString() == "abc::abc")
+                    require(text.take(4).toString() == " abc" && text.drop(6).take(3).toString() == "abc")
+                    require(text.takeLast(3).toString() == "\r\n " && text.dropLast(3).toString() == " abc::abc")
+                    require(text.removePrefix(StringBuilder(" ")).removeSuffix(TextView("\r\n ")).toString() == "abc::abc")
+                    require(text.substring(1, 4) == "abc")
+                    checkParts(text.split("::"), listOf(" abc", "abc\r\n "))
+                    checkParts(text.split(':'), listOf(" abc", "", "abc\r\n "))
+                    checkParts(text.lines(), listOf(" abc::abc", " "))
+                    val unit: CharSequence = StringBuilder("x")
+                    val repeated: kotlin.String = unit.repeat(3)
+                    require(repeated == "xxx" && unit.padStart(3, '_').toString() == "__x")
+                    require(unit.padEnd(3, '_').toString() == "x__")
+                    invalid { text.take(-1) }
+                    invalid { text.padEnd(-1) }
+                    require((TextView(" \t") as CharSequence).isBlank())
+                    val pair: CharSequence = StringBuilder("\uD83D\uDE00")
+                    require(pair.take(1)[0] == '\uD83D' && pair.drop(1)[0] == '\uDE00')
+                }
                 fun checkCharSequences() {
                     checkSequence("abc")
                     checkSequence(StringBuilder("abc"))
                     checkSequence(TextView("abc"))
+                    checkSequenceHelpers(StringBuilder(" abc::abc\r\n "))
+                    checkSequenceHelpers(TextView(" abc::abc\r\n "))
+                    val stringResult: kotlin.String = " abc ".trim().take(2).padEnd(3).removePrefix(" ")
+                    require(stringResult == "ab ")
+                    val sliceBuilder = StringBuilder(" abc ")
+                    val trimmed: CharSequence = (sliceBuilder as CharSequence).trim()
+                    val padded: CharSequence = (sliceBuilder as CharSequence).padEnd(1)
+                    sliceBuilder[1] = 'x'
+                    require(trimmed.toString() == "abc" && padded.toString() == " abc ")
                     val original: Any = "abc"
                     require(original is CharSequence)
                     val view = original as CharSequence
