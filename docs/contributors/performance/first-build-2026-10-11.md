@@ -95,7 +95,7 @@ No production tests were rerun for this documentation-only stage.
 [verification]({{ '/benchmarks/first-build-2026-10-11/verification.json' | relative_url }}) accompany the report.
 The directory also contains nine raw stdout logs and `FirstBuildProbe.kt`; private PID sources are not published.
 
-Compile the probe with the pinned payload's Kotlin CLI compiler, targeting JVM 17. Use the compiler profile's
+Compile the probe with the pinned payload's Kotlin CLI compiler, using `-jvm-target 17`. Use the compiler profile's
 classpath for compilation and for the parent probe JVM. Run `FirstBuildProbeKt` with arguments in this order:
 project root, fresh output directory, frozen tooling payload root, Sable `.cagb`, Propulsion `.cagb`.
 Set `BENCH_MODE` to `cold`, `prepared`, or `hello`. The probe uses the JDK 21 executable at

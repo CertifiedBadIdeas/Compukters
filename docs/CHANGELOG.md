@@ -16,6 +16,8 @@ headings so this page has one stable URL that can be shared outside the reposito
 - Guest displays provide a lightweight declarative widget DSL with explicit pixel viewports, rows/columns,
   reusable mutable widgets, a clipped drawing canvas and a rotation-slider cube example. Server-validated
   held-right-click gestures support captured dragging, release and cancellation without a reactive runtime.
+- All main, addon, development-stand and API-documentation builds use Gradle 9.8.1, with the binary distribution
+  verified against its published SHA-256.
 
 - The IDE has a named peripheral selection window with shared window controls, block item icons and project-style cards.
   Selecting a reachable device inserts its name as an undoable `const val` beneath imports in the active
