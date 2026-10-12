@@ -554,6 +554,22 @@ val generateNullableCallbacksConformanceArtifact = tasks.register<Test>("generat
     systemProperty("compukter.vm.nullableCallbacksArtifact", nullableCallbacksConformanceArtifact.get().asFile.absolutePath)
 }
 
+val genericClassCapturesConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-generic-class-captures.cpkt")
+val generateGenericClassCapturesConformanceArtifact = tasks.register<Test>("generateGenericClassCapturesConformanceArtifact") {
+    description = "Compiles Guest generic class captures for pinned VM conformance."
+    group = "verification"
+    dependsOn(tasks.jar)
+    useJUnitPlatform()
+    testClassesDirs = sourceSets.test.get().output.classesDirs
+    classpath = sourceSets.test.get().runtimeClasspath
+    filter.includeTestsMatching("*generic class captures preserve concrete owners and escaping callbacks*")
+    inputs.file(workerJar)
+    inputs.file("src/test/resources/kotlin/generic-class-captures/main.kt")
+    outputs.file(genericClassCapturesConformanceArtifact)
+    systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
+    systemProperty("compukter.vm.genericClassCapturesArtifact", genericClassCapturesConformanceArtifact.get().asFile.absolutePath)
+}
+
 val genericLocalFunctionsConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-generic-local-functions.cpkt")
 val generateGenericLocalFunctionsConformanceArtifact = tasks.register<Test>("generateGenericLocalFunctionsConformanceArtifact") {
     description = "Compiles generic Guest local functions for pinned VM conformance."

@@ -51,6 +51,16 @@ and mutable cells concrete per-owner layouts before managed types are assigned. 
 the 256 function-variant budget with ordinary emitter specialization and bounds expansion depth to 64.
 `testKotlinGenericLocalFunctionsVmConformance` exercises these paths without a runtime or ABI change.
 
+`prepareGuestFunctionBodies` returns the concrete function/class instances and executable lexical roots
+before capture discovery. Function/class dependencies and copied local declarations iterate to a fixed
+point. A generic member instance retains its source declaration for dispatch/signature identity and a
+separate symbol-remapped concrete declaration for executable bodies. The shared IR copier substitutes
+owner parameters while preserving nested local parameters until lexical specialization. Member bodies
+are cached per declaration and concrete class instance; recursive calls and member references retain
+the source dispatch symbol while returns target their concrete executable copy. Generic class discovery defers unresolved lexical types rather than treating
+them as concrete instances. `testKotlinGenericClassCapturesVmConformance` exercises owner retention,
+all primitive signatures, shared cells, dispatch and small-heap collection without a VM/ABI change.
+
 Named local functions are discovered before closure layout. A fixed-point free-value analysis includes
 captures required by local callees and referenced helpers. Direct calls prepend hidden typed capture
 arguments; reassigned variables use the same capture cells as lambdas. Local declarations are static

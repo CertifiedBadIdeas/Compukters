@@ -6,8 +6,13 @@
 
 package ru.lazyhat.compukters.compiler.k2.engine
 
+import org.jetbrains.kotlin.ir.IrElement
 import org.jetbrains.kotlin.ir.declarations.IrSimpleFunction
+import org.jetbrains.kotlin.ir.declarations.IrTypeParameter
 import org.jetbrains.kotlin.ir.declarations.IrTypeParametersContainer
+import org.jetbrains.kotlin.ir.expressions.IrCall
+import org.jetbrains.kotlin.ir.expressions.IrFunctionReference
+import org.jetbrains.kotlin.ir.expressions.IrRichFunctionReference
 import org.jetbrains.kotlin.ir.symbols.UnsafeDuringIrConstructionAPI
 import org.jetbrains.kotlin.ir.types.IrType
 import org.jetbrains.kotlin.ir.types.IrTypeSubstitutor
@@ -16,6 +21,7 @@ import org.jetbrains.kotlin.ir.util.DeepCopyIrTreeWithSymbols
 import org.jetbrains.kotlin.ir.util.DeepCopySymbolRemapper
 import org.jetbrains.kotlin.ir.util.DeepCopyTypeRemapper
 import org.jetbrains.kotlin.ir.util.TypeRemapper
+import org.jetbrains.kotlin.ir.visitors.IrVisitorVoid
 import org.jetbrains.kotlin.types.Variance
 
 /** Copy lexical symbols together, substituting only the selected owner's type parameters. */
@@ -23,13 +29,15 @@ import org.jetbrains.kotlin.types.Variance
 internal fun copyGuestFunction(
     function: IrSimpleFunction,
     arguments: List<IrType>,
+    ownerParameters: List<IrTypeParameter> = emptyList(),
+    ownerArguments: List<IrType> = emptyList(),
 ): IrSimpleFunction {
     val symbols = DeepCopySymbolRemapper()
     function.accept(symbols, null)
     val substitution =
         IrTypeSubstitutor(
-            function.typeParameters.map { it.symbol },
-            arguments.map { makeTypeProjection(it, Variance.INVARIANT) },
+            (function.typeParameters + ownerParameters).map { it.symbol },
+            (arguments + ownerArguments).map { makeTypeProjection(it, Variance.INVARIANT) },
             true,
         )
     val copiedTypes = DeepCopyTypeRemapper(symbols)
@@ -46,5 +54,29 @@ internal fun copyGuestFunction(
     copiedTypes.deepCopy = copier
     val copy = function.transform(copier, null) as IrSimpleFunction
     copy.typeParameters = emptyList()
+    if (ownerParameters.isNotEmpty()) {
+        // A concrete executable copy retains the source member's dispatch identity.
+        copy.accept(
+            object : IrVisitorVoid() {
+                override fun visitElement(element: IrElement) = element.acceptChildren(this, null)
+
+                override fun visitCall(expression: IrCall) {
+                    if (expression.symbol == copy.symbol) expression.symbol = function.symbol
+                    super.visitCall(expression)
+                }
+
+                override fun visitFunctionReference(expression: IrFunctionReference) {
+                    if (expression.symbol == copy.symbol) expression.symbol = function.symbol
+                    super.visitFunctionReference(expression)
+                }
+
+                override fun visitRichFunctionReference(expression: IrRichFunctionReference) {
+                    if (expression.reflectionTargetSymbol == copy.symbol) expression.reflectionTargetSymbol = function.symbol
+                    super.visitRichFunctionReference(expression)
+                }
+            },
+            null,
+        )
+    }
     return copy
 }
