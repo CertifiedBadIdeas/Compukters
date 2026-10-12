@@ -18,7 +18,8 @@ headings so this page has one stable URL that can be shared outside the reposito
   state survives instruction slices and computer checkpoints.
 
 - The built-in `cmatrix` program draws animated green terminal rain with bright stream heads,
-  configurable tick delay and Ctrl+C return to the shell.
+  configurable tick delay and Ctrl+C return to the shell. Its rain uses the reproducible Guest stdlib
+  random generator with uniform bounded selection.
 
 - The built-in shell supports cursor editing, Unicode-aware deletion, horizontal scrolling and a bounded
   32-command history that restores unfinished input. `Ctrl+U` clears the line; `Ctrl+C` cancels input or stops
