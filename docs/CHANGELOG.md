@@ -13,6 +13,10 @@ headings so this page has one stable URL that can be shared outside the reposito
 
 ## 0.6.0 — In development
 
+- Guest stdlib provides immutable `Vector2d`, `Vector3d` and `Vector4d` with Double arithmetic,
+  robust normalization and explicit conversions to/from existing vectors. Distinct `Quaternionf`/`Quaterniond`
+  preserve quaternion identity and support explicit conversions with the corresponding four-dimensional vectors.
+
 - Guest Kotlin provides reusable `StringBuilder` and `buildString`, full `CharSequence` support for strings, builders and
   user implementations, text iteration, `take`/`drop`
   helpers, padding and repetition, plus signed and unsigned integer parsers with radices 2–36.

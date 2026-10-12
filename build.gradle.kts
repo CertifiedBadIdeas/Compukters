@@ -323,6 +323,16 @@ registerKotlinVmConformance(
 )
 
 registerKotlinVmConformance(
+    taskName = "testKotlinDoubleGeometryVmConformance",
+    taskDescription = "Executes Double vectors, robust normalization and quaternion component conversions.",
+    artifactTask = ":compiler-k2:generateDoubleGeometryConformanceArtifact",
+    artifact = project(":compiler-k2").layout.buildDirectory.file("generated/conformance/kotlin-double-geometry.cpkt"),
+    cargoTargetDirectory = ".toolchain/build/cargo/compiler-k2-math-conformance",
+    artifactEnvironmentVariable = "COMPUKTER_KOTLIN_DOUBLE_GEOMETRY_ARTIFACT",
+    conformanceScenario = "double-geometry",
+)
+
+registerKotlinVmConformance(
     taskName = "testKotlinRandomVmConformance",
     taskDescription = "Executes Guest random ranges, reproducibility, quota slices and checkpoint restoration.",
     artifactTask = ":compiler-k2:generateRandomConformanceArtifact",

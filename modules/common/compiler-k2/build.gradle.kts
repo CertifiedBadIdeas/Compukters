@@ -1782,6 +1782,22 @@ tasks.register<Test>("generateGeometryConformanceArtifact") {
     systemProperty("compukter.vm.geometryArtifact", geometryConformanceArtifact.get().asFile.absolutePath)
 }
 
+val doubleGeometryConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-double-geometry.cpkt")
+tasks.register<Test>("generateDoubleGeometryConformanceArtifact") {
+    description = "Compiles Double vectors and distinct quaternion components for VM conformance."
+    group = "verification"
+    dependsOn(tasks.jar)
+    useJUnitPlatform()
+    testClassesDirs = sourceSets.test.get().output.classesDirs
+    classpath = sourceSets.test.get().runtimeClasspath
+    filter.includeTestsMatching("*Double geometry preserves precision normalization and quaternion identity*")
+    inputs.file(workerJar)
+    inputs.file("src/test/resources/kotlin/double-geometry/main.kt")
+    outputs.file(doubleGeometryConformanceArtifact)
+    systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
+    systemProperty("compukter.vm.doubleGeometryArtifact", doubleGeometryConformanceArtifact.get().asFile.absolutePath)
+}
+
 val generateTerminalOutputConformanceArtifact = tasks.register<Test>("generateTerminalOutputConformanceArtifact") {
     description = "Compiles scalar, sequence and ranged terminal output for native conformance."
     group = "verification"
