@@ -33,6 +33,12 @@ Canonical `IntRange` and `IntProgression` declarations let K2 resolve ascending,
 The compiler recognizes only their canonical `for` shape and evaluates start, end, and step once into scalar registers;
 no range or iterator object enters the VM. It validates a positive step before iteration, calculates the next index in
 `Long` to avoid `Int` overflow, and retains a loop-header quota safepoint. Stored progressions and non-Int range loops use ordinary Guest library classes and iterators; the allocation-free optimization is specific to the recognized direct `Int` shape.
+
+Text iteration uses the ordinary managed `CharSequence.iterator` / `CharIterator` library path, including
+String, StringBuilder and Guest implementations. It traverses UTF-16 units and allocates an iterator;
+there is no direct text-loop allocation optimization. The generated canonical runtime owns CharSequence
+and String's interface methods; stdlib exports the canonical CharIterator base class once.
+
 Direct primitive and reference-array `for` loops follow the same canonical-shape rule: the compiler snapshots the array reference, loads
 its length, and reads each element with existing array instructions at the current index. The loop header retains its
 quota safepoint; no iterator object is created. A source variable may be reassigned without changing the traversed

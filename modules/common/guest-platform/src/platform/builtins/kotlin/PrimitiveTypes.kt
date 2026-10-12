@@ -1127,4 +1127,9 @@ public class String : Comparable<String>, CharSequence {
     public external operator fun plus(other: Any?): String
 
     public external fun substring(startIndex: Int, endIndex: Int): String
+
+    public external override fun subSequence(
+        startIndex: Int,
+        endIndex: Int,
+    ): String
 }
