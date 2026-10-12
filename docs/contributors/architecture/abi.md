@@ -11,6 +11,17 @@ permalink: /ARCHITECTURE/abi/
 
 This reference groups versioned representation boundaries by the version that introduced them. Those versions are minimum feature requirements, not a claim that older Runtime distributions implement today’s platform. The source owners below define the active contract. Before changing a wire format, inspect each producer, consumer and verifier. Runtime release pins in `build-scripts/src/main/kotlin/RuntimeBundleSupport.kt` describe published bundles separately from the local VM checkout.
 
+## Sable mass observations
+
+Sable addon 1.2 appends `sable:sable` capability ABI 1.0 selector 1, `massProperties(): PhysicsMassProperties`.
+Selector 0 and the complete existing PhysicsSnapshot record shape remain unchanged. The new record carries UUID text,
+dimension, world observation tick, mass, plot-space center of mass and nine named inertia tensor components.
+Generated bindings declare two operations and retain the locked historical schemas; old one-operation executables
+remain admissible. The Sable module content identity changes, so source consumers rebuild against addon 1.2.
+Existing F64 nested-record transport expresses the result: Runtime ABI, native C ABI, worker framing, platform
+encoding and checkpoint schemas do not change. The handler remains stateless. See the
+[Sable guide](../../players/addons/sable.md#mass-properties) for units, axes, sampling and unavailable-data behavior.
+
 ## Guest text helpers
 
 `kotlin:builtins` 1.12.0 and `stdlib:core` 1.17.0 add canonical CharSequence, reusable StringBuilder/buildString,
