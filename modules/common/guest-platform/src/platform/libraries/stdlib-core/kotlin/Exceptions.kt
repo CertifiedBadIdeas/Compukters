@@ -16,7 +16,7 @@ public open class RuntimeException(
     cause: Throwable? = null,
 ) : Exception(message, cause)
 
-public class IllegalArgumentException(
+public open class IllegalArgumentException(
     message: String?,
     cause: Throwable? = null,
 ) : RuntimeException(message, cause)
@@ -58,3 +58,8 @@ public class NoSuchElementException(
     message: String?,
     cause: Throwable? = null,
 ) : RuntimeException(message, cause)
+
+/** The input cannot be represented as the requested number. */
+public class NumberFormatException(
+    message: String?,
+) : IllegalArgumentException(message)

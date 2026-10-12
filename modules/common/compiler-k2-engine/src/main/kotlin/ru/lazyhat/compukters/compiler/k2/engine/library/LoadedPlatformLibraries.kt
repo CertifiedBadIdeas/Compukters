@@ -147,6 +147,13 @@ fun loadPlatformLibraries(modules: List<PlatformModule>): LoadedPlatformLibrarie
                         declaration.defaultArguments,
                     )
                 }
+        // CharIterator is declared in builtins but its executable abstract methods are owned by stdlib.
+        library.exports.filter { it.kind == SymbolKind.FUNCTION }.forEach { export ->
+            val name = library.strings[export.name.value.toInt()].toString()
+            if (name.startsWith("kotlin.collections.CharIterator.") && '#' in name) {
+                functions += PlatformFunctionLink(name.substringBefore('#'), name.substringAfter('#'), name, moduleHash.copyOf())
+            }
+        }
         library.exports
             .filter {
                 it.kind == SymbolKind.TYPE &&
