@@ -24,3 +24,8 @@ To verify compilation against a local real-addon bundle after staging the worksp
 ```
 
 Run the addon build and parent checks sequentially: the addon composite build also uses the parent's build outputs.
+
+
+The dashboard builds its `displayUi` tree once. `at` preserves explicit pixel placement and a `row`
+arranges the command buttons. Telemetry updates widget properties, then one admitted click is dispatched
+before drawing. Button handlers record command intent; the controller command remains outside the frame.
