@@ -98,7 +98,7 @@ public object Terminal {
     public val size: Size2i get() = Vector2i(TerminalBindings.width(), TerminalBindings.height())
 
     public fun write(text: CharSequence) {
-        TerminalBindings.write(if (text is String) text else text.substring(0, text.length))
+        TerminalBindings.write(text.toString())
     }
 
     /** Writes one UTF-16 unit. An isolated surrogate is rendered as a replacement character. */
@@ -147,7 +147,7 @@ public object Terminal {
         position: Position2i,
         text: CharSequence,
     ) {
-        TerminalBindings.writeAt(position.x, position.y, if (text is String) text else text.substring(0, text.length))
+        TerminalBindings.writeAt(position.x, position.y, text.toString())
     }
 
     public fun writeAt(

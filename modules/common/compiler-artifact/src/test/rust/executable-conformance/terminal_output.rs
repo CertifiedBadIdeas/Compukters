@@ -26,7 +26,7 @@ pub(super) fn execute() {
             }
         }
         assert!(completed);
-        for (x, y, scalar) in [(2, 1, 'A'), (3, 1, '😀'), (4, 1, 'Z'), (5, 1, 'B'), (6, 1, 'C'), (50, 3, '😀'), (0, 4, '�'), (1, 4, 'D'), (2, 4, 'E')] {
+        for (x, y, scalar) in [(2, 1, 'A'), (3, 1, '😀'), (4, 1, 'Z'), (5, 1, 'B'), (6, 1, 'C'), (50, 3, '😀'), (0, 4, '�'), (1, 4, 'D'), (2, 4, 'E'), (4, 4, 'C')] {
             let cell = terminal.terminal().cell(x, y).unwrap();
             assert_eq!(scalar as u32, cell.code_point());
             assert_eq!(10, cell.foreground());
