@@ -49,7 +49,7 @@ headings so this page has one stable URL that can be shared outside the reposito
   at an empty prompt; unfinished input and running editors remain protected.
 - Guest `Terminal` provides owned typed Text/Key/SubmittedLine events, named keys and modifiers, standard-library integer
   geometry for cursor/drawing operations, terminal size observations and named palette colors. Output accepts
-  `CharSequence`, individual `Char` values and `CharArray` ranges; char/buffer output avoids temporary Guest
+  `CharSequence` via `toString()`, individual `Char` values and `CharArray` ranges; char/buffer output avoids temporary Guest
   strings, including glyphs in cmatrix and row buffers in edit. The old public
   raw event protocol is replaced; built-in shell, editor and benchmark agent use the new API.
 
