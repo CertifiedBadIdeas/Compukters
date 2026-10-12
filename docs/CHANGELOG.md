@@ -55,6 +55,8 @@ headings so this page has one stable URL that can be shared outside the reposito
   stay in typed arguments. Local functions can use expression defaults and appear in class initializers.
   Generic local functions and local helpers inside generic top-level functions specialize concrete calls,
   defaults and escaping captures; primitive arguments remain unboxed within bounded compiler expansion.
+  Generic class methods and custom accessors also admit local helpers and callbacks capturing their concrete
+  owner, parameters and shared mutable locals; captured owners observe later field updates.
   Class `val`/`var` properties can store, replace and invoke callbacks, including concrete generic holders,
   constructor defaults and custom/inherited accessors. Nullable callbacks can default or reset to null,
   use safe invocation, Elvis and smart casts, and retain separately held aliases after reset. Safe Unit
