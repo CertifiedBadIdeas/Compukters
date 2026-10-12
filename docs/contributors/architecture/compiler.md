@@ -219,6 +219,15 @@ verifier over FFM; runtime admission quotas are deliberately not part of cache v
 
 ## Specialization and library ownership
 
+`KotlinProjectLowering` coordinates body preparation, layouts, emission and artifact assembly.
+`GuestPlatformLinking` owns library symbol discovery and deterministic import binding. Discovery returns
+source-symbol links before layout; binding runs after value-class component discovery and allocates type,
+boxed/inline value, field and function imports in their existing canonical order. Its bound tables serve
+both artifact assembly and function emission, including imported payload fields. `FunctionCompiler`
+receives the library dependencies as `GuestFunctionImports`; register, block, capture and default-expansion
+state remains local to each function compiler. This phase split preserves the artifact format and source
+versus concrete function identity used by specialization and dispatch.
+
 Guest generic functions and supported generic classes are specialized before artifact writing. Final classes,
 concrete value classes and the admitted abstract/open generic provider hierarchies share the bounded specialization model. Function and class
 specializations are discovered together until no further dependencies appear, including helpers called from generic

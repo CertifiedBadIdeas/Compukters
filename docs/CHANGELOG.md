@@ -29,6 +29,7 @@ headings so this page has one stable URL that can be shared outside the reposito
   allowing independent built-in program artifacts to compile concurrently inside the included Compukters project.
 
 - Addon SDK accepts immutable value-class host responses, nested data/value mixtures and canonical stdlib geometry.
+  Value layouts coexist with precompiled interface methods and companion providers.
   Inline record fields avoid Guest record allocations while retaining bounded copying, GC and checkpoint support.
   Sable 2.0 exposes value snapshots with Vector3d, validated Rotation3d and Matrix3d mass tensors.
 
