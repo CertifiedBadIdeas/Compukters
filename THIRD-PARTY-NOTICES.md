@@ -170,7 +170,7 @@ and `META-INF/licenses/JetBrains-Mono-PROVENANCE.txt`.
 
 ## Gradle Wrapper
 
-The repository includes the Gradle Wrapper from Gradle 9.8.0. Gradle is
+The repository includes the Gradle Wrapper from Gradle 9.8.1. Gradle is
 licensed under Apache-2.0: <https://github.com/gradle/gradle>. The wrapper is a
 repository/build tool and is not embedded in the Compukters production mod
 archive.
