@@ -90,7 +90,16 @@ internal class IdeSourceGeometry(
             .length
             .coerceAtLeast(2)
     val codeLeft = geometry.editor.left + (gutterDigits + 2) * geometry.font.cellWidth
-    val codeBounds = IdeRect(minOf(codeLeft, geometry.editor.right), geometry.editor.top, geometry.editor.right, geometry.editor.bottom)
+    val codeBounds =
+        IdeRect(
+            minOf(codeLeft, geometry.editor.right),
+            geometry.editor.top,
+            maxOf(minOf(codeLeft, geometry.editor.right), geometry.editor.right - IDE_SCROLLBAR_SIZE),
+            maxOf(
+                geometry.editor.top,
+                geometry.editor.bottom - IDE_SCROLLBAR_SIZE,
+            ),
+        )
 
     fun clipCode(bounds: IdeRect): IdeRect? {
         val left = maxOf(bounds.left, codeBounds.left)
