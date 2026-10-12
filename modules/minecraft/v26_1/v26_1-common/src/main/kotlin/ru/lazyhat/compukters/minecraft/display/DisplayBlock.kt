@@ -63,11 +63,11 @@ class DisplayBlock(
         hitResult: BlockHitResult,
     ): InteractionResult {
         if (player.isShiftKeyDown || hitResult.direction != blockState.getValue(FACING)) return InteractionResult.PASS
-        if (level.isClientSide) return InteractionResult.SUCCESS
+        if (level.isClientSide) return InteractionResult.CONSUME
         val server = level as? ServerLevel ?: return InteractionResult.PASS
         val entity = level.getBlockEntity(position) as? DisplayBlockEntity ?: return InteractionResult.PASS
         DisplayWorldAccess.click(server, entity, hitResult)
-        return InteractionResult.SUCCESS_SERVER
+        return InteractionResult.CONSUME
     }
 
     override fun newBlockEntity(
