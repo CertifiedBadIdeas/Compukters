@@ -6865,13 +6865,20 @@ class MinimalScriptLoweringTest {
                         """
                         import compukter.filesystem.Path
                         import compukter.filesystem.FileSystem
+                        import compukter.filesystem.FileSystemException
+                        import compukter.filesystem.FileSystemError
                         import compukter.io.IOException
                         fun readFile(): String = FileSystem.readText(Path("/home/missing"))
                         fun main() {
                             var cleanup = false
                             try { readFile(); error("read must fail") }
                             catch (caught: IOException) {
-                                require(caught.message == "Filesystem entry was not found")
+                                if (caught is FileSystemException) {
+                                    require(caught.reason == FileSystemError.NOT_FOUND)
+                                    require(caught.path == "/home/missing")
+                                    require(caught.operation == "openRead")
+                                    require(caught.message == "openRead: not found: /home/missing")
+                                } else { error("expected a typed filesystem error") }
                                 require(caught.cause == null)
                             } finally { cleanup = true }
                             require(cleanup)
