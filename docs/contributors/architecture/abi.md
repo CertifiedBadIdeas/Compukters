@@ -30,6 +30,13 @@ and response tag 8. Logical checkpoint envelope/schema advances to 4 for pending
 cold boot while retaining published files. Sable addon 2.0 uses Vector3d/Matrix3d and value snapshots, with
 Rotation3d created by its validating Guest factory.
 
+Addon metadata archives retain executable library members alongside source value layouts. The compressed
+metadata archive remains bounded to 2 MiB and the complete bundle to 4 MiB; expanded metadata has a separate
+8 MiB budget, enforced during bounded entry reads and across the archive. Source archives retain their 2 MiB
+compressed and expanded limits. This accommodates compiled platform dependencies without removing addon methods;
+CAGB encoding and capability schemas remain unchanged. `AddonGuestApiBundleCodecTest` exercises round trips
+with expanded metadata above 2 MiB and rejection of either exceeded budget.
+
 ## Matrix shape kernels — Runtime ABI 1.19
 
 MatrixMath retains opcode 0x1e/form 0 and original selectors 1–5. Selectors 6–8 add Matrix3f

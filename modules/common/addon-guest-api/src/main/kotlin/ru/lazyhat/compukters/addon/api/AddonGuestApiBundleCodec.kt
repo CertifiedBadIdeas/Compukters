@@ -154,7 +154,13 @@ object AddonGuestApiBundleCodec {
         require(platformAbi == PlatformBundleCodec.SUPPORTED_PLATFORM_ABI) { "unsupported addon platform ABI: $platformAbi" }
         require(metadataJar.size <= AddonGuestApiLimits.MAXIMUM_METADATA_BYTES) { "addon metadata JAR exceeds byte limit" }
         require((sourcesJar?.size ?: 0) <= AddonGuestApiLimits.MAXIMUM_SOURCE_BYTES) { "addon sources JAR exceeds byte limit" }
-        val metadataEntries = readArchive(metadataJar, AddonGuestApiLimits.MAXIMUM_METADATA_BYTES, sources = false)
+        val metadataEntries =
+            readArchive(
+                metadataJar,
+                AddonGuestApiLimits.MAXIMUM_METADATA_BYTES,
+                sources = false,
+                maximumExpandedBytes = AddonGuestApiLimits.MAXIMUM_EXPANDED_METADATA_BYTES,
+            )
         require(metadataEntries.keys == setOf(METADATA_ENTRY)) { "addon metadata JAR contains undeclared entries" }
         require(metadataJar.contentEquals(archive(metadataEntries, AddonGuestApiLimits.MAXIMUM_METADATA_BYTES))) {
             "addon metadata JAR is not canonical"
@@ -415,6 +421,7 @@ object AddonGuestApiBundleCodec {
         bytes: ByteArray,
         maximumBytes: Int,
         sources: Boolean,
+        maximumExpandedBytes: Int = maximumBytes,
     ): Map<String, ByteArray> {
         require(bytes.size <= maximumBytes) { "addon archive exceeds byte limit" }
         val entries = linkedMapOf<String, ByteArray>()
@@ -433,10 +440,10 @@ object AddonGuestApiBundleCodec {
                 require(sources || name == METADATA_ENTRY) { "addon metadata JAR contains forbidden entry: $name" }
                 require(!sources || name.endsWith(".kt")) { "addon sources JAR contains a non-Kotlin entry: $name" }
                 require(entries.size < AddonGuestApiLimits.MAXIMUM_ARCHIVE_ENTRIES) { "addon archive entry count exceeds limit" }
-                val content = jar.readNBytes(maximumBytes + 1)
-                require(content.size <= maximumBytes) { "addon archive entry exceeds byte limit" }
+                val content = jar.readNBytes(maximumExpandedBytes + 1)
+                require(content.size <= maximumExpandedBytes) { "addon archive entry exceeds byte limit" }
                 expandedBytes = Math.addExact(expandedBytes, content.size.toLong())
-                require(expandedBytes <= maximumBytes) { "addon archive expanded bytes exceed limit" }
+                require(expandedBytes <= maximumExpandedBytes) { "addon archive expanded bytes exceed limit" }
                 require(entries.put(name, content) == null) { "addon archive contains duplicate entry: $name" }
             }
         }
