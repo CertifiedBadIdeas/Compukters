@@ -25,6 +25,7 @@ import org.gradle.api.Plugin;
 import org.gradle.api.Project;
 import org.gradle.api.artifacts.Configuration;
 import org.gradle.api.file.DuplicatesStrategy;
+import org.gradle.api.file.FileCollection;
 import org.gradle.api.tasks.AbstractCopyTask;
 import org.gradle.api.tasks.JavaExec;
 import org.gradle.api.tasks.TaskProvider;
@@ -52,6 +53,7 @@ public final class CompuktersAddonPlugin implements Plugin<Project> {
             configuration.setCanBeConsumed(false);
             configuration.setCanBeResolved(true);
         });
+        FileCollection platformFiles = project.files(platform);
         var sourceRoot = project.getLayout().getProjectDirectory().dir("src/compuktersAddon/kotlin");
         var abiLock = project.getLayout().getProjectDirectory().file("src/compuktersAddon/addon.lock");
         var descriptor = project.getLayout().getBuildDirectory().file("compukters-addon/addon.api");
@@ -94,7 +96,7 @@ public final class CompuktersAddonPlugin implements Plugin<Project> {
             task.getInputs().files(platform);
             task.getOutputs().file(bundle);
             task.getOutputs().file(generatedHost);
-            task.doFirst(ignored -> task.setArgs(builderArguments(platform, sourceRoot.getAsFile().getAbsolutePath(),
+            task.doFirst(ignored -> task.setArgs(builderArguments(platformFiles, sourceRoot.getAsFile().getAbsolutePath(),
                     descriptor.get().getAsFile().getAbsolutePath(), abiLock.getAsFile().getAbsolutePath(),
                     bundle.get().getAsFile().getAbsolutePath(), generatedHost.get().getAsFile().getAbsolutePath(), false)));
         });
@@ -111,7 +113,7 @@ public final class CompuktersAddonPlugin implements Plugin<Project> {
             var validationBundle = project.getLayout().getBuildDirectory()
                     .file("compukters-addon/" + project.getName() + "-abi-lock-update.cagb");
             task.getOutputs().file(validationBundle);
-            task.doFirst(ignored -> task.setArgs(builderArguments(platform, sourceRoot.getAsFile().getAbsolutePath(),
+            task.doFirst(ignored -> task.setArgs(builderArguments(platformFiles, sourceRoot.getAsFile().getAbsolutePath(),
                     descriptor.get().getAsFile().getAbsolutePath(), abiLock.getAsFile().getAbsolutePath(),
                     validationBundle.get().getAsFile().getAbsolutePath(), null, true)));
         });
@@ -157,7 +159,7 @@ public final class CompuktersAddonPlugin implements Plugin<Project> {
     }
 
     private static List<String> builderArguments(
-            Configuration platform,
+            FileCollection platform,
             String sources,
             String descriptor,
             String lock,
