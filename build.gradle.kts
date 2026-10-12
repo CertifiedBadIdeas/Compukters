@@ -1566,3 +1566,13 @@ registerKotlinVmConformance(
     artifactEnvironmentVariable = "COMPUKTER_KOTLIN_DISPLAY_UI_ARTIFACT",
     conformanceScenario = "display-ui",
 )
+
+registerKotlinVmConformance(
+    taskName = "testKotlinContractsVmConformance",
+    taskDescription = "Executes classic contract data-flow and initialized locals with the pinned VM.",
+    artifactTask = ":compiler-k2:generateContractsConformanceArtifact",
+    artifact = project(":compiler-k2").layout.buildDirectory.file("generated/conformance/kotlin-contracts.cpkt"),
+    cargoTargetDirectory = ".toolchain/build/cargo/compiler-k2-contracts-conformance",
+    artifactEnvironmentVariable = "COMPUKTER_KOTLIN_CONTRACTS_ARTIFACT",
+    conformanceScenario = "contracts",
+)

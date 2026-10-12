@@ -45,7 +45,7 @@ class CanonicalPlatformSourceTest {
         assertTrue("public const val MIN_VALUE: Long" in primitives)
         assertTrue("public class Float private constructor()" in primitives)
         assertTrue("public external val NaN: Float" in primitives)
-        assertEquals("1.12.0", catalog.modules.single { it.id == "kotlin:builtins" }.version)
+        assertEquals("1.13.0", catalog.modules.single { it.id == "kotlin:builtins" }.version)
     }
 
     @Test

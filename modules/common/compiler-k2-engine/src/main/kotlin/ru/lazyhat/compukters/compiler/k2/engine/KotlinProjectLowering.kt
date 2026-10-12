@@ -2215,7 +2215,11 @@ internal object KotlinProjectLowering {
                             declaration,
                             shapeInterfaceTypes,
                             classInstanceTypeIds = classInstanceTypeIds,
-                        ).let { guestTypes.heapType(declaration.type, it) },
+                        ).let { guestTypes.heapType(declaration.type, it) }.let { storage ->
+                            // A captured, definitely assigned reference starts without a value.
+                            // Keep only its cell storage nullable; reads recover the declared type.
+                            if (declaration.initializer == null && storage is ValueType.Ref) storage.copy(nullable = true) else storage
+                        },
                 )
             }
         val captureCellLayoutsBySymbol: Map<IrValueSymbol, GuestCaptureCellLayout> =
@@ -3953,11 +3957,13 @@ internal object KotlinProjectLowering {
         closures: List<GuestClosureSource>,
         locals: Map<IrSimpleFunctionSymbol, GuestLocalFunction>,
         written: Set<IrValueSymbol>,
-    ): List<IrVariable> =
-        (closures.flatMap { it.captures } + locals.values.flatMap { it.captures })
+    ): List<IrVariable> {
+        val assignedInCallbacks = collectWrittenGuestValues(closures.mapNotNull { it.function } + locals.keys.map { it.owner })
+        return (closures.flatMap { it.captures } + locals.values.flatMap { it.captures })
             .filterIsInstance<IrVariable>()
-            .filter { it.isVar && it.symbol in written }
+            .filter { it.symbol in written && (it.isVar || it.symbol in assignedInCallbacks) }
             .distinctBy { it.symbol }
+    }
 
     private fun localCaptureParameterTypes(
         locals: Map<IrSimpleFunctionSymbol, GuestLocalFunction>,
@@ -5243,19 +5249,22 @@ private class FunctionCompiler(
         if (isTerminated()) return
         when (statement) {
             is IrVariable -> {
-                val initializer = statement.initializer ?: throw UnsupportedKotlinIr(statement, "local without initializer")
-                rejectFunctionVariance(initializer.type, statement.type, statement)
-                val source = coerceLocalValue(compileExpression(initializer, statement.type), statement.type, statement)
+                val initializer = statement.initializer
+                val source =
+                    initializer?.let {
+                        rejectFunctionVariance(it.type, statement.type, statement)
+                        coerceLocalValue(compileExpression(it, statement.type), statement.type, statement)
+                    }
                 val cell = captureCells[statement.symbol]
                 if (cell == null) {
                     if (initializer is IrFunctionExpression ||
                         initializer is IrFunctionReference ||
                         initializer is IrRichFunctionReference
                     ) {
-                        values[statement.symbol] = source
+                        values[statement.symbol] = requireNotNull(source)
                     } else {
                         val destination = allocate(valueType(statement.type, statement))
-                        emit(Instruction.Move(destination, source))
+                        if (source != null) emit(Instruction.Move(destination, source))
                         values[statement.symbol] = destination
                     }
                 } else {
@@ -5263,13 +5272,15 @@ private class FunctionCompiler(
                     val cellType = TypeRef.Local(cell.typeId)
                     val destination = allocate(ValueType.Ref(nullable = false, type = cellType))
                     emit(Instruction.NewObject(destination, cellType))
-                    emit(
-                        Instruction.FieldSet(
-                            destination,
-                            FieldRef.Local(cell.fieldId),
-                            storedValue(source, statement.type, cell.valueType),
-                        ),
-                    )
+                    if (source != null) {
+                        emit(
+                            Instruction.FieldSet(
+                                destination,
+                                FieldRef.Local(cell.fieldId),
+                                storedValue(source, statement.type, cell.valueType),
+                            ),
+                        )
+                    }
                     values[statement.symbol] = destination
                 }
             }
@@ -5825,7 +5836,7 @@ private class FunctionCompiler(
                 allocate(cell.valueType).also { destination ->
                     emit(Instruction.FieldGet(destination, loadCellReference(symbol, element), FieldRef.Local(cell.fieldId)))
                 }
-            return loadedValue(stored, symbol.owner.type, element)
+            return coerceLocalValue(loadedValue(stored, symbol.owner.type, element), symbol.owner.type, element)
         }
         values[symbol]?.let { return it }
         val capture = captureFields[symbol] ?: throw UnsupportedKotlinIr(element, "unknown local value")

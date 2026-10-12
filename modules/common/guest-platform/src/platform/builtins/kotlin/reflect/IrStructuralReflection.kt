@@ -24,7 +24,8 @@ internal interface KMutableProperty1<T, R> : KProperty1<T, R>
 
 internal interface KMutableProperty2<D, E, R> : KProperty2<D, E, R>
 
-internal interface KClass<out T : Any> : KCallable<T>
+/** Structural class token for annotations; runtime reflection is unavailable. */
+public interface KClass<out T : Any>
 
 internal interface KType
 

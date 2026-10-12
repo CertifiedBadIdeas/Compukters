@@ -170,6 +170,8 @@ class PlatformMetadataCompiler {
             completionDeclarations = parsedPlatform.completionDeclarations.sortedWith(COMPLETION_DECLARATION_ORDER),
             libraryDeclarations =
                 declarations
+                    // K2 interprets this declaration-only DSL; it has no executable library surface.
+                    .filterNot { it.declaration.symbol.startsWith("kotlin.contracts.") }
                     .filter { parsed ->
                         parsed.hasBody || parsed.abstractMember ||
                             (
@@ -696,6 +698,10 @@ class PlatformMetadataCompiler {
                 is KtConstructor<*> -> declaration.valueParameters
                 else -> return emptyList()
             }
+        // Annotation defaults belong to FIR metadata, never to executable call defaults.
+        if (declaration is KtConstructor<*> && declaration.getContainingClassOrObject()?.isAnnotation() == true) {
+            return emptyList()
+        }
         val function = declaration as? KtNamedFunction
         val values =
             parameters.map { parameter ->

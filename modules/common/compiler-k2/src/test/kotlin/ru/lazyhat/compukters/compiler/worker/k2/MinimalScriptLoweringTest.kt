@@ -2357,6 +2357,89 @@ class MinimalScriptLoweringTest {
         }
 
     @Test
+    fun `contract descriptions emit the same executable instructions as plain functions`() =
+        withAdapter { adapter ->
+            val description = "contract { returns(true) implies (value is String) }"
+            val source =
+                """
+                @file:OptIn(kotlin.contracts.ExperimentalContracts::class)
+                import kotlin.contracts.*
+                fun text(value: Any?): Boolean {
+                    $description
+                    return value is String
+                }
+                fun main() { check(text("ok")) }
+                """.trimIndent()
+
+            fun instructions(input: String): List<Instruction> {
+                val result = adapter.compile(request(input))
+                return ArtifactReader
+                    .read(assertNotNull(result.artifact, result.diagnostics.toString()).toByteArray())
+                    .modules
+                    .flatMap { it.blocks }
+                    .flatMap { it.instructions }
+            }
+            assertEquals(instructions(source.replace(description, "")), instructions(source))
+        }
+
+    @Test
+    fun `invalid contract effects and insufficient initialization guarantees are rejected`() =
+        withAdapter { adapter ->
+            val prelude =
+                """
+                @file:OptIn(kotlin.contracts.ExperimentalContracts::class)
+                import kotlin.contracts.*
+                """.trimIndent()
+            val cases =
+                listOf(
+                    "fun wrong(value: Int) { contract { returns() implies (value > 0) } }; fun main() {}",
+                    "fun wrong() { contract { returns(42) } }; fun main() {}",
+                    "fun wrong() { println(1); contract { returns() } }; fun main() {}",
+                    """
+                    fun maybe(block: () -> Unit) {
+                        contract { callsInPlace(block, InvocationKind.AT_MOST_ONCE) }
+                    }
+                    fun main() { val value: Int; maybe { value = 1 }; println(value) }
+                    """.trimIndent(),
+                    """
+                    fun many(block: () -> Unit) {
+                        contract { callsInPlace(block, InvocationKind.AT_LEAST_ONCE) }
+                        block()
+                    }
+                    fun main() { val value: Int; many { value = 1 }; println(value) }
+                    """.trimIndent(),
+                    """
+                    fun once(block: () -> Unit) {
+                        contract { callsInPlace(block, InvocationKind.EXACTLY_ONCE) }
+                        block()
+                    }
+                    fun main() { var value: String? = null; once { value = "ok" }; println(value.length) }
+                    """.trimIndent(),
+                    "fun wrong(block: () -> Unit) { contract { returnsResultOf(block) } }; fun main() {}",
+                )
+            for (source in cases) {
+                val result = adapter.compile(request("$prelude\n$source"))
+                assertNull(result.artifact, source)
+                assertTrue(result.diagnostics.any { it.severity.name == "ERROR" }, result.diagnostics.toString())
+            }
+            val withoutOptIn = adapter.compile(request("import kotlin.contracts.*\nfun wrong() { contract { returns() } }; fun main() {}"))
+            assertNull(withoutOptIn.artifact)
+        }
+
+    @Test
+    fun `classic contracts preserve initialization conditional effects and compile time erasure`() =
+        withAdapter { adapter ->
+            val source = repositoryFile("modules/common/compiler-k2/src/test/resources/kotlin/contracts/main.kt").readText()
+            val result = adapter.compile(request(source))
+            val bytes = assertNotNull(result.artifact, result.diagnostics.joinToString()).toByteArray()
+            val artifact = ArtifactReader.read(bytes)
+            assertTrue(artifact.modules.none { module -> module.strings.any { it.toString().startsWith("kotlin.contracts.") } })
+            System.getProperty("compukter.vm.contractsArtifact")?.let { output ->
+                Path.of(output).also { it.parent.createDirectories() }.writeBytes(bytes)
+            }
+        }
+
+    @Test
     fun `declarative display UI preserves viewport layout capture and callback boundaries`() =
         withAdapter { adapter ->
             val source = repositoryFile("modules/common/compiler-k2/src/test/resources/kotlin/display-ui/main.kt").readText()
@@ -2862,7 +2945,7 @@ class MinimalScriptLoweringTest {
             )) {
                 val result = adapter.compile(request(source))
                 assertNull(result.artifact)
-                assertTrue(result.diagnostics.any { it.severity == DiagnosticSeverity.ERROR }, result.diagnostics.toString())
+                assertTrue(result.diagnostics.any { it.severity.name == "ERROR" }, result.diagnostics.toString())
             }
         }
 
@@ -4700,7 +4783,7 @@ class MinimalScriptLoweringTest {
             )) {
                 val result = adapter.compile(request("import kotlin.collections.*\nfun main() { $source }"))
                 assertNull(result.artifact)
-                assertTrue(result.diagnostics.any { it.severity == DiagnosticSeverity.ERROR })
+                assertTrue(result.diagnostics.any { it.severity.name == "ERROR" })
             }
         }
 
