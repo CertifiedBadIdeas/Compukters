@@ -25,11 +25,45 @@ import ru.lazyhat.compukters.ide.analysis.DeclarationOrigin
 import ru.lazyhat.compukters.ide.editor.EditorRange
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
 class ExpressionInfoQueryTest {
+    @Test
+    fun `list hover distinguishes mutable overloads read only contracts and selection functions`() {
+        val source =
+            "import kotlin.collections.*\n" +
+                "fun main() { val values = ArrayList<Int>(2); val view: List<Int> = values; " +
+                "values.add(0, 1); values.add(2); values.get(0); view.get(0); values.iterator(); " +
+                "view.getOrNull(0); view.lastOrNull(); listOf(1, 2); emptyList<Int>() }"
+        K2QueryFixture.sourceWithGuestApi(true, "main.kt" to source).use { fixture ->
+            for ((site, tags) in listOf(
+                "ArrayList<Int>" to listOf("@param initialCapacity", "@constructor", "@throws IllegalArgumentException"),
+                "add(0, 1)" to listOf("@param index", "@param element"),
+                "add(2)" to listOf("@param element", "@return"),
+                "get(0); view" to listOf("@param index", "@throws IllegalArgumentException"),
+                "get(0); values.iterator" to listOf("@param index", "@return"),
+                "iterator()" to listOf("@return"),
+                "getOrNull" to listOf("@receiver", "@param index", "@return"),
+                "lastOrNull" to listOf("@receiver", "@return"),
+                "listOf(1" to listOf("@param elements", "@return"),
+                "emptyList<Int>" to listOf("@return"),
+            )) {
+                val result =
+                    fixture.execute(
+                        AnalysisQuery.ExpressionInfo(fixture.identity, VirtualSourcePath.kotlin("main.kt"), source.indexOf(site)),
+                    ) as AnalysisResult.ExpressionInfo
+                val info = assertNotNull(result.value, "$site: missing expression info")
+                val documentation = assertNotNull(info.documentation, "$site: $info")
+                tags.forEach { tag -> assertTrue(documentation.contains(tag), "$site: missing $tag in $documentation") }
+                if (site == "add(2)") assertFalse(documentation.contains("@param index"), documentation)
+                if (site == "get(0); values.iterator") assertFalse(documentation.contains("@throws"), documentation)
+            }
+        }
+    }
+
     @Test
     fun `primitive hover resolves member constants and narrow extension documentation`() {
         val source =

@@ -6,23 +6,65 @@
 
 package kotlin.collections
 
-/** A mutable list backed by an array whose capacity grows as elements are added. */
+/**
+ * A mutable ordered list backed by an array that grows as elements are added.
+ *
+ * Duplicates are retained. Nullable element types may store null. A [List] view refers to the
+ * same object and observes later mutations. Removed storage slots are cleared; [clear] retains
+ * backing capacity for reuse. Insertion and removal shift following elements.
+ *
+ * Adding, removing, or calling [clear] invalidates existing iterators, except for removal through
+ * that iterator itself. [set] replaces an element without changing size or invalidating iterators.
+ * Allocation uses the VM heap budget.
+ *
+ * @param T element type.
+ * @param initialCapacity initial backing capacity, not the list's initial size.
+ * @constructor creates an empty list with the requested non-negative capacity; the default is 10.
+ * @throws IllegalArgumentException if [initialCapacity] is negative.
+ * @see MutableList
+ */
 public class ArrayList<T>(
     initialCapacity: Int = 10,
 ) : MutableList<T> {
     private var storage: MutableListStorage<T> = mutableListStorage<T>(initialCapacity)
+    /**
+     * Number of elements currently stored in this list.
+     */
     public override var size: Int = 0
         private set
     internal var modificationCount: Int = 0
         private set
 
+    /**
+     * Checks whether this list has no elements.
+     *
+     * @return true when [size] is zero.
+     */
     public override fun isEmpty(): Boolean = size == 0
 
+    /**
+     * Returns the element at [index] without removing it.
+     *
+     * @param index zero-based element index, less than [size].
+     * @return the stored element, including null for nullable element types.
+     * @throws IllegalArgumentException if [index] is negative or at least [size].
+     * @see getOrNull
+     */
     public override fun get(index: Int): T {
         require(index >= 0 && index < size)
         return storage[index]
     }
 
+    /**
+     * Replaces the element at [index] and returns the previous element.
+     *
+     * Does not change [size], shift other elements, or invalidate iterators.
+     *
+     * @param index zero-based element index, less than [size].
+     * @param element replacement element.
+     * @return the element previously stored at [index].
+     * @throws IllegalArgumentException if [index] is negative or at least [size].
+     */
     public override fun set(
         index: Int,
         element: T,
@@ -32,11 +74,29 @@ public class ArrayList<T>(
         return previous
     }
 
+    /**
+     * Appends [element] to the end of this list, growing the backing array when needed.
+     *
+     * Duplicates are allowed. Successful insertion invalidates existing iterators.
+     *
+     * @param element element to append.
+     * @return true after the element has been added.
+     * @throws IllegalArgumentException if [size] is already [Int.MAX_VALUE].
+     */
     public override fun add(element: T): Boolean {
         add(size, element)
         return true
     }
 
+    /**
+     * Inserts [element] at [index], shifting following elements one position to the right.
+     *
+     * An index equal to [size] appends to the list. Successful insertion invalidates existing iterators.
+     *
+     * @param index insertion position, from zero through [size] inclusive.
+     * @param element element to insert.
+     * @throws IllegalArgumentException if [index] is outside the insertion range or [size] is [Int.MAX_VALUE].
+     */
     public override fun add(
         index: Int,
         element: T,
@@ -54,6 +114,15 @@ public class ArrayList<T>(
         modificationCount += 1
     }
 
+    /**
+     * Removes the element at [index] and shifts following elements one position to the left.
+     *
+     * Decreases [size], clears the unused storage slot and invalidates existing iterators.
+     *
+     * @param index zero-based element index, less than [size].
+     * @return the removed element.
+     * @throws IllegalArgumentException if [index] is negative or at least [size].
+     */
     public override fun removeAt(index: Int): T {
         val previous = get(index)
         var position = index
@@ -67,6 +136,15 @@ public class ArrayList<T>(
         return previous
     }
 
+    /**
+     * Removes the first element equal to [element].
+     *
+     * Uses the same equality as [indexOf]. Removing a match shifts following elements to the left
+     * and invalidates existing iterators. An absent element leaves the list unchanged.
+     *
+     * @param element value to search for and remove.
+     * @return true if an element was removed, or false when no equal element exists.
+     */
     public override fun remove(element: T): Boolean {
         val index = indexOf(element)
         if (index < 0) return false
@@ -74,6 +152,12 @@ public class ArrayList<T>(
         return true
     }
 
+    /**
+     * Removes all elements while retaining backing capacity for reuse.
+     *
+     * Clears the occupied storage slots and sets [size] to zero. Every call invalidates existing
+     * iterators, including calls on an already empty list.
+     */
     public override fun clear() {
         var index = 0
         while (index < size) {
@@ -84,12 +168,47 @@ public class ArrayList<T>(
         modificationCount += 1
     }
 
+    /**
+     * Checks whether this list contains an element equal to [element].
+     *
+     * @param element value to search for.
+     * @return true if [indexOf] finds a match.
+     */
     public override fun contains(element: T): Boolean = indexOf(element) >= 0
 
+    /**
+     * Returns the first index whose element equals [element], or -1 when no match exists.
+     *
+     * Searches from index zero and stops at the first match, using generic element equality.
+     *
+     * @param element value to search for.
+     * @return the first matching index, or -1.
+     */
     public override fun indexOf(element: T): Int = listIndexOf<T>(element)
 
+    /**
+     * Returns the last index whose element equals [element], or -1 when no match exists.
+     *
+     * Searches backwards from the last index and stops at the first match, using generic element equality.
+     *
+     * @param element value to search for.
+     * @return the last matching index, or -1.
+     */
     public override fun lastIndexOf(element: T): Int = listLastIndexOf<T>(element)
 
+    /**
+     * Creates a new mutable iterator that visits this list in index order.
+     *
+     * [MutableIterator.remove] removes the most recently returned element once and preserves the
+     * iterator's traversal position. External insertion, removal or any [clear] invalidates later
+     * [Iterator.next] and [MutableIterator.remove] calls; [set] does not. [Iterator.hasNext] only
+     * checks whether an element remains and does not validate structural changes.
+     *
+     * This iterator throws [IllegalArgumentException] from next after exhaustion or invalidation,
+     * or from remove after invalidation, before next, or twice after the same successful next.
+     *
+     * @return a fresh iterator positioned before the first element.
+     */
     public override fun iterator(): MutableIterator<T> = ArrayListIterator(this)
 
     internal fun iteratorReadOnly(): Iterator<T> = ArrayListIterator(this)
