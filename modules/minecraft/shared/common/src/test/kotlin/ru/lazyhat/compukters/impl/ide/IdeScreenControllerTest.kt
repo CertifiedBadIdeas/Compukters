@@ -136,14 +136,39 @@ class IdeScreenControllerTest {
     }
 
     @Test
-    fun `completed close restores parent and removal releases the session only once`() {
+    fun `completed close ignores later screen ticks and releases the session only once`() {
         Fixture().use { fixture ->
             fixture.controller.dispatch(IdeCommand.CloseRequested)
             fixture.ui.tick()
+            fixture.ui.tick()
             fixture.ui.removed()
+            fixture.ui.tick()
             assertEquals(1, fixture.host.restored)
             assertEquals(1, fixture.host.closed)
             assertEquals(0, fixture.host.abandoned)
+        }
+    }
+
+    @Test
+    fun `application shutdown ignores later screen ticks and removal`() {
+        Fixture().use { fixture ->
+            fixture.controller.close()
+            repeat(3) { fixture.ui.tick() }
+            fixture.ui.removed()
+            assertEquals(0, fixture.host.restored)
+            assertEquals(1, fixture.host.closed)
+            assertEquals(1, fixture.host.abandoned)
+        }
+    }
+
+    @Test
+    fun `removed screen ignores later ticks without restoring its parent`() {
+        Fixture().use { fixture ->
+            fixture.ui.removed()
+            repeat(3) { fixture.ui.tick() }
+            assertEquals(0, fixture.host.restored)
+            assertEquals(1, fixture.host.closed)
+            assertEquals(1, fixture.host.abandoned)
         }
     }
 
@@ -389,7 +414,9 @@ class IdeScreenControllerTest {
         }
     }
 
-    private class Host : IdeScreenHost {
+    private class Host(
+        private val closeApplication: () -> Unit,
+    ) : IdeScreenHost {
         override var clipboard = ""
         var focusCleared = 0
         var restored = 0
@@ -413,6 +440,7 @@ class IdeScreenControllerTest {
 
         override fun closeSession() {
             closed++
+            closeApplication()
         }
     }
 
@@ -432,7 +460,7 @@ class IdeScreenControllerTest {
         private val preferences = IdeClientPreferences(root.resolve("preferences"), layout)
         val controller = IdeClientController(workspace, preferences, IdeControllerClock { 0L }, BoundedIdeEventQueue(128))
         private val terminal = IdeTargetTerminalClient { }
-        val host = Host()
+        val host = Host(controller::close)
         val ui = IdeScreenController(controller, preferences, terminal, IdeVisibleLatencyTrace.None, host)
 
         init {
