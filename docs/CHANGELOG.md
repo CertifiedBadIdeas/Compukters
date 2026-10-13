@@ -13,6 +13,8 @@ headings so this page has one stable URL that can be shared outside the reposito
 
 ## 0.6.0 — In development
 
+- The shell repeats the failure reason beneath multiline program diagnostics so it remains visible after a long stack trace.
+
 - Guest Kotlin supports classic compile-time contracts for callback invocation counts, definite local initialization and conditional null/type smart casts. Contracts cover standard scope functions, preconditions, `buildString` and nested display UI construction; declarations add no runtime builder or VM operations.
 
 - Guest displays provide a lightweight declarative widget DSL with explicit pixel viewports, rows/columns,

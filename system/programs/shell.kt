@@ -117,7 +117,14 @@ private fun executeExternal(words: Array<String>) {
         result = Process.run(path, arguments)
     }
     val diagnostic = shellProcessDiagnostic(result, path.normalize().value)
-    if (diagnostic.isNotEmpty()) Stderr.write(diagnostic + "\n")
+    if (diagnostic.isNotEmpty()) {
+        Stderr.write(diagnostic + "\n")
+        // Keep the failure reason visible when a long stack trace scrolls it out of the fixed grid.
+        val newline = diagnostic.indexOf('\n')
+        if (newline >= 0 && newline < diagnostic.length - 1) {
+            Stderr.write(diagnostic.substring(0, newline) + "\n")
+        }
+    }
 }
 
 fun shellFallbackPath(

@@ -313,6 +313,8 @@ Ctrl+C is reserved for foreground interruption. At an idle shell it cancels comm
 child is running it unwinds that command's process tree and returns status 130 to its parent.
 It is forced cancellation, without Guest signal handlers. Ctrl+T is no longer reserved.
 Plain C/U text remains normal input; the client maps Ctrl+C and Ctrl+U as key events.
+The terminal has no output scrollback. The shell prints a program's complete failure diagnostic and
+repeats its first line after a multiline diagnostic to keep the reason visible beneath the stack trace.
 
 **Evidence:**
 [`MinimalScriptLoweringTest`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/compiler-k2/src/test/kotlin/ru/lazyhat/compukters/compiler/worker/k2/MinimalScriptLoweringTest.kt),
