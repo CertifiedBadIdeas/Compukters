@@ -63,6 +63,39 @@ class LifecycleTest(unittest.TestCase):
         self.assertEqual(b'game save', (archive / 'preserved-files/world/save.dat').read_bytes())
         self.assertEqual('dev', json.loads((archive / 'completion.json').read_text())['base'])
 
+    def test_finish_ignores_nested_gradle_caches_but_preserves_world_data(self):
+        checkout = self.ready_task()
+        git(checkout, 'config', 'core.excludesFile', str(self.directory / 'ignore'))
+        (self.directory / 'ignore').write_text('.gradle-sandbox/\nrun/\n')
+        cache = checkout / 'addons/example/.gradle-sandbox/caches/src/cached-data'
+        cache.parent.mkdir(parents=True)
+        cache.write_text('disposable cache')
+        world = checkout / 'addons/example/run/world/save.dat'
+        world.parent.mkdir(parents=True)
+        world.write_text('keep world')
+        self.check_success(self.lifecycle('finish', 'feat/example'))
+        archive = next((self.workspace / 'build/agent-logs/worktree-completion').iterdir())
+        self.assertFalse(any(path.name == 'cached-data' for path in archive.rglob('*')))
+        self.assertEqual('keep world', (archive / 'preserved-files/addons/example/run/world/save.dat').read_text())
+
+    def test_finish_refuses_active_nested_independent_gradle_build(self):
+        checkout = self.ready_task()
+        wrapper = checkout / 'addons/example/gradlew-sandbox'
+        wrapper.parent.mkdir(parents=True)
+        wrapper.write_text('#!/bin/sh\n')
+        git(checkout, 'add', 'addons/example/gradlew-sandbox')
+        git(checkout, 'commit', '-m', 'nested independent build')
+        git(self.workspace, 'merge', '--ff-only', 'feat/example')
+        git(checkout, 'config', 'core.excludesFile', str(self.directory / 'ignore'))
+        (self.directory / 'ignore').write_text('.gradle-sandbox/\n')
+        lock = wrapper.parent / '.gradle-sandbox/.compukters-cache.lock'
+        lock.parent.mkdir()
+        with lock.open('wb') as handle:
+            fcntl.flock(handle, fcntl.LOCK_SH)
+            self.assertIn('build is active', self.lifecycle('finish', 'feat/example').stderr)
+        self.assertTrue(checkout.exists())
+        self.check_success(self.lifecycle('finish', 'feat/example'))
+
     def test_finish_refuses_unmerged_dirty_or_missing_evidence(self):
         self.check_success(self.command())
         checkout = self.workspace / '.worktrees/feat-example'

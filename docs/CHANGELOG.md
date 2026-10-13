@@ -16,6 +16,15 @@ headings so this page has one stable URL that can be shared outside the reposito
 - Added an empty independent Cosmonautics addon scaffold and pinned Cosmonautics in the all-addon development stand;
   Guest APIs and spacecraft controls will follow separately.
 
+- The Crafts & Additions integration exposes named liquid Blaze Burners with atomic fuel quantity, capacity,
+  heat and remaining burn-time readings. The separate `boiler-scada` project starts water/fuel pumps from a
+  kinetic battery, switches to steam self-power with battery charging, and reverses the fuel pump on STOP until
+  every configured burner is empty. Its panel shows boiler readings, per-burner fuel, cooldown and fault states.
+  The development stand includes Crafts & Additions and Create: Connected.
+
+- Task worktree completion checks active builds in nested independent Gradle projects and excludes their
+  sandbox caches from its archive while retaining worlds and IDE data.
+
 - Guest Kotlin supports direct generic methods on ordinary classes and objects, combining class and method
   type specialization with defaults, local helpers and escaping callbacks.
 

@@ -79,6 +79,10 @@ Commit, merge and verify the integrated change first, then run from outside the 
 ./worktree-task finish fix/vm-execution --repo host/compukter-vm --evidence /path/to/cargo-test.log
 ```
 
+Independent nested Gradle builds with tracked sandbox wrappers are checked for active builds too. Their
+`.gradle-sandbox` homes are disposable cache data and are excluded from the completion archive; worlds
+and IDE files remain preserved.
+
 `finish` uses the task record written during setup, checks that the recorded branch still owns that
 worktree, and requires its HEAD to be an ancestor of the recorded local base (`dev` or submodule `main`
 by default). It performs no merge, commit, push or branch deletion. Dirty or untracked files, locked
