@@ -7,11 +7,12 @@
 import boiler.control.BoilerControl
 import boiler.control.BoilerSample
 import boiler.control.Channel
-import boiler.control.FuelDirection
+import boiler.control.FuelMode
 import boiler.control.Outputs
 import boiler.control.Phase
 import boiler.control.PowerSource
 import boiler.control.outputSteps
+import boiler.control.unavailableSample
 import compukter.compiler.CompilationFailureReason
 import compukter.compiler.CompilationResult
 import compukter.filesystem.FileInfo
@@ -22,31 +23,31 @@ import compukter.process.ProcessResult
 import compukter.terminal.TerminalEvent
 
 class ControllerScenarios {
-    private val cold = BoilerSample(true, fuelCapacity = 4000)
-    private val hot = BoilerSample(true, 20f, 1, 1, 1, 16f, 1200, 4000)
-    private val off = Outputs(PowerSource.NONE, FuelDirection.OFF)
+    private val cold = BoilerSample(true, 0f, 0, 0, 0, 0f, 0, 4000, 0)
+    private val hot = BoilerSample(true, 20f, 1, 1, 1, 16f, 1200, 4000, 0)
+    private val off = Outputs(PowerSource.NONE, FuelMode.OFF)
 
     fun explicitStartup() {
         val control = BoilerControl(stableSamples = 3)
         repeat(10) { control.observe(hot) }
         assertEquals(off, control.outputs)
-        control.start(sample(cold, available = false))
+        control.start(unavailableSample())
         assertEquals(Phase.IDLE, control.phase)
         control.start(cold)
-        assertEquals(Outputs(PowerSource.BATTERY, FuelDirection.FEED), control.outputs)
+        assertEquals(Outputs(PowerSource.BATTERY, FuelMode.FEED), control.outputs)
         repeat(2) { control.observe(hot) }
         control.observe(sample(hot, engineRpm = 0f))
         repeat(2) { control.observe(hot) }
         assertEquals(Phase.STARTING, control.phase)
         control.observe(hot)
-        assertEquals(Outputs(PowerSource.STEAM, FuelDirection.FEED), control.outputs)
+        assertEquals(Outputs(PowerSource.STEAM, FuelMode.FEED), control.outputs)
     }
 
     fun residualFuelAndCooling() {
         val control = BoilerControl(stableSamples = 3)
         control.start(cold)
         control.stop(hot)
-        assertEquals(Outputs(PowerSource.BATTERY, FuelDirection.DRAIN), control.outputs)
+        assertEquals(Outputs(PowerSource.BATTERY, FuelMode.DRAIN), control.outputs)
         repeat(5) { control.observe(sample(hot, fuelAmount = 1)) }
         assertEquals(Phase.DRAINING, control.phase)
         repeat(2) { control.observe(sample(hot, fuelAmount = 0)) }
@@ -121,9 +122,9 @@ class ControllerScenarios {
         val states =
             listOf(
                 off,
-                Outputs(PowerSource.BATTERY, FuelDirection.FEED),
-                Outputs(PowerSource.STEAM, FuelDirection.FEED),
-                Outputs(PowerSource.BATTERY, FuelDirection.DRAIN),
+                Outputs(PowerSource.BATTERY, FuelMode.FEED),
+                Outputs(PowerSource.STEAM, FuelMode.FEED),
+                Outputs(PowerSource.BATTERY, FuelMode.DRAIN),
             )
         for (previous in states) {
             for (next in states) {
@@ -132,21 +133,26 @@ class ControllerScenarios {
                         Channel.BATTERY to if (previous.power == PowerSource.BATTERY) 15 else 0,
                         Channel.BATTERY_CLUTCH to if (previous.power != PowerSource.NONE) 15 else 0,
                         Channel.STEAM_CLUTCH to if (previous.power == PowerSource.STEAM) 15 else 0,
-                        Channel.FUEL_CLUTCH to if (previous.fuel != FuelDirection.OFF) 15 else 0,
-                        Channel.FUEL_REVERSE to if (previous.fuel == FuelDirection.DRAIN) 15 else 0,
+                        Channel.FUEL_FEED_CLUTCH to if (previous.fuel == FuelMode.FEED) 15 else 0,
+                        Channel.FUEL_DRAIN_CLUTCH to if (previous.fuel == FuelMode.DRAIN) 15 else 0,
                     )
-                var waited = false
+                var pumpsSettled = false
                 for (step in outputSteps(previous, next)) {
                     if (step.channel == Channel.WAIT) {
                         assertTrue(step.value >= 2)
-                        waited = true
+                        if (signals[Channel.FUEL_FEED_CLUTCH] == 0 && signals[Channel.FUEL_DRAIN_CLUTCH] == 0) {
+                            pumpsSettled = true
+                        }
                         continue
                     }
-                    if (step.channel == Channel.FUEL_REVERSE && signals[step.channel] != step.value) {
-                        assertEquals(0, signals[Channel.FUEL_CLUTCH])
-                        assertTrue(waited)
+                    if ((step.channel == Channel.FUEL_FEED_CLUTCH || step.channel == Channel.FUEL_DRAIN_CLUTCH) && step.value == 15) {
+                        assertEquals(0, signals[Channel.FUEL_FEED_CLUTCH])
+                        assertEquals(0, signals[Channel.FUEL_DRAIN_CLUTCH])
+                        assertTrue(pumpsSettled)
+                        pumpsSettled = false
                     }
                     signals[step.channel] = step.value
+                    assertFalse(signals[Channel.FUEL_FEED_CLUTCH] == 15 && signals[Channel.FUEL_DRAIN_CLUTCH] == 15)
                     assertFalse(
                         signals[Channel.BATTERY] == 15 && signals[Channel.BATTERY_CLUTCH] == 15 && signals[Channel.STEAM_CLUTCH] == 15,
                     )
@@ -154,7 +160,8 @@ class ControllerScenarios {
                 assertEquals(if (next.power == PowerSource.BATTERY) 15 else 0, signals[Channel.BATTERY])
                 assertEquals(if (next.power != PowerSource.NONE) 15 else 0, signals[Channel.BATTERY_CLUTCH])
                 assertEquals(if (next.power == PowerSource.STEAM) 15 else 0, signals[Channel.STEAM_CLUTCH])
-                assertEquals(if (next.fuel == FuelDirection.OFF) 0 else 15, signals[Channel.FUEL_CLUTCH])
+                assertEquals(if (next.fuel == FuelMode.FEED) 15 else 0, signals[Channel.FUEL_FEED_CLUTCH])
+                assertEquals(if (next.fuel == FuelMode.DRAIN) 15 else 0, signals[Channel.FUEL_DRAIN_CLUTCH])
             }
         }
     }

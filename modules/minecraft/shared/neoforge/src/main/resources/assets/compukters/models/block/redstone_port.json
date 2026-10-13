@@ -77,7 +77,7 @@
       "faces": {
         "north": {
           "texture": "#port",
-          "tintindex": 0,
+          "tintindex": 2,
           "cullface": "north"
         }
       }
@@ -96,7 +96,7 @@
       "faces": {
         "south": {
           "texture": "#port",
-          "tintindex": 0,
+          "tintindex": 3,
           "cullface": "south"
         }
       }
@@ -115,7 +115,7 @@
       "faces": {
         "west": {
           "texture": "#port",
-          "tintindex": 0,
+          "tintindex": 4,
           "cullface": "west"
         }
       }
@@ -134,7 +134,7 @@
       "faces": {
         "east": {
           "texture": "#port",
-          "tintindex": 0,
+          "tintindex": 5,
           "cullface": "east"
         }
       }
@@ -172,7 +172,7 @@
       "faces": {
         "north": {
           "texture": "#port",
-          "tintindex": 1,
+          "tintindex": 2,
           "cullface": "north"
         }
       }
@@ -191,7 +191,7 @@
       "faces": {
         "south": {
           "texture": "#port",
-          "tintindex": 1,
+          "tintindex": 3,
           "cullface": "south"
         }
       }
@@ -210,7 +210,7 @@
       "faces": {
         "west": {
           "texture": "#port",
-          "tintindex": 1,
+          "tintindex": 4,
           "cullface": "west"
         }
       }
@@ -229,7 +229,7 @@
       "faces": {
         "east": {
           "texture": "#port",
-          "tintindex": 1,
+          "tintindex": 5,
           "cullface": "east"
         }
       }
@@ -267,7 +267,7 @@
       "faces": {
         "down": {
           "texture": "#port",
-          "tintindex": 2,
+          "tintindex": 0,
           "cullface": "down"
         }
       }
@@ -286,7 +286,7 @@
       "faces": {
         "up": {
           "texture": "#port",
-          "tintindex": 2,
+          "tintindex": 1,
           "cullface": "up"
         }
       }
@@ -305,7 +305,7 @@
       "faces": {
         "west": {
           "texture": "#port",
-          "tintindex": 2,
+          "tintindex": 4,
           "cullface": "west"
         }
       }
@@ -324,7 +324,7 @@
       "faces": {
         "east": {
           "texture": "#port",
-          "tintindex": 2,
+          "tintindex": 5,
           "cullface": "east"
         }
       }
@@ -362,7 +362,7 @@
       "faces": {
         "down": {
           "texture": "#port",
-          "tintindex": 3,
+          "tintindex": 0,
           "cullface": "down"
         }
       }
@@ -381,7 +381,7 @@
       "faces": {
         "up": {
           "texture": "#port",
-          "tintindex": 3,
+          "tintindex": 1,
           "cullface": "up"
         }
       }
@@ -400,7 +400,7 @@
       "faces": {
         "west": {
           "texture": "#port",
-          "tintindex": 3,
+          "tintindex": 4,
           "cullface": "west"
         }
       }
@@ -419,7 +419,7 @@
       "faces": {
         "east": {
           "texture": "#port",
-          "tintindex": 3,
+          "tintindex": 5,
           "cullface": "east"
         }
       }
@@ -457,7 +457,7 @@
       "faces": {
         "down": {
           "texture": "#port",
-          "tintindex": 4,
+          "tintindex": 0,
           "cullface": "down"
         }
       }
@@ -476,7 +476,7 @@
       "faces": {
         "up": {
           "texture": "#port",
-          "tintindex": 4,
+          "tintindex": 1,
           "cullface": "up"
         }
       }
@@ -495,7 +495,7 @@
       "faces": {
         "north": {
           "texture": "#port",
-          "tintindex": 4,
+          "tintindex": 2,
           "cullface": "north"
         }
       }
@@ -514,7 +514,7 @@
       "faces": {
         "south": {
           "texture": "#port",
-          "tintindex": 4,
+          "tintindex": 3,
           "cullface": "south"
         }
       }
@@ -552,7 +552,7 @@
       "faces": {
         "down": {
           "texture": "#port",
-          "tintindex": 5,
+          "tintindex": 0,
           "cullface": "down"
         }
       }
@@ -571,7 +571,7 @@
       "faces": {
         "up": {
           "texture": "#port",
-          "tintindex": 5,
+          "tintindex": 1,
           "cullface": "up"
         }
       }
@@ -590,7 +590,7 @@
       "faces": {
         "north": {
           "texture": "#port",
-          "tintindex": 5,
+          "tintindex": 2,
           "cullface": "north"
         }
       }
@@ -609,7 +609,7 @@
       "faces": {
         "south": {
           "texture": "#port",
-          "tintindex": 5,
+          "tintindex": 3,
           "cullface": "south"
         }
       }

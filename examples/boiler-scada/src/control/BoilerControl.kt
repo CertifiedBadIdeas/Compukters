@@ -12,25 +12,28 @@ import kotlin.collections.emptyList
 /** All values describe a completed observation, never a partially read set of devices. */
 value class BoilerSample(
     val available: Boolean,
-    val waterSupply: Float = 0f,
-    val waterLevel: Int = 0,
-    val heatLevel: Int = 0,
-    val level: Int = 0,
-    val engineRpm: Float = 0f,
-    val fuelAmount: Int = 0,
-    val fuelCapacity: Int = 0,
-    val burnTicks: Int = 0,
+    val waterSupply: Float,
+    val waterLevel: Int,
+    val heatLevel: Int,
+    val level: Int,
+    val engineRpm: Float,
+    val fuelAmount: Int,
+    val fuelCapacity: Int,
+    val burnTicks: Int,
 )
+
+/** Unavailable observations carry no usable readings. */
+fun unavailableSample(): BoilerSample = BoilerSample(false, 0f, 0, 0, 0, 0f, 0, 0, 0)
 
 enum class Phase { IDLE, STARTING, RUNNING, DRAINING, COOLING, FAULT }
 
 enum class PowerSource { NONE, BATTERY, STEAM }
 
-enum class FuelDirection { OFF, FEED, DRAIN }
+enum class FuelMode { OFF, FEED, DRAIN }
 
 value class Outputs(
     val power: PowerSource,
-    val fuel: FuelDirection,
+    val fuel: FuelMode,
 )
 
 /** Time limits count completed samples. Each sample is separated by at least five server ticks. */
@@ -50,10 +53,10 @@ class BoilerControl(
     val outputs: Outputs
         get() =
             when (phase) {
-                Phase.STARTING -> Outputs(PowerSource.BATTERY, FuelDirection.FEED)
-                Phase.RUNNING -> Outputs(PowerSource.STEAM, FuelDirection.FEED)
-                Phase.DRAINING -> Outputs(PowerSource.BATTERY, FuelDirection.DRAIN)
-                else -> Outputs(PowerSource.NONE, FuelDirection.OFF)
+                Phase.STARTING -> Outputs(PowerSource.BATTERY, FuelMode.FEED)
+                Phase.RUNNING -> Outputs(PowerSource.STEAM, FuelMode.FEED)
+                Phase.DRAINING -> Outputs(PowerSource.BATTERY, FuelMode.DRAIN)
+                else -> Outputs(PowerSource.NONE, FuelMode.OFF)
             }
 
     fun start(sample: BoilerSample) {
@@ -134,21 +137,25 @@ class BoilerControl(
     }
 }
 
-enum class Channel { BATTERY, BATTERY_CLUTCH, STEAM_CLUTCH, FUEL_CLUTCH, FUEL_REVERSE, WAIT }
+enum class Channel { BATTERY, BATTERY_CLUTCH, STEAM_CLUTCH, FUEL_FEED_CLUTCH, FUEL_DRAIN_CLUTCH, WAIT }
 
 value class OutputStep(
     val channel: Channel,
     val value: Int,
 )
 
-/** Clutch signals are enables: a redstone torch inverts each signal at the physical clutch. */
+/**
+ * Clutch signals are enables: a redstone torch inverts each signal at the physical clutch.
+ * Feed and drain use separate fixed-direction pumps, isolated before switching either pump or power source.
+ */
 fun outputSteps(
     previous: Outputs,
     next: Outputs,
 ): List<OutputStep> {
     if (previous == next) return emptyList()
     val steps = ArrayList<OutputStep>()
-    steps.add(OutputStep(Channel.FUEL_CLUTCH, 0))
+    steps.add(OutputStep(Channel.FUEL_FEED_CLUTCH, 0))
+    steps.add(OutputStep(Channel.FUEL_DRAIN_CLUTCH, 0))
     steps.add(OutputStep(Channel.WAIT, 2))
     if (previous.power != next.power) {
         steps.add(OutputStep(Channel.BATTERY_CLUTCH, 0))
@@ -156,8 +163,6 @@ fun outputSteps(
         steps.add(OutputStep(Channel.BATTERY, 0))
         steps.add(OutputStep(Channel.WAIT, 2))
     }
-    steps.add(OutputStep(Channel.FUEL_REVERSE, if (next.fuel == FuelDirection.DRAIN) 15 else 0))
-    steps.add(OutputStep(Channel.WAIT, 2))
     if (previous.power != next.power) {
         when (next.power) {
             PowerSource.BATTERY -> {
@@ -176,6 +181,16 @@ fun outputSteps(
         }
         steps.add(OutputStep(Channel.WAIT, 2))
     }
-    if (next.fuel != FuelDirection.OFF) steps.add(OutputStep(Channel.FUEL_CLUTCH, 15))
+    when (next.fuel) {
+        FuelMode.FEED -> {
+            steps.add(OutputStep(Channel.FUEL_FEED_CLUTCH, 15))
+        }
+
+        FuelMode.DRAIN -> {
+            steps.add(OutputStep(Channel.FUEL_DRAIN_CLUTCH, 15))
+        }
+
+        else -> {}
+    }
     return steps
 }
