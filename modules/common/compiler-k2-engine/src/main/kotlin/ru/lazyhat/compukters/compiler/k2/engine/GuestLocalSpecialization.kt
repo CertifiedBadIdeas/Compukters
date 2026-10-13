@@ -75,9 +75,13 @@ internal class GuestLocalSpecialization {
             override fun visitSimpleFunction(declaration: IrSimpleFunction) {
                 // Generic member bodies are visited after their concrete owner copy is prepared.
                 if (declaration.parent is IrClass &&
-                    declaration.parameters.any {
-                        it.kind == IrParameterKind.DispatchReceiver && it.type.containsTypeParameter()
-                    }
+                    !declaration.isGuestLocalFunction() &&
+                    (
+                        declaration.typeParameters.isNotEmpty() ||
+                            declaration.parameters.any {
+                                it.kind == IrParameterKind.DispatchReceiver && it.type.containsTypeParameter()
+                            }
+                    )
                 ) {
                     return
                 }

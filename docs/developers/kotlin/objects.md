@@ -65,7 +65,9 @@ A concrete method declared in a final class uses a direct call when the target i
 bound and unbound method references. Its virtual declaration remains available to calls through parent classes
 and interfaces. Inherited fake overrides retain their existing dispatch path. Nullable receiver checks and
 exceptions from reading an uninitialized non-null field still precede method execution.
-Generic or suspending methods, member extensions remain unsupported. Interface methods may have supported
+Final ordinary class/object methods with their own type parameters support direct concrete calls; see
+[direct generic methods](functions.md#direct-generic-methods). Generic virtual/interface methods, generic
+method references, suspending methods and member extensions remain unsupported. Interface methods may have supported
 non-suspending bodies; an inherited default uses the most specific interface declaration unless a class
 overrides it. An override may call a concrete interface body with `super<Interface>`, including one inherited
 through that interface; the call bypasses dynamic dispatch to the override.
@@ -345,7 +347,7 @@ types and member completion. Scalar regression evidence: `testKotlinValueClassBo
 canonical identity across precompiled addon functions`. `testKotlinSubsetVmConformance` also verifies that
 string interpolation of `Redstone.left` renders the nominal `RedstoneSide(index=2)` value rather than its
 underlying scalar. Existing Guest boundaries still apply: secondary
-constructors, runtime generic instantiation and methods declaring their own type parameters are outside the
+constructors, runtime generic instantiation and value-class methods declaring their own type parameters are outside the
 subset. `@JvmInline` is deliberately rejected as JVM syntax.
 
 **Related work:** [#701](https://github.com/CertifiedBadIdeas/Compukters/issues/701).

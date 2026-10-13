@@ -61,6 +61,15 @@ the source dispatch symbol while returns target their concrete executable copy. 
 them as concrete instances. `testKotlinGenericClassCapturesVmConformance` exercises owner retention,
 all primitive signatures, shared cells, dispatch and small-heap collection without a VM/ABI change.
 
+Direct generic ordinary methods extend function-instance identity with both concrete method arguments and
+concrete owner arguments. One substitutor and the typed IR copier cover both parameter sets before lexical
+normalization and dependency discovery; canonical member symbols still own call lookup. Concrete method
+defaults share the same copied parameter and closure symbols as capture layout. Function discovery bounds
+method variants with the existing function budget. Artifact ordering groups all variants with their owner's
+other methods, preserving contiguous nominal method ranges; concrete method arguments distinguish their
+names. Generic virtual/interface dispatch and generic callable references retain source diagnostics.
+`testKotlinGenericMethodsVmConformance` executes this path through the unchanged artifact and VM contract.
+
 Generic ordinary class initialization uses one typed symbol copier per concrete owner for the primary
 constructor, class receiver, backing-field initializer expressions and `init` bodies. Original class,
 field and constructor identities continue to own layout and lookup; copied lexical symbols own execution

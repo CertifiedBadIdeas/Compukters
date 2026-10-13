@@ -7,6 +7,7 @@
 package ru.lazyhat.compukters.compiler.k2.engine
 
 import org.jetbrains.kotlin.ir.IrElement
+import org.jetbrains.kotlin.ir.declarations.IrClass
 import org.jetbrains.kotlin.ir.declarations.IrSimpleFunction
 import org.jetbrains.kotlin.ir.declarations.IrTypeParameter
 import org.jetbrains.kotlin.ir.declarations.IrTypeParametersContainer
@@ -40,7 +41,7 @@ internal fun copyGuestFunction(
         )
     val copy = function.transform(copier, null) as IrSimpleFunction
     copy.typeParameters = emptyList()
-    if (ownerParameters.isNotEmpty()) {
+    if (ownerParameters.isNotEmpty() || (function.parent is IrClass && !function.isGuestLocalFunction())) {
         // A concrete executable copy retains the source member's dispatch identity.
         copy.accept(
             object : IrVisitorVoid() {
