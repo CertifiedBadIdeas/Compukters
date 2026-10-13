@@ -298,7 +298,14 @@ class AnalysisProtocolRoundTripTest {
                         EditorParameterInfo(
                             path(),
                             EditorRange(4, 12),
-                            listOf(ParameterInfoItem("answer(value: Int): Unit", EditorRange(7, 17), true)),
+                            listOf(
+                                ParameterInfoItem(
+                                    "answer(value: Int): Unit",
+                                    EditorRange(7, 17),
+                                    true,
+                                    "The value with Unicode 😀 and `code`.\nSecond line.",
+                                ),
+                            ),
                         ),
                         sourceLengths(),
                     ),

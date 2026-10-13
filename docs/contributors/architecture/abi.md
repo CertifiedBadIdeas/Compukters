@@ -296,6 +296,12 @@ never parses localized message text. Existing severity, path and exact UTF-16 ra
 Protocol 15 frames and unknown enum values are rejected. Worker payload identities change with the coherent
 producer/consumer update; platform, compiler framing, artifacts and native ABI remain unchanged.
 
+Analysis protocol 17 adds an optional UTF-8 active-parameter documentation string after each signature candidate's
+best-candidate flag. Both producer and consumer enforce the negotiated detail-text byte bound, and documentation
+requires a valid active-parameter span. The existing KDoc parser selects `@param` by semantic parameter name;
+English UI labels are separate from the body and do not introduce a localization identifier ABI. Protocol 16
+workers are rejected at handshake. Compiler, Guest platform, artifact and native contracts are unchanged.
+
 ## Boundary identities
 
 | Boundary | Current representation | Owner |
@@ -305,7 +311,7 @@ producer/consumer update; platform, compiler framing, artifacts and native ABI r
 | Base platform | Bundle format 9, standalone module format 5, platform ABI 3 | `PlatformBundleCodec` in `modules/common/platform-bundle` |
 | Kotlin metadata carrier | Private format 6 | `platform-k2` |
 | Compiler worker | Protocol 5; explicit source-free library preparation | `compiler-client` and `compiler-k2` |
-| IDE analysis | Protocol 16 | `ide-analysis-client` and `ide-analysis-k2` |
+| IDE analysis | Protocol 17 | `ide-analysis-client` and `ide-analysis-k2` |
 
 ## Reference-array loop surface
 

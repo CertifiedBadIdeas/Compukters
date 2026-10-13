@@ -474,6 +474,40 @@ class AnalysisProtocolHostileInputTest {
     }
 
     @Test
+    fun `parameter documentation rejects oversized text and documentation without an active parameter`() {
+        kotlin.test.assertFailsWith<IllegalArgumentException> {
+            ParameterInfoItem("f(): Unit", null, true, "orphan")
+        }
+        val query = AnalysisQuery.ParameterInfo(identity, VirtualSourcePath.kotlin("main.kt"), 6)
+        val reply =
+            AnalysisQuerySuccess(
+                RequestId.of(2uL),
+                AnalysisResult.ParameterInfo.create(
+                    identity,
+                    EditorParameterInfo(
+                        VirtualSourcePath.kotlin("main.kt"),
+                        EditorRange(4, 12),
+                        listOf(ParameterInfoItem("f(a: Int): Unit", EditorRange(2, 8), true, "😀".repeat(20))),
+                    ),
+                    mapOf(VirtualSourcePath.kotlin("main.kt") to 20),
+                ),
+            )
+        val frame = AnalysisMessageCodec.encode(reply, AnalysisProtocolContext.unchecked())
+        assertFailsWith<AnalysisProtocolException> {
+            AnalysisMessageCodec.decode(frame, AnalysisProtocolContext.of(snapshot, AnalysisLimits(detailTextBytes = 32)).forQuery(query))
+        }
+        assertFailsWith<IllegalArgumentException> {
+            AnalysisResult.ParameterInfo.create(
+                identity,
+                reply.result.let { (it as AnalysisResult.ParameterInfo).value },
+                mapOf(VirtualSourcePath.kotlin("main.kt") to 20),
+                ru.lazyhat.compukters.ide.analysis
+                    .AnalysisResultLimits(maxDetailUtf8Bytes = 32),
+            )
+        }
+    }
+
+    @Test
     fun `decoder rejects traversal out of source positions and hostile counts`() {
         val query =
             AnalysisQueryRequest(

@@ -92,11 +92,12 @@ class ParameterInfoQueryTest {
 
             fun main() { Sound.beep(12, ) }
             """.trimIndent()
-        K2QueryFixture.sourceWithGuestApi(false, "main.kt" to source).use { fixture ->
+        K2QueryFixture.sourceWithGuestApi(true, "main.kt" to source).use { fixture ->
             val info = assertNotNull(fixture.parameterInfo(source.indexOf(",") + 2))
 
             assertEquals(listOf("beep(note: Int, volume: Int = …): Boolean"), info.items.map { it.signature })
             assertEquals("volume: Int = …", info.items.single().activeText())
+            assertEquals("volume percentage in the inclusive range `1..100`.", info.items.single().activeParameterDocumentation)
         }
     }
 
@@ -113,6 +114,30 @@ class ParameterInfoQueryTest {
 
             assertEquals(listOf("setTargetSpeed(speed: Int): Int"), info.items.map { it.signature })
             assertEquals("speed: Int", info.items.single().activeText())
+        }
+    }
+
+    @Test
+    fun `parameter documentation follows named vararg and nested calls without mixing overloads`() {
+        val source =
+            """
+            /** @param count number of retries */
+            fun send(count: Int) = Unit
+            /** @param count textual retry policy */
+            fun send(count: String) = Unit
+            /** @param values values to send */
+            fun emit(prefix: String, vararg values: Int) = Unit
+            fun main() { send(count = 2); emit("n", 1, 2); emit("n", send(2)) }
+            """.trimIndent()
+        K2QueryFixture.source("main.kt" to source).use { fixture ->
+            val named = assertNotNull(fixture.parameterInfo(source.indexOf("count = 2") + 8))
+            assertEquals(setOf("number of retries", "textual retry policy"), named.items.map { it.activeParameterDocumentation }.toSet())
+            val vararg = assertNotNull(fixture.parameterInfo(source.indexOf("1, 2") + 3))
+            assertEquals("values to send", vararg.items.single().activeParameterDocumentation)
+            val nested = assertNotNull(fixture.parameterInfo(source.lastIndexOf("send(2)") + 5))
+            assertEquals("number of retries", nested.items.first().activeParameterDocumentation)
+            val absent = assertNotNull(fixture.parameterInfo(source.indexOf("emit(\"n\"") + 6))
+            assertNull(absent.items.single().activeParameterDocumentation)
         }
     }
 

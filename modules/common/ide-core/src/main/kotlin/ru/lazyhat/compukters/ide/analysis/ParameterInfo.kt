@@ -26,10 +26,16 @@ data class ParameterInfoItem(
     val signature: String,
     val activeParameter: EditorRange?,
     val bestCandidate: Boolean,
+    val activeParameterDocumentation: String? = null,
 ) {
     init {
         require(signature.isNotEmpty()) { "parameter-info signature must not be empty" }
         strictUtf8Size(signature)
+        activeParameterDocumentation?.let {
+            require(activeParameter != null) { "parameter documentation requires an active parameter" }
+            require(it.isNotBlank()) { "parameter documentation must not be blank" }
+            strictUtf8Size(it)
+        }
         activeParameter?.let { range ->
             require(range.length > 0) { "active parameter range must not be empty" }
             require(range.endUtf16 <= signature.length) { "active parameter range exceeds its signature" }

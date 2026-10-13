@@ -166,6 +166,9 @@ sealed interface AnalysisResult {
                         require(strictUtf8Size(item.signature) <= limits.maxDetailUtf8Bytes) {
                             "parameter-info signature exceeds limit"
                         }
+                        item.activeParameterDocumentation?.let {
+                            require(strictUtf8Size(it) <= limits.maxDetailUtf8Bytes) { "parameter documentation exceeds limit" }
+                        }
                     }
                 }
                 return ParameterInfo(identity, value)

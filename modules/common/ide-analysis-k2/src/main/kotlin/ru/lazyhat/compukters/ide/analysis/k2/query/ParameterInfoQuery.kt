@@ -74,6 +74,7 @@ internal object ParameterInfoQuery {
                                     activeName,
                                     candidate.isInBestCandidates,
                                     limits,
+                                    snapshot,
                                 )
                             }.sortedWith(
                                 compareByDescending<ParameterInfoItem>(
@@ -127,6 +128,7 @@ internal object ParameterInfoQuery {
         activeName: String?,
         bestCandidate: Boolean,
         limits: AnalysisLimits,
+        snapshot: AdmittedK2Snapshot,
     ): ParameterInfoItem {
         val parameters = signature.valueParameters
         val activeIndex =
@@ -154,6 +156,18 @@ internal object ParameterInfoQuery {
                 append("): ")
                 append(signature.returnType.render(KaTypeRendererForSource.WITH_SHORT_NAMES, Variance.INVARIANT))
             }.let { requiredBoundedUtf8(it, limits.detailTextBytes, "parameter-info signature") }
-        return ParameterInfoItem(rendered, activeRange, bestCandidate)
+        val parameterDocumentation =
+            parameters.getOrNull(activeIndex)?.let { parameter ->
+                SymbolDocumentation
+                    .run { documentation(signature.symbol, snapshot, limits.detailTextBytes) }
+                    ?.let(ru.lazyhat.compukters.ide.documentation.KDocDocument::parse)
+                    ?.tags
+                    ?.firstOrNull { tag ->
+                        tag.kind == ru.lazyhat.compukters.ide.documentation.KDocTagKind.Param &&
+                            tag.subject == parameter.name.asString()
+                    }?.description
+                    ?.takeIf(String::isNotBlank)
+            }
+        return ParameterInfoItem(rendered, activeRange, bestCandidate, parameterDocumentation)
     }
 }
