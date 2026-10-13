@@ -30,6 +30,81 @@ import kotlin.test.assertTrue
 
 class PeripheralNetworkDirectoryTest {
     @Test
+    fun `joining assigns unique names and repeated clicks preserve names`() {
+        val directory = PeripheralNetworkDirectory()
+        val first = member(1)
+        val network = directory.createFor(first, "display")
+        val second = member(2)
+        val custom = member(3).copy(name = "display_2")
+        directory.bindWithDefaultName(network.id, custom, "display")
+        directory.bindWithDefaultName(network.id, second, "display")
+        assertEquals(listOf("display_1", "display_2", "display_3"), directory.get(network.id)!!.members.map { it.name })
+        directory.bindWithDefaultName(network.id, second, "display")
+        directory.setName(first.instance, first.identity, "panel")
+        directory.bindWithDefaultName(network.id, first, "display")
+        assertEquals(listOf("panel", "display_2", "display_3"), directory.get(network.id)!!.members.map { it.name })
+        val encoded = PeripheralNetworkCodecs.directory.encodeStart(JsonOps.INSTANCE, directory).getOrThrow()
+        val restored = PeripheralNetworkCodecs.directory.parse(JsonOps.INSTANCE, encoded).getOrThrow()
+        restored.bindWithDefaultName(network.id, member(4), "display")
+        assertEquals(
+            "display_1",
+            restored
+                .get(network.id)!!
+                .members
+                .last()
+                .name,
+        )
+    }
+
+    @Test
+    fun `numbering is local to a network and explicit joins can name old unnamed members`() {
+        val directory = PeripheralNetworkDirectory()
+        val first = directory.create("first")
+        val second = directory.create("second")
+        val device = member(1)
+        directory.bind(first.id, device)
+        directory.bindWithDefaultName(first.id, device, "speedometer")
+        directory.bindWithDefaultName(second.id, member(2), "speedometer")
+        assertEquals(
+            "speedometer_1",
+            directory
+                .get(first.id)!!
+                .members
+                .single()
+                .name,
+        )
+        assertEquals(
+            "speedometer_1",
+            directory
+                .get(second.id)!!
+                .members
+                .single()
+                .name,
+        )
+        directory.bindWithDefaultName(first.id, member(3).copy(name = "custom"), "speedometer")
+        assertEquals(
+            "custom",
+            directory
+                .get(first.id)!!
+                .members
+                .last()
+                .name,
+        )
+    }
+
+    @Test
+    fun `generated names normalize addon kinds and fit the configured name bounds`() {
+        for (base in listOf("", "42", "Some Device!", "x".repeat(128))) {
+            val name = defaultPeripheralName(base, emptySet())
+            assertEquals(name, normalizePeripheralName(name))
+        }
+        val occupied = (1..1024).map { "display_$it" }.toSet()
+        assertEquals("display_1025", defaultPeripheralName("display", occupied))
+        assertEquals("display", defaultPeripheralNameBase(member(0, "compukters-display").identity))
+        assertEquals("redstone_port", defaultPeripheralNameBase(member(0, "compukters-redstone").identity))
+    }
+
+    @Test
     fun `computer removal retains network and devices and replacement must explicitly join`() {
         val directory = PeripheralNetworkDirectory()
         val network = directory.create("factory")

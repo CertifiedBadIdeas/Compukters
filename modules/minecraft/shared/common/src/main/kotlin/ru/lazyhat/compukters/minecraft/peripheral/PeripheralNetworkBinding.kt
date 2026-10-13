@@ -65,11 +65,11 @@ internal object PeripheralNetworkBinding {
         val selected = item.selectedNetwork(stack)
         if (selected == null) {
             val network =
-                existing ?: runCatching { directory.createFor(member) }.getOrNull()
+                existing ?: runCatching { directory.createFor(member, defaultPeripheralNameBase(member.identity)) }.getOrNull()
                     ?: return PeripheralBindingResult.LIMIT_REACHED
             if (existing == null) {
                 storage.setDirty()
-                PeripheralDeviceNameStorage.get(level).clearName(member.identity)
+                completeNaming(level, member)
             }
             item.selectNetwork(stack, network.id)
             return if (existing == null) PeripheralBindingResult.CREATED else PeripheralBindingResult.SELECTED
@@ -79,10 +79,28 @@ internal object PeripheralNetworkBinding {
             return PeripheralBindingResult.MISSING_NETWORK
         }
         if (existing != null && existing.id != selected) return PeripheralBindingResult.OTHER_NETWORK
-        if (runCatching { directory.bind(selected, member) }.isFailure) return PeripheralBindingResult.LIMIT_REACHED
+        if (runCatching {
+                directory.bindWithDefaultName(selected, member, defaultPeripheralNameBase(member.identity))
+            }.isFailure
+        ) {
+            return PeripheralBindingResult.LIMIT_REACHED
+        }
         storage.setDirty()
-        PeripheralDeviceNameStorage.get(level).clearName(member.identity)
+        completeNaming(level, member)
         return PeripheralBindingResult.BOUND
+    }
+
+    private fun completeNaming(
+        level: ServerLevel,
+        member: PeripheralNetworkMember,
+    ) {
+        PeripheralDeviceNameStorage.get(level).clearName(member.identity)
+        val stored =
+            PeripheralNetworkStorage.get(level).directory.networkOf(member.instance)?.members?.firstOrNull {
+                it.instance == member.instance && it.identity == member.identity
+            } ?: return
+        // Composite display names belong to DisplayStorage and must survive screen refreshes.
+        stored.name?.let { PeripheralDeviceNames.setName(level, member.identity, it) }
     }
 
     fun resolveMember(

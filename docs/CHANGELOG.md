@@ -15,6 +15,9 @@ headings so this page has one stable URL that can be shared outside the reposito
 
 - Guest Kotlin enums expose immutable `EnumType.entries` in declaration order, including empty enums and enums from platform/addon libraries. Indexing, iteration, membership and IDE completion share the typed `EnumEntries<E>` API.
 
+- Joining a peripheral network assigns unnamed devices unique numbered names such as `display_1`;
+  existing names are preserved and generated names remain stable across reloads.
+
 - Create boilers appear as one whole structure in the configurator: every tank segment shares its controller's
   name and network, with one outline around the complete tank. Explicit interaction consolidates older per-block
   bindings; addon providers can opt into the same bounded structure geometry.
