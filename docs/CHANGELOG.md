@@ -13,6 +13,9 @@ headings so this page has one stable URL that can be shared outside the reposito
 
 ## 0.6.0 — In development
 
+- Agent sandbox builds share one workspace build slot across worktrees and the all-addon development stand,
+  with eight Gradle workers and eight Rust jobs by default. Explicit build limits remain configurable.
+
 - Added read-only Cosmonautics space telemetry for Guest Kotlin: Deep Space membership, linked planet parameters,
   instance orbital observations and an atomic snapshot of orbital guidance directions in Sable world axes.
   Examples cover telemetry and experimental prograde pointing with a creative vector engine; launch and orbital
