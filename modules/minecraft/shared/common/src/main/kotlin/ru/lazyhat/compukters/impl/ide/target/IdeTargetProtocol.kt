@@ -56,6 +56,18 @@ class IdeCanonicalLine private constructor(
 }
 
 sealed interface IdeTargetRequest {
+    data class RenamePeripheral(
+        val target: IdeTargetReference,
+        val device: IdePeripheralReference,
+        val expectedName: String,
+        val requestedName: String,
+    ) : IdeTargetRequest {
+        init {
+            require(expectedName.isNotBlank() && expectedName.length <= 64 && expectedName.none(Char::isISOControl))
+            require(requestedName.length <= 64 && requestedName.none(Char::isISOControl))
+        }
+    }
+
     data class NamedPeripherals(
         val target: IdeTargetReference,
     ) : IdeTargetRequest

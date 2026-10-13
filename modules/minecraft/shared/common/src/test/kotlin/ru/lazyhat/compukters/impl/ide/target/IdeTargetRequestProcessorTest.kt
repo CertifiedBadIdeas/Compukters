@@ -35,6 +35,35 @@ import kotlin.test.assertTrue
 
 internal class IdeTargetRequestProcessorTest {
     @Test
+    fun `rename requires exact live lease and forwards the expected device name`() =
+        runServerTest {
+            val device = IdePeripheralReference(UUID.randomUUID(), "test:provider", "motor")
+            var calls = 0
+            val fixture =
+                fixture(IdeTargetDeploymentOperations(verifyForDeploy = { null }), rename = { actual, expected, requested ->
+                    assertEquals(device, actual)
+                    assertEquals("motor_1", expected)
+                    assertEquals("drive", requested)
+                    calls++
+                    IdeTargetReply.NamedPeripherals(emptyList())
+                })
+            val target = assertIs<IdeTargetReply.Attached>(fixture.processor.handle(fixture.player, attach(), 1)).target
+            val request = IdeTargetRequest.RenamePeripheral(IdeTargetReference(target.id, target.profile), device, "motor_1", "drive")
+            assertIs<IdeTargetReply.NamedPeripherals>(fixture.processor.handle(fixture.player, request, 2))
+            assertIs<IdeTargetReply.Failed>(fixture.processor.handle(UUID.randomUUID(), request, 3))
+            assertIs<IdeTargetReply.Failed>(
+                fixture.processor.handle(
+                    fixture.player,
+                    request.copy(target = request.target.copy(profile = IdeTargetProfileId(hash(7)))),
+                    3,
+                ),
+            )
+            fixture.processor.handle(fixture.player, IdeTargetRequest.Detach(request.target), 4)
+            assertIs<IdeTargetReply.Failed>(fixture.processor.handle(fixture.player, request, 5))
+            assertEquals(1, calls)
+        }
+
+    @Test
     fun `peripheral snapshot requires exact live player lease`() =
         runServerTest {
             var calls = 0
@@ -175,6 +204,7 @@ internal class IdeTargetRequestProcessorTest {
 
     private fun fixture(
         operations: IdeTargetDeploymentOperations,
+        rename: ((IdePeripheralReference, String, String) -> IdeTargetReply)? = null,
         peripherals: (() -> IdeTargetReply.NamedPeripherals)? = null,
     ): Fixture {
         val profile = TargetCompileProfile(toolchain(), emptyList(), WorkerLimits(artifactBytes = 32))
@@ -188,6 +218,7 @@ internal class IdeTargetRequestProcessorTest {
                 alive = { true },
                 deployment = operations,
                 namedPeripherals = peripherals,
+                renamePeripheral = rename,
             )
         val leases =
             IdeTargetLeaseService(

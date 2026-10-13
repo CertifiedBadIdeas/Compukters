@@ -23,7 +23,13 @@ object RedstonePortIntegration {
     private const val PROVIDER = "compukters-redstone"
     private const val DEVICE = "port"
     internal val contract =
-        ComputerPeripheralContract<RedstonePortEndpoint>("compukter:redstone_port", PROVIDER, DEVICE) { level, position, identity ->
+        ComputerPeripheralContract<RedstonePortEndpoint>(
+            "compukter:redstone_port",
+            PROVIDER,
+            DEVICE,
+            false,
+            "compukter.redstone.RedstonePort",
+        ) { level, position, identity ->
             val computer = level.getBlockEntity(position) as? ComputerBlockEntity
             val port = level.getBlockEntity(identity.anchor) as? RedstonePortBlockEntity
             if (computer == null || port == null || computer.terminalMachineId == null) {

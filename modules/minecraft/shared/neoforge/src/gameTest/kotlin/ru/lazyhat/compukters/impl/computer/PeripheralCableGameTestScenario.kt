@@ -57,6 +57,7 @@ internal object PeripheralCableGameTestScenario {
         helper.setBlock(secondDevice, Blocks.DROPPER)
 
         val level = helper.level
+        var firstReference: ru.lazyhat.compukters.impl.ide.target.IdePeripheralReference? = null
         val firstIdentity =
             ComputerPeripheralIdentity(TEST_PROVIDER_ID, helper.absolutePos(firstDevice), FIRST_DEVICE_KEY)
         val secondIdentity =
@@ -88,6 +89,40 @@ internal object PeripheralCableGameTestScenario {
                     } == listOf("minecraft:barrel", "minecraft:dropper"),
                     "IDE discovery lost block item icons",
                 )
+                firstReference = peripherals.entries.single { it.name == "input" }.reference
+                val device = checkNotNull(firstReference)
+
+                fun rename(
+                    expected: String,
+                    requested: String,
+                ) = ru.lazyhat.compukters.minecraft.peripheral.IdePeripheralDiscovery.rename(
+                    level,
+                    helper.absolutePos(computer),
+                    device,
+                    expected,
+                    requested,
+                )
+                helper.assertTrue(
+                    rename("input", "output") is ru.lazyhat.compukters.impl.ide.target.IdeTargetReply.Failed,
+                    "IDE rename accepted a conflicting name",
+                )
+                helper.assertTrue(
+                    rename("input", "bad name") is ru.lazyhat.compukters.impl.ide.target.IdeTargetReply.Failed,
+                    "IDE rename accepted malformed name",
+                )
+                helper.assertTrue(
+                    rename("input", "inlet") is ru.lazyhat.compukters.impl.ide.target.IdeTargetReply.NamedPeripherals,
+                    "IDE rename did not update discovery",
+                )
+                assertFound(helper, computer, "inlet", firstIdentity.anchor)
+                helper.assertTrue(
+                    rename("input", "stale") is ru.lazyhat.compukters.impl.ide.target.IdeTargetReply.Failed,
+                    "IDE rename accepted a stale expected name",
+                )
+                helper.assertTrue(
+                    rename("inlet", "input") is ru.lazyhat.compukters.impl.ide.target.IdeTargetReply.NamedPeripherals,
+                    "IDE rename could not restore the original name",
+                )
                 verifyConfiguratorSave(helper, computer, firstIdentity, secondIdentity)
             }.thenExecute {
                 // Membership is independent of cable topology.
@@ -112,6 +147,16 @@ internal object PeripheralCableGameTestScenario {
                 helper.setBlock(firstDevice, Blocks.AIR)
                 helper.setBlock(firstDevice, Blocks.BARREL)
                 assertStatus(helper, computer, "input", ComputerPeripheralLookupStatus.MISSING)
+                helper.assertTrue(
+                    ru.lazyhat.compukters.minecraft.peripheral.IdePeripheralDiscovery.rename(
+                        level,
+                        helper.absolutePos(computer),
+                        checkNotNull(firstReference),
+                        "input",
+                        "replacement",
+                    ) is ru.lazyhat.compukters.impl.ide.target.IdeTargetReply.Failed,
+                    "IDE rename silently selected a replacement instance",
+                )
             }.thenExecute {
                 // A fresh computer does not inherit membership by position; reconnect explicitly.
                 helper.setBlock(computer, Blocks.AIR)
@@ -140,6 +185,26 @@ internal object PeripheralCableGameTestScenario {
                 helper.setBlock(highDevice, Blocks.BARREL)
                 PeripheralNetworkGameTestFixtures.bind(helper, computer, highDevice)
                 val highIdentity = ComputerPeripheralIdentity(TEST_PROVIDER_ID, helper.absolutePos(highDevice), FIRST_DEVICE_KEY)
+                val visible =
+                    ru.lazyhat.compukters.minecraft.peripheral.IdePeripheralDiscovery
+                        .snapshot(
+                            level,
+                            helper.absolutePos(computer),
+                        ).entries
+                        .single {
+                            it.name ==
+                                "output"
+                        }
+                helper.assertTrue(
+                    ru.lazyhat.compukters.minecraft.peripheral.IdePeripheralDiscovery.rename(
+                        level,
+                        helper.absolutePos(computer),
+                        checkNotNull(visible.reference),
+                        "output",
+                        "barrel_1",
+                    ) is ru.lazyhat.compukters.impl.ide.target.IdeTargetReply.Failed,
+                    "IDE rename ignored an out-of-range member's name",
+                )
                 assertStatus(helper, computer, "barrel_1", ComputerPeripheralLookupStatus.MISSING)
                 val named =
                     PeripheralConfiguratorServer.inspect(
