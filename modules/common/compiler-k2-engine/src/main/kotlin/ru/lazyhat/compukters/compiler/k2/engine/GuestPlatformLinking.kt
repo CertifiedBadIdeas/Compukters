@@ -40,10 +40,13 @@ import org.jetbrains.kotlin.ir.symbols.UnsafeDuringIrConstructionAPI
 import org.jetbrains.kotlin.ir.types.IrSimpleType
 import org.jetbrains.kotlin.ir.types.IrType
 import org.jetbrains.kotlin.ir.types.IrTypeProjection
+import org.jetbrains.kotlin.ir.types.IrTypeSubstitutor
+import org.jetbrains.kotlin.ir.types.impl.makeTypeProjection
 import org.jetbrains.kotlin.ir.util.fqNameWhenAvailable
 import org.jetbrains.kotlin.ir.util.parentAsClass
 import org.jetbrains.kotlin.ir.util.resolveFakeOverrideMaybeAbstract
 import org.jetbrains.kotlin.ir.visitors.IrVisitorVoid
+import org.jetbrains.kotlin.types.Variance
 import ru.lazyhat.compukters.compiler.artifact.model.FieldRef
 import ru.lazyhat.compukters.compiler.artifact.model.ImportId
 import ru.lazyhat.compukters.compiler.artifact.model.TypeRef
@@ -260,11 +263,30 @@ private fun linkedPlatformSymbols(
         types[symbol] = ExternalTypeTarget(link.exportName, link.moduleHash.copyOf())
     }
 
+    val consideredTypes = mutableSetOf<IrType>()
+
     fun considerType(type: IrType) {
+        if (!consideredTypes.add(type)) return
         val simple = type as? IrSimpleType ?: return
-        simple.arguments.filterIsInstance<IrTypeProjection>().forEach { considerType(it.type) }
+        val arguments = simple.arguments.filterIsInstance<IrTypeProjection>().map { it.type }
+        arguments.forEach(::considerType)
         val symbol = simple.classifier as? IrClassSymbol ?: return
         considerTypeSymbol(symbol)
+        // A linked inline record also needs the nominal types of its payload, even when callers only
+        // inspect another property. These types are absent from the caller's expression tree.
+        if (symbol.owner.isValue) {
+            val substitution =
+                IrTypeSubstitutor(
+                    symbol.owner.typeParameters.map { it.symbol },
+                    arguments.map { makeTypeProjection(it, Variance.INVARIANT) },
+                    true,
+                )
+            symbol.owner.declarations.filterIsInstance<IrConstructor>().filter { it.isPrimary }.forEach { constructor ->
+                constructor.parameters.filter { it.kind == IrParameterKind.Regular }.forEach { parameter ->
+                    considerType(substitution.substitute(parameter.type))
+                }
+            }
+        }
     }
 
     fun fieldTarget(
