@@ -938,7 +938,12 @@ class TerminalWireDecoder(
         require(width == WIDTH && height == HEIGHT) { "unsupported terminal dimensions" }
         val cells = List(count(CELL_COUNT)) { cell() }
         require(cells.size == CELL_COUNT) { "invalid terminal cell count" }
-        return TerminalState(revision, width, height, cells, position(), boolean())
+        val cursor = position()
+        val visible = boolean()
+        val historyStart = revision()
+        val historyCells = historyCells()
+        require(historyStart <= Long.MAX_VALUE - historyCells.size / WIDTH - HEIGHT) { "terminal row identity overflow" }
+        return TerminalState(revision, width, height, cells, cursor, visible, historyStart, historyCells)
     }
 
     private fun change(): TerminalChange =
@@ -975,10 +980,24 @@ class TerminalWireDecoder(
                 TerminalChange.Reset
             }
 
+            5 -> {
+                TerminalChange.HistoryAppend(revision(), historyCells())
+            }
+
+            6 -> {
+                TerminalChange.HistoryReplace(revision(), historyCells())
+            }
+
             else -> {
                 invalid()
             }
         }
+
+    private fun historyCells(): List<TerminalCell> {
+        val count = count(TerminalHistoryLimits.ROWS * WIDTH)
+        require(count % WIDTH == 0) { "incomplete terminal history row" }
+        return List(count) { cell() }
+    }
 
     private fun cell(): TerminalCell {
         val codePoint = buffer.int

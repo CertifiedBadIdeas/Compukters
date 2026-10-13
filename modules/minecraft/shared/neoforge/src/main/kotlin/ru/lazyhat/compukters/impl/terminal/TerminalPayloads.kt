@@ -229,6 +229,7 @@ internal object TerminalProtocol {
         state.cells.forEach { writeCell(buffer, it) }
         writePosition(buffer, state.cursor)
         buffer.writeBoolean(state.cursorVisible)
+        writeHistory(buffer, state.historyStart, state.historyCells)
     }
 
     fun readState(buffer: RegistryFriendlyByteBuf): TerminalState {
@@ -239,7 +240,11 @@ internal object TerminalProtocol {
         val count = buffer.readVarInt()
         require(count == CELL_COUNT) { "invalid terminal cell count" }
         val cells = List(count) { readCell(buffer) }
-        val state = TerminalState(revision, width, height, cells, readPosition(buffer), buffer.readBoolean())
+        val cursor = readPosition(buffer)
+        val visible = buffer.readBoolean()
+        val historyStart = readRevision(buffer)
+        val history = readHistoryCells(buffer)
+        val state = TerminalState(revision, width, height, cells, cursor, visible, historyStart, history)
         validateState(state)
         return state
     }
@@ -317,6 +322,16 @@ internal object TerminalProtocol {
             TerminalChange.Reset -> {
                 buffer.writeByte(4)
             }
+
+            is TerminalChange.HistoryAppend -> {
+                buffer.writeByte(5)
+                writeHistory(buffer, change.firstRow, change.cells)
+            }
+
+            is TerminalChange.HistoryReplace -> {
+                buffer.writeByte(6)
+                writeHistory(buffer, change.firstRow, change.cells)
+            }
         }
     }
 
@@ -324,7 +339,7 @@ internal object TerminalProtocol {
         buffer: RegistryFriendlyByteBuf,
         budget: CellBudget,
     ): TerminalChange =
-        when (buffer.readU8()) {
+        when (val tag = buffer.readU8()) {
             0 -> {
                 val start = buffer.readVarInt()
                 val count = buffer.readVarInt()
@@ -360,10 +375,37 @@ internal object TerminalProtocol {
                 TerminalChange.Reset
             }
 
+            5, 6 -> {
+                val firstRow = readRevision(buffer)
+                val cells = readHistoryCells(buffer, budget)
+                if (tag == 5) TerminalChange.HistoryAppend(firstRow, cells) else TerminalChange.HistoryReplace(firstRow, cells)
+            }
+
             else -> {
                 invalid("unknown terminal change")
             }
         }
+
+    private fun writeHistory(
+        buffer: RegistryFriendlyByteBuf,
+        firstRow: Long,
+        cells: List<TerminalCell>,
+    ) {
+        TerminalModel.validateHistory(firstRow, cells)
+        writeRevision(buffer, firstRow)
+        buffer.writeVarInt(cells.size)
+        cells.forEach { writeCell(buffer, it) }
+    }
+
+    private fun readHistoryCells(
+        buffer: RegistryFriendlyByteBuf,
+        budget: CellBudget? = null,
+    ): List<TerminalCell> {
+        val count = buffer.readVarInt()
+        require(count in 0..TerminalModel.HISTORY_CELLS && count % WIDTH == 0) { "invalid terminal history count" }
+        budget?.consume(count)
+        return List(count) { readCell(buffer) }
+    }
 
     private fun validateChange(change: TerminalChange) = TerminalModel.validateChange(change)
 

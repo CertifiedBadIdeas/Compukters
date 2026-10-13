@@ -24,6 +24,8 @@ import ru.lazyhat.compukters.lang.runtime.capability.HostOperationSchema
 import ru.lazyhat.compukters.lang.runtime.capability.HostValueType
 import ru.lazyhat.compukters.lang.runtime.vm.CapabilityIdentity
 import ru.lazyhat.compukters.lang.runtime.vm.FfmBridge
+import ru.lazyhat.compukters.lang.runtime.vm.TerminalKey
+import ru.lazyhat.compukters.lang.runtime.vm.TerminalKeyAction
 import ru.lazyhat.compukters.lang.runtime.vm.TerminalState
 import ru.lazyhat.compukters.lang.runtime.vm.TerminalUpdate
 import ru.lazyhat.compukters.lang.runtime.vm.VmBridgeException
@@ -73,7 +75,7 @@ class FfmBridgeIntegrationTest {
     @Test
     fun `JDK 25 FFM reads the native ABI version`() {
         FfmBridge.open(Path.of(requiredProperty("compukter.ffi.library"))).use { bridge ->
-            assertEquals(23, bridge.abiVersion())
+            assertEquals(24, bridge.abiVersion())
         }
     }
 
@@ -177,6 +179,31 @@ class FfmBridgeIntegrationTest {
                     assertEquals(0, independent.revision)
                     assertEquals(TerminalUpdate.Unchanged(0), second.terminalChangesSince(0))
                 }
+            }
+        }
+    }
+
+    @Test
+    fun `full bounded history crosses the native outcome buffer size without losing rows`() {
+        FfmBridge.open(Path.of(requiredProperty("compukter.ffi.library"))).use { bridge ->
+            val artifact = Path.of(requiredProperty("compukters.shell.artifact")).readBytes()
+            VmSession.open(artifact, bridge).use { session ->
+                advanceUntilWaiting(session)
+                repeat(100) {
+                    session.sendTerminalText("echo " + "x".repeat(200))
+                    advanceUntilWaiting(session)
+                    session.sendTerminalKey(
+                        TerminalKey.ENTER,
+                        TerminalKeyAction.PRESS,
+                    )
+                    advanceUntilWaiting(session)
+                }
+                session.commitTerminal()
+                val full = session.terminalFullState()
+                assertEquals(512 * 51, full.historyCells.size)
+                assertTrue(full.historyStart > 0)
+                assertEquals(full, assertIs<TerminalUpdate.Full>(session.terminalChangesSince(Long.MAX_VALUE)).state)
+                assertEquals(full, session.terminalFullState())
             }
         }
     }
