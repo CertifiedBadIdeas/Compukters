@@ -117,7 +117,8 @@ object PeripheralConstantInsertion {
         return Insertion(insertion, "${prefix}const val $identifier = $literal$newline$separator", identifier)
     }
 
-    private fun quote(name: String): String =
+    /** Encodes a name as a Kotlin string literal, including template escaping. */
+    fun quote(name: String): String =
         buildString {
             append('"')
             for (char in name) {
