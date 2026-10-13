@@ -11,6 +11,14 @@ permalink: /ARCHITECTURE/abi/
 
 This reference groups versioned representation boundaries by the version that introduced them. Those versions are minimum feature requirements, not a claim that older Runtime distributions implement today’s platform. The source owners below define the active contract. Before changing a wire format, inspect each producer, consumer and verifier. Runtime release pins in `build-scripts/src/main/kotlin/RuntimeBundleSupport.kt` describe published bundles separately from the local VM checkout.
 
+## Linked constant pools
+
+Artifact constants are unique and ordered by their encoded bytes. Reachability pruning can renumber
+UTF-16 literal IDs across little-endian byte boundaries, so the linker rebuilds the canonical constant
+order after literal relocation and updates every constant reference. The representation and verifier
+requirements are unchanged. `LibraryModuleLinkerTest` covers the 256-literal boundary; real Guest editor
+execution also exercises this path.
+
 ## Terminal scrollback transport (Runtime 0.24.0)
 
 Native C ABI **24** extends full-terminal results with the bounded 512-row history and introduces history
