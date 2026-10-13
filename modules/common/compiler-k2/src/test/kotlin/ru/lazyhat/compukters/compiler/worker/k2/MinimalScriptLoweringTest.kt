@@ -2485,20 +2485,22 @@ class MinimalScriptLoweringTest {
                     screen.rect((0 xy 0) sized (6 by 5), Colors.WHITE)
                     screen.text(0 xy 0, "Ready", scale = 1)
                     screen.image(2 xy 2, 2 by 1, intArrayOf(Colors.RED, Colors.BLUE))
-                    screen.frame { pixel(0 xy 0, Colors.YELLOW) }
+                    screen.frame { pixel(0 xy 0, Colors.YELLOW); image(2 xy 2, 2 by 1, intArrayOf(Colors.RED, Colors.BLUE)) }
                     try { screen.frame { pixel(1, 0, Colors.CYAN); throw IllegalArgumentException("abort") } }
                     catch (error: IllegalArgumentException) { screen.pixel(1, 0, Colors.MAGENTA) }
                     val history = DisplayHistory(3)
                     history.add(1f); history.add(Float.NaN); history.add(2f); history.add(3f)
                     require(history.size == 3 && history[0] != history[0] && history[2] == 3f)
-                    val widgets = DisplayWidgets(screen)
-                    val bounds = (0 xy 8) sized (8 by 8)
-                    require(!widgets.button(bounds, "", null))
-                    require(widgets.button(bounds, "", compukter.display.DisplayClick(0 xy 8)))
-                    require(!widgets.button(bounds, "", compukter.display.DisplayClick(8 xy 8)))
-                    require(!widgets.button(bounds, "", compukter.display.DisplayClick(0 xy 8), false))
-                    widgets.gauge(bounds, Float.NaN, 0f, 100f)
-                    widgets.chart(bounds, history, 0f, 10f)
+                    screen.frame {
+                        val widgets = DisplayWidgets(this)
+                        val bounds = (0 xy 8) sized (8 by 8)
+                        require(!widgets.button(bounds, "", null))
+                        require(widgets.button(bounds, "", compukter.display.DisplayClick(0 xy 8)))
+                        require(!widgets.button(bounds, "", compukter.display.DisplayClick(8 xy 8)))
+                        require(!widgets.button(bounds, "", compukter.display.DisplayClick(0 xy 8), false))
+                        widgets.gauge(bounds, Float.NaN, 0f, 100f)
+                        widgets.chart(bounds, history, 0f, 10f)
+                    }
                     var actions = 0
                     val ui = compukter.display.displayUi((4 xy 4) sized (20 by 12)) {
                         canvas(30 by 20) {
@@ -2517,7 +2519,7 @@ class MinimalScriptLoweringTest {
                     var click = screen.pollClick()
                     while (click == null) { Tasks.sleepTicks(1); click = screen.pollClick() }
                     require(click.position == Vector2i(35, 18))
-                    require(!widgets.button(bounds, "", click, false))
+                    screen.frame { require(!DisplayWidgets(this).button((0 xy 8) sized (8 by 8), "", click, false)) }
                     screen.pixel(click.position, 0x123456)
                     var pointer = screen.pollPointer()
                     while (pointer == null) { Tasks.sleepTicks(1); pointer = screen.pollPointer() }

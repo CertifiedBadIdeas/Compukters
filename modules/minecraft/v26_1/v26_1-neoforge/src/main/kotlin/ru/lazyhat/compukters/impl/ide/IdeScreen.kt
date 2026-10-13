@@ -189,6 +189,10 @@ internal class IdeScreen(
         private val graphics: GuiGraphicsExtractor,
         private val viewport: CompuktersUiViewport,
     ) : IdeCanvas {
+        override fun layer(zIndex: Int) {
+            graphics.nextStratum()
+        }
+
         override fun fill(
             bounds: IdeRect,
             color: Int,

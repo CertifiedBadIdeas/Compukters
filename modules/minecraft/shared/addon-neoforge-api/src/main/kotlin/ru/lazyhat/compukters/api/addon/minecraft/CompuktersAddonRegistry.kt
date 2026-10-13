@@ -21,12 +21,14 @@ package ru.lazyhat.compukters.api.addon.minecraft
 import net.minecraft.core.BlockPos
 import net.minecraft.core.Direction
 import net.minecraft.server.level.ServerLevel
+import net.minecraft.world.phys.AABB
 import ru.lazyhat.compukters.addon.api.AddonGuestApiBundle
 import ru.lazyhat.compukters.api.addon.ProgramAddonHost
 import ru.lazyhat.compukters.core.device.runtime.peripheral.PeripheralFailure
 import ru.lazyhat.compukters.minecraft.computer.ComputerAddonHostFactory
 import ru.lazyhat.compukters.minecraft.computer.ComputerAddonHosts
 import ru.lazyhat.compukters.minecraft.computer.ComputerBlock
+import ru.lazyhat.compukters.minecraft.computer.ComputerPeripheralGeometryProvider
 import ru.lazyhat.compukters.minecraft.computer.ComputerPeripheralHostFactory
 import ru.lazyhat.compukters.minecraft.computer.ComputerPeripheralIdentity
 import ru.lazyhat.compukters.minecraft.computer.ComputerPeripheralProvider
@@ -148,6 +150,14 @@ fun interface CompuktersPeripheralProvider {
     fun resolve(contact: CompuktersPeripheralContact): CompuktersPeripheralDevice?
 }
 
+/** Opt-in whole-device outline geometry. It never participates in device identity or network persistence.
+ * Return block-aligned bounds containing both the controller and the contacted block, at most 64 blocks per axis.
+ * Existing single-block providers need not implement this interface.
+ */
+interface CompuktersPeripheralGeometryProvider : CompuktersPeripheralProvider {
+    fun bounds(contact: CompuktersPeripheralContact): AABB?
+}
+
 object CompuktersAddonRegistry {
     @JvmStatic
     fun register(
@@ -180,14 +190,32 @@ object CompuktersAddonRegistry {
             },
             listOf(guestApi),
             factory,
-            ComputerPeripheralProvider { level, position, face ->
-                peripheralProvider.resolve(CompuktersPeripheralContact(level, position, face))?.let { device ->
-                    ComputerPeripheralIdentity(providerId, device.anchor.immutable(), device.deviceKey)
-                }
-            },
+            bindProvider(providerId, peripheralProvider),
             bound.values.toList(),
         )
     }
+
+    private fun bindProvider(
+        providerId: String,
+        provider: CompuktersPeripheralProvider,
+    ): ComputerPeripheralProvider =
+        object : ComputerPeripheralGeometryProvider {
+            override fun resolve(
+                level: ServerLevel,
+                position: BlockPos,
+                contactedFace: Direction,
+            ): ComputerPeripheralIdentity? =
+                provider.resolve(CompuktersPeripheralContact(level, position, contactedFace))?.let { device ->
+                    ComputerPeripheralIdentity(providerId, device.anchor.immutable(), device.deviceKey)
+                }
+
+            override fun bounds(
+                level: ServerLevel,
+                position: BlockPos,
+                contactedFace: Direction,
+            ): AABB? =
+                (provider as? CompuktersPeripheralGeometryProvider)?.bounds(CompuktersPeripheralContact(level, position, contactedFace))
+        }
 
     private fun registerInternal(
         guestApi: AddonGuestApiBundle,
@@ -201,13 +229,7 @@ object CompuktersAddonRegistry {
             },
             listOf(guestApi),
             factory,
-            peripheralProvider?.let { provider ->
-                ComputerPeripheralProvider { level, position, contactedFace ->
-                    provider.resolve(CompuktersPeripheralContact(level, position, contactedFace))?.let { device ->
-                        ComputerPeripheralIdentity(providerId, device.anchor.immutable(), device.deviceKey)
-                    }
-                }
-            },
+            peripheralProvider?.let { bindProvider(providerId, it) },
         )
     }
 }

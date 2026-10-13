@@ -298,6 +298,178 @@ class DisplayHostStateTest {
         assertIs<HostResponse.Failure>(host.call(2, VmValue.I32(handle), VmValue.I32(0), VmValue.I32(10), VmValue.StringValue("W")))
     }
 
+    @Test
+    fun `raster packets preserve scalar drawing order clipping text images and atomic publication`() {
+        val endpoint = FakeDisplayEndpoint()
+        val scalarEndpoint = FakeDisplayEndpoint()
+        val host = DisplayHostState({ endpoint }, { DisplayResolution.Found(endpoint) })
+        val scalar = DisplayHostState({ scalarEndpoint }, { DisplayResolution.Found(scalarEndpoint) })
+        val handle = assertIs<HostResponse.IntSuccess>(host.call(0, VmValue.I32(0))).value
+        val scalarHandle = assertIs<HostResponse.IntSuccess>(scalar.call(0, VmValue.I32(0))).value
+
+        fun draw(
+            operation: Int,
+            vararg fields: Int,
+        ) = scalar.call(operation, VmValue.I32(scalarHandle), *fields.map(VmValue::I32).toTypedArray())
+        draw(8, 0x123456)
+        draw(11, 1, 1, 8, 8, 0x456789)
+        draw(10, 0, 4, 12, 4, 0xABCDEF)
+        draw(19, -100, 5, 100, 5, 0xFF0000, 4, 5, 3, 2)
+        scalar.call(
+            20,
+            VmValue.I32(scalarHandle),
+            VmValue.I32(0),
+            VmValue.I32(0),
+            VmValue.StringValue("W\uD83D\uDE00"),
+            VmValue.I32(0xFFFFFF),
+            VmValue.I32(1),
+            VmValue.I32(4),
+            VmValue.I32(5),
+            VmValue.I32(3),
+            VmValue.I32(2),
+        )
+        scalar.call(13, VmValue.I32(scalarHandle), VmValue.I32(0), VmValue.I32(0), VmValue.StringValue("ff000000ff00"))
+        draw(9, 0, 0, 0x778899)
+        val packet =
+            rasterPacket(7) {
+                command(8, 0x123456)
+                command(11, 1, 1, 8, 8, 0x456789)
+                command(10, 0, 4, 12, 4, 0xABCDEF)
+                command(19, -100, 5, 100, 5, 0xFF0000, 4, 5, 3, 2)
+                put(20.toByte())
+                putInt(0)
+                putInt(0)
+                putText("W\uD83D\uDE00")
+                listOf(0xFFFFFF, 1, 4, 5, 3, 2).forEach { putInt(it) }
+                command(13, 0, 0, 2, 0xFF0000, 0x00FF00)
+                command(9, 0, 0, 0x778899)
+            }
+        assertEquals(HostResponse.UnitSuccess, host.call(14, VmValue.I32(handle)))
+        assertEquals(HostResponse.UnitSuccess, host.call(21, VmValue.I32(handle), VmValue.ByteArrayValue(packet)))
+        assertEquals(0, endpoint.canvas.pixelAt(0, 0))
+        assertEquals(HostResponse.UnitSuccess, host.call(15, VmValue.I32(handle)))
+        for (y in 0 until endpoint.canvas.height) {
+            for (x in 0 until endpoint.canvas.width) {
+                assertEquals(scalarEndpoint.canvas.pixelAt(x, y), endpoint.canvas.pixelAt(x, y), "$x,$y")
+            }
+        }
+    }
+
+    @Test
+    fun `raster packets reject malformed data and poison partially applied frames`() {
+        val endpoint = FakeDisplayEndpoint()
+        val host = DisplayHostState({ endpoint }, { DisplayResolution.Found(endpoint) })
+        val handle = assertIs<HostResponse.IntSuccess>(host.call(0, VmValue.I32(0))).value
+        val valid = rasterPacket(1) { command(9, 0, 0, 0x123456) }
+        val malformed =
+            listOf(
+                valid.copyOf(valid.size - 1),
+                valid + byteArrayOf(0),
+                rasterPacket(1) { command(99) },
+                rasterPacket(2) {
+                    command(9, 0, 0, 0x123456)
+                    command(99)
+                },
+                rasterPacket(129) {},
+                rasterPacket(0) {},
+                rasterPacket(1) { command(9, 0, 0, -1) },
+                rasterPacket(1) { command(11, 0, 0, -1, 1, 0) },
+                rasterPacket(1) { command(13, 0, 0, 257) },
+                rasterPacket(1) {
+                    put(12.toByte())
+                    putInt(0)
+                    putInt(0)
+                    putText("\uD800")
+                    putInt(0)
+                    putInt(1)
+                },
+                valid.copyOf().also { it[0] = 2 },
+            )
+        malformed.forEach { packet ->
+            assertEquals(HostResponse.UnitSuccess, host.call(14, VmValue.I32(handle)))
+            var charged = 0
+            endpoint.canvas.admitWork = { charged++ }
+            assertIs<HostResponse.Failure>(host.call(21, VmValue.I32(handle), VmValue.ByteArrayValue(packet)))
+            assertEquals(0, charged, "Malformed packets must reject before applying any command")
+            endpoint.canvas.admitWork = {}
+            assertIs<HostResponse.Failure>(host.call(15, VmValue.I32(handle)))
+            assertEquals(HostResponse.UnitSuccess, host.call(16, VmValue.I32(handle)))
+            assertEquals(0, endpoint.canvas.pixelAt(0, 0))
+        }
+        kotlin.test.assertFailsWith<IllegalArgumentException> { DisplayRasterBatch.decode(ByteArray(4097)) }
+        // The second command exceeds pixel-work quota after the first command has modified the private canvas.
+        assertEquals(HostResponse.UnitSuccess, host.call(14, VmValue.I32(handle)))
+        endpoint.canvas.admitWork = { work -> check(work < 2) }
+        val workFailure =
+            rasterPacket(2) {
+                command(9, 0, 0, 0x123456)
+                command(11, 0, 0, 2, 2, 0)
+            }
+        assertIs<HostResponse.Failure>(host.call(21, VmValue.I32(handle), VmValue.ByteArrayValue(workFailure)))
+        assertIs<HostResponse.Failure>(host.call(15, VmValue.I32(handle)))
+        assertEquals(0, endpoint.canvas.pixelAt(0, 0))
+    }
+
+    @Test
+    fun `raster batches require current minor an open frame and its task owner`() {
+        val endpoint = FakeDisplayEndpoint()
+        val host = DisplayHostState({ endpoint }, { DisplayResolution.Found(endpoint) })
+        val handle = assertIs<HostResponse.IntSuccess>(host.call(0, VmValue.I32(0))).value
+        val packet = VmValue.ByteArrayValue(rasterPacket(1) { command(9, 0, 0, 0x123456) })
+        assertIs<HostResponse.Failure>(host.call(21, VmValue.I32(handle), packet))
+        host.call(14, VmValue.I32(handle))
+        for ((task, minor) in listOf(2 to 4, 1 to 3)) {
+            val response =
+                assertIs<ProgramAddonDispatch.Completed>(
+                    host.dispatch(
+                        ProgramAddonRequest(
+                            VmHostRequestIdentity(task, 1),
+                            ru.lazyhat.compukters.lang.runtime.vm
+                                .CapabilityIdentity("compukters", "display", 1, minor),
+                            21,
+                            listOf(VmValue.I32(handle), packet),
+                        ),
+                    ),
+                ).response
+            assertIs<HostResponse.Failure>(response)
+        }
+        assertIs<HostResponse.Failure>(host.call(14, VmValue.I32(handle)))
+        assertEquals(HostResponse.UnitSuccess, host.call(21, VmValue.I32(handle), packet))
+        assertEquals(HostResponse.UnitSuccess, host.call(16, VmValue.I32(handle)))
+        assertEquals(0, endpoint.canvas.pixelAt(0, 0))
+        host.call(14, VmValue.I32(handle))
+        endpoint.present = false
+        assertIs<HostResponse.Failure>(host.call(21, VmValue.I32(handle), packet))
+        assertEquals(0, endpoint.canvas.pixelAt(0, 0))
+    }
+
+    private fun rasterPacket(
+        count: Int,
+        block: java.nio.ByteBuffer.() -> Unit,
+    ): ByteArray {
+        val buffer =
+            java.nio.ByteBuffer
+                .allocate(4096)
+                .order(java.nio.ByteOrder.LITTLE_ENDIAN)
+        buffer.putInt(1)
+        buffer.putInt(count)
+        buffer.block()
+        return buffer.array().copyOf(buffer.position())
+    }
+
+    private fun java.nio.ByteBuffer.command(
+        operation: Int,
+        vararg fields: Int,
+    ) {
+        put(operation.toByte())
+        fields.forEach { putInt(it) }
+    }
+
+    private fun java.nio.ByteBuffer.putText(text: String) {
+        putInt(text.length)
+        text.forEach { putChar(it) }
+    }
+
     private fun DisplayHostState.call(
         operation: Int,
         vararg arguments: VmValue,

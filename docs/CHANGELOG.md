@@ -15,6 +15,10 @@ headings so this page has one stable URL that can be shared outside the reposito
 
 - Guest Kotlin enums expose immutable `EnumType.entries` in declaration order, including empty enums and enums from platform/addon libraries. Indexing, iteration, membership and IDE completion share the typed `EnumEntries<E>` API.
 
+- Create boilers appear as one whole structure in the configurator: every tank segment shares its controller's
+  name and network, with one outline around the complete tank. Explicit interaction consolidates older per-block
+  bindings; addon providers can opt into the same bounded structure geometry.
+
 - Redstone Ports show input/output strength independently on all six faces, with small edge indicators visible when a face is covered.
 
 - Newly compiled Guest programs allow 64 nested calls, matching the runtime limit, so framed nested UI drawing fits within the declared stack budget.
@@ -23,6 +27,8 @@ headings so this page has one stable URL that can be shared outside the reposito
 
 - Guest Kotlin supports classic compile-time contracts for callback invocation counts, definite local initialization and conditional null/type smart casts. Contracts cover standard scope functions, preconditions, `buildString` and nested display UI construction; declarations add no runtime builder or VM operations.
 
+- Display frames record bounded drawing packets through `DisplayFrame`, reducing host round trips while
+  retaining clipping, atomic publication and drawing quotas. Canvas/widgets/UI draw through the frame recorder.
 - Guest displays provide a lightweight declarative widget DSL with explicit pixel viewports, rows/columns,
   reusable mutable widgets, a clipped drawing canvas and a rotation-slider cube example. Server-validated
   held-right-click gestures support captured dragging, release and cancellation without a reactive runtime;
@@ -45,6 +51,7 @@ headings so this page has one stable URL that can be shared outside the reposito
   `GraphicalDisplay.pollClick()`. Input belongs to the drawing program and is bounded and transient.
   Guest widgets provide buttons, indicators, gauges and history charts. The `create-scada` example
   controls a Create kinetic drive with real speed/load readings, RPM commands and connection/load alarms.
+  Its input loop runs independently of telemetry sampling, applies commands before drawing and avoids unchanged redraws.
 
 - The all-addon development build uses Loom directly and enables Configuration Cache and parallel execution,
   allowing independent built-in program artifacts to compile concurrently inside the included Compukters project.
@@ -138,7 +145,7 @@ headings so this page has one stable URL that can be shared outside the reposito
   IDE controls share an outlined neutral style, with vertically centered labels in toolbars, dialogs, project navigation
   and status/search bars. Hover and completion popups reserve space around every text row. Floating IDE windows
   share subtle borders and rounded corners; the embedded terminal shares the standalone terminal background
-  and IDE window chrome and focus accent.
+  and IDE window chrome and focus accent. Floating windows also cover native block item icons in underlying controls.
   Attached addon sources have a separate bounded allowance, so bundled library sources do not exhaust it.
   Closed IDE screens ignore late ticks during screen transitions and client shutdown.
 
