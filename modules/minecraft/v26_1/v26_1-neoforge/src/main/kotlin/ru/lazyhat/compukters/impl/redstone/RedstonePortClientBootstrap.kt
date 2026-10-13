@@ -12,7 +12,7 @@ import net.neoforged.neoforge.client.event.RegisterColorHandlersEvent
 import ru.lazyhat.compukters.impl.registry.CompuktersRegistry
 import ru.lazyhat.compukters.minecraft.redstone.RedstonePortBlockEntity
 
-/** Each tint index belongs to one world face, including its neighboring edge repeaters. */
+/** Each tint index belongs to one world face, including all indicators drawn on that face. */
 object RedstonePortClientBootstrap {
     fun register(eventBus: IEventBus) {
         eventBus.addListener(::registerColors)
