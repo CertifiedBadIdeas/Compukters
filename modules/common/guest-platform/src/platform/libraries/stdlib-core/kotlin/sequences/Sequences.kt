@@ -79,6 +79,93 @@ public fun <T> Sequence<T>.toList(): List<T> {
     return result
 }
 
+/**
+ * Visits every element in iteration order without constructing a result list.
+ * Exceptions propagate; the immediate inline callback admits non-local returns.
+ */
+public inline fun <T> Sequence<T>.forEach(action: (T) -> Unit) {
+    for (element in this) action(element)
+}
+
+/**
+ * Accumulates elements in order, passing the accumulator before the current element.
+ * Returns [initial] for an empty sequence without invoking [operation].
+ * Exceptions propagate; the immediate inline callback admits non-local returns.
+ */
+public inline fun <T, R> Sequence<T>.fold(initial: R, operation: (R, T) -> R): R {
+    var accumulator = initial
+    for (element in this) accumulator = operation(accumulator, element)
+    return accumulator
+}
+
+/**
+ * Consumes all elements and returns their count, including null elements.
+ * @throws ArithmeticException if the count exceeds Int.MAX_VALUE.
+ */
+public fun <T> Sequence<T>.count(): Int {
+    var count = 0
+    for (element in this) {
+        if (count == Int.MAX_VALUE) throw ArithmeticException("Count overflow has happened.")
+        count += 1
+    }
+    return count
+}
+
+/**
+ * Counts matches in iteration order, consuming the entire sequence.
+ * Exceptions propagate; the immediate inline callback admits non-local returns.
+ * @throws ArithmeticException if the match count exceeds Int.MAX_VALUE.
+ */
+public inline fun <T> Sequence<T>.count(predicate: (T) -> Boolean): Int {
+    var count = 0
+    for (element in this) {
+        if (predicate(element)) {
+            if (count == Int.MAX_VALUE) throw ArithmeticException("Count overflow has happened.")
+            count += 1
+        }
+    }
+    return count
+}
+
+/** Checks availability without reading an element; returns false when empty. */
+public fun <T> Sequence<T>.any(): Boolean = iterator().hasNext()
+
+/**
+ * Stops at the first match; returns false when empty without invoking [predicate].
+ * Exceptions propagate; the immediate inline callback admits non-local returns.
+ */
+public inline fun <T> Sequence<T>.any(predicate: (T) -> Boolean): Boolean {
+    for (element in this) {
+        if (predicate(element)) return true
+    }
+    return false
+}
+
+/**
+ * Stops at the first failure; returns true when empty without invoking [predicate].
+ * Exceptions propagate; the immediate inline callback admits non-local returns.
+ */
+public inline fun <T> Sequence<T>.all(predicate: (T) -> Boolean): Boolean {
+    for (element in this) {
+        if (!predicate(element)) return false
+    }
+    return true
+}
+
+/** Checks availability without reading an element; returns true when empty. */
+public fun <T> Sequence<T>.none(): Boolean = !iterator().hasNext()
+
+/**
+ * Stops at the first match; returns true when empty without invoking [predicate].
+ * Exceptions propagate; the immediate inline callback admits non-local returns.
+ */
+public inline fun <T> Sequence<T>.none(predicate: (T) -> Boolean): Boolean {
+    for (element in this) {
+        if (predicate(element)) return false
+    }
+    return true
+}
+
 internal class TransformingSequence<T, R>(
     private val source: Sequence<T>,
     private val transform: (T) -> R,
