@@ -46,4 +46,9 @@ dependencies {
 
     // This fork is still a Fabric jar: Connector must receive its intermediary names.
     "runtimeOnly"("me.cortex.voxy.neoforge:voxy:0.2.15") { isTransitive = false }
+
+    // NeoForge Worldgen and its configuration UI dependencies (Modrinth version IDs).
+    "modRuntimeOnly"("maven.modrinth:voxy-worldgen:PzNUZlWw") { isTransitive = false } // 2.4.2
+    "modRuntimeOnly"("maven.modrinth:cloth-config:izKINKFg") { isTransitive = false } // 15.0.140
+    "modRuntimeOnly"("maven.modrinth:better-modlist:ZID4kkto") { isTransitive = false } // 21.1.4
 }

@@ -13,7 +13,7 @@ headings so this page has one stable URL that can be shared outside the reposito
 
 ## 0.6.0 — In development
 
-- The addon development stand loads optional Connector, Forgified Fabric API, Sodium and Voxy through Gradle;
+- The addon development stand loads optional Connector, Forgified Fabric API, Sodium, Voxy and Voxy Worldgen through Gradle;
   their dependency lines can be commented out. Loom supplies Connector's clean Minecraft path and remaps every
   Fabric API module for the development environment.
 
