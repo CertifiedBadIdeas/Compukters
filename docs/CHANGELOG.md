@@ -19,6 +19,9 @@ headings so this page has one stable URL that can be shared outside the reposito
   every configured burner is empty. Its panel shows boiler readings, per-burner fuel, cooldown and fault states.
   The development stand includes Crafts & Additions and Create: Connected.
 
+- Guest Kotlin supports direct generic methods on ordinary classes and objects, combining class and method
+  type specialization with defaults, local helpers and escaping callbacks.
+
 - Guest generic classes support callbacks and local helpers in primary-constructor initialization, field
   initializers and `init` blocks, with concrete capture types and independent state for each instance.
 

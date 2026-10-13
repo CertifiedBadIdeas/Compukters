@@ -312,6 +312,66 @@ class MinimalScriptLoweringTest {
         }
 
     @Test
+    fun `generic methods reject virtual references and expanding specialization`() =
+        withAdapter { adapter ->
+            val cases =
+                listOf(
+                    "value class Factory(val value: Int) { fun <T> keep(value: T): T = value }\nfun main() {}" to
+                        "generic value class methods",
+                    "interface Factory { fun <T> keep(value: T): T }\nfun main() {}" to "generic virtual",
+                    "open class Factory { open fun <T> keep(value: T): T = value }\nfun main() {}" to "generic virtual",
+                    """
+                    class Factory { fun <T> keep(value: T): T = value }
+                    fun main() { val f: (Int) -> Int = Factory()::keep; f(1) }
+                    """.trimIndent() to "generic method references",
+                    """
+                    class Factory { fun <T> grow(value: T) { grow(listOf(value)) } }
+                    fun main() { Factory().grow(1) }
+                    """.trimIndent() to "specialization",
+                )
+            cases.forEach { (source, message) ->
+                val result = adapter.compile(request(source))
+                assertNull(result.artifact, source)
+                assertTrue(result.diagnostics.any { it.code == "UNSUPPORTED_IR" && message in it.message }, result.diagnostics.toString())
+            }
+        }
+
+    @Test
+    fun `generic methods keep direct primitive calls unboxed`() =
+        withAdapter { adapter ->
+            val result =
+                adapter.compile(
+                    request("class Identity { fun <T> keep(value: T): T = value }\nfun main() { Identity().keep(7) }"),
+                )
+            val artifact = ArtifactReader.read(assertNotNull(result.artifact, result.diagnostics.toString()).toByteArray())
+            assertEquals(
+                1,
+                artifact.modules
+                    .flatMap { it.blocks }
+                    .flatMap { it.instructions }
+                    .count { it is Instruction.NewObject },
+            )
+            assertTrue(
+                artifact.modules.flatMap { it.types }.filterIsInstance<NominalType.Function>().any {
+                    it.parameters.size == 2 && it.parameters.last() == ValueType.I32 && it.result == ValueType.I32
+                },
+            )
+        }
+
+    @Test
+    fun `generic methods preserve concrete owner and method captures`() =
+        withAdapter { adapter ->
+            val source = repositoryFile("modules/common/compiler-k2/src/test/resources/kotlin/generic-methods/main.kt").readText()
+            val result = adapter.compile(request(source))
+            val bytes = assertNotNull(result.artifact, result.diagnostics.toString()).toByteArray()
+            ArtifactReader.read(bytes)
+            assertContentEquals(bytes, assertNotNull(adapter.compile(request(source)).artifact).toByteArray())
+            System.getProperty("compukter.vm.genericMethodsArtifact")?.let { output ->
+                Path.of(output).also { it.parent.createDirectories() }.writeBytes(bytes)
+            }
+        }
+
+    @Test
     fun `generic initialization captures preserve concrete symbols order and ownership`() =
         withAdapter { adapter ->
             val source =
@@ -6356,7 +6416,7 @@ class MinimalScriptLoweringTest {
             val unsupported =
                 listOf(
                     "class Worker { suspend fun run() {} }\nfun main() {}" to "suspend functions are unsupported",
-                    "class Box { fun <T> keep(value: T): T = value }\nfun main() { Box() }" to "generic instance methods",
+                    "open class Box { open fun <T> keep(value: T): T = value }\nfun main() { Box() }" to "generic virtual",
                     "class Scope { fun String.sizeAgain(): Int = length }\nfun main() { Scope() }" to "member extension functions",
                 )
 

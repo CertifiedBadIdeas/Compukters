@@ -77,7 +77,7 @@ field changes; capturing a parameter retains its value. Different method invocat
 cells. Primary constructor bodies, backing-field initializers and `init` blocks of ordinary generic classes also
 receive concrete lexical copies. Lambdas and named local helpers can retain constructor parameters, `this`,
 and shared mutable locals; local helpers with their own type parameters specialize before capture layout.
-Methods with their own type parameters and local inline/suspend/reified declarations remain outside this extension.
+Direct methods with their own non-reified type parameters are supported as described below. Local inline/suspend/reified declarations remain outside this extension.
 
 ```kotlin
 class Holder<T>(var value: T) {
@@ -226,7 +226,40 @@ specialization. Imported interfaces remain in the nominal parent list, so upcast
 contract. Generic classes extending a class other than `Any` remain rejected.
 
 **Evidence:** `canonical peripheral companion specializes shared typed queries`, executed by
-`testKotlinPeripheralQueriesVmConformance`. ### Generic value classes and limits
+`testKotlinPeripheralQueriesVmConformance`.
+
+### Direct generic methods
+
+Ordinary Guest classes and objects may declare final, non-suspending methods with their own non-reified
+type parameters. Direct calls specialize inferred or explicit concrete method arguments together with the
+concrete receiver's class arguments. Primitive parameters and results remain unboxed; nullable, reference,
+callable and MFVC values retain their existing representations.
+
+```kotlin
+class Box<T>(var value: T) {
+    fun <R> map(transform: (T) -> R): Box<R> = Box(transform(value))
+}
+fun main() { check(Box(3).map { it.toLong() }.value == 3L) }
+```
+
+Defaults may use earlier method parameters and the owner's fields, including returning callbacks that
+capture these values. Local helpers and escaping callbacks receive concrete lexical bodies and independent
+mutable cells. Receiver and explicit arguments evaluate before omitted defaults; captured owners observe
+later field writes. Recursion with the same types reuses its variant; type-growing calls retain the existing
+256 function-variant bound and report `UNSUPPORTED_IR` when it is exceeded.
+
+Generic virtual/interface methods, overrides, inherited generic methods, generic method references,
+member extensions and reified/suspending forms remain outside this stage. Binary generic method templates
+are unavailable; the executable body must be admitted source. Methods on value-class receivers with their
+own type parameters remain outside this support claim.
+
+**Evidence:** `generic methods preserve concrete owner and method captures` and
+`generic methods keep direct primitive calls unboxed`, executed by `testKotlinGenericMethodsVmConformance`
+(including 64 KiB heap collection), plus `generic methods reject virtual references and expanding specialization`.
+IDE test `generic methods resolve with source and metadata inputs` checks both declaration-input modes.
+**Related work:** [#774](https://github.com/CertifiedBadIdeas/Compukters/issues/774).
+
+### Generic value classes and limits
 
 Concrete generic value-class fields and member methods specialize
 through the same bounded model; generic interface bridges and precompiled producer/consumer layouts retain
@@ -234,7 +267,7 @@ their nominal identity.
 
 **Evidence:** `multi field value classes preserve direct layouts nested calls and managed boundaries` and
 `multi field value classes share canonical layouts across precompiled addon boundaries`, executed by
-`testKotlinMfvcVmConformance`. Contravariance, reified parameters and generic methods declaring their own type
+`testKotlinMfvcVmConformance`. Contravariance, reified parameters and value-class methods declaring their own type
 parameters remain outside the subset. Direct `Any` values use the [supported primitive boxes](primitives.md).
 Expansion is bounded to 256 function and 256 class variants per project compilation. Platform/addon library builds allow 1024 class variants so complete enum caches and read-only collection views can be exported; their function limit remains 256. Binary generic library templates
 and runtime instantiation are absent.
