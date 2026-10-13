@@ -19,6 +19,9 @@ headings so this page has one stable URL that can be shared outside the reposito
   every configured burner is empty. Its panel shows boiler readings, per-burner fuel, cooldown and fault states.
   The development stand includes Crafts & Additions and Create: Connected.
 
+- Task worktree completion checks active builds in nested independent Gradle projects and excludes their
+  sandbox caches from its archive while retaining worlds and IDE data.
+
 - Guest Kotlin supports direct generic methods on ordinary classes and objects, combining class and method
   type specialization with defaults, local helpers and escaping callbacks.
 
