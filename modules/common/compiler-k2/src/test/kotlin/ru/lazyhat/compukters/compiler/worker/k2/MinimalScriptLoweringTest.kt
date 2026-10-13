@@ -398,6 +398,39 @@ class MinimalScriptLoweringTest {
         }
 
     @Test
+    fun `generic sequence helpers specialize retained callback signatures`() =
+        withAdapter { adapter ->
+            val cases =
+                listOf(
+                    "filter forward" to
+                        "fun <T> helper(source: Sequence<T>, predicate: (T) -> Boolean): Sequence<T> = source.filter(predicate)",
+                    "filter capture" to
+                        "fun <T> helper(source: Sequence<T>, value: T): Sequence<T> = source.filter { it == value }",
+                    "filterNot capture" to
+                        "fun <T> helper(source: Sequence<T>, value: T): Sequence<T> = source.filterNot { it != value }",
+                    "map capture" to
+                        "fun <T, R> helper(source: Sequence<T>, transform: (T) -> R): Sequence<R> = source.map { transform(it) }",
+                    "filterNot forward" to
+                        "fun <T> helper(source: Sequence<T>, predicate: (T) -> Boolean): Sequence<T> = source.filterNot(predicate)",
+                    "map forward" to
+                        "fun <T, R> helper(source: Sequence<T>, transform: (T) -> R): Sequence<R> = source.map(transform)",
+                )
+            val failures = mutableListOf<String>()
+            for ((name, helper) in cases) {
+                val call =
+                    if (name == "filter capture" || name == "filterNot capture") {
+                        "helper(listOf(1).asSequence(), 1)"
+                    } else {
+                        "helper(listOf(1).asSequence()) { it == 1 }"
+                    }
+                val source = "import kotlin.collections.*\nimport kotlin.sequences.*\n$helper\nfun main() { check($call.count() == 1) }"
+                val result = adapter.compile(request(source))
+                if (result.artifact == null) failures += "$name: ${result.diagnostics}"
+            }
+            assertTrue(failures.isEmpty(), failures.joinToString("\n"))
+        }
+
+    @Test
     fun `sequences preserve lazy demand iterator state and nullable values`() =
         withAdapter { adapter ->
             for (fixture in listOf("main", "signed", "unsigned")) {

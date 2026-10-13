@@ -57,7 +57,8 @@ headings so this page has one stable URL that can be shared outside the reposito
   Terminal callbacks support non-local returns; predicate queries stop as soon as their result is known.
   Chains defer callbacks until consumption,
   stop at the requested prefix or first match and retain independent iterator state, including nullable elements.
-  Filtering caches all twelve non-null primitive families in unboxed scalar fields.
+  Filtering caches all twelve non-null primitive families in unboxed scalar fields. Generic helpers can construct
+  retained callbacks and bound member references for `filter`, `filterNot` and `map`, including escaping captures.
 
 - Guest Kotlin supports direct generic methods on ordinary classes and objects, combining class and method
   type specialization with defaults, local helpers and escaping callbacks.

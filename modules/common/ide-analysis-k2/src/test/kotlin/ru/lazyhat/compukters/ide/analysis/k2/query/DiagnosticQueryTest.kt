@@ -281,7 +281,13 @@ class DiagnosticQueryTest {
             """
             import kotlin.collections.*
             import kotlin.sequences.*
+            fun <T> select(source: Sequence<T>, value: T): Sequence<T> =
+                source.filter { it == value }.filterNot { it != value }
+            fun <T, R> transform(source: Sequence<T>, action: (T) -> R): Sequence<R> =
+                source.map { action(it) }
             fun main() {
+                val selected: Sequence<Int?> = select(listOf<Int?>(null, 2).asSequence(), null)
+                check(transform(selected) { it == null }.all { it })
                 val values: Sequence<Int?> = listOf<Int?>(null, 2, 3).asSequence()
                 val lazy = values.filter { it != null }.filterNot { it == 3 }.map { it }.take(1)
                 val result: List<Int?> = lazy.toList()

@@ -43,7 +43,10 @@ therefore share scoped default evaluation and dispatch with direct calls, withou
 new artifact representation. Unsupported signature conversions retain target diagnostics.
 
 Before capture discovery, `GuestLocalSpecialization` materializes concrete generic local declarations
-and generic top-level lexical owners, including their generic callers. It shares typed IR deep-copying
+and generic top-level lexical owners, including their generic callers. Anonymous callbacks and
+callable-reference adapters trigger the same owner materialization as named local declarations;
+otherwise their signatures and captures could retain unsubstituted owner type parameters. It shares typed
+IR deep-copying
 with inline specialization: each owner copy remaps its lexical symbols and substitutes only that owner's
 type parameters, leaving nested generic parameters for their own specialization. Recursive calls reuse
 cached concrete variants; calls that change type arguments discover distinct variants. This gives closures
