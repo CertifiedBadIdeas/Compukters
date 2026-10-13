@@ -26,6 +26,21 @@ class ComputerPeripheralContract<T : Any>(
     val ownsReachability: Boolean,
     internal val resolve: (ServerLevel, BlockPos, ComputerPeripheralIdentity) -> PeripheralEndpoint<T>?,
 ) {
+    private var lookupType: String? = null
+    val guestLookupType: String? get() = lookupType
+
+    constructor(
+        id: String,
+        providerId: String,
+        deviceKey: String,
+        ownsReachability: Boolean,
+        guestLookupType: String,
+        resolve: (ServerLevel, BlockPos, ComputerPeripheralIdentity) -> PeripheralEndpoint<T>?,
+    ) : this(id, providerId, deviceKey, ownsReachability, resolve) {
+        require(guestLookupType.length <= 256 && guestLookupType.matches(Regex("[A-Za-z_][A-Za-z0-9_]*(\\.[A-Za-z_][A-Za-z0-9_]*)+")))
+        lookupType = guestLookupType
+    }
+
     /** Retain the JVM constructor used by already compiled addons. */
     constructor(
         id: String,

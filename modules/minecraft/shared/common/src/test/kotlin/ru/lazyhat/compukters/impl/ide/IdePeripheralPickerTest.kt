@@ -32,6 +32,10 @@ class IdePeripheralPickerTest {
             IdePeripheralPickerView(),
             IdePeripheralPickerView(loading = true),
             IdePeripheralPickerView(listOf(IdeNamedPeripheral("speed", "create:speedometer")), writable = true),
+            IdePeripheralPickerView(
+                listOf(IdeNamedPeripheral("speed", "create:speedometer", lookupTypes = listOf("create.kinetics.Speedometer"))),
+                selectedIndex = 0,
+            ),
         )) {
             val output = IdeDrawBuilder(geometry.font)
             IdePeripheralPicker.draw(output, geometry.content, view)
@@ -78,7 +82,13 @@ class IdePeripheralPickerTest {
                 }.second
             for (target in model.hitTargets) {
                 assertEquals(
-                    if (target.enabled) IdeColors.CONTROL else IdeColors.PANEL_ALT,
+                    if (target.selected) {
+                        IdeColors.SELECTION
+                    } else if (target.enabled) {
+                        IdeColors.CONTROL
+                    } else {
+                        IdeColors.PANEL_ALT
+                    },
                     pixel(
                         target.bounds.left + 2,
                         target.bounds.top + 2,
@@ -95,7 +105,7 @@ class IdePeripheralPickerTest {
     }
 
     @Test
-    fun `picker draws project sized cards doubled icons and disables ambiguous names`() {
+    fun `picker draws project sized cards and permits selecting ambiguous names`() {
         val output = IdeDrawBuilder(IdeCodeFontProfile.DEFAULT)
         val area = IdeRect(0, 0, 800, 500)
         IdePeripheralPicker.draw(
@@ -114,7 +124,7 @@ class IdePeripheralPickerTest {
         val rows = model.hitTargets.filter { it.action == IdeHitAction.PeripheralChoice }
         assertEquals(38, rows[0].bounds.height)
         assertTrue(rows[0].enabled)
-        assertFalse(rows[1].enabled)
+        assertTrue(rows[1].enabled)
         assertEquals(
             32,
             model.icons
@@ -128,6 +138,40 @@ class IdePeripheralPickerTest {
                 .bounds.height,
         )
         assertEquals("create:speedometer", model.icons.first().itemId)
+    }
+
+    @Test
+    fun `device actions work without a writable file and typed lookup escapes Kotlin templates`() {
+        val entry =
+            IdeNamedPeripheral(
+                "screen$" + "name",
+                "compukters:display",
+                reference =
+                    ru.lazyhat.compukters.impl.ide.target.IdePeripheralReference(
+                        java.util.UUID.randomUUID(),
+                        "compukters-display",
+                        "text",
+                    ),
+                lookupTypes = listOf("compukter.display.TextDisplay", "compukter.display.GraphicalDisplay"),
+            )
+        val view = IdePeripheralPickerView(listOf(entry), selectedIndex = 0)
+        val output = IdeDrawBuilder(IdeCodeFontProfile.DEFAULT)
+        val area = IdeRect(0, 0, 800, 500)
+        IdePeripheralPicker.draw(output, area, view)
+        val actions = output.build().hitTargets.associateBy { it.action }
+        assertTrue(actions.getValue(IdeHitAction.PeripheralRename).enabled)
+        assertTrue(actions.getValue(IdeHitAction.PeripheralCopyLookup).enabled)
+        assertTrue(actions.getValue(IdeHitAction.PeripheralLookupType).enabled)
+        assertFalse(actions.getValue(IdeHitAction.PeripheralInsert).enabled)
+        assertTrue(actions.values.all { IdePeripheralPicker.bounds(area).contains(it.bounds) })
+        val literal =
+            ru.lazyhat.compukters.ide.editor.PeripheralConstantInsertion
+                .quote(entry.name)
+        assertEquals("compukter.display.TextDisplay.named($literal)", IdePeripheralPicker.lookup(view))
+        assertTrue(literal.contains('\\'))
+        assertEquals("compukter.display.GraphicalDisplay.named($literal)", IdePeripheralPicker.lookup(view.copy(lookupIndex = 1)))
+        assertEquals(null, IdePeripheralPicker.lookup(view.copy(entries = listOf(entry.copy(duplicate = true)))))
+        assertEquals(null, IdePeripheralPicker.lookup(view.copy(entries = listOf(entry.copy(lookupTypes = emptyList())))))
     }
 
     @Test

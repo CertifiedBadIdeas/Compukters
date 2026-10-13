@@ -915,3 +915,13 @@ storage and typed reads.
 `stdlib:core` 1.20.0 publishes scope/assertion/buildString effects, and `compukter:core` 7.5.0
 publishes synchronous display frame and nested UI construction effects. Existing native K2 metadata
 carries these effects for compiler and IDE consumers, including when SDK sources are detached.
+
+## IDE device management transport
+
+IDE target payload registration version 2 extends bounded named-peripheral entries with optional exact instance/kind
+references and up to eight validated fully qualified Guest lookup types. A lease-authorized rename request carries
+that reference, an expected previous name and a bounded requested name; success returns refreshed discovery.
+Version 1 peers cannot decode the extended entry layout and are rejected by target payload registration.
+The optional lookup type constructors in ComputerPeripheralContract and CompuktersPeripheralContract retain all
+existing JVM constructor signatures. Missing metadata disables typed clipboard lookup generation only.
+Guest capabilities, platform bundles, saved network records and native Runtime ABIs are unchanged.

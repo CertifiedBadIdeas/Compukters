@@ -30,6 +30,17 @@ import kotlin.test.assertTrue
 
 class PeripheralNetworkDirectoryTest {
     @Test
+    fun `legacy Java createFor overload preserves unnamed membership`() {
+        val directory = PeripheralNetworkDirectory()
+        val device = member(0)
+        val method = PeripheralNetworkDirectory::class.java.getMethod("createFor", PeripheralNetworkMember::class.java)
+        val network = method.invoke(directory, device) as PeripheralNetwork
+        assertEquals(listOf(device), network.members)
+        assertNull(network.members.single().name)
+        assertEquals(network.id, directory.networkOf(device.instance)?.id)
+    }
+
+    @Test
     fun `joining assigns unique names and repeated clicks preserve names`() {
         val directory = PeripheralNetworkDirectory()
         val first = member(1)
