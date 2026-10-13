@@ -272,23 +272,44 @@ private fun IrType.classInstance(classes: Map<IrClassSymbol, IrClass>): GuestCla
     return GuestClassInstance(declaration, arguments)
 }
 
+private const val MAXIMUM_GUEST_CLASS_VARIANTS = 256
+private const val MAXIMUM_PLATFORM_CLASS_VARIANTS = 1024
+
 private fun collectGuestClassInstances(
     classes: List<IrClass>,
     functions: List<GuestFunctionInstance>,
     properties: List<TopLevelProperty>,
     anyType: IrType,
-    maximumVariants: Int,
+    isPlatformClass: (IrClass) -> Boolean,
     initializationRoots: List<IrElement> = emptyList(),
 ): List<GuestClassInstance> {
     val bySymbol = classes.associateBy { it.symbol }
     val byName = classes.associateBy { it.fqNameWhenAvailable?.asString() }
     val instances = linkedSetOf<GuestClassInstance>()
     val pending = ArrayDeque<GuestClassInstance>()
+    var guestVariants = 0
+    var platformVariants = 0
 
     fun add(instance: GuestClassInstance) {
         if (instances.add(instance)) {
-            if (instances.count { it.arguments.isNotEmpty() } > maximumVariants) {
-                throw UnsupportedKotlinIr(instance.declaration, "generic specialization exceeds $maximumVariants class variants")
+            if (instance.arguments.isNotEmpty()) {
+                if (isPlatformClass(instance.declaration)) {
+                    platformVariants++
+                    if (platformVariants > MAXIMUM_PLATFORM_CLASS_VARIANTS) {
+                        throw UnsupportedKotlinIr(
+                            instance.declaration,
+                            "generic specialization exceeds $MAXIMUM_PLATFORM_CLASS_VARIANTS platform class variants",
+                        )
+                    }
+                } else {
+                    guestVariants++
+                    if (guestVariants > MAXIMUM_GUEST_CLASS_VARIANTS) {
+                        throw UnsupportedKotlinIr(
+                            instance.declaration,
+                            "generic specialization exceeds $MAXIMUM_GUEST_CLASS_VARIANTS class variants",
+                        )
+                    }
+                }
             }
             pending.addLast(instance)
         }
@@ -655,7 +676,7 @@ private fun prepareGuestFunctionBodies(
     topLevelProperties: List<TopLevelProperty>,
     pluginContext: IrPluginContext,
     lexicalSpecialization: GuestLocalSpecialization,
-    maximumClassVariants: Int,
+    isPlatformClass: (IrClass) -> Boolean,
 ): PreparedGuestFunctionBodies {
     val ordinaryInitializationRoots =
         sourceClasses.filter { it.typeParameters.isEmpty() }.flatMap { declaration ->
@@ -699,7 +720,7 @@ private fun prepareGuestFunctionBodies(
             functionInstances,
             topLevelProperties,
             pluginContext.irBuiltIns.anyType,
-            maximumClassVariants,
+            isPlatformClass,
         )
     var classInstances = allClassInstances.filterNot { inlineValueClasses.contains(it.declaration.symbol) }
     // Generic member bodies can call helpers whose signatures/body introduce further class instances.
@@ -769,7 +790,7 @@ private fun prepareGuestFunctionBodies(
                 functionInstances,
                 topLevelProperties,
                 pluginContext.irBuiltIns.anyType,
-                maximumClassVariants,
+                isPlatformClass,
                 initializationRoots,
             )
         val stable = discoveredClasses.toSet() == allClassInstances.toSet() && discoveredFunctions == userFunctions
@@ -1709,8 +1730,16 @@ internal object KotlinProjectLowering {
                 topLevelProperties,
                 pluginContext,
                 lexicalSpecialization,
-                // A complete library exports all enum caches and their read views; project expansion stays bounded separately.
-                maximumClassVariants = if (includeTrustedPlatformBodies) 1024 else 256,
+                // Library specializations must not consume the project's independent 256-variant budget.
+                isPlatformClass = { declaration ->
+                    var parent = declaration.parent
+                    while (parent is IrDeclaration) parent = parent.parent
+                    val path = (parent as? IrFile)?.fileEntry?.name
+                    val sourcePath = session.virtualSourcePath(path)
+                    session.trustedPlatformModule(path) != null ||
+                        sourcePath in session.sourcePlatformPaths ||
+                        (declaration in collectionInterfaceClasses && sourcePath == null)
+                },
             )
         val userFunctions = prepared.functions
         val userClasses = prepared.classes

@@ -223,7 +223,13 @@ captures in value-class initialization.
 
 Captured owners and values remain live under ordinary managed GC. Each materialized closure/cell uses
 the existing metered heap allocations; initialization adds no special runtime storage or VM instruction.
-Concrete dependencies use the existing 256-variant bounds and lexical expansion depth limit.
+Concrete dependencies retain the 256-variant function bounds and lexical expansion depth limit. Generic class
+specializations have independent budgets: 256 for Guest declarations and 1024 for admitted platform/library
+classes, including their collection interfaces. Library dependencies do not consume the Guest class budget;
+classification uses admitted source provenance and canonical platform declarations, not Guest package names.
+`MinimalScriptLoweringTest` covers this with `platform dependencies do not consume guest class specialization
+budget`, `class specialization remains bounded for guest projects`, and `platform class specialization has its
+own bounded budget`.
 
 **Evidence:** `MinimalScriptLoweringTest`, test `generic initialization captures preserve concrete symbols
 order and ownership`, with deterministic artifact checking, and `testKotlinGenericInitializerCapturesVmConformance`
