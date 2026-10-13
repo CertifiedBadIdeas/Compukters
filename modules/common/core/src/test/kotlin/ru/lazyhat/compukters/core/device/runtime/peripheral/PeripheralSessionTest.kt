@@ -12,6 +12,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertNotEquals
 import kotlin.test.assertSame
+import kotlin.test.assertTrue
 
 class PeripheralSessionTest {
     private class Device(
@@ -68,6 +69,56 @@ class PeripheralSessionTest {
                     .int
             },
         )
+    }
+
+    @Test
+    fun `guarded adapted leases acquire only retained handles and release on close or lost connectivity`() {
+        val world = World()
+        val device = world.devices.getValue(3)
+        val ownership = PeripheralOwnership()
+        var reachable = true
+        var acquisitions = 0
+        var releases = 0
+        val lease =
+            object : PeripheralHandleLease {
+                override fun acquire() {
+                    acquisitions++
+                }
+
+                override fun release() {
+                    releases++
+                }
+            }
+        val identity = PeripheralIdentity("test", 3, "actuator")
+        val contract =
+            PeripheralContract<Int, Device>("test:actuator", "test", "actuator") {
+                PeripheralEndpoint(device, device, null, lease) { world.connected && device.valid }.withValidity { reachable }
+            }
+        val session =
+            PeripheralSession(
+                listOf(contract),
+                discover = { listOf(identity) },
+                side = { listOf(identity) },
+                lookupName = { _, _ -> identity },
+                ownership = ownership,
+            )
+        val snapshot = session.openSnapshot(contract.id)
+        assertEquals(0, acquisitions)
+        session.closeSnapshot(snapshot)
+        val handle = session.at(contract.id, 0)
+        assertEquals(1, acquisitions)
+        assertSame(device, session.endpoint(contract, handle))
+        session.close(contract, handle)
+        assertEquals(1, releases)
+        session.at(contract.id, 0)
+        assertEquals(2, acquisitions)
+        reachable = false
+        assertTrue(world.connected)
+        assertTrue(device.valid)
+        ownership.expire()
+        assertEquals(2, releases)
+        session.reset()
+        assertEquals(2, releases)
     }
 
     @Test

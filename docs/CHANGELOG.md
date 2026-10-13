@@ -13,6 +13,9 @@ headings so this page has one stable URL that can be shared outside the reposito
 
 ## 0.6.0 — In development
 
+- Addon SDK 0.6.0 supports transient actuator acquisition/release callbacks and lazy item groups in the shared
+  Compukters creative tab. Base items stay first; addon groups follow in stable order without extra tabs.
+
 - Guest files support eager `readLines` and scoped streaming `useLines`, with strict UTF-8 across transfer chunks,
   LF/CRLF/CR delimiters, explicit byte limits and guaranteed reader cleanup. Low-level readers expose a single-pass
   line sequence; optional Path extensions retain the separation between paths and storage.
