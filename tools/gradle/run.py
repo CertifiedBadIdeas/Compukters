@@ -43,8 +43,13 @@ def main():
         # The build inherits the lock; process exit releases it, including on failure.
         os.set_inheritable(handle.fileno(), True)
         # Explicit command-line limits take precedence over wrapper defaults.
-        command = [args.command[0], f"--max-workers={workers}",
-                   f"-PcompukterVmBuildJobs={jobs}", *args.command[1:]]
+        supplied = args.command[1:]
+        defaults = []
+        if not any(arg == "--max-workers" or arg.startswith("--max-workers=") for arg in supplied):
+            defaults.append(f"--max-workers={workers}")
+        if not any(arg.startswith("-PcompukterVmBuildJobs=") for arg in supplied):
+            defaults.append(f"-PcompukterVmBuildJobs={jobs}")
+        command = [args.command[0], *defaults, *supplied]
         os.execvp(command[0], command)
     except (OSError, ValueError, subprocess.CalledProcessError) as error:
         print(f"Cannot start managed Gradle build: {error}", file=sys.stderr)
