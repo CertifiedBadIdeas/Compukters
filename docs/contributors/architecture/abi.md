@@ -1005,3 +1005,20 @@ Version 1 peers cannot decode the extended entry layout and are rejected by targ
 The optional lookup type constructors in ComputerPeripheralContract and CompuktersPeripheralContract retain all
 existing JVM constructor signatures. Missing metadata disables typed clipboard lookup generation only.
 Guest capabilities, platform bundles, saved network records and native Runtime ABIs are unchanged.
+
+### Programmable Create actuators
+
+Create addon API 2.1 preserves capability `create:create` major 1 operation IDs 0–29 and appends:
+
+| ID | Binding | Arguments | Result |
+| --- | --- | --- | --- |
+| 30 | `create.actuators.ActuatorBindings.pumpReversed` | `Int` handle | `Boolean` |
+| 31 | `create.actuators.ActuatorBindings.setPumpReversed` | `Int` handle, `Boolean` direction | `Boolean` |
+| 32 | `create.actuators.ActuatorBindings.clutchConnected` | `Int` handle | `Boolean` |
+| 33 | `create.actuators.ActuatorBindings.setClutchConnected` | `Int` handle, `Boolean` connection | `Boolean` |
+
+The typed contracts are `create:pump` and `create:clutch`. Guest wrappers are `create.actuators.Pump` and
+`create.actuators.Clutch`; common peripheral discovery owns acquisition and exclusivity. Pump reversal persists in
+block state. Clutch command ownership is a transient SDK lease and never survives a world reload or peripheral
+checkpoint. These endpoints provide no persistent-instance identity; old handles restore as stale. This extends
+only the locked addon schema; native ABI, artifact encoding and capability wire format remain unchanged.

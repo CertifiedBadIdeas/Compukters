@@ -23,7 +23,7 @@ files. Its Kotlin types link to the [Compukters Core API reference]({{ '/guest-a
 
 | Area | Supported devices | Program actions |
 | --- | --- | --- |
-| [Kinetics]({{ '/CREATE-KINETICS/' | relative_url }}) | Speedometer, Stressometer, Rotation Speed Controller | Read speed, stress, and capacity; wait for changes; read or set a target speed. |
+| [Kinetics]({{ '/CREATE-KINETICS/' | relative_url }}) | Speedometer, Stressometer, Rotation Speed Controller, programmable Pump and Clutch | Read speed, stress, and capacity; wait for changes; set a target speed, reverse pump flow or connect a load. |
 | [Logistics]({{ '/CREATE-LOGISTICS/' | relative_url }}) | Stock Ticker | Find stock by item ID, inspect exact variants and counts, and request packaging to an address. |
 | [Boilers]({{ '/CREATE-BOILERS/' | relative_url }}) | Active steam boiler through any Fluid Tank segment | Read incoming water supply, water and heat gauge levels, effective boiler level, and passive heating. |
 
@@ -34,7 +34,7 @@ files. Its Kotlin types link to the [Compukters Core API reference]({{ '/guest-a
 
 ## Enable the addon in a project
 
-With a computer attached in the IDE, accepting a completion for `Kinetics`, `Logistics`, or `Boilers` enables the
+With a computer attached in the IDE, accepting a completion for a Create device such as `Pump`, `Clutch`, `Speedometer`, `StockTicker`, or `Boiler` enables the
 addon for the project. You can also add it to `compukter.toml`:
 
 ```toml

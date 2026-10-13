@@ -108,7 +108,7 @@ across hibernation or server restarts; a restored waiting receive reports interr
 ## Typed discovery
 
 Device classes also act as providers. For example, `TextDisplay`, `RedstonePort`, Create's `Speedometer`, `Stressometer`,
-`RotationController`, `StockTicker` and `Boiler`, and Propulsion's `CreativeThruster` and
+`RotationController`, `Pump`, `Clutch`, `StockTicker` and `Boiler`, and Propulsion's `CreativeThruster` and
 `CreativeVectorThruster` share these methods:
 
 | Method | Result |
@@ -145,7 +145,7 @@ and a **P** completion badge; the same name used as a device type keeps ordinary
 Device wrappers are value classes implementing `Peripheral`: direct device calls
 use scalar handles, while nullable values, interface references and collections use typed managed wrappers.
 The old `Display`, `Kinetics`, `Boilers`, `Logistics`, `Thrusters` helpers and their separate side types are removed.
-Use typed providers and the common `Side` instead. Create and Propulsion use addon API line `2.0`.
+Use typed providers and the common `Side` instead. Create uses addon API `2.1`; Propulsion uses API `2.0`.
 Rebuild dependent Guest bundles and programs against the updated
 platform; exact bundle versions and hashes still govern compiled artifacts.
 

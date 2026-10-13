@@ -8,7 +8,7 @@ section: players
 
 # Create kinetics
 
-The optional Create addon exposes speedometers, stressometers, and Rotation Speed Controllers on Minecraft 1.21.1.
+The optional Create addon exposes speedometers, stressometers, Rotation Speed Controllers, programmable pumps and programmable clutches on Minecraft 1.21.1.
 See the [Create overview]({{ '/CREATE/' | relative_url }}) for installation, project setup, peripheral cables, and
 device naming.
 
@@ -90,3 +90,40 @@ operation.
 Each running computer may retain the shared limit of 1,024 typed peripheral handles and at most 64 pending Create waits. Host requests and
 completions cross the same bounded asynchronous actor path as other world-facing computer operations and execute on the
 server thread where Minecraft and Create state may safely be accessed.
+
+## Programmable actuators
+
+The Create addon adds **Programmable Mechanical Pump** (`compukters_create:programmable_pump`) and
+**Programmable Clutch** (`compukters_create:programmable_clutch`). Craft either with its ordinary Create block and
+one Compukters Redstone Port. They appear together in the existing Compukters creative tab, after base-mod items.
+Addon groups stay together in stable addon-id order; installing another addon does not add a creative tab.
+
+Only these programmable variants support the actuator API. Name and connect them with the Peripheral Configurator,
+then use the same typed discovery as other devices:
+
+```kotlin
+import create.actuators.Pump
+import create.actuators.Clutch
+
+fun main() {
+    val fuel = Pump.named("fuel")
+    val load = Clutch.named("load")
+    fuel.setReversed(true)
+    load.setConnected(true)
+    println(fuel.reversed())
+    println(load.connected())
+    readln()
+    load.setConnected(false)
+}
+```
+
+`Pump.setReversed(Boolean): Boolean` reverses the actual fluid-flow direction without reversing the kinetic input.
+Calling it again with the same value does not flip the pump again. `reversed()` reports the selected direction,
+relative to its placement; wrench reversal updates this flag too. The direction survives program exit and world
+reload. Changing its direction requires rotation and a valid pipe route before fluid can move.
+
+`Clutch.setConnected(Boolean): Boolean` engages or disengages the kinetic output, and `connected()` reads its state.
+It ignores redstone. A newly placed clutch is disengaged. It also disengages after program exit, Ctrl+C, loss of
+peripheral connectivity, unloading or world reload. Ownership is transient and is never restored from saved data.
+An expired handle cannot engage a replacement block. Keep the controlling program running while the load is connected.
+Both setters return the resulting state. Create's kinetic stress rules still apply.
