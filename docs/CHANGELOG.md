@@ -13,6 +13,9 @@ headings so this page has one stable URL that can be shared outside the reposito
 
 ## 0.6.0 — In development
 
+- Guest Kotlin supports direct generic methods on ordinary classes and objects, combining class and method
+  type specialization with defaults, local helpers and escaping callbacks.
+
 - Guest generic classes support callbacks and local helpers in primary-constructor initialization, field
   initializers and `init` blocks, with concrete capture types and independent state for each instance.
 

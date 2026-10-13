@@ -612,6 +612,15 @@ registerKotlinVmConformance(
     conformanceScenario = "generic-initializer-captures",
 )
 registerKotlinVmConformance(
+    taskName = "testKotlinGenericMethodsVmConformance",
+    taskDescription = "Executes concrete Guest generic methods with the pinned Compukter VM.",
+    artifactTask = ":compiler-k2:generateGenericMethodsConformanceArtifact",
+    artifact = project(":compiler-k2").layout.buildDirectory.file("generated/conformance/kotlin-generic-methods.cpkt"),
+    cargoTargetDirectory = ".toolchain/build/cargo/compiler-k2-generic-methods-conformance",
+    artifactEnvironmentVariable = "COMPUKTER_KOTLIN_GENERIC_METHODS_ARTIFACT",
+    conformanceScenario = "generic-methods",
+)
+registerKotlinVmConformance(
     taskName = "testKotlinGenericLocalFunctionsVmConformance",
     taskDescription = "Executes generic Guest local functions with the pinned Compukter VM.",
     artifactTask = ":compiler-k2:generateGenericLocalFunctionsConformanceArtifact",
