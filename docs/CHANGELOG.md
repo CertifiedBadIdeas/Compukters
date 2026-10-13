@@ -13,6 +13,8 @@ headings so this page has one stable URL that can be shared outside the reposito
 
 ## 0.6.0 — In development
 
+- Added read-only Cosmonautics space telemetry for Guest Kotlin: flight phase, linked planet parameters and Deep Space instance orbital observations, with a small telemetry example.
+
 - The addon development stand loads optional Connector, Forgified Fabric API, Sodium, Voxy and Voxy Worldgen through Gradle;
   their dependency lines can be commented out. Loom supplies Connector's clean Minecraft path and remaps every
   Fabric API module for the development environment.
