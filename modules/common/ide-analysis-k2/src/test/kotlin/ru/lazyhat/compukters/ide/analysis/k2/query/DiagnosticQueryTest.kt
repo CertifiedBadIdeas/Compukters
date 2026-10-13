@@ -24,12 +24,45 @@ import ru.lazyhat.compukters.ide.analysis.EditorDiagnosticSeverity
 import ru.lazyhat.compukters.ide.analysis.SnapshotPresentationAcceptance
 import ru.lazyhat.compukters.ide.analysis.protocol.AnalysisLimits
 import ru.lazyhat.compukters.ide.editor.EditorRange
+import java.nio.file.Files
+import java.nio.file.Path
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
 
 class DiagnosticQueryTest {
+    @Test
+    fun `shipped boiler controller resolves through native IDE diagnostics`() {
+        val controller = Files.readString(Path.of(checkNotNull(System.getProperty("compukters.test.boilerController"))))
+        val source =
+            """
+            import boiler.control.BoilerControl
+            import boiler.control.Phase
+            import boiler.control.unavailableSample
+            fun main() {
+                val control = BoilerControl()
+                val sample = unavailableSample()
+                control.start(sample)
+                check(!sample.available && control.phase == Phase.IDLE)
+            }
+            """.trimIndent()
+        for (attachedSources in listOf(false, true)) {
+            K2QueryFixture
+                .sourceWithGuestApi(
+                    attachedSources,
+                    "control/BoilerControl.kt" to controller,
+                    "main.kt" to source,
+                ).use { fixture ->
+                    for (path in listOf("control/BoilerControl.kt", "main.kt")) {
+                        val result = fixture.execute(fixture.presentation(path)) as AnalysisResult.Presentation
+                        val active = result.value.accept(fixture.identity) as SnapshotPresentationAcceptance.Active
+                        assertTrue(active.diagnostics.none { it.severity == EditorDiagnosticSeverity.Error }, active.diagnostics.toString())
+                    }
+                }
+        }
+    }
+
     @Test
     fun `enum entries resolve typed indexing iteration and platform enums`() {
         val source =

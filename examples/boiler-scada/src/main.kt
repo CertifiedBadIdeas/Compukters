@@ -12,6 +12,7 @@ import boiler.control.Outputs
 import boiler.control.Phase
 import boiler.control.PowerSource
 import boiler.control.outputSteps
+import boiler.control.unavailableSample
 import compukter.concurrent.Tasks
 import compukter.display.Colors
 import compukter.display.DisplayHistory
@@ -85,7 +86,7 @@ fun runDashboard(iterations: Int = -1) {
     val control = BoilerControl()
     val history = DisplayHistory(96)
     val burnerLabels = ArrayList<UiIndicator>()
-    var telemetry = Telemetry(0, BoilerSample(false), emptyList())
+    var telemetry = Telemetry(0, unavailableSample(), emptyList())
     var port: RedstonePort? = null
     var running = true
     // A cooperative clock lets a stuck sampler invalidate old readings independently of I/O.
@@ -186,7 +187,7 @@ fun runDashboard(iterations: Int = -1) {
                 while (running && applying) Tasks.sleepTicks(1)
                 if (!running) break
                 val sampleRevision = revision
-                var sample = BoilerSample(false)
+                var sample = unavailableSample()
                 val statuses = ArrayList<BurnerStatus>()
                 try {
                     val output = port ?: RedstonePort.named(CONTROL)
@@ -243,7 +244,7 @@ fun runDashboard(iterations: Int = -1) {
             val observation = telemetry
             var dirty = iteration == 0 || observation.sequence != sequence
             val fresh = clock - observedAt <= 80
-            val sample = if (fresh) observation.sample else BoilerSample(false)
+            val sample = if (fresh) observation.sample else unavailableSample()
             if (observation.sequence != sequence || (!fresh && previouslyAvailable)) {
                 sequence = observation.sequence
                 control.observe(sample)

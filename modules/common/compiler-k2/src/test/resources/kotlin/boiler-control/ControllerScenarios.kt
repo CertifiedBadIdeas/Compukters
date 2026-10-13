@@ -12,6 +12,7 @@ import boiler.control.Outputs
 import boiler.control.Phase
 import boiler.control.PowerSource
 import boiler.control.outputSteps
+import boiler.control.unavailableSample
 import compukter.compiler.CompilationFailureReason
 import compukter.compiler.CompilationResult
 import compukter.filesystem.FileInfo
@@ -22,15 +23,15 @@ import compukter.process.ProcessResult
 import compukter.terminal.TerminalEvent
 
 class ControllerScenarios {
-    private val cold = BoilerSample(true, fuelCapacity = 4000)
-    private val hot = BoilerSample(true, 20f, 1, 1, 1, 16f, 1200, 4000)
+    private val cold = BoilerSample(true, 0f, 0, 0, 0, 0f, 0, 4000, 0)
+    private val hot = BoilerSample(true, 20f, 1, 1, 1, 16f, 1200, 4000, 0)
     private val off = Outputs(PowerSource.NONE, FuelMode.OFF)
 
     fun explicitStartup() {
         val control = BoilerControl(stableSamples = 3)
         repeat(10) { control.observe(hot) }
         assertEquals(off, control.outputs)
-        control.start(sample(cold, available = false))
+        control.start(unavailableSample())
         assertEquals(Phase.IDLE, control.phase)
         control.start(cold)
         assertEquals(Outputs(PowerSource.BATTERY, FuelMode.FEED), control.outputs)

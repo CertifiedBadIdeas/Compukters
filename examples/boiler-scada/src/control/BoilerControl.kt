@@ -12,15 +12,18 @@ import kotlin.collections.emptyList
 /** All values describe a completed observation, never a partially read set of devices. */
 value class BoilerSample(
     val available: Boolean,
-    val waterSupply: Float = 0f,
-    val waterLevel: Int = 0,
-    val heatLevel: Int = 0,
-    val level: Int = 0,
-    val engineRpm: Float = 0f,
-    val fuelAmount: Int = 0,
-    val fuelCapacity: Int = 0,
-    val burnTicks: Int = 0,
+    val waterSupply: Float,
+    val waterLevel: Int,
+    val heatLevel: Int,
+    val level: Int,
+    val engineRpm: Float,
+    val fuelAmount: Int,
+    val fuelCapacity: Int,
+    val burnTicks: Int,
 )
+
+/** Unavailable observations carry no usable readings. */
+fun unavailableSample(): BoilerSample = BoilerSample(false, 0f, 0, 0, 0, 0f, 0, 0, 0)
 
 enum class Phase { IDLE, STARTING, RUNNING, DRAINING, COOLING, FAULT }
 
