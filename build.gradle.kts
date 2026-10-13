@@ -363,6 +363,22 @@ registerKotlinVmConformance(
 )
 
 registerKotlinVmConformance(
+    taskName = "testKotlinSequencesVmConformance",
+    taskDescription = "Executes lazy Guest sequence demand, independent iterators and nullable values across slices.",
+    artifactTask = ":compiler-k2:generateSequencesConformanceArtifact",
+    artifact = project(":compiler-k2").layout.buildDirectory.file("generated/conformance/kotlin-sequences-main.cpkt"),
+    cargoTargetDirectory = ".toolchain/build/cargo/compiler-k2-sequences-conformance",
+    artifactEnvironmentVariable = "COMPUKTER_KOTLIN_SEQUENCES_ARTIFACT",
+    conformanceScenario = "sequences",
+    additionalArtifacts = mapOf(
+        "COMPUKTER_KOTLIN_SEQUENCES_SIGNED_ARTIFACT" to
+            project(":compiler-k2").layout.buildDirectory.file("generated/conformance/kotlin-sequences-signed.cpkt"),
+        "COMPUKTER_KOTLIN_SEQUENCES_UNSIGNED_ARTIFACT" to
+            project(":compiler-k2").layout.buildDirectory.file("generated/conformance/kotlin-sequences-unsigned.cpkt"),
+    ),
+)
+
+registerKotlinVmConformance(
     taskName = "testKotlinRandomVmConformance",
     taskDescription = "Executes Guest random ranges, reproducibility, quota slices and checkpoint restoration.",
     artifactTask = ":compiler-k2:generateRandomConformanceArtifact",

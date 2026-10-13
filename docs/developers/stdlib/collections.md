@@ -119,7 +119,7 @@ value equality. Non-null lists also widen to `List<Any?>`.
 
 **Evidence:** `testKotlinNullableCollectionsVmConformance`, test `nullable Int and collection elements
 preserve values and nulls`. Extension functions are Guest `kotlin.collections` declarations and require
-imports. Spread arguments, sequences, and collection APIs not listed here remain unavailable. Hash maps and
+imports. Spread arguments and collection APIs not listed here remain unavailable. The lazy sequence subset is described below. Hash maps and
 sets have the separate supported subset below.
 Generic list implementations are distributed as source bodies in the hybrid `stdlib:core` module, alongside
 ordinary precompiled library implementations.
@@ -348,3 +348,44 @@ Sequences and collection conversion helpers have no Guest implementation.
 Multi-field value classes use nominal managed boxes in list storage. Their construction, filtering, mapping
 and mutable-list updates execute in `testKotlinMfvcVmConformance`; direct primitive list storage remains
 unboxed.
+
+## Lazy sequences
+
+**Status:** Partial; the following subset is executable in `stdlib:core` 1.22.0.
+
+`kotlin.sequences.Sequence<out T>` is a separate iterator-producing interface. Import
+`kotlin.collections.asSequence` for `Iterable<T>.asSequence()` and the `kotlin.sequences`
+extensions `map`, `filter`, `filterNot`, `take`, `firstOrNull` (with or without predicate),
+and `toList`. Lists, sets and custom iterables can supply the source. A sequence borrows
+its source; it does not copy or freeze it. Source mutation and iterator invalidation follow
+the source's own contract. Repeating traversal creates new wrapper iterator state and runs
+callbacks again, provided the source itself permits repeated traversal.
+
+Constructing a chain invokes no source iterator and no callbacks. `map` invokes its retained
+callback on `next`; filtering searches on demand from `hasNext` or `next`, caching one
+accepted element. Repeated `hasNext` reuses that cache. Null is an ordinary element and
+is distinct from exhaustion. `take(count)` validates non-negative counts immediately;
+`take(0)` does not request even a source iterator. Taking a prefix or finding the first
+match stops consuming at that point. `toList` consumes all available values in order and
+allocates a new list. An unbounded source may exhaust ordinary execution or heap quotas.
+
+Intermediate callbacks escape and are not inline, so they cannot use non-local returns.
+The immediate predicate overload of `firstOrNull` is inline and admits non-local returns.
+Source and callback exceptions propagate. Exhausted filtering, empty and count-limited
+iterators throw `NoSuchElementException`; mapping propagates its source iterator's
+exhaustion behavior. Each wrapper and iterator is a managed object; callbacks retain
+captures. Filtering's nullable cache boxes primitive elements, while typed mapping and
+result lists use existing specialization. Avoiding intermediate lists does not guarantee
+lower instruction cost or faster execution for small inputs.
+
+`sequence { yield(...) }`, `generateSequence`, `sequenceOf`, array/iterator adapters and
+other sequence operations are outside this supported subset. Covariant primitive-to-Any
+sequence views have no execution claim in this stage.
+
+**Evidence:** `MinimalScriptLoweringTest`, test `sequences preserve lazy demand iterator state
+and nullable values`, executed by `testKotlinSequencesVmConformance` with 256-unit slices.
+The fixture covers deferred callbacks and order, early stopping, independent interleaved
+iterators, repeated availability checks, empty/exhausted inputs, count validation, borrowed
+mutable sources, retained captures, callback exceptions, references, nullable values and all twelve primitive families.
+`sequences reject non local returns from deferred callbacks` covers map/filter/filterNot rejection. `DiagnosticQueryTest`,
+`lazy sequences resolve with source and metadata inputs`, covers both IDE platform modes.

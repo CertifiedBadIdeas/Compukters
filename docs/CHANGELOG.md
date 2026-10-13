@@ -35,6 +35,10 @@ headings so this page has one stable URL that can be shared outside the reposito
 - Task worktree completion checks active builds in nested independent Gradle projects and excludes their
   sandbox caches from its archive while retaining worlds and IDE data.
 
+- Guest Kotlin provides lazy `Sequence<T>` chains with `Iterable.asSequence()`, `map`, `filter`,
+  `filterNot`, `take`, `firstOrNull` and `toList`. Chains defer callbacks until consumption,
+  stop at the requested prefix or first match and retain independent iterator state, including nullable elements.
+
 - Guest Kotlin supports direct generic methods on ordinary classes and objects, combining class and method
   type specialization with defaults, local helpers and escaping callbacks.
 
