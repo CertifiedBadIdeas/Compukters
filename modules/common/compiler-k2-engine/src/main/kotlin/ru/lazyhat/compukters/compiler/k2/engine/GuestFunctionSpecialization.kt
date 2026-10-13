@@ -32,26 +32,12 @@ internal fun copyGuestFunction(
     ownerParameters: List<IrTypeParameter> = emptyList(),
     ownerArguments: List<IrType> = emptyList(),
 ): IrSimpleFunction {
-    val symbols = DeepCopySymbolRemapper()
-    function.accept(symbols, null)
-    val substitution =
-        IrTypeSubstitutor(
-            (function.typeParameters + ownerParameters).map { it.symbol },
-            (arguments + ownerArguments).map { makeTypeProjection(it, Variance.INVARIANT) },
-            true,
+    val copier =
+        guestIrCopier(
+            listOf(function),
+            function.typeParameters + ownerParameters,
+            arguments + ownerArguments,
         )
-    val copiedTypes = DeepCopyTypeRemapper(symbols)
-    val types =
-        object : TypeRemapper {
-            override fun enterScope(irTypeParametersContainer: IrTypeParametersContainer) =
-                copiedTypes.enterScope(irTypeParametersContainer)
-
-            override fun leaveScope() = copiedTypes.leaveScope()
-
-            override fun remapType(type: IrType): IrType = copiedTypes.remapType(substitution.substitute(type))
-        }
-    val copier = DeepCopyIrTreeWithSymbols(symbols, types)
-    copiedTypes.deepCopy = copier
     val copy = function.transform(copier, null) as IrSimpleFunction
     copy.typeParameters = emptyList()
     if (ownerParameters.isNotEmpty()) {
@@ -79,4 +65,31 @@ internal fun copyGuestFunction(
         )
     }
     return copy
+}
+
+/** One symbol map must cover every root sharing constructor parameters or receiver captures. */
+internal fun guestIrCopier(
+    roots: List<IrElement>,
+    parameters: List<IrTypeParameter>,
+    arguments: List<IrType>,
+): DeepCopyIrTreeWithSymbols {
+    val symbols = DeepCopySymbolRemapper()
+    roots.forEach { it.accept(symbols, null) }
+    val substitution =
+        IrTypeSubstitutor(
+            parameters.map { it.symbol },
+            arguments.map { makeTypeProjection(it, Variance.INVARIANT) },
+            true,
+        )
+    val copiedTypes = DeepCopyTypeRemapper(symbols)
+    val types =
+        object : TypeRemapper {
+            override fun enterScope(irTypeParametersContainer: IrTypeParametersContainer) =
+                copiedTypes.enterScope(irTypeParametersContainer)
+
+            override fun leaveScope() = copiedTypes.leaveScope()
+
+            override fun remapType(type: IrType): IrType = copiedTypes.remapType(substitution.substitute(type))
+        }
+    return DeepCopyIrTreeWithSymbols(symbols, types).also { copiedTypes.deepCopy = it }
 }

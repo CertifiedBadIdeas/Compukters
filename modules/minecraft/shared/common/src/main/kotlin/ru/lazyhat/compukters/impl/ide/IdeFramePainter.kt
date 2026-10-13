@@ -153,7 +153,16 @@ object IdeFramePainter {
                 else -> null
             }
         overlay.grid?.let { grid ->
-            replica?.let { canvas.terminal(it.state, TerminalGridGeometry(grid.left, grid.top), nowMillis) }
+            replica?.let {
+                val geometry = TerminalGridGeometry(grid.left, grid.top)
+                canvas.terminal(it.viewport.state(), geometry, nowMillis)
+                it.viewport.selectionBounds(geometry).forEach { bounds ->
+                    canvas.fill(
+                        IdeRect(bounds.left, bounds.top, bounds.right, bounds.bottom),
+                        TerminalSurfaceStyle.SELECTION_COLOR,
+                    )
+                }
+            }
         }
     }
 }

@@ -18,6 +18,11 @@
 
 package ru.lazyhat.compukters.lang.runtime.vm
 
+object TerminalHistoryLimits {
+    const val ROWS = 512
+    const val NATIVE_BUFFER_BYTES = 256 * 1024
+}
+
 data class TerminalCell(
     val codePoint: Int,
     val foreground: Int,
@@ -36,6 +41,8 @@ data class TerminalState(
     val cells: List<TerminalCell>,
     val cursor: TerminalPosition,
     val cursorVisible: Boolean,
+    val historyStart: Long = 0,
+    val historyCells: List<TerminalCell> = emptyList(),
 )
 
 sealed interface TerminalChange {
@@ -60,6 +67,16 @@ sealed interface TerminalChange {
     data class Cursor(
         val position: TerminalPosition,
         val visible: Boolean,
+    ) : TerminalChange
+
+    data class HistoryAppend(
+        val firstRow: Long,
+        val cells: List<TerminalCell>,
+    ) : TerminalChange
+
+    data class HistoryReplace(
+        val firstRow: Long,
+        val cells: List<TerminalCell>,
     ) : TerminalChange
 
     data object Reset : TerminalChange

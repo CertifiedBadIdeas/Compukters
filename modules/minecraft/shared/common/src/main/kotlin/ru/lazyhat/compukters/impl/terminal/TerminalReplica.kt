@@ -30,6 +30,8 @@ class TerminalReplica(
     var state: TerminalState = validatedCopy(initial)
         private set
 
+    val viewport = TerminalViewport { state }
+
     fun replace(state: TerminalState): Boolean {
         val replacement = runCatching { validatedCopy(state) }.getOrNull() ?: return false
         this.state = replacement
@@ -49,6 +51,8 @@ class TerminalReplica(
     ): TerminalState {
         TerminalModel.validateDelta(delta)
         val cells = current.cells.toMutableList()
+        var historyStart = current.historyStart
+        var historyCells = current.historyCells
         var cursor = current.cursor
         var cursorVisible = current.cursorVisible
         delta.changes.forEach { change ->
@@ -78,6 +82,19 @@ class TerminalReplica(
                     cursorVisible = change.visible
                 }
 
+                is TerminalChange.HistoryAppend -> {
+                    require(change.firstRow == historyStart + historyCells.size / TerminalModel.WIDTH) { "noncontiguous terminal history" }
+                    val joined = historyCells + change.cells
+                    val evicted = (joined.size - TerminalModel.HISTORY_CELLS).coerceAtLeast(0)
+                    historyStart += evicted / TerminalModel.WIDTH
+                    historyCells = joined.drop(evicted)
+                }
+
+                is TerminalChange.HistoryReplace -> {
+                    historyStart = change.firstRow
+                    historyCells = change.cells.toList()
+                }
+
                 TerminalChange.Reset -> {
                     cells.fill(DEFAULT_CELL)
                     cursor = TerminalPosition(0, 0)
@@ -91,6 +108,8 @@ class TerminalReplica(
                 cells = cells.toList(),
                 cursor = cursor,
                 cursorVisible = cursorVisible,
+                historyStart = historyStart,
+                historyCells = historyCells,
             ).also(TerminalModel::validateState)
     }
 
@@ -99,7 +118,7 @@ class TerminalReplica(
 
         fun validatedCopy(state: TerminalState): TerminalState {
             TerminalModel.validateState(state)
-            return state.copy(cells = state.cells.toList())
+            return state.copy(cells = state.cells.toList(), historyCells = state.historyCells.toList())
         }
     }
 }
