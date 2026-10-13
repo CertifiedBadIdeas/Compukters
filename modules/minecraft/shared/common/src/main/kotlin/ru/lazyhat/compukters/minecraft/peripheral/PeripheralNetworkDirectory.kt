@@ -183,6 +183,7 @@ internal class PeripheralNetworkDirectory(
         networks[id] = network.copy(name = normalizePeripheralName(name))
     }
 
+    @JvmOverloads
     fun createFor(
         member: PeripheralNetworkMember,
         defaultNameBase: String? = null,

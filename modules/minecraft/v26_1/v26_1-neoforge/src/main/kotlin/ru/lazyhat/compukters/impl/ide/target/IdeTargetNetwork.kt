@@ -22,7 +22,7 @@ import net.neoforged.neoforge.network.event.RegisterPayloadHandlersEvent
 
 internal object IdeTargetNetwork {
     fun register(event: RegisterPayloadHandlersEvent) {
-        val registrar = event.registrar("1")
+        val registrar = event.registrar("2")
         IdeTargetServerNetwork.register(registrar)
         registrar.playToClient(IdeTargetReplyPayload.TYPE, IdeTargetReplyPayload.STREAM_CODEC)
         registrar.playToClient(IdeTerminalOpenedPayload.TYPE, IdeTerminalOpenedPayload.STREAM_CODEC)

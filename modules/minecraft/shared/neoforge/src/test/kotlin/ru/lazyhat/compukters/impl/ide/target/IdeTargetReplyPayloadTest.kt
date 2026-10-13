@@ -42,6 +42,9 @@ internal class IdeTargetReplyPayloadTest {
     fun `peripheral payload rejects invalid registry IDs and oversized entry counts before allocation`() {
         assertFailsWith<IllegalArgumentException> { IdeNamedPeripheral("speed", "../../invalid") }
         assertFailsWith<IllegalArgumentException> { IdeNamedPeripheral("", "minecraft:stone") }
+        assertFailsWith<IllegalArgumentException> { IdeNamedPeripheral("x", "minecraft:stone", lookupTypes = listOf("Injected(1)")) }
+        assertFailsWith<IllegalArgumentException> { IdeNamedPeripheral("x", "minecraft:stone", lookupTypes = List(9) { "api.Type$it" }) }
+        assertFailsWith<IllegalArgumentException> { IdePeripheralReference(java.util.UUID.randomUUID(), "", "motor") }
         val buffer = RegistryFriendlyByteBuf(Unpooled.buffer(), RegistryAccess.EMPTY)
         try {
             buffer.writeVarLong(1)
@@ -61,6 +64,16 @@ internal class IdeTargetReplyPayloadTest {
             listOf(
                 IdeTargetReply.Attached(target),
                 IdeTargetReply.NamedPeripherals(listOf(IdeNamedPeripheral("speed", "create:speedometer", true)), true),
+                IdeTargetReply.NamedPeripherals(
+                    listOf(
+                        IdeNamedPeripheral(
+                            "panel",
+                            "compukters:display",
+                            reference = IdePeripheralReference(java.util.UUID.randomUUID(), "compukters-display", "text"),
+                            lookupTypes = listOf("compukter.display.TextDisplay", "compukter.display.GraphicalDisplay"),
+                        ),
+                    ),
+                ),
                 IdeTargetReply.UploadAccepted,
                 IdeTargetReply.Verified(BinaryValue.of(byteArrayOf(1, 2)), target.reference(), hash(8), artifactBytes = 42),
                 IdeTargetReply.RevisionObserved(IdeExecutableRevision.Absent),

@@ -202,6 +202,14 @@ Each contract has a unique namespaced id, a logical device key, and a resolver r
 removal, replacement and unloading. The resolver receives a `CompuktersPeripheralLocation` with the canonical
 anchor and a latching `isReachable()` check. One logical device may expose several contracts.
 
+For the IDE's **Copy lookup** action, optionally register the canonical Guest wrapper's fully qualified type:
+`CompuktersPeripheralContract("create:speedometer", "speedometer", "create.kinetics.Speedometer") { location -> ... }`.
+The wrapper must expose the typed provider's `named` lookup. The IDE lists each registered type for the logical
+provider/device key and copies `create.kinetics.Speedometer.named("speedometer_1")`; it does not infer types from
+block ids or contract names. Type metadata is bounded to 256 characters and must be a qualified identifier.
+Existing constructors remain available. Addons that omit this metadata retain constant insertion and rename,
+but cannot offer typed lookup copying. This host metadata does not change the Guest module or platform ABI.
+
 Guest wrappers can be scalar value classes implementing `compukter.peripheral.Peripheral`; their companions inherit
 `TypedPeripheralProvider<Wrapper>("addon:contract")` and implement the protected `wrap(handle)` method.
 The base implements typed `first`, `firstOrNull`, `filter`, `all`, `at`, `atOrNull`, `named`, and `namedOrNull`.
