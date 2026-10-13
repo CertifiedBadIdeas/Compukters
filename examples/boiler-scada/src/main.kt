@@ -7,11 +7,12 @@
 import boiler.control.BoilerControl
 import boiler.control.BoilerSample
 import boiler.control.Channel
-import boiler.control.FuelDirection
+import boiler.control.FuelMode
 import boiler.control.Outputs
 import boiler.control.Phase
 import boiler.control.PowerSource
 import boiler.control.outputSteps
+import boiler.control.unavailableSample
 import compukter.concurrent.Tasks
 import compukter.display.Colors
 import compukter.display.DisplayHistory
@@ -85,7 +86,7 @@ fun runDashboard(iterations: Int = -1) {
     val control = BoilerControl()
     val history = DisplayHistory(96)
     val burnerLabels = ArrayList<UiIndicator>()
-    var telemetry = Telemetry(0, BoilerSample(false), emptyList())
+    var telemetry = Telemetry(0, unavailableSample(), emptyList())
     var port: RedstonePort? = null
     var running = true
     // A cooperative clock lets a stuck sampler invalidate old readings independently of I/O.
@@ -94,7 +95,7 @@ fun runDashboard(iterations: Int = -1) {
     var applying = false
     var revision = 0
     var requested = ""
-    var applied = Outputs(PowerSource.NONE, FuelDirection.OFF)
+    var applied = Outputs(PowerSource.NONE, FuelMode.OFF)
     val phaseText: UiIndicator
     val waterText: UiText
     val heatText: UiText
@@ -186,7 +187,7 @@ fun runDashboard(iterations: Int = -1) {
                 while (running && applying) Tasks.sleepTicks(1)
                 if (!running) break
                 val sampleRevision = revision
-                var sample = BoilerSample(false)
+                var sample = unavailableSample()
                 val statuses = ArrayList<BurnerStatus>()
                 try {
                     val output = port ?: RedstonePort.named(CONTROL)
@@ -243,7 +244,7 @@ fun runDashboard(iterations: Int = -1) {
             val observation = telemetry
             var dirty = iteration == 0 || observation.sequence != sequence
             val fresh = clock - observedAt <= 80
-            val sample = if (fresh) observation.sample else BoilerSample(false)
+            val sample = if (fresh) observation.sample else unavailableSample()
             if (observation.sequence != sequence || (!fresh && previouslyAvailable)) {
                 sequence = observation.sequence
                 control.observe(sample)
@@ -290,7 +291,7 @@ fun runDashboard(iterations: Int = -1) {
                     } catch (ignored: Exception) {
                     }
                     port = null
-                    applied = Outputs(PowerSource.NONE, FuelDirection.OFF)
+                    applied = Outputs(PowerSource.NONE, FuelMode.OFF)
                 } finally {
                     applying = false
                 }
@@ -327,11 +328,11 @@ fun runDashboard(iterations: Int = -1) {
                 }
             pumps.label =
                 when (applied.fuel) {
-                    FuelDirection.FEED -> "FEED CMD"
-                    FuelDirection.DRAIN -> "DRAIN CMD"
+                    FuelMode.FEED -> "FEED PUMP"
+                    FuelMode.DRAIN -> "DRAIN PUMP"
                     else -> "PUMPS OFF"
                 }
-            pumps.color = if (applied.fuel == FuelDirection.OFF) 0x687D8C else Colors.CYAN
+            pumps.color = if (applied.fuel == FuelMode.OFF) 0x687D8C else Colors.CYAN
             boiler.color = if (available && sample.heatLevel > 0) Colors.YELLOW else 0x687D8C
             engine.color = if (available && abs(sample.engineRpm) >= 8f) Colors.GREEN else 0x687D8C
             fuelText.text = if (available) "Liquid fuel: ${sample.fuelAmount}/${sample.fuelCapacity} mB" else "Liquid fuel: --"
@@ -386,8 +387,8 @@ fun sideFor(channel: Channel): RedstonePort.Side =
         Channel.BATTERY -> RedstonePort.Side.FRONT
         Channel.BATTERY_CLUTCH -> RedstonePort.Side.RIGHT
         Channel.STEAM_CLUTCH -> RedstonePort.Side.LEFT
-        Channel.FUEL_CLUTCH -> RedstonePort.Side.TOP
-        Channel.FUEL_REVERSE -> RedstonePort.Side.BOTTOM
+        Channel.FUEL_FEED_CLUTCH -> RedstonePort.Side.TOP
+        Channel.FUEL_DRAIN_CLUTCH -> RedstonePort.Side.BOTTOM
         else -> error("WAIT has no port side")
     }
 

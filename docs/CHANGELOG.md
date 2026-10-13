@@ -29,8 +29,9 @@ headings so this page has one stable URL that can be shared outside the reposito
 
 - The Crafts & Additions integration exposes named liquid Blaze Burners with atomic fuel quantity, capacity,
   heat and remaining burn-time readings. The separate `boiler-scada` project starts water/fuel pumps from a
-  kinetic battery, switches to steam self-power with battery charging, and reverses the fuel pump on STOP until
-  every configured burner is empty. Its panel shows boiler readings, per-burner fuel, cooldown and fault states.
+  kinetic battery, switches to steam self-power with battery charging, and selects a separate drain pump on STOP until
+  every configured burner is empty. Feed and drain pumps have separate, mutually interlocked clutch outputs.
+  Its panel shows boiler readings, per-burner fuel, cooldown and fault states.
   The development stand includes Crafts & Additions and Create: Connected.
 
 - Task worktree completion checks active builds in nested independent Gradle projects and excludes their
@@ -53,7 +54,7 @@ headings so this page has one stable URL that can be shared outside the reposito
   name and network, with one outline around the complete tank. Explicit interaction consolidates older per-block
   bindings; addon providers can opt into the same bounded structure geometry.
 
-- Redstone Ports show input/output strength independently on all six faces, with small edge indicators visible when a face is covered.
+- Redstone Ports show input/output strength independently on all six faces; the central and all four edge indicators on each face light together according to that face’s signal.
 
 - Newly compiled Guest programs allow 64 nested calls, matching the runtime limit, so framed nested UI drawing fits within the declared stack budget.
 

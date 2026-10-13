@@ -325,6 +325,9 @@ val verifyAnalysisWorkerLicenses = tasks.register("verifyAnalysisWorkerLicenses"
 }
 
 tasks.test {
+    val boilerController = rootProject.file("examples/boiler-scada/src/control/BoilerControl.kt")
+    inputs.file(boilerController)
+    systemProperty("compukters.test.boilerController", boilerController.absolutePath)
     maxHeapSize = "1g"
     val guestApiJar = project(":guest-platform").tasks.named<Jar>("jar")
     val platformBundle = project(":guest-platform").tasks.named("assemblePlatformBundle")
