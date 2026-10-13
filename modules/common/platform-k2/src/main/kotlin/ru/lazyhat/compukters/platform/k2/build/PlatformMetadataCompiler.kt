@@ -350,10 +350,21 @@ class PlatformMetadataCompiler {
                     file.declarations.forEach { declaration ->
                         declarations += collect(module, source.path, packageName, emptyList(), declaration = declaration)
                         completionDeclaration(module, source.path, packageName, declaration)?.let(completionDeclarations::add)
-                        collectScalars(source.path, packageName, emptyList(), declaration)?.let { scalar ->
-                            scalarTypes += scalar.type
-                            scalarConstants += scalar.constants
+
+                        fun collectNestedScalars(
+                            declaration: KtDeclaration,
+                            owners: List<String>,
+                        ) {
+                            collectScalars(source.path, packageName, owners, declaration)?.let { scalar ->
+                                scalarTypes += scalar.type
+                                scalarConstants += scalar.constants
+                            }
+                            if (declaration is KtClassOrObject) {
+                                val name = declaration.name ?: return
+                                declaration.declarations.forEach { collectNestedScalars(it, owners + name) }
+                            }
                         }
+                        collectNestedScalars(declaration, emptyList())
                     }
                 }
             ParsedPlatform(declarations, completionDeclarations, scalarTypes, scalarConstants, recordCandidates)

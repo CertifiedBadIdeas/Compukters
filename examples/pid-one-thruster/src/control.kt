@@ -5,7 +5,7 @@
  */
 
 // This example uses bounded arithmetic helpers; portable Guest kotlin.math is also available.
-data class Vector(
+value class Vector(
     val x: Double,
     val y: Double,
     val z: Double,
@@ -93,7 +93,7 @@ class AxisPid(
     }
 }
 
-data class Command(
+value class Command(
     val vectorX: Double,
     val vectorY: Double,
     val thrustKn: Double,

@@ -326,6 +326,35 @@ class PlatformMetadataCompilerTest {
     }
 
     @Test
+    fun `nested value class scalar metadata uses the full owner path`() {
+        val result =
+            compiler.compile(
+                module,
+                listOf(
+                    source(
+                        "Result.kt",
+                        """
+                        package sample
+                        sealed interface Result {
+                            value class Exited(val code: Int) : Result
+                            value class Flag(val enabled: Boolean) : Result
+                            class Nested { value class UnitCode(val code: Char) }
+                        }
+                        """.trimIndent(),
+                    ),
+                ),
+            )
+        assertEquals(
+            listOf("sample.Result.Exited", "sample.Result.Flag", "sample.Result.Nested.UnitCode"),
+            result.scalarTypes.map { it.symbol },
+        )
+        assertEquals(
+            listOf(PlatformScalarRepresentation.INT, PlatformScalarRepresentation.BOOLEAN, PlatformScalarRepresentation.CHAR),
+            result.scalarTypes.map { it.representation },
+        )
+    }
+
+    @Test
     fun `mutable and computed value class constants are not scalar metadata`() {
         val text =
             """

@@ -10,7 +10,7 @@ import kotlin.collections.ArrayList
 import kotlin.collections.emptyList
 
 /** All values describe a completed observation, never a partially read set of devices. */
-data class BoilerSample(
+value class BoilerSample(
     val available: Boolean,
     val waterSupply: Float = 0f,
     val waterLevel: Int = 0,
@@ -28,7 +28,7 @@ enum class PowerSource { NONE, BATTERY, STEAM }
 
 enum class FuelDirection { OFF, FEED, DRAIN }
 
-data class Outputs(
+value class Outputs(
     val power: PowerSource,
     val fuel: FuelDirection,
 )
@@ -136,7 +136,7 @@ class BoilerControl(
 
 enum class Channel { BATTERY, BATTERY_CLUTCH, STEAM_CLUTCH, FUEL_CLUTCH, FUEL_REVERSE, WAIT }
 
-data class OutputStep(
+value class OutputStep(
     val channel: Channel,
     val value: Int,
 )
