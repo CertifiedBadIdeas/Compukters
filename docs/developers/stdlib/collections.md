@@ -352,11 +352,11 @@ unboxed.
 
 ## Lazy sequences
 
-**Status:** Partial; the following subset is executable in `stdlib:core` 1.24.0.
+**Status:** Partial; the following subset is executable in `stdlib:core` 1.25.0.
 
 `kotlin.sequences.Sequence<out T>` is a separate iterator-producing interface. Import
 `kotlin.collections.asSequence` for `Iterable<T>.asSequence()` and the `kotlin.sequences`
-extensions `map`, `filter`, `filterNot`, `take`, `firstOrNull` (with or without predicate),
+extensions `map`, `mapNotNull`, `filter`, `filterNot`, `filterNotNull`, `take`, `firstOrNull` (with or without predicate),
 and `toList`, plus terminal `forEach`, `fold`, `count` (with or without predicate),
 `any` and `none` (with or without predicate), and `all(predicate)`. Lists, sets and custom
 iterables can supply the source. A sequence borrows
@@ -371,6 +371,16 @@ is distinct from exhaustion. `take(count)` validates non-negative counts immedia
 `take(0)` does not request even a source iterator. Taking a prefix or finding the first
 match stops consuming at that point. `toList` consumes all available values in order and
 allocates a new list. An unbounded source may exhaust ordinary execution or heap quotas.
+
+`mapNotNull` invokes its retained transform once per consumed source element and drops null
+results. It composes mapping with the shared non-null selection iterator; repeated `hasNext`
+reuses a cached accepted result. `filterNotNull` drops null source elements and exposes
+`Sequence<T>` from `Sequence<T?>`, with `T : Any`; `mapNotNull` likewise returns a non-null
+result element type. Both preserve order, create independent iterator state and stop when
+the downstream consumer stops. Empty/all-null sources exhaust normally. Primitive nullable
+results cross the ordinary boxing boundary, then accepted values use the non-null scalar
+cache. Reference caches clear their consumed slots. Wrappers/iterators are managed objects;
+no intermediate result list is created.
 
 Intermediate callbacks escape and are not inline, so they cannot use non-local returns.
 The immediate predicate overload of `firstOrNull` is inline and admits non-local returns.
@@ -397,9 +407,10 @@ lower instruction cost or faster execution for small inputs.
 
 `sequence { yield(...) }`, `generateSequence`, `sequenceOf`, array/iterator adapters and
 other sequence operations are outside this supported subset. Covariant primitive-to-Any
-sequence views have no execution claim in this stage. Ordinary generic helpers can forward existing
+and primitive-to-nullable sequence views have no execution claim in this stage; the nullable
+selection contract uses explicitly nullable source/result types. Ordinary generic helpers can forward existing
 callbacks or construct retained lambdas and bound member references for `filter`, `filterNot` and
-`map`. Their owners and generic callers specialize before closure layout, so captures retain their
+`map`/`mapNotNull`. Their owners and generic callers specialize before closure layout, so captures retain their
 concrete scalar/reference types. Helpers returning a predicate or a sequence retain captured values
 and shared mutable cells after the helper returns. Direct terminal calls inside generic helpers are
 covered separately for primitive, nullable and reference elements.
@@ -422,6 +433,11 @@ nullable elements and references. The main fixture also covers different source/
 mutation of captured generic values before returning a sequence. `generic sequence helpers specialize
 retained callback signatures` protects both forwarded and locally constructed callback lowering.
 Overflow guards are not exercised at the multi-billion-element threshold by this bounded conformance scenario.
-`sequences reject non local returns from deferred callbacks` covers map/filter/filterNot rejection.
+`checkNullSelection` runs filterNotNull and mapNotNull through generic helpers across all twelve
+primitive families and reference values. `testNullSelection` exercises exact callback demand,
+repeated availability checks, nullable inputs, non-null result types, early stopping, independent
+iterators, empty/all-null inputs, exhaustion, reference identity, mutable captures and callback/upstream
+exceptions. Scalar cache and no-boxing assertions also cover NotNullIterator.calculateNext.
+`sequences reject non local returns from deferred callbacks` covers map/mapNotNull/filter/filterNot rejection.
 `DiagnosticQueryTest`,
 `lazy sequences resolve with source and metadata inputs`, covers both IDE platform modes.

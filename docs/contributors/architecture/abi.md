@@ -92,7 +92,9 @@ implementations for all twelve non-null primitives and reference storage for nul
 objects. The internal trusted compiler factory shares primitive/reference constructor selection
 with list storage; cache operations remain Guest method bodies and clear consumed references.
 `stdlib:core` 1.24.0 adds immediate terminal forEach/fold/count/any/all/none bodies using
-ordinary iteration, scalar accumulation and inline callbacks. Dependent bundles rebuild
+ordinary iteration, scalar accumulation and inline callbacks. `stdlib:core` 1.25.0 adds lazy
+mapNotNull/filterNotNull through mapping and a typed non-null selection cache. Nullable primitive
+results keep the existing box boundary; accepted cache values use scalar fields. Dependent bundles rebuild
 against the updated core module identity.
 The module content identity changes; platform bundle encoding, executable format,
 Runtime ABI, host operations and checkpoint schema remain unchanged. Exact semantics and
