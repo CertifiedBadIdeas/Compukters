@@ -16,6 +16,7 @@
  * limitations under the License.
  */
 
+import dev.architectury.loom.forge.minecraft.MinecraftPatchedProvider
 import java.util.zip.ZipFile
 
 plugins {
@@ -38,6 +39,7 @@ repositories {
 }
 apply(from = "../sable/gradle/sable-libraries.gradle.kts")
 apply(from = "gradle/aeronautics-libraries.gradle.kts")
+apply(from = "gradle/client-mods.gradle.kts")
 val aeronauticsLibraries = files(configurations.named("aeronauticsNestedMods"))
 val physicsMods = configurations.create("physicsMods") {
     isCanBeConsumed = false
@@ -135,6 +137,15 @@ loom {
         }
     }
 }
+// Connector compares Fabric mixins against the unpatched Mojang-mapped Minecraft jar.
+// Resolve the path during configuration, after Loom has prepared its providers.
+afterEvaluate {
+    val cleanMinecraft = MinecraftPatchedProvider.get(project).minecraftIntermediateJar.toAbsolutePath().toString()
+    loom.runs.configureEach {
+        property("connector.clean.path", cleanMinecraft)
+    }
+}
+
 // This is a run/test composition, never a distributable umbrella mod.
 tasks.jar { enabled = false }
 val verifyDevelopmentMods = tasks.register("verifyDevelopmentMods") {
