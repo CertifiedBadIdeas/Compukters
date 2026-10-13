@@ -35,6 +35,7 @@ import ru.lazyhat.compukters.impl.display.NeoForgeDisplayBlockEntity
 import ru.lazyhat.compukters.impl.peripheral.NeoForgePeripheralConfiguratorItem
 import ru.lazyhat.compukters.impl.redstone.NeoForgeRedstonePortBlockEntity
 import ru.lazyhat.compukters.impl.terminal.TerminalNetwork
+import ru.lazyhat.compukters.minecraft.computer.ComputerAddonCreativeItems
 import ru.lazyhat.compukters.minecraft.computer.ComputerBlock
 import ru.lazyhat.compukters.minecraft.display.DisplayBlock
 import ru.lazyhat.compukters.minecraft.peripheral.PeripheralCableBlock
@@ -119,6 +120,7 @@ object CompuktersRegistry {
                         output.accept(REDSTONE_PORT_ITEM.get())
                         output.accept(PERIPHERAL_CABLE_ITEM.get())
                         output.accept(PERIPHERAL_CONFIGURATOR_ITEM.get())
+                        ComputerAddonCreativeItems.items().forEach { output.accept(it) }
                     }.build()
             },
         )

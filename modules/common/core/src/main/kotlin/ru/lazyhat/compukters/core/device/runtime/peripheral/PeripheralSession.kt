@@ -32,6 +32,27 @@ class PeripheralEndpoint<T : Any>(
 ) {
     constructor(value: T, identity: Any, checkValid: () -> Boolean) : this(value, identity, null, checkValid)
 
+    internal var lease: PeripheralHandleLease? = value as? PeripheralHandleLease
+        private set
+
+    /** Allow SDK adapters to supply lifecycle callbacks without exposing core interfaces to addons. */
+    constructor(
+        value: T,
+        identity: Any,
+        persistentIdentity: String?,
+        lease: PeripheralHandleLease,
+        checkValid: () -> Boolean,
+    ) : this(value, identity, persistentIdentity, checkValid) {
+        this.lease = lease
+    }
+
+    /** Add a reachability guard while preserving the retained value, instance identity and lifecycle. */
+    fun withValidity(checkValid: () -> Boolean): PeripheralEndpoint<T> {
+        val guarded = { valid() && checkValid() }
+        return lease?.let { PeripheralEndpoint(value, identity, persistentIdentity, it, guarded) }
+            ?: PeripheralEndpoint(value, identity, persistentIdentity, guarded)
+    }
+
     private var available = true
 
     /** Capture does not revalidate a world owner that may already be detached by unload. */
@@ -330,7 +351,7 @@ class PeripheralSession<I : Any>(
             check(!acquired)
             ownership.acquire(endpoint.identity, owner, this, endpoint::valid, ::release)
             try {
-                (endpoint.value as? PeripheralHandleLease)?.acquire()
+                endpoint.lease?.acquire()
                 acquired = true
             } catch (failure: Throwable) {
                 ownership.release(endpoint.identity, this)
@@ -342,7 +363,7 @@ class PeripheralSession<I : Any>(
             if (!acquired) return
             acquired = false
             try {
-                (endpoint.value as? PeripheralHandleLease)?.release()
+                endpoint.lease?.release()
             } finally {
                 ownership.release(endpoint.identity, this)
             }

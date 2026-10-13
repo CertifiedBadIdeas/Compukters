@@ -9,6 +9,7 @@ package ru.lazyhat.compukters.api.addon.minecraft
 import net.minecraft.core.BlockPos
 import net.minecraft.server.level.ServerLevel
 import ru.lazyhat.compukters.core.device.runtime.peripheral.PeripheralEndpoint
+import ru.lazyhat.compukters.core.device.runtime.peripheral.PeripheralHandleLease
 import ru.lazyhat.compukters.lang.runtime.vm.HostFailureKind
 import ru.lazyhat.compukters.minecraft.computer.ComputerPeripheralIdentity
 import ru.lazyhat.compukters.minecraft.peripheral.ComputerPeripheralContract
@@ -23,6 +24,22 @@ interface CompuktersPeripheralEndpoint {
     val identity: Any
 
     fun valid(): Boolean
+}
+
+/** Optional server-thread callbacks for transient actuator ownership; discovery does not acquire a lease. */
+interface CompuktersLeasedPeripheralEndpoint : CompuktersPeripheralEndpoint {
+    fun acquire()
+
+    /** Called once on close, program stop or disconnection. Must tolerate an already removed device. */
+    fun release()
+}
+
+private class PeripheralLeaseAdapter(
+    private val endpoint: CompuktersLeasedPeripheralEndpoint,
+) : PeripheralHandleLease {
+    override fun acquire() = endpoint.acquire()
+
+    override fun release() = endpoint.release()
 }
 
 /** Optional hibernation contract; existing endpoint implementations remain binary compatible. */
@@ -77,11 +94,13 @@ class CompuktersPeripheralContract<T : CompuktersPeripheralEndpoint>(
     internal fun bind(providerId: String): ComputerPeripheralContract<T> {
         val resolver: (ServerLevel, BlockPos, ComputerPeripheralIdentity) -> PeripheralEndpoint<T>? = { level, computer, identity ->
             resolve(CompuktersPeripheralLocation(level, identity.anchor, identity.deviceKey, computer, providerId))?.let { endpoint ->
-                PeripheralEndpoint(
-                    endpoint,
-                    endpoint.identity,
-                    (endpoint as? CompuktersPersistentPeripheralEndpoint)?.persistentIdentity,
-                ) { endpoint.valid() }
+                val persistentIdentity = (endpoint as? CompuktersPersistentPeripheralEndpoint)?.persistentIdentity
+                val leased = endpoint as? CompuktersLeasedPeripheralEndpoint
+                if (leased == null) {
+                    PeripheralEndpoint(endpoint, endpoint.identity, persistentIdentity) { endpoint.valid() }
+                } else {
+                    PeripheralEndpoint(endpoint, endpoint.identity, persistentIdentity, PeripheralLeaseAdapter(leased)) { endpoint.valid() }
+                }
             }
         }
         return lookupType?.let { ComputerPeripheralContract(id, providerId, deviceKey, false, it, resolver) }

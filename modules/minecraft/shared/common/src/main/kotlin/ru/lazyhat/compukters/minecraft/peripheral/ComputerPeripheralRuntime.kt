@@ -128,8 +128,8 @@ class ComputerPeripheralRuntime internal constructor(
             requireServerThread()
             val location = ComputerPeripheralIdentity(identity.providerId, identity.location, identity.deviceKey)
             descriptor.resolve(level, computer, location)?.let { endpoint ->
-                PeripheralEndpoint(endpoint.value, endpoint.identity, endpoint.persistentIdentity) {
-                    endpoint.valid() && (descriptor.ownsReachability || ComputerPeripheralLookup.isReachable(level, computer, location))
+                endpoint.withValidity {
+                    descriptor.ownsReachability || ComputerPeripheralLookup.isReachable(level, computer, location)
                 }
             }
         }

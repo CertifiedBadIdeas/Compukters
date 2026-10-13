@@ -12,7 +12,7 @@ A Compukters addon is an ordinary, independently installed NeoForge mod. It owns
 Kotlin declarations and generated `.cagb` bundle. Compukters reads that data bundle when the addon registers it, but
 the base mod never links to or packages the addon implementation.
 
-The public addon SDK uses version 0.5.0 independently of Compukters 0.5.0. The SDK has its own
+The public addon SDK uses version 0.6.0 independently of the Compukters release version. The SDK has its own
 compatibility version: Compukters releases do not require addon authors to update unless the public addon boundary
 changes. All artifacts belonging to one SDK release share that SDK version:
 
@@ -115,7 +115,7 @@ Then apply the matching Compukters plugin version:
 // build.gradle.kts
 plugins {
     kotlin("jvm") version "2.4.10"
-    id("ru.lazyhat.compukters.addon") version "0.5.0"
+    id("ru.lazyhat.compukters.addon") version "0.6.0"
     // Apply and configure Loom/NeoForge as usual for the target mod.
 }
 
@@ -207,6 +207,19 @@ Each contract has a unique namespaced id, a logical device key, and a resolver r
 `CompuktersPeripheralEndpoint`. Its `identity` must be the pinned physical instance; `valid()` must reject
 removal, replacement and unloading. The resolver receives a `CompuktersPeripheralLocation` with the canonical
 anchor and a latching `isReachable()` check. One logical device may expose several contracts.
+
+SDK 0.6.0 adds optional `CompuktersLeasedPeripheralEndpoint` callbacks. `acquire()` runs when an exact-instance
+handle is retained, never during discovery. `release()` runs once on handle close, program disposal or invalidation,
+including lost connectivity detected by the server tick. Several contracts may retain the same device in one
+program: actuator implementations must keep it active until their final lease releases. Callbacks run on the
+server thread and must tolerate device removal/replacement without modifying the replacement. Existing endpoints
+and constructor signatures remain compatible; this does not change the VM, peripheral capability or checkpoint ABI.
+
+`CompuktersAddonRegistry.registerCreativeItems("create") { listOf(PUMP_ITEM.get(), CLUTCH_ITEM.get()) }`
+registers a lazy item group in the shared Compukters creative tab. Call it once during addon registration with a
+unique lowercase addon ID; suppliers run only when tab contents are requested, after item registration. Base items
+come first, then addon groups sorted by ID, preserving each supplier's order and suppressing duplicate items.
+Addons without items need no registration and create no extra tabs.
 
 For the IDE's **Copy lookup** action, optionally register the canonical Guest wrapper's fully qualified type:
 `CompuktersPeripheralContract("create:speedometer", "speedometer", "create.kinetics.Speedometer") { location -> ... }`.

@@ -195,7 +195,14 @@ The Minecraft adapter binds registered `ComputerPeripheralContract<T>` descripto
 resolves the contacted face directly. SDK 0.5.0 adds typed `CompuktersPeripheralContract<T>` registration and
 `CompuktersComputerContext.peripheral` access, retaining the earlier overloads. SDK JARs depend on core only at
 compile time and retain their explicit thin-archive class inventory. Both Minecraft version families compile the
-canonical shared adapter sources.
+canonical shared adapter sources. SDK 0.6.0 adds optional SDK-owned
+acquisition/release callbacks mapped to the existing core handle lease, retaining old endpoint constructor ABIs
+without exposing core lifecycle types to addon consumers. The existing server-tick ownership expiry remains the
+source of disconnection cleanup. Transient actuators must not replay commands from saved block state on world load.
+
+The shared Compukters creative tab appends lazy addon item groups from `ComputerAddonCreativeItems`, ordered by
+addon ID after base items. The host SDK exposes registration; both Minecraft target registries consume the same
+catalog. Empty addons create no tabs, and duplicate items are suppressed without reordering their first occurrence.
 
 TextDisplay is a scalar value class implementing Peripheral, with a canonical box and a managed companion provider.
 All public acquisition uses typed providers and the common Side; the earlier Display/Create/Propulsion helpers

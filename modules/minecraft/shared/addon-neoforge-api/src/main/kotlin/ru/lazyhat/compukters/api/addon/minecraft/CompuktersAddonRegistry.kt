@@ -21,10 +21,12 @@ package ru.lazyhat.compukters.api.addon.minecraft
 import net.minecraft.core.BlockPos
 import net.minecraft.core.Direction
 import net.minecraft.server.level.ServerLevel
+import net.minecraft.world.level.ItemLike
 import net.minecraft.world.phys.AABB
 import ru.lazyhat.compukters.addon.api.AddonGuestApiBundle
 import ru.lazyhat.compukters.api.addon.ProgramAddonHost
 import ru.lazyhat.compukters.core.device.runtime.peripheral.PeripheralFailure
+import ru.lazyhat.compukters.minecraft.computer.ComputerAddonCreativeItems
 import ru.lazyhat.compukters.minecraft.computer.ComputerAddonHostFactory
 import ru.lazyhat.compukters.minecraft.computer.ComputerAddonHosts
 import ru.lazyhat.compukters.minecraft.computer.ComputerBlock
@@ -36,6 +38,7 @@ import ru.lazyhat.compukters.minecraft.peripheral.ComputerPeripheralContract
 import ru.lazyhat.compukters.minecraft.peripheral.ComputerPeripheralLookup
 import ru.lazyhat.compukters.minecraft.peripheral.ComputerPeripheralLookupStatus
 import ru.lazyhat.compukters.minecraft.peripheral.ComputerPeripheralRuntime
+import java.util.function.Supplier
 
 class CompuktersComputerContext internal constructor(
     val level: ServerLevel,
@@ -159,6 +162,13 @@ interface CompuktersPeripheralGeometryProvider : CompuktersPeripheralProvider {
 }
 
 object CompuktersAddonRegistry {
+    /** Adds one lazy group to the shared Compukters tab, ordered by addon ID after base items. */
+    @JvmStatic
+    fun registerCreativeItems(
+        addonId: String,
+        items: Supplier<List<ItemLike>>,
+    ) = ComputerAddonCreativeItems.register(addonId, items)
+
     @JvmStatic
     fun register(
         guestApi: AddonGuestApiBundle,

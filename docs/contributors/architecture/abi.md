@@ -11,6 +11,14 @@ permalink: /ARCHITECTURE/abi/
 
 This reference groups versioned representation boundaries by the version that introduced them. Those versions are minimum feature requirements, not a claim that older Runtime distributions implement today’s platform. The source owners below define the active contract. Before changing a wire format, inspect each producer, consumer and verifier. Runtime release pins in `build-scripts/src/main/kotlin/RuntimeBundleSupport.kt` describe published bundles separately from the local VM checkout.
 
+## Addon SDK actuator lifecycle and creative content
+
+SDK 0.6.0 adds `CompuktersLeasedPeripheralEndpoint` and lazy shared-tab item registration. These are additive host
+SDK APIs. Existing SDK endpoint implementations and core endpoint constructors retain their binary signatures;
+the adapter supplies lifecycle callbacks through a new overload, using the existing core ownership registry.
+Discovery never acquires actuator ownership. This changes neither native/Guest capability ABI nor checkpoint
+encoding. Addons using the new API require a host containing SDK 0.6.0.
+
 ## Scoped Guest line reading
 
 `compukter:core` 9.1.0 adds eager `FileSystem.readLines`, inline scoped `FileSystem.useLines`,
