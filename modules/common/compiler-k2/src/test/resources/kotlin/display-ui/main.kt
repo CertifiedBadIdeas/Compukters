@@ -57,6 +57,8 @@ fun main() {
         }
     }
     check(first == 0 && second == 0 && draws == 0)
+    ui.draw(GraphicalDisplay.named("screen"))
+    check(draws == 1)
     check(ui.contentSize == 50 by 50)
     check(ui.dispatch(DisplayClick(100 xy 50)) && first == 1)
     check(!ui.dispatch(DisplayClick(110 xy 50))) // row gap, half-open edge
@@ -66,7 +68,7 @@ fun main() {
     check(ui.dispatch(DisplayClick(100 xy 90)) && first == 1 && second == 1)
     check(ui.dispatch(DisplayClick(120 xy 90)) && first == 1)
     check(!ui.dispatch(DisplayClick(180 xy 50))) // viewport right edge
-    check(draws == 0)
+    check(draws == 1)
     button.label = "updated"
     check(button.label == "updated")
     var changes = 0
@@ -104,5 +106,23 @@ fun main() {
     try { failures.dispatch(DisplayPointerEvent(DisplayPointerKind.DOWN, 4, 0 xy 0)); error("handler must fail") }
     catch (error: IllegalArgumentException) { check(error.message == "handler") }
     check(!failures.dispatch(DisplayPointerEvent(DisplayPointerKind.UP, 4, 0 xy 0)))
+    val history = DisplayHistory(96)
+    history.add(Float.NaN)
+    val scada = displayUi(Rect2i(0 xy 0, 384 by 384)) {
+        at(12 xy 10) { text("CREATE DRIVE", 360 by 24) { scale = 2 } }
+        at(12 xy 42) { indicator("NO TELEMETRY", 360 by 14) }
+        at(12 xy 158) { gauge(360 by 14) { value = Float.NaN } }
+        at(12 xy 208) { chart(360 by 84, history) { minimum = -256f; maximum = 256f } }
+        at(12 xy 308) {
+            row(spacing = 8) {
+                button("-16 RPM", 84 by 26) { enabled = false }
+                button("+16 RPM", 84 by 26) { enabled = false }
+                button("STOP", 84 by 26) { enabled = false }
+                button("RESUME", 84 by 26) { enabled = false }
+            }
+        }
+    }
+    val screen = GraphicalDisplay.named("screen")
+    repeat(50) { scada.draw(screen) }
     println("display ui ok")
 }

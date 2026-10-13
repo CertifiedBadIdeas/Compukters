@@ -506,7 +506,9 @@ Applications own draining and admission; process a bounded batch per update, or 
 reconnecting controls as the SCADA example does.
 
 Evidence: `testKotlinDisplayUiVmConformance` executes layout, viewport boundaries, overlays, disabled/passive
-blocking, capture, local coordinates, cancellation and callback failures. `DisplayPointerTest` covers queue
+blocking, capture, local coordinates, cancellation and callback failures. It also records raster host calls
+for nested enabled/disabled buttons and 50 drawing passes of a SCADA-shaped layout with telemetry widgets.
+`DisplayPointerTest` covers queue
 limits/coalescing, independent players, release/re-entry, expiry and clipping. `DisplayHostStateTest` checks
 capability revisions, little-endian input and clipped drawing. The graphical display GameTest exercises
 DSL drawing and the Guest Down/Drag/Up host bridge. The [cube example](https://github.com/CertifiedBadIdeas/Compukters/tree/dev/examples/rotating-cube)
