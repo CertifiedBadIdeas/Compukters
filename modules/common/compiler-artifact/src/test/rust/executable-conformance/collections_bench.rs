@@ -20,6 +20,7 @@ struct Case {
     artifact: VerifiedArtifact,
     expected: String,
     minimum_heap: u32,
+    minimum_execution_heap: u32,
     samples: Vec<Measurement>,
 }
 
@@ -147,23 +148,23 @@ fn run(case: &Case, heap: u32, ready_only: bool) -> Option<Measurement> {
     panic!("benchmark termination exceeded slice bound");
 }
 
-fn minimum_ready_heap(case: &Case) -> u32 {
+fn minimum_heap(case: &Case, ready_only: bool) -> u32 {
     // Heap arena blocks are aligned to 16 bytes. This measures admission-to-ready capacity, not RSS.
     let mut low = 2u32;
     let mut high = LARGE_HEAP / 16;
-    assert!(run(case, high * 16, true).is_some());
+    assert!(run(case, high * 16, ready_only).is_some());
     while low < high {
         let middle = low + (high - low) / 2;
-        if run(case, middle * 16, true).is_some() {
+        if run(case, middle * 16, ready_only).is_some() {
             high = middle;
         } else {
             low = middle + 1;
         }
     }
     let minimum = low * 16;
-    assert!(run(case, minimum, true).is_some());
+    assert!(run(case, minimum, ready_only).is_some());
     if minimum > 32 {
-        assert!(run(case, minimum - 16, true).is_none());
+        assert!(run(case, minimum - 16, ready_only).is_none());
     }
     minimum
 }
@@ -175,11 +176,12 @@ fn percentile(mut samples: Vec<u128>, percent: usize) -> u128 {
 
 fn main() {
     let args: Vec<_> = std::env::args().skip(1).collect();
-    assert_eq!(
-        args.len(),
-        3,
-        "usage: collections_bench ARTIFACT_DIR REPORT_DIR SAMPLES"
-    );
+    assert!(args.len() == 3 || args.len() == 4,
+        "usage: collections_bench ARTIFACT_DIR REPORT_DIR SAMPLES [execution-heap]");
+    let execution_heap = args.get(3).map(|value| {
+        assert_eq!(value, "execution-heap");
+        true
+    }).unwrap_or(false);
     let inputs = Path::new(&args[0]);
     let outputs = Path::new(&args[1]);
     let repetitions: usize = args[2].parse().unwrap();
@@ -201,11 +203,12 @@ fn main() {
                 artifact,
                 expected,
                 minimum_heap: 0,
+                minimum_execution_heap: 0,
                 samples: vec![],
             }
         })
         .collect();
-    assert_eq!(cases.len(), 30);
+    if execution_heap { assert!(!cases.is_empty()); } else { assert_eq!(cases.len(), 30); }
     // Pre-verify every image. Verification, admission, start and teardown are outside elapsed execution times.
     for case in &mut cases {
         assert!(
@@ -213,7 +216,8 @@ fn main() {
             "warmup {}",
             case.fields[0]
         );
-        case.minimum_heap = minimum_ready_heap(case);
+        case.minimum_heap = minimum_heap(case, true);
+        if execution_heap { case.minimum_execution_heap = minimum_heap(case, false); }
         eprintln!(
             "prepared {}: minimum ready heap {} bytes",
             case.fields[0], case.minimum_heap
@@ -255,6 +259,10 @@ fn main() {
         eprintln!("measurement round {}/{} complete", sample + 1, repetitions);
     }
     let mut summary = String::from("id\trepresentation\tworkload\tcount\trounds\tchecksum\tartifact_bytes\ttypes\tfunctions\tminimum_ready_heap_bytes\tcreate_median_ns\thot_p10_ns\thot_median_ns\thot_p90_ns\tcreate_instructions\tcreate_fixed_units\tcreate_dynamic_units\tcreate_maintenance_units\thot_instructions\thot_fixed_units\thot_dynamic_units\thot_maintenance_units\tpressure_status\tpressure_hot_ns\tpressure_hot_maintenance_units\n");
+    if execution_heap {
+        summary.pop();
+        summary.push_str("\tminimum_execution_heap_bytes\n");
+    }
     for case in &cases {
         let measurement = case.samples[0];
         let pressured = run(case, PRESSURE_HEAP, false);
@@ -282,6 +290,10 @@ fn main() {
             elapsed,
             maintenance
         ));
+        if execution_heap {
+            summary.pop();
+            summary.push_str(&format!("\t{}\n", case.minimum_execution_heap));
+        }
     }
     fs::write(outputs.join("samples.tsv"), raw).unwrap();
     fs::write(outputs.join("measurements.tsv"), summary).unwrap();

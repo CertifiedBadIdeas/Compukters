@@ -10102,6 +10102,35 @@ class MinimalScriptLoweringTest {
         }
 
     @Test
+    @org.junit.jupiter.api.condition.EnabledIfSystemProperty(named = "compukter.bench.sequencesOutput", matches = ".+")
+    fun `sequence eager and lazy benchmark artifacts compile`() =
+        withAdapter { adapter ->
+            val output = Path.of(checkNotNull(System.getProperty("compukter.bench.sequencesOutput"))).createDirectories()
+            val manifest = mutableListOf("id\trepresentation\tworkload\tcount\trounds\tchecksum\tartifact_bytes\ttypes\tfunctions")
+            sequenceBenchmarkCases().forEach { case ->
+                val source = case.source()
+                val result = adapter.compile(request(source))
+                val bytes = collectionBenchmarkArtifact(assertNotNull(result.artifact, result.diagnostics.joinToString()).toByteArray())
+                val module = ArtifactReader.read(bytes).modules.single { it.kind == ModuleKind.APPLICATION }
+                output.resolve("${case.id}.cpkt").writeBytes(bytes)
+                output.resolve("${case.id}.kt").writeText(source)
+                manifest +=
+                    listOf(
+                        case.id,
+                        case.representation,
+                        case.workload,
+                        case.count,
+                        case.rounds,
+                        case.checksum(),
+                        bytes.size,
+                        module.types.size,
+                        module.functions.size,
+                    ).joinToString("\t")
+            }
+            output.resolve("manifest.tsv").writeText(manifest.joinToString("\n", postfix = "\n"))
+        }
+
+    @Test
     @org.junit.jupiter.api.condition.EnabledIfSystemProperty(named = "compukter.bench.collectionsOutput", matches = ".+")
     fun `collection representation benchmark artifacts compile`() =
         withAdapter { adapter ->

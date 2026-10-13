@@ -1469,6 +1469,29 @@ tasks.register<Exec>("benchmarkCollectionRepresentations") {
     environment("CARGO_TARGET_DIR", rootProject.file(".toolchain/build/cargo/collection-benchmark").absolutePath)
 }
 
+val sequenceBenchmarkArtifacts = project(":compiler-k2").layout.buildDirectory.dir("generated/benchmarks/sequences")
+val sequenceBenchmarkLabel = providers.gradleProperty("sequenceBenchmarkLabel").orElse("current")
+val sequenceBenchmarkReports = sequenceBenchmarkLabel.map { layout.buildDirectory.dir("reports/benchmarks/sequences/$it").get() }
+tasks.register<Exec>("benchmarkSequencePipelines") {
+    description = "Measures eager/lazy full and early-stop chains, including required execution heap."
+    group = "benchmark"
+    dependsOn(":compiler-k2:generateSequenceBenchmarkArtifacts")
+    inputs.dir(sequenceBenchmarkArtifacts)
+    inputs.file(compilerArtifactVmConformanceHarness)
+    inputs.file(compilerArtifactVmConformanceLock)
+    inputs.file(compilerArtifactVmConformanceHarness.resolveSibling("collections_bench.rs"))
+    inputs.dir(compukterVmRoot.resolve("src"))
+    outputs.dir(sequenceBenchmarkReports)
+    outputs.upToDateWhen { false }
+    commandLine(
+        "cargo", "test", "--release", "--locked", "--offline", "--manifest-path",
+        compilerArtifactVmConformanceHarness.absolutePath, "--test", "collections_bench", "--",
+        sequenceBenchmarkArtifacts.get().asFile.absolutePath,
+        sequenceBenchmarkReports.get().asFile.absolutePath, "7", "execution-heap",
+    )
+    environment("CARGO_TARGET_DIR", rootProject.file(".toolchain/build/cargo/collection-benchmark").absolutePath)
+}
+
 val objectArrayBenchmarkArtifacts = project(":compiler-k2").layout.buildDirectory.dir("generated/benchmarks/object-arrays")
 
 val transientBenchmarkArtifacts = project(":compiler-k2").layout.buildDirectory.dir("generated/benchmarks/transient-allocations")
