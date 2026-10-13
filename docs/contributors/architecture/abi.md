@@ -64,8 +64,11 @@ embedded generated runtime library. `testKotlinEnumEntriesVmConformance` checks 
 `stdlib:core` 1.22.0 adds the ordinary Guest `kotlin.sequences.Sequence<T>` interface and
 lazy iterable adapters, map/filter/filterNot/take, firstOrNull and toList. Generic source
 bodies specialize in consuming artifacts; wrappers, iterators and captured callbacks use
-existing managed objects. The filtering cache uses nullable storage with existing primitive
-boxes. The module content identity changes; platform bundle encoding, executable format,
+existing managed objects. `stdlib:core` 1.23.0 replaces the filtering cache with scalar field
+implementations for all twelve non-null primitives and reference storage for nullable/ordinary
+objects. The internal trusted compiler factory shares primitive/reference constructor selection
+with list storage; cache operations remain Guest method bodies and clear consumed references.
+The module content identity changes; platform bundle encoding, executable format,
 Runtime ABI, host operations and checkpoint schema remain unchanged. Exact semantics and
 execution evidence live in [the collection inventory](../../developers/stdlib/collections.md#lazy-sequences).
 

@@ -341,6 +341,13 @@ calls. `Iterable<T>` search extensions `contains`, `indexOf`, and `lastIndexOf` 
 `List<T>` index methods use direct indexed access and publish `Any` and `Any?` argument bridges for covariant calls. The
 `Iterable<T>` predicate extensions `any`, `all`, and `none` specialize both the element and function value signature
 before lowering calls to the predicate.
+List storage and lazy sequence caches use one internal compiler registry to select concrete
+primitive/reference constructors by `GuestPrimitive` and nullability. Lists retain their typed
+array-backed implementations. Sequence filtering uses a separate one-value storage interface:
+primitive leaves have scalar fields; reference leaves have nullable storage, with occupancy
+owned by the filtering iterator and consumed references cleared. The internal factory lowers
+to ordinary object allocation and constructor calls; it adds no VM opcode or host operation.
+
 `MutableList<T>` is invariant. `ArrayList<T>` uses a typed storage interface, with the compiler selecting the matching primitive or
 reference storage at its trusted factory call. Growth, shifting, searches, slot clearing, and mutable iteration are
 ordinary Guest bodies; all allocations use the VM's existing metered array instructions. Read-only aliases share

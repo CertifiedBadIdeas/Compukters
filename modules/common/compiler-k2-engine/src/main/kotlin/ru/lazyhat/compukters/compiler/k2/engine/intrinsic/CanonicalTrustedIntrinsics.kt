@@ -88,6 +88,7 @@ object CanonicalTrustedIntrinsics {
             primitive("stdlib", "core", "kotlin.collections", "setOf", "fun(T):Set<T>")
             primitive("stdlib", "core", "kotlin.collections", "mutableSetOf", "fun(T):MutableSet<T>")
             primitive("stdlib", "core", "kotlin.collections", "mutableListStorage", "fun(Int):MutableListStorage<T>")
+            primitive("stdlib", "core", "kotlin.sequences", "sequenceCache", "fun():SequenceCache<T>")
             GuestPrimitive.entries.filter { it.numeric }.forEach { owner ->
                 GuestPrimitive.entries.filter { it.numeric && it.unsigned == owner.unsigned }.forEach { operand ->
                     primitive("kotlin", "builtins", "kotlin", "${owner.sourceName}.compareTo", "fun(${operand.sourceName}):Int")
