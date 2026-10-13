@@ -221,6 +221,21 @@ private fun IrClass.isManagedPlatformObject(): Boolean =
             }
     )
 
+private data class SpecializedStorageFactory(
+    val packageName: String,
+    val implementationSuffix: String,
+) {
+    val referenceName: String get() = "$packageName.Reference$implementationSuffix"
+
+    fun primitiveName(primitive: GuestPrimitive): String = "$packageName.${primitive.sourceName}$implementationSuffix"
+}
+
+private val specializedStorageFactories =
+    mapOf(
+        "kotlin.collections.mutableListStorage" to SpecializedStorageFactory("kotlin.collections", "MutableListStorage"),
+        "kotlin.sequences.sequenceCache" to SpecializedStorageFactory("kotlin.sequences", "SequenceCache"),
+    )
+
 private val hashCollectionFactories =
     mapOf(
         "kotlin.collections.mapOf" to "kotlin.collections.HashMap",
@@ -326,14 +341,15 @@ private fun collectGuestClassInstances(
                         if (arguments.any { it.containsTypeParameter() }) return@let
                         byName[owner]?.let { add(GuestClassInstance(it, arguments)) }
                     }
-                    if (expression.symbol.owner.fqNameWhenAvailable
-                            ?.asString() == "kotlin.collections.mutableListStorage"
-                    ) {
+                    specializedStorageFactories[
+                        expression.symbol.owner.fqNameWhenAvailable
+                            ?.asString(),
+                    ]?.let { factory ->
                         val elementType = expression.typeArguments.singleOrNull()?.let(substitution)
                         if (elementType != null && !elementType.containsTypeParameter() &&
                             (elementType.isNullable() || GuestPrimitive.scalar(elementType) == null)
                         ) {
-                            byName["kotlin.collections.ReferenceMutableListStorage"]?.let {
+                            byName[factory.referenceName]?.let {
                                 add(GuestClassInstance(it, listOf(elementType)))
                             }
                         }
@@ -7024,8 +7040,8 @@ private class FunctionCompiler(
         if (target.isExternal && targetName in hashCollectionFactories) {
             return compileHashCollectionFactory(call, requireNotNull(hashCollectionFactories[targetName]))
         }
-        if (target.isExternal && targetName == "kotlin.collections.mutableListStorage") {
-            return compileMutableListStorage(call)
+        if (target.isExternal) {
+            specializedStorageFactories[targetName]?.let { return compileSpecializedStorage(call, it) }
         }
         if ((
                 targetName?.startsWith("kotlin.Function") == true ||
@@ -7833,31 +7849,34 @@ private class FunctionCompiler(
         }
 
     @OptIn(UnsafeDuringIrConstructionAPI::class)
-    private fun compileMutableListStorage(call: IrCall): RegisterId {
+    private fun compileSpecializedStorage(
+        call: IrCall,
+        factory: SpecializedStorageFactory,
+    ): RegisterId {
         val elementType =
             call.typeArguments.singleOrNull()?.let(::resolvedType)
-                ?: throw UnsupportedKotlinIr(call, "mutable list storage requires a concrete element type")
+                ?: throw UnsupportedKotlinIr(call, "specialized storage requires a concrete element type")
         val primitive = GuestPrimitive.scalar(elementType)?.takeUnless { elementType.isNullable() }
-        val name = primitive?.let { "${it.sourceName}MutableListStorage" } ?: "ReferenceMutableListStorage"
+        val name = primitive?.let(factory::primitiveName) ?: factory.referenceName
         val target =
             if (primitive != null) {
                 constructorLayouts.values.singleOrNull {
                     it.instance.declaration.fqNameWhenAvailable
-                        ?.asString() == "kotlin.collections.$name"
+                        ?.asString() == name
                 }
             } else {
                 genericConstructorLayouts.entries
                     .singleOrNull {
                         it.key.declaration.fqNameWhenAvailable
-                            ?.asString() == "kotlin.collections.$name" && it.key.arguments == listOf(elementType)
+                            ?.asString() == name && it.key.arguments == listOf(elementType)
                     }?.value
-            } ?: throw UnsupportedKotlinIr(call, "mutable list storage is unavailable for this element type")
-        val capacity = compileExpression(call.arguments.filterNotNull().single())
+            } ?: throw UnsupportedKotlinIr(call, "specialized storage is unavailable for this element type")
+        val arguments = call.arguments.filterNotNull().map(::compileExpression)
         val ownerType = target.ownerType
         prepareAllocationBlock()
         return allocate(ValueType.Ref(nullable = false, type = ownerType)).also { destination ->
             emit(Instruction.NewObject(destination, ownerType))
-            emit(Instruction.Call(Destination.Unit, FunctionRef.Local(target.functionId), listOf(destination, capacity)))
+            emit(Instruction.Call(Destination.Unit, FunctionRef.Local(target.functionId), listOf(destination) + arguments))
         }
     }
 

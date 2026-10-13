@@ -107,15 +107,15 @@ internal class FilteringIterator<T>(
     private val sendWhen: Boolean,
     private val predicate: (T) -> Boolean,
 ) : Iterator<T> {
-    // -1: not searched yet; 0: exhausted; 1: cached, even when nextValue is null.
+    // -1: not searched yet; 0: exhausted; 1: cached, even when the cached element is null.
     private var nextState: Int = -1
-    private var nextValue: T? = null
+    private val cache: SequenceCache<T> = sequenceCache<T>()
 
     private fun calculateNext() {
         while (source.hasNext()) {
             val value = source.next()
             if (predicate(value) == sendWhen) {
-                nextValue = value
+                cache.store(value)
                 nextState = 1
                 return
             }
@@ -128,11 +128,9 @@ internal class FilteringIterator<T>(
         return nextState == 1
     }
 
-    @Suppress("UNCHECKED_CAST")
     override fun next(): T {
         if (!hasNext()) throw NoSuchElementException("Sequence iterator is exhausted")
-        val result = nextValue as T
-        nextValue = null
+        val result = cache.take()
         nextState = -1
         return result
     }

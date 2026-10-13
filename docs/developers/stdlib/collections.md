@@ -352,7 +352,7 @@ unboxed.
 
 ## Lazy sequences
 
-**Status:** Partial; the following subset is executable in `stdlib:core` 1.22.0.
+**Status:** Partial; the following subset is executable in `stdlib:core` 1.23.0.
 
 `kotlin.sequences.Sequence<out T>` is a separate iterator-producing interface. Import
 `kotlin.collections.asSequence` for `Iterable<T>.asSequence()` and the `kotlin.sequences`
@@ -375,8 +375,11 @@ The immediate predicate overload of `firstOrNull` is inline and admits non-local
 Source and callback exceptions propagate. Exhausted filtering, empty and count-limited
 iterators throw `NoSuchElementException`; mapping propagates its source iterator's
 exhaustion behavior. Each wrapper and iterator is a managed object; callbacks retain
-captures. Filtering's nullable cache boxes primitive elements, while typed mapping and
-result lists use existing specialization. Avoiding intermediate lists does not guarantee
+captures. Filtering uses a specialized one-value cache: all twelve non-null primitive families retain
+unboxed scalar fields, while nullable and reference values keep their references. Consuming
+a reference clears its cached slot. The cache is one additional managed object per filtering
+iterator; typed mapping and result lists use existing specialization. Nullable terminal results
+and universal views keep their ordinary boxing boundaries. Avoiding intermediate lists does not guarantee
 lower instruction cost or faster execution for small inputs.
 
 `sequence { yield(...) }`, `generateSequence`, `sequenceOf`, array/iterator adapters and
@@ -387,7 +390,9 @@ sequence views have no execution claim in this stage.
 and nullable values`, executed by `testKotlinSequencesVmConformance` with 256-unit slices.
 The fixture covers deferred callbacks and order, early stopping, independent interleaved
 iterators, repeated availability checks, empty/exhausted inputs, count validation, borrowed
-mutable sources, retained captures, callback exceptions, references, nullable values and all twelve primitive families.
+mutable sources, retained captures, callback exceptions, references, nullable values and all twelve primitive families, including integer boundaries, NaNs and signed zero.
+The same lowering test inspects scalar cache layouts, checks that cache methods and primitive
+filtering steps allocate no boxed values, and verifies reference-slot clearing.
 `sequences reject non local returns from deferred callbacks` covers map/filter/filterNot rejection.
 `DiagnosticQueryTest`,
 `lazy sequences resolve with source and metadata inputs`, covers both IDE platform modes.

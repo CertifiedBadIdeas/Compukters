@@ -404,7 +404,106 @@ class MinimalScriptLoweringTest {
                 val source = repositoryFile("modules/common/compiler-k2/src/test/resources/kotlin/sequences/$fixture.kt").readText()
                 val result = adapter.compile(request(source))
                 val bytes = assertNotNull(result.artifact, "$fixture: ${result.diagnostics}").toByteArray()
-                ArtifactReader.read(bytes)
+                val decoded = ArtifactReader.read(bytes)
+                val primitives =
+                    mapOf(
+                        "Int" to ValueType.I32,
+                        "Boolean" to ValueType.Bool,
+                        "Byte" to ValueType.I32,
+                        "Short" to ValueType.I32,
+                        "Char" to ValueType.Char,
+                        "Long" to ValueType.I64,
+                        "Float" to ValueType.F32,
+                        "Double" to ValueType.F64,
+                        "UByte" to ValueType.I32,
+                        "UShort" to ValueType.I32,
+                        "UInt" to ValueType.I32,
+                        "ULong" to ValueType.I64,
+                    )
+                val names =
+                    when (fixture) {
+                        "main" -> listOf("Int")
+                        "signed" -> listOf("Boolean", "Byte", "Short", "Char", "Long", "Float")
+                        else -> listOf("Double", "UByte", "UShort", "UInt", "ULong")
+                    }
+                for (name in names) {
+                    val (module, cache) =
+                        decoded.modules
+                            .flatMap { module ->
+                                module.types
+                                    .filterIsInstance<NominalType.Class>()
+                                    .filter {
+                                        module.strings[it.name.value.toInt()].toString() == "kotlin.sequences.${name}SequenceCache"
+                                    }.map { module to it }
+                            }.single()
+                    assertEquals(1u, cache.fieldCount)
+                    assertEquals(primitives.getValue(name), module.fields[cache.fieldStart.toInt()].type)
+                    val methods =
+                        module.functions
+                            .subList(cache.methodStart.toInt(), (cache.methodStart + cache.methodCount).toInt())
+                            .filter { module.strings[it.name.value.toInt()].toString() in setOf("store", "take") }
+                    assertEquals(2, methods.size)
+                    for (method in methods) {
+                        val instructions =
+                            module.blocks
+                                .subList(
+                                    method.firstBlock.value.toInt(),
+                                    (method.firstBlock.value + method.blockCount).toInt(),
+                                ).flatMap(Block::instructions)
+                        assertTrue(instructions.none { it is Instruction.NewObject }, "$name cache must not box values")
+                    }
+                    val (iteratorModule, iterator) =
+                        decoded.modules
+                            .flatMap { candidate ->
+                                candidate.types
+                                    .filterIsInstance<NominalType.Class>()
+                                    .filter {
+                                        candidate.strings[it.name.value.toInt()].toString() == "kotlin.sequences.FilteringIterator<$name>"
+                                    }.map { candidate to it }
+                            }.single()
+                    val calculate =
+                        iteratorModule.functions
+                            .subList(
+                                iterator.methodStart.toInt(),
+                                (iterator.methodStart + iterator.methodCount).toInt(),
+                            ).single {
+                                iteratorModule.strings[it.name.value.toInt()].toString() == "calculateNext"
+                            }
+                    val instructions =
+                        iteratorModule.blocks
+                            .subList(
+                                calculate.firstBlock.value.toInt(),
+                                (calculate.firstBlock.value + calculate.blockCount).toInt(),
+                            ).flatMap(Block::instructions)
+                    assertTrue(instructions.none { it is Instruction.NewObject }, "$name filtering must not box cached values")
+                }
+                if (fixture == "main") {
+                    val references =
+                        decoded.modules.flatMap { module ->
+                            module.types
+                                .filterIsInstance<NominalType.Class>()
+                                .filter {
+                                    module.strings[it.name.value.toInt()].toString().startsWith("kotlin.sequences.ReferenceSequenceCache<")
+                                }.map { module to it }
+                        }
+                    assertTrue(references.isNotEmpty())
+                    for ((module, cache) in references) {
+                        val field = module.fields[cache.fieldStart.toInt()].type as ValueType.Ref
+                        assertTrue(field.nullable)
+                        val take =
+                            module.functions
+                                .subList(cache.methodStart.toInt(), (cache.methodStart + cache.methodCount).toInt())
+                                .single { module.strings[it.name.value.toInt()].toString() == "take" }
+                        val instructions =
+                            module.blocks
+                                .subList(
+                                    take.firstBlock.value.toInt(),
+                                    (take.firstBlock.value + take.blockCount).toInt(),
+                                ).flatMap(Block::instructions)
+                        assertTrue(instructions.any { it is Instruction.Null })
+                        assertTrue(instructions.any { it is Instruction.FieldSet })
+                    }
+                }
                 assertContentEquals(bytes, assertNotNull(adapter.compile(request(source)).artifact).toByteArray())
                 System.getProperty("compukter.vm.sequencesArtifact.$fixture")?.let { output ->
                     Path.of(output).also { it.parent.createDirectories() }.writeBytes(bytes)
