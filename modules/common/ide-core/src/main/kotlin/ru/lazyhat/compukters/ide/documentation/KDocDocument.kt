@@ -35,13 +35,15 @@ data class KDocDocument(
             var fenceLength = 0
 
             fun finish() {
-                kind?.let { tags += KDocTag(it, name.orEmpty(), subject, body.toString().trim()) }
+                kind?.let { tags += KDocTag(it, name.orEmpty(), subject, body.toString().trimBlankLines()) }
             }
             for (line in text.lines()) {
                 val trimmed = line.trimStart()
                 val marker = trimmed.firstOrNull()
                 val markerLength = if (marker == '`' || marker == '~') trimmed.takeWhile { it == marker }.length else 0
-                if (markerLength >= 3) {
+                val indentation = line.takeWhile(Char::isWhitespace)
+                val blockStart = indentation.length < 4 && '\t' !in indentation
+                if (blockStart && markerLength >= 3) {
                     if (fence == null) {
                         fence = marker
                         fenceLength = markerLength
@@ -49,7 +51,7 @@ data class KDocDocument(
                         fence = null
                     }
                 }
-                val match = if (fence == null && line.takeWhile(Char::isWhitespace).length < 4) TAG.find(trimmed) else null
+                val match = if (fence == null && blockStart) TAG.find(trimmed) else null
                 if (match != null) {
                     finish()
                     name = match.groupValues[1]
@@ -79,8 +81,10 @@ data class KDocDocument(
                 }
             }
             finish()
-            return KDocDocument(description.toString().trim(), tags.toList())
+            return KDocDocument(description.toString().trimBlankLines(), tags.toList())
         }
+
+        private fun String.trimBlankLines(): String = lines().dropWhile(String::isBlank).dropLastWhile(String::isBlank).joinToString("\n")
 
         private val TAG = Regex("^@([A-Za-z]+)(?=\\s|\\[|$)")
     }

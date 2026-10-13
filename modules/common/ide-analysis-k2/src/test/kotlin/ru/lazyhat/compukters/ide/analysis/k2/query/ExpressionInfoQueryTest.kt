@@ -34,6 +34,38 @@ import kotlin.test.assertTrue
 
 class ExpressionInfoQueryTest {
     @Test
+    fun `project documentation preserves initial indented examples and hard breaks`() {
+        val source =
+            """
+            /**
+             *     val literal = 1
+             *
+             * First line.  #
+             * Second line.
+             * @return
+             *     literal
+             */
+            fun sample(): Int = 1
+            fun main() { sample() }
+            """.trimIndent().replace("  #", "  ")
+        K2QueryFixture.sourceWithGuestApi(true, "main.kt" to source).use { fixture ->
+            val result =
+                assertIs<AnalysisResult.ExpressionInfo>(
+                    fixture.execute(
+                        AnalysisQuery.ExpressionInfo(fixture.identity, VirtualSourcePath.kotlin("main.kt"), source.lastIndexOf("sample()")),
+                    ),
+                )
+            val documentation = assertNotNull(result.value?.documentation)
+            assertTrue(documentation.startsWith("    val literal = 1\n"), documentation)
+            assertTrue("First line.  \nSecond line." in documentation, documentation)
+            val parsed =
+                ru.lazyhat.compukters.ide.documentation.KDocDocument
+                    .parse(documentation)
+            assertEquals("    literal", parsed.tags.single().description)
+        }
+    }
+
+    @Test
     fun `hash collection hover resolves constructors entries factories and defaults`() {
         val source =
             """

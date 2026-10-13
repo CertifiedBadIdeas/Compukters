@@ -19,7 +19,11 @@ Assemble a flat 3x3 display, name it `boiler_scada`, and bind these devices to t
 | --- | --- |
 | `boiler` | The formed Fluid Tank boiler with an attached Steam Engine |
 | `boiler_engine_speed` | A Speedometer on the engine branch **before its isolation clutch** |
-| `boiler_control` | One Redstone Port controlling the actuators below |
+| `boiler_battery_discharge` | Redstone Port at the Kinetic Battery |
+| `boiler_battery_clutch` | Redstone Port at the battery branch clutch inverter |
+| `boiler_steam_clutch` | Redstone Port at the steam branch clutch inverter |
+| `boiler_fuel_feed_clutch` | Redstone Port at the feed pump clutch inverter |
+| `boiler_fuel_drain_clutch` | Redstone Port at the drain pump clutch inverter |
 | `boiler_burner_1` through `boiler_burner_9` | Nine liquid Blaze Burners, each given a straw |
 
 The default stand has a 3x3 burner floor beneath a 3x3x4 tank boiler. For a smaller installation, edit `configuredBurners()` in
@@ -50,21 +54,23 @@ separate between the burners and reservoir so drainage cannot bypass the burners
 series or use a Gearshift to select fuel flow. Isolate other fuel consumers and use separate water plumbing.
 A clutch at each power branch isolates both sources during switching.
 
-Port sides are relative to **the port's front**, independently of the computer orientation:
+Each actuator has its own named Redstone Port beside its consumer. Commands drive **all six sides** of that port,
+so mounting orientation is irrelevant. Bind all five ports to the same peripheral network and give each its unique
+name below; edit the constants in `src/main.kt` to use existing installation names.
 
-| Port output | Connection | Signal 15 | Signal 0 |
+| Port name | Connection | Signal 15 | Signal 0 |
 | --- | --- | --- | --- |
-| FRONT | Kinetic Battery, directly | Discharge | Charge if mechanically connected |
-| RIGHT | Battery branch clutch **through a redstone torch inverter** | Connect battery | Isolate battery |
-| LEFT | Steam branch clutch **through a redstone torch inverter** | Connect engine | Isolate engine |
-| TOP | Feed pump clutch **through a redstone torch inverter** | Feed reservoir → burners | Stop feed pump |
-| BOTTOM | Drain pump clutch **through a redstone torch inverter** | Drain burners → reservoir | Stop drain pump |
-| BACK | Unused | — | — |
+| `boiler_battery_discharge` | Kinetic Battery, directly | Discharge | Charge if mechanically connected |
+| `boiler_battery_clutch` | Battery branch clutch **through a redstone torch inverter** | Connect battery | Isolate battery |
+| `boiler_steam_clutch` | Steam branch clutch **through a redstone torch inverter** | Connect engine | Isolate engine |
+| `boiler_fuel_feed_clutch` | Feed pump clutch **through a redstone torch inverter** | Feed reservoir → burners | Stop feed pump |
+| `boiler_fuel_drain_clutch` | Drain pump clutch **through a redstone torch inverter** | Drain burners → reservoir | Stop drain pump |
 
 The clutch lines are inverted because Create clutches disconnect when powered. With all port outputs zero, both
 power branches and both fuel pumps must be isolated. Keep the five redstone circuits separate; direct short runs or
-independent Redstone Links can carry them. Test the polarity before attaching fluid supplies.
-For steam operation, FRONT is zero and both source clutches are connected: the engine drives the pumps and charges
+independent Redstone Links can carry them. Keep each port away from other actuator circuits because it powers
+every face. Test the polarity before attaching fluid supplies.
+For steam operation, `boiler_battery_discharge` is zero and both source clutches are connected: the engine drives the pumps and charges
 the battery. Before discharge can be enabled again, the engine branch is isolated. Both fuel clutches disconnect before
 switching pumps or power sources; the feed and drain pumps are never enabled together. Two-tick waits allow
 redstone torch and mechanical updates to settle between stages.
@@ -94,14 +100,15 @@ Recovery does not replay clicks or automatically start. Data reads started befor
 
 Fuel already converted into burn time cannot be extracted. Empty burners can remain hot until that finite portion
 burns out; SCADA displays this as COOLING. Use STOP and wait for IDLE before stopping the program. Abrupt program
-termination releases the transient Redstone Port outputs and isolates the pumps; it cannot execute a complete fuel
+termination releases all five transient Redstone Port outputs and isolates the pumps; it cannot execute a complete fuel
 recovery sequence. The last display image remains after the program exits.
 
 ## Install and verify
 
 Copy this directory to a new IDE project, retaining `compukter.toml` and both files under `src/`. Attach the IDE to
 the stand's computer so both selected addon bundles are available, compile and run the project. Startup itself sends
-no actuator command. `runDashboard(iterations)` is also available for a bounded program run.
+no actuator command. If any port lookup, lease validation or actuator write fails, all acquired output ports
+are released, including a partially acquired set. `runDashboard(iterations)` is also available for a bounded program run.
 
 From the Compukters root, build SDK and addon bundles **sequentially**, because addon builds include parent outputs:
 

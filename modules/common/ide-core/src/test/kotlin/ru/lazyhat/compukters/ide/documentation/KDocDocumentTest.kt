@@ -69,4 +69,27 @@ class KDocDocumentTest {
         assertEquals("text 😀", doc.tags.last().description)
         assertEquals(KDocTagKind.Unknown, doc.tags.last().kind)
     }
+
+    @Test
+    fun `indented examples preserve their first line and do not start fences or tags`() {
+        for (indent in listOf("    ", "\t")) {
+            val doc = KDocDocument.parse("\n$indent```kotlin\n$indent@param literal\n\n@return actual")
+            assertEquals("$indent```kotlin\n$indent@param literal", doc.description)
+            assertEquals(listOf(KDocTagKind.Return), doc.tags.map { it.kind })
+            assertEquals("actual", doc.tags.single().description)
+        }
+    }
+
+    @Test
+    fun `tag descriptions retain initial code indentation and hard line breaks`() {
+        val doc = KDocDocument.parse("@return\n\n    val answer = 42  \n\n")
+        assertEquals("    val answer = 42  ", doc.tags.single().description)
+    }
+
+    @Test
+    fun `four space fence inside fenced code cannot close the block`() {
+        val doc = KDocDocument.parse("```kotlin\n    ```\n@param literal\n```\n@return actual")
+        assertEquals(listOf(KDocTagKind.Return), doc.tags.map { it.kind })
+        assertTrue("@param literal" in doc.description)
+    }
 }

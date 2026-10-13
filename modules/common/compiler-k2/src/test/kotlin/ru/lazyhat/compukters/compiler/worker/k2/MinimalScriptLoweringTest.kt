@@ -2528,6 +2528,14 @@ class MinimalScriptLoweringTest {
         }
 
     @Test
+    fun `space telemetry example compiles against the actual addon bundle`() =
+        withAdapter { adapter ->
+            val bundle = checkNotNull(System.getProperty("compukters.cosmonauticsTelemetryBundle"))
+            val result = adapter.compile(projectRequest("examples/space-telemetry/src", listOf(bundle)))
+            assertNotNull(result.artifact, result.diagnostics.joinToString())
+        }
+
+    @Test
     fun `contract descriptions emit the same executable instructions as plain functions`() =
         withAdapter { adapter ->
             val description = "contract { returns(true) implies (value is String) }"
