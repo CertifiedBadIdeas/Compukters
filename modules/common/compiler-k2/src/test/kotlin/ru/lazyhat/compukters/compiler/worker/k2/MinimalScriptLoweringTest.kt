@@ -144,6 +144,25 @@ class MinimalScriptLoweringTest {
         }
 
     @Test
+    fun `boiler controller value records execute startup drainage cooldown and interlocks`() =
+        withAdapter { adapter ->
+            val sources =
+                listOf(
+                    "boiler/control/BoilerControl.kt" to repositoryFile("examples/boiler-scada/src/control/BoilerControl.kt").readText(),
+                    "main.kt" to
+                        repositoryFile(
+                            "modules/common/compiler-k2/src/test/resources/kotlin/boiler-control/ControllerScenarios.kt",
+                        ).readText(),
+                )
+            val result = adapter.compile(request(sources, WorkerLimits()))
+            val bytes = assertNotNull(result.artifact, result.diagnostics.toString()).toByteArray()
+            ArtifactReader.read(bytes)
+            System.getProperty("compukter.vm.boilerControlArtifact")?.let { output ->
+                Path.of(output).also { it.parent.createDirectories() }.writeBytes(bytes)
+            }
+        }
+
+    @Test
     fun `spatial rotations preserve shortest arcs matrices and long chain stability`() =
         withAdapter { adapter ->
             val source = repositoryFile("modules/common/compiler-k2/src/test/resources/kotlin/rotations/main.kt").readText()
@@ -2460,37 +2479,16 @@ class MinimalScriptLoweringTest {
         withAdapter { adapter ->
             val create = checkNotNull(System.getProperty("compukters.createScadaBundle"))
             val addition = checkNotNull(System.getProperty("compukters.createadditionScadaBundle"))
-            val root = repositoryFile("examples/boiler-scada/src").toFile()
-            val sources =
-                root
-                    .walkTopDown()
-                    .filter { it.isFile && it.extension == "kt" }
-                    .sortedBy { it.relativeTo(root).path }
-                    .map { "project/" + it.relativeTo(root).invariantSeparatorsPath to it.readText() }
-                    .toList()
-            val addons =
-                listOf(create, addition).map { path ->
-                    AddonGuestApiBundleCodec.decode(
-                        java.nio.file.Files
-                            .readAllBytes(Path.of(path)),
-                    )
-                }
-            val base = request(sources, WorkerLimits())
-            val modules =
-                addons.map { addon ->
-                    TrustedBundleIdentity.of(addon.moduleDescriptor.id.toString(), Hash256.of(addon.identity.contentHash.toByteArray()))
-                }
-            val payloads =
-                addons.map { addon ->
-                    TrustedBundlePayload(
-                        TrustedBundleIdentity.of(
-                            addon.identity.id,
-                            Hash256.of(addon.identity.contentHash.toByteArray()),
-                        ),
-                        BinaryValue.of(AddonGuestApiBundleCodec.encode(addon)),
-                    )
-                }
-            val result = adapter.compile(base.copy(platformModules = base.platformModules + modules, addonBundles = payloads))
+            val result = adapter.compile(projectRequest("examples/boiler-scada/src", listOf(create, addition)))
+            assertNotNull(result.artifact, result.diagnostics.joinToString())
+        }
+
+    @Test
+    fun `PID example compiles against the actual addon bundles`() =
+        withAdapter { adapter ->
+            val sable = checkNotNull(System.getProperty("compukters.sablePidBundle"))
+            val propulsion = checkNotNull(System.getProperty("compukters.propulsionPidBundle"))
+            val result = adapter.compile(projectRequest("examples/pid-one-thruster/src", listOf(sable, propulsion)))
             assertNotNull(result.artifact, result.diagnostics.joinToString())
         }
 
@@ -10595,6 +10593,40 @@ class MinimalScriptLoweringTest {
 
     private fun repositoryFile(relativePath: String): Path =
         Path.of(checkNotNull(System.getProperty("compukters.repository.root"))).resolve(relativePath)
+
+    private fun projectRequest(
+        rootPath: String,
+        bundlePaths: List<String>,
+    ): CompileRequest {
+        val root = repositoryFile(rootPath).toFile()
+        val sources =
+            root
+                .walkTopDown()
+                .filter { it.isFile && it.extension == "kt" }
+                .sortedBy { it.relativeTo(root).path }
+                .map { "project/" + it.relativeTo(root).invariantSeparatorsPath to it.readText() }
+                .toList()
+        val addons =
+            bundlePaths.map { path ->
+                AddonGuestApiBundleCodec.decode(
+                    java.nio.file.Files
+                        .readAllBytes(Path.of(path)),
+                )
+            }
+        val base = request(sources, WorkerLimits())
+        val modules =
+            addons.map { addon ->
+                TrustedBundleIdentity.of(addon.moduleDescriptor.id.toString(), Hash256.of(addon.identity.contentHash.toByteArray()))
+            }
+        val payloads =
+            addons.map { addon ->
+                TrustedBundlePayload(
+                    TrustedBundleIdentity.of(addon.identity.id, Hash256.of(addon.identity.contentHash.toByteArray())),
+                    BinaryValue.of(AddonGuestApiBundleCodec.encode(addon)),
+                )
+            }
+        return base.copy(platformModules = base.platformModules + modules, addonBundles = payloads)
+    }
 
     private fun request(
         source: String,

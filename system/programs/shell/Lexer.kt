@@ -19,9 +19,9 @@
 package compukter.system.shell
 
 sealed interface LexResult {
-    data class Success(val words: Array<String>) : LexResult
+    value class Success(val words: Array<String>) : LexResult
 
-    data class Error(val message: String) : LexResult
+    value class Error(val message: String) : LexResult
 }
 
 fun lex(source: String): LexResult {

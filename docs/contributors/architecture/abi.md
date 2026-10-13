@@ -11,6 +11,16 @@ permalink: /ARCHITECTURE/abi/
 
 This reference groups versioned representation boundaries by the version that introduced them. Those versions are minimum feature requirements, not a claim that older Runtime distributions implement today’s platform. The source owners below define the active contract. Before changing a wire format, inspect each producer, consumer and verifier. Runtime release pins in `build-scripts/src/main/kotlin/RuntimeBundleSupport.kt` describe published bundles separately from the local VM checkout.
 
+## Guest value records
+
+`compukter:core` 9.0.0 represents file metadata, process/compilation results and terminal event payloads as native
+Guest value classes. Their property names and host operation contracts remain unchanged; sealed interfaces
+box their concrete value payloads with nominal identity. Recompile programs against the updated platform and
+addon bundle identities. This changes source value semantics: direct reference equality (`===`) is no longer
+valid for these payloads, so the affected public API compatibility lines advance. Crafts & Additions 2.0 and
+Propulsion 3.0 make the same representation change for Guest observations while retaining peripheral operation IDs and record field order/types. JVM host records
+remain ordinary Kotlin data classes. No native ABI revision is introduced by these source representation changes.
+
 ## Linked constant pools
 
 Artifact constants are unique and ordered by their encoded bytes. Reachability pruning can renumber

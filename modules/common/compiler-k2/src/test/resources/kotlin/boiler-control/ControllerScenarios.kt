@@ -4,8 +4,6 @@
  * Licensed under the Apache License, Version 2.0.
  */
 
-package ru.lazyhat.compukters.compiler.worker.k2
-
 import boiler.control.BoilerControl
 import boiler.control.BoilerSample
 import boiler.control.Channel
@@ -14,44 +12,46 @@ import boiler.control.Outputs
 import boiler.control.Phase
 import boiler.control.PowerSource
 import boiler.control.outputSteps
-import kotlin.test.Test
-import kotlin.test.assertEquals
-import kotlin.test.assertFalse
-import kotlin.test.assertTrue
+import compukter.compiler.CompilationFailureReason
+import compukter.compiler.CompilationResult
+import compukter.filesystem.FileInfo
+import compukter.filesystem.FileKind
+import compukter.filesystem.Path
+import compukter.process.ProcessFailureReason
+import compukter.process.ProcessResult
+import compukter.terminal.TerminalEvent
 
-class BoilerScadaControllerTest {
+class ControllerScenarios {
     private val cold = BoilerSample(true, fuelCapacity = 4000)
     private val hot = BoilerSample(true, 20f, 1, 1, 1, 16f, 1200, 4000)
     private val off = Outputs(PowerSource.NONE, FuelDirection.OFF)
 
-    @Test
-    fun `startup is explicit and requires consecutive independent engine readings`() {
+    fun explicitStartup() {
         val control = BoilerControl(stableSamples = 3)
         repeat(10) { control.observe(hot) }
         assertEquals(off, control.outputs)
-        control.start(cold.copy(available = false))
+        control.start(sample(cold, available = false))
         assertEquals(Phase.IDLE, control.phase)
         control.start(cold)
         assertEquals(Outputs(PowerSource.BATTERY, FuelDirection.FEED), control.outputs)
         repeat(2) { control.observe(hot) }
-        control.observe(hot.copy(engineRpm = 0f))
+        control.observe(sample(hot, engineRpm = 0f))
         repeat(2) { control.observe(hot) }
         assertEquals(Phase.STARTING, control.phase)
         control.observe(hot)
         assertEquals(Outputs(PowerSource.STEAM, FuelDirection.FEED), control.outputs)
     }
 
-    @Test
-    fun `stop drains even a small residual and waits for burning fuel to cool`() {
+    fun residualFuelAndCooling() {
         val control = BoilerControl(stableSamples = 3)
         control.start(cold)
         control.stop(hot)
         assertEquals(Outputs(PowerSource.BATTERY, FuelDirection.DRAIN), control.outputs)
-        repeat(5) { control.observe(hot.copy(fuelAmount = 1)) }
+        repeat(5) { control.observe(sample(hot, fuelAmount = 1)) }
         assertEquals(Phase.DRAINING, control.phase)
-        repeat(2) { control.observe(hot.copy(fuelAmount = 0)) }
-        control.observe(hot.copy(fuelAmount = 1))
-        repeat(3) { control.observe(hot.copy(fuelAmount = 0)) }
+        repeat(2) { control.observe(sample(hot, fuelAmount = 0)) }
+        control.observe(sample(hot, fuelAmount = 1))
+        repeat(3) { control.observe(sample(hot, fuelAmount = 0)) }
         assertEquals(Phase.COOLING, control.phase)
         assertEquals(off, control.outputs)
         control.start(cold)
@@ -60,23 +60,21 @@ class BoilerScadaControllerTest {
         assertEquals(Phase.IDLE, control.phase)
     }
 
-    @Test
-    fun `cooldown includes fuel already converted into burning time`() {
+    fun remainingBurnTime() {
         val control = BoilerControl(stableSamples = 1)
         control.stop(cold)
-        control.observe(cold.copy(burnTicks = 100))
+        control.observe(sample(cold, burnTicks = 100))
         assertEquals(Phase.COOLING, control.phase)
-        control.observe(cold.copy(burnTicks = 1))
+        control.observe(sample(cold, burnTicks = 1))
         assertEquals(Phase.COOLING, control.phase)
         control.observe(cold)
         assertEquals(Phase.IDLE, control.phase)
     }
 
-    @Test
-    fun `telemetry loss latches a fault and recovery cannot restart`() {
+    fun telemetryFault() {
         val control = BoilerControl()
         control.start(cold)
-        control.observe(cold.copy(available = false))
+        control.observe(sample(cold, available = false))
         assertEquals(Phase.FAULT, control.phase)
         assertEquals(off, control.outputs)
         control.observe(hot)
@@ -87,8 +85,7 @@ class BoilerScadaControllerTest {
         assertEquals(Phase.DRAINING, control.phase)
     }
 
-    @Test
-    fun `failed startup and blocked fuel return time out without leaving power on`() {
+    fun startupAndDrainTimeouts() {
         val starting = BoilerControl(startupLimit = 3)
         starting.start(cold)
         repeat(3) { starting.observe(cold) }
@@ -104,15 +101,14 @@ class BoilerScadaControllerTest {
         assertEquals(off, draining.outputs)
     }
 
-    @Test
-    fun `lost self power returns to battery for drain and leaking feed cannot end shutdown`() {
+    fun lostSelfPowerAndLeakingFeed() {
         val control = BoilerControl(stableSamples = 2)
         control.start(cold)
         repeat(2) { control.observe(hot) }
-        repeat(3) { control.observe(hot.copy(waterSupply = 0f)) }
+        repeat(3) { control.observe(sample(hot, waterSupply = 0f)) }
         assertEquals(Phase.DRAINING, control.phase)
         assertEquals(PowerSource.BATTERY, control.outputs.power)
-        repeat(2) { control.observe(hot.copy(fuelAmount = 0)) }
+        repeat(2) { control.observe(sample(hot, fuelAmount = 0)) }
         control.observe(hot)
         assertEquals(Phase.DRAINING, control.phase)
         repeat(2) { control.observe(cold) }
@@ -121,8 +117,7 @@ class BoilerScadaControllerTest {
         assertEquals("SELF POWER LOST", control.alarm)
     }
 
-    @Test
-    fun `every output transition interlocks powered sources and pump reversal`() {
+    fun outputInterlocks() {
         val states =
             listOf(
                 off,
@@ -163,4 +158,83 @@ class BoilerScadaControllerTest {
             }
         }
     }
+}
+
+private fun sample(
+    value: BoilerSample,
+    available: Boolean = value.available,
+    waterSupply: Float = value.waterSupply,
+    engineRpm: Float = value.engineRpm,
+    fuelAmount: Int = value.fuelAmount,
+    burnTicks: Int = value.burnTicks,
+): BoilerSample =
+    BoilerSample(
+        available,
+        waterSupply,
+        value.waterLevel,
+        value.heatLevel,
+        value.level,
+        engineRpm,
+        fuelAmount,
+        value.fuelCapacity,
+        burnTicks,
+    )
+
+private fun <T> assertEquals(
+    expected: T,
+    actual: T,
+) {
+    check(expected == actual)
+}
+
+private fun assertTrue(value: Boolean) {
+    check(value)
+}
+
+private fun assertFalse(value: Boolean) {
+    check(!value)
+}
+
+fun main() {
+    verifyPlatformRecords()
+    val scenarios = ControllerScenarios()
+    scenarios.explicitStartup()
+    scenarios.residualFuelAndCooling()
+    scenarios.remainingBurnTime()
+    scenarios.telemetryFault()
+    scenarios.startupAndDrainTimeouts()
+    scenarios.lostSelfPowerAndLeakingFeed()
+    scenarios.outputInterlocks()
+    println("boiler controller ok")
+}
+
+private fun verifyPlatformRecords() {
+    val info = FileInfo(FileKind.FILE, 4294967296L, 9L, true)
+    val files = listOf(info)
+    check(files[0] == info && files[0].sizeBytes == 4294967296L)
+    val process: ProcessResult = ProcessResult.Exited(42)
+    check(process is ProcessResult.Exited && process.code == 42)
+    val failure: ProcessResult = ProcessResult.Failed(ProcessFailureReason.NOT_FOUND, "missing")
+    check(failure is ProcessResult.Failed && failure.reason == ProcessFailureReason.NOT_FOUND && failure.diagnostic == "missing")
+    val results =
+        listOf<CompilationResult>(
+            CompilationResult.Success(Path("/program")),
+            CompilationResult.Failed(CompilationFailureReason.REJECTED, "error"),
+        )
+    val success = results[0]
+    check(success is CompilationResult.Success && success.output.value == "/program")
+    val failed = results[1]
+    check(failed is CompilationResult.Failed && failed.diagnostics == "error")
+    val events = listOf<TerminalEvent>(TerminalEvent.Text("typed"), TerminalEvent.SubmittedLine("line"))
+    for (event in events) {
+        when (event) {
+            is TerminalEvent.Text -> check(event.text == "typed")
+            is TerminalEvent.SubmittedLine -> check(event.text == "line")
+            is TerminalEvent.Key -> error("unexpected key event")
+        }
+    }
+    val boxed: Any = info
+    check(boxed is FileInfo && boxed.revision == 9L)
+    val optional: FileInfo? = info
+    check(optional != null && optional.isExecutable)
 }

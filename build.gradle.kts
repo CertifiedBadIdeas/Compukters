@@ -343,6 +343,16 @@ registerKotlinVmConformance(
 )
 
 registerKotlinVmConformance(
+    taskName = "testKotlinBoilerControlVmConformance",
+    taskDescription = "Executes the Guest boiler lifecycle and output interlock checks with native value records.",
+    artifactTask = ":compiler-k2:generateBoilerControlConformanceArtifact",
+    artifact = project(":compiler-k2").layout.buildDirectory.file("generated/conformance/kotlin-boiler-control.cpkt"),
+    cargoTargetDirectory = ".toolchain/build/cargo/compiler-k2-math-conformance",
+    artifactEnvironmentVariable = "COMPUKTER_KOTLIN_BOILER_CONTROL_ARTIFACT",
+    conformanceScenario = "boiler-control",
+)
+
+registerKotlinVmConformance(
     taskName = "testKotlinRotationsVmConformance",
     taskDescription = "Executes rotation factories, shortest-arc interpolation and long seeded chains.",
     artifactTask = ":compiler-k2:generateRotationsConformanceArtifact",

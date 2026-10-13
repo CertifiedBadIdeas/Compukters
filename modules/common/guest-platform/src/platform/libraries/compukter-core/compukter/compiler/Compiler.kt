@@ -39,11 +39,11 @@ public object Compiler {
 }
 
 public sealed interface CompilationResult {
-    public data class Success(
+    public value class Success(
         val output: Path,
     ) : CompilationResult
 
-    public data class Failed(
+    public value class Failed(
         val reason: CompilationFailureReason,
         val diagnostics: String,
     ) : CompilationResult
