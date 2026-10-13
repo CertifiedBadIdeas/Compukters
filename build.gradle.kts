@@ -590,6 +590,15 @@ registerKotlinVmConformance(
     conformanceScenario = "generic-class-captures",
 )
 registerKotlinVmConformance(
+    taskName = "testKotlinGenericInitializerCapturesVmConformance",
+    taskDescription = "Executes concrete Guest generic initialization captures with the pinned Compukter VM.",
+    artifactTask = ":compiler-k2:generateGenericInitializerCapturesConformanceArtifact",
+    artifact = project(":compiler-k2").layout.buildDirectory.file("generated/conformance/kotlin-generic-initializer-captures.cpkt"),
+    cargoTargetDirectory = ".toolchain/build/cargo/compiler-k2-generic-initializer-captures-conformance",
+    artifactEnvironmentVariable = "COMPUKTER_KOTLIN_GENERIC_INITIALIZER_CAPTURES_ARTIFACT",
+    conformanceScenario = "generic-initializer-captures",
+)
+registerKotlinVmConformance(
     taskName = "testKotlinGenericLocalFunctionsVmConformance",
     taskDescription = "Executes generic Guest local functions with the pinned Compukter VM.",
     artifactTask = ":compiler-k2:generateGenericLocalFunctionsConformanceArtifact",

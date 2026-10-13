@@ -74,8 +74,10 @@ unbounded code. Methods and custom accessors of concrete generic classes also re
 symbol-remapped bodies before capture layout. Named local helpers, lambdas and escaping references may
 capture `this`, concrete parameters and locals, or shared mutable cells. Captured `this` observes later
 field changes; capturing a parameter retains its value. Different method invocations retain independent
-cells. Generic constructor bodies, backing-field initializers and init blocks with lexical captures, methods with their own type parameters,
-and local inline/suspend/reified declarations remain outside this extension.
+cells. Primary constructor bodies, backing-field initializers and `init` blocks of ordinary generic classes also
+receive concrete lexical copies. Lambdas and named local helpers can retain constructor parameters, `this`,
+and shared mutable locals; local helpers with their own type parameters specialize before capture layout.
+Methods with their own type parameters and local inline/suspend/reified declarations remain outside this extension.
 
 ```kotlin
 class Holder<T>(var value: T) {

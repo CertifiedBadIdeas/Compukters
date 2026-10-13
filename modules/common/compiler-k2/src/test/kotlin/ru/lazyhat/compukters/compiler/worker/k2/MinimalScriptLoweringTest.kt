@@ -289,6 +289,43 @@ class MinimalScriptLoweringTest {
         }
 
     @Test
+    fun `expanding generic initialization reports bounded target diagnostics`() =
+        withAdapter { adapter ->
+            val result =
+                adapter.compile(
+                    request(
+                        """
+                        class Growing<T>(val value: T) {
+                            init { Growing(listOf(value)) }
+                        }
+                        fun main() { Growing(1) }
+                        """.trimIndent(),
+                    ),
+                )
+            assertNull(result.artifact)
+            assertTrue(
+                result.diagnostics.any { it.code == "UNSUPPORTED_IR" && it.message.contains("specialization") },
+                result.diagnostics.toString(),
+            )
+        }
+
+    @Test
+    fun `generic initialization captures preserve concrete symbols order and ownership`() =
+        withAdapter { adapter ->
+            val source =
+                repositoryFile(
+                    "modules/common/compiler-k2/src/test/resources/kotlin/generic-initializer-captures/main.kt",
+                ).readText()
+            val result = adapter.compile(request(source))
+            val bytes = assertNotNull(result.artifact, result.diagnostics.toString()).toByteArray()
+            ArtifactReader.read(bytes)
+            assertContentEquals(bytes, assertNotNull(adapter.compile(request(source)).artifact).toByteArray())
+            System.getProperty("compukter.vm.genericInitializerCapturesArtifact")?.let { output ->
+                Path.of(output).also { it.parent.createDirectories() }.writeBytes(bytes)
+            }
+        }
+
+    @Test
     fun `generic class captures preserve concrete owners and escaping callbacks`() =
         withAdapter { adapter ->
             val source = repositoryFile("modules/common/compiler-k2/src/test/resources/kotlin/generic-class-captures/main.kt").readText()
