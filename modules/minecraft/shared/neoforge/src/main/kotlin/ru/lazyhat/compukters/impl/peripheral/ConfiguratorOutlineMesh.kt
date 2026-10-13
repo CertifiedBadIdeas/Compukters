@@ -23,6 +23,7 @@ internal object ConfiguratorOutlineMesh {
         vertices: VertexConsumer,
         outlines: List<ConfiguratorOutline>,
         time: Double,
+        camera: Vec3,
     ) {
         outlines.forEach { outline ->
             val pulse = (sin(time * 0.11) + 1.0) * 0.5
@@ -49,7 +50,7 @@ internal object ConfiguratorOutlineMesh {
                             1 -> AABB(a - width, from, c - width, a + width, to, c + width)
                             else -> AABB(a - width, c - width, from, a + width, c + width, to)
                         }
-                    cuboid(pose, vertices, box, color)
+                    cuboid(pose, vertices, box, color, camera)
                 }
             }
 
@@ -63,11 +64,19 @@ internal object ConfiguratorOutlineMesh {
         }
     }
 
+    /** Project absolute storage coordinates before camera subtraction, while still using Doubles. */
+    internal fun cameraRelative(
+        point: Vec3,
+        camera: Vec3,
+        project: (Vec3) -> Vec3?,
+    ): Vec3? = project(point)?.subtract(camera)
+
     private fun cuboid(
         pose: PoseStack.Pose,
         vertices: VertexConsumer,
         b: AABB,
         color: Int,
+        camera: Vec3,
     ) {
         fun vertex(
             x: Double,
@@ -80,7 +89,7 @@ internal object ConfiguratorOutlineMesh {
             nz: Float,
         ) {
             val level = Minecraft.getInstance().level ?: return
-            val point = PeripheralWorldPositions.project(level, Vec3(x, y, z)) ?: return
+            val point = cameraRelative(Vec3(x, y, z), camera) { PeripheralWorldPositions.project(level, it) } ?: return
             vertices
                 .addVertex(pose, point.x.toFloat(), point.y.toFloat(), point.z.toFloat())
                 .setColor(color)

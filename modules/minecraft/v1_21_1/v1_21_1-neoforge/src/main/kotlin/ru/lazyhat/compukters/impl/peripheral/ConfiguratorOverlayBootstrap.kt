@@ -29,7 +29,6 @@ internal object ConfiguratorOverlayBootstrap {
         val camera = event.camera.position
         val pose = event.poseStack
         pose.pushPose()
-        val relative = outlines.map { it.copy(bounds = it.bounds.move(-camera.x, -camera.y, -camera.z)) }
         val buffers = minecraft.renderBuffers().bufferSource()
         val type =
             net.minecraft.client.renderer.RenderType
@@ -37,8 +36,9 @@ internal object ConfiguratorOverlayBootstrap {
         ConfiguratorOutlineMesh.draw(
             pose.last(),
             buffers.getBuffer(type),
-            relative,
+            outlines,
             event.renderTick + event.partialTick.getGameTimeDeltaPartialTick(false).toDouble(),
+            camera,
         )
         pose.popPose()
         buffers.endBatch(type)
