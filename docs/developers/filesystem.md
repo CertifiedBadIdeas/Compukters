@@ -119,6 +119,55 @@ whole-file reads need an explicit bound. These conveniences allocate the complet
 the Guest heap; use a reader for larger files. Ordinary VM memory, execution and cancellation limits remain
 in force. The default filesystem allows files up to 8 MiB and 64 MiB of persistent logical data.
 
+## Reading lines
+
+`FileSystem.readLines(path, maximumBytes = 65536)` returns all lines from one immutable snapshot as a
+`List<String>`. The byte limit covers the entire encoded file, including delimiters, and is checked before
+collecting lines. A result can still exhaust Guest heap capacity.
+
+`FileSystem.useLines(path, maximumLineBytes = 65536) { lines -> … }` processes a lazy `Sequence<String>`.
+The reader closes on normal completion, callback failure and non-local return; callback failures take
+precedence over cleanup failures, like `Closeable.use`. The inline callback has an `EXACTLY_ONCE` contract.
+Both operations also have explicitly imported `compukter.io.path.readLines` / `useLines` conveniences:
+
+```kotlin
+import compukter.filesystem.FileSystem
+import compukter.filesystem.toPath
+import compukter.io.path.useLines
+import kotlin.sequences.filter
+import kotlin.sequences.take
+import kotlin.sequences.toList
+
+fun main() {
+    val log = "/home/log.txt".toPath()
+    val firstMatches = log.useLines(maximumLineBytes = 4096) { lines ->
+        lines.filter { it.startsWith("ERROR") }.take(10).toList()
+    }
+    for (line in firstMatches) println(line)
+}
+```
+
+Lines use strict UTF-8, including scalars split across native transfer chunks. LF, CRLF and CR are
+recognized and removed; mixed delimiters work in one file. Empty files return no lines. An ending delimiter
+terminates its preceding line without adding another empty line; `"\n"` is one empty line and `"\n\n"`
+is two. A final unterminated line is returned. BOM and U+0000 are ordinary content.
+
+The streaming limit counts encoded bytes in each line, excluding delimiters; it does not limit the entire
+file. Zero permits empty lines. Negative bounds throw `IllegalArgumentException`; an oversized line throws
+`FileSystemException(QUOTA_EXCEEDED)`. Invalid consumed UTF-8 throws `INVALID_UTF8`. Decoding is lazy:
+`take(1)` can finish before invalid or oversized later lines. Reads may fetch later bytes into one bounded
+native-transfer chunk, but do not decode them. The iterator retains that chunk, a reusable bounded line
+buffer and at most one prepared line; it never retains the full file or previous lines. Collecting or retaining
+strings inside the callback still consumes ordinary Guest heap capacity.
+
+`FileReader.lineSequence(maximumLineBytes = 65536)` exposes the same iteration for callers managing a reader
+with `use`. It starts at the current snapshot cursor and does not close the reader automatically. Each
+sequence can be traversed only once; a second traversal throws `IllegalStateException`. Do not interleave
+binary reads or multiple line sequences on one reader, because a line iterator owns read-ahead bytes.
+Closed-reader access throws typed `CLOSED`, including through an escaped sequence or an iterator that has
+already prepared a line. Do all scoped processing inside `useLines`; returning its lazy sequence does not
+extend the resource lifetime. File replacement after open does not affect the captured snapshot.
+
 ## Sequential reads and atomic writes
 
 ```kotlin

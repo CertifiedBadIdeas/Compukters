@@ -9851,6 +9851,153 @@ class MinimalScriptLoweringTest {
                 import compukter.io.use
                 import compukter.io.path.readText
                 import compukter.io.path.writeText
+                import compukter.io.path.readLines
+                import compukter.io.path.useLines
+                import kotlin.sequences.*
+
+
+                object InlineLines {
+                    var log = ""
+                    fun receiver(): InlineLines { log += "r"; return this }
+                    fun argument(): Int { log += "a"; return 3 }
+                    inline fun <T, R> map(value: T, block: (T) -> R): R = block(value)
+                    inline fun increment(value: Int = 2): Int = map(value) { it + 1 }
+                }
+                class InlineCompanion {
+                    companion object {
+                        inline fun <T> identity(value: T): T = InlineLines.map(value) { it }
+                    }
+                }
+                fun objectInlineChecks() {
+                    require(InlineLines.receiver().map(InlineLines.argument()) {
+                        InlineLines.log += "b"
+                        it + 2
+                    } == 5)
+                    require(InlineLines.log == "rab")
+                    require(InlineLines.increment() == 3)
+                    require(InlineCompanion.identity("companion") == "companion")
+                    val alias = InlineLines
+                    require(alias.map(4L) { it + 1L } == 5L)
+                    val stored: (Int) -> Int = alias::increment
+                    require(stored(8) == 9)
+                }
+
+                fun firstLine(path: Path): String {
+                    FileSystem.useLines(path) { return it.firstOrNull() ?: "empty" }
+                    error("nonlocal return must leave the block")
+                }
+
+                fun invalidLine(file: Path, bytes: ByteArray) {
+                    FileSystem.writeBytes(file, bytes)
+                    expect(FileSystemError.INVALID_UTF8) { FileSystem.useLines(file) { it.toList() } }
+                }
+
+                fun checkLines(actual: List<String>, expected: List<String>) {
+                    require(actual.size == expected.size) { "line count: " + actual.size + " expected: " + expected.size }
+                    for (index in 0 until expected.size) {
+                        require(actual[index] == expected[index]) { "line " + index + ": " + actual[index] }
+                    }
+                }
+
+                fun lineChecks() {
+                    val file = Path("/home/lines.txt")
+                    FileSystem.writeText(file, "a\r\nb\rc\n\nlast")
+                    val mixed = FileSystem.readLines(file)
+                    checkLines(mixed, listOf("a", "b", "c", "", "last"))
+                    checkLines(file.readLines(), listOf("a", "b", "c", "", "last"))
+                    val first: String
+                    FileSystem.useLines(file) { first = it.firstOrNull() ?: "empty" }
+                    require(first == "a")
+                    checkLines(file.useLines { it.filter { line -> line.isNotEmpty() }.take(2).toList() }, listOf("a", "b"))
+                    for (text in listOf("", "\n", "\r", "\r\n", "x\n", "x\r", "x\r\n", "\n\n")) {
+                        FileSystem.writeText(file, text)
+                        val expected = if (text.isEmpty()) emptyList<String>() else if (text == "\n\n") listOf("", "") else listOf(if (text.startsWith("x")) "x" else "")
+                        checkLines(FileSystem.readLines(file), expected)
+                    }
+                    FileSystem.writeText(file, "\n\r\n")
+                    checkLines(FileSystem.useLines(file, 0) { it.toList() }, listOf("", ""))
+                    checkLines(FileSystem.readLines(file, 3), listOf("", ""))
+                    expect(FileSystemError.QUOTA_EXCEEDED) { FileSystem.readLines(file, 2) }
+                    FileSystem.writeText(file, "")
+                    require(FileSystem.readLines(file, 0).isEmpty())
+                    expectArgument { FileSystem.readLines(file, -1) }
+                    expectArgument { FileSystem.useLines(file, -1) { error("invalid bound must skip callback") } }
+                    FileSystem.writeText(file, "é\n")
+                    checkLines(FileSystem.useLines(file, 2) { it.toList() }, listOf("é"))
+                    expect(FileSystemError.QUOTA_EXCEEDED) { FileSystem.useLines(file, 1) { it.toList() } }
+                    expect(FileSystemError.QUOTA_EXCEEDED) { FileSystem.useLines(file, 0) { it.toList() } }
+                    for (padding in listOf(4092, 4093, 4094)) {
+                        val prefix = "x".repeat(padding)
+                        FileSystem.writeText(file, prefix + "😀漢é\r\nnext")
+                        checkLines(FileSystem.useLines(file) { it.toList() }, listOf(prefix + "😀漢é", "next"))
+                    }
+                    FileSystem.writeText(file, "\uFEFFa\u0000\nb")
+                    checkLines(FileSystem.readLines(file), listOf("\uFEFFa\u0000", "b"))
+                    FileSystem.openRead(file).use { reader ->
+                        require(reader.read(3).size == 3)
+                        checkLines(reader.lineSequence().toList(), listOf("a\u0000", "b"))
+                    }
+                    FileSystem.writeText(file, "a\nlong")
+                    require(FileSystem.useLines(file, 1) { it.firstOrNull() } == "a")
+                    expect(FileSystemError.QUOTA_EXCEEDED) { FileSystem.useLines(file, 1) { it.toList() } }
+                    val crPrefix = "x".repeat(4094)
+                    FileSystem.writeText(file, crPrefix + "\r\nnext")
+                    checkLines(FileSystem.readLines(file), listOf(crPrefix, "next"))
+                    val chunk = ByteArray(1000)
+                    for (index in 0 until chunk.size) {
+                        chunk[index] = when (index % 5) { 0 -> 119; 1 -> 111; 2 -> 114; 3 -> 100; else -> 10 }.toByte()
+                    }
+                    FileSystem.openWrite(file).use { writer ->
+                        repeat(70) { writer.write(chunk) }
+                        writer.commit()
+                    }
+                    expect(FileSystemError.QUOTA_EXCEEDED) { FileSystem.readLines(file) }
+                    checkLines(FileSystem.useLines(file, 4) { it.take(3).toList() }, listOf("word", "word", "word"))
+                    var count = 0
+                    FileSystem.useLines(file, 4) { for (line in it) { require(line == "word"); count++ } }
+                    require(count == 14000)
+                    FileSystem.writeText(file, "old\nsecond")
+                    FileSystem.openRead(file).use { reader ->
+                        val lines = reader.lineSequence()
+                        FileSystem.writeText(file, "new")
+                        checkLines(lines.toList(), listOf("old", "second"))
+                        var repeated = false
+                        try { lines.iterator() }
+                        catch (failure: IllegalStateException) { repeated = true }
+                        require(repeated)
+                    }
+                    invalidLine(file, byteArrayOf(0xC0.toByte(), 0xAF.toByte()))
+                    invalidLine(file, byteArrayOf(0xED.toByte(), 0xA0.toByte(), 0x80.toByte()))
+                    invalidLine(file, byteArrayOf(0xF4.toByte(), 0x90.toByte(), 0x80.toByte(), 0x80.toByte()))
+                    invalidLine(file, byteArrayOf(0xE2.toByte(), 0x82.toByte()))
+                    invalidLine(file, byteArrayOf(0x80.toByte()))
+                    invalidLine(file, byteArrayOf(97, 98, 99, 10, 0xE2.toByte(), 0x82.toByte()))
+                    FileSystem.writeBytes(file, byteArrayOf(111, 107, 10, 0xFF.toByte()))
+                    require(FileSystem.useLines(file) { it.firstOrNull() } == "ok")
+                    expect(FileSystemError.INVALID_UTF8) { FileSystem.readLines(file) }
+                    var escaped: Sequence<String>? = null
+                    var cached: Iterator<String>? = null
+                    FileSystem.writeText(file, "a\nb")
+                    FileSystem.useLines(file) {
+                        escaped = it
+                        val iterator = it.iterator()
+                        require(iterator.hasNext())
+                        require(iterator.hasNext())
+                        cached = iterator
+                    }
+                    expect(FileSystemError.CLOSED) { escaped!!.iterator() }
+                    expect(FileSystemError.CLOSED) { cached!!.hasNext() }
+                    expect(FileSystemError.CLOSED) { cached!!.next() }
+                    repeat(270) {
+                        require(firstLine(file) == "a")
+                        try { FileSystem.useLines(file) { throw IllegalArgumentException("body") } }
+                        catch (failure: IllegalArgumentException) { require(failure.message == "body") }
+                    }
+                    FileSystem.openRead(file).use { reader ->
+                        checkLines(reader.lineSequence().take(1).toList(), listOf("a"))
+                    }
+                }
+
 
                 class FailingCloseable : Closeable {
                     var closed = false
@@ -9994,6 +10141,8 @@ class MinimalScriptLoweringTest {
                     val resource2 = FailingCloseable()
                     try { resource2.use { 42 }; error("close must fail") }
                     catch (failure: IllegalStateException) { require(failure.message == "cleanup") }
+                    objectInlineChecks()
+                    lineChecks()
                     println("filesystem API ok")
                 }
                 """.trimIndent()
