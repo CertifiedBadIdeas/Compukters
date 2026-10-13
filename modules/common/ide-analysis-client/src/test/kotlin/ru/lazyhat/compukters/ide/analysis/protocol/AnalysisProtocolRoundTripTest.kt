@@ -61,6 +61,36 @@ import kotlin.test.assertIs
 
 class AnalysisProtocolRoundTripTest {
     @Test
+    fun `import fix query and bounded edits round trip`() {
+        val query = AnalysisQuery.ImportFixes(identity, path(), 5)
+        assertEquals(AnalysisQueryRequest(requestId, query), roundTrip(AnalysisQueryRequest(requestId, query), context))
+        val item =
+            ru.lazyhat.compukters.ide.analysis.ImportQuickFix(
+                "sample.Box",
+                CompletionTextEdit(EditorRange(0, 0), "import sample.Box\n\n"),
+            )
+        val value = AnalysisResult.ImportFixes.create(identity, EditorRange(4, 10), listOf(item), sourceLengths().getValue(path()))
+        assertEquals(AnalysisQuerySuccess(requestId, value), roundTrip(AnalysisQuerySuccess(requestId, value), context.forQuery(query)))
+        assertFailsWith<IllegalArgumentException> {
+            AnalysisResult.ImportFixes.create(identity, EditorRange(4, 10), listOf(item, item), 10)
+        }
+        assertFailsWith<IllegalArgumentException> {
+            AnalysisResult.ImportFixes.create(
+                identity,
+                EditorRange(4, 10),
+                listOf(item.copy(edit = CompletionTextEdit(EditorRange(11, 11), "x"))),
+                10,
+            )
+        }
+        assertFailsWith<IllegalArgumentException> {
+            AnalysisMessageCodec.encode(
+                AnalysisQuerySuccess(requestId, value),
+                context.forQuery(AnalysisQuery.ExpressionInfo(identity, path(), 5)),
+            )
+        }
+    }
+
+    @Test
     fun `diagnostic highlight round trips and rejects unknown kinds`() {
         val query = AnalysisQuery.Presentation(identity, path())
         val correlated = context.forQuery(query)

@@ -94,7 +94,7 @@ hover waits 400 ms. These delays share the visible response budget with K2 proce
 the next rendered frame. Manual completion enqueues immediately for an admitted snapshot and is retained while
 preparation is pending. Newer edits cancel obsolete work before their replacement snapshot is prepared.
 
-Analysis protocol v17 carries a validated diagnostic highlight kind alongside severity and exact source ranges.
+Analysis protocol v18 carries a validated diagnostic highlight kind alongside severity and exact source ranges.
 K2 factory identities and compiler diagnostic codes classify unresolved references; presentation never parses
 message text. Hover types and declarations use K2 short-name renderers, preserving generic, nullable and
 function-type structure without package prefixes. Qualified declaration identities remain available to

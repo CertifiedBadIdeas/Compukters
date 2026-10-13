@@ -58,6 +58,8 @@ internal class AdmittedK2Snapshot(
     val platformCompletionIndex: GlobalCompletionIndex,
     private val workspace: IncrementalK2Workspace,
 ) {
+    fun sourceText(path: VirtualSourcePath): String = workspace.sourceText(path)
+
     fun <T> preview(
         changedTexts: Map<VirtualSourcePath, String>,
         limits: ru.lazyhat.compukters.ide.analysis.protocol.AnalysisLimits,

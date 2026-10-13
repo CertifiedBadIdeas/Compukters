@@ -119,6 +119,38 @@ sealed interface AnalysisResult {
     }
 
     @ConsistentCopyVisibility
+    data class ImportFixes private constructor(
+        override val identity: AnalysisSnapshotIdentity,
+        val reference: EditorRange?,
+        val items: List<ImportQuickFix>,
+    ) : AnalysisResult {
+        companion object {
+            fun create(
+                identity: AnalysisSnapshotIdentity,
+                reference: EditorRange?,
+                items: List<ImportQuickFix>,
+                sourceLengthUtf16: Int,
+                limits: AnalysisResultLimits = AnalysisResultLimits(),
+            ): ImportFixes {
+                require(sourceLengthUtf16 >= 0)
+                require(reference == null || (reference.length > 0 && reference.endUtf16 <= sourceLengthUtf16))
+                require(items.isEmpty() || reference != null) { "import fixes require a reference" }
+                require(items.size <= limits.maxCompletionItems) { "import fix count exceeds limit" }
+                require(items.map { it.fqName }.distinct().size == items.size) { "duplicate import fix" }
+                items.forEach { item ->
+                    require(strictUtf8Size(item.fqName) <= limits.maxDetailUtf8Bytes) { "import name exceeds limit" }
+                    require(strictUtf8Size(item.edit.text) <= limits.maxDetailUtf8Bytes) { "import edit exceeds limit" }
+                    require(
+                        item.edit.range.length == 0 && item.edit.range.endUtf16 <= sourceLengthUtf16,
+                    ) { "import fix must insert within source" }
+                    require(item.edit.range.startUtf16 <= requireNotNull(reference).startUtf16) { "import must precede reference" }
+                }
+                return ImportFixes(identity, reference, immutableCopy(items))
+            }
+        }
+    }
+
+    @ConsistentCopyVisibility
     data class ExpressionInfo private constructor(
         override val identity: AnalysisSnapshotIdentity,
         val value: EditorExpressionInfo?,

@@ -23,24 +23,11 @@ import com.intellij.openapi.progress.ProgressManager
 import com.intellij.psi.PsiErrorElement
 import com.intellij.psi.util.PsiTreeUtil
 import org.jetbrains.kotlin.analysis.api.KaExperimentalApi
-import org.jetbrains.kotlin.analysis.api.KaSession
 import org.jetbrains.kotlin.analysis.api.analyze
-import org.jetbrains.kotlin.analysis.api.components.render
-import org.jetbrains.kotlin.analysis.api.components.resolveSymbol
-import org.jetbrains.kotlin.analysis.api.components.resolveToSymbols
-import org.jetbrains.kotlin.analysis.api.renderer.declarations.impl.KaDeclarationRendererForSource
-import org.jetbrains.kotlin.analysis.api.symbols.KaDeclarationSymbol
-import org.jetbrains.kotlin.analysis.api.symbols.KaSymbol
-import org.jetbrains.kotlin.idea.references.mainReference
 import org.jetbrains.kotlin.lexer.KotlinLexer
 import org.jetbrains.kotlin.lexer.KtTokens
-import org.jetbrains.kotlin.psi.KtExperimentalApi
-import org.jetbrains.kotlin.psi.KtNameReferenceExpression
 import org.jetbrains.kotlin.psi.KtNamedDeclaration
 import org.jetbrains.kotlin.psi.KtNamedFunction
-import org.jetbrains.kotlin.psi.KtOperationReferenceExpression
-import org.jetbrains.kotlin.psi.KtSimpleNameExpression
-import org.jetbrains.kotlin.psi.KtTreeVisitorVoid
 import ru.lazyhat.compukters.compiler.worker.protocol.VirtualSourcePath
 import ru.lazyhat.compukters.ide.analysis.AnalysisQuery
 import ru.lazyhat.compukters.ide.analysis.AnalysisResult
@@ -79,12 +66,12 @@ internal object RenameQuery {
             }
         snapshot.preview(changedTexts, limits) { candidate ->
             ReadAction.run<RuntimeException> {
-                val shifts = edits.mapValues { (_, ranges) -> RenameOffsetShift(ranges, query.newName.length) }
+                val shifts = edits.mapValues { (_, ranges) -> SourceOffsetShift(ranges, query.newName.length) }
                 val expectedErrors = prepared.errors.map { it.shift(shifts) }.toMutableList()
                 errors(candidate, limits).forEach { error ->
                     rejectUnless(expectedErrors.remove(error), "The new name introduces an analysis error: ${error.message}")
                 }
-                val actual = bindings(candidate, limits)
+                val actual = SemanticBindings.collect(candidate, limits)
                 val editedSites = prepared.locations.toSet()
                 val expected =
                     prepared.bindings.map { binding ->
@@ -146,7 +133,7 @@ internal object RenameQuery {
             !(named is KtNamedFunction && named.name == "main" && named.parent is org.jetbrains.kotlin.psi.KtFile),
             "The project entry point must remain main",
         )
-        val allBindings = bindings(snapshot, limits)
+        val allBindings = SemanticBindings.collect(snapshot, limits)
         val locations =
             (
                 listOf(target) +
@@ -182,77 +169,6 @@ internal object RenameQuery {
                 }
             }
         }
-
-    @OptIn(KaExperimentalApi::class, KtExperimentalApi::class)
-    private fun bindings(
-        snapshot: AdmittedK2Snapshot,
-        limits: AnalysisLimits,
-    ): List<Binding> {
-        val result = ArrayList<Binding>()
-        var signatureBytes = 0L
-        snapshot.files.entries.sortedBy { it.key.value }.forEach { (path, file) ->
-            analyze(file) {
-                file.accept(
-                    object : KtTreeVisitorVoid() {
-                        override fun visitSimpleNameExpression(expression: KtSimpleNameExpression) {
-                            ProgressManager.checkCanceled()
-                            // Infix calls use operation references, unlike ordinary calls and named arguments.
-                            // Symbolic operators remain excluded from editable sites.
-                            if (expression is KtNameReferenceExpression ||
-                                (
-                                    expression is KtOperationReferenceExpression &&
-                                        expression.getReferencedNameElementType() == KtTokens.IDENTIFIER
-                                )
-                            ) {
-                                if (result.size >=
-                                    limits.semanticTokens
-                                ) {
-                                    throw AnalysisOutputLimitException("rename binding count exceeds negotiated limit")
-                                }
-                                val symbol = expression.resolveSymbol() ?: expression.mainReference.resolveToSymbols().singleOrNull()
-                                val target = symbol?.let { bindingKey(it, snapshot) }
-                                if (target is SignatureBinding) {
-                                    signatureBytes += target.value.encodeToByteArray().size
-                                    if (signatureBytes >
-                                        limits.sourceBytes.toLong() * 4
-                                    ) {
-                                        throw AnalysisOutputLimitException("rename binding text exceeds negotiated limit")
-                                    }
-                                }
-                                result +=
-                                    Binding(
-                                        DeclarationLocation.Source(
-                                            DeclarationOrigin.Project,
-                                            path,
-                                            EditorRange(expression.textRange.startOffset, expression.textRange.endOffset),
-                                        ),
-                                        expression.getReferencedName(),
-                                        target,
-                                    )
-                            }
-                            super.visitSimpleNameExpression(expression)
-                        }
-                    },
-                )
-            }
-        }
-        return result
-    }
-
-    @OptIn(KaExperimentalApi::class)
-    private fun KaSession.bindingKey(
-        symbol: KaSymbol,
-        snapshot: AdmittedK2Snapshot,
-    ): BindingKey? {
-        val mapped = DeclarationOriginMapper.run { map(symbol, snapshot) }
-        if (mapped is MappedDeclaration.Location && mapped.value is DeclarationLocation.Source &&
-            mapped.value.origin == DeclarationOrigin.Project
-        ) {
-            return ProjectBinding(mapped.value)
-        }
-        if (mapped is MappedDeclaration.PlatformTarget) return PlatformBinding(mapped)
-        return (symbol as? KaDeclarationSymbol)?.let { SignatureBinding(it.render(KaDeclarationRendererForSource.WITH_QUALIFIED_NAMES)) }
-    }
 }
 
 private data class PreparedRename(
@@ -260,49 +176,6 @@ private data class PreparedRename(
     val bindings: List<Binding>,
     val errors: List<EditorDiagnostic>,
 )
-
-private data class Binding(
-    val site: DeclarationLocation.Source,
-    val name: String,
-    val target: BindingKey?,
-)
-
-private sealed interface BindingKey
-
-private data class ProjectBinding(
-    val location: DeclarationLocation.Source,
-) : BindingKey
-
-private data class PlatformBinding(
-    val target: MappedDeclaration.PlatformTarget,
-) : BindingKey
-
-private data class SignatureBinding(
-    val value: String,
-) : BindingKey
-
-private fun DeclarationLocation.Source.shift(shifts: Map<VirtualSourcePath, RenameOffsetShift>): DeclarationLocation.Source =
-    shifts[path]?.let { copy(range = EditorRange(it.offset(range.startUtf16), it.offset(range.endUtf16))) } ?: this
-
-private class RenameOffsetShift(
-    private val ranges: List<EditorRange>,
-    newLength: Int,
-) {
-    private val deltas =
-        IntArray(ranges.size + 1).apply {
-            ranges.forEachIndexed { index, range -> this[index + 1] = this[index] + newLength - range.length }
-        }
-
-    fun offset(value: Int): Int {
-        var low = 0
-        var high = ranges.size
-        while (low < high) {
-            val middle = (low + high) ushr 1
-            if (ranges[middle].endUtf16 <= value) low = middle + 1 else high = middle
-        }
-        return value + deltas[low]
-    }
-}
 
 private fun rejectUnless(
     condition: Boolean,
@@ -315,7 +188,7 @@ internal class RenameAdmissionException(
     message: String,
 ) : RuntimeException(message)
 
-private fun EditorDiagnostic.shift(shifts: Map<VirtualSourcePath, RenameOffsetShift>): EditorDiagnostic {
+private fun EditorDiagnostic.shift(shifts: Map<VirtualSourcePath, SourceOffsetShift>): EditorDiagnostic {
     val shift = shifts[path] ?: return this
     val original = range ?: return this
     return copy(range = EditorRange(shift.offset(original.startUtf16), shift.offset(original.endUtf16)))

@@ -56,6 +56,16 @@ sealed interface AnalysisQuery {
         }
     }
 
+    data class ImportFixes(
+        override val identity: AnalysisSnapshotIdentity,
+        val path: VirtualSourcePath,
+        val offsetUtf16: Int,
+    ) : AnalysisQuery {
+        init {
+            validateCursor(path, offsetUtf16)
+        }
+    }
+
     data class ExpressionInfo(
         override val identity: AnalysisSnapshotIdentity,
         val path: VirtualSourcePath,
