@@ -23,9 +23,9 @@ import compukter.process.ProcessResult
 import compukter.terminal.TerminalEvent
 
 class ControllerScenarios {
-    private val cold = BoilerSample(true, 0f, 0, 0, 0, 0f, 0, 4000, 0)
-    private val hot = BoilerSample(true, 20f, 1, 1, 1, 16f, 1200, 4000, 0)
-    private val off = Outputs(PowerSource.NONE, FuelMode.OFF)
+    private val cold = BoilerSample(true, 0f, 0, 0, 0, 0f, 0, 4000, 0, 0f, 0f)
+    private val hot = BoilerSample(true, 20f, 1, 1, 1, 16f, 1200, 4000, 0, 100f, 200f)
+    private val off = Outputs(PowerSource.NONE, FuelMode.OFF, false)
 
     fun explicitStartup() {
         val control = BoilerControl(stableSamples = 3)
@@ -34,20 +34,20 @@ class ControllerScenarios {
         control.start(unavailableSample())
         assertEquals(Phase.IDLE, control.phase)
         control.start(cold)
-        assertEquals(Outputs(PowerSource.BATTERY, FuelMode.FEED), control.outputs)
+        assertEquals(Outputs(PowerSource.BATTERY, FuelMode.FEED, false), control.outputs)
         repeat(2) { control.observe(hot) }
         control.observe(sample(hot, engineRpm = 0f))
         repeat(2) { control.observe(hot) }
         assertEquals(Phase.STARTING, control.phase)
         control.observe(hot)
-        assertEquals(Outputs(PowerSource.STEAM, FuelMode.FEED), control.outputs)
+        assertEquals(Outputs(PowerSource.STEAM, FuelMode.FEED, true), control.outputs)
     }
 
     fun residualFuelAndCooling() {
         val control = BoilerControl(stableSamples = 3)
         control.start(cold)
         control.stop(hot)
-        assertEquals(Outputs(PowerSource.BATTERY, FuelMode.DRAIN), control.outputs)
+        assertEquals(Outputs(PowerSource.BATTERY, FuelMode.DRAIN, false), control.outputs)
         repeat(5) { control.observe(sample(hot, fuelAmount = 1)) }
         assertEquals(Phase.DRAINING, control.phase)
         repeat(2) { control.observe(sample(hot, fuelAmount = 0)) }
@@ -70,16 +70,16 @@ class ControllerScenarios {
         assertEquals(Phase.COOLING, control.phase)
         control.start(burning)
         assertEquals(Phase.STARTING, control.phase)
-        assertEquals(Outputs(PowerSource.BATTERY, FuelMode.FEED), control.outputs)
+        assertEquals(Outputs(PowerSource.BATTERY, FuelMode.FEED, false), control.outputs)
         repeat(2) { control.observe(hot) }
         assertEquals(Phase.RUNNING, control.phase)
-        assertEquals(Outputs(PowerSource.STEAM, FuelMode.FEED), control.outputs)
+        assertEquals(Outputs(PowerSource.STEAM, FuelMode.FEED, true), control.outputs)
 
-        val fault = BoilerControl(stableSamples = 1)
+        val fault = BoilerControl(stableSamples = 1, overloadDelayTicks = 10, recoveryLimitTicks = 5)
         fault.start(cold)
         fault.observe(hot)
         repeat(3) { fault.observe(sample(hot, waterSupply = 0f)) }
-        fault.observe(burning)
+        repeat(2) { fault.observe(burning) }
         assertEquals(Phase.COOLING, fault.phase)
         assertFalse(fault.canStart)
         fault.start(burning)
@@ -129,10 +129,12 @@ class ControllerScenarios {
     }
 
     fun lostSelfPowerAndLeakingFeed() {
-        val control = BoilerControl(stableSamples = 2)
+        val control = BoilerControl(stableSamples = 2, overloadDelayTicks = 10, recoveryLimitTicks = 5)
         control.start(cold)
         repeat(2) { control.observe(hot) }
         repeat(3) { control.observe(sample(hot, waterSupply = 0f)) }
+        assertEquals(Phase.RECOVERING, control.phase)
+        control.observe(sample(hot, waterSupply = 0f))
         assertEquals(Phase.DRAINING, control.phase)
         assertEquals(PowerSource.BATTERY, control.outputs.power)
         repeat(2) { control.observe(sample(hot, fuelAmount = 0)) }
@@ -141,31 +143,93 @@ class ControllerScenarios {
         repeat(2) { control.observe(cold) }
         control.observe(cold)
         assertEquals(Phase.FAULT, control.phase)
-        assertEquals("SELF POWER LOST", control.alarm)
+        assertEquals("RECOVERY TIMEOUT", control.alarm)
+    }
+
+    fun overloadRecovery() {
+        val control = BoilerControl(stableSamples = 1, overloadDelayTicks = 10, recoveryLimitTicks = 100)
+        control.start(cold)
+        control.observe(hot)
+        val overloaded = sample(hot, loadStress = 300f)
+        control.observe(overloaded, 1000)
+        assertEquals(Phase.RUNNING, control.phase)
+        control.observe(overloaded, 9)
+        assertEquals(Phase.RUNNING, control.phase)
+        control.observe(hot)
+        control.observe(overloaded)
+        control.observe(overloaded, 10)
+        assertEquals(Phase.RECOVERING, control.phase)
+        assertEquals(Outputs(PowerSource.BATTERY, FuelMode.FEED, false), control.outputs)
+        assertEquals("", control.alarm)
+        // A disconnected load reads zero capacity; recovery validates the engine and service bus.
+        val isolated = sample(hot, loadStress = 0f, loadCapacity = 0f)
+        control.observe(isolated)
+        assertEquals(Phase.RECOVERING, control.phase)
+        assertEquals(Outputs(PowerSource.STEAM, FuelMode.FEED, false), control.outputs)
+        control.observe(isolated)
+        assertEquals(Phase.RUNNING, control.phase)
+        assertEquals(Outputs(PowerSource.STEAM, FuelMode.FEED, true), control.outputs)
+        // A persistent overload gets another delayed recovery, rather than immediate drainage.
+        control.observe(overloaded)
+        control.observe(overloaded, 10)
+        assertEquals(Phase.RECOVERING, control.phase)
+        control.stop(hot)
+        assertEquals(Outputs(PowerSource.BATTERY, FuelMode.DRAIN, false), control.outputs)
+    }
+
+    fun recoveryRequiresStableServicePower() {
+        val control = BoilerControl(stableSamples = 2, overloadDelayTicks = 10, recoveryLimitTicks = 30)
+        control.start(cold)
+        repeat(2) { control.observe(hot) }
+        val stalled = sample(hot, engineRpm = 0f)
+        control.observe(stalled)
+        control.observe(stalled, 10)
+        assertEquals(Phase.RECOVERING, control.phase)
+        repeat(2) { control.observe(hot) }
+        assertEquals(Outputs(PowerSource.STEAM, FuelMode.FEED, false), control.outputs)
+        control.observe(stalled)
+        control.observe(hot)
+        assertEquals(Phase.RECOVERING, control.phase)
+        control.observe(stalled)
+        control.observe(stalled)
+        assertEquals(Phase.DRAINING, control.phase)
+        assertEquals("RECOVERY TIMEOUT", control.alarm)
+        val disconnected = BoilerControl(stableSamples = 1, overloadDelayTicks = 0)
+        disconnected.start(cold)
+        disconnected.observe(hot)
+        disconnected.observe(stalled)
+        assertEquals(Phase.RECOVERING, disconnected.phase)
+        disconnected.observe(unavailableSample())
+        assertEquals(Phase.FAULT, disconnected.phase)
+        assertEquals(off, disconnected.outputs)
     }
 
     fun outputInterlocks() {
         val states =
             listOf(
                 off,
-                Outputs(PowerSource.BATTERY, FuelMode.FEED),
-                Outputs(PowerSource.STEAM, FuelMode.FEED),
-                Outputs(PowerSource.BATTERY, FuelMode.DRAIN),
+                Outputs(PowerSource.BATTERY, FuelMode.FEED, false),
+                Outputs(PowerSource.STEAM, FuelMode.FEED, true),
+                Outputs(PowerSource.STEAM, FuelMode.FEED, false),
+                Outputs(PowerSource.BATTERY, FuelMode.DRAIN, false),
             )
         for (previous in states) {
             for (next in states) {
                 val signals =
                     mutableMapOf(
+                        Channel.LOAD_CLUTCH to if (previous.load) 15 else 0,
                         Channel.BATTERY to if (previous.power == PowerSource.BATTERY) 15 else 0,
                         Channel.BATTERY_CLUTCH to if (previous.power != PowerSource.NONE) 15 else 0,
                         Channel.STEAM_CLUTCH to if (previous.power == PowerSource.STEAM) 15 else 0,
                         Channel.FUEL_FEED_CLUTCH to if (previous.fuel == FuelMode.FEED) 15 else 0,
                         Channel.FUEL_DRAIN_CLUTCH to if (previous.fuel == FuelMode.DRAIN) 15 else 0,
                     )
+                var loadSettled = false
                 var pumpsSettled = false
                 for (step in outputSteps(previous, next)) {
                     if (step.channel == Channel.WAIT) {
                         assertTrue(step.value >= 2)
+                        if (signals[Channel.LOAD_CLUTCH] == 0) loadSettled = true
                         if (signals[Channel.FUEL_FEED_CLUTCH] == 0 && signals[Channel.FUEL_DRAIN_CLUTCH] == 0) {
                             pumpsSettled = true
                         }
@@ -177,12 +241,23 @@ class ControllerScenarios {
                         assertTrue(pumpsSettled)
                         pumpsSettled = false
                     }
+                    if (step.channel != Channel.LOAD_CLUTCH && (previous.power != next.power || previous.fuel != next.fuel)) {
+                        assertEquals(0, signals[Channel.LOAD_CLUTCH])
+                        assertTrue(loadSettled)
+                    }
                     signals[step.channel] = step.value
+                    if (signals[Channel.LOAD_CLUTCH] == 15) {
+                        assertEquals(0, signals[Channel.BATTERY])
+                        assertEquals(15, signals[Channel.STEAM_CLUTCH])
+                        assertEquals(15, signals[Channel.FUEL_FEED_CLUTCH])
+                        assertEquals(0, signals[Channel.FUEL_DRAIN_CLUTCH])
+                    }
                     assertFalse(signals[Channel.FUEL_FEED_CLUTCH] == 15 && signals[Channel.FUEL_DRAIN_CLUTCH] == 15)
                     assertFalse(
                         signals[Channel.BATTERY] == 15 && signals[Channel.BATTERY_CLUTCH] == 15 && signals[Channel.STEAM_CLUTCH] == 15,
                     )
                 }
+                assertEquals(if (next.load) 15 else 0, signals[Channel.LOAD_CLUTCH])
                 assertEquals(if (next.power == PowerSource.BATTERY) 15 else 0, signals[Channel.BATTERY])
                 assertEquals(if (next.power != PowerSource.NONE) 15 else 0, signals[Channel.BATTERY_CLUTCH])
                 assertEquals(if (next.power == PowerSource.STEAM) 15 else 0, signals[Channel.STEAM_CLUTCH])
@@ -200,6 +275,8 @@ private fun sample(
     engineRpm: Float = value.engineRpm,
     fuelAmount: Int = value.fuelAmount,
     burnTicks: Int = value.burnTicks,
+    loadStress: Float = value.loadStress,
+    loadCapacity: Float = value.loadCapacity,
 ): BoilerSample =
     BoilerSample(
         available,
@@ -211,6 +288,8 @@ private fun sample(
         fuelAmount,
         value.fuelCapacity,
         burnTicks,
+        loadStress,
+        loadCapacity,
     )
 
 private fun <T> assertEquals(
@@ -238,6 +317,8 @@ fun main() {
     scenarios.telemetryFault()
     scenarios.startupAndDrainTimeouts()
     scenarios.lostSelfPowerAndLeakingFeed()
+    scenarios.overloadRecovery()
+    scenarios.recoveryRequiresStableServicePower()
     scenarios.outputInterlocks()
     println("boiler controller ok")
 }

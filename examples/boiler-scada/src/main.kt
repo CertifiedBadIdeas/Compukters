@@ -28,6 +28,7 @@ import compukter.redstone.Redstone
 import compukter.redstone.RedstonePort
 import create.boiler.Boiler
 import create.kinetics.Speedometer
+import create.kinetics.Stressometer
 import createaddition.boiler.BurnerStatus
 import createaddition.boiler.LiquidBurner
 import kotlin.collections.ArrayList
@@ -41,6 +42,8 @@ import kotlin.math.xy
 
 const val SCREEN = "boiler_scada"
 const val BOILER = "boiler"
+const val LOAD_STRESS = "boiler_load_stress"
+const val LOAD_CLUTCH = "boiler_load_clutch"
 const val ENGINE_SPEED = "boiler_engine_speed"
 const val BATTERY_DISCHARGE = "boiler_battery_discharge"
 const val BATTERY_CLUTCH = "boiler_battery_clutch"
@@ -99,12 +102,13 @@ fun runDashboard(iterations: Int = -1) {
     var applying = false
     var revision = 0
     var requested = ""
-    var applied = Outputs(PowerSource.NONE, FuelMode.OFF)
+    var applied = Outputs(PowerSource.NONE, FuelMode.OFF, false)
     val phaseText: UiIndicator
     val waterText: UiText
     val heatText: UiText
     val engineText: UiText
     val battery: UiIndicator
+    val load: UiIndicator
     val pumps: UiIndicator
     val boiler: UiIndicator
     val engine: UiIndicator
@@ -131,14 +135,7 @@ fun runDashboard(iterations: Int = -1) {
             at(138 xy 122) { pumps = indicator("PUMPS", 100 by 14) }
             at(260 xy 122) { boiler = indicator("BOILER", 112 by 14) }
             at(260 xy 145) { engine = indicator("ENGINE", 112 by 14) }
-            at(12 xy 140) {
-                canvas(235 by 18) {
-                    onDraw = {
-                        line(12, 4, 226, 4, 0x687D8C)
-                        text(0, 6, "starter -> water + fuel -> steam", 0x687D8C)
-                    }
-                }
-            }
+            at(12 xy 145) { load = indicator("LOAD: --", 235 by 14) }
             at(12 xy 168) { fuelText = text("Liquid fuel: --", 360 by 14) }
             at(12 xy 186) { fuelGauge = gauge(360 by 8) }
             for (index in 0 until burnerNames.size) {
@@ -186,6 +183,7 @@ fun runDashboard(iterations: Int = -1) {
         Tasks.launch {
             var boilerDevice: Boiler? = null
             var speedDevice: Speedometer? = null
+            var stressDevice: Stressometer? = null
             val burners = ArrayList<LiquidBurner>()
             while (running) {
                 while (running && applying) Tasks.sleepTicks(1)
@@ -199,6 +197,8 @@ fun runDashboard(iterations: Int = -1) {
                     output.validate() // Revalidate every output lease without issuing a command.
                     val source = boilerDevice ?: Boiler.named(BOILER)
                     val gauge = speedDevice ?: Speedometer.named(ENGINE_SPEED)
+                    val stressometer = stressDevice ?: Stressometer.named(LOAD_STRESS)
+                    stressDevice = stressometer
                     boilerDevice = source
                     speedDevice = gauge
                     if (burners.isEmpty()) for (name in burnerNames) burners.add(LiquidBurner.named(name))
@@ -207,6 +207,9 @@ fun runDashboard(iterations: Int = -1) {
                     val heat = source.heatLevel()
                     val level = source.level()
                     val rpm = gauge.speed()
+                    val stress = stressometer.stress()
+                    val capacityReading = stressometer.capacity()
+                    require(finite(stress) && stress >= 0f && finite(capacityReading) && capacityReading >= 0f)
                     require(finite(water) && water >= 0f && finite(rpm) && waterLevel in 0..18 && heat in 0..18 && level in 0..18)
                     var fuel = 0
                     var capacity = 0
@@ -219,10 +222,11 @@ fun runDashboard(iterations: Int = -1) {
                         capacity += status.fuelCapacity
                         burnTicks = max(burnTicks, status.burnTicks)
                     }
-                    sample = BoilerSample(true, water, waterLevel, heat, level, rpm, fuel, capacity, burnTicks)
+                    sample = BoilerSample(true, water, waterLevel, heat, level, rpm, fuel, capacity, burnTicks, stress, capacityReading)
                 } catch (error: Exception) {
                     boilerDevice = null
                     speedDevice = null
+                    stressDevice = null
                     burners.clear()
                     val failedPorts = ports
                     ports = null
@@ -239,6 +243,7 @@ fun runDashboard(iterations: Int = -1) {
                 Tasks.sleepTicks(5)
             }
         }
+    var controlTick = clock
     var sequence = -1
     var iteration = 0
     var previouslyAvailable = false
@@ -251,7 +256,9 @@ fun runDashboard(iterations: Int = -1) {
             val sample = if (fresh) observation.sample else unavailableSample()
             if (observation.sequence != sequence || (!fresh && previouslyAvailable)) {
                 sequence = observation.sequence
-                control.observe(sample)
+                val observedTick = clock
+                control.observe(sample, observedTick - controlTick)
+                controlTick = observedTick
                 history.add(if (sample.available) sample.level.toFloat() else Float.NaN)
             }
             val available = sample.available && ports != null
@@ -295,7 +302,7 @@ fun runDashboard(iterations: Int = -1) {
                     } catch (ignored: Exception) {
                     }
                     ports = null
-                    applied = Outputs(PowerSource.NONE, FuelMode.OFF)
+                    applied = Outputs(PowerSource.NONE, FuelMode.OFF, false)
                 } finally {
                     applying = false
                 }
@@ -309,7 +316,7 @@ fun runDashboard(iterations: Int = -1) {
             reset.enabled =
                 available && ports != null && control.phase == Phase.FAULT && sample.fuelAmount == 0 && sample.heatLevel == 0 &&
                 sample.burnTicks == 0
-            phaseText.label = if (available) "PHASE: ${control.phase}" else "NO TELEMETRY"
+            phaseText.label = if (available) "PHASE: ${control.phase.name}" else "NO TELEMETRY"
             phaseText.color = if (available && control.phase != Phase.FAULT) Colors.CYAN else Colors.RED
             waterText.text = if (available) "Water: ${sample.waterSupply.toInt()} mB/t  level ${sample.waterLevel}" else "Water: --"
             heatText.text = if (available) "Heat: ${sample.heatLevel}  boiler level: ${sample.level}" else "Heat: --"
@@ -329,6 +336,22 @@ fun runDashboard(iterations: Int = -1) {
                     Colors.GREEN
                 } else {
                     0x687D8C
+                }
+            load.label =
+                if (available) {
+                    "LOAD ${if (applied.load) "ON" else "OFF"}: ${sample.loadStress.toInt()}/${sample.loadCapacity.toInt()} SU"
+                } else {
+                    "LOAD: --"
+                }
+            load.color =
+                if (!applied.load) {
+                    0x687D8C
+                } else if (sample.loadCapacity > 0f &&
+                    sample.loadStress > sample.loadCapacity
+                ) {
+                    Colors.RED
+                } else {
+                    Colors.GREEN
                 }
             pumps.label =
                 when (applied.fuel) {
@@ -358,10 +381,21 @@ fun runDashboard(iterations: Int = -1) {
                     control.alarm
                 } else if (!available) {
                     "TELEMETRY UNAVAILABLE"
+                } else if (control.warning.isNotEmpty()) {
+                    control.warning
                 } else {
                     "STATUS: NORMAL"
                 }
-            alarm.color = if (control.alarm.isNotEmpty() || !available) Colors.RED else Colors.GREEN
+            alarm.color =
+                if (control.alarm.isNotEmpty() ||
+                    !available
+                ) {
+                    Colors.RED
+                } else if (control.warning.isNotEmpty()) {
+                    Colors.YELLOW
+                } else {
+                    Colors.GREEN
+                }
             coolingText.text = if (available) "Burning fuel: up to ${sample.burnTicks / 20}s left" else "Burning fuel: --"
             if (dirty) {
                 screen.frame {
@@ -393,10 +427,11 @@ fun portNameFor(channel: Channel): String =
         Channel.STEAM_CLUTCH -> STEAM_CLUTCH
         Channel.FUEL_FEED_CLUTCH -> FUEL_FEED_CLUTCH
         Channel.FUEL_DRAIN_CLUTCH -> FUEL_DRAIN_CLUTCH
+        Channel.LOAD_CLUTCH -> LOAD_CLUTCH
         else -> error("WAIT has no output port")
     }
 
-/** Own all five actuator leases, including handles acquired before a later lookup fails. */
+/** Own all six actuator leases, including handles acquired before a later lookup fails. */
 class ControlPorts {
     private val devices = arrayOfNulls<RedstonePort>(Channel.entries.size)
     private var closed = false

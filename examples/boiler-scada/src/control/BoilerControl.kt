@@ -20,12 +20,14 @@ value class BoilerSample(
     val fuelAmount: Int,
     val fuelCapacity: Int,
     val burnTicks: Int,
+    val loadStress: Float,
+    val loadCapacity: Float,
 )
 
 /** Unavailable observations carry no usable readings. */
-fun unavailableSample(): BoilerSample = BoilerSample(false, 0f, 0, 0, 0, 0f, 0, 0, 0)
+fun unavailableSample(): BoilerSample = BoilerSample(false, 0f, 0, 0, 0, 0f, 0, 0, 0, 0f, 0f)
 
-enum class Phase { IDLE, STARTING, RUNNING, DRAINING, COOLING, FAULT }
+enum class Phase { IDLE, STARTING, RUNNING, RECOVERING, DRAINING, COOLING, FAULT }
 
 enum class PowerSource { NONE, BATTERY, STEAM }
 
@@ -34,13 +36,16 @@ enum class FuelMode { OFF, FEED, DRAIN }
 value class Outputs(
     val power: PowerSource,
     val fuel: FuelMode,
+    val load: Boolean,
 )
 
-/** Time limits count completed samples. Each sample is separated by at least five server ticks. */
+/** Startup/drain limits count samples; overload/recovery limits count elapsed server ticks. */
 class BoilerControl(
     private val stableSamples: Int = 8,
     private val startupLimit: Int = 240,
     private val drainLimit: Int = 240,
+    private val overloadDelayTicks: Int = 80,
+    private val recoveryLimitTicks: Int = 1200,
 ) {
     var phase: Phase = Phase.IDLE
         private set
@@ -48,15 +53,28 @@ class BoilerControl(
         private set
     private var age = 0
     private var stable = 0
-    private var bad = 0
+    private var lossTicks = -1
+    private var recoveryTicks = 0
+    private var recoverOnSteam = false
 
     val outputs: Outputs
         get() =
             when (phase) {
-                Phase.STARTING -> Outputs(PowerSource.BATTERY, FuelMode.FEED)
-                Phase.RUNNING -> Outputs(PowerSource.STEAM, FuelMode.FEED)
-                Phase.DRAINING -> Outputs(PowerSource.BATTERY, FuelMode.DRAIN)
-                else -> Outputs(PowerSource.NONE, FuelMode.OFF)
+                Phase.STARTING -> Outputs(PowerSource.BATTERY, FuelMode.FEED, false)
+                Phase.RUNNING -> Outputs(PowerSource.STEAM, FuelMode.FEED, true)
+                Phase.RECOVERING -> Outputs(if (recoverOnSteam) PowerSource.STEAM else PowerSource.BATTERY, FuelMode.FEED, false)
+                Phase.DRAINING -> Outputs(PowerSource.BATTERY, FuelMode.DRAIN, false)
+                else -> Outputs(PowerSource.NONE, FuelMode.OFF, false)
+            }
+
+    val warning: String
+        get() =
+            if (phase == Phase.RECOVERING) {
+                "RECOVERING: LOAD ISOLATED"
+            } else if (lossTicks >= 0) {
+                "ROTATION/LOAD WAIT: ${(overloadDelayTicks - lossTicks + 19) / 20}s"
+            } else {
+                ""
             }
 
     val canStart: Boolean
@@ -82,7 +100,11 @@ class BoilerControl(
         enter(Phase.FAULT)
     }
 
-    fun observe(sample: BoilerSample) {
+    fun observe(
+        sample: BoilerSample,
+        elapsedTicks: Int = 5,
+    ) {
+        require(elapsedTicks >= 0)
         if (!sample.available) {
             if (phase != Phase.IDLE && phase != Phase.FAULT) fail("TELEMETRY LOST")
             return
@@ -99,10 +121,33 @@ class BoilerControl(
             }
 
             Phase.RUNNING -> {
-                bad = if (selfPowered(sample)) 0 else bad + 1
-                if (bad >= 3) {
-                    alarm = "SELF POWER LOST"
-                    enter(Phase.DRAINING)
+                val overloaded = sample.loadCapacity > 0f && sample.loadStress > sample.loadCapacity
+                lossTicks =
+                    if (selfPowered(sample) && !overloaded) {
+                        -1
+                    } else if (lossTicks < 0) {
+                        0
+                    } else {
+                        lossTicks + elapsedTicks
+                    }
+                if (lossTicks >= overloadDelayTicks) enter(Phase.RECOVERING)
+            }
+
+            Phase.RECOVERING -> {
+                recoveryTicks += elapsedTicks
+                // The isolated load's capacity can be zero. Validate only the engine and service circuit here.
+                stable = if (selfPowered(sample)) stable + 1 else 0
+                if (stable >= stableSamples && recoverOnSteam) {
+                    enter(Phase.RUNNING)
+                } else {
+                    if (stable >= stableSamples) {
+                        recoverOnSteam = true
+                        stable = 0
+                    }
+                    if (recoveryTicks >= recoveryLimitTicks) {
+                        alarm = "RECOVERY TIMEOUT"
+                        enter(Phase.DRAINING)
+                    }
                 }
             }
 
@@ -136,11 +181,13 @@ class BoilerControl(
         phase = next
         age = 0
         stable = 0
-        bad = 0
+        lossTicks = -1
+        recoveryTicks = 0
+        recoverOnSteam = false
     }
 }
 
-enum class Channel { BATTERY, BATTERY_CLUTCH, STEAM_CLUTCH, FUEL_FEED_CLUTCH, FUEL_DRAIN_CLUTCH, WAIT }
+enum class Channel { BATTERY, BATTERY_CLUTCH, STEAM_CLUTCH, FUEL_FEED_CLUTCH, FUEL_DRAIN_CLUTCH, LOAD_CLUTCH, WAIT }
 
 value class OutputStep(
     val channel: Channel,
@@ -157,6 +204,13 @@ fun outputSteps(
 ): List<OutputStep> {
     if (previous == next) return emptyList()
     val steps = ArrayList<OutputStep>()
+    if (previous.power == next.power && previous.fuel == next.fuel) {
+        steps.add(OutputStep(Channel.LOAD_CLUTCH, if (next.load) 15 else 0))
+        steps.add(OutputStep(Channel.WAIT, 2))
+        return steps
+    }
+    steps.add(OutputStep(Channel.LOAD_CLUTCH, 0))
+    steps.add(OutputStep(Channel.WAIT, 2))
     steps.add(OutputStep(Channel.FUEL_FEED_CLUTCH, 0))
     steps.add(OutputStep(Channel.FUEL_DRAIN_CLUTCH, 0))
     steps.add(OutputStep(Channel.WAIT, 2))
@@ -194,6 +248,10 @@ fun outputSteps(
         }
 
         else -> {}
+    }
+    if (next.load) {
+        steps.add(OutputStep(Channel.WAIT, 2))
+        steps.add(OutputStep(Channel.LOAD_CLUTCH, 15))
     }
     return steps
 }
