@@ -2161,3 +2161,18 @@ tasks.register<Test>("compileSpaceTelemetryExample") {
     systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
     bundle.orNull?.let { systemProperty("compukters.cosmonauticsTelemetryBundle", file(it).absolutePath) }
 }
+
+val sequenceBenchmarkArtifacts = layout.buildDirectory.dir("generated/benchmarks/sequences")
+tasks.register<Test>("generateSequenceBenchmarkArtifacts") {
+    description = "Compiles opt-in eager and lazy sequence workloads with matching checksums."
+    group = "benchmark"
+    dependsOn(tasks.jar)
+    useJUnitPlatform()
+    testClassesDirs = sourceSets.test.get().output.classesDirs
+    classpath = sourceSets.test.get().runtimeClasspath
+    filter.includeTestsMatching("*sequence eager and lazy benchmark artifacts compile*")
+    inputs.file(workerJar)
+    outputs.dir(sequenceBenchmarkArtifacts)
+    systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
+    systemProperty("compukter.bench.sequencesOutput", sequenceBenchmarkArtifacts.get().asFile.absolutePath)
+}
