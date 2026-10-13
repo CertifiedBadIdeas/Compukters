@@ -53,6 +53,23 @@ subdirectory. The pinned mods above are already on the classpath and do not need
 worlds use separate `run/server` and `run/gameTestServer` directories. Gradle rebuilds the main mod and all addon
 archives before launching, so editing them does not require a Maven Local publication.
 
+Optional renderer mods are declared in `addons/dev/gradle/client-mods.gradle.kts`, with one dependency per
+mod. Comment out a dependency line and reload Gradle to disable it, or comment out the script's `apply(from = ...)`
+line in `addons/dev/build.gradle.kts` to disable the whole group. Voxy requires Connector, Forgified Fabric API and
+Sodium; disable Voxy before removing any of those dependencies. The script pins Connector 2.0.0-beta.17,
+Forgified Fabric API 0.116.15+2.3.5, Sodium 0.8.13, and the `realBritakee/voxy-neoforge` 0.2.15 fork for Minecraft 1.21.1.
+Gradle downloads them from Sinytra Maven, Modrinth Maven and the fork's GitHub Release. Do not also copy these JARs
+into `run/client/mods`.
+
+Connector and Sodium contain early ModLauncher services and use `forgeRuntimeLibrary`. Forgified Fabric API uses
+`modRuntimeOnly` with its Maven dependencies, so Loom remaps every API module into the development namespace. A
+standalone API JAR copied into `mods` retains production lambda names and can fail to apply its mixins; declaring
+only that local umbrella JAR also omits its nested API modules after Loom's remapping. Voxy uses `runtimeOnly`, keeping
+its Fabric intermediary names for Connector. Its NeoForge filename does not mean that it is a native NeoForge mod.
+The run configurations also supply `connector.clean.path` from Loom's unpatched Mojang-mapped Minecraft provider;
+this is separate from the patched development Minecraft JAR. These dependencies belong only to the development
+stand and are not packaged into Compukters or addon releases.
+
 Configuration Cache and parallel execution are enabled in this stand itself, so independent built-in program
 generators can run concurrently inside the included Compukters build. Repeated commands reuse the configured
 graph; `--max-workers=N` limits concurrent work.

@@ -13,6 +13,10 @@ headings so this page has one stable URL that can be shared outside the reposito
 
 ## 0.6.0 — In development
 
+- The addon development stand loads optional Connector, Forgified Fabric API, Sodium and Voxy through Gradle;
+  their dependency lines can be commented out. Loom supplies Connector's clean Minecraft path and remaps every
+  Fabric API module for the development environment.
+
 - Added an empty independent Cosmonautics addon scaffold and pinned Cosmonautics in the all-addon development stand;
   Guest APIs and spacecraft controls will follow separately. The existing Crafts & Additions addon is also published
   independently and pinned as a submodule.
