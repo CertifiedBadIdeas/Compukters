@@ -124,7 +124,9 @@ internal object IdeKDocPresentation {
             for (raw in text.lines()) {
                 val trimmed = raw.trimStart()
                 val marker = trimmed.firstOrNull()
-                val count = if (marker == '`' || marker == '~') trimmed.takeWhile { it == marker }.length else 0
+                val indentation = raw.takeWhile(Char::isWhitespace)
+                val blockStart = indentation.length < 4 && '\t' !in indentation
+                val count = if (blockStart && (marker == '`' || marker == '~')) trimmed.takeWhile { it == marker }.length else 0
                 if (fence != null) {
                     if (marker == fence && count >= fenceLength && trimmed.drop(count).isBlank()) {
                         fence = null

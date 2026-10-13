@@ -42,7 +42,11 @@ import kotlin.math.xy
 const val SCREEN = "boiler_scada"
 const val BOILER = "boiler"
 const val ENGINE_SPEED = "boiler_engine_speed"
-const val CONTROL = "boiler_control"
+const val BATTERY_DISCHARGE = "boiler_battery_discharge"
+const val BATTERY_CLUTCH = "boiler_battery_clutch"
+const val STEAM_CLUTCH = "boiler_steam_clutch"
+const val FUEL_FEED_CLUTCH = "boiler_fuel_feed_clutch"
+const val FUEL_DRAIN_CLUTCH = "boiler_fuel_drain_clutch"
 
 // Explicit names keep this installation separate from other boilers on the same network.
 fun configuredBurners(): Array<String> =
@@ -87,7 +91,7 @@ fun runDashboard(iterations: Int = -1) {
     val history = DisplayHistory(96)
     val burnerLabels = ArrayList<UiIndicator>()
     var telemetry = Telemetry(0, unavailableSample(), emptyList())
-    var port: RedstonePort? = null
+    var ports: ControlPorts? = null
     var running = true
     // A cooperative clock lets a stuck sampler invalidate old readings independently of I/O.
     var clock = 0
@@ -190,9 +194,9 @@ fun runDashboard(iterations: Int = -1) {
                 var sample = unavailableSample()
                 val statuses = ArrayList<BurnerStatus>()
                 try {
-                    val output = port ?: RedstonePort.named(CONTROL)
-                    port = output
-                    output.front.get() // Revalidate the output lease without issuing a command.
+                    val output = ports ?: ControlPorts()
+                    ports = output
+                    output.validate() // Revalidate every output lease without issuing a command.
                     val source = boilerDevice ?: Boiler.named(BOILER)
                     val gauge = speedDevice ?: Speedometer.named(ENGINE_SPEED)
                     boilerDevice = source
@@ -220,10 +224,10 @@ fun runDashboard(iterations: Int = -1) {
                     boilerDevice = null
                     speedDevice = null
                     burners.clear()
-                    val failedPort = port
-                    port = null
+                    val failedPorts = ports
+                    ports = null
                     try {
-                        failedPort?.close()
+                        failedPorts?.close()
                     } catch (ignored: Exception) {
                     }
                 }
@@ -250,7 +254,7 @@ fun runDashboard(iterations: Int = -1) {
                 control.observe(sample)
                 history.add(if (sample.available) sample.level.toFloat() else Float.NaN)
             }
-            val available = sample.available && port != null
+            val available = sample.available && ports != null
             start.enabled = available && control.phase == Phase.IDLE
             stop.enabled = available && control.phase != Phase.DRAINING && control.phase != Phase.COOLING
             reset.enabled =
@@ -274,23 +278,23 @@ fun runDashboard(iterations: Int = -1) {
                 applying = true
                 revision++
                 try {
-                    val output = port ?: error("Output port is unavailable")
+                    val output = ports ?: error("Output ports are unavailable")
                     for (step in outputSteps(applied, next)) {
                         if (step.channel == Channel.WAIT) {
                             Tasks.sleepTicks(step.value)
                         } else {
                             if (step.value > 0) require(telemetry.sample.available && clock - observedAt <= 80)
-                            output.set(step.value, Redstone.Power.WEAK, sideFor(step.channel))
+                            output.set(step.channel, step.value)
                         }
                     }
                     applied = next
                 } catch (error: Exception) {
                     control.fail("OUTPUT COMMAND FAILED")
                     try {
-                        port?.close()
+                        ports?.close()
                     } catch (ignored: Exception) {
                     }
-                    port = null
+                    ports = null
                     applied = Outputs(PowerSource.NONE, FuelMode.OFF)
                 } finally {
                     applying = false
@@ -300,10 +304,10 @@ fun runDashboard(iterations: Int = -1) {
                     drainClicks(screen)
                 }
             }
-            start.enabled = available && port != null && control.phase == Phase.IDLE
-            stop.enabled = available && port != null && control.phase != Phase.DRAINING && control.phase != Phase.COOLING
+            start.enabled = available && ports != null && control.phase == Phase.IDLE
+            stop.enabled = available && ports != null && control.phase != Phase.DRAINING && control.phase != Phase.COOLING
             reset.enabled =
-                available && port != null && control.phase == Phase.FAULT && sample.fuelAmount == 0 && sample.heatLevel == 0 &&
+                available && ports != null && control.phase == Phase.FAULT && sample.fuelAmount == 0 && sample.heatLevel == 0 &&
                 sample.burnTicks == 0
             phaseText.label = if (available) "PHASE: ${control.phase}" else "NO TELEMETRY"
             phaseText.color = if (available && control.phase != Phase.FAULT) Colors.CYAN else Colors.RED
@@ -376,21 +380,68 @@ fun runDashboard(iterations: Int = -1) {
             try {
                 ticker.join()
             } finally {
-                port?.close()
+                ports?.close()
             }
         }
     }
 }
 
-fun sideFor(channel: Channel): RedstonePort.Side =
+fun portNameFor(channel: Channel): String =
     when (channel) {
-        Channel.BATTERY -> RedstonePort.Side.FRONT
-        Channel.BATTERY_CLUTCH -> RedstonePort.Side.RIGHT
-        Channel.STEAM_CLUTCH -> RedstonePort.Side.LEFT
-        Channel.FUEL_FEED_CLUTCH -> RedstonePort.Side.TOP
-        Channel.FUEL_DRAIN_CLUTCH -> RedstonePort.Side.BOTTOM
-        else -> error("WAIT has no port side")
+        Channel.BATTERY -> BATTERY_DISCHARGE
+        Channel.BATTERY_CLUTCH -> BATTERY_CLUTCH
+        Channel.STEAM_CLUTCH -> STEAM_CLUTCH
+        Channel.FUEL_FEED_CLUTCH -> FUEL_FEED_CLUTCH
+        Channel.FUEL_DRAIN_CLUTCH -> FUEL_DRAIN_CLUTCH
+        else -> error("WAIT has no output port")
     }
+
+/** Own all five actuator leases, including handles acquired before a later lookup fails. */
+class ControlPorts {
+    private val devices = arrayOfNulls<RedstonePort>(Channel.entries.size)
+    private var closed = false
+
+    fun validate() {
+        check(!closed)
+        for (channel in Channel.entries) {
+            if (channel == Channel.WAIT) continue
+            var device = devices[channel.ordinal]
+            if (device == null) {
+                val opened = RedstonePort.named(portNameFor(channel))
+                if (closed) {
+                    opened.close()
+                    error("Output ports are closed")
+                }
+                devices[channel.ordinal] = opened
+                device = opened
+            }
+            device.front.get()
+            check(!closed)
+        }
+    }
+
+    fun set(
+        channel: Channel,
+        value: Int,
+    ) {
+        check(!closed)
+        val device = devices[channel.ordinal] ?: error("Output port is unavailable")
+        device.set(value, Redstone.Power.WEAK, RedstonePort.Side.ALL)
+    }
+
+    fun close() {
+        closed = true
+        for (channel in Channel.entries) {
+            val device = devices[channel.ordinal] ?: continue
+            devices[channel.ordinal] = null
+            try {
+                device.close()
+            } catch (ignored: Exception) {
+                // A failed release must not leave the other actuators enabled.
+            }
+        }
+    }
+}
 
 fun drainClicks(screen: GraphicalDisplay) {
     var discarded = 0

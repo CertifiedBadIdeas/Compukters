@@ -13,6 +13,8 @@ headings so this page has one stable URL that can be shared outside the reposito
 
 ## 0.6.0 — In development
 
+- Added read-only Cosmonautics space telemetry for Guest Kotlin: flight phase, linked planet parameters and Deep Space instance orbital observations, with a small telemetry example.
+
 - The addon development stand loads optional Connector, Forgified Fabric API, Sodium, Voxy and Voxy Worldgen through Gradle;
   their dependency lines can be commented out. Loom supplies Connector's clean Minecraft path and remaps every
   Fabric API module for the development environment.
@@ -28,7 +30,8 @@ headings so this page has one stable URL that can be shared outside the reposito
 - The Crafts & Additions integration exposes named liquid Blaze Burners with atomic fuel quantity, capacity,
   heat and remaining burn-time readings. The separate `boiler-scada` project starts water/fuel pumps from a
   kinetic battery, switches to steam self-power with battery charging, and selects a separate drain pump on STOP until
-  every configured burner is empty. Feed and drain pumps have separate, mutually interlocked clutch outputs.
+  every configured burner is empty. Feed and drain pumps have separate, mutually interlocked clutch outputs;
+  all five actuator channels use individual named Redstone Ports placed beside their consumers.
   Its panel shows boiler readings, per-burner fuel, cooldown and fault states.
   The development stand includes Crafts & Additions and Create: Connected.
 
@@ -175,7 +178,8 @@ headings so this page has one stable URL that can be shared outside the reposito
   normalize before foreground launch.
 
 - IDE hover displays short Kotlin signatures with explicit return types, compact documentation entries
-  and source information below the documentation. Editor and long hover scrollbars support thumb dragging
+  and source information below the documentation. KDoc retains indented code examples and Markdown hard breaks.
+  Editor and long hover scrollbars support thumb dragging
   and page clicks alongside mouse-wheel scrolling. Hover documentation and Go to Declaration resolve
   platform callback overloads to their exact attached source, including callbacks with a receiver.
   Unknown references color their complete identifier; errors and warnings underline their exact source ranges.

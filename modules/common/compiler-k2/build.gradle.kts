@@ -2145,3 +2145,19 @@ tasks.register<Test>("generateSequencesConformanceArtifact") {
         systemProperty("compukter.vm.sequencesArtifact.$fixture", artifact.get().asFile.absolutePath)
     }
 }
+
+tasks.register<Test>("compileSpaceTelemetryExample") {
+    group = "verification"
+    description = "Compiles the space telemetry example against the actual Cosmonautics addon bundle."
+    dependsOn(tasks.jar)
+    useJUnitPlatform()
+    testClassesDirs = sourceSets.test.get().output.classesDirs
+    classpath = sourceSets.test.get().runtimeClasspath
+    filter.includeTestsMatching("*space telemetry example compiles against the actual addon bundle*")
+    val bundle = providers.gradleProperty("compuktersCosmonauticsGuestApiBundle")
+    inputs.file(bundle)
+    inputs.dir(rootProject.file("examples/space-telemetry/src"))
+    inputs.file(workerJar)
+    systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
+    bundle.orNull?.let { systemProperty("compukters.cosmonauticsTelemetryBundle", file(it).absolutePath) }
+}
