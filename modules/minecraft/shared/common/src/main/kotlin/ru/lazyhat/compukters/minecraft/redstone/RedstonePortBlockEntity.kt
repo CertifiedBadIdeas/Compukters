@@ -32,6 +32,21 @@ open class RedstonePortBlockEntity(
             }
         }
 
+    /** Packed world-face levels for rendering only; never persisted as device state. */
+    @Volatile
+    var indicatorLevels: Int = 0
+        private set
+
+    fun indicatorLevel(direction: Direction): Int = (indicatorLevels ushr (direction.ordinal * 4)) and 15
+
+    fun acceptIndicatorLevels(value: Int) {
+        indicatorLevels = value and 0xFFFFFF
+        val client = level
+        if (client != null && client.isClientSide) {
+            client.sendBlockUpdated(blockPos, blockState, blockState, 2)
+        }
+    }
+
     fun output(direction: Direction): Int =
         signals.output(localSide(blockState.getValue(BlockStateProperties.HORIZONTAL_FACING), direction).ordinal)
 
@@ -46,6 +61,16 @@ open class RedstonePortBlockEntity(
                 server.getSignal(blockPos.relative(direction), direction)
             },
         )
+        var next = 0
+        Direction.entries.forEach { direction ->
+            val side = localSide(facing, direction).ordinal
+            val intensity = maxOf(signals.input(side), signals.output(side) and 15)
+            next = next or (intensity shl (direction.ordinal * 4))
+        }
+        if (next != indicatorLevels) {
+            indicatorLevels = next
+            server.sendBlockUpdated(blockPos, blockState, blockState, 2)
+        }
     }
 
     override fun setRemoved() {
