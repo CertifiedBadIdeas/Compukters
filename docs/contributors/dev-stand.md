@@ -1,7 +1,7 @@
 ---
 layout: default
 title: All-addon development stand
-description: Build and test Create, Sable, Propulsion and Aeronautics together.
+description: Build and test Create, Crafts & Additions, Sable, Propulsion and Aeronautics together.
 section: contributors
 permalink: /DEV-STAND/
 ---
@@ -13,8 +13,10 @@ It pins Minecraft 1.21.1 and NeoForge 21.1.252 with the following runtime:
 
 | Mod | Version |
 | --- | --- |
-| Compukters + Compukters: Create + Compukters: Sable + Compukters: Propulsion | Current checkout |
+| Compukters + Create/Crafts & Additions/Sable/Propulsion integrations | Current checkout |
 | Create | 6.0.10 |
+| Create: Crafts & Additions | 1.7.2 |
+| Create: Connected | 1.3.3 |
 | Sable | 2.0.6 |
 | Aeronautics bundle (Aeronautics, Simulated, Offroad) | 1.3.2 |
 | Create Propulsion: Simulated | 1.1.5 |
@@ -24,7 +26,8 @@ Pinned Modrinth versions: [Aeronautics 44pLdPGg](https://modrinth.com/mod/create
 Aeronautics 1.3.2 includes the upstream JEI compatibility fix; the older 1.3.1 bundle fails with recent JEI versions.
 The exact bundled Aeronautics mods and Sable libraries are extracted for the Loom dev classpath; no separate versions
 of Simulated/Offroad are selected. This stand has no distributable umbrella JAR.
-The main mod has no upstream physics dependency; the three Compukters addons remain independent.
+The main mod has no upstream physics dependency; the four Compukters addons remain independent.
+The [boiler SCADA example](https://github.com/CertifiedBadIdeas/Compukters/tree/dev/examples/boiler-scada) uses Crafts & Additions liquid burners and the Connected kinetic battery.
 
 For an interactive client from the repository root:
 

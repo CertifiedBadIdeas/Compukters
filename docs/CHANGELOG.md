@@ -13,6 +13,12 @@ headings so this page has one stable URL that can be shared outside the reposito
 
 ## 0.6.0 — In development
 
+- The Crafts & Additions integration exposes named liquid Blaze Burners with atomic fuel quantity, capacity,
+  heat and remaining burn-time readings. The separate `boiler-scada` project starts water/fuel pumps from a
+  kinetic battery, switches to steam self-power with battery charging, and reverses the fuel pump on STOP until
+  every configured burner is empty. Its panel shows boiler readings, per-burner fuel, cooldown and fault states.
+  The development stand includes Crafts & Additions and Create: Connected.
+
 - Guest Kotlin enums expose immutable `EnumType.entries` in declaration order, including empty enums and enums from platform/addon libraries. Indexing, iteration, membership and IDE completion share the typed `EnumEntries<E>` API.
 
 - Joining a peripheral network assigns unnamed devices unique numbered names such as `display_1`;
