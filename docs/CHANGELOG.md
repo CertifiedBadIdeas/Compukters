@@ -143,7 +143,7 @@ headings so this page has one stable URL that can be shared outside the reposito
   IDE controls share an outlined neutral style, with vertically centered labels in toolbars, dialogs, project navigation
   and status/search bars. Hover and completion popups reserve space around every text row. Floating IDE windows
   share subtle borders and rounded corners; the embedded terminal shares the standalone terminal background
-  and IDE window chrome and focus accent.
+  and IDE window chrome and focus accent. Floating windows also cover native block item icons in underlying controls.
   Attached addon sources have a separate bounded allowance, so bundled library sources do not exhaust it.
   Closed IDE screens ignore late ticks during screen transitions and client shutdown.
 

@@ -235,6 +235,14 @@ internal class IdeScreen(
         private val graphics: GuiGraphics,
         private val viewport: CompuktersUiViewport,
     ) : IdeCanvas {
+        private var currentLayer = 0
+
+        override fun layer(zIndex: Int) {
+            graphics.flush()
+            graphics.pose().translate(0f, 0f, (zIndex - currentLayer).toFloat())
+            currentLayer = zIndex
+        }
+
         override fun fill(
             bounds: IdeRect,
             color: Int,
@@ -253,12 +261,9 @@ internal class IdeScreen(
                 val stack =
                     net.minecraft.world.item
                         .ItemStack(item)
-                graphics.pose().pushPose()
-                graphics.pose().translate(draw.bounds.left.toFloat(), draw.bounds.top.toFloat(), 0f)
-                val scale = minOf(draw.bounds.width, draw.bounds.height) / 16f
-                graphics.pose().scale(scale, scale, 1f)
-                graphics.renderItem(stack, 0, 0)
-                graphics.pose().popPose()
+                withIdeItemIconTransform(graphics.pose(), draw.bounds) {
+                    graphics.renderItem(stack, 0, 0)
+                }
                 return
             }
 

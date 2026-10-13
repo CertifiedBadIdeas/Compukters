@@ -25,6 +25,9 @@ import ru.lazyhat.compukters.impl.ui.CompuktersUiViewport
 import ru.lazyhat.compukters.lang.runtime.vm.TerminalState
 
 interface IdeCanvas {
+    /** Starts a shared drawing layer, including native item rendering. */
+    fun layer(zIndex: Int) = Unit
+
     fun fill(
         bounds: IdeRect,
         color: Int,
@@ -58,11 +61,19 @@ class IdeRenderOperation(
 fun executeIdeRenderOperations(
     operations: MutableList<IdeRenderOperation>,
     terminalVisible: Boolean,
+    beginLayer: (Int) -> Unit = {},
     renderTerminal: () -> Unit,
 ) {
     if (terminalVisible) operations += IdeRenderOperation(IDE_TERMINAL_OVERLAY_Z, renderTerminal)
     operations.sortBy(IdeRenderOperation::zIndex)
-    operations.forEach { it.draw() }
+    var currentLayer: Int? = null
+    operations.forEach { operation ->
+        if (currentLayer != operation.zIndex) {
+            beginLayer(operation.zIndex)
+            currentLayer = operation.zIndex
+        }
+        operation.draw()
+    }
 }
 
 object IdeFramePainter {
@@ -95,7 +106,7 @@ object IdeFramePainter {
         }
         model.icons.forEach { draw -> operations += IdeRenderOperation(draw.zIndex) { canvas.icon(draw) } }
         model.text.forEach { draw -> operations += IdeRenderOperation(draw.zIndex) { canvas.text(draw) } }
-        executeIdeRenderOperations(operations, frame.terminalVisible) { terminalOverlay(frame, canvas, nowMillis) }
+        executeIdeRenderOperations(operations, frame.terminalVisible, canvas::layer) { terminalOverlay(frame, canvas, nowMillis) }
     }
 
     private fun terminalOverlay(
