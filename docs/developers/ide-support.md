@@ -273,12 +273,15 @@ and `type error after supplementary character keeps UTF-16 range`; `AnalysisProt
 
 **Status:** Supported.
 
-Typing `(` in code automatically opens argument information; strings and comments are excluded.
+Typing `(` or `,` in code automatically opens argument information; strings and comments are excluded.
 Ctrl+P also opens a call-anchored popup for the innermost call, lists bounded and deterministic K2-resolved
 overload signatures, and highlights the active positional, named, or vararg parameter. The popup follows edits
 and caret movement, wraps long signatures while keeping the active parameter visible, rejects stale snapshot results,
-and closes on Escape, focus loss, file changes, or when
-the caret leaves a call.
+and allows Ctrl+Up/Down overload selection without source edits. Selection persists while refreshing the same call.
+The active parameter's `@param` description is resolved through the same source/attached-library lookup as hover,
+transmitted under the negotiated detail byte limit, and rendered with shared English KDoc presentation. Descriptions
+use at most six rows with an ellipsis when the available viewport cannot show the complete body. The popup
+closes on Escape, focus loss, file changes, or when the caret leaves a call.
 
 **Evidence:**
 [`ParameterInfoQueryTest`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/ide-analysis-k2/src/test/kotlin/ru/lazyhat/compukters/ide/analysis/k2/query/ParameterInfoQueryTest.kt),

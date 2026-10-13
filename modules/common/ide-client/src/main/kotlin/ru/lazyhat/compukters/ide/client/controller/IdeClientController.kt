@@ -745,6 +745,12 @@ class IdeClientController(
                 publishWorkspace()
             }
 
+            is IdeCommand.SelectParameterInfo -> {
+                analysisCoordinator?.selectParameterInfo(command.delta)
+                refreshAnalysisState()
+                publishWorkspace()
+            }
+
             IdeCommand.DismissParameterInfo -> {
                 analysisCoordinator?.dismissParameterInfo()
                 refreshAnalysisState()
@@ -3816,7 +3822,7 @@ class IdeClientController(
             sourceOverlays(),
         )
         val opening = active.document.caretOffset - 1
-        if (insertedText?.contains('(') == true && opening >= 0 && active.document.charAt(opening) == '(' &&
+        if (insertedText?.lastOrNull() in listOf('(', ',') && opening >= 0 && active.document.charAt(opening) in listOf('(', ',') &&
             ru.lazyhat.compukters.ide.client.search
                 .lexicalTokenAt(
                     active.document,

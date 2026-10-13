@@ -119,8 +119,11 @@ Clicking that token still places the caret normally. The Problems window and **F
 
 Argument information opens automatically when you type `(` in Kotlin code, and **Ctrl+P** opens it manually
 inside a call. The resolved signatures follow the caret; the current positional, named or vararg parameter is
-highlighted. Long signatures wrap while keeping the current parameter visible. **Esc** dismisses the popup.
-Typing `(` inside strings or comments does not open argument information.
+highlighted. **Ctrl+↑ / Ctrl+↓** cycles through overloads without moving the caret; the choice is retained
+while you edit the same call. The selected overload shows the current parameter's English KDoc when available,
+with the same code/link formatting as hover. Long signatures wrap while keeping the current parameter visible;
+long parameter descriptions are bounded with an ellipsis. **Esc** dismisses the popup, and typing an argument
+separator can reopen it. Typing `(` or `,` inside strings or comments does not open argument information.
 
 ## UI scale
 

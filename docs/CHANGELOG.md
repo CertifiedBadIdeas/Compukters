@@ -184,7 +184,8 @@ headings so this page has one stable URL that can be shared outside the reposito
   platform callback overloads to their exact attached source, including callbacks with a receiver.
   Unknown references color their complete identifier; errors and warnings underline their exact source ranges.
   Hovering a marked token shows its problems together, preserving source editing and horizontal scrolling.
-  Argument hints open when typing a call or pressing Ctrl+P, wrap long signatures and emphasize the current parameter.
+  Argument hints open when typing a call or argument separator, or pressing Ctrl+P; they wrap long signatures,
+  emphasize the current parameter and show its English KDoc. Ctrl+Up/Down selects overloads without moving the caret.
   IDE controls share an outlined neutral style, with vertically centered labels in toolbars, dialogs, project navigation
   and status/search bars. Hover and completion popups reserve space around every text row. Floating IDE windows
   share subtle borders and rounded corners; the embedded terminal shares the standalone terminal background

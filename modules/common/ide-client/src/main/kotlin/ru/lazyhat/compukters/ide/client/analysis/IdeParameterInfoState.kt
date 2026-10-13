@@ -32,13 +32,29 @@ class IdeParameterInfoState(
     val callRange: EditorRange,
     items: List<ParameterInfoItem>,
     maximumItems: Int,
+    val selectedIndex: Int = 0,
 ) {
     val items: List<ParameterInfoItem> = Collections.unmodifiableList(items.toList())
+
+    val selectedItem: ParameterInfoItem get() = items[selectedIndex]
+
+    fun select(delta: Int): IdeParameterInfoState =
+        IdeParameterInfoState(
+            identity,
+            path,
+            documentRevision,
+            caretOffsetUtf16,
+            callRange,
+            items,
+            items.size,
+            Math.floorMod(selectedIndex + delta % items.size, items.size),
+        )
 
     init {
         require(documentRevision >= 0) { "parameter-info document revision must not be negative" }
         require(caretOffsetUtf16 in callRange.startUtf16..callRange.endUtf16) { "parameter-info caret is outside its call" }
         require(maximumItems > 0) { "parameter-info item limit must be positive" }
+        require(selectedIndex in this.items.indices) { "selected parameter signature is outside items" }
         require(this.items.isNotEmpty()) { "parameter-info must not be empty" }
         require(this.items.size <= maximumItems) { "parameter-info item count exceeds limit" }
     }

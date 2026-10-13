@@ -339,8 +339,17 @@ internal class IdeEditorPopups(
         val maximumRows = minOf(20, (availableHeight - 12) / font.cellHeight)
         if (maximumRows < 2) return
         val columns = minOf(80, ((geometry.editor.width - 24) / font.cellWidth).coerceAtLeast(1))
-        val items = info.items.sortedByDescending { it.bestCandidate }.take(minOf(PARAMETER_INFO_VISIBLE_ROWS, maximumRows - 1))
-        val rowsPerItem = ((maximumRows - 1) / items.size).coerceAtLeast(1)
+        val documentation =
+            info.selectedItem.activeParameterDocumentation
+                ?.let {
+                    IdeKDocPresentation.wrap(IdeKDocPresentation.lines(it), columns)
+                }.orEmpty()
+        val documentationRows = minOf(documentation.size, 6, (maximumRows - 3).coerceAtLeast(0))
+        val signatureRows = maximumRows - 1 - documentationRows - if (documentationRows > 0) 1 else 0
+        val visibleItems = minOf(PARAMETER_INFO_VISIBLE_ROWS, signatureRows, info.items.size)
+        val firstItem = (info.selectedIndex - visibleItems + 1).coerceAtLeast(0)
+        val items = info.items.drop(firstItem).take(visibleItems)
+        val rowsPerItem = (signatureRows / items.size).coerceAtLeast(1)
         val lines =
             items.flatMap { item ->
                 val wrapped = IdePopupText.wrap(item.signature, columns, item.signature.length)
@@ -350,13 +359,39 @@ internal class IdeEditorPopups(
                     ParameterLine(item, range, first > 0 && index == 0)
                 }
             }
-        val header = "Parameters · Ctrl+P" + if (info.items.size > 1) " · ${info.items.size} signatures" else ""
+        val header =
+            popupText(
+                "Parameters · Ctrl+P" +
+                    if (info.items.size > 1) {
+                        " · ${info.selectedIndex + 1}/${info.items.size} · Ctrl+↑/↓"
+                    } else {
+                        ""
+                    },
+            )
+        val visibleDocumentation = documentation.take(documentationRows).toMutableList()
+        if (documentation.size > documentationRows && visibleDocumentation.isNotEmpty()) {
+            visibleDocumentation[visibleDocumentation.lastIndex] = IdeDocumentationLine(listOf(IdeDocumentationSpan("…", IdeColors.MUTED)))
+        }
         val width =
             maxOf(
                 SEMANTIC_POPUP_MINIMUM_WIDTH,
-                maxOf(visualColumns(header), lines.maxOf { visualColumns(it.text) + if (it.truncated) 2 else 0 }) * font.cellWidth + 12,
+                maxOf(
+                    visualColumns(header),
+                    visibleDocumentation.maxOfOrNull { visualColumns(it.text) } ?: 0,
+                    lines.maxOf {
+                        visualColumns(it.text) +
+                            if (it.truncated) 2 else 0
+                    },
+                ) *
+                    font.cellWidth +
+                    12,
             )
-        val popup = geometry.anchoredPopup(anchor, width, (lines.size + 1) * font.cellHeight + 12)
+        val popup =
+            geometry.anchoredPopup(
+                anchor,
+                width,
+                (lines.size + 1 + documentationRows + if (documentationRows > 0) 1 else 0) * font.cellHeight + 12,
+            )
         semanticPopupPanel(popup.bounds)
         output.code(
             IdeTextKind.ParameterInfoHeader,
@@ -375,7 +410,7 @@ internal class IdeEditorPopups(
                 output.code(IdeTextKind.ParameterInfo, "… ", x, y, IdeColors.MUTED, popup.bounds, z = Z_POPUP_TEXT)
                 x += 2 * font.cellWidth
             }
-            val color = if (item.bestCandidate) IdeColors.TEXT else IdeColors.MUTED
+            val color = if (item === info.selectedItem) IdeColors.TEXT else IdeColors.MUTED
             val parameter = item.activeParameter?.takeIf { it.intersects(line.range) }
             if (parameter == null) {
                 output.code(IdeTextKind.ParameterInfo, line.text, x, y, color, popup.bounds, z = Z_POPUP_TEXT)
@@ -407,6 +442,14 @@ internal class IdeEditorPopups(
                     popup.bounds,
                     z = Z_POPUP_TEXT,
                 )
+            }
+        }
+        visibleDocumentation.forEachIndexed { index, line ->
+            var x = popup.bounds.left + 6
+            val y = popup.bounds.top + 6 + font.glyphDrawOffsetY + (lines.size + 2 + index) * font.cellHeight
+            for (span in line.spans) {
+                output.code(IdeTextKind.ParameterInfo, span.text, x, y, span.color, popup.bounds, z = Z_POPUP_TEXT)
+                x += visualColumns(span.text) * font.cellWidth
             }
         }
     }

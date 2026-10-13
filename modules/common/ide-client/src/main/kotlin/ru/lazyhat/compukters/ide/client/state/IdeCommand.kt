@@ -258,6 +258,10 @@ sealed interface IdeCommand {
 
     data object DismissParameterInfo : IdeCommand
 
+    data class SelectParameterInfo(
+        val delta: Int,
+    ) : IdeCommand
+
     data class SourcePointer(
         val offsetUtf16: Int?,
         val controlDown: Boolean,
