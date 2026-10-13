@@ -353,6 +353,16 @@ registerKotlinVmConformance(
 )
 
 registerKotlinVmConformance(
+    taskName = "testKotlinOrbitalPointingVmConformance",
+    taskDescription = "Executes the shipped prograde controller feedback and numerical checks in the pinned VM.",
+    artifactTask = ":compiler-k2:generateOrbitalPointingConformanceArtifact",
+    artifact = project(":compiler-k2").layout.buildDirectory.file("generated/conformance/kotlin-orbital-pointing.cpkt"),
+    cargoTargetDirectory = ".toolchain/build/cargo/compiler-k2-math-conformance",
+    artifactEnvironmentVariable = "COMPUKTER_KOTLIN_ORBITAL_POINTING_ARTIFACT",
+    conformanceScenario = "orbital-pointing",
+)
+
+registerKotlinVmConformance(
     taskName = "testKotlinRotationsVmConformance",
     taskDescription = "Executes rotation factories, shortest-arc interpolation and long seeded chains.",
     artifactTask = ":compiler-k2:generateRotationsConformanceArtifact",
