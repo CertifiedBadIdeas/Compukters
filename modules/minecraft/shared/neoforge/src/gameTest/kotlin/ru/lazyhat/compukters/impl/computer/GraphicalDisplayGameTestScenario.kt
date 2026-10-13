@@ -50,6 +50,16 @@ internal object GraphicalDisplayGameTestScenario {
             "overlay created an uninitialized screen",
         )
         val inheritedNetwork = PeripheralNetworkGameTestFixtures.bind(helper, computerPosition, first)
+        helper.assertTrue(
+            ru.lazyhat.compukters.minecraft.peripheral.PeripheralConfiguratorServer
+                .inspect(
+                    helper.level,
+                    ru.lazyhat.compukters.minecraft.peripheral
+                        .PeripheralConfiguratorContext(helper.absolutePos(first), Direction.NORTH),
+                    ru.lazyhat.compukters.minecraft.peripheral.PeripheralConfiguratorMode.EDIT_DEVICE,
+                ).targetName == "display_1",
+            "display network join did not persist its default screen name",
+        )
         val player = helper.makeMockServerPlayerInLevel()
         val stack = ItemStack(CompuktersRegistry.PERIPHERAL_CONFIGURATOR_ITEM.get())
         val selections = mutableMapOf<String, String>()
