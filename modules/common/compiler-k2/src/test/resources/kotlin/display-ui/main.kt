@@ -124,6 +124,8 @@ fun main() {
     }
     val screen = GraphicalDisplay.named("screen")
     repeat(50) { renderDashboard(scada, screen) }
+    repeat(96) { history.add((it - 48).toFloat()) }
+    repeat(2) { renderDashboard(scada, screen) }
     println("display ui ok")
 }
 
