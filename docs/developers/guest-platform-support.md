@@ -509,7 +509,8 @@ reconnecting controls as the SCADA example does.
 
 Evidence: `testKotlinDisplayUiVmConformance` executes layout, viewport boundaries, overlays, disabled/passive
 blocking, capture, local coordinates, cancellation and callback failures. It also records raster host calls
-for nested enabled/disabled buttons and 50 drawing passes of a SCADA-shaped layout with telemetry widgets.
+for nested enabled/disabled buttons and 50 framed drawing passes of a SCADA-shaped layout with telemetry
+widgets, called through a separate dashboard function to exercise its library-call depth.
 `DisplayPointerTest` covers queue
 limits/coalescing, independent players, release/re-entry, expiry and clipping. `DisplayHostStateTest` checks
 capability revisions, little-endian input and clipped drawing. The graphical display GameTest exercises

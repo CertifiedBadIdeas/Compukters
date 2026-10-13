@@ -304,6 +304,7 @@ class CompuktersFir2IrPipelineTest {
                 },
                 "dependent ordinary factories and parameters must reuse the original specialization",
             )
+            assertEquals(64u, decoded.manifest.maximumCallDepth)
             val largestFrameBytes =
                 decoded.modules
                     .flatMap { it.functions }

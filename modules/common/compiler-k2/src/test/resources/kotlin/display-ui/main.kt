@@ -123,6 +123,10 @@ fun main() {
         }
     }
     val screen = GraphicalDisplay.named("screen")
-    repeat(50) { scada.draw(screen) }
+    repeat(50) { renderDashboard(scada, screen) }
     println("display ui ok")
+}
+
+fun renderDashboard(ui: DisplayUi, screen: GraphicalDisplay) {
+    screen.frame { ui.draw(this) }
 }

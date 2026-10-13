@@ -375,7 +375,9 @@ rejected before artifact publication`, `supported constructor references lower t
 **Status:** Partial.
 
 Direct calls and local function references support recursion within the VM call-depth and execution
-quotas. `testKotlinLocalFunctionsVmConformance` exercises recursive local calls and reference invocation;
+quotas. Newly compiled programs declare a maximum of 64 active calls, including library calls;
+this matches the native runtime profile. Required frame storage is calculated for that depth and
+checked at admission, and exceeding the call-depth limit still traps. `testKotlinLocalFunctionsVmConformance` exercises recursive local calls and reference invocation;
 other recursive forms retain their surrounding signature and dispatch restrictions.
 
 **Related work:** not scheduled

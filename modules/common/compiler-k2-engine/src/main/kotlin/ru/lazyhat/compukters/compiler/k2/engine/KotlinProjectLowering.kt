@@ -3736,7 +3736,8 @@ internal object KotlinProjectLowering {
                         },
             )
         val modules = listOf(app, library)
-        val maximumCallDepth = 16u
+        // Match the bounded runtime profile; ordinary nested UI and library calls exceed 16 frames.
+        val maximumCallDepth = 64u
         val usesTasks = blocks.any { block -> block.instructions.any { it is Instruction.TaskSpawn || it is Instruction.TaskJoin } }
         val usesI64StringConversion =
             blocks.any { block ->

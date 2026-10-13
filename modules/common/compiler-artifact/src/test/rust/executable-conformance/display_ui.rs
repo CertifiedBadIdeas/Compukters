@@ -21,6 +21,9 @@ pub(super) fn execute() {
     ];
     // Only raster operations used by this fixture are admitted; unexpected operations fail schema validation.
     let mut display_operations = vec![OperationSchema::asynchronous(&[], HostValueType::Unit); 21];
+    for index in [14, 15, 16] {
+        display_operations[index] = OperationSchema::asynchronous(&[HostValueType::I32], HostValueType::Unit);
+    }
     display_operations[9] =
         OperationSchema::asynchronous(&[HostValueType::I32; 4], HostValueType::Unit);
     display_operations[11] =
@@ -87,7 +90,7 @@ pub(super) fn execute() {
                                 })
                                 .collect::<Vec<_>>(),
                         ),
-                        9 | 19 | 20 => {}
+                        9 | 14 | 15 | 16 | 19 | 20 => {}
                         value => panic!("unexpected display operation {value}"),
                     }
                 }
