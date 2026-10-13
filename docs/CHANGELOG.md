@@ -13,7 +13,10 @@ headings so this page has one stable URL that can be shared outside the reposito
 
 ## 0.6.0 — In development
 
-- Added read-only Cosmonautics space telemetry for Guest Kotlin: flight phase, linked planet parameters and Deep Space instance orbital observations, with a small telemetry example.
+- Added read-only Cosmonautics space telemetry for Guest Kotlin: Deep Space membership, linked planet parameters,
+  instance orbital observations and an atomic snapshot of orbital guidance directions in Sable world axes.
+  Examples cover telemetry and experimental prograde pointing with a creative vector engine; launch and orbital
+  insertion remain separate work.
 
 - The addon development stand loads optional Connector, Forgified Fabric API, Sodium, Voxy and Voxy Worldgen through Gradle;
   their dependency lines can be commented out. Loom supplies Connector's clean Minecraft path and remaps every
@@ -23,9 +26,8 @@ headings so this page has one stable URL that can be shared outside the reposito
   programs and examples, including terminal events, process/compiler results and boiler telemetry. Recompile
   Guest programs against the updated platform and addon bundles. Boiler controller checks execute in the Guest VM.
 
-- Added an empty independent Cosmonautics addon scaffold and pinned Cosmonautics in the all-addon development stand;
-  Guest APIs and spacecraft controls will follow separately. The existing Crafts & Additions addon is also published
-  independently and pinned as a submodule.
+- Cosmonautics and Crafts & Additions are independent addons pinned as submodules; the all-addon development stand
+  loads their upstream dependencies.
 
 - The Crafts & Additions integration exposes named liquid Blaze Burners with atomic fuel quantity, capacity,
   heat and remaining burn-time readings. The separate `boiler-scada` project starts water/fuel pumps from a
