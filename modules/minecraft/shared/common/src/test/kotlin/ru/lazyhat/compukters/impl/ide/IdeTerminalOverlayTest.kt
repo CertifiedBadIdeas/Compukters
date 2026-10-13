@@ -12,7 +12,16 @@
 
 package ru.lazyhat.compukters.impl.ide
 
+import ru.lazyhat.compukters.compiler.worker.protocol.Hash256
+import ru.lazyhat.compukters.ide.client.target.IdeTargetId
+import ru.lazyhat.compukters.ide.client.target.IdeTargetProfileId
+import ru.lazyhat.compukters.impl.ide.target.IdeTargetReference
+import ru.lazyhat.compukters.impl.ide.target.IdeTargetTerminalClient
 import ru.lazyhat.compukters.impl.ide.target.IdeTargetTerminalState
+import ru.lazyhat.compukters.impl.ide.target.IdeTerminalCommand
+import ru.lazyhat.compukters.impl.ide.target.IdeTerminalKeyInput
+import ru.lazyhat.compukters.impl.ide.target.IdeTerminalOpened
+import ru.lazyhat.compukters.impl.ide.target.IdeTerminalTextInput
 import ru.lazyhat.compukters.impl.terminal.TerminalFontProfile
 import ru.lazyhat.compukters.impl.terminal.TerminalReplica
 import ru.lazyhat.compukters.lang.runtime.vm.TerminalCell
@@ -26,6 +35,31 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 internal class IdeTerminalOverlayTest {
+    @Test
+    fun `overlay copies selected cells locally while paste and unselected Ctrl C reach input`() {
+        val sent = mutableListOf<IdeTerminalCommand>()
+        val client = IdeTargetTerminalClient { sent += it }
+        val target = IdeTargetReference(IdeTargetId("terminal-test"), IdeTargetProfileId(Hash256.zero()))
+        client.setTarget(target)
+        val overlay = IdeTerminalOverlayController(client)
+        overlay.show()
+        val generation = (client.state() as IdeTargetTerminalState.Opening).generation
+        client.accept(IdeTerminalOpened(generation, UUID.randomUUID(), 1, terminalState(0)))
+        val grid = IdeRect(10, 20, 10 + 51 * TerminalFontProfile.cellWidth, 20 + 19 * TerminalFontProfile.cellHeight)
+        assertTrue(overlay.press(grid, 10.0, 20.0, 0))
+        overlay.release()
+        var copied = ""
+        val before = sent.size
+        assertTrue(overlay.keyPressed(IdeKeyInput(IdeKeyCode.C, IdeModifier.CONTROL), "") { copied = it })
+        assertEquals(" ", copied)
+        assertEquals(before, sent.size)
+        overlay.keyPressed(IdeKeyInput(IdeKeyCode.ESCAPE), "")
+        overlay.keyPressed(IdeKeyInput(IdeKeyCode.C, IdeModifier.CONTROL), "")
+        assertTrue(sent.last() is IdeTerminalKeyInput)
+        overlay.keyPressed(IdeKeyInput(IdeKeyCode.V, IdeModifier.CONTROL, paste = true), "λ😀")
+        assertEquals("λ😀", (sent.last() as IdeTerminalTextInput).text)
+    }
+
     @Test
     fun `JetBrains Mono overlay keeps the exact grid without a dedicated footer`() {
         val content = IdeRect(0, 0, 640, 360)

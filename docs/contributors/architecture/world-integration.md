@@ -30,7 +30,10 @@ thread and only while the viewer still refers to the same machine epoch.
 
 The raw terminal is a synchronous Rust device: cell writes, positional writes, rectangular fills, colors, cursor
 changes, and input polling never cross into Minecraft. The authoritative fixed 51x19 cell grid and its replication
-journal live in the machine; Minecraft only renders full states or ordered deltas. Waiting for an absent input event
+journal live in the machine, alongside a bounded 512-row history of scrolled cells. History survives
+viewer close/reopen and hibernation; reboot replaces it. Screen clear preserves history. Full states
+include history, and ordered append/replace changes preserve it through journal compaction. Minecraft
+owns only history navigation, rectangular selection and clipboard interaction over replicated cells. Waiting for an absent input event
 and foreground process execution are explicit suspension points. Kotlin guests consume ordered raw Text and Key
 events; there is no compatibility line buffer or second input protocol. The Guest Terminal facade returns an owned event snapshot and finishes its native event before returning,
 so starting an interactive child cannot retain that event ownership. The server host never

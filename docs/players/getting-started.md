@@ -59,6 +59,14 @@ running shell session. Long commands scroll horizontally while editing; input is
 Ctrl+U clears the line. Ctrl+C cancels input at the prompt or stops the foreground program and its nested work,
 returning to the shell. Files already saved remain intact; interruption does not save an editor's unsaved buffer.
 
+The terminal retains the last **512 scrolled rows**, available when you reopen it. Scroll with the mouse
+wheel or **Shift+PageUp/PageDown**; **Shift+Home/End** jumps to the oldest output or the live screen.
+Drag with the left mouse button to select any rectangular area, then press **Ctrl+C** to copy it.
+**Escape** clears the selection. Without a selection, Ctrl+C still stops the running program;
+**Ctrl+Shift+C** is always a local copy shortcut. **Ctrl+V** pastes into program input and returns to
+the live screen. The same controls work in the IDE target terminal. Screen clear preserves history;
+reboot starts a fresh terminal.
+
 Run `cmatrix` for green terminal rain, or `cmatrix 1` for a shorter delay between animation frames.
 The optional delay is 1–20 server ticks (default 2), in addition to time spent drawing under the VM budget.
 Press **Ctrl+C** to stop the animation and return to the shell. `help cmatrix` shows the command usage.

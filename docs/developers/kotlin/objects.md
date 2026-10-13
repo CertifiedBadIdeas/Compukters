@@ -191,8 +191,49 @@ heap. IDE `nullable callbacks resolve with source and metadata inputs` covers bo
 Generic class methods and custom accessors can return callbacks and local function references with
 concrete owner capture layouts. Capturing `this` keeps the same owner alive and observes field mutations;
 captured method locals follow the ordinary shared-cell rules. See [local functions](functions.md#local-functions-and-captures)
-and `testKotlinGenericClassCapturesVmConformance` for executed evidence. Generic constructor bodies, backing-field
-initializers and init blocks with lexical captures remain outside that extension.
+and `testKotlinGenericClassCapturesVmConformance` for executed evidence. Primary constructor bodies, backing-field
+initializers and init blocks of ordinary generic classes also support lexical captures as described below.
+
+## Captures during generic class initialization
+
+**Status:** Supported for ordinary classes in the existing generic class subset.
+
+Primary constructor bodies, initialized backing fields and `init` blocks specialize their lexical symbols
+and types together for each concrete owner. Lambdas and named local helpers can capture constructor
+parameters, `this`, and shared mutable locals. Local generic helpers specialize before capture layout;
+direct calls and escaping references use the existing closure and capture-cell representation.
+
+```kotlin
+class Holder<T>(initial: T) {
+    var value: T = initial
+    val snapshot: () -> T = { initial }
+    val read: () -> T = { value }
+}
+```
+
+`snapshot` retains the parameter value; `read` retains the same owner and observes later field writes.
+Different instances and concrete type specializations keep separate capture cells. Constructor callback
+defaults can capture earlier parameters through the same concrete initialization copy. Constructor
+arguments evaluate once in source order; properties and `init` blocks execute in declaration order.
+Existing field-initialization rules still apply: this extension does not admit uninitialized body `val`
+properties assigned later in `init`, secondary constructors, generic superclass inheritance, or lexical
+captures in value-class initialization.
+
+Captured owners and values remain live under ordinary managed GC. Each materialized closure/cell uses
+the existing metered heap allocations; initialization adds no special runtime storage or VM instruction.
+Concrete dependencies use the existing 256-variant bounds and lexical expansion depth limit.
+
+**Evidence:** `MinimalScriptLoweringTest`, test `generic initialization captures preserve concrete symbols
+order and ownership`, with deterministic artifact checking, and `testKotlinGenericInitializerCapturesVmConformance`
+execute [`generic-initializer-captures/main.kt`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/compiler-k2/src/test/resources/kotlin/generic-initializer-captures/main.kt).
+The scenario covers all twelve primitive families, nullable/reference/MFVC values, parameter versus owner
+captures, local generic helpers and defaults, independent mutable cells, recursive construction, nested
+generic dependencies, explicit argument snapshots, declaration order and retained callbacks across 200 allocations of 12 KiB arrays
+on a 64 KiB heap. IDE test `generic initialization captures resolve with source and metadata inputs`
+checks both platform input modes. Compiler test `expanding generic initialization reports bounded target diagnostics`
+checks that type-growing recursive construction stops before publishing an artifact.
+
+**Related work:** [#769](https://github.com/CertifiedBadIdeas/Compukters/issues/769).
 
 ## Sealed interfaces, data classes, and stateless enums
 

@@ -91,7 +91,7 @@ internal class FfmBridge private constructor(
 
     override fun openTerminalTransport(): TerminalWireTransport =
         ReusableTerminalWireTransport(
-            maximumBytes = maximumOutcomeBytes,
+            maximumBytes = TerminalHistoryLimits.NATIVE_BUFFER_BYTES,
             fullStateCall =
                 TerminalFullStateCall { handle, output, maximum, written ->
                     terminalFullStateHandle.invokeExact(handle, output, maximum, written) as Int
@@ -1109,7 +1109,7 @@ internal class FfmBridge private constructor(
                     terminalTextHandle =
                         downcall(FfmAbiFunction.TERMINAL_TEXT),
                 ).also { bridge ->
-                    if (bridge.abiVersion() != 23) throw VmBridgeException("unsupported Compukter FFM ABI")
+                    if (bridge.abiVersion() != 24) throw VmBridgeException("unsupported Compukter FFM ABI")
                 }
             } catch (error: Throwable) {
                 arena.close()
