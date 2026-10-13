@@ -42,6 +42,10 @@ fn main() {
             let mut session = k2_stdio_session_with_heap("COMPUKTER_KOTLIN_BOILER_CONTROL_ARTIFACT", 1, 256 * 1024);
             k2_assert_prints(&mut session, ["boiler controller ok\n"], 1024);
         },
+        "orbital-pointing" => {
+            let mut session = k2_stdio_session_with_heap("COMPUKTER_KOTLIN_ORBITAL_POINTING_ARTIFACT", 1, 256 * 1024);
+            k2_assert_prints(&mut session, ["orbital pointing ok\n"], 4096);
+        },
         "rotations" => {
             let mut session = k2_stdio_session_with_heap("COMPUKTER_KOTLIN_ROTATIONS_ARTIFACT", 1, 256 * 1024);
             k2_assert_prints(&mut session, ["rotations ok\n"], 1024);

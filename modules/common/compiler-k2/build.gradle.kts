@@ -2090,6 +2090,8 @@ tasks.withType<org.jmailen.gradle.kotlinter.tasks.ConfigurableKtLintTask>().conf
     if (name == "formatKotlinTest" || name == "lintKotlinTest") {
         source(rootProject.fileTree("examples/boiler-scada/src") { include("**/*.kt") })
         source(file("src/test/resources/kotlin/boiler-control/ControllerScenarios.kt"))
+        source(rootProject.fileTree("examples/orbital-prograde/src") { include("**/*.kt") })
+        source(file("src/test/resources/kotlin/orbital-pointing/Scenarios.kt"))
     }
 }
 
@@ -2175,4 +2177,41 @@ tasks.register<Test>("generateSequenceBenchmarkArtifacts") {
     outputs.dir(sequenceBenchmarkArtifacts)
     systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
     systemProperty("compukter.bench.sequencesOutput", sequenceBenchmarkArtifacts.get().asFile.absolutePath)
+}
+
+tasks.register<Test>("compileOrbitalProgradeExample") {
+    group = "verification"
+    description = "Compiles prograde guidance against the actual Cosmonautics, Sable and Propulsion bundles."
+    dependsOn(tasks.jar)
+    useJUnitPlatform()
+    testClassesDirs = sourceSets.test.get().output.classesDirs
+    classpath = sourceSets.test.get().runtimeClasspath
+    filter.includeTestsMatching("*orbital prograde example compiles against the actual addon bundles*")
+    val cosmonautics = providers.gradleProperty("compuktersCosmonauticsGuestApiBundle")
+    val sable = providers.gradleProperty("compuktersSableGuestApiBundle")
+    val propulsion = providers.gradleProperty("compuktersPropulsionGuestApiBundle")
+    inputs.files(cosmonautics, sable, propulsion)
+    inputs.dir(rootProject.file("examples/orbital-prograde/src"))
+    inputs.file(workerJar)
+    systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
+    cosmonautics.orNull?.let { systemProperty("compukters.cosmonauticsTelemetryBundle", file(it).absolutePath) }
+    sable.orNull?.let { systemProperty("compukters.sablePidBundle", file(it).absolutePath) }
+    propulsion.orNull?.let { systemProperty("compukters.propulsionPidBundle", file(it).absolutePath) }
+}
+
+val orbitalPointingArtifact = layout.buildDirectory.file("generated/conformance/kotlin-orbital-pointing.cpkt")
+tasks.register<Test>("generateOrbitalPointingConformanceArtifact") {
+    group = "verification"
+    description = "Compiles the shipped prograde controller and pure numerical feedback scenarios."
+    dependsOn(tasks.jar)
+    useJUnitPlatform()
+    testClassesDirs = sourceSets.test.get().output.classesDirs
+    classpath = sourceSets.test.get().runtimeClasspath
+    filter.includeTestsMatching("*orbital pointing controller preserves torque signs damping and convergence*")
+    inputs.file(rootProject.file("examples/orbital-prograde/src/PointingCommand.kt"))
+    inputs.file("src/test/resources/kotlin/orbital-pointing/Scenarios.kt")
+    inputs.file(workerJar)
+    outputs.file(orbitalPointingArtifact)
+    systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
+    systemProperty("compukter.vm.orbitalPointingArtifact", orbitalPointingArtifact.get().asFile.absolutePath)
 }
