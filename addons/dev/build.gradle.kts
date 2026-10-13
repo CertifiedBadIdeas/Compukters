@@ -53,6 +53,7 @@ val addonMods = mapOf(
     "create" to "compukters-create",
     "sable" to "compukters-sable",
     "propulsion" to "compukters-propulsion",
+    "cosmonautics" to "compukters-cosmonautics",
 ).mapValues { (directory, buildName) ->
     files(rootProject.file("../$directory/build/devlibs/$buildName-development-mod.jar"))
         .builtBy(gradle.includedBuild(buildName).task(":developmentModJar"))
@@ -69,8 +70,13 @@ val gameTest by sourceSets.creating
 // Select complete test archives instead of loading duplicate copies of each addon.
 gameTest.compileClasspath += sourceSets.main.get().compileClasspath + sourceSets.main.get().output
 val normalAddonPaths = addonMods.values.map { it.singleFile.absolutePath }.toSet()
-gameTest.runtimeClasspath = sourceSets.main.get().runtimeClasspath.filter { it.absolutePath !in normalAddonPaths } +
-    files(addonGameTestMods.values) + gameTest.output
+// Cosmonautics ticks its Deep Space dimension, which the vanilla GameTest server does not create.
+// Capture the paths as a local lambda argument so the deferred filter does not retain the Gradle script.
+gameTest.runtimeClasspath = normalAddonPaths.let { excludedPaths ->
+    sourceSets.main.get().runtimeClasspath.filter {
+        it.absolutePath !in excludedPaths && !it.name.startsWith("create-cosmonatics-")
+    } + files(addonGameTestMods.values) + gameTest.output
+}
 
 dependencies {
     minecraft("net.minecraft:minecraft:1.21.1")
@@ -84,6 +90,7 @@ dependencies {
     addonMods.values.forEach { runtimeOnly(it) }
     physicsMods("maven.modrinth:create-aeronautics:44pLdPGg")
     physicsMods("maven.modrinth:create-propulsion-simulated:H13U56dc")
+    physicsMods("maven.modrinth:create-cosmonatics:HuCMavv8")
     modRuntimeOnly(files(physicsMods))
     modRuntimeOnly(aeronauticsLibraries)
     modImplementation("maven.modrinth:sable:fg9dTRz9")
@@ -149,38 +156,72 @@ val verifyDevelopmentMods = tasks.register("verifyDevelopmentMods") {
         check(selectedBaseMod.singleFile.isFile) { "base development mod is missing" }
     }
 }
-val verifyPhysicsMods = tasks.register("verifyPhysicsMods") {
+val physicsIds = setOf("aeronautics_bundled", "aeronautics", "offroad", "simulated", "createpropulsion")
+fun registerPhysicsVerification(name: String, archives: FileCollection, expectedIds: Set<String>) =
+    tasks.register(name) {
+        group = "verification"
+        description = "Verifies the exact physics mod set for the selected development runtime."
+        inputs.files(archives)
+        inputs.property("expectedModIds", expectedIds)
+        doLast {
+            val ids = archives.files.flatMap { archive ->
+                ZipFile(archive).use { zip ->
+                    val metadata = checkNotNull(zip.getEntry("META-INF/neoforge.mods.toml"))
+                    val text = zip.getInputStream(metadata).bufferedReader().use { it.readText() }
+                    val mods = text.split(Regex("(?m)^\\[\\[")).filter { it.startsWith("mods]]") }
+                    check(mods.isNotEmpty()) { "no mod entries in ${archive.name}" }
+                    mods.map { section ->
+                        checkNotNull(Regex("""(?m)^\s*modId\s*=\s*["']([^"']+)["']""").find(section)) { "modId missing in ${archive.name}: $section" }.groupValues[1]
+                    }
+                }
+            }
+            check(ids.size == ids.toSet().size) { "duplicate physics mod IDs: $ids" }
+            check(ids.toSet() == expectedIds) { "incorrect physics runtime: $ids; expected $expectedIds" }
+            this.logger.lifecycle("$name: ${ids.sorted().joinToString()}")
+        }
+    }
+val verifyPhysicsMods = registerPhysicsVerification(
+    "verifyPhysicsMods", files(physicsMods, aeronauticsLibraries), physicsIds + setOf("rocketnautics", "dimensional_sable"),
+)
+val verifyGameTestPhysicsMods = registerPhysicsVerification(
+    "verifyGameTestPhysicsMods",
+    files(physicsMods, aeronauticsLibraries).filter { !it.name.startsWith("create-cosmonatics-") },
+    physicsIds,
+)
+val verifyGameTestClasspath = tasks.register("verifyGameTestClasspath") {
     group = "verification"
-    description = "Verify the exact Aeronautics bundle and Propulsion mods used by every development run."
-    val selectedPhysicsMods = files(physicsMods, aeronauticsLibraries)
-    inputs.files(selectedPhysicsMods)
+    val selectedClasspath = gameTest.runtimeClasspath
+    dependsOn(selectedClasspath)
+    inputs.files(selectedClasspath)
     doLast {
-        val ids = selectedPhysicsMods.files.map { archive ->
+        selectedClasspath.files.filter { it.extension == "jar" }.forEach { archive ->
             ZipFile(archive).use { zip ->
-                val metadata = checkNotNull(zip.getEntry("META-INF/neoforge.mods.toml"))
-                val text = zip.getInputStream(metadata).bufferedReader().use { it.readText() }
-                checkNotNull(Regex("(?m)^modId\\s*=\\s*\"([^\"]+)\"").find(text)).groupValues[1]
+                zip.getEntry("META-INF/neoforge.mods.toml")?.let { metadata ->
+                    val text = zip.getInputStream(metadata).bufferedReader().use { it.readText() }
+                    val modIds = text.split(Regex("(?m)^\\[\\[")).filter { it.startsWith("mods]]") }.map { section ->
+                        checkNotNull(Regex("""(?m)^\s*modId\s*=\s*["']([^"']+)["']""").find(section)) { "modId missing in ${archive.name}: $section" }.groupValues[1]
+                    }
+                    check(modIds.none { it in setOf("rocketnautics", "dimensional_sable", "compukters_cosmonautics") }) {
+                        "Cosmonautics requires dimensions unavailable in vanilla GameTest worlds: ${archive.name}"
+                    }
+                }
             }
         }
-        check(ids.size == ids.toSet().size) { "duplicate physics mod IDs: $ids" }
-        check(ids.toSet() == setOf("aeronautics_bundled", "aeronautics", "offroad", "simulated", "createpropulsion")) {
-            "incomplete physics runtime: $ids"
-        }
-        this.logger.lifecycle("Development physics mods: ${ids.sorted().joinToString()}")
     }
 }
-tasks.named("check") { dependsOn(verifyDevelopmentMods, verifyPhysicsMods, gameTest.classesTaskName) }
+tasks.named("check") { dependsOn(verifyDevelopmentMods, verifyPhysicsMods, verifyGameTestPhysicsMods, verifyGameTestClasspath, gameTest.classesTaskName) }
 tasks.register("verifyAddons") {
     group = "verification"
-    dependsOn(verifyDevelopmentMods, verifyPhysicsMods)
+    dependsOn(verifyDevelopmentMods, verifyPhysicsMods, verifyGameTestPhysicsMods, verifyGameTestClasspath)
     dependsOn(gradle.includedBuild("compukters-create").task(":check"))
     dependsOn(gradle.includedBuild("compukters-sable").task(":check"))
     dependsOn(gradle.includedBuild("compukters-propulsion").task(":check"))
+    dependsOn(gradle.includedBuild("compukters-cosmonautics").task(":check"))
 }
 
 tasks.configureEach {
-    if (name == "runClient" || name == "runServer" || name == "runGameTestServer") dependsOn(verifyPhysicsMods)
-    if (name == "runGameTestServer") dependsOn(addonGameTestMods.values)
+    if (name == "runClient" || name == "runServer") dependsOn(verifyPhysicsMods)
+    if (name == "runGameTestServer") dependsOn(addonGameTestMods.values, verifyGameTestPhysicsMods, verifyGameTestClasspath)
 }
 
 listOf(false, true).forEach { release ->
@@ -194,7 +235,7 @@ listOf(false, true).forEach { release ->
                 if (release) ":stageReleaseDistributionModJars" else ":stageDistributionModJars",
             ))
         from(mods)
-        listOf("create", "sable", "propulsion").forEach { addon ->
+        listOf("create", "sable", "propulsion", "cosmonautics").forEach { addon ->
             val archives = files(layout.projectDirectory.dir("../$addon/build/distribution"))
                 .builtBy(gradle.includedBuild("compukters-$addon").task(":stageDistributionJar"))
             from(archives) { into("1.21.1") }

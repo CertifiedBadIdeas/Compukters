@@ -1,7 +1,7 @@
 ---
 layout: default
 title: All-addon development stand
-description: Build and test Create, Sable, Propulsion and Aeronautics together.
+description: Build and test Create, Sable, Propulsion, Cosmonautics and Aeronautics together.
 section: contributors
 permalink: /DEV-STAND/
 ---
@@ -13,18 +13,26 @@ It pins Minecraft 1.21.1 and NeoForge 21.1.252 with the following runtime:
 
 | Mod | Version |
 | --- | --- |
-| Compukters + Compukters: Create + Compukters: Sable + Compukters: Propulsion | Current checkout |
+| Compukters + Compukters: Create + Compukters: Sable + Compukters: Propulsion + Compukters: Cosmonautics | Current checkout |
 | Create | 6.0.10 |
 | Sable | 2.0.6 |
 | Aeronautics bundle (Aeronautics, Simulated, Offroad) | 1.3.2 |
 | Create Propulsion: Simulated | 1.1.5 |
+| Create: Cosmonautics (including Dimensional Sable) | 26.08.307 |
 
 Pinned Modrinth versions: [Aeronautics 44pLdPGg](https://modrinth.com/mod/create-aeronautics/version/44pLdPGg),
-[Propulsion H13U56dc](https://modrinth.com/mod/create-propulsion-simulated/version/H13U56dc).
+[Propulsion H13U56dc](https://modrinth.com/mod/create-propulsion-simulated/version/H13U56dc),
+[Cosmonautics HuCMavv8](https://modrinth.com/mod/create-cosmonatics/version/HuCMavv8).
 Aeronautics 1.3.2 includes the upstream JEI compatibility fix; the older 1.3.1 bundle fails with recent JEI versions.
 The exact bundled Aeronautics mods and Sable libraries are extracted for the Loom dev classpath; no separate versions
 of Simulated/Offroad are selected. This stand has no distributable umbrella JAR.
-The main mod has no upstream physics dependency; the three Compukters addons remain independent.
+The main mod has no upstream physics dependency; the four Compukters addons remain independent.
+Compukters: Cosmonautics is an empty NeoForge scaffold for future integration. It exposes no Guest API or peripherals;
+its upstream JAR supplies both `rocketnautics` and `dimensional_sable`, which the runtime-set check verifies.
+Client and ordinary server runs include Cosmonautics. The GameTest composition excludes it and its empty addon:
+Cosmonautics requires its Deep Space dimension during server ticks, whereas vanilla GameTest worlds do not create
+that dimension. `verifyGameTestPhysicsMods` checks the original physics set and `verifyGameTestClasspath` ensures no
+Cosmonautics mod is included in that test runtime. Future Cosmonautics world tests require a server with its dimensions.
 
 For an interactive client from the repository root:
 
@@ -65,15 +73,18 @@ Run these verification/development commands from `addons/dev` with Gradle on JDK
 ```
 
 `verifyAddons` checks all standalone addons, verifies that their development archives contain only their own
-implementation, and checks the complete pinned physics mod set through `verifyPhysicsMods`. Every client/server/GameTest
-launch also performs that physics-set check. The common GameTest server loads complete test archives instead of the
+implementation, and checks the complete pinned physics mod set through `verifyPhysicsMods` plus the separate
+GameTest runtime. Every client/server launch performs the full physics-set check; GameTest launches check their
+separate runtime set. The common GameTest server loads complete test archives instead of the
 ordinary addon archives, registering the Create, Sable, Propulsion and development lifecycle
 scenarios together. Client and ordinary server runs load the ordinary archives. Each archive is built
-by its owning included Gradle build. Addon Guest bundles use the current workspace SDK tooling and platform bundle,
+by its owning included Gradle build. The empty Cosmonautics addon loads only in ordinary client/server runs and
+adds no GameTest scenarios. Addon Guest bundles use the current workspace SDK tooling and platform bundle,
 so launches do not mix a stale published compiler with the base mod from this checkout.
 
-To add another independent addon, include its build in `settings.gradle.kts`, add its stable development and GameTest
-archives to the maps in `build.gradle.kts`, and declare its upstream runtime dependencies here. The addon keeps its
+To add another independent addon, include its build in `settings.gradle.kts`, add its stable development archive to
+the map in `build.gradle.kts`, and declare its upstream runtime dependencies here. Add a GameTest archive only when
+its upstream mods support the test server's world setup. The addon keeps its
 own standalone checks, test registration and metadata. The shared stand owns only launch and verification composition.
 
 Compukters exposes the Create Guest API, request-only `sable.physics.Physics.snapshot()` and the independent

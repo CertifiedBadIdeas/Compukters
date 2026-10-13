@@ -54,8 +54,8 @@ For existing local first-party builds, `:addon-gradle-plugin:publishAddonSdkToMa
 The common API and target adapters are compile-only dependencies and carry the SDK version. Isolated TestKit
 verification creates its own temporary Maven layout directly from the built SDK artifacts.
 
-Create, Sable and Propulsion live in separate repositories, pinned as submodules under `addons/create`,
-`addons/sable` and `addons/propulsion`. Initialize them with `git submodule update --init --recursive`.
+Create, Sable, Propulsion and Cosmonautics live in separate repositories, pinned as submodules under `addons/create`,
+`addons/sable`, `addons/propulsion` and `addons/cosmonautics`. Initialize them with `git submodule update --init --recursive`.
 The first-party Create addon is itself a separate Gradle root and serves as the complete example.
 It owns its Gradle wrapper and explicitly includes the configured Compukters checkout as a composite build for
 local co-development.
@@ -66,9 +66,13 @@ After staging the local SDK, run `check`,
 `buildProductionJar`, or `runClient` from `addons/create`. The Compukters root remains unaware of the addon and does not
 own or invoke its tasks. First-party addons use the two-part release policy below, independently of the SDK version.
 
+The Cosmonautics addon starts as an empty NeoForge scaffold with pinned upstream development dependencies. It has no
+Guest bundle, ABI lock, peripherals or registered Host operations. SDK API coordinates remain compile-only; the
+Guest addon plugin and release-bundle pipeline will be added with its first real Guest API.
+
 ## First-party addon versions
 
-Create, Sable and Propulsion use `x.y` versions. `x` identifies the addon's public API compatibility line; increment it
+Create, Sable, Propulsion and Cosmonautics use `x.y` versions. `x` identifies the addon's public API compatibility line; increment it
 and reset `y` to zero for an incompatible public API change. Increment `y` for backward-compatible updates, including
 fixes and additions. The number is independent of the Compukters version and is not three-part SemVer. Moving to a new
 Compukters target line does not reset the addon version or require an API-line bump by itself.
@@ -92,8 +96,8 @@ Keep capability ABI versions and ABI locks explicit; changing a release number d
 Guest build locks still identify exact addon bundle versions and content hashes and may require re-resolution/rebuild
 when an addon is updated. A loader dependency range does not make previously compiled Guest artifacts interchangeable.
 
-This policy covers the three first-party addons. Independent SDK users can retain their own mod versioning policy.
-Stable development and GameTest archive names are retained for the workspace's included-build composition. Each addon
+This policy covers the four first-party addons. Independent SDK users can retain their own mod versioning policy.
+Stable development archive names and supported GameTest archive names are retained for the workspace's included-build composition. Each addon
 `check` verifies its production filename, packaged version and Compukters dependency range through
 `verifyAddonVersioning`.
 
@@ -261,10 +265,12 @@ The consumable `compuktersAddonBundle` configuration is also available to custom
 ## Joint development runs
 
 [`addons/dev`](https://github.com/CertifiedBadIdeas/Compukters/tree/dev/addons/dev) composes the main mod and the
-independent Create, Sable and Propulsion builds, with Aeronautics 1.3.2 (including Simulated/Offroad) and Propulsion: Simulated 1.1.5
-on the runtime classpath. From that directory, run `./gradlew-sandbox-dev-parallel-summary verifyAddons`
-for all three addon checks, or `./gradlew-sandbox-dev-parallel runGameTestServer` for their shared real NeoForge scenarios.
-`runClient` and `runServer` use the same upstream dependency pins and ordinary development archives. This build
+independent Create, Sable, Propulsion and Cosmonautics builds, with Aeronautics 1.3.2 (including Simulated/Offroad) and Propulsion: Simulated 1.1.5
+and Cosmonautics 26.08.307 on the runtime classpath. From that directory, run `./gradlew-sandbox-dev-parallel-summary verifyAddons`
+for all four addon checks, or `./gradlew-sandbox-dev-parallel runGameTestServer` for their shared real NeoForge scenarios.
+`runClient` and `runServer` use the same upstream dependency pins and ordinary development archives. Cosmonautics and
+its empty addon are excluded from the GameTest composition because its Deep Space dimension is required on ticks and
+is absent in vanilla GameTest worlds. This build
 produces no distributable umbrella mod; adding another addon does not introduce a dependency between existing addons.
 
 

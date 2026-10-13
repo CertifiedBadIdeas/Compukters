@@ -13,6 +13,9 @@ headings so this page has one stable URL that can be shared outside the reposito
 
 ## 0.6.0 — In development
 
+- Added an empty independent Cosmonautics addon scaffold and pinned Cosmonautics in the all-addon development stand;
+  Guest APIs and spacecraft controls will follow separately.
+
 - Guest Kotlin supports direct generic methods on ordinary classes and objects, combining class and method
   type specialization with defaults, local helpers and escaping callbacks.
 

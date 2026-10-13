@@ -1,7 +1,8 @@
 # All-addon development stand
 
-This independent Gradle build runs the main mod, all first-party addons and the pinned Aeronautics/Sable/Propulsion
-runtime together. It produces no distributable umbrella mod.
+This independent Gradle build runs the main mod, all first-party addons and the pinned Aeronautics/Sable/Propulsion/Cosmonautics
+runtime together in ordinary client/server runs. GameTests retain the original physics runtime without Cosmonautics,
+which requires its Deep Space dimension. It produces no distributable umbrella mod.
 
 The [canonical Wiki guide](https://certifiedbadideas.github.io/Compukters/DEV-STAND/) owns setup commands, runtime
 versions, temporary chunk-loading controls and lifecycle verification details.
