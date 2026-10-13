@@ -41,6 +41,19 @@ import kotlin.test.assertTrue
 
 class CompletionQueryTest {
     @Test
+    fun `enum entries complete for project and platform enum types`() {
+        for (attachedSources in listOf(false, true)) {
+            for (expression in listOf("Choice", "RedstonePort.Side")) {
+                val source = "import compukter.redstone.RedstonePort\nenum class Choice { FIRST, SECOND }\nfun main() { $expression. }"
+                K2QueryFixture.sourceWithGuestApi(attachedSources, "main.kt" to source).use { fixture ->
+                    val items = fixture.complete("main.kt", source.lastIndexOf(". ") + 1).items
+                    assertTrue(items.any { it.insertText == "entries" && it.kind == CompletionKind.Property }, "$expression: $items")
+                }
+            }
+        }
+    }
+
+    @Test
     fun `completion suppresses literal content and comments including nested template literals`() {
         val contexts =
             listOf(

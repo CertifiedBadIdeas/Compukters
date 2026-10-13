@@ -214,10 +214,12 @@ private data class GuestClassLayout(
 }
 
 private fun IrClass.isManagedPlatformObject(): Boolean =
-    kind == ClassKind.OBJECT &&
-        superTypes.any { type ->
-            ((type as? IrSimpleType)?.classifier as? IrClassSymbol)?.owner?.fqNameWhenAvailable?.asString() != "kotlin.Any"
-        }
+    kind == ClassKind.OBJECT && (
+        GuestEnumEntries.isHolder(this) ||
+            superTypes.any { type ->
+                ((type as? IrSimpleType)?.classifier as? IrClassSymbol)?.owner?.fqNameWhenAvailable?.asString() != "kotlin.Any"
+            }
+    )
 
 private val hashCollectionFactories =
     mapOf(
@@ -260,6 +262,7 @@ private fun collectGuestClassInstances(
     functions: List<GuestFunctionInstance>,
     properties: List<TopLevelProperty>,
     anyType: IrType,
+    maximumVariants: Int,
 ): List<GuestClassInstance> {
     val bySymbol = classes.associateBy { it.symbol }
     val byName = classes.associateBy { it.fqNameWhenAvailable?.asString() }
@@ -268,8 +271,8 @@ private fun collectGuestClassInstances(
 
     fun add(instance: GuestClassInstance) {
         if (instances.add(instance)) {
-            if (instances.count { it.arguments.isNotEmpty() } > 256) {
-                throw UnsupportedKotlinIr(instance.declaration, "generic specialization exceeds 256 class variants")
+            if (instances.count { it.arguments.isNotEmpty() } > maximumVariants) {
+                throw UnsupportedKotlinIr(instance.declaration, "generic specialization exceeds $maximumVariants class variants")
             }
             pending.addLast(instance)
         }
@@ -563,6 +566,7 @@ private fun prepareGuestFunctionBodies(
     topLevelProperties: List<TopLevelProperty>,
     pluginContext: IrPluginContext,
     lexicalSpecialization: GuestLocalSpecialization,
+    maximumClassVariants: Int,
 ): PreparedGuestFunctionBodies {
     var closureRoots: List<IrElement> =
         rootFunctions.filter { (it.parent as? IrClass)?.typeParameters?.isNotEmpty() != true } +
@@ -591,7 +595,13 @@ private fun prepareGuestFunctionBodies(
         collectGuestFunctionInstances(userFunctions, constructorClasses, lexicalVariantCount = lexicalSpecialization.variantCount)
     val specializationClasses = (userClasses + sourceClasses.filter { inlineValueClasses.contains(it.symbol) }).distinctBy { it.symbol }
     var allClassInstances =
-        collectGuestClassInstances(specializationClasses, functionInstances, topLevelProperties, pluginContext.irBuiltIns.anyType)
+        collectGuestClassInstances(
+            specializationClasses,
+            functionInstances,
+            topLevelProperties,
+            pluginContext.irBuiltIns.anyType,
+            maximumClassVariants,
+        )
     var classInstances = allClassInstances.filterNot { inlineValueClasses.contains(it.declaration.symbol) }
     // Generic member bodies can call helpers whose signatures/body introduce further class instances.
     // Discover functions and classes together until their dependencies stop adding specializations.
@@ -647,7 +657,13 @@ private fun prepareGuestFunctionBodies(
         val discoveredLocals = collectGuestLocalFunctions(closureRoots)
         val discoveredFunctions = rootFunctions + discoveredLocals.values.map { it.declaration }
         val discoveredClasses =
-            collectGuestClassInstances(specializationClasses, functionInstances, topLevelProperties, pluginContext.irBuiltIns.anyType)
+            collectGuestClassInstances(
+                specializationClasses,
+                functionInstances,
+                topLevelProperties,
+                pluginContext.irBuiltIns.anyType,
+                maximumClassVariants,
+            )
         val stable = discoveredClasses.toSet() == allClassInstances.toSet() && discoveredFunctions == userFunctions
         localFunctions = discoveredLocals
         userFunctions = discoveredFunctions
@@ -1361,6 +1377,27 @@ internal object KotlinProjectLowering {
         session: CompilationSession,
         includeTrustedPlatformBodies: Boolean = false,
     ): Artifact {
+        val enumEntries = GuestEnumEntries.lower(classes, pluginContext)
+        return lowerPrepared(
+            functions + enumEntries.functions,
+            properties,
+            classes + enumEntries.classes,
+            entry,
+            pluginContext,
+            session,
+            includeTrustedPlatformBodies,
+        )
+    }
+
+    private fun lowerPrepared(
+        functions: List<IrSimpleFunction>,
+        properties: List<IrProperty>,
+        classes: List<IrClass>,
+        entry: IrSimpleFunction,
+        pluginContext: IrPluginContext,
+        session: CompilationSession,
+        includeTrustedPlatformBodies: Boolean,
+    ): Artifact {
         val guestTypes = GuestTypeRegistry(pluginContext)
         val platformScalars = PlatformScalarRegistry(session.platformScalarTypes, session.platformScalarConstants)
         var usesListFactory = false
@@ -1531,6 +1568,8 @@ internal object KotlinProjectLowering {
                 topLevelProperties,
                 pluginContext,
                 lexicalSpecialization,
+                // A complete library exports all enum caches and their read views; project expansion stays bounded separately.
+                maximumClassVariants = if (includeTrustedPlatformBodies) 1024 else 256,
             )
         val userFunctions = prepared.functions
         val userClasses = prepared.classes
@@ -10328,6 +10367,7 @@ private val specializedPlatformBaseTypes =
         "kotlin.collections.Iterator",
         "kotlin.collections.Collection",
         "kotlin.collections.List",
+        "kotlin.enums.EnumEntries",
         "kotlin.collections.MutableIterable",
         "kotlin.collections.MutableIterator",
         "kotlin.collections.MutableCollection",

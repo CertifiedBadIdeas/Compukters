@@ -482,6 +482,19 @@ registerKotlinVmConformance(
     conformanceScenario = "dispatch",
 )
 registerKotlinVmConformance(
+    taskName = "testKotlinEnumEntriesVmConformance",
+    taskDescription = "Executes immutable source and platform enum entries with the pinned Compukter VM.",
+    artifactTask = ":compiler-k2:generateEnumEntriesConformanceArtifact",
+    artifact = project(":compiler-k2").layout.buildDirectory.file("generated/conformance/kotlin-enum-entries.cpkt"),
+    cargoTargetDirectory = ".toolchain/build/cargo/compiler-k2-enum-entries-conformance",
+    artifactEnvironmentVariable = "COMPUKTER_KOTLIN_ENUM_ENTRIES_ARTIFACT",
+    conformanceScenario = "enum-entries",
+    additionalArtifacts = mapOf(
+        "COMPUKTER_KOTLIN_ENUM_ONLY_ENTRIES_ARTIFACT" to
+            project(":compiler-k2").layout.buildDirectory.file("generated/conformance/kotlin-enum-entries.cpkt.enum-only.cpkt"),
+    ),
+)
+registerKotlinVmConformance(
     taskName = "testKotlinObjectModelVmConformance",
     taskDescription = "Executes K2-lowered sealed, data, and enum Guest objects with the pinned Compukter VM.",
     artifactTask = ":compiler-k2:generateObjectModelConformanceArtifact",

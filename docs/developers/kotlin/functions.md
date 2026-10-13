@@ -234,7 +234,7 @@ their nominal identity.
 `multi field value classes share canonical layouts across precompiled addon boundaries`, executed by
 `testKotlinMfvcVmConformance`. Contravariance, reified parameters and generic methods declaring their own type
 parameters remain outside the subset. Direct `Any` values use the [supported primitive boxes](primitives.md).
-Expansion is bounded to 256 function and 256 class variants per compilation. Binary generic library templates
+Expansion is bounded to 256 function and 256 class variants per project compilation. Platform/addon library builds allow 1024 class variants so complete enum caches and read-only collection views can be exported; their function limit remains 256. Binary generic library templates
 and runtime instantiation are absent.
 
 **Evidence:**

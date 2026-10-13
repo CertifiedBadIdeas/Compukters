@@ -13,6 +13,8 @@ headings so this page has one stable URL that can be shared outside the reposito
 
 ## 0.6.0 — In development
 
+- Guest Kotlin enums expose immutable `EnumType.entries` in declaration order, including empty enums and enums from platform/addon libraries. Indexing, iteration, membership and IDE completion share the typed `EnumEntries<E>` API.
+
 - Redstone Ports show input/output strength independently on all six faces, with small edge indicators visible when a face is covered.
 
 - Newly compiled Guest programs allow 64 nested calls, matching the runtime limit, so framed nested UI drawing fits within the declared stack budget.
