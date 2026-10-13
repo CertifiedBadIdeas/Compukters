@@ -263,6 +263,7 @@ private fun collectGuestClassInstances(
     properties: List<TopLevelProperty>,
     anyType: IrType,
     maximumVariants: Int,
+    initializationRoots: List<IrElement> = emptyList(),
 ): List<GuestClassInstance> {
     val bySymbol = classes.associateBy { it.symbol }
     val byName = classes.associateBy { it.fqNameWhenAvailable?.asString() }
@@ -354,6 +355,7 @@ private fun collectGuestClassInstances(
     }
     functions.forEach { instance -> scan(instance.concreteDeclaration, instance::substitute) }
     properties.forEach { property -> scan(property.declaration, { it }) }
+    initializationRoots.forEach { scan(it, { type -> type }) }
     while (pending.isNotEmpty()) {
         val instance = pending.removeFirst()
         // Concrete collection ownership must not depend on which read views a consumer happens to use.
@@ -475,7 +477,7 @@ private fun collectGuestFunctionShapes(
 
 private fun collectGuestFunctionInstances(
     functions: List<IrSimpleFunction>,
-    constructors: List<IrClass>,
+    initializationRoots: List<IrElement>,
     memberInstances: List<GuestFunctionInstance> = emptyList(),
     lexicalVariantCount: Int = 0,
 ): List<GuestFunctionInstance> {
@@ -501,11 +503,10 @@ private fun collectGuestFunctionInstances(
 
     functions
         .filter { function ->
-            function.typeParameters.isEmpty() && (function.parent as? IrClass)?.typeParameters?.isEmpty() != false
+            function.typeParameters.isEmpty() &&
+                (function.isGuestLocalFunction() || (function.parent as? IrClass)?.typeParameters?.isEmpty() != false)
         }.forEach { add(GuestFunctionInstance(it, emptyList())) }
     memberInstances.forEach(::add)
-    val constructorBodies =
-        constructors.flatMap { declaration -> declaration.constructors.filter { it.isPrimary } }
 
     fun scan(
         element: IrElement,
@@ -539,7 +540,7 @@ private fun collectGuestFunctionInstances(
         )
     }
 
-    constructorBodies.forEach { constructor -> constructor.body?.let { scan(it, null) } }
+    initializationRoots.forEach { scan(it, null) }
     while (pending.isNotEmpty()) {
         val instance = pending.removeFirst()
         instance.concreteDeclaration.body?.let { scan(it, instance) }
@@ -556,6 +557,7 @@ private data class PreparedGuestFunctionBodies(
     val classInstances: List<GuestClassInstance>,
     val locals: Map<IrSimpleFunctionSymbol, GuestLocalFunction>,
     val closureRoots: List<IrElement>,
+    val initializations: Map<GuestClassInstance, GuestClassInitialization>,
 )
 
 @OptIn(UnsafeDuringIrConstructionAPI::class)
@@ -568,13 +570,13 @@ private fun prepareGuestFunctionBodies(
     lexicalSpecialization: GuestLocalSpecialization,
     maximumClassVariants: Int,
 ): PreparedGuestFunctionBodies {
+    val ordinaryInitializationRoots =
+        sourceClasses.filter { it.typeParameters.isEmpty() }.flatMap { declaration ->
+            declaration.declarations.filter { it is IrConstructor || it is IrProperty || it is IrAnonymousInitializer }
+        }
+    var initializationRoots: List<IrElement> = ordinaryInitializationRoots
     var closureRoots: List<IrElement> =
-        rootFunctions.filter { (it.parent as? IrClass)?.typeParameters?.isNotEmpty() != true } +
-            sourceClasses.flatMap { declaration ->
-                declaration.declarations.filter {
-                    it is IrConstructor || it is IrProperty || it is IrAnonymousInitializer
-                }
-            }
+        rootFunctions.filter { (it.parent as? IrClass)?.typeParameters?.isNotEmpty() != true } + initializationRoots
     var localFunctions = collectGuestLocalFunctions(closureRoots)
     var userFunctions = rootFunctions + localFunctions.values.map { it.declaration }
     val userClasses =
@@ -592,7 +594,7 @@ private fun prepareGuestFunctionBodies(
                 declaration.constructors.any { it.isPrimary }
         }
     var functionInstances =
-        collectGuestFunctionInstances(userFunctions, constructorClasses, lexicalVariantCount = lexicalSpecialization.variantCount)
+        collectGuestFunctionInstances(userFunctions, initializationRoots, lexicalVariantCount = lexicalSpecialization.variantCount)
     val specializationClasses = (userClasses + sourceClasses.filter { inlineValueClasses.contains(it.symbol) }).distinctBy { it.symbol }
     var allClassInstances =
         collectGuestClassInstances(
@@ -606,16 +608,28 @@ private fun prepareGuestFunctionBodies(
     // Generic member bodies can call helpers whose signatures/body introduce further class instances.
     // Discover functions and classes together until their dependencies stop adding specializations.
     val concreteMemberBodies = linkedMapOf<GuestFunctionInstance, IrSimpleFunction>()
+    val initializations = linkedMapOf<GuestClassInstance, GuestClassInitialization>()
     while (true) {
+        classInstances
+            .filter { it.arguments.isNotEmpty() && it.declaration.constructors.any { constructor -> constructor.isPrimary } }
+            .forEach { instance ->
+                initializations.getOrPut(instance) {
+                    copyGuestClassInitialization(instance.declaration, instance.arguments).also { copy ->
+                        lexicalSpecialization.lower(emptyList(), copy.roots)
+                    }
+                }
+            }
+        initializationRoots = ordinaryInitializationRoots + initializations.values.flatMap { it.roots }
+
         functionInstances =
             collectGuestFunctionInstances(
                 userFunctions,
-                constructorClasses,
+                initializationRoots,
                 allClassInstances.flatMap { classInstance ->
                     if (classInstance.arguments.isEmpty()) {
                         emptyList()
                     } else {
-                        userFunctions.filter { it.parent == classInstance.declaration }.map { function ->
+                        userFunctions.filter { it.parent == classInstance.declaration && !it.isGuestLocalFunction() }.map { function ->
                             GuestFunctionInstance(function, emptyList(), classInstance).also { instance ->
                                 instance.concreteDeclaration =
                                     concreteMemberBodies.getOrPut(instance) {
@@ -643,17 +657,7 @@ private fun prepareGuestFunctionBodies(
                     listOf(function)
                 }
             } +
-            sourceClasses.flatMap { declaration ->
-                declaration.declarations
-                    .filter { it is IrConstructor || it is IrProperty || it is IrAnonymousInitializer }
-                    .flatMap { element ->
-                        if (element is IrProperty && declaration.typeParameters.isNotEmpty()) {
-                            listOfNotNull(element.backingField)
-                        } else {
-                            listOf(element)
-                        }
-                    }
-            }
+            initializationRoots
         val discoveredLocals = collectGuestLocalFunctions(closureRoots)
         val discoveredFunctions = rootFunctions + discoveredLocals.values.map { it.declaration }
         val discoveredClasses =
@@ -663,6 +667,7 @@ private fun prepareGuestFunctionBodies(
                 topLevelProperties,
                 pluginContext.irBuiltIns.anyType,
                 maximumClassVariants,
+                initializationRoots,
             )
         val stable = discoveredClasses.toSet() == allClassInstances.toSet() && discoveredFunctions == userFunctions
         localFunctions = discoveredLocals
@@ -679,6 +684,7 @@ private fun prepareGuestFunctionBodies(
         classInstances,
         localFunctions,
         closureRoots,
+        initializations,
     )
 }
 
@@ -1098,7 +1104,15 @@ private const val ANY_EQUALS_IMPORT = 50u
 private const val CHAR_SEQUENCE_RUNTIME_TYPE = 39u
 private const val CHAR_SEQUENCE_IMPORT = 57u
 private const val CHAR_SEQUENCE_LENGTH_IMPORT = 58u
-private const val RUNTIME_IMPORT_COUNT = 61
+private const val ENUM_RUNTIME_TYPE = 40u
+private const val ENUM_FIELD_START = 15u
+private const val ENUM_IMPORT = 61u
+private const val ENUM_NAME_IMPORT = 62u
+private const val ENUM_ORDINAL_IMPORT = 63u
+private const val ENUM_NAME = "kotlin.Enum"
+private const val ENUM_NAME_FIELD = "kotlin.Enum.name"
+private const val ENUM_ORDINAL_FIELD = "kotlin.Enum.ordinal"
+private const val RUNTIME_IMPORT_COUNT = 64
 private const val CHAR_SEQUENCE_NAME = "kotlin.CharSequence"
 private val charSequenceMethods = listOf("<get-length>", "get", "subSequence")
 private val charSequenceMemberNames = charSequenceMethods.map { "$CHAR_SEQUENCE_NAME.$it" }
@@ -1121,7 +1135,8 @@ private val scalarBoxes = GuestPrimitive.entries.map(::ScalarBox)
 private val runtimeMemberNames =
     listOf(INT_BOX_VALUE_NAME, THROWABLE_MESSAGE_NAME, THROWABLE_CAUSE_NAME) +
         scalarBoxes.drop(1).take(5).map { it.name } + UNIT_INSTANCE_NAME + ANY_TO_STRING_NAME + ANY_HASH_CODE_NAME + ANY_EQUALS_NAME +
-        scalarBoxes.drop(6).map { it.name } + CHAR_SEQUENCE_NAME + charSequenceMemberNames
+        scalarBoxes.drop(6).map { it.name } + CHAR_SEQUENCE_NAME + charSequenceMemberNames +
+        listOf(ENUM_NAME, ENUM_NAME_FIELD, ENUM_ORDINAL_FIELD)
 private const val INT_BOX_VALUE_NAME = "kotlin.Int.<boxed-value>"
 private const val THROWABLE_MESSAGE_NAME = "kotlin.Throwable.message"
 private const val THROWABLE_CAUSE_NAME = "kotlin.Throwable.cause"
@@ -1190,6 +1205,9 @@ private fun mapGuestValueType(
             classInstanceTypeIds = classInstanceTypeIds,
             resolveUnderlyingType = resolveUnderlyingType,
         )
+    }
+    if (((type as? IrSimpleType)?.classifier as? IrClassSymbol)?.owner?.fqNameWhenAvailable?.asString() == ENUM_NAME) {
+        return ValueType.Ref(type.isNullable(), TypeRef.Imported(ImportId.of(ENUM_IMPORT)))
     }
     if (type.isNullableUnit()) return ValueType.Ref(true, TypeRef.Imported(ImportId.of(UNIT_RUNTIME_TYPE)))
     if (type.isNullable() && (type as? IrSimpleType)?.classifier == pluginContext.irBuiltIns.nothingClass) {
@@ -1512,7 +1530,7 @@ internal object KotlinProjectLowering {
             ).distinctBy { it.symbol }
                 .filter { function ->
                     val owner = function.parent as? IrClass
-                    inlineValueClasses.getter(function.symbol) == null &&
+                    inlineValueClasses.getter(function.symbol) == null && function.origin != IrDeclarationOrigin.LOCAL_FUNCTION &&
                         (
                             includeTrustedPlatformBodies ||
                                 function.parent is IrFile ||
@@ -1521,7 +1539,8 @@ internal object KotlinProjectLowering {
                                         function.origin == IrDeclarationOrigin.DEFINED
                                 ) ||
                                 (
-                                    owner?.symbol in sourceClassSymbols &&
+                                    owner != null && owner.symbol in sourceClassSymbols &&
+                                        (function in owner.declarations || function.correspondingPropertySymbol != null) &&
                                         function.origin != IrDeclarationOrigin.FAKE_OVERRIDE &&
                                         (function.correspondingPropertySymbol == null || !function.isDirectFieldAccessor())
                                 )
@@ -1547,7 +1566,7 @@ internal object KotlinProjectLowering {
             lexicalSpecialization
                 .lower(
                     playerFunctions,
-                    sourceClasses.flatMap { declaration ->
+                    sourceClasses.filter { it.typeParameters.isEmpty() }.flatMap { declaration ->
                         declaration.declarations.filter { it is IrConstructor || it is IrProperty || it is IrAnonymousInitializer }
                     },
                 ).sortedWith(
@@ -1584,6 +1603,7 @@ internal object KotlinProjectLowering {
         val classInstances = prepared.classInstances
         val localFunctions = prepared.locals
         val closureRoots = prepared.closureRoots
+        val concreteInitializationRoots = prepared.initializations.values.flatMap { it.roots }
         require(userFunctions.firstOrNull() === entry)
         session.recordPlatformSpecializations(
             classInstances
@@ -1626,8 +1646,10 @@ internal object KotlinProjectLowering {
             }
         val platformLinks =
             discoverGuestPlatformLinks(
-                functionRoots = userFunctions + constructorDeclarations + inlineInitializers,
-                symbolRoots = userFunctions + constructorDeclarations + sourceClasses.filter { inlineValueClasses.contains(it.symbol) },
+                functionRoots = userFunctions + constructorDeclarations + inlineInitializers + concreteInitializationRoots,
+                symbolRoots =
+                    userFunctions + constructorDeclarations + concreteInitializationRoots +
+                        sourceClasses.filter { inlineValueClasses.contains(it.symbol) },
                 session = session,
             )
         val linkedSymbols = platformLinks.symbols
@@ -1638,6 +1660,7 @@ internal object KotlinProjectLowering {
             }
         userFunctions.forEach { function -> function.accept(intrinsicCollector, null) }
         constructorClasses.forEach { declaration -> declaration.accept(intrinsicCollector, null) }
+        concreteInitializationRoots.forEach { it.accept(intrinsicCollector, null) }
         inlineInitializers.forEach { initializer -> initializer.accept(intrinsicCollector, null) }
         val capabilityIdentities =
             (
@@ -1662,6 +1685,7 @@ internal object KotlinProjectLowering {
 
         val stringArrayUsage = StringArrayUsageCollector(guestTypes)
         userFunctions.forEach { function -> function.accept(stringArrayUsage, null) }
+        concreteInitializationRoots.forEach { it.accept(stringArrayUsage, null) }
         val usesStringArray =
             stringArrayUsage.used ||
                 userFunctions.any { function ->
@@ -1737,20 +1761,28 @@ internal object KotlinProjectLowering {
                 ?.filter { it != type }
                 ?.forEach(::discoverValueClass)
         }
-        functionInstances.forEach { instance ->
-            instance.declaration.accept(
+
+        fun discoverValueClassUses(
+            root: IrElement,
+            substitute: (IrType) -> IrType,
+        ) {
+            root.accept(
                 object : IrVisitorVoid() {
                     override fun visitElement(element: IrElement) {
                         when (element) {
-                            is IrExpression -> discoverValueClass(instance.substitute(element.type))
-                            is IrValueDeclaration -> discoverValueClass(instance.substitute(element.type))
+                            is IrExpression -> discoverValueClass(substitute(element.type))
+                            is IrValueDeclaration -> discoverValueClass(substitute(element.type))
                         }
-                        if (element is IrTypeOperatorCall) discoverValueClass(instance.substitute(element.typeOperand))
+                        if (element is IrTypeOperatorCall) discoverValueClass(substitute(element.typeOperand))
                         element.acceptChildren(this, null)
                     }
                 },
                 null,
             )
+        }
+        concreteInitializationRoots.forEach { discoverValueClassUses(it) { type -> type } }
+        functionInstances.forEach { instance ->
+            discoverValueClassUses(instance.concreteDeclaration, instance::substitute)
             discoverValueClass(instance.substitute(instance.declaration.returnType))
             loweredParameters(instance.declaration, session).forEach { discoverValueClass(instance.substitute(it.type)) }
         }
@@ -1790,6 +1822,7 @@ internal object KotlinProjectLowering {
         classInstances.forEach { instance ->
             guestArrayUsage.scan(instance.declaration, instance::substitute)
         }
+        concreteInitializationRoots.forEach { guestArrayUsage.scan(it) }
         topLevelProperties.forEach { guestArrayUsage.scan(it.declaration) }
         val guestArrays = guestArrayUsage.arrays.toSortedMap()
         val functionArtifactNames =
@@ -1900,6 +1933,7 @@ internal object KotlinProjectLowering {
                 userFunctions.forEach { function -> function.accept(collector, null) }
                 constructorClasses.forEach { declaration -> declaration.accept(collector, null) }
                 constructorInstances.forEach { it.declaration.accept(collector, null) }
+                concreteInitializationRoots.forEach { it.accept(collector, null) }
                 inlineInitializers.forEach { initializer -> initializer.body.accept(collector, null) }
                 topLevelProperties.forEach { property ->
                     property.declaration.backingField
@@ -1908,8 +1942,10 @@ internal object KotlinProjectLowering {
                         ?.accept(collector, null)
                 }
             }
+        val enumEntries = userClasses.flatMap { it.declarations.filterIsInstance<IrEnumEntry>() }
+        val enumNames = enumEntries.map { it.name.asString() }
         val literals =
-            (literalCollector.strings + guestTypes.valueClassBoxes.values.flatMap { it.stringParts })
+            (literalCollector.strings + guestTypes.valueClassBoxes.values.flatMap { it.stringParts } + enumNames)
                 .distinct()
                 .map {
                     Utf16Literal.fromString(it)
@@ -1918,7 +1954,13 @@ internal object KotlinProjectLowering {
         val constantPool = ConstantPoolBuilder()
         (
             (
-                literalCollector.values + guestTypes.valueClassBoxes.values.flatMap { it.stringParts } +
+                literalCollector.values + guestTypes.valueClassBoxes.values.flatMap { it.stringParts } + enumNames +
+                    userClasses.flatMap {
+                        it.declarations
+                            .filterIsInstance<IrEnumEntry>()
+                            .indices
+                            .toList()
+                    } +
                     topLevelProperties.mapNotNull { property ->
                         when (val initializer = property.initializer) {
                             TopLevelInitializer.Null -> null
@@ -2457,6 +2499,7 @@ internal object KotlinProjectLowering {
                             inlineValueClasses = inlineValueClasses,
                             platformScalars = platformScalars,
                             constructorLayouts = constructorTargets,
+                            classInitializations = prepared.initializations,
                             genericConstructorLayouts = genericConstructorTargets,
                             fieldsBySetter = fieldsBySetter,
                             fieldsByGetter = fieldsByGetter,
@@ -2751,6 +2794,7 @@ internal object KotlinProjectLowering {
                         inlineValueClasses = inlineValueClasses,
                         platformScalars = platformScalars,
                         constructorLayouts = constructorTargets,
+                        classInitializations = prepared.initializations,
                         genericConstructorLayouts = genericConstructorTargets,
                         fieldsBySetter = fieldsBySetter,
                         fieldsByGetter = fieldsByGetter,
@@ -2837,7 +2881,8 @@ internal object KotlinProjectLowering {
         constructorInstances.forEach { classInstance ->
             val declaration = classInstance.declaration
             val layout = classLayoutsByInstance[classInstance]
-            val constructor = requireNotNull(declaration.constructors.singleOrNull { it.isPrimary })
+            val initialization = prepared.initializations[classInstance]
+            val constructor = initialization?.constructor ?: requireNotNull(declaration.constructors.singleOrNull { it.isPrimary })
             val functionId = requireNotNull(constructorFunctionIds[classInstance])
             val receiverType =
                 ValueType.Ref(
@@ -2902,6 +2947,7 @@ internal object KotlinProjectLowering {
                     inlineValueClasses = inlineValueClasses,
                     platformScalars = platformScalars,
                     constructorLayouts = constructorTargets,
+                    classInitializations = prepared.initializations,
                     genericConstructorLayouts = genericConstructorTargets,
                     fieldsBySetter = fieldsBySetter,
                     fieldsByGetter = fieldsByGetter,
@@ -2922,6 +2968,7 @@ internal object KotlinProjectLowering {
                     leadingParameterTypes = listOf(receiverType),
                     constructorOwner = layout,
                     constructorDeclaration = declaration,
+                    initialization = initialization,
                 ).compile()
             blocks += compiled.blocks
             debug += compiled.debug
@@ -2982,6 +3029,30 @@ internal object KotlinProjectLowering {
                         instructions =
                             listOf(
                                 Instruction.NewObject(RegisterId.of(index.toUInt()), TypeRef.Local(layout.typeId)),
+                                Instruction.Const(
+                                    RegisterId.of(layout.enumEntries.size.toUInt()),
+                                    requireNotNull(
+                                        constantIds[
+                                            Constant.StringLiteral(
+                                                requireNotNull(literalIds[Utf16Literal.fromString(enumEntry.declaration.name.asString())]),
+                                            ),
+                                        ],
+                                    ),
+                                ),
+                                Instruction.FieldSet(
+                                    RegisterId.of(index.toUInt()),
+                                    FieldRef.Imported(ImportId.of(ENUM_NAME_IMPORT)),
+                                    RegisterId.of(layout.enumEntries.size.toUInt()),
+                                ),
+                                Instruction.Const(
+                                    RegisterId.of(layout.enumEntries.size.toUInt() + 1u),
+                                    requireNotNull(constantIds[Constant.I32(index)]),
+                                ),
+                                Instruction.FieldSet(
+                                    RegisterId.of(index.toUInt()),
+                                    FieldRef.Imported(ImportId.of(ENUM_ORDINAL_IMPORT)),
+                                    RegisterId.of(layout.enumEntries.size.toUInt() + 1u),
+                                ),
                                 Instruction.StaticSet(FieldRef.Local(enumEntry.fieldId), RegisterId.of(index.toUInt())),
                                 Instruction.Jump(BlockId.of(nextBlock.toUInt())),
                             ),
@@ -2997,7 +3068,7 @@ internal object KotlinProjectLowering {
                     values =
                         List(layout.enumEntries.size) {
                             FunctionValue.scalar(ValueType.Ref(nullable = false, type = TypeRef.Local(layout.typeId)))
-                        },
+                        } + listOf(FunctionValue.scalar(stringType), FunctionValue.scalar(ValueType.I32)),
                     parameterCount = 0u,
                     firstBlock = BlockId.of(firstBlock.toUInt()),
                     blockCount = (layout.enumEntries.size + 1).toUInt(),
@@ -3218,6 +3289,8 @@ internal object KotlinProjectLowering {
                         } ?: ((resolved as? IrSimpleType)?.classifier as? IrClassSymbol)?.let { symbol ->
                             if (symbol.owner.fqNameWhenAvailable?.asString() == CHAR_SEQUENCE_NAME) {
                                 symbol to TypeRef.Imported(ImportId.of(CHAR_SEQUENCE_IMPORT))
+                            } else if (symbol.owner.fqNameWhenAvailable?.asString() == ENUM_NAME) {
+                                symbol to TypeRef.Imported(ImportId.of(ENUM_IMPORT))
                             } else {
                                 externalClassTypes[symbol]?.let { symbol to it }
                             }
@@ -4148,7 +4221,8 @@ internal object KotlinProjectLowering {
                 return true
             }
             if (((type as? IrSimpleType)?.classifier as? IrClassSymbol)?.owner?.fqNameWhenAvailable?.asString() ==
-                CHAR_SEQUENCE_NAME
+                CHAR_SEQUENCE_NAME ||
+                ((type as? IrSimpleType)?.classifier as? IrClassSymbol)?.owner?.fqNameWhenAvailable?.asString() == ENUM_NAME
             ) {
                 return true
             }
@@ -4349,7 +4423,7 @@ internal object KotlinProjectLowering {
                     if (owner == STRING_RUNTIME_TYPE) charSequenceMethods.map { owner to it } else emptyList()
             }
         val methodStarts = owners.associateWith { owner -> methods.indexOfFirst { it.first == owner }.toUInt() }
-        val runtimeTypeCount = runtimeTypeNames.size + 1
+        val runtimeTypeCount = runtimeTypeNames.size + 2
         val textType = TypeRef.Local(TypeId.of(CHAR_SEQUENCE_RUNTIME_TYPE))
         val blockCounts =
             methods.map { (owner, name) ->
@@ -4834,7 +4908,13 @@ internal object KotlinProjectLowering {
                             storage = primitive.arrayStorage,
                         )
                     } + NominalType.Interface(requireNotNull(ids[CHAR_SEQUENCE_NAME]), methodStart = initializerId + 1u, methodCount = 3u) +
-                    signatures,
+                    NominalType.Class(
+                        requireNotNull(ids[ENUM_NAME]),
+                        abstract = true,
+                        superType = anyType,
+                        fieldStart = ENUM_FIELD_START,
+                        fieldCount = 2u,
+                    ) + signatures,
             fields =
                 listOf(
                     Field(
@@ -4883,10 +4963,26 @@ internal object KotlinProjectLowering {
                             mutable = true,
                             static = false,
                         )
-                    },
+                    } +
+                    listOf(
+                        Field(
+                            TypeRef.Local(TypeId.of(ENUM_RUNTIME_TYPE)),
+                            requireNotNull(ids[ENUM_NAME_FIELD]),
+                            string,
+                            mutable = true,
+                            static = false,
+                        ),
+                        Field(
+                            TypeRef.Local(TypeId.of(ENUM_RUNTIME_TYPE)),
+                            requireNotNull(ids[ENUM_ORDINAL_FIELD]),
+                            ValueType.I32,
+                            mutable = true,
+                            static = false,
+                        ),
+                    ),
             exports =
                 (
-                    (runtimeTypeNames + CHAR_SEQUENCE_NAME).mapIndexed { index, name ->
+                    (runtimeTypeNames + CHAR_SEQUENCE_NAME + ENUM_NAME).mapIndexed { index, name ->
                         Export(
                             kind = SymbolKind.TYPE,
                             visibility = ExportVisibility.PUBLIC_LIBRARY,
@@ -4948,6 +5044,15 @@ internal object KotlinProjectLowering {
                             2u,
                             TypeRef.Local(TypeId.of(runtimeTypeCount.toUInt() + 2u)),
                         ) +
+                        listOf(ENUM_NAME_FIELD, ENUM_ORDINAL_FIELD).mapIndexed { index, name ->
+                            Export(
+                                SymbolKind.FIELD,
+                                ExportVisibility.PUBLIC_LIBRARY,
+                                requireNotNull(ids[name]),
+                                ENUM_FIELD_START + index.toUInt(),
+                                TypeRef.Local(TypeId.of(ENUM_RUNTIME_TYPE)),
+                            )
+                        } +
                         charSequenceMemberNames.mapIndexed { index, name ->
                             Export(
                                 SymbolKind.FUNCTION,
@@ -5040,6 +5145,22 @@ internal object KotlinProjectLowering {
                     ModuleId.of(1u),
                     requireNotNull(metadataIds[name]),
                     TypeRef.Local(TypeId.of((functionTypeBase + 3 + index).toUInt())),
+                    libraryHash,
+                )
+            } +
+            Import(
+                SymbolKind.TYPE,
+                ModuleId.of(1u),
+                requireNotNull(metadataIds[ENUM_NAME]),
+                TypeRef.Imported(ImportId.of(ENUM_IMPORT)),
+                libraryHash,
+            ) +
+            listOf(ENUM_NAME_FIELD, ENUM_ORDINAL_FIELD).map { name ->
+                Import(
+                    SymbolKind.FIELD,
+                    ModuleId.of(1u),
+                    requireNotNull(metadataIds[name]),
+                    TypeRef.Imported(ImportId.of(ENUM_IMPORT)),
                     libraryHash,
                 )
             }
@@ -5200,6 +5321,8 @@ private class FunctionCompiler(
     private val constructorOwner: GuestClassLayout? = null,
     private val constructorDeclaration: IrClass? = constructorOwner?.declaration,
     private val valueClassConstructorReference: InlineValueClassLayout? = null,
+    private val initialization: GuestClassInitialization? = null,
+    private val classInitializations: Map<GuestClassInstance, GuestClassInitialization> = emptyMap(),
 ) {
     private val localTypes = mutableListOf<ValueType>()
     private val values = mutableMapOf<IrValueSymbol, RegisterId>()
@@ -5223,7 +5346,7 @@ private class FunctionCompiler(
         sourceParameters.forEachIndexed { index, parameter ->
             values[parameter.symbol] = RegisterId.of((leadingParameterTypes.size + index).toUInt())
         }
-        constructorDeclaration?.thisReceiver?.let { receiver ->
+        (initialization?.receiver ?: constructorDeclaration?.thisReceiver)?.let { receiver ->
             values[receiver.symbol] = RegisterId.of(0u)
         }
         if (valueClassConstructorReference != null) {
@@ -5636,7 +5759,8 @@ private class FunctionCompiler(
                 is IrProperty -> {
                     val field = constructorOwner?.fields?.firstOrNull { it.property === declaration } ?: return@forEach
                     val initializer =
-                        declaration.backingField?.initializer?.expression
+                        initialization?.fields?.get(declaration.backingField?.symbol)
+                            ?: declaration.backingField?.initializer?.expression
                             ?: throw UnsupportedKotlinIr(declaration, "class field initializer is missing")
                     rejectFunctionVariance(initializer.type, requireNotNull(field.property.backingField).type, initializer)
                     val value = compileExpression(initializer, field.property.backingField?.type)
@@ -5650,7 +5774,7 @@ private class FunctionCompiler(
                 }
 
                 is IrAnonymousInitializer -> {
-                    declaration.body.statements.forEach(::compileStatement)
+                    (initialization?.blocks?.get(declaration) ?: declaration).body.statements.forEach(::compileStatement)
                 }
             }
         }
@@ -6113,7 +6237,8 @@ private class FunctionCompiler(
         instance: GuestClassInstance,
         source: IrElement,
     ): List<RegisterId> {
-        val parameters = target.parameters.withIndex().filter { it.value.kind == IrParameterKind.Regular }
+        val executable = classInitializations[instance]?.constructor ?: target
+        val parameters = executable.parameters.withIndex().filter { it.value.kind == IrParameterKind.Regular }
         val defaults =
             session.platformDefaults[
                 PlatformDeclarationIdentity(
@@ -6134,10 +6259,13 @@ private class FunctionCompiler(
                     .mapNotNull { (index, parameter) ->
                         arguments.getOrNull(index)?.let { expression -> Triple(index, parameter, expression) }
                     }.sortedWith(compareBy({ it.third.startOffset.takeIf { offset -> offset >= 0 } ?: Int.MAX_VALUE }, { it.first }))
-            explicit.forEach { (_, parameter, expression) ->
-                rejectFunctionVariance(expression.type, instance.substitute(parameter.type), expression)
-                values[parameter.symbol] = compileExpression(expression, instance.substitute(parameter.type))
-            }
+            val evaluated =
+                explicit.map { (_, parameter, expression) ->
+                    rejectFunctionVariance(expression.type, instance.substitute(parameter.type), expression)
+                    val value = compileExpression(expression, instance.substitute(parameter.type))
+                    parameter.symbol to allocate(registerValueType(value)).also { emit(Instruction.Move(it, value)) }
+                }
+            evaluated.forEach { (symbol, value) -> values[symbol] = value }
             parameters.forEachIndexed { regularIndex, (index, parameter) ->
                 if (arguments.getOrNull(index) == null) {
                     defaults.getOrNull(regularIndex)?.let { value ->
@@ -6314,6 +6442,12 @@ private class FunctionCompiler(
                             )
                         }
                     return unboxValueClass(reference, valueBox)
+                }
+                val primitive = GuestPrimitive.scalar(resolvedType(expression.typeOperand))
+                if (primitive != null && registerValueType(source) == target &&
+                    GuestPrimitive.scalar(resolvedType(expression.argument.type)) == primitive
+                ) {
+                    return source
                 }
                 if (scalarBoxes.none { it.valueType == target } || registerValueType(source) !is ValueType.Ref) {
                     throw UnsupportedKotlinIr(expression, "scalar cast requires a supported box and reference operand")
@@ -6744,6 +6878,14 @@ private class FunctionCompiler(
                 call.symbol.owner.resolveFakeOverrideMaybeAbstract() ?: call.symbol.owner
             }
         val targetName = target.fqNameWhenAvailable?.asString()
+        if (targetName in setOf("$ENUM_NAME.<get-name>", "$ENUM_NAME.<get-ordinal>")) {
+            val argument = call.dispatchReceiver ?: throw UnsupportedKotlinIr(call, "enum identity receiver is missing")
+            val receiver = compileExpression(argument)
+            val field = if (target.name.asString() == "<get-name>") ENUM_NAME_IMPORT else ENUM_ORDINAL_IMPORT
+            return allocate(
+                valueType(call.type, call),
+            ).also { emit(Instruction.FieldGet(it, receiver, FieldRef.Imported(ImportId.of(field)))) }
+        }
         if (targetName == "kotlin.internal.ir.EQEQEQ") {
             val operands = call.arguments.filterNotNull()
             if (operands.size != 2 || operands.any { !(it is IrConst && it.value == null) && valueType(it.type, it) !is ValueType.Ref }) {
@@ -8877,6 +9019,11 @@ private class FunctionCompiler(
         if (name in setOf("EQEQ", "equals", "eqeq") || floatIeeeEquality) {
             if (!numeric && (registerValueType(operands[0]) is ValueType.Ref || registerValueType(operands[1]) is ValueType.Ref)) {
                 if (expressions.any { it is IrConst && it.value == null }) {
+                    if (operands.any { registerValueType(it) !is ValueType.Ref }) {
+                        return allocate(ValueType.Bool).also {
+                            emit(Instruction.Const(it, requireNotNull(constantIds[Constant.Bool(false)])))
+                        }
+                    }
                     return allocate(ValueType.Bool).also { emit(Instruction.RefEqual(it, operands[0], operands[1])) }
                 }
                 return equalsValue(operands[0], operands[1])
@@ -9479,6 +9626,7 @@ private class FunctionCompiler(
         call: IrCall,
         target: IrSimpleFunction,
     ): FunctionId? {
+        if (target.symbol in localFunctions) return functionIds[target.symbol]
         if (target.origin == IrDeclarationOrigin.FAKE_OVERRIDE) {
             val receiver = resolveClassInstance(call.dispatchReceiver?.type)
 
@@ -10607,6 +10755,9 @@ private class GuestArrayUsageCollector(
             when {
                 ((element as? IrSimpleType)?.classifier as? IrClassSymbol)?.owner?.fqNameWhenAvailable?.asString() ==
                     CHAR_SEQUENCE_NAME -> CHAR_SEQUENCE_IMPORT
+
+                ((element as? IrSimpleType)?.classifier as? IrClassSymbol)?.owner?.fqNameWhenAvailable?.asString() ==
+                    ENUM_NAME -> ENUM_IMPORT
 
                 element.isKotlinAny() -> ANY_RUNTIME_TYPE
 

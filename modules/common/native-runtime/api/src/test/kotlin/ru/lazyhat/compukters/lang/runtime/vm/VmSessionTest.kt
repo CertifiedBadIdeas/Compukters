@@ -626,7 +626,7 @@ class VmSessionTest {
                 repeat(968) { add(cell(' '.code, 15, 0)) }
             }.fold(ByteArray(0), ByteArray::plus)
         bridge.terminalState =
-            bytes(2, long(3), short(51), short(19), int(969), cells, short(50), short(18), 1)
+            bytes(2, long(3), short(51), short(19), int(969), cells, short(50), short(18), 1, long(0), int(0))
         bridge.terminalUpdate = bytes(0, long(3))
 
         val state = session.terminalFullState()

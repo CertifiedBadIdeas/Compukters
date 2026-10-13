@@ -39,6 +39,14 @@ class IdeTargetRequestProcessor(
         tick: Long,
     ): IdeTargetReply =
         when (request) {
+            is IdeTargetRequest.RenamePeripheral -> {
+                withTarget(player, request.target, tick) { target ->
+                    val resolved = leases.access(player, target, tick)
+                    resolved?.renamePeripheral?.invoke(request.device, request.expectedName, request.requestedName)
+                        ?: IdeTargetReply.Failed(IdeTargetFailure(IdeTargetFailureKind.Other, "Peripheral renaming is unavailable"), false)
+                }
+            }
+
             is IdeTargetRequest.NamedPeripherals -> {
                 withTarget(player, request.target, tick) { target ->
                     val resolved = leases.access(player, target, tick)

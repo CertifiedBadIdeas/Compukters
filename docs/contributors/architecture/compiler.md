@@ -61,6 +61,17 @@ the source dispatch symbol while returns target their concrete executable copy. 
 them as concrete instances. `testKotlinGenericClassCapturesVmConformance` exercises owner retention,
 all primitive signatures, shared cells, dispatch and small-heap collection without a VM/ABI change.
 
+Generic ordinary class initialization uses one typed symbol copier per concrete owner for the primary
+constructor, class receiver, backing-field initializer expressions and `init` bodies. Original class,
+field and constructor identities continue to own layout and lookup; copied lexical symbols own execution
+and captures. Concrete initialization roots participate in dependency convergence, closure/cell discovery
+and literal/import collection. Constructor emission walks the original declaration order while reading
+its corresponding concrete expressions and blocks. Call-site defaults use the copied constructor
+parameters, so their captures match the concrete caller argument bindings. Local declarations inside
+initializers remain static local functions even when K2 gives them a class parent; they do not enter
+member dispatch tables. `testKotlinGenericInitializerCapturesVmConformance` verifies these paths without
+a runtime or ABI change.
+
 Named local functions are discovered before closure layout. A fixed-point free-value analysis includes
 captures required by local callees and referenced helpers. Direct calls prepend hidden typed capture
 arguments; reassigned variables use the same capture cells as lambdas. Local declarations are static
@@ -375,3 +386,11 @@ layout/verifier contract are unchanged; already compiled artifacts retain their 
 `ServerCompilerService` performs bounded asynchronous preparation, persistent-cache lookup, and single-flight
 deduplication by compilation identity. Minecraft-facing code submits requests and drains completions; worker and cache
 I/O run outside the server tick thread.
+
+## Enum identity storage
+
+The generated Kotlin runtime module owns a non-generic abstract `kotlin.Enum` class with name/ordinal
+fields. Guest source `Enum<E>` and `Enum<*>` map to this base, while each concrete enum retains its own
+nominal type and singleton fields. Initializers create entry objects, set exact declaration names and
+indices, then publish static references. Trusted getters emit ordinary base field reads, including for
+separately compiled enums. This introduces no host lookup, per-enum dispatch table or VM instruction.

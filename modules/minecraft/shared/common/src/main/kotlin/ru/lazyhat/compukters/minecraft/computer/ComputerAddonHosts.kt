@@ -132,6 +132,17 @@ object ComputerAddonHosts {
     @Synchronized
     fun availableGuestApiCatalog(): AddonGuestApiCatalog = guestApiCatalog
 
+    internal fun peripheralLookupTypes(
+        providerId: String,
+        deviceKey: String,
+    ): List<String> =
+        registrations
+            .flatMap { it.contracts }
+            .filter { it.providerId == providerId && it.deviceKey == deviceKey }
+            .mapNotNull { it.guestLookupType }
+            .distinct()
+            .take(8)
+
     internal fun resolvePeripheralContact(
         level: ServerLevel,
         position: BlockPos,

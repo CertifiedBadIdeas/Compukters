@@ -90,6 +90,7 @@ internal class IdeScreen(
                 override fun closeSession() = session.close()
             },
             peripheralRequest = ru.lazyhat.compukters.impl.ide.target.IdeTargetClientNetwork::namedPeripherals,
+            peripheralRename = ru.lazyhat.compukters.impl.ide.target.IdeTargetClientNetwork::renamePeripheral,
         )
 
     override fun setInitialFocus() = Unit

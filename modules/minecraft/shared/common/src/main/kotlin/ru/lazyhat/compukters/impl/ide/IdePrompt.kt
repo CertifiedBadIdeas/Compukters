@@ -58,6 +58,10 @@ sealed interface IdePromptKind {
         val directoryName: String,
     ) : IdePromptKind
 
+    data class RenamePeripheral(
+        val name: String,
+    ) : IdePromptKind
+
     data object RenameSymbol : IdePromptKind
 
     data class Rename(
@@ -88,6 +92,7 @@ data class IdePromptState(
             IdePromptKind.CreateDirectory -> "Create directory"
             is IdePromptKind.Rename -> "Rename ${kind.source.value} · destination path"
             is IdePromptKind.RenameProject -> "Rename project folder · ${kind.directoryName}"
+            is IdePromptKind.RenamePeripheral -> "Rename device · ${kind.name}"
             IdePromptKind.RenameSymbol -> "Rename symbol · new name"
         }
     val fieldLabel: String get() =
@@ -105,6 +110,7 @@ data class IdePromptState(
             IdePromptKind.CreateDirectory -> "Directory path"
             is IdePromptKind.Rename -> "Destination path"
             is IdePromptKind.RenameProject -> "New directory name"
+            is IdePromptKind.RenamePeripheral -> "New device name"
             IdePromptKind.RenameSymbol -> "New name"
         }
     val displayValue: String get() = if (kind is IdePromptKind.GitToken) "•".repeat(value.length.coerceAtMost(48)) else value
@@ -206,6 +212,10 @@ class IdePromptController {
         return true
     }
 
+    fun error(message: String) {
+        state = state?.copy(error = message)
+    }
+
     fun confirm(): IdeCommand? {
         val current = state ?: return null
         val value = if (current.kind is IdePromptKind.GitToken) current.value else current.value.trim()
@@ -293,6 +303,10 @@ class IdePromptController {
                         IdeCommand.RenameProject(kind.directoryName, value)
                     }
 
+                    is IdePromptKind.RenamePeripheral -> {
+                        return null
+                    }
+
                     IdePromptKind.RenameSymbol -> {
                         require(
                             value.encodeToByteArray().size <= ru.lazyhat.compukters.ide.analysis.MAX_RENAME_NAME_BYTES,
@@ -311,6 +325,7 @@ class IdePromptController {
     private fun maximum(kind: IdePromptKind): Int =
         when (kind) {
             IdePromptKind.OpenExisting, IdePromptKind.CloneRemote, IdePromptKind.GitRemoteUrl, is IdePromptKind.GitToken -> 4096
+            is IdePromptKind.RenamePeripheral -> 32
             else -> MAXIMUM_CODE_UNITS
         }
 

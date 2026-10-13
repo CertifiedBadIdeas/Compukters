@@ -191,8 +191,49 @@ heap. IDE `nullable callbacks resolve with source and metadata inputs` covers bo
 Generic class methods and custom accessors can return callbacks and local function references with
 concrete owner capture layouts. Capturing `this` keeps the same owner alive and observes field mutations;
 captured method locals follow the ordinary shared-cell rules. See [local functions](functions.md#local-functions-and-captures)
-and `testKotlinGenericClassCapturesVmConformance` for executed evidence. Generic constructor bodies, backing-field
-initializers and init blocks with lexical captures remain outside that extension.
+and `testKotlinGenericClassCapturesVmConformance` for executed evidence. Primary constructor bodies, backing-field
+initializers and init blocks of ordinary generic classes also support lexical captures as described below.
+
+## Captures during generic class initialization
+
+**Status:** Supported for ordinary classes in the existing generic class subset.
+
+Primary constructor bodies, initialized backing fields and `init` blocks specialize their lexical symbols
+and types together for each concrete owner. Lambdas and named local helpers can capture constructor
+parameters, `this`, and shared mutable locals. Local generic helpers specialize before capture layout;
+direct calls and escaping references use the existing closure and capture-cell representation.
+
+```kotlin
+class Holder<T>(initial: T) {
+    var value: T = initial
+    val snapshot: () -> T = { initial }
+    val read: () -> T = { value }
+}
+```
+
+`snapshot` retains the parameter value; `read` retains the same owner and observes later field writes.
+Different instances and concrete type specializations keep separate capture cells. Constructor callback
+defaults can capture earlier parameters through the same concrete initialization copy. Constructor
+arguments evaluate once in source order; properties and `init` blocks execute in declaration order.
+Existing field-initialization rules still apply: this extension does not admit uninitialized body `val`
+properties assigned later in `init`, secondary constructors, generic superclass inheritance, or lexical
+captures in value-class initialization.
+
+Captured owners and values remain live under ordinary managed GC. Each materialized closure/cell uses
+the existing metered heap allocations; initialization adds no special runtime storage or VM instruction.
+Concrete dependencies use the existing 256-variant bounds and lexical expansion depth limit.
+
+**Evidence:** `MinimalScriptLoweringTest`, test `generic initialization captures preserve concrete symbols
+order and ownership`, with deterministic artifact checking, and `testKotlinGenericInitializerCapturesVmConformance`
+execute [`generic-initializer-captures/main.kt`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/compiler-k2/src/test/resources/kotlin/generic-initializer-captures/main.kt).
+The scenario covers all twelve primitive families, nullable/reference/MFVC values, parameter versus owner
+captures, local generic helpers and defaults, independent mutable cells, recursive construction, nested
+generic dependencies, explicit argument snapshots, declaration order and retained callbacks across 200 allocations of 12 KiB arrays
+on a 64 KiB heap. IDE test `generic initialization captures resolve with source and metadata inputs`
+checks both platform input modes. Compiler test `expanding generic initialization reports bounded target diagnostics`
+checks that type-growing recursive construction stops before publishing an artifact.
+
+**Related work:** [#769](https://github.com/CertifiedBadIdeas/Compukters/issues/769).
 
 ## Sealed interfaces, data classes, and stateless enums
 
@@ -218,9 +259,9 @@ task `testKotlinObjectModelVmConformance`.
 
 Stateless enums also expose cached, typed `EnumType.entries`, including empty enums and separately
 compiled library enums. The [collection contract](../stdlib/collections.md#immutable-enum-entries)
-owns its immutable list operations and executable evidence. This does not add `values()`, `valueOf()`,
-`name`, `ordinal` or `compareTo()` execution support. The structural `Enum.compareTo` declaration keeps
-IDE enum inheritance complete without claiming those runtime operations.
+owns its immutable list operations and executable evidence. Entries also expose the [name and ordinal](#enum-names-and-declaration-indices)
+properties. `values()`, `valueOf()` and `compareTo()` remain outside executable support. The structural `Enum.compareTo` declaration keeps
+IDE enum inheritance complete without claiming comparison runtime support.
 
 ## Secondary constructors and stateful enums
 
@@ -325,3 +366,22 @@ Platform libraries export mutable property accessors, including custom setter va
 side effects. Private setters remain inaccessible from external Kotlin source. `PlatformMetadataCompilerTest` exercises setter
 metadata; `testKotlinDisplayUiVmConformance` executes the validated slider setter and viewport setter
 cancellation through the compiled Guest library.
+
+## Enum names and declaration indices
+
+**Status:** Supported.
+
+Every admitted enum entry exposes its exact source `name` and zero-based `ordinal` in declaration order.
+The common managed `kotlin.Enum` base preserves these properties through `Enum<E>`, `Enum<*>`, generic
+functions bounded by `Enum<E>`, nullable references and separately compiled platform/addon libraries.
+Each entry stores one String reference and one Int in addition to its object header; property reads
+use ordinary field access without allocation. Name strings initialize before singleton publication and
+remain reachable through the entry. Enum constructor state remains unsupported. `compareTo`, `values()`
+and `valueOf()` remain outside executable support.
+
+**Evidence:** `MinimalScriptLoweringTest`, tests `enum entries preserve ordered singleton references and
+collection identity` and `enum entries from enum-only libraries export executable getters`, paired with
+`testKotlinEnumEntriesVmConformance`. IDE test `enum entries resolve typed indexing iteration and platform enums`
+covers typed properties and base references with source and metadata platform inputs.
+
+**Related work:** [#773](https://github.com/CertifiedBadIdeas/Compukters/issues/773).

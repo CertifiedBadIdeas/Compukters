@@ -420,6 +420,7 @@ internal class ProgramRuntimeActorProcessor(
     private fun TerminalState.immutableCopy(): TerminalState =
         copy(
             cells = cells.toList(),
+            historyCells = historyCells.toList(),
             cursor = cursor.copy(),
         )
 
@@ -442,6 +443,8 @@ internal class ProgramRuntimeActorProcessor(
                                 is TerminalChange.Fill -> change.copy()
                                 is TerminalChange.Scroll -> change.copy()
                                 is TerminalChange.Cursor -> change.copy(position = change.position.copy())
+                                is TerminalChange.HistoryAppend -> change.copy(cells = change.cells.toList())
+                                is TerminalChange.HistoryReplace -> change.copy(cells = change.cells.toList())
                                 TerminalChange.Reset -> TerminalChange.Reset
                             }
                         },

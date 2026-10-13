@@ -40,6 +40,30 @@ import kotlin.test.assertTrue
 
 class TerminalPayloadsTest {
     @Test
+    fun `history snapshots and append replacements round trip with bounded complete rows`() {
+        val history = List(512 * 51) { cell(0x1f600) }
+        val full = TerminalFullPayload(POSITION, 7, terminalState(2).copy(historyStart = 20, historyCells = history), true)
+        assertEquals(full, roundTrip(TerminalFullPayload.STREAM_CODEC, full))
+        val delta =
+            TerminalDeltaPayload(
+                POSITION,
+                7,
+                TerminalUpdate.Delta(
+                    2,
+                    3,
+                    listOf(
+                        TerminalChange.HistoryAppend(532, List(51) { cell('x') }),
+                        TerminalChange.Scroll(1, cell(' ')),
+                    ),
+                ),
+            )
+        assertEquals(delta, roundTrip(TerminalDeltaPayload.STREAM_CODEC, delta))
+        assertFailsWith<IllegalArgumentException> {
+            roundTrip(TerminalFullPayload.STREAM_CODEC, full.copy(state = full.state.copy(historyCells = history.drop(1))))
+        }
+    }
+
+    @Test
     fun `bounded full and ordered delta payloads round trip`() {
         val full = TerminalFullPayload(POSITION, 9, terminalState(3), openScreen = true)
         assertEquals(full, roundTrip(TerminalFullPayload.STREAM_CODEC, full))
