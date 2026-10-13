@@ -17,6 +17,7 @@ import net.minecraft.server.level.ServerPlayer
 import net.minecraft.world.InteractionHand
 import net.neoforged.neoforge.network.event.RegisterPayloadHandlersEvent
 import ru.lazyhat.compukters.impl.compat.Identifier
+import ru.lazyhat.compukters.minecraft.peripheral.ConfiguratorDeviceBounds
 import ru.lazyhat.compukters.minecraft.peripheral.ConfiguratorOverlayDevice
 import ru.lazyhat.compukters.minecraft.peripheral.ConfiguratorOverlayScreen
 import ru.lazyhat.compukters.minecraft.peripheral.ConfiguratorOverlayServer
@@ -27,7 +28,7 @@ internal object ConfiguratorOverlayNetwork {
     private val requests = WeakHashMap<ServerPlayer, Long>()
 
     fun register(event: RegisterPayloadHandlersEvent) {
-        val registrar = event.registrar("1")
+        val registrar = event.registrar("2")
         registrar.playToServer(OverlayRequest.TYPE, OverlayRequest.CODEC) { payload, context ->
             val player = context.player() as? ServerPlayer ?: return@playToServer
             val tick = (player.level() as net.minecraft.server.level.ServerLevel).server.overworld().gameTime
@@ -85,6 +86,10 @@ internal data class OverlayReply(
                 buffer.writeNullable(device.network) { sink, id -> sink.writeUUID(id) }
                 buffer.writeUtf(device.networkName, 64)
                 buffer.writeNullable(device.screen) { sink, id -> sink.writeUUID(id) }
+                buffer.writeNullable(device.bounds) { sink, bounds ->
+                    sink.writeBlockPos(bounds.minimum)
+                    sink.writeBlockPos(bounds.maximum)
+                }
             }
             buffer.writeVarInt(value.snapshot.screens.size)
             value.snapshot.screens.forEach { screen ->
@@ -113,6 +118,7 @@ internal data class OverlayReply(
                         },
                         buffer.readUtf(64),
                         buffer.readNullable { it.readUUID() },
+                        buffer.readNullable { ConfiguratorDeviceBounds(it.readBlockPos(), it.readBlockPos()) },
                     )
                 }
             val screens =

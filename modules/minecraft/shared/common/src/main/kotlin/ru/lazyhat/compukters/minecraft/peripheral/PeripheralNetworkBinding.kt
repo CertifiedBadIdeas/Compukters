@@ -114,7 +114,55 @@ internal object PeripheralNetworkBinding {
         if (!level.hasChunkAt(identity.anchor)) return null
         val anchor = level.getBlockEntity(identity.anchor) ?: return null
         val instance = PeripheralNetworkAccess.instance(anchor, create) ?: return null
+        if (create) consolidateAliases(level, position, face, instance, identity)
         return PeripheralNetworkMember(instance, identity, PeripheralDeviceNameStorage.get(level).directory.nameOf(identity))
+    }
+
+    /** Upgrade old per-block bindings only on an explicit configurator interaction. */
+    private fun consolidateAliases(
+        level: ServerLevel,
+        contact: BlockPos,
+        face: Direction,
+        instance: UUID,
+        identity: PeripheralDeviceIdentity,
+    ) {
+        val geometry =
+            ru.lazyhat.compukters.minecraft.computer.ComputerAddonHosts
+                .resolvePeripheralGeometry(level, contact, face)
+                .firstOrNull {
+                    it.identity.providerId == identity.providerId && it.identity.anchor == identity.anchor &&
+                        it.identity.deviceKey == identity.deviceKey
+                }
+                ?: return
+        val bounds = ConfiguratorDeviceBounds.from(geometry.bounds, identity.anchor, contact) ?: return
+        val storage = PeripheralNetworkStorage.get(level)
+        val directory = storage.directory
+        val members = directory.snapshot().flatMap { it.members }
+        val aliases =
+            members.filter { member ->
+                member.instance != instance && member.identity.providerId == identity.providerId &&
+                    member.identity.deviceKey == identity.deviceKey && member.identity.dimension == identity.dimension &&
+                    bounds.contains(member.identity.anchor) && level.hasChunkAt(member.identity.anchor) &&
+                    level.getBlockEntity(member.identity.anchor)?.let { PeripheralNetworkAccess.instance(it) } == member.instance &&
+                    Direction.entries.any { identity in PeripheralDeviceNames.resolveContact(level, member.identity.anchor, it) }
+            }
+        if (aliases.isEmpty()) return
+        val sources = aliases.map { it.instance }.toSet()
+        // One physical instance may expose several kinds. Do not discard unrelated memberships.
+        if (members.any {
+                it.instance in sources + instance &&
+                    (it.identity.providerId != identity.providerId || it.identity.deviceKey != identity.deviceKey)
+            }
+        ) {
+            return
+        }
+        val existing = members.firstOrNull { it.instance == instance && it.identity == identity }
+        val name =
+            existing?.name ?: aliases.mapNotNull { it.name }.distinct().singleOrNull()
+                ?: PeripheralDeviceNameStorage.get(level).directory.nameOf(identity)
+        directory.consolidate(sources, PeripheralNetworkMember(instance, identity, name))
+        if (directory.networkOf(instance) == null && name != null) PeripheralDeviceNameStorage.get(level).setName(identity, name)
+        storage.setDirty()
     }
 
     fun removeSelected(

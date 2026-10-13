@@ -338,6 +338,7 @@ object CanonicalTrustedIntrinsics {
                 Triple("pollPointer", "fun(Int):ByteArray", 18u),
                 Triple("lineClipped", "fun(Int,Int,Int,Int,Int,Int,Int,Int,Int,Int):Unit", 19u),
                 Triple("textClipped", "fun(Int,Int,Int,String,Int,Int,Int,Int,Int,Int):Unit", 20u),
+                Triple("rasterBatch", "fun(Int,ByteArray):Unit", 21u),
             ).forEach { (name, signature, operation) ->
                 capability(
                     "compukter",

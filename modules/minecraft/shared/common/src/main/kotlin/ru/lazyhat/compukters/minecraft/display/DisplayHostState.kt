@@ -61,9 +61,10 @@ internal class DisplayHostState(
         frameTasks.keys.removeIf { !it.owns(owner) }
         val response =
             if (request.capability.namespace != SCHEMA.identity.namespace || request.capability.name != SCHEMA.identity.name ||
-                request.capability.abiMajor != 1 || request.capability.abiMinor !in 0..3 ||
+                request.capability.abiMajor != 1 || request.capability.abiMinor !in 0..4 ||
                 (request.operation == 17 && request.capability.abiMinor < 2) ||
-                (request.operation >= 18 && request.capability.abiMinor < 3)
+                (request.operation >= 18 && request.capability.abiMinor < 3) ||
+                (request.operation >= 21 && request.capability.abiMinor < 4)
             ) {
                 failure(HostFailureKind.OTHER, "Unexpected display capability")
             } else {
@@ -307,6 +308,24 @@ internal class DisplayHostState(
         val schema = SCHEMA.operations.getOrNull(request.operation) ?: return malformed()
         if (request.arguments.size != schema.arguments.size) return malformed()
         val handle = request.intAt(0) ?: return malformed()
+        if (request.operation == 21) {
+            val bytes = (request.arguments[1] as? VmValue.ByteArrayValue)?.value ?: return malformed()
+            return withEndpoint(handle) { endpoint ->
+                val canvas = endpoint.canvas
+                check(frameTasks[canvas] == request.identity.taskId) { "This task has no frame on the display" }
+                try {
+                    val commands = DisplayRasterBatch.decode(bytes)
+                    canvas.acquire(owner, endpoint::leaseValid)
+                    commands.forEach { it.apply(canvas, owner) }
+                    HostResponse.UnitSuccess
+                } catch (error: Exception) {
+                    // A failed packet cannot leave private partial changes available for a later commit.
+                    canvas.finish(owner, false)
+                    frameTasks.remove(canvas)
+                    throw error
+                }
+            }
+        }
         val values = request.arguments.drop(1)
         if (values.zip(schema.arguments.drop(1)).any { (value, type) ->
                 if (type == HostValueType.STRING) value !is VmValue.StringValue else value !is VmValue.I32
@@ -425,9 +444,11 @@ internal class DisplayHostState(
                         }
 
                         15, 16 -> {
-                            check(frameTask == task) { "This task has no frame on the display" }
-                            canvas.finish(owner, request.operation == 15)
-                            frameTasks.remove(canvas)
+                            if (request.operation == 15 || frameTask != null) {
+                                check(frameTask == task) { "This task has no frame on the display" }
+                                canvas.finish(owner, request.operation == 15)
+                                frameTasks.remove(canvas)
+                            }
                         }
 
                         else -> {
@@ -465,7 +486,7 @@ internal class DisplayHostState(
 
         val SCHEMA =
             HostCapabilitySchema(
-                CapabilityIdentity("compukters", "display", 1, 3),
+                CapabilityIdentity("compukters", "display", 1, 4),
                 listOf(
                     HostOperationSchema(listOf(HostValueType.I32), HostValueType.I32, true),
                     HostOperationSchema(listOf(HostValueType.STRING), HostValueType.I32, true),
@@ -514,6 +535,7 @@ internal class DisplayHostState(
                             HostValueType.UNIT,
                             true,
                         ),
+                        HostOperationSchema(listOf(HostValueType.I32, HostValueType.BYTE_ARRAY), HostValueType.UNIT, true),
                     ),
             )
 

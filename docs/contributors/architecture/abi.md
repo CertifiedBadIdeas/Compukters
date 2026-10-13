@@ -15,7 +15,7 @@ This reference groups versioned representation boundaries by the version that in
 
 `kotlin:builtins` 1.14.0 completes the structural Enum comparison declaration for frontend inheritance.
 `stdlib:core` 1.21.0 adds sealed `kotlin.enums.EnumEntries<E>` and its private immutable array-backed
-implementation. `compukter:core` 7.6.0 exports generated static `entries` getters for its enums. Library
+implementation. `compukter:core` 8.1.0 exports generated static `entries` getters for its enums. Library
 metadata records these generated functions with their canonical typed signatures, including enum-only
 libraries; consumers import the same cached collection and singleton entries through ordinary links.
 Dependent libraries rebuild against the resulting platform identities.
@@ -336,6 +336,15 @@ an unavailable host failure before reads or writes, including competing processe
 contracts of the same device. Discovery snapshots reserve no unread devices. Process stop/reset, explicit final
 handle close and disconnected endpoint expiry release ownership. Peripheral checkpoint format 2 and the published
 addon contract JVM constructors remain unchanged; persisted handles must reacquire available exact instances.
+
+## Configurator structure geometry
+
+Configurator overlay payload registration version 2 appends optional inclusive minimum/maximum block positions
+for each device. Bounds contain the canonical anchor, span 1–64 blocks per axis and are validated on decode.
+Single-block devices omit bounds. Both producer and consumer change together; version 1 overlay peers are incompatible.
+The additive `CompuktersPeripheralGeometryProvider` interface leaves existing provider SAMs, device constructors,
+Guest capabilities, exact-instance stamps and persistent network format 1 unchanged. Structure geometry is presentation
+metadata and is excluded from canonical device identity. See [world integration](world-integration.md#peripheral-structure-geometry).
 
 ## Computer network capability
 
@@ -836,6 +845,42 @@ Operations 18–20 reject capability minors below 3. Existing operations remain 
 minimum minors. Kotlin source declarations and compiled export linking include mutable property accessors.
 Callback source syntax is normalized to canonical function types during linking; source metadata preserves
 extension-function receivers. Callback interfaces share specialization identity across library boundaries.
+
+## Display capability 1.4
+
+`compukters:display` 1.4 preserves operations 0–20 and appends asynchronous operation 21
+`rasterBatch(handle: I32, bytes: BYTE_ARRAY): UNIT`. Minors below 4 reject operation 21.
+Guest module `compukter:core` 8.0.0 changes the `GraphicalDisplay.frame` receiver to `DisplayFrame`;
+canvas/widget/UI drawing accepts this scoped recorder. Immediate scalar drawing and device input remain on
+`GraphicalDisplay`. CPKT, Runtime ABI, native transports and checkpoint encoding are unchanged.
+
+Packets contain at most 4096 bytes: little-endian I32 version (1), I32 command count (1–128), then commands.
+Each command starts with a U8 tag matching its existing scalar operation. All following scalar fields are
+signed little-endian I32; strings are an I32 UTF-16 code-unit count followed by little-endian U16 units.
+
+| Tag | Fields after tag |
+| --- | --- |
+| 8 | color |
+| 9 | x, y, color |
+| 10 | x0, y0, x1, y1, color |
+| 11 | x, y, width, height, color |
+| 12 | x, y, string, color, scale |
+| 13 | x, y, pixel count (1–256), that many 24-bit RGB colors in I32 fields |
+| 19 | x0, y0, x1, y1, color, clipX, clipY, clipWidth, clipHeight |
+| 20 | x, y, string, color, scale, clipX, clipY, clipWidth, clipHeight |
+
+The host decodes and validates the whole packet before drawing. Unknown tags/versions, invalid counts,
+truncation, trailing bytes, invalid colors, negative sizes and malformed UTF-16 reject. Existing text limits
+(256 code points, 1024 UTF-8 bytes, scales 1–8), clipping and deterministic pixel-work limits remain in force.
+Batching requires a live endpoint, an exclusive program lease and an open frame owned by the requesting task.
+Any decode or application failure discards that frame; commit then fails. Abort is idempotent when no frame
+remains, allowing Guest `finally` cleanup without masking the original error. A wrong-task request cannot
+abort the owner's frame. Multiple packets retain drawing order, and only commit publishes pixels.
+
+The Guest recorder is mutable and task-confined; do not share it between cooperative tasks. A failed submission
+poisons it and successful/failed block exit closes it, so an escaped recorder cannot submit another frame's
+commands. Packet buffers are ordinary managed Guest memory and follow VM hibernation with the host's existing
+private framebuffer checkpoint. No global handle-to-buffer registry exists.
 
 ### Classic Kotlin contracts
 

@@ -32,10 +32,7 @@ internal object DisplayRasterFont {
         scale: Int,
         clip: ru.lazyhat.compukters.core.display.DisplayRegion? = null,
     ) {
-        require(scale in 1..8)
-        DisplayCanvas.requireColor(color)
-        require(text.toByteArray(Charsets.UTF_8).size <= 1024)
-        require(text.none { it in '\uD800'..'\uDFFF' } || validSurrogates(text))
+        validate(text, color, scale)
         val cellWidth = 6 * scale
         val cellHeight = 12 * scale
         val points = text.codePoints().toArray()
@@ -54,6 +51,18 @@ internal object DisplayRasterFont {
             val glyph = lines[py / cellHeight].getOrNull(px / cellWidth)
             glyph?.get((py % cellHeight) * cellWidth + (px % cellWidth)) == true
         }
+    }
+
+    fun validate(
+        text: String,
+        color: Int,
+        scale: Int,
+    ) {
+        require(scale in 1..8)
+        DisplayCanvas.requireColor(color)
+        require(text.toByteArray(Charsets.UTF_8).size <= 1024)
+        require(text.none { it in '\uD800'..'\uDFFF' } || validSurrogates(text))
+        require(text.codePointCount(0, text.length) <= 256)
     }
 
     private fun glyph(

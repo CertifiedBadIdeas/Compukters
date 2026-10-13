@@ -1438,26 +1438,30 @@ internal object KotlinProjectLowering {
             }
         (functions + properties).filterNot(::isCollectionSource).forEach { it.accept(collectionUsage, null) }
         val collectionInterfaceClasses = canonicalPlatformBaseClasses(pluginContext, session)
+        val platformTypeSymbols =
+            if (includeTrustedPlatformBodies) emptySet() else session.platformTypes.mapTo(hashSetOf()) { it.symbol }
         val sourceClasses =
             (classes + collectionInterfaceClasses)
                 .distinctBy { it.symbol }
-                .filterNot { it.runtimeExceptionType() != null }
-                .filterNot { includeTrustedPlatformBodies && it.kind == ClassKind.OBJECT && !it.isManagedPlatformObject() }
                 .filterNot { declaration ->
-                    !includeTrustedPlatformBodies && !usesListFactory &&
-                        declaration !in collectionInterfaceClasses &&
-                        isCollectionSource(declaration)
-                }.filterNot {
-                    !includeTrustedPlatformBodies &&
-                        it.fqNameWhenAvailable?.asString() !in specializedPlatformBaseTypes &&
-                        it.fqNameWhenAvailable?.asString() !in session.sourcePlatformSymbols &&
-                        session.trustedPlatformModule(it.file.fileEntry.name) != null
-                }.filterNot { declaration ->
-                    !includeTrustedPlatformBodies && session.platformTypes.any { it.symbol == declaration.fqNameWhenAvailable?.asString() }
-                }.filterNot { declaration ->
-                    !includeTrustedPlatformBodies && declaration !in collectionInterfaceClasses &&
-                        session.virtualSourcePath(declaration.file.fileEntry.name) in session.sourcePlatformPaths &&
-                        declaration.fqNameWhenAvailable?.asString() !in session.sourcePlatformSymbols
+                    declaration.runtimeExceptionType() != null ||
+                        (includeTrustedPlatformBodies && declaration.kind == ClassKind.OBJECT && !declaration.isManagedPlatformObject()) ||
+                        (
+                            !includeTrustedPlatformBodies && !usesListFactory &&
+                                declaration !in collectionInterfaceClasses && isCollectionSource(declaration)
+                        ) ||
+                        (
+                            !includeTrustedPlatformBodies &&
+                                declaration.fqNameWhenAvailable?.asString() !in specializedPlatformBaseTypes &&
+                                declaration.fqNameWhenAvailable?.asString() !in session.sourcePlatformSymbols &&
+                                session.trustedPlatformModule(declaration.file.fileEntry.name) != null
+                        ) ||
+                        (!includeTrustedPlatformBodies && declaration.fqNameWhenAvailable?.asString() in platformTypeSymbols) ||
+                        (
+                            !includeTrustedPlatformBodies && declaration !in collectionInterfaceClasses &&
+                                session.virtualSourcePath(declaration.file.fileEntry.name) in session.sourcePlatformPaths &&
+                                declaration.fqNameWhenAvailable?.asString() !in session.sourcePlatformSymbols
+                        )
                 }.sortedBy { it.fqNameWhenAvailable?.asString().orEmpty() }
         sourceClasses
             .firstOrNull { declaration ->
@@ -1506,35 +1510,37 @@ internal object KotlinProjectLowering {
                         }
                     }
             ).distinctBy { it.symbol }
-                .filterNot { inlineValueClasses.getter(it.symbol) != null }
                 .filter { function ->
                     val owner = function.parent as? IrClass
-                    includeTrustedPlatformBodies ||
-                        function.parent is IrFile ||
+                    inlineValueClasses.getter(function.symbol) == null &&
                         (
-                            inlineValueClasses.contains(owner?.symbol) &&
-                                function.origin == IrDeclarationOrigin.DEFINED
-                        ) ||
+                            includeTrustedPlatformBodies ||
+                                function.parent is IrFile ||
+                                (
+                                    inlineValueClasses.contains(owner?.symbol) &&
+                                        function.origin == IrDeclarationOrigin.DEFINED
+                                ) ||
+                                (
+                                    owner?.symbol in sourceClassSymbols &&
+                                        function.origin != IrDeclarationOrigin.FAKE_OVERRIDE &&
+                                        (function.correspondingPropertySymbol == null || !function.isDirectFieldAccessor())
+                                )
+                        ) &&
                         (
-                            owner?.symbol in sourceClassSymbols &&
-                                function.origin != IrDeclarationOrigin.FAKE_OVERRIDE &&
-                                (function.correspondingPropertySymbol == null || !function.isDirectFieldAccessor())
-                        )
-                }.filter { function ->
-                    function.body != null || function.modality == Modality.ABSTRACT ||
-                        function.isGeneratedDataValueMethod()
-                }.filterNot { function ->
-                    !includeTrustedPlatformBodies &&
-                        (function.parent as? IrClass)?.fqNameWhenAvailable?.asString() !in specializedPlatformBaseTypes &&
-                        function.fqNameWhenAvailable?.asString() !in session.sourcePlatformSymbols &&
-                        function.correspondingPropertySymbol
-                            ?.owner
-                            ?.fqNameWhenAvailable
-                            ?.asString() !in session.sourcePlatformSymbols &&
-                        session.trustedPlatformModule(function.file.fileEntry.name) != null
-                }.filterNot { function ->
-                    !includeTrustedPlatformBodies &&
-                        isLinkedPlatformFunction(function, session)
+                            function.body != null || function.modality == Modality.ABSTRACT ||
+                                function.isGeneratedDataValueMethod()
+                        ) &&
+                        !(
+                            !includeTrustedPlatformBodies &&
+                                owner?.fqNameWhenAvailable?.asString() !in specializedPlatformBaseTypes &&
+                                function.fqNameWhenAvailable?.asString() !in session.sourcePlatformSymbols &&
+                                function.correspondingPropertySymbol
+                                    ?.owner
+                                    ?.fqNameWhenAvailable
+                                    ?.asString() !in session.sourcePlatformSymbols &&
+                                session.trustedPlatformModule(function.file.fileEntry.name) != null
+                        ) &&
+                        (includeTrustedPlatformBodies || !isLinkedPlatformFunction(function, session))
                 }
         val lexicalSpecialization = GuestLocalSpecialization()
         val rootFunctions =
@@ -10758,7 +10764,7 @@ private fun capabilityShape(
         ?: PlatformCapabilityShape(
             when (capability.namespace to capability.name) {
                 "compukter" to "terminal" -> 3
-                "compukters" to "display" -> 3
+                "compukters" to "display" -> 4
                 else -> 0
             },
             when (capability.namespace to capability.name) {
@@ -10771,7 +10777,7 @@ private fun capabilityShape(
                 "compukters" to "peripheral" -> 6u
                 "compukters" to "redstone-port" -> 6u
                 "compukter" to "sound" -> 1u
-                "compukters" to "display" -> 21u
+                "compukters" to "display" -> 22u
                 "compukters" to "network" -> 3u
                 "compukter" to "timer" -> 1u
                 else -> error("unknown Compukters capability ${capability.namespace}:${capability.name}")
