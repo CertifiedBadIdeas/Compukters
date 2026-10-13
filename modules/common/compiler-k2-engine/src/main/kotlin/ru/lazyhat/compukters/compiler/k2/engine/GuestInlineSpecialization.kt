@@ -6,8 +6,10 @@
 
 package ru.lazyhat.compukters.compiler.k2.engine
 
+import org.jetbrains.kotlin.descriptors.ClassKind
 import org.jetbrains.kotlin.ir.IrElement
 import org.jetbrains.kotlin.ir.declarations.IrClass
+import org.jetbrains.kotlin.ir.declarations.IrDeclarationContainer
 import org.jetbrains.kotlin.ir.declarations.IrFile
 import org.jetbrains.kotlin.ir.declarations.IrSimpleFunction
 import org.jetbrains.kotlin.ir.expressions.IrCall
@@ -51,7 +53,7 @@ internal class GuestInlineSpecialization(
             override fun visitClass(declaration: IrClass) {
                 val added = declaration.typeParameters.map { it.symbol }.filter { enclosingParameters.add(it) }
                 try {
-                    super.visitClass(declaration)
+                    declaration.declarations.toList().forEach { it.accept(this, null) }
                 } finally {
                     enclosingParameters.removeAll(added.toSet())
                 }
@@ -96,8 +98,10 @@ internal class GuestInlineSpecialization(
         require(copies.size < maximumVariants) { "generic inline specialization variant limit exceeded" }
         require(active.size < maximumDepth) { "generic inline specialization depth limit exceeded" }
         val original = key.declaration
-        val parent = original.parent as? IrFile
-        requireNotNull(parent) { "generic inline specialization currently requires a top-level declaration" }
+        val parent = original.parent
+        require(parent is IrFile || (parent is IrClass && parent.kind == ClassKind.OBJECT)) {
+            "generic inline specialization requires a top-level or object declaration"
+        }
         val copy = copyGuestFunction(original, key.arguments)
         copy.patchDeclarationParents(parent)
         copies[key] = copy
@@ -107,7 +111,7 @@ internal class GuestInlineSpecialization(
         } finally {
             active -= key
         }
-        parent.declarations += copy
+        (parent as IrDeclarationContainer).declarations += copy
         return copy
     }
 }

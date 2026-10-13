@@ -722,6 +722,55 @@ class GuestInlineIntegrationTest {
     }
 
     @Test
+    fun `object and companion inline methods preserve typed receivers and discard templates`() {
+        val source =
+            """
+            object Owner {
+                var state = 1
+                inline fun <T, R> transform(value: T, block: (T) -> R): R = block(value)
+                inline fun bump(value: Int = state): Int = transform(value) { it + 1 }
+                fun ordinary(): Int = transform(state) { it + 2 }
+            }
+            class Container {
+                companion object {
+                    inline fun <T> forward(value: T): T = Owner.transform(value) { it }
+                }
+            }
+            fun main() {
+                val alias = Owner
+                val a = alias.bump()
+                val b = Container.forward(2L)
+                val c = Owner.ordinary()
+                val retained: (Int) -> Int = alias::bump
+                val d = retained(3)
+            }
+            """.trimIndent()
+        for (shared in listOf(false, true)) {
+            probe(source, throughSharedEntry = shared) { _, facts, diagnostics, artifact ->
+                assertTrue(diagnostics.isEmpty(), diagnostics.toString())
+                assertEquals(0, facts.inlineCalls)
+                assertTrue(!facts.erasedGenericValue)
+                assertNotNull(artifact)
+            }
+        }
+    }
+
+    @Test
+    fun `trusted stateless object inline methods retain erased platform receivers`() {
+        probe(
+            source = "import probe.Owner\nfun main() { val result = Owner.apply(3) { it + 1 } }",
+            librarySource = "package probe\nobject Owner { inline fun <T, R> apply(value: T, block: (T) -> R): R = block(value) }",
+            throughSharedEntry = true,
+            trustedLibrary = true,
+            admitTrustedSourceBodies = true,
+        ) { _, facts, diagnostics, artifact ->
+            assertTrue(diagnostics.isEmpty(), diagnostics.toString())
+            assertEquals(0, facts.inlineCalls)
+            assertNotNull(artifact)
+        }
+    }
+
+    @Test
     fun `generic specialization rejects variant and nesting limits explicitly`() {
         val variants =
             assertFailsWith<IllegalArgumentException> {
@@ -783,7 +832,7 @@ class GuestInlineIntegrationTest {
                     """.trimIndent(),
                 ) { _, _, _, _ -> error("unsupported shape must fail before emission") }
             }
-        assertTrue(member.message.orEmpty().contains("top-level declaration"))
+        assertTrue(member.message.orEmpty().contains("top-level or object declaration"))
     }
 
     @Test
@@ -974,6 +1023,7 @@ class GuestInlineIntegrationTest {
         throughSharedEntry: Boolean = false,
         libraryAdmission: Boolean = true,
         trustedLibrary: Boolean = false,
+        admitTrustedSourceBodies: Boolean = false,
         canonicalIdentity: Boolean = false,
         bodyUnavailable: Boolean = false,
         maximumVariants: Int = 256,
@@ -1064,6 +1114,8 @@ class GuestInlineIntegrationTest {
                         } else {
                             emptyMap()
                         },
+                    sourcePlatformPaths =
+                        if (admitTrustedSourceBodies) setOf(VirtualSourcePath.of("platform/probe/library/Library.kt")) else emptySet(),
                     canonicalIntrinsicRegistry = registry,
                     selectedPlatformModules = if (canonicalIdentity) setOf(identityModule) else emptySet(),
                     capabilityShapes = if (canonicalIdentity) mapOf(capability to PlatformCapabilityShape(0, 1u)) else emptyMap(),

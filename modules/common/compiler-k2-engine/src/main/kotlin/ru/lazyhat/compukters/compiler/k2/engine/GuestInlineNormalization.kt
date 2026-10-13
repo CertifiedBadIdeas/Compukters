@@ -13,8 +13,10 @@ import org.jetbrains.kotlin.backend.common.ir.SharedVariablesManager
 import org.jetbrains.kotlin.backend.common.lower.UpgradeCallableReferences
 import org.jetbrains.kotlin.cli.common.messages.MessageCollector
 import org.jetbrains.kotlin.config.CompilerConfiguration
+import org.jetbrains.kotlin.descriptors.ClassKind
 import org.jetbrains.kotlin.ir.IrElement
 import org.jetbrains.kotlin.ir.declarations.IrAnonymousInitializer
+import org.jetbrains.kotlin.ir.declarations.IrClass
 import org.jetbrains.kotlin.ir.declarations.IrDeclaration
 import org.jetbrains.kotlin.ir.declarations.IrField
 import org.jetbrains.kotlin.ir.declarations.IrFile
@@ -114,10 +116,10 @@ internal object GuestInlineNormalization {
                 if (canonical) return null
                 throw UnsupportedKotlinIr(location, "inline body is not from an admitted Guest source")
             }
-            if (function.parent !is IrFile) {
+            if (function.parent !is IrFile && (function.parent as? IrClass)?.kind != ClassKind.OBJECT) {
                 throw UnsupportedKotlinIr(
                     location,
-                    "inline functions currently require a top-level declaration",
+                    "inline functions require a top-level or object declaration",
                 )
             }
             if (function.isSuspend) throw UnsupportedKotlinIr(location, "suspend inline functions are unsupported")
@@ -208,6 +210,7 @@ internal object GuestInlineNormalization {
                 }
             }
         }
+        files.forEach { GuestInlineObjectReceivers.lower(it, session) }
         val required = mutableSetOf<IrFunctionSymbol>()
         val pending = ArrayDeque<IrSimpleFunction>()
 
@@ -247,7 +250,21 @@ internal object GuestInlineNormalization {
             // Open generic function references remain subject to the existing signature rejection.
             if (target.typeParameters.isEmpty()) target.accept(references, null)
         }
-        files.forEach { file -> file.declarations.removeAll { it is IrSimpleFunction && it.isInline && it.symbol !in required } }
+        val removeTemplates =
+            object : IrVisitorVoid() {
+                override fun visitElement(element: IrElement) {
+                    element.acceptChildren(this, null)
+                }
+
+                override fun visitClass(declaration: IrClass) {
+                    declaration.declarations.removeAll { it is IrSimpleFunction && it.isInline && it.symbol !in required }
+                    super.visitClass(declaration)
+                }
+            }
+        files.forEach { file ->
+            file.declarations.removeAll { it is IrSimpleFunction && it.isInline && it.symbol !in required }
+            file.accept(removeTemplates, null)
+        }
         session.normalizedGuestModules += module
     }
 
