@@ -45,6 +45,32 @@ import kotlin.test.assertFailsWith
 
 class AnalysisProtocolHostileInputTest {
     @Test
+    fun `import fix decoder rejects excess candidates bytes and non insertion ranges`() {
+        val path = VirtualSourcePath.kotlin("main.kt")
+        val query = AnalysisQuery.ImportFixes(identity, path, 1)
+        val item =
+            ru.lazyhat.compukters.ide.analysis.ImportQuickFix(
+                "a.Box",
+                ru.lazyhat.compukters.ide.analysis
+                    .CompletionTextEdit(EditorRange(0, 0), "import a.Box\n\n"),
+            )
+        val value = AnalysisResult.ImportFixes.create(identity, EditorRange(0, 2), listOf(item), 3)
+        val correlated = context.forQuery(query)
+        val frame = AnalysisMessageCodec.encode(AnalysisQuerySuccess(RequestId.of(1uL), value), correlated)
+        val limited = AnalysisProtocolContext.of(snapshot("main.kt", "abc"), AnalysisLimits(completionItems = 0)).forQuery(query)
+        assertEquals(AnalysisProtocolError.CountLimit, messageFailure(frame, limited).error)
+        val textLimited = AnalysisProtocolContext.of(snapshot("main.kt", "abc"), AnalysisLimits(detailTextBytes = 4)).forQuery(query)
+        assertEquals(AnalysisProtocolError.CountLimit, messageFailure(frame, textLimited).error)
+        val endOffset =
+            frame.payload.size -
+                item.edit.text
+                    .encodeToByteArray()
+                    .size - 8
+        val hostile = frame.copy(payload = frame.payload.copyOf().also { it[endOffset] = 1 })
+        assertEquals(AnalysisProtocolError.InvalidRange, messageFailure(hostile, correlated).error)
+    }
+
+    @Test
     fun `completion decoder rejects malformed unicode match ranges and excessive range counts`() {
         val path = VirtualSourcePath.kotlin("main.kt")
         val query = AnalysisQuery.Completion(identity, path, 3, CompletionTrigger.Manual)

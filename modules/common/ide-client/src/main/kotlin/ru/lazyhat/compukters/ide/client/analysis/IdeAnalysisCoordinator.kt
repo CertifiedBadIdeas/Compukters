@@ -1012,6 +1012,7 @@ class IdeAnalysisCoordinator(
                 publishedState.set(next)
             }
 
+            is AnalysisResult.ImportFixes,
             is AnalysisResult.Declaration,
             is AnalysisResult.ExpressionInfo,
             is AnalysisResult.ParameterInfo,

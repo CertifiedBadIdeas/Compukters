@@ -50,6 +50,44 @@ import kotlin.test.assertIs
 
 class CompletionIntegrationTest {
     @Test
+    fun `forked worker returns import fixes without changing snapshot`() {
+        val source = "fun main() { greet(2) }"
+        val path = VirtualSourcePath.kotlin("main.kt")
+        val sources =
+            ProjectSnapshot.of(
+                listOf(
+                    ProjectSource(path, BinaryValue.of(source.encodeToByteArray())),
+                    ProjectSource(
+                        VirtualSourcePath.kotlin("lib.kt"),
+                        BinaryValue.of("package sample\nfun greet(times: Int) = Unit".encodeToByteArray()),
+                    ),
+                ).sortedBy { it.path.value },
+                WorkerLimits(),
+            )
+        val profile = AnalysisProfileIdentity(Hash256.of(ByteArray(32) { 9 }))
+        val identity = AnalysisSnapshotIdentity(SourceSnapshotIdentity.of(sources), profile)
+        val admitted =
+            AdmittedAnalysisSnapshot(
+                identity,
+                sources,
+                AdmittedAnalysisProfile(
+                    profile,
+                    ru.lazyhat.compukters.ide.analysis.k2
+                        .testAdmittedPlatform(),
+                ),
+                AnalysisLimits(),
+            )
+        withController { controller ->
+            assertEquals(SnapshotOpenResult.Opened(identity), controller.open(admitted).get(90, TimeUnit.SECONDS))
+            val query = AnalysisQuery.ImportFixes(identity, path, source.indexOf("greet"))
+            val result = assertIs<AnalysisClientResult.Success>(controller.query(admitted, query).get(90, TimeUnit.SECONDS)).result
+            assertEquals(listOf("sample.greet"), assertIs<AnalysisResult.ImportFixes>(result).items.map { it.fqName })
+            val again = assertIs<AnalysisClientResult.Success>(controller.query(admitted, query).get(90, TimeUnit.SECONDS)).result
+            assertEquals(result, again)
+        }
+    }
+
+    @Test
     fun `forked worker returns parameter information`() {
         val source =
             """

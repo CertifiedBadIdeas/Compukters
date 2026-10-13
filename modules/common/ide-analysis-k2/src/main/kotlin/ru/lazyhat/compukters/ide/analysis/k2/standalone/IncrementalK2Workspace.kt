@@ -94,6 +94,8 @@ internal class IncrementalK2Workspace(
             this,
         )
 
+    fun sourceText(path: VirtualSourcePath): String = decodeStrict(sources.sources.single { it.path == path }.content)
+
     /** Serialized worker-only speculation; never commits identity, sources or completion data. */
     fun <T> preview(
         expectedIdentity: AnalysisSnapshotIdentity,

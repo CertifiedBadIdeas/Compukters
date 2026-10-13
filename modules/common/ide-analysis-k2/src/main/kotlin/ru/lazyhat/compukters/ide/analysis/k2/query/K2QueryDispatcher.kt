@@ -34,6 +34,7 @@ internal object K2QueryDispatcher {
         limits: AnalysisLimits,
     ): AnalysisResult {
         require(query.identity == snapshot.identity) { "analysis query identity is not active" }
+        if (query is AnalysisQuery.ImportFixes) return ImportFixQuery.execute(query, snapshot, limits)
         if (query is AnalysisQuery.Rename) return RenameQuery.execute(query, snapshot, limits)
         return ReadAction.compute<AnalysisResult, RuntimeException> {
             when (query) {
@@ -43,6 +44,7 @@ internal object K2QueryDispatcher {
                 is AnalysisQuery.ParameterInfo -> ParameterInfoQuery.execute(query, snapshot, limits)
                 is AnalysisQuery.Declaration -> DeclarationQuery.execute(query, snapshot, limits)
                 is AnalysisQuery.References -> ReferenceQuery.execute(query, snapshot, limits)
+                is AnalysisQuery.ImportFixes -> error("import fixes execute outside K2 read actions")
                 is AnalysisQuery.Format -> error("format queries execute outside K2 read actions")
                 is AnalysisQuery.Rename -> error("rename queries execute outside K2 read actions")
             }

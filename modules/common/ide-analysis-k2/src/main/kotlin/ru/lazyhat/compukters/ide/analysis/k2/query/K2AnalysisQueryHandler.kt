@@ -46,6 +46,7 @@ internal class K2AnalysisQueryHandler(
         is AnalysisQuery.Declaration,
         is AnalysisQuery.References,
         is AnalysisQuery.Rename,
+        is AnalysisQuery.ImportFixes,
         -> {
             try {
                 AnalysisQuerySuccess(request.requestId, K2QueryDispatcher.execute(request.query, snapshot, limits))

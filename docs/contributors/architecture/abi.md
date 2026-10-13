@@ -310,6 +310,13 @@ requires a valid active-parameter span. The existing KDoc parser selects `@param
 English UI labels are separate from the body and do not introduce a localization identifier ABI. Protocol 16
 workers are rejected at handshake. Compiler, Guest platform, artifact and native contracts are unchanged.
 
+Analysis protocol 18 adds the explicit `ImportFixes` cursor query and its bounded result: an optional reference
+range and distinct qualified import names, each with one insertion edit. Candidate count uses the negotiated
+completion-item bound; names and edit text use the detail-text byte bound. The worker checks each candidate through
+a restored K2 preview and considers at most 16 previews per request. Existing resolved bindings and errors must
+remain valid. The result carries source UTF-16 coordinates, including conversion from normalized PSI for CRLF.
+Protocol 17 workers are rejected at handshake; compiler, platform, artifact and native contracts are unchanged.
+
 ## Boundary identities
 
 | Boundary | Current representation | Owner |
@@ -319,7 +326,7 @@ workers are rejected at handshake. Compiler, Guest platform, artifact and native
 | Base platform | Bundle format 9, standalone module format 5, platform ABI 3 | `PlatformBundleCodec` in `modules/common/platform-bundle` |
 | Kotlin metadata carrier | Private format 6 | `platform-k2` |
 | Compiler worker | Protocol 5; explicit source-free library preparation | `compiler-client` and `compiler-k2` |
-| IDE analysis | Protocol 17 | `ide-analysis-client` and `ide-analysis-k2` |
+| IDE analysis | Protocol 18 | `ide-analysis-client` and `ide-analysis-k2` |
 
 ## Reference-array loop surface
 

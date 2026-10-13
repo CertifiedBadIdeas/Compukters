@@ -46,6 +46,7 @@ import ru.lazyhat.compukters.ide.analysis.EditorDiagnosticSeverity
 import ru.lazyhat.compukters.ide.analysis.EditorExpressionInfo
 import ru.lazyhat.compukters.ide.analysis.EditorParameterInfo
 import ru.lazyhat.compukters.ide.analysis.EditorPresentationLimits
+import ru.lazyhat.compukters.ide.analysis.ImportQuickFix
 import ru.lazyhat.compukters.ide.analysis.MAX_RENAME_NAME_BYTES
 import ru.lazyhat.compukters.ide.analysis.MethodUsageCount
 import ru.lazyhat.compukters.ide.analysis.ParameterInfoItem
@@ -408,6 +409,10 @@ private fun validateQuery(
             context.validate(query.path, query.offsetUtf16)
         }
 
+        is AnalysisQuery.ImportFixes -> {
+            context.validate(query.path, query.offsetUtf16)
+        }
+
         is AnalysisQuery.ExpressionInfo -> {
             context.validate(query.path, query.offsetUtf16)
         }
@@ -476,6 +481,17 @@ private fun validateResult(
             AnalysisResult.Completion.create(
                 result.identity,
                 result.replacement,
+                result.items,
+                sourceLengths.getValue(query.path),
+                limits.resultLimits(),
+            )
+        }
+
+        is AnalysisResult.ImportFixes -> {
+            require(query is AnalysisQuery.ImportFixes) { "analysis result kind does not match its query" }
+            AnalysisResult.ImportFixes.create(
+                result.identity,
+                result.reference,
                 result.items,
                 sourceLengths.getValue(query.path),
                 limits.resultLimits(),
@@ -634,6 +650,7 @@ private class MessageSink {
             when (value) {
                 is AnalysisQuery.Presentation -> QueryKind.Presentation
                 is AnalysisQuery.Completion -> QueryKind.Completion
+                is AnalysisQuery.ImportFixes -> QueryKind.ImportFixes
                 is AnalysisQuery.ExpressionInfo -> QueryKind.ExpressionInfo
                 is AnalysisQuery.ParameterInfo -> QueryKind.ParameterInfo
                 is AnalysisQuery.Declaration -> QueryKind.Declaration
@@ -653,6 +670,10 @@ private class MessageSink {
                 string(value.path.value)
                 u32(value.offsetUtf16)
                 enum(value.trigger)
+            }
+
+            is AnalysisQuery.ImportFixes -> {
+                cursor(value.path, value.offsetUtf16)
             }
 
             is AnalysisQuery.ExpressionInfo -> {
@@ -689,6 +710,7 @@ private class MessageSink {
             when (value) {
                 is AnalysisResult.Presentation -> ResultKind.Presentation
                 is AnalysisResult.Completion -> ResultKind.Completion
+                is AnalysisResult.ImportFixes -> ResultKind.ImportFixes
                 is AnalysisResult.ExpressionInfo -> ResultKind.ExpressionInfo
                 is AnalysisResult.ParameterInfo -> ResultKind.ParameterInfo
                 is AnalysisResult.Declaration -> ResultKind.Declaration
@@ -707,6 +729,16 @@ private class MessageSink {
                 range(value.replacement)
                 u32(value.items.size)
                 value.items.forEach(::completionItem)
+            }
+
+            is AnalysisResult.ImportFixes -> {
+                nullableRange(value.reference)
+                u32(value.items.size)
+                value.items.forEach { item ->
+                    string(item.fqName)
+                    range(item.edit.range)
+                    string(item.edit.text)
+                }
             }
 
             is AnalysisResult.ExpressionInfo -> {
@@ -1090,6 +1122,10 @@ private class MessageSource(
                 AnalysisQuery.Completion(identity, path, offset, enumValue())
             }
 
+            QueryKind.ImportFixes -> {
+                cursor(identity, AnalysisQuery::ImportFixes)
+            }
+
             QueryKind.ExpressionInfo -> {
                 cursor(identity, AnalysisQuery::ExpressionInfo)
             }
@@ -1131,6 +1167,22 @@ private class MessageSource(
                     identity,
                     range(),
                     List(boundedCount(context.limits.completionItems, "completion item")) { completionItem() },
+                    sourceLengths.getValue(query.path),
+                    context.limits.resultLimits(),
+                )
+            }
+
+            ResultKind.ImportFixes -> {
+                val query = context.expectedQuery as? AnalysisQuery.ImportFixes ?: error("import fix result has no import fix query")
+                AnalysisResult.ImportFixes.create(
+                    identity,
+                    optional { range() },
+                    List(boundedCount(context.limits.completionItems, "import fix")) {
+                        ImportQuickFix(
+                            string(context.limits.detailTextBytes),
+                            CompletionTextEdit(range(), string(context.limits.detailTextBytes)),
+                        )
+                    },
                     sourceLengths.getValue(query.path),
                     context.limits.resultLimits(),
                 )
@@ -1349,9 +1401,19 @@ private class MessageSource(
     }
 }
 
-private enum class QueryKind { Presentation, Completion, ExpressionInfo, ParameterInfo, Declaration, References, Format, Rename }
+private enum class QueryKind {
+    Presentation,
+    Completion,
+    ExpressionInfo,
+    ParameterInfo,
+    Declaration,
+    References,
+    Format,
+    Rename,
+    ImportFixes,
+}
 
-private enum class ResultKind { Presentation, Completion, ExpressionInfo, ParameterInfo, Declaration, References, Format }
+private enum class ResultKind { Presentation, Completion, ExpressionInfo, ParameterInfo, Declaration, References, Format, ImportFixes }
 
 private enum class OriginKind { Project, Platform }
 

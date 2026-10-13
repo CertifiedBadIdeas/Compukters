@@ -82,6 +82,11 @@ interface AnalysisRequestCoordinator : AutoCloseable {
         offsetUtf16: Int,
     ): CompletableFuture<AnalysisClientResult> = unsupportedInteractiveRequest()
 
+    fun importFixes(
+        path: VirtualSourcePath,
+        offsetUtf16: Int,
+    ): CompletableFuture<AnalysisClientResult> = unsupportedInteractiveRequest()
+
     fun rename(
         path: VirtualSourcePath,
         offsetUtf16: Int,
@@ -343,6 +348,18 @@ class DefaultAnalysisRequestCoordinator(
                 checkNotNull(snapshot) { "analysis snapshot is not open" }
             }
         return client.query(current, AnalysisQuery.Format(current.identity, path, source, caretOffsetUtf16))
+    }
+
+    override fun importFixes(
+        path: VirtualSourcePath,
+        offsetUtf16: Int,
+    ): CompletableFuture<AnalysisClientResult> {
+        val current =
+            synchronized(lock) {
+                check(!closed) { "analysis request coordinator is closed" }
+                checkNotNull(snapshot) { "analysis snapshot is not open" }
+            }
+        return client.query(current, AnalysisQuery.ImportFixes(current.identity, path, offsetUtf16))
     }
 
     override fun rename(
