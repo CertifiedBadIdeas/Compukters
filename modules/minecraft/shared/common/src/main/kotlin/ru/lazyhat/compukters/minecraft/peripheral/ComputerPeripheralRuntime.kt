@@ -64,21 +64,9 @@ class ComputerPeripheralRuntime internal constructor(
             ::discover,
             ::at,
             ::named,
-            encodeLocation = { position ->
-                java.nio.ByteBuffer
-                    .allocate(8)
-                    .putLong(position.asLong())
-                    .array()
-            },
+            encodeLocation = { location -> location.encode(computer) },
             ownership = ComputerPeripheralOwnership.forServer(level.server),
-            decodeLocation = { bytes ->
-                require(bytes.size == 8)
-                BlockPos.of(
-                    java.nio.ByteBuffer
-                        .wrap(bytes)
-                        .long,
-                )
-            },
+            decodeLocation = { bytes -> PeripheralCheckpointLocation.decode(bytes, computer) },
         )
 
     fun <T : Any> endpoint(
@@ -88,7 +76,7 @@ class ComputerPeripheralRuntime internal constructor(
         requireServerThread()
         @Suppress("UNCHECKED_CAST")
         val bound =
-            contracts[contract] as? PeripheralContract<BlockPos, T>
+            contracts[contract] as? PeripheralContract<PeripheralCheckpointLocation, T>
                 ?: throw PeripheralFailure(HostFailureKind.OTHER, "Peripheral contract is not registered")
         return session.endpoint(bound, handle)
     }
@@ -115,7 +103,7 @@ class ComputerPeripheralRuntime internal constructor(
     ) {
         requireRegistered(contract)
         @Suppress("UNCHECKED_CAST")
-        session.close(contracts.getValue(contract) as PeripheralContract<BlockPos, T>, handle)
+        session.close(contracts.getValue(contract) as PeripheralContract<PeripheralCheckpointLocation, T>, handle)
     }
 
     private fun requireRegistered(contract: ComputerPeripheralContract<*>) {
@@ -123,10 +111,13 @@ class ComputerPeripheralRuntime internal constructor(
         if (contract !in contracts) throw PeripheralFailure(HostFailureKind.OTHER, "Peripheral contract is not registered")
     }
 
-    private fun <T : Any> bind(descriptor: ComputerPeripheralContract<T>): PeripheralContract<BlockPos, T> =
+    private fun <T : Any> bind(descriptor: ComputerPeripheralContract<T>): PeripheralContract<PeripheralCheckpointLocation, T> =
         PeripheralContract(descriptor.id, descriptor.providerId, descriptor.deviceKey) { identity ->
             requireServerThread()
-            val location = ComputerPeripheralIdentity(identity.providerId, identity.location, identity.deviceKey)
+            val anchor =
+                identity.location.resolve(level.dimension().toString(), PeripheralNetworkStorage.get(level).directory)
+                    ?: return@PeripheralContract null
+            val location = ComputerPeripheralIdentity(identity.providerId, anchor, identity.deviceKey)
             descriptor.resolve(level, computer, location)?.let { endpoint ->
                 endpoint.withValidity {
                     descriptor.ownsReachability || ComputerPeripheralLookup.isReachable(level, computer, location)
@@ -134,7 +125,7 @@ class ComputerPeripheralRuntime internal constructor(
             }
         }
 
-    private fun discover(): List<PeripheralIdentity<BlockPos>> {
+    private fun discover(): List<PeripheralIdentity<PeripheralCheckpointLocation>> {
         requireServerThread()
         return when (val traversal = PeripheralWorldDiscovery.discover(level, computer)) {
             is PeripheralCableTraversal.LimitExceeded -> {
@@ -146,12 +137,12 @@ class ComputerPeripheralRuntime internal constructor(
                     .distinct()
                     .sortedWith(
                         compareBy({ it.anchor.x }, { it.anchor.y }, { it.anchor.z }, { it.providerId }, { it.deviceKey }),
-                    ).map { PeripheralIdentity(it.providerId, it.anchor, it.deviceKey) }
+                    ).map { PeripheralIdentity(it.providerId, checkpointLocation(it.anchor), it.deviceKey) }
             }
         }
     }
 
-    private fun at(side: Int): List<PeripheralIdentity<BlockPos>> {
+    private fun at(side: Int): List<PeripheralIdentity<PeripheralCheckpointLocation>> {
         requireServerThread()
         val direction =
             when (side) {
@@ -166,21 +157,21 @@ class ComputerPeripheralRuntime internal constructor(
         val position = computer.relative(direction)
         if (!level.hasChunkAt(position)) return emptyList()
         return ComputerAddonHosts.resolvePeripheralContact(level, position, direction.opposite).map {
-            PeripheralIdentity(it.providerId, it.anchor, it.deviceKey)
+            PeripheralIdentity(it.providerId, checkpointLocation(it.anchor), it.deviceKey)
         }
     }
 
     private fun named(
         provider: String,
         name: String,
-    ): PeripheralIdentity<BlockPos>? {
+    ): PeripheralIdentity<PeripheralCheckpointLocation>? {
         requireServerThread()
         val result = ComputerPeripheralLookup.find(level, computer, provider, name)
         return when (result.status) {
             ComputerPeripheralLookupStatus.FOUND -> {
                 checkNotNull(
                     result.identity,
-                ).let { PeripheralIdentity(it.providerId, it.anchor, it.deviceKey) }
+                ).let { PeripheralIdentity(it.providerId, checkpointLocation(it.anchor), it.deviceKey) }
             }
 
             ComputerPeripheralLookupStatus.MISSING -> {
@@ -202,6 +193,17 @@ class ComputerPeripheralRuntime internal constructor(
                 )
             }
         }
+    }
+
+    private fun checkpointLocation(anchor: BlockPos): PeripheralCheckpointLocation {
+        val instance = if (level.hasChunkAt(anchor)) level.getBlockEntity(anchor)?.let { PeripheralNetworkAccess.instance(it) } else null
+        val member =
+            instance?.takeIf { stamp ->
+                PeripheralNetworkStorage.get(level).directory.networkOf(stamp)?.members?.any {
+                    it.instance == stamp && it.identity.dimension == level.dimension().toString() && it.identity.anchor == anchor
+                } == true
+            }
+        return PeripheralCheckpointLocation(anchor.immutable(), member)
     }
 
     private fun requireServerThread() {

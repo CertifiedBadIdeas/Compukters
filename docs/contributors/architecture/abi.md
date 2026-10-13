@@ -26,6 +26,19 @@ removing a construction. It captures computer host resources before source block
 checkpoint asynchronously. The filesystem attachment barrier prevents destination execution from racing that
 publication. Existing SDK signatures, Guest capabilities and native ABI remain unchanged.
 
+## Minecraft peripheral checkpoint locations
+
+The mod's opaque location payload inside core peripheral resource checkpoint version 2 now has a version byte
+`1` and a kind byte. Kind `0` contains three big-endian signed 32-bit computer-relative offsets (14 bytes total);
+kind `1` contains a network member UUID as two big-endian 64-bit words (18 bytes total). UUID-backed restoration
+uses only the authoritative network directory address in the destination dimension; missing or ambiguous members
+produce stale handles. Endpoint identity and process-scoped ownership checks still apply. Multiple logical contracts
+at the same member address share that address. Direct devices retain exact-instance validation after translation.
+The reader explicitly accepts the previous eight-byte absolute BlockPos payload for older ordinary-world checkpoints;
+there is no fallback from a missing UUID to an old address or a same-name device. Unknown versions/kinds, extra bytes
+and offset overflow are rejected. This mod-owned encoding requires the new host when writing new checkpoints;
+core checkpoint version, Rust VM snapshots, exported C ABI and Guest capability versions are unchanged.
+
 ## Scoped Guest line reading
 
 `compukter:core` 9.1.0 adds eager `FileSystem.readLines`, inline scoped `FileSystem.useLines`,
