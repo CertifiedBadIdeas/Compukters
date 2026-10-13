@@ -352,12 +352,14 @@ unboxed.
 
 ## Lazy sequences
 
-**Status:** Partial; the following subset is executable in `stdlib:core` 1.23.0.
+**Status:** Partial; the following subset is executable in `stdlib:core` 1.24.0.
 
 `kotlin.sequences.Sequence<out T>` is a separate iterator-producing interface. Import
 `kotlin.collections.asSequence` for `Iterable<T>.asSequence()` and the `kotlin.sequences`
 extensions `map`, `filter`, `filterNot`, `take`, `firstOrNull` (with or without predicate),
-and `toList`. Lists, sets and custom iterables can supply the source. A sequence borrows
+and `toList`, plus terminal `forEach`, `fold`, `count` (with or without predicate),
+`any` and `none` (with or without predicate), and `all(predicate)`. Lists, sets and custom
+iterables can supply the source. A sequence borrows
 its source; it does not copy or freeze it. Source mutation and iterator invalidation follow
 the source's own contract. Repeating traversal creates new wrapper iterator state and runs
 callbacks again, provided the source itself permits repeated traversal.
@@ -372,6 +374,17 @@ allocates a new list. An unbounded source may exhaust ordinary execution or heap
 
 Intermediate callbacks escape and are not inline, so they cannot use non-local returns.
 The immediate predicate overload of `firstOrNull` is inline and admits non-local returns.
+Terminal operations request a fresh iterator per invocation. `forEach` and `fold` visit in order;
+`fold` evaluates its initial accumulator once and returns it unchanged for empty inputs.
+`count` consumes the entire sequence and counts null elements normally; its predicate overload
+counts only matches. A count exceeding `Int.MAX_VALUE` throws `ArithmeticException`.
+`any(predicate)` and `none(predicate)` stop at the first match; `all(predicate)` stops at
+its first failure. Empty inputs return false for `any`, true for `all`/`none`, and zero for
+`count`, without invoking callbacks. Parameterless `any`/`none` check `hasNext` without
+calling `next`; an upstream filter may still consume source elements to establish availability.
+All immediate terminal callbacks are inline and admit non-local returns. No terminal operation
+constructs a result list; upstream wrappers and iterators retain their ordinary allocation costs.
+
 Source and callback exceptions propagate. Exhausted filtering, empty and count-limited
 iterators throw `NoSuchElementException`; mapping propagates its source iterator's
 exhaustion behavior. Each wrapper and iterator is a managed object; callbacks retain
@@ -384,7 +397,10 @@ lower instruction cost or faster execution for small inputs.
 
 `sequence { yield(...) }`, `generateSequence`, `sequenceOf`, array/iterator adapters and
 other sequence operations are outside this supported subset. Covariant primitive-to-Any
-sequence views have no execution claim in this stage.
+sequence views have no execution claim in this stage. Constructing `filter` with a retained
+`T`-typed callback inside an ordinary generic helper can produce an unresolved callable-signature
+diagnostic; that shape has no execution claim. Direct terminal calls inside generic helpers are
+covered separately for primitive, nullable and reference elements.
 
 **Evidence:** `MinimalScriptLoweringTest`, test `sequences preserve lazy demand iterator state
 and nullable values`, executed by `testKotlinSequencesVmConformance` with 256-unit slices.
@@ -393,6 +409,13 @@ iterators, repeated availability checks, empty/exhausted inputs, count validatio
 mutable sources, retained captures, callback exceptions, references, nullable values and all twelve primitive families, including integer boundaries, NaNs and signed zero.
 The same lowering test inspects scalar cache layouts, checks that cache methods and primitive
 filtering steps allocate no boxed values, and verifies reference-slot clearing.
+The same main/signed/unsigned fixtures execute terminal operations across all twelve primitive
+families, nullable elements and reference accumulators, including ordered non-commutative folds,
+empty inputs, availability-only queries, early stopping, non-local returns, callback/upstream
+exceptions and single evaluation of the initial accumulator. `checkGenericTerminals` exercises
+immediate terminal callbacks through an ordinary generic helper with Int, Int? and reference elements.
+Overflow guards are not exercised
+at the multi-billion-element threshold by this bounded conformance scenario.
 `sequences reject non local returns from deferred callbacks` covers map/filter/filterNot rejection.
 `DiagnosticQueryTest`,
 `lazy sequences resolve with source and metadata inputs`, covers both IDE platform modes.

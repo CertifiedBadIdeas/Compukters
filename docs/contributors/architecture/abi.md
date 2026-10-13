@@ -73,6 +73,9 @@ existing managed objects. `stdlib:core` 1.23.0 replaces the filtering cache with
 implementations for all twelve non-null primitives and reference storage for nullable/ordinary
 objects. The internal trusted compiler factory shares primitive/reference constructor selection
 with list storage; cache operations remain Guest method bodies and clear consumed references.
+`stdlib:core` 1.24.0 adds immediate terminal forEach/fold/count/any/all/none bodies using
+ordinary iteration, scalar accumulation and inline callbacks. Dependent bundles rebuild
+against the updated core module identity.
 The module content identity changes; platform bundle encoding, executable format,
 Runtime ABI, host operations and checkpoint schema remain unchanged. Exact semantics and
 execution evidence live in [the collection inventory](../../developers/stdlib/collections.md#lazy-sequences).

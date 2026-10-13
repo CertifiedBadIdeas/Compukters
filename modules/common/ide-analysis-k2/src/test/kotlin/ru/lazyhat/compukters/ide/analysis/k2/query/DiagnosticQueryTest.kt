@@ -286,6 +286,11 @@ class DiagnosticQueryTest {
                 val lazy = values.filter { it != null }.filterNot { it == 3 }.map { it }.take(1)
                 val result: List<Int?> = lazy.toList()
                 check(result[0] == 2 && lazy.firstOrNull { it != null } == 2)
+                lazy.forEach { check(it == 2) }
+                val sum: Long = lazy.fold(0L) { acc, value -> acc + (value ?: 0).toLong() }
+                check(sum == 2L && lazy.count() == 1 && lazy.count { it != null } == 1)
+                check(lazy.any() && !lazy.none())
+                check(lazy.any { it == 2 } && lazy.all { it != null } && lazy.none { it == 3 })
                 val iterator = lazy.iterator()
                 check(iterator.hasNext() && iterator.next() == 2)
             }

@@ -2,6 +2,13 @@ import kotlin.collections.*
 import kotlin.sequences.*
 
 fun main() {
+    checkBooleanTerminals(true)
+    checkByteTerminals(2.toByte())
+    checkShortTerminals(3.toShort())
+    checkCharTerminals('x')
+    checkLongTerminals(4L)
+    checkFloatTerminals(1.5f)
+
     check(listOf(true).asSequence().filter { it }.map { !it }.toList()[0] == false)
     check(listOf<Byte>(2).asSequence().filter { true }.map { it }.toList()[0] == 2.toByte())
     check(listOf<Short>(3).asSequence().filter { true }.map { it }.toList()[0] == 3.toShort())
@@ -15,4 +22,70 @@ fun main() {
     val floats = listOf(Float.NaN, -0.0f).asSequence().filter { true }.toList()
     check(floats[0] != floats[0] && 1.0f / floats[1] == Float.NEGATIVE_INFINITY)
     println("sequences signed ok")
+}
+
+fun checkBooleanTerminals(value: Boolean) {
+    val sequence = listOf<Boolean>(value).asSequence().filter { true }
+    var visits = 0
+    sequence.forEach { check(it == value); visits += 1 }
+    check(visits == 1)
+    check(sequence.fold<Boolean, Boolean>(value) { acc, element -> check(acc == value); element } == value)
+    check(sequence.count() == 1 && sequence.count { it == value } == 1)
+    check(sequence.any() && !sequence.none())
+    check(sequence.any { it == value } && sequence.all { it == value } && sequence.none { it != value })
+}
+
+fun checkByteTerminals(value: Byte) {
+    val sequence = listOf<Byte>(value).asSequence().filter { true }
+    var visits = 0
+    sequence.forEach { check(it == value); visits += 1 }
+    check(visits == 1)
+    check(sequence.fold<Byte, Byte>(value) { acc, element -> check(acc == value); element } == value)
+    check(sequence.count() == 1 && sequence.count { it == value } == 1)
+    check(sequence.any() && !sequence.none())
+    check(sequence.any { it == value } && sequence.all { it == value } && sequence.none { it != value })
+}
+
+fun checkShortTerminals(value: Short) {
+    val sequence = listOf<Short>(value).asSequence().filter { true }
+    var visits = 0
+    sequence.forEach { check(it == value); visits += 1 }
+    check(visits == 1)
+    check(sequence.fold<Short, Short>(value) { acc, element -> check(acc == value); element } == value)
+    check(sequence.count() == 1 && sequence.count { it == value } == 1)
+    check(sequence.any() && !sequence.none())
+    check(sequence.any { it == value } && sequence.all { it == value } && sequence.none { it != value })
+}
+
+fun checkCharTerminals(value: Char) {
+    val sequence = listOf<Char>(value).asSequence().filter { true }
+    var visits = 0
+    sequence.forEach { check(it == value); visits += 1 }
+    check(visits == 1)
+    check(sequence.fold<Char, Char>(value) { acc, element -> check(acc == value); element } == value)
+    check(sequence.count() == 1 && sequence.count { it == value } == 1)
+    check(sequence.any() && !sequence.none())
+    check(sequence.any { it == value } && sequence.all { it == value } && sequence.none { it != value })
+}
+
+fun checkLongTerminals(value: Long) {
+    val sequence = listOf<Long>(value).asSequence().filter { true }
+    var visits = 0
+    sequence.forEach { check(it == value); visits += 1 }
+    check(visits == 1)
+    check(sequence.fold<Long, Long>(value) { acc, element -> check(acc == value); element } == value)
+    check(sequence.count() == 1 && sequence.count { it == value } == 1)
+    check(sequence.any() && !sequence.none())
+    check(sequence.any { it == value } && sequence.all { it == value } && sequence.none { it != value })
+}
+
+fun checkFloatTerminals(value: Float) {
+    val sequence = listOf<Float>(value).asSequence().filter { true }
+    var visits = 0
+    sequence.forEach { check(it == value); visits += 1 }
+    check(visits == 1)
+    check(sequence.fold<Float, Float>(value) { acc, element -> check(acc == value); element } == value)
+    check(sequence.count() == 1 && sequence.count { it == value } == 1)
+    check(sequence.any() && !sequence.none())
+    check(sequence.any { it == value } && sequence.all { it == value } && sequence.none { it != value })
 }
