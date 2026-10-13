@@ -59,7 +59,9 @@ line in `addons/dev/build.gradle.kts` to disable the whole group. Voxy requires 
 Sodium; disable Voxy before removing any of those dependencies. The script pins Connector 2.0.0-beta.17,
 Forgified Fabric API 0.116.15+2.3.5, Sodium 0.8.13, and the `realBritakee/voxy-neoforge` 0.2.15 fork for Minecraft 1.21.1.
 Gradle downloads them from Sinytra Maven, Modrinth Maven and the fork's GitHub Release. Do not also copy these JARs
-into `run/client/mods`.
+into `run/client/mods`. Voxy Worldgen 2.4.2 (NeoForge 1.21.1), Cloth Config 15.0.140 and Better ModList 21.1.4
+are also pinned there as separate Modrinth dependencies. Cloth Config and Better ModList provide access to its
+generation settings through the mod configuration screen.
 
 Connector and Sodium contain early ModLauncher services and use `forgeRuntimeLibrary`. Forgified Fabric API uses
 `modRuntimeOnly` with its Maven dependencies, so Loom remaps every API module into the development namespace. A
