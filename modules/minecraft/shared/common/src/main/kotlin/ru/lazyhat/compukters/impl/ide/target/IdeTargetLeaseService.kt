@@ -58,6 +58,7 @@ data class IdeResolvedTarget(
     val terminal: IdeTargetTerminalOperations? = null,
     val fileSystem: IdeTargetFileSystemOperations? = null,
     val namedPeripherals: (() -> IdeTargetReply.NamedPeripherals)? = null,
+    val renamePeripheral: ((IdePeripheralReference, String, String) -> IdeTargetReply)? = null,
 ) {
     init {
         require(machineIdentity.isNotBlank()) { "machine identity must not be blank" }

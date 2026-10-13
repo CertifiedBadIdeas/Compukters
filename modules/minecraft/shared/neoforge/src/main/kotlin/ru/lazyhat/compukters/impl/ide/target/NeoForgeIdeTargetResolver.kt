@@ -95,6 +95,15 @@ internal class NeoForgeIdeTargetResolver(
                         submitKey = { key, action, modifiers -> entity.submitTerminalKeyAsync(key, action, modifiers).awaitServerResult() },
                         submitText = { entity.submitTerminalTextAsync(it).awaitServerResult() },
                     ),
+                renamePeripheral = { device, expected, requested ->
+                    ru.lazyhat.compukters.minecraft.peripheral.IdePeripheralDiscovery.rename(
+                        serverPlayer.level() as net.minecraft.server.level.ServerLevel,
+                        position,
+                        device,
+                        expected,
+                        requested,
+                    )
+                },
                 namedPeripherals = {
                     ru.lazyhat.compukters.minecraft.peripheral.IdePeripheralDiscovery.snapshot(
                         serverPlayer.level() as net.minecraft.server.level.ServerLevel,

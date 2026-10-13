@@ -26,21 +26,24 @@ object DisplayPeripheralIntegration {
     private const val PROVIDER_ID = "compukters-display"
     private const val DEVICE_KEY = "text"
 
-    private fun displayContract(id: String) =
-        ComputerPeripheralContract<DisplayEndpoint>(
-            id,
-            PROVIDER_ID,
-            DEVICE_KEY,
-            ownsReachability = true,
-        ) { level, computerPosition, identity ->
-            val computer = level.getBlockEntity(computerPosition) as? ComputerBlockEntity
-            computer?.let { resolve(level, it, identity.anchor, null) }?.let { endpoint ->
-                PeripheralEndpoint(endpoint, endpoint.identity, endpoint.checkpointIdentity, endpoint::valid)
-            }
+    private fun displayContract(
+        id: String,
+        guestLookupType: String,
+    ) = ComputerPeripheralContract<DisplayEndpoint>(
+        id,
+        PROVIDER_ID,
+        DEVICE_KEY,
+        ownsReachability = true,
+        guestLookupType = guestLookupType,
+    ) { level, computerPosition, identity ->
+        val computer = level.getBlockEntity(computerPosition) as? ComputerBlockEntity
+        computer?.let { resolve(level, it, identity.anchor, null) }?.let { endpoint ->
+            PeripheralEndpoint(endpoint, endpoint.identity, endpoint.checkpointIdentity, endpoint::valid)
         }
+    }
 
-    internal val contract = displayContract("compukter:text_display")
-    internal val graphicalContract = displayContract("compukter:graphical_display")
+    internal val contract = displayContract("compukter:text_display", "compukter.display.TextDisplay")
+    internal val graphicalContract = displayContract("compukter:graphical_display", "compukter.display.GraphicalDisplay")
 
     fun register() {
         ComputerAddonHosts.registerPeripheral(

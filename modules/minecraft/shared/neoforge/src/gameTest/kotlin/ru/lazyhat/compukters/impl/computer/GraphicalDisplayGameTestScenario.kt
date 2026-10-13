@@ -60,6 +60,37 @@ internal object GraphicalDisplayGameTestScenario {
                 ).targetName == "display_1",
             "display network join did not persist its default screen name",
         )
+        val namedScreen =
+            ru.lazyhat.compukters.minecraft.peripheral.IdePeripheralDiscovery
+                .snapshot(
+                    helper.level,
+                    helper.absolutePos(computerPosition),
+                ).entries
+                .single()
+        helper.assertTrue(
+            namedScreen.lookupTypes == listOf("compukter.display.TextDisplay", "compukter.display.GraphicalDisplay"),
+            "display lookup types were not advertised",
+        )
+        helper.assertTrue(
+            ru.lazyhat.compukters.minecraft.peripheral.IdePeripheralDiscovery.rename(
+                helper.level,
+                helper.absolutePos(computerPosition),
+                checkNotNull(namedScreen.reference),
+                "display_1",
+                "screen",
+            ) is ru.lazyhat.compukters.impl.ide.target.IdeTargetReply.NamedPeripherals,
+            "IDE display rename failed",
+        )
+        helper.assertTrue(
+            ru.lazyhat.compukters.minecraft.peripheral.PeripheralConfiguratorServer
+                .inspect(
+                    helper.level,
+                    ru.lazyhat.compukters.minecraft.peripheral
+                        .PeripheralConfiguratorContext(helper.absolutePos(first), Direction.NORTH),
+                    ru.lazyhat.compukters.minecraft.peripheral.PeripheralConfiguratorMode.EDIT_DEVICE,
+                ).targetName == "screen",
+            "IDE rename did not update authoritative screen storage",
+        )
         val player = helper.makeMockServerPlayerInLevel()
         val stack = ItemStack(CompuktersRegistry.PERIPHERAL_CONFIGURATOR_ITEM.get())
         val selections = mutableMapOf<String, String>()

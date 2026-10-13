@@ -25,9 +25,31 @@ import ru.lazyhat.compukters.ide.client.state.BoundedIdeEventQueue
 import ru.lazyhat.compukters.ide.client.state.IdeCommand
 import ru.lazyhat.compukters.ide.client.state.IdeEditorView
 import ru.lazyhat.compukters.ide.client.state.IdePageState
+import ru.lazyhat.compukters.ide.client.target.IdeAttachResult
+import ru.lazyhat.compukters.ide.client.target.IdeAttachedTarget
+import ru.lazyhat.compukters.ide.client.target.IdeDeployResult
+import ru.lazyhat.compukters.ide.client.target.IdeDeploymentPath
+import ru.lazyhat.compukters.ide.client.target.IdeExecutableRevision
+import ru.lazyhat.compukters.ide.client.target.IdeHeartbeatResult
+import ru.lazyhat.compukters.ide.client.target.IdeRevisionResult
+import ru.lazyhat.compukters.ide.client.target.IdeSubmissionResult
+import ru.lazyhat.compukters.ide.client.target.IdeTargetArtifact
+import ru.lazyhat.compukters.ide.client.target.IdeTargetCapabilities
+import ru.lazyhat.compukters.ide.client.target.IdeTargetClaim
+import ru.lazyhat.compukters.ide.client.target.IdeTargetCoordinator
+import ru.lazyhat.compukters.ide.client.target.IdeTargetId
+import ru.lazyhat.compukters.ide.client.target.IdeTargetPort
+import ru.lazyhat.compukters.ide.client.target.IdeTargetProfileId
+import ru.lazyhat.compukters.ide.client.target.IdeVerificationTicket
+import ru.lazyhat.compukters.ide.client.target.IdeVerifyResult
 import ru.lazyhat.compukters.ide.client.workspace.DefaultIdeWorkspace
+import ru.lazyhat.compukters.impl.ide.target.IdeNamedPeripheral
+import ru.lazyhat.compukters.impl.ide.target.IdePeripheralReference
+import ru.lazyhat.compukters.impl.ide.target.IdeTargetReference
+import ru.lazyhat.compukters.impl.ide.target.IdeTargetReply
 import ru.lazyhat.compukters.impl.ide.target.IdeTargetTerminalClient
 import ru.lazyhat.compukters.impl.ui.CompuktersUiViewport
+import java.util.concurrent.CompletableFuture
 import kotlin.io.path.createTempDirectory
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -35,6 +57,124 @@ import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class IdeScreenControllerTest {
+    @Test
+    fun `device selection and copy leave source unchanged while rename updates exact selected instance`() {
+        val reference = IdePeripheralReference(java.util.UUID.randomUUID(), "compukters-display", "text")
+        val entry =
+            IdeNamedPeripheral(
+                "display_1",
+                "compukters:display",
+                reference = reference,
+                lookupTypes = listOf("compukter.display.TextDisplay", "compukter.display.GraphicalDisplay"),
+            )
+        val rename = CompletableFuture<IdeTargetReply>()
+        var renamed: Triple<IdePeripheralReference, String, String>? = null
+        Fixture(
+            { CompletableFuture.completedFuture(IdeTargetReply.NamedPeripherals(listOf(entry))) },
+            { _, device, old, name ->
+                renamed = Triple(device, old, name)
+                rename
+            },
+        ).use { fixture ->
+            fixture.controller.dispatch(IdeCommand.CreateProject("demo"))
+            fixture.awaitWorkspace()
+            val path =
+                ru.lazyhat.compukters.ide.project.fs.ProjectPath
+                    .file("src/main.kt")
+            fixture.controller.dispatch(IdeCommand.OpenFile(path))
+            fixture.awaitFile(path)
+
+            fun text() = (fixture.controller.viewState().page as IdePageState.Workspace).value.editor as IdeEditorView.Text
+            val before = text().visibleLines
+            fixture.attach()
+            fixture.click(IdeHitAction.Peripherals)
+            fixture.ui.tick()
+            fixture.click(IdeHitAction.PeripheralChoice, 0)
+            assertEquals(before, text().visibleLines)
+            fixture.click(IdeHitAction.PeripheralLookupType)
+            fixture.click(IdeHitAction.PeripheralCopyLookup)
+            assertEquals("compukter.display.GraphicalDisplay.named(\"display_1\")", fixture.host.clipboard)
+            assertEquals(before, text().visibleLines)
+            fixture.click(IdeHitAction.PeripheralRename)
+            fixture.ui.keyPressed(IdeKeyInput(IdeKeyCode.A, IdeModifier.CONTROL))
+            fixture.ui.charTyped(IdeCharacterInput("Screen"))
+            fixture.ui.keyPressed(IdeKeyInput(IdeKeyCode.ENTER))
+            assertEquals(Triple(reference, "display_1", "screen"), renamed)
+            rename.complete(IdeTargetReply.NamedPeripherals(listOf(entry.copy(name = "screen"))))
+            fixture.ui.tick()
+            fixture.click(IdeHitAction.PeripheralCopyLookup)
+            assertEquals("compukter.display.TextDisplay.named(\"screen\")", fixture.host.clipboard)
+            assertEquals(before, text().visibleLines)
+            fixture.click(IdeHitAction.PeripheralInsert)
+            assertTrue(text().visibleLines.any { it.contains("const val SCREEN = \"screen\"") })
+        }
+    }
+
+    @Test
+    fun `device rename shows server rejection and discards replies after attachment changes`() {
+        val reference = IdePeripheralReference(java.util.UUID.randomUUID(), "compukters-redstone", "port")
+        val entry = IdeNamedPeripheral("input", "compukters:redstone_port", reference = reference)
+        val rename = CompletableFuture<IdeTargetReply>()
+        Fixture(
+            { CompletableFuture.completedFuture(IdeTargetReply.NamedPeripherals(listOf(entry))) },
+            { _, _, _, _ -> rename },
+        ).use { fixture ->
+            fixture.controller.dispatch(IdeCommand.CreateProject("demo"))
+            fixture.awaitWorkspace()
+            fixture.attach()
+            fixture.click(IdeHitAction.Peripherals)
+            fixture.ui.tick()
+            fixture.click(IdeHitAction.PeripheralChoice, 0)
+            fixture.click(IdeHitAction.PeripheralRename)
+            fixture.ui.keyPressed(IdeKeyInput(IdeKeyCode.ENTER))
+            val failure =
+                ru.lazyhat.compukters.ide.client.target.IdeTargetFailure(
+                    ru.lazyhat.compukters.ide.client.target.IdeTargetFailureKind.Other,
+                    "Name already used",
+                )
+            rename.complete(IdeTargetReply.Failed(failure, false))
+            fixture.ui.tick()
+            assertTrue(
+                fixture.ui
+                    .frame(0, 0)
+                    .model.text
+                    .any { it.value.contains("Name already used") },
+            )
+            fixture.controller.detachTarget()
+            fixture.ui.tick()
+            val model = fixture.ui.frame(0, 0).model
+            assertFalse(model.panels.any { it.kind == IdePanelKind.Dialog })
+            assertTrue(model.text.any { it.value == "Attach to a computer" })
+        }
+    }
+
+    @Test
+    fun `pending device rename is cancelled when attachment retires and cannot replace the new window`() {
+        val reference = IdePeripheralReference(java.util.UUID.randomUUID(), "provider", "kind")
+        val entry = IdeNamedPeripheral("device_1", "minecraft:stone", reference = reference)
+        val rename = CompletableFuture<IdeTargetReply>()
+        Fixture(
+            { CompletableFuture.completedFuture(IdeTargetReply.NamedPeripherals(listOf(entry))) },
+            { _, _, _, _ -> rename },
+        ).use { fixture ->
+            fixture.controller.dispatch(IdeCommand.CreateProject("demo"))
+            fixture.awaitWorkspace()
+            fixture.attach()
+            fixture.click(IdeHitAction.Peripherals)
+            fixture.ui.tick()
+            fixture.click(IdeHitAction.PeripheralChoice, 0)
+            fixture.click(IdeHitAction.PeripheralRename)
+            fixture.ui.keyPressed(IdeKeyInput(IdeKeyCode.ENTER))
+            fixture.controller.detachTarget()
+            fixture.ui.tick()
+            assertTrue(rename.isCancelled)
+            assertFalse(rename.complete(IdeTargetReply.NamedPeripherals(listOf(entry.copy(name = "late")))))
+            val model = fixture.ui.frame(0, 0).model
+            assertFalse(model.panels.any { it.kind == IdePanelKind.Dialog })
+            assertTrue(model.text.any { it.value == "Attach to a computer" })
+        }
+    }
+
     @Test
     fun `peripheral toolbar opens an independent workspace window and escape closes it`() {
         Fixture().use { fixture ->
@@ -519,7 +659,10 @@ class IdeScreenControllerTest {
         }
     }
 
-    private class Fixture : AutoCloseable {
+    private class Fixture(
+        request: (IdeTargetReference) -> CompletableFuture<IdeTargetReply>? = { null },
+        rename: (IdeTargetReference, IdePeripheralReference, String, String) -> CompletableFuture<IdeTargetReply>? = { _, _, _, _ -> null },
+    ) : AutoCloseable {
         private val root = createTempDirectory("ide-screen-controller-")
         private val workspace = DefaultIdeWorkspace(root.resolve("projects"))
         private val layout =
@@ -533,10 +676,68 @@ class IdeScreenControllerTest {
                 override fun saveUiScale(scale: IdeUiScale) = Unit
             }
         private val preferences = IdeClientPreferences(root.resolve("preferences"), layout)
-        val controller = IdeClientController(workspace, preferences, IdeControllerClock { 0L }, BoundedIdeEventQueue(128))
+        private val hash =
+            ru.lazyhat.compukters.compiler.worker.protocol.Hash256
+                .of(ByteArray(32) { 1 })
+        private val attached =
+            IdeAttachedTarget(
+                IdeTargetId("computer"),
+                IdeTargetProfileId(hash),
+                ru.lazyhat.compukters.ide.compiler.profile.TargetCompileProfile(
+                    ru.lazyhat.compukters.ide.project
+                        .ToolchainLockIdentity("2.4.10", "2.4", 1u, 2u, 1u, hash, hash),
+                    emptyList(),
+                    ru.lazyhat.compukters.compiler.worker.protocol
+                        .WorkerLimits(),
+                ),
+                IdeTargetCapabilities(writableFileSystem = false, canonicalInput = false, terminal = false),
+                "Computer",
+            )
+        private val port =
+            object : IdeTargetPort {
+                override fun attach(claim: IdeTargetClaim) =
+                    CompletableFuture.completedFuture<IdeAttachResult>(IdeAttachResult.Attached(attached))
+
+                override fun heartbeat(target: IdeAttachedTarget) =
+                    CompletableFuture.completedFuture<IdeHeartbeatResult>(IdeHeartbeatResult.Alive)
+
+                override fun detach(target: IdeAttachedTarget) = CompletableFuture.completedFuture(Unit)
+
+                override fun verify(
+                    target: IdeAttachedTarget,
+                    artifact: IdeTargetArtifact,
+                ): CompletableFuture<IdeVerifyResult> = error("unused")
+
+                override fun executableRevision(
+                    target: IdeAttachedTarget,
+                    path: IdeDeploymentPath,
+                ): CompletableFuture<IdeRevisionResult> = error("unused")
+
+                override fun deploy(
+                    target: IdeAttachedTarget,
+                    ticket: IdeVerificationTicket,
+                    path: IdeDeploymentPath,
+                    expected: IdeExecutableRevision,
+                ): CompletableFuture<IdeDeployResult> = error("unused")
+
+                override fun submitCanonicalLine(
+                    target: IdeAttachedTarget,
+                    line: CharArray,
+                ): CompletableFuture<IdeSubmissionResult> = error("unused")
+            }
+        val controller =
+            IdeClientController(
+                workspace,
+                preferences,
+                IdeControllerClock {
+                    0L
+                },
+                BoundedIdeEventQueue(128),
+                targetCoordinator = IdeTargetCoordinator(port, IdeControllerClock { 0L }),
+            )
         private val terminal = IdeTargetTerminalClient { }
         val host = Host(controller::close)
-        val ui = IdeScreenController(controller, preferences, terminal, IdeVisibleLatencyTrace.None, host)
+        val ui = IdeScreenController(controller, preferences, terminal, IdeVisibleLatencyTrace.None, host, request, rename)
 
         init {
             controller.start()
@@ -557,6 +758,35 @@ class IdeScreenControllerTest {
                 .resolve(path.value)
                 .toFile()
                 .writeText(text)
+        }
+
+        fun attach() {
+            controller.attachTarget(IdeTargetClaim.of(byteArrayOf(1)))
+            controller.tick()
+        }
+
+        fun click(
+            action: IdeHitAction,
+            index: Int? = null,
+        ) {
+            val hit =
+                ui
+                    .frame(0, 0)
+                    .model.hitTargets
+                    .single { it.action == action && (index == null || it.choiceIndex == index) }
+            assertTrue(hit.enabled, action.name)
+            val viewport = host.viewport()
+            assertTrue(
+                ui.mouseClicked(
+                    IdePointerInput(
+                        viewport.toMinecraftX(hit.bounds.left + 2.0),
+                        viewport.toMinecraftY(hit.bounds.top + 2.0),
+                        0,
+                        0,
+                    ),
+                    false,
+                ),
+            )
         }
 
         fun awaitWorkspace() = await { controller.viewState().page is IdePageState.Workspace }
