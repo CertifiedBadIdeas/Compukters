@@ -51,6 +51,7 @@ enum class EditorDiagnosticSeverity {
 enum class EditorDiagnosticHighlight {
     Standard,
     UnresolvedReference,
+    None,
     ;
 
     companion object {
@@ -138,6 +139,7 @@ sealed interface SnapshotPresentationAcceptance {
         val semanticTokens: List<SemanticToken>,
         val locations: List<SourceLocation>,
         val methodUsages: List<MethodUsageCount> = emptyList(),
+        val peripheralLookups: List<PeripheralLookup> = emptyList(),
     ) : SnapshotPresentationAcceptance
 
     data object Stale : SnapshotPresentationAcceptance
@@ -149,10 +151,11 @@ class SnapshotPresentation private constructor(
     private val semanticTokens: List<SemanticToken>,
     private val locations: List<SourceLocation>,
     private val methodUsages: List<MethodUsageCount>,
+    private val peripheralLookups: List<PeripheralLookup>,
 ) {
     fun accept(currentIdentity: AnalysisSnapshotIdentity): SnapshotPresentationAcceptance =
         if (currentIdentity == identity) {
-            SnapshotPresentationAcceptance.Active(diagnostics, semanticTokens, locations, methodUsages)
+            SnapshotPresentationAcceptance.Active(diagnostics, semanticTokens, locations, methodUsages, peripheralLookups)
         } else {
             SnapshotPresentationAcceptance.Stale
         }
@@ -166,10 +169,12 @@ class SnapshotPresentation private constructor(
             locations: List<SourceLocation> = emptyList(),
             limits: EditorPresentationLimits = EditorPresentationLimits(),
             methodUsages: List<MethodUsageCount> = emptyList(),
+            peripheralLookups: List<PeripheralLookup> = emptyList(),
         ): SnapshotPresentation {
             require(diagnostics.size <= limits.maxDiagnostics) { "diagnostic count exceeds presentation limit" }
             require(semanticTokens.size <= limits.maxSemanticTokens) { "semantic-token count exceeds presentation limit" }
             require(locations.size <= limits.maxLocations) { "source-location count exceeds presentation limit" }
+            require(peripheralLookups.size <= limits.maxLocations) { "peripheral lookup count exceeds presentation limit" }
             require(methodUsages.size <= limits.maxSemanticTokens) { "method-usage count exceeds presentation limit" }
             require(methodUsages.map { it.path to it.range }.distinct().size == methodUsages.size) { "duplicate method usage count" }
             val sourceLengths = sourceLengthsUtf16.toMap()
@@ -185,6 +190,7 @@ class SnapshotPresentation private constructor(
             }
             semanticTokens.forEach { token -> validateRange(sourceLengths, token.path, token.range) }
             locations.forEach { location -> validateRange(sourceLengths, location.path, location.range) }
+            peripheralLookups.forEach { lookup -> validateRange(sourceLengths, lookup.path, lookup.range) }
             methodUsages.forEach { usage -> validateRange(sourceLengths, usage.path, usage.range) }
             return SnapshotPresentation(
                 identity,
@@ -192,6 +198,7 @@ class SnapshotPresentation private constructor(
                 immutableCopy(semanticTokens),
                 immutableCopy(locations),
                 immutableCopy(methodUsages),
+                immutableCopy(peripheralLookups),
             )
         }
 
