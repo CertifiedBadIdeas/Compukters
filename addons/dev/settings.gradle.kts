@@ -50,4 +50,5 @@ includeBuild("../create") { name = "compukters-create" }
 includeBuild("../createaddition") { name = "compukters-createaddition" }
 includeBuild("../sable") { name = "compukters-sable" }
 includeBuild("../propulsion") { name = "compukters-propulsion" }
+includeBuild("../cosmonautics") { name = "compukters-cosmonautics" }
 rootProject.name = "compukters-addons-dev"

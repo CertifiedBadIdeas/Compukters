@@ -17,6 +17,10 @@ headings so this page has one stable URL that can be shared outside the reposito
   programs and examples, including terminal events, process/compiler results and boiler telemetry. Recompile
   Guest programs against the updated platform and addon bundles. Boiler controller checks execute in the Guest VM.
 
+- Added an empty independent Cosmonautics addon scaffold and pinned Cosmonautics in the all-addon development stand;
+  Guest APIs and spacecraft controls will follow separately. The existing Crafts & Additions addon is also published
+  independently and pinned as a submodule.
+
 - The Crafts & Additions integration exposes named liquid Blaze Burners with atomic fuel quantity, capacity,
   heat and remaining burn-time readings. The separate `boiler-scada` project starts water/fuel pumps from a
   kinetic battery, switches to steam self-power with battery charging, and reverses the fuel pump on STOP until
