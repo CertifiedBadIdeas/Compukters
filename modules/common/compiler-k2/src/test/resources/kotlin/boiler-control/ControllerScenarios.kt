@@ -55,10 +55,36 @@ class ControllerScenarios {
         repeat(3) { control.observe(sample(hot, fuelAmount = 0)) }
         assertEquals(Phase.COOLING, control.phase)
         assertEquals(off, control.outputs)
-        control.start(cold)
-        assertEquals(Phase.COOLING, control.phase)
         control.observe(cold)
         assertEquals(Phase.IDLE, control.phase)
+    }
+
+    fun restartDuringCooling() {
+        val control = BoilerControl(stableSamples = 2)
+        control.stop(hot)
+        val burning = sample(hot, fuelAmount = 0, burnTicks = 100)
+        repeat(2) { control.observe(burning) }
+        assertEquals(Phase.COOLING, control.phase)
+        assertTrue(control.canStart)
+        control.start(unavailableSample())
+        assertEquals(Phase.COOLING, control.phase)
+        control.start(burning)
+        assertEquals(Phase.STARTING, control.phase)
+        assertEquals(Outputs(PowerSource.BATTERY, FuelMode.FEED), control.outputs)
+        repeat(2) { control.observe(hot) }
+        assertEquals(Phase.RUNNING, control.phase)
+        assertEquals(Outputs(PowerSource.STEAM, FuelMode.FEED), control.outputs)
+
+        val fault = BoilerControl(stableSamples = 1)
+        fault.start(cold)
+        fault.observe(hot)
+        repeat(3) { fault.observe(sample(hot, waterSupply = 0f)) }
+        fault.observe(burning)
+        assertEquals(Phase.COOLING, fault.phase)
+        assertFalse(fault.canStart)
+        fault.start(burning)
+        assertEquals(Phase.COOLING, fault.phase)
+        assertEquals(off, fault.outputs)
     }
 
     fun remainingBurnTime() {
@@ -207,6 +233,7 @@ fun main() {
     val scenarios = ControllerScenarios()
     scenarios.explicitStartup()
     scenarios.residualFuelAndCooling()
+    scenarios.restartDuringCooling()
     scenarios.remainingBurnTime()
     scenarios.telemetryFault()
     scenarios.startupAndDrainTimeouts()
