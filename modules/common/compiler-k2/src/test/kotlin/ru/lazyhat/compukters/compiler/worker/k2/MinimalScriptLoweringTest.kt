@@ -380,7 +380,7 @@ class MinimalScriptLoweringTest {
     @Test
     fun `sequences reject non local returns from deferred callbacks`() =
         withAdapter { adapter ->
-            for (operation in listOf("map", "filter", "filterNot")) {
+            for (operation in listOf("map", "mapNotNull", "filter", "filterNot")) {
                 val source =
                     """
                     import kotlin.collections.*
@@ -485,30 +485,32 @@ class MinimalScriptLoweringTest {
                                 ).flatMap(Block::instructions)
                         assertTrue(instructions.none { it is Instruction.NewObject }, "$name cache must not box values")
                     }
-                    val (iteratorModule, iterator) =
-                        decoded.modules
-                            .flatMap { candidate ->
-                                candidate.types
-                                    .filterIsInstance<NominalType.Class>()
-                                    .filter {
-                                        candidate.strings[it.name.value.toInt()].toString() == "kotlin.sequences.FilteringIterator<$name>"
-                                    }.map { candidate to it }
-                            }.single()
-                    val calculate =
-                        iteratorModule.functions
-                            .subList(
-                                iterator.methodStart.toInt(),
-                                (iterator.methodStart + iterator.methodCount).toInt(),
-                            ).single {
-                                iteratorModule.strings[it.name.value.toInt()].toString() == "calculateNext"
-                            }
-                    val instructions =
-                        iteratorModule.blocks
-                            .subList(
-                                calculate.firstBlock.value.toInt(),
-                                (calculate.firstBlock.value + calculate.blockCount).toInt(),
-                            ).flatMap(Block::instructions)
-                    assertTrue(instructions.none { it is Instruction.NewObject }, "$name filtering must not box cached values")
+                    for (iteratorName in listOf("FilteringIterator", "NotNullIterator")) {
+                        val (iteratorModule, iterator) =
+                            decoded.modules
+                                .flatMap { candidate ->
+                                    candidate.types
+                                        .filterIsInstance<NominalType.Class>()
+                                        .filter {
+                                            candidate.strings[it.name.value.toInt()].toString() == "kotlin.sequences.$iteratorName<$name>"
+                                        }.map { candidate to it }
+                                }.single()
+                        val calculate =
+                            iteratorModule.functions
+                                .subList(
+                                    iterator.methodStart.toInt(),
+                                    (iterator.methodStart + iterator.methodCount).toInt(),
+                                ).single {
+                                    iteratorModule.strings[it.name.value.toInt()].toString() == "calculateNext"
+                                }
+                        val instructions =
+                            iteratorModule.blocks
+                                .subList(
+                                    calculate.firstBlock.value.toInt(),
+                                    (calculate.firstBlock.value + calculate.blockCount).toInt(),
+                                ).flatMap(Block::instructions)
+                        assertTrue(instructions.none { it is Instruction.NewObject }, "$iteratorName<$name> must not box cached values")
+                    }
                 }
                 if (fixture == "main") {
                     val references =

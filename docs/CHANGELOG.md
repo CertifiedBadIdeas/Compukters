@@ -62,11 +62,12 @@ headings so this page has one stable URL that can be shared outside the reposito
 - Task worktree completion checks active builds in nested independent Gradle projects and excludes their
   sandbox caches from its archive while retaining worlds and IDE data.
 
-- Guest Kotlin provides lazy `Sequence<T>` chains with `Iterable.asSequence()`, `map`, `filter`,
-  `filterNot`, `take`, `firstOrNull` and `toList`, with terminal `forEach`, `fold`, `count`, `any`, `all` and `none`.
+- Guest Kotlin provides lazy `Sequence<T>` chains with `Iterable.asSequence()`, `map`, `mapNotNull`, `filter`,
+  `filterNot`, `filterNotNull`, `take`, `firstOrNull` and `toList`, with terminal `forEach`, `fold`, `count`, `any`, `all` and `none`.
   Terminal callbacks support non-local returns; predicate queries stop as soon as their result is known.
   Chains defer callbacks until consumption,
   stop at the requested prefix or first match and retain independent iterator state, including nullable elements.
+  Nullable selection skips nulls on demand and exposes non-null result types.
   Filtering caches all twelve non-null primitive families in unboxed scalar fields. Generic helpers can construct
   retained callbacks and bound member references for `filter`, `filterNot` and `map`, including escaping captures.
 

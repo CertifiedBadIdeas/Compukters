@@ -26,10 +26,12 @@ fun findInline(): Int {
 }
 fun main() {
     checkIntTerminals(1)
+    checkNullSelection(1)
     checkGenericSequence(1)
     checkGenericTerminals(3)
     checkGenericSequence<Int?>(null)
     checkGenericSequence(Item(7))
+    checkNullSelection(Item(7))
     check(genericTransform(genericForward(listOf(1, 2).asSequence(), 2)) { it.toLong() + 1L }.firstOrNull() == 3L)
     val converted = genericTransform(listOf<Int?>(null, 5).asSequence()) { it == null }.toList()
     check(converted[0] && !converted[1])
@@ -125,6 +127,7 @@ fun main() {
     check(captured.firstOrNull() == 6)
     offset = 5
     check(captured.firstOrNull() == 7)
+    testNullSelection()
     testTerminals()
     println("sequences ok")
 }
@@ -269,4 +272,84 @@ fun <T> genericChanging(initial: T, replacement: T): Sequence<T> {
     val result = listOf<T>(initial).asSequence().map { current }
     current = replacement
     return result
+}
+
+fun testNullSelection() {
+    val source = Probe()
+    var calls = 0
+    var order = 0
+    val chain: Sequence<Int> = source.asSequence().mapNotNull {
+        calls += 1
+        order = order * 10 + it
+        if (it % 2 == 0) it * 10 else null
+    }.take(2)
+    check(source.iterators == 0 && calls == 0)
+    val a = chain.iterator()
+    val b = chain.iterator()
+    check(source.iterators == 2 && calls == 0)
+    check(a.hasNext() && a.hasNext() && calls == 2 && source.reads == 2)
+    check(a.next() == 20 && calls == 2)
+    check(a.next() == 40 && !a.hasNext() && calls == 4 && order == 1234)
+    check(b.next() == 20 && b.next() == 40 && !b.hasNext() && calls == 8)
+    val before = source.iterators
+    check(chain.take(0).count() == 0 && source.iterators == before && calls == 8)
+    var exhausted = false
+    try { a.next() } catch (e: NoSuchElementException) { exhausted = true }
+    check(exhausted)
+    val early = Probe()
+    check(early.asSequence().mapNotNull { if (it == 3) it else null }.firstOrNull() == 3 && early.reads == 3)
+    var nullCalls = 0
+    val allNull: Sequence<Int> = listOf(1, 2).asSequence().mapNotNull<Int, Int> { nullCalls += 1; null }
+    val empty = allNull.iterator()
+    check(!empty.hasNext() && !empty.hasNext() && nullCalls == 2)
+    exhausted = false
+    try { empty.next() } catch (e: NoSuchElementException) { exhausted = true }
+    check(exhausted)
+    check(emptyList<Int>().asSequence().mapNotNull { it }.count() == 0)
+    check(listOf<Int?>(null, null).asSequence().filterNotNull().count() == 0)
+    val item = Item(8)
+    val refs: Sequence<Item> = listOf<Item?>(null, item, null).asSequence().filterNotNull()
+    check(refs.firstOrNull() === item && refs.count() == 1)
+    val strings: Sequence<String> = listOf<Int?>(null, 2, null).asSequence().mapNotNull { if (it == null) null else "ok" }
+    check(strings.toList()[0] == "ok" && strings.count() == 1)
+    var failed = false
+    try {
+        listOf(1).asSequence().mapNotNull { if (it == 1) throw IllegalStateException("transform"); it }.count()
+    } catch (e: IllegalStateException) { failed = true }
+    check(failed)
+    failed = false
+    try {
+        listOf<Int?>(null).asSequence().map<Int?, Int?> { if (it == null) throw IllegalStateException("source"); it }.filterNotNull().count()
+    } catch (e: IllegalStateException) { failed = true }
+    check(failed)
+    val parsed: List<Int> = listOf("1", "bad", "2").asSequence().mapNotNull { it.toIntOrNull() }.take(2).toList()
+    check(parsed.size == 2 && parsed[0] == 1 && parsed[1] == 2)
+    var enabled = false
+    val retained = listOf(1, 2).asSequence().mapNotNull { if (enabled) it else null }
+    enabled = true
+    check(retained.count() == 2)
+    enabled = false
+    check(retained.count() == 0)
+}
+
+fun <T : Any> genericNotNull(source: Sequence<T?>): Sequence<T> = source.filterNotNull()
+fun <T, R : Any> genericMapNotNull(source: Sequence<T>, transform: (T) -> R?): Sequence<R> =
+    source.mapNotNull { transform(it) }
+fun <T : Any> checkNullSelection(value: T) {
+    val source = listOf<T?>(null, value, null, value).asSequence()
+    val filtered: Sequence<T> = genericNotNull(source)
+    check(filtered.count() == 2 && filtered.firstOrNull() == value)
+    var calls = 0
+    val mapped: Sequence<T> = genericMapNotNull(source) { calls += 1; it }
+    val iterator = mapped.iterator()
+    check(iterator.hasNext() && iterator.hasNext() && calls == 2)
+    check(iterator.next() == value && calls == 2)
+    check(iterator.next() == value && calls == 4 && !iterator.hasNext())
+    check(mapped.take(1).count() == 1 && calls == 6)
+    var produced = 0
+    val nonNullableSource: Sequence<T> = genericMapNotNull(listOf<T>(value, value).asSequence()) {
+        produced += 1
+        if (produced == 1) null else it
+    }
+    check(nonNullableSource.firstOrNull() == value && produced == 2)
 }

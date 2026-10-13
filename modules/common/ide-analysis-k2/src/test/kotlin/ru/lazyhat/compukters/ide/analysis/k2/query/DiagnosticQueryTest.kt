@@ -286,6 +286,9 @@ class DiagnosticQueryTest {
             fun <T, R> transform(source: Sequence<T>, action: (T) -> R): Sequence<R> =
                 source.map { action(it) }
             fun main() {
+                val nonNull: Sequence<Int> = listOf<Int?>(null, 2).asSequence().filterNotNull()
+                val converted: Sequence<Long> = nonNull.mapNotNull { if (it > 0) it.toLong() else null }
+                check(converted.fold(0L) { sum, value -> sum + value } == 2L)
                 val selected: Sequence<Int?> = select(listOf<Int?>(null, 2).asSequence(), null)
                 check(transform(selected) { it == null }.all { it })
                 val values: Sequence<Int?> = listOf<Int?>(null, 2, 3).asSequence()
