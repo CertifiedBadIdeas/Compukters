@@ -61,6 +61,7 @@ private object DisplayBindings {
     external fun pollPointer(handle: Int): ByteArray
     external fun lineClipped(handle: Int, x0: Int, y0: Int, x1: Int, y1: Int, color: Int, clipX: Int, clipY: Int, clipWidth: Int, clipHeight: Int)
     external fun textClipped(handle: Int, x: Int, y: Int, text: String, color: Int, scale: Int, clipX: Int, clipY: Int, clipWidth: Int, clipHeight: Int)
+    external fun rasterBatch(handle: Int, bytes: ByteArray)
     external fun abortFrame(handle: Int)
 }
 
@@ -240,6 +241,11 @@ public value class GraphicalDisplay internal constructor(private val handle: Int
     public fun image(position: Position2i, size: Size2i, pixels: IntArray) { image(position.x, position.y, size.x, size.y, pixels) }
 
     @PublishedApi
+    internal fun recorder(): DisplayFrame = DisplayFrame(this)
+
+    internal fun rasterBatch(bytes: ByteArray) { DisplayBindings.rasterBatch(handle, bytes) }
+
+    @PublishedApi
     internal fun beginFrame() { DisplayBindings.beginFrame(handle) }
 
     @PublishedApi
@@ -249,16 +255,19 @@ public value class GraphicalDisplay internal constructor(private val handle: Int
     internal fun abortFrame() { DisplayBindings.abortFrame(handle) }
 }
 
-/** Publishes all enclosed changes together; exceptions discard the pending frame. Nested frames fail. */
-public inline fun GraphicalDisplay.frame(block: GraphicalDisplay.() -> Unit) {
+/** Records bounded drawing packets and publishes them together. Exceptions discard the frame; nesting fails. */
+public inline fun GraphicalDisplay.frame(block: DisplayFrame.() -> Unit) {
     contract { callsInPlace(block, InvocationKind.EXACTLY_ONCE) }
     beginFrame()
+    val frame = recorder()
     var completed = false
     try {
-        block()
+        frame.block()
+        frame.flush()
         commitFrame()
         completed = true
     } finally {
+        frame.close()
         if (!completed) abortFrame()
     }
 }

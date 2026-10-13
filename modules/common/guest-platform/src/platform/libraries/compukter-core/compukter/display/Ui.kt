@@ -358,7 +358,7 @@ public class DisplayUi internal constructor(bounds: Rect2i, private val root: Ui
     }
 
     /** Clipped drawing in [bounds]; does not clear, publish a frame or invoke input handlers. */
-    public fun draw(display: GraphicalDisplay) { root.draw(display.canvas(bounds)) }
+    public fun draw(display: DisplayFrame) { root.draw(display.canvas(bounds)) }
 
     private fun local(position: Position2i, origin: Position2i): Position2i =
         Vector2i(uiInputCoordinate(position.x.toLong() - bounds.left - origin.x), uiInputCoordinate(position.y.toLong() - bounds.top - origin.y))

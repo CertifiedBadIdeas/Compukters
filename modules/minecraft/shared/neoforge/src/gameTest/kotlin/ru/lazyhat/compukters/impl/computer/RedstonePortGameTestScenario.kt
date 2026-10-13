@@ -128,7 +128,16 @@ internal object RedstonePortGameTestScenario {
                             level.getDirectSignal(absolutePort, Direction.DOWN) == 12,
                             "port top direct output has wrong direction or level",
                         )
+                        port.serverTick()
+                        helper.assertTrue(port.indicatorLevel(Direction.UP) == 12, "output indicator lost signal strength")
+                        helper.assertTrue(
+                            Direction.entries.filter { it != Direction.UP }.all { port.indicatorLevel(it) == 0 },
+                            "output indicator illuminated an unrelated face",
+                        )
+                        helper.assertTrue(port.updatePacket != null, "indicator update packet is missing")
                         owner.programStopped(1)
+                        port.serverTick()
+                        helper.assertTrue(port.indicatorLevel(Direction.UP) == 0, "released output retained its indicator")
                         helper.assertTrue(port.output(Direction.UP) == 0, "process exit retained port output")
                         named(owner, 2, "compukter:redstone_port", "relay") as HostResponse.IntSuccess
                         owner.programStopped(2)
@@ -143,6 +152,18 @@ internal object RedstonePortGameTestScenario {
                             VmValue.I32(28),
                         )
                         val saved = port.saveWithFullMetadata(level.registryAccess())
+                        port.serverTick()
+                        helper.assertTrue(!saved.contains("IndicatorLevels"), "visual signal levels entered saved device state")
+                        val clientSnapshot = saved.copy().merge(port.getUpdateTag(level.registryAccess()))
+                        val visualCopy =
+                            net.minecraft.world.level.block.entity.BlockEntity.loadStatic(
+                                absolutePort,
+                                port.blockState,
+                                clientSnapshot,
+                                level.registryAccess(),
+                            ) as RedstonePortBlockEntity
+                        helper.assertTrue(visualCopy.indicatorLevel(Direction.UP) == 12, "client snapshot lost per-face brightness")
+                        helper.assertTrue(visualCopy.output(Direction.UP) == 0, "client snapshot restored physical redstone output")
                         val restored =
                             net.minecraft.world.level.block.entity.BlockEntity.loadStatic(
                                 absolutePort,
@@ -176,6 +197,12 @@ internal object RedstonePortGameTestScenario {
                 helper.assertTrue(port.output(Direction.UP) == 0, "closing computer host retained port output")
                 helper.setBlock(portPosition.north(), Blocks.REDSTONE_BLOCK)
                 helper.assertTrue(level.getSignal(absolutePort, Direction.UP) == 0, "port passively forwarded input")
+                port.serverTick()
+                helper.assertTrue(port.indicatorLevel(Direction.NORTH) == 15, "input indicator lost signal strength")
+                helper.assertTrue(
+                    Direction.entries.filter { it != Direction.NORTH }.all { port.indicatorLevel(it) == 0 },
+                    "input indicator illuminated an unrelated face",
+                )
             }.thenIdle(2)
             .thenExecute {
                 val artifact = requireNotNull(javaClass.getResourceAsStream("/fixtures/redstone-port.cpkt")).use { it.readAllBytes() }
