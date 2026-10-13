@@ -39,6 +39,11 @@ internal class IdeEditorInputRouter(
             if (focus.findFocused) return findKey(event, focus)
         }
         if (focus.declarationChooserVisible) chooserKey(event)?.let { return dispatch(it) }
+        if (focus.parameterInfoVisible && event.modifiers == IdeModifier.CONTROL &&
+            event.key in listOf(IdeKeyCode.UP, IdeKeyCode.DOWN)
+        ) {
+            return dispatch(IdeCommand.SelectParameterInfo(if (event.key == IdeKeyCode.UP) -1 else 1))
+        }
         if (focus.parameterInfoVisible && event.key == IdeKeyCode.ESCAPE) {
             return dispatch(IdeCommand.DismissParameterInfo)
         }

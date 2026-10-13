@@ -94,7 +94,7 @@ hover waits 400 ms. These delays share the visible response budget with K2 proce
 the next rendered frame. Manual completion enqueues immediately for an admitted snapshot and is retained while
 preparation is pending. Newer edits cancel obsolete work before their replacement snapshot is prepared.
 
-Analysis protocol v16 carries a validated diagnostic highlight kind alongside severity and exact source ranges.
+Analysis protocol v17 carries a validated diagnostic highlight kind alongside severity and exact source ranges.
 K2 factory identities and compiler diagnostic codes classify unresolved references; presentation never parses
 message text. Hover types and declarations use K2 short-name renderers, preserving generic, nullable and
 function-type structure without package prefixes. Qualified declaration identities remain available to
@@ -155,7 +155,11 @@ Parameter information
 resolves the innermost call at a UTF-16 caret into a bounded, deterministically ordered set of K2-substituted callable
 signatures with active-parameter spans; client-side snapshot, revision, path, caret, and call-range checks reject stale
 popup results. Typing an opening parenthesis requests the same query after lexical context excludes strings and
-comments; Ctrl+P remains available. Shared popup wrapping preserves UTF-16 parameter spans and selects a bounded
+comments; an argument separator can reopen it, and Ctrl+P remains available. Each candidate carries optional bounded
+active-parameter KDoc, resolved through the same declaration/source mapper used by hover. Protocol 17 adds this
+nullable UTF-8 body; protocol 16 workers are rejected at handshake. The client owns Ctrl+Up/Down selection and retains
+it by signature within the same call start while source revisions refresh; dismissal, leaving the call or changing
+calls resets that selection. Shared popup wrapping preserves UTF-16 parameter spans and selects a bounded
 window containing the current parameter for long signatures. The format request includes the exact editor text and
 UTF-16 caret captured by the Reformat Code action, so formatting does not depend on whether the semantic snapshot has
 caught up. The worker runs ktlint standard rules from a compiler-free nested runtime whose shaded IntelliJ references

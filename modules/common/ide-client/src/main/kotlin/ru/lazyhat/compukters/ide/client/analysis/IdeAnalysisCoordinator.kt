@@ -254,6 +254,7 @@ class IdeAnalysisCoordinator(
     private var caretOccurrencesEnabled = false
     private var navigationResult: CompletableFuture<IdeDeclarationOutcome>? = null
     private var parameterInfoRequested = false
+    private var parameterInfoSelection: Pair<Int, String>? = null
     private var parameterInfoOperation = 0L
     private var parameterInfoRequest: ParameterInfoRequest? = null
     private var closed = false
@@ -534,6 +535,16 @@ class IdeAnalysisCoordinator(
         request?.let(::dispatchParameterInfo)
         if (!requestOccurrences) requests.cancelSymbolOccurrences()
         refreshCaretOccurrences()
+    }
+
+    fun selectParameterInfo(delta: Int) {
+        synchronized(lock) {
+            val active = publishedState.get() as? IdeAnalysisState.Active ?: return
+            val info = active.parameterInfo ?: return
+            val selected = info.select(delta)
+            parameterInfoSelection = selected.callRange.startUtf16 to selected.selectedItem.signature
+            publishedState.set(active.copy(parameterInfo = selected))
+        }
     }
 
     fun dismissParameterInfo() {
@@ -1293,9 +1304,11 @@ class IdeAnalysisCoordinator(
                 expected.caretOffsetUtf16 !in info.callRange.startUtf16..info.callRange.endUtf16
             ) {
                 parameterInfoRequested = false
+                parameterInfoSelection = null
                 publishedState.set(active.copy(parameterInfo = null))
                 return
             }
+            if (parameterInfoSelection?.first != info.callRange.startUtf16) parameterInfoSelection = null
             publishedState.set(
                 active.copy(
                     completion = null,
@@ -1308,6 +1321,10 @@ class IdeAnalysisCoordinator(
                             info.callRange,
                             info.items,
                             limits.parameterInfoItems,
+                            parameterInfoSelection
+                                ?.takeIf { it.first == info.callRange.startUtf16 }
+                                ?.let { selected -> info.items.indexOfFirst { it.signature == selected.second } }
+                                ?.takeIf { it >= 0 } ?: 0,
                         ),
                 ),
             )
@@ -1325,7 +1342,10 @@ class IdeAnalysisCoordinator(
     private fun invalidateParameterInfoLocked(close: Boolean) {
         parameterInfoOperation = Math.incrementExact(parameterInfoOperation)
         parameterInfoRequest = null
-        if (close) parameterInfoRequested = false
+        if (close) {
+            parameterInfoRequested = false
+            parameterInfoSelection = null
+        }
         val active = publishedState.get() as? IdeAnalysisState.Active ?: return
         publishedState.set(active.copy(parameterInfo = null))
     }

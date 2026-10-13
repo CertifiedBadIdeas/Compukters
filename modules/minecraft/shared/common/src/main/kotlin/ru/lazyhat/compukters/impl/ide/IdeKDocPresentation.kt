@@ -68,6 +68,27 @@ internal object IdeKDocPresentation {
             }
         }
 
+    fun wrap(
+        content: List<IdeDocumentationLine>,
+        columns: Int,
+    ): List<IdeDocumentationLine> =
+        content.flatMap { line ->
+            val value = line.text.replace("\t", "    ")
+            // All lines remain available; wrapping is bounded by the admitted documentation byte budget.
+            IdePopupText.wrap(value, columns, value.length + 1).map { range ->
+                val spans = mutableListOf<IdeDocumentationSpan>()
+                var offset = 0
+                for (span in line.spans) {
+                    val expanded = span.text.replace("\t", "    ")
+                    val start = maxOf(range.startUtf16, offset)
+                    val end = minOf(range.endUtf16, offset + expanded.length)
+                    if (start < end) spans += IdeDocumentationSpan(expanded.substring(start - offset, end - offset), span.color)
+                    offset += expanded.length
+                }
+                IdeDocumentationLine(spans, line.code)
+            }
+        }
+
     private fun label(kind: KDocTagKind): String =
         when (kind) {
             KDocTagKind.Param -> "Parameters"

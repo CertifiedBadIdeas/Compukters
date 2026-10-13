@@ -93,6 +93,8 @@ class IdeAnalysisFlowTest {
         assertNotNull((fixture.textEditor().analysis as IdeAnalysisState.Active).parameterInfo)
         fixture.controller.dispatch(IdeCommand.DismissParameterInfo)
         assertNull((fixture.textEditor().analysis as IdeAnalysisState.Active).parameterInfo)
+        fixture.controller.dispatch(IdeCommand.Edit(IdeEditorInput.Type(",")))
+        assertEquals(2, requests.parameterInfoRequests.size)
         fixture.controller.close()
         for (prefix in listOf("val text = \"", "// text ", "/* text ")) {
             val excludedRequests = FlowAnalysisRequests()
@@ -230,6 +232,47 @@ class IdeAnalysisFlowTest {
         fixture.controller.dispatch(IdeCommand.ShowParameterInfo)
         fixture.controller.dispatch(IdeCommand.DismissParameterInfo)
         assertNull((fixture.textEditor().analysis as IdeAnalysisState.Active).parameterInfo)
+        fixture.controller.close()
+    }
+
+    @Test
+    fun `overload choice cycles without editing preserves refresh and resets after dismissal`() {
+        val requests = FlowAnalysisRequests()
+        val fixture =
+            ControllerFixture(preferences("demo", "src/main.kt"), analysisCoordinatorFactory = { workspace ->
+                coordinator(workspace, requests)
+            })
+        fixture.startAndTick()
+        val source = "fun main() { println(\"x\") }"
+        fixture.controller.dispatch(IdeCommand.Edit(IdeEditorInput.SelectAll))
+        fixture.controller.dispatch(IdeCommand.Edit(IdeEditorInput.Type(source)))
+        fixture.controller.dispatch(IdeCommand.Edit(IdeEditorInput.SetCaret(source.indexOf("x"), false)))
+        fixture.controller.dispatch(IdeCommand.ShowParameterInfo)
+        val items =
+            listOf(
+                ParameterInfoItem("println(value: Any?): Unit", EditorRange(8, 19), true, "any value"),
+                ParameterInfoItem("println(value: String): Unit", EditorRange(8, 21), false, "text value"),
+            )
+        requests.completeParameterInfo(0, source, items)
+        fixture.controller.tick()
+        fixture.controller.dispatch(IdeCommand.SelectParameterInfo(-1))
+        val chosen = assertNotNull((fixture.textEditor().analysis as IdeAnalysisState.Active).parameterInfo)
+        assertEquals(1, chosen.selectedIndex)
+        assertEquals("text value", chosen.selectedItem.activeParameterDocumentation)
+        assertEquals(source.indexOf("x"), chosen.caretOffsetUtf16)
+        assertEquals(source, fixture.textEditor().visibleLines.joinToString("\n"))
+        fixture.controller.dispatch(IdeCommand.Edit(IdeEditorInput.Type("y")))
+        val edited = source.replace("x", "yx")
+        requests.completeParameterInfo(1, edited, items.asReversed())
+        fixture.controller.tick()
+        val refreshed = assertNotNull((fixture.textEditor().analysis as IdeAnalysisState.Active).parameterInfo)
+        assertEquals(0, refreshed.selectedIndex)
+        assertEquals("text value", refreshed.selectedItem.activeParameterDocumentation)
+        fixture.controller.dispatch(IdeCommand.DismissParameterInfo)
+        fixture.controller.dispatch(IdeCommand.ShowParameterInfo)
+        requests.completeParameterInfo(2, edited, items)
+        fixture.controller.tick()
+        assertEquals(0, (fixture.textEditor().analysis as IdeAnalysisState.Active).parameterInfo?.selectedIndex)
         fixture.controller.close()
     }
 
@@ -637,6 +680,7 @@ private class FlowAnalysisRequests : AnalysisRequestCoordinator {
     fun completeParameterInfo(
         index: Int,
         source: String,
+        items: List<ParameterInfoItem>? = null,
     ) {
         val request = parameterInfoRequests[index]
         val callStart = source.indexOf("println")
@@ -649,7 +693,7 @@ private class FlowAnalysisRequests : AnalysisRequestCoordinator {
                     EditorParameterInfo(
                         request.path,
                         EditorRange(callStart, callEnd),
-                        listOf(ParameterInfoItem(signature, EditorRange(8, 19), true)),
+                        items ?: listOf(ParameterInfoItem(signature, EditorRange(8, 19), true)),
                     ),
                     mapOf(request.path to source.length),
                 ),
@@ -660,6 +704,7 @@ private class FlowAnalysisRequests : AnalysisRequestCoordinator {
     fun completeNoParameterInfo(
         index: Int,
         source: String,
+        items: List<ParameterInfoItem>? = null,
     ) {
         val request = parameterInfoRequests[index]
         request.future.complete(

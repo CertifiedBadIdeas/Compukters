@@ -580,6 +580,18 @@ class IdeInputAdapterTest {
     }
 
     @Test
+    fun `control arrows select argument overload while plain arrows remain editing`() {
+        val fixture = fixture()
+        val focus = IdeFocusState.Editor.copy(parameterInfoVisible = true)
+        fixture.adapter.keyPressed(key(IdeKeyCode.UP, IdeModifier.CONTROL), focus)
+        fixture.adapter.keyPressed(key(IdeKeyCode.DOWN, IdeModifier.CONTROL), focus)
+        assertEquals(listOf<IdeCommand>(IdeCommand.SelectParameterInfo(-1), IdeCommand.SelectParameterInfo(1)), fixture.commands)
+        fixture.commands.clear()
+        fixture.adapter.keyPressed(key(IdeKeyCode.DOWN), focus)
+        assertTrue(fixture.commands.single() is IdeCommand.Edit)
+    }
+
+    @Test
     fun `escape dismisses parameter info before completion`() {
         val fixture = fixture()
         val focus = IdeFocusState(IdeFocusArea.Editor, completionVisible = true, parameterInfoVisible = true)

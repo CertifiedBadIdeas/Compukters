@@ -94,6 +94,49 @@ import kotlin.test.assertTrue
 
 class IdeRendererStateTest {
     @Test
+    fun `argument popup shows selected overload documentation and keeps wrapped text inside narrow editor`() {
+        val source = "fun main() { send(1) }"
+        val items =
+            (0..6).map { index ->
+                ParameterInfoItem(
+                    "send(value$index: Int): Unit",
+                    EditorRange(5, 16),
+                    index == 0,
+                    if (index == 6) "Selected **parameter** with `code`, [links] and 😀. ".repeat(30) else "Other description",
+                )
+            }
+        val editor =
+            semanticEditor(source, caretUtf16 = source.indexOf('1'), parameterInfo = { identity, path ->
+                IdeParameterInfoState(
+                    identity,
+                    path,
+                    0,
+                    source.indexOf('1'),
+                    EditorRange(source.indexOf("send"), source.indexOf(')', source.indexOf("send")) + 1),
+                    items,
+                    32,
+                    6,
+                )
+            }) { _, _ -> IdeSemanticInteraction.None }
+        val geometry = IdeRenderGeometry.compute(560, 360, 120, 80, true, false, IdeCodeFontProfile.DEFAULT)
+        val model = IdeRenderer.extract(workspaceState(editor, IdeBuildState.Idle), geometry)
+        val popup = model.panels.single { it.kind == IdePanelKind.Dialog }.bounds
+        assertTrue(geometry.editor.contains(popup))
+        val text = model.text.filter { it.kind == IdeTextKind.ParameterInfo }
+        assertTrue(text.any { it.value.contains("Selected ") })
+        assertTrue(text.any { it.value == "parameter" && it.color == IdeColors.ACCENT })
+        assertTrue(text.none { it.value.contains("Other description") })
+        assertTrue(text.joinToString("") { it.value }.contains("value6: Int"))
+        assertTrue(text.any { it.value == "…" })
+        assertTrue(
+            text.all { run ->
+                run.x >= popup.left && run.x + visualColumnsForTest(run.value) * IdeCodeFontProfile.DEFAULT.cellWidth <= popup.right &&
+                    run.y - IdeCodeFontProfile.DEFAULT.glyphDrawOffsetY + IdeCodeFontProfile.DEFAULT.cellHeight <= popup.bottom
+            },
+        )
+    }
+
+    @Test
     fun `long argument hints keep the active parameter visible with wrapped source-safe ranges`() {
         val source = "fun main() { send(1) }"
         val signature = "send(" + (0..99).joinToString(", ") { "parameter$it: List<String?>" } + ", selected: Int): Unit"
@@ -1678,6 +1721,7 @@ class IdeRendererStateTest {
         assertEquals(
             listOf(
                 IdeIconKind.Format,
+                IdeIconKind.Resolve,
                 IdeIconKind.Resolve,
                 IdeIconKind.Build,
                 IdeIconKind.Verify,
