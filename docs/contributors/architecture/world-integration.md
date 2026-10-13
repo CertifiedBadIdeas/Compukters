@@ -276,3 +276,21 @@ families and registration is on the dedicated-server payload path as well.
 Guest `pollPointer` and legacy `pollClick` are independent transient queues. The widget tree consumes only
 explicitly supplied events; no Minecraft-side mirror of widget state exists. Drawing regions are carried
 per command, so there is no ambient clipping stack to restore across frame or VM checkpoint boundaries.
+
+## Peripheral structure geometry
+
+A provider resolves every contact on a formed multiblock to the same controller anchor and device key.
+The controller owns the exact-instance stamp, configured name and persistent network membership.
+The optional `CompuktersPeripheralGeometryProvider` interface supplies block-aligned world bounds for
+presentation; existing SAM providers and identity constructors remain unchanged. Geometry never enters
+peripheral equality, Guest schemas or saved network records. The overlay adapter accepts only finite
+bounds containing both anchor and contact, at most 64 blocks on each axis; invalid metadata falls back
+to the anchor block. Overlay protocol 2 transports validated inclusive block bounds, deduplicates by
+anchor and uses the same geometry for hover, HUD and the existing depth-tested pulsing outline.
+
+The Create adapter resolves active Fluid Tank boilers through Create's real controller and width/height.
+Inactive or unformed tanks remain unavailable. Explicit configurator interaction consolidates old
+per-block memberships only when their current exact-instance stamps and provider resolution still
+match the structure. One source network is inherited; conflicting networks leave the resulting device
+unbound before the requested binding action. An unambiguous name is retained. Holding the configurator
+only observes structures and never creates stamps or consolidates memberships.

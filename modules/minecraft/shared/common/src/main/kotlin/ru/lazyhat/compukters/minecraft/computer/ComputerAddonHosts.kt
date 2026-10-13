@@ -22,6 +22,7 @@ import net.minecraft.core.BlockPos
 import net.minecraft.core.Direction
 import net.minecraft.server.level.ServerLevel
 import net.minecraft.world.level.block.state.BlockState
+import net.minecraft.world.phys.AABB
 import ru.lazyhat.compukters.addon.api.AddonCapabilitySchema
 import ru.lazyhat.compukters.addon.api.AddonCapabilityValueType
 import ru.lazyhat.compukters.addon.api.AddonGuestApiBundle
@@ -71,6 +72,20 @@ fun interface ComputerPeripheralProvider {
         contactedFace: Direction,
     ): ComputerPeripheralIdentity?
 }
+
+/** Optional presentation geometry, separate from canonical peripheral identity. */
+interface ComputerPeripheralGeometryProvider : ComputerPeripheralProvider {
+    fun bounds(
+        level: ServerLevel,
+        position: BlockPos,
+        contactedFace: Direction,
+    ): AABB?
+}
+
+internal data class ComputerPeripheralGeometry(
+    val identity: ComputerPeripheralIdentity,
+    val bounds: AABB?,
+)
 
 object ComputerAddonHosts {
     private val registrations = CopyOnWriteArrayList<Registration>()
@@ -130,6 +145,27 @@ object ComputerAddonHosts {
             } catch (_: Exception) {
                 null
             }
+        }
+    }
+
+    internal fun resolvePeripheralGeometry(
+        level: ServerLevel,
+        position: BlockPos,
+        contactedFace: Direction,
+    ): List<ComputerPeripheralGeometry> {
+        check(level.server.isSameThread) { "peripheral geometry must be resolved on the server thread" }
+        return registrations.mapNotNull { registration ->
+            val provider = registration.peripheralProvider ?: return@mapNotNull null
+            val identity = runCatching { provider.resolve(level, position, contactedFace) }.getOrNull() ?: return@mapNotNull null
+            val bounds =
+                runCatching {
+                    (provider as? ComputerPeripheralGeometryProvider)?.bounds(
+                        level,
+                        position,
+                        contactedFace,
+                    )
+                }.getOrNull()
+            ComputerPeripheralGeometry(identity, bounds)
         }
     }
 

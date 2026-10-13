@@ -13,6 +13,10 @@ headings so this page has one stable URL that can be shared outside the reposito
 
 ## 0.6.0 — In development
 
+- Create boilers appear as one whole structure in the configurator: every tank segment shares its controller's
+  name and network, with one outline around the complete tank. Explicit interaction consolidates older per-block
+  bindings; addon providers can opt into the same bounded structure geometry.
+
 - Newly compiled Guest programs allow 64 nested calls, matching the runtime limit, so framed nested UI drawing fits within the declared stack budget.
 
 - The shell repeats the failure reason beneath multiline program diagnostics so it remains visible after a long stack trace.

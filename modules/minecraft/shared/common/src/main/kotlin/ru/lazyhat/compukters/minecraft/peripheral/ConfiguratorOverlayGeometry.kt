@@ -40,7 +40,7 @@ object ConfiguratorOverlayGeometry {
         selectedNetwork: UUID?,
         selectedScreen: UUID?,
     ): List<ConfiguratorOutline> {
-        val hovered = snapshot.devices.firstOrNull { it.position == hover }
+        val hovered = snapshot.devices.firstOrNull { it.contains(hover) }
         val hoverGroup = if (mode == 2) hovered?.screen ?: hovered?.network else hovered?.network ?: hovered?.screen
         val screens = snapshot.screens.filter { it.columns * it.rows > 1 }
         val screensById = screens.associateBy { it.id }
@@ -52,10 +52,10 @@ object ConfiguratorOverlayGeometry {
                     if (unjoined == null && screen != null && device.position in screen.panels) return@mapNotNull null
                     val group = if (mode == 2) device.screen ?: device.network else device.network ?: device.screen
                     val strong =
-                        device.position == hover ||
+                        device.contains(hover) ||
                             (group != null && (group == hoverGroup || group == selectedNetwork || group == selectedScreen))
                     ConfiguratorOutline(
-                        AABB(device.position).inflate(0.008),
+                        device.box().inflate(0.008),
                         if (unjoined != null) UNJOINED_COLOR else color(group),
                         strong,
                     )

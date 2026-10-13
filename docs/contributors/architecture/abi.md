@@ -322,6 +322,15 @@ contracts of the same device. Discovery snapshots reserve no unread devices. Pro
 handle close and disconnected endpoint expiry release ownership. Peripheral checkpoint format 2 and the published
 addon contract JVM constructors remain unchanged; persisted handles must reacquire available exact instances.
 
+## Configurator structure geometry
+
+Configurator overlay payload registration version 2 appends optional inclusive minimum/maximum block positions
+for each device. Bounds contain the canonical anchor, span 1–64 blocks per axis and are validated on decode.
+Single-block devices omit bounds. Both producer and consumer change together; version 1 overlay peers are incompatible.
+The additive `CompuktersPeripheralGeometryProvider` interface leaves existing provider SAMs, device constructors,
+Guest capabilities, exact-instance stamps and persistent network format 1 unchanged. Structure geometry is presentation
+metadata and is excluded from canonical device identity. See [world integration](world-integration.md#peripheral-structure-geometry).
+
 ## Computer network capability
 
 `compukter:core` 2.2.0 adds `compukters:network` ABI 1.0, with three asynchronous operations: 0 returns connection status,
