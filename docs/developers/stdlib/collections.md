@@ -341,7 +341,8 @@ compiles and executes` compiles its actual source; the same VM task checks its r
 
 **Status:** Unsupported.
 
-Sequences and collection conversion helpers have no Guest implementation.
+Collection conversion helpers not listed on this page remain unavailable. The supported lazy
+sequence subset is described below.
 
 **Related work:** not scheduled
 
@@ -387,5 +388,6 @@ and nullable values`, executed by `testKotlinSequencesVmConformance` with 256-un
 The fixture covers deferred callbacks and order, early stopping, independent interleaved
 iterators, repeated availability checks, empty/exhausted inputs, count validation, borrowed
 mutable sources, retained captures, callback exceptions, references, nullable values and all twelve primitive families.
-`sequences reject non local returns from deferred callbacks` covers map/filter/filterNot rejection. `DiagnosticQueryTest`,
+`sequences reject non local returns from deferred callbacks` covers map/filter/filterNot rejection.
+`DiagnosticQueryTest`,
 `lazy sequences resolve with source and metadata inputs`, covers both IDE platform modes.
