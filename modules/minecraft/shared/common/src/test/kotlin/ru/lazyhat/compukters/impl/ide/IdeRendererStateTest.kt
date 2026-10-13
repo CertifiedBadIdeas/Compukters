@@ -1085,6 +1085,52 @@ class IdeRendererStateTest {
         ) { _, _ -> IdeSemanticInteraction.None }
 
     @Test
+    fun `problem text cells align with selection and hit rows when selected item scrolls into view`() {
+        val source = "fun main() = Unit"
+        val editor = semanticEditor(source, caretUtf16 = 4) { _, _ -> IdeSemanticInteraction.None }
+        val path = VirtualSourcePath.kotlin("src/main.kt")
+        val diagnostics =
+            IdeDiagnostics(
+                (0..29).map { index ->
+                    IdeDiagnosticRow(
+                        EditorDiagnostic(
+                            EditorDiagnosticSeverity.Error,
+                            "Problem $index",
+                            if (index == 29) path else VirtualSourcePath.kotlin("src/a.kt"),
+                            EditorRange(4, 8),
+                        ),
+                        source,
+                    )
+                },
+            )
+        val base = workspaceState(editor, IdeBuildState.Idle)
+        val page = (base.page as IdePageState.Workspace).value
+        val geometry = geometry()
+        val model = IdeRenderer.extract(base.copy(page = IdePageState.Workspace(page.copy(diagnostics = diagnostics))), geometry)
+        val targets =
+            model.hitTargets.filter {
+                it.action == IdeHitAction.DiagnosticChoice && geometry.diagnostics!!.contains(it.bounds)
+            }
+        assertTrue(targets.isNotEmpty())
+        assertTrue(targets.size < diagnostics.rows.size)
+        val labels = model.text.filter { it.kind == IdeTextKind.Diagnostic }
+        assertEquals(targets.size, labels.size)
+        targets.zip(labels).forEach { (target, label) ->
+            assertEquals(target.bounds, label.clip)
+            assertEquals(geometry.font.centeredCellTop(target.bounds) + geometry.font.glyphDrawOffsetY, label.y)
+            val cellTop = label.y - geometry.font.glyphDrawOffsetY
+            assertTrue(cellTop >= target.bounds.top && cellTop + geometry.font.cellHeight <= target.bounds.bottom)
+        }
+        assertEquals(diagnostics.rows.last(), targets.last().diagnostic)
+        val selected =
+            model.fills.single {
+                it.kind == IdeFillKind.Selection && it.bounds.height == geometry.font.cellHeight &&
+                    geometry.diagnostics!!.contains(it.bounds)
+            }
+        assertEquals(targets.last().bounds, selected.bounds)
+    }
+
+    @Test
     fun `diagnostic rows and gutter use exact locations without shifting code and expose counts`() {
         val source = "fun work() = 1\nfun second() = 2"
         val editor = semanticEditor(source) { _, _ -> IdeSemanticInteraction.None }
@@ -1250,7 +1296,10 @@ class IdeRendererStateTest {
         assertEquals(0, usage.choiceIndex)
         assertTrue(usage.bounds.left >= bounds.diagnostics!!.left && usage.bounds.right <= bounds.diagnostics!!.right)
         assertTrue(usage.bounds.top >= bounds.diagnostics!!.top && usage.bounds.bottom <= bounds.diagnostics!!.bottom)
-        assertTrue(model.text.any { it.value.contains("src/main.kt:1") && it.value.contains("val answer = answer") })
+        val context = model.text.single { it.value.contains("src/main.kt:1") && it.value.contains("val answer = answer") }
+        assertEquals(usage.bounds, context.clip)
+        assertEquals(bounds.font.centeredCellTop(usage.bounds) + bounds.font.glyphDrawOffsetY, context.y)
+
         assertTrue(model.hitTargets.any { it.action == IdeHitAction.UsagesClose })
     }
 

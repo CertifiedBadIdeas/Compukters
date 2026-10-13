@@ -1278,13 +1278,11 @@ object IdeRenderer {
                     val top = bounds.top + UI_LINE_HEIGHT + visible * UI_LINE_HEIGHT
                     val row = IdeRect(bounds.left, top, bounds.right, top + UI_LINE_HEIGHT)
                     if (index == usages.selectedIndex) fills += IdeFillDraw(IdeFillKind.Selection, row, IdeColors.SELECTION, Z_SELECTION)
-                    ui(
+                    centeredUi(
                         IdeTextKind.Diagnostic,
                         "${usage.path.value}:${usage.line + 1}  ${usage.context}",
                         row.left + 6,
-                        row.top + 4,
-                        IdeColors.TEXT,
-                        bounds,
+                        row,
                     )
                     hitTargets +=
                         IdeHitTarget(IdeHitAction.UsageChoice, row, true, "Open usage", IdeFocusGroup.Page, Z_TARGET, choiceIndex = index)
@@ -1321,13 +1319,12 @@ object IdeRenderer {
                         .orEmpty()
                 val stale = if (diagnostic.range != null && !row.navigable) " [outdated]" else ""
                 if (first + index == selected) fills += IdeFillDraw(IdeFillKind.Selection, rowBounds, IdeColors.SELECTION, Z_SELECTION)
-                ui(
+                centeredUi(
                     IdeTextKind.Diagnostic,
                     "$location${diagnostic.message}$stale",
-                    bounds.left + 6,
-                    bounds.top + 4 + index * UI_LINE_HEIGHT,
+                    rowBounds.left + 6,
+                    rowBounds,
                     IdeSourceStyles.diagnosticColor(diagnostic.severity),
-                    bounds,
                 )
                 hitTargets +=
                     IdeHitTarget(
