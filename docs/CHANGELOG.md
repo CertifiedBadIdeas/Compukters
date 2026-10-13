@@ -13,6 +13,8 @@ headings so this page has one stable URL that can be shared outside the reposito
 
 ## 0.6.0 — In development
 
+- Redstone Ports show input/output strength independently on all six faces, with small edge indicators visible when a face is covered.
+
 - Newly compiled Guest programs allow 64 nested calls, matching the runtime limit, so framed nested UI drawing fits within the declared stack budget.
 
 - The shell repeats the failure reason beneath multiline program diagnostics so it remains visible after a long stack trace.

@@ -70,6 +70,8 @@ class CompuktersMod(
         if (FMLEnvironment.dist == Dist.CLIENT) {
             IdeClientBootstrap.register(eventBus)
             DisplayClientBootstrap.register(eventBus)
+            ru.lazyhat.compukters.impl.redstone.RedstonePortClientBootstrap
+                .register(eventBus)
             ru.lazyhat.compukters.impl.peripheral.ConfiguratorOverlayBootstrap
                 .register()
         }
