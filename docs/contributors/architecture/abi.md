@@ -20,6 +20,17 @@ preserve authoritative history; client UI owns navigation, selection and clipboa
 checkpoint envelope/schema **5** retains history; older schemas use the existing cold-boot fallback.
 See the VM host-neutral terminal wire contract for field widths, order and bounds.
 
+## Guest enum identity
+
+`kotlin:builtins` 1.15.0 makes `Enum.name` and `Enum.ordinal` executable. The compiler-generated Kotlin
+runtime library adds a shared abstract nominal Enum base with String/Int fields, using ordinary managed
+objects, inheritance and field instructions. Concrete enum types remain distinct. `Enum<E>` and `Enum<*>`
+use the common base representation; enum initialization sets both fields before publishing singleton
+roots. Runtime imports are appended, preserving earlier import indices. The generated library hash and
+platform identity change; dependent libraries rebuild against the updated bundle. Artifact wire formats,
+VM instructions, native ABI and checkpoint schema remain unchanged. Existing artifacts retain their
+embedded generated runtime library. `testKotlinEnumEntriesVmConformance` checks project and library getters.
+
 ## Guest enum entries
 
 `kotlin:builtins` 1.14.0 completes the structural Enum comparison declaration for frontend inheritance.

@@ -43,6 +43,10 @@ class DiagnosticQueryTest {
                 val first: Choice = values[0]
                 for (entry in values) check(entry in values)
                 check(first === Choice.FIRST)
+                val name: String = first.name
+                val index: Int = first.ordinal
+                val generic: Enum<*> = first
+                check(generic.name == name && generic.ordinal == index)
                 check(Empty.entries.isEmpty())
                 val sides: EnumEntries<RedstonePort.Side> = RedstonePort.Side.entries
                 check(sides[0] === RedstonePort.Side.ALL)
