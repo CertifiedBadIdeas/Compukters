@@ -26,7 +26,7 @@ import ru.lazyhat.compukters.lang.runtime.vm.HostFailureKind
 
 object LiquidBurnerIntegration {
     private val contract =
-        CompuktersPeripheralContract("createaddition:liquid_burner", "liquid_burner") { location ->
+        CompuktersPeripheralContract("createaddition:liquid_burner", "liquid_burner", "createaddition.boiler.LiquidBurner") { location ->
             (location.level.getBlockEntity(location.position) as? LiquidBlazeBurnerBlockEntity)?.let { entity ->
                 LiquidBurnerEndpoint(location.level, location.position, entity) { location.isReachable() }
             }
