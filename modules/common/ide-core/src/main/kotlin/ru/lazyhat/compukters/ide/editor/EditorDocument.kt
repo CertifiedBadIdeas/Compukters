@@ -196,6 +196,23 @@ class EditorDocument(
 
     fun paste(text: String): EditorEditResult = replaceSelection(text, EditorHistoryKind.Atomic)
 
+    /** Insert one atomic edit while rebasing both ends of the current selection. */
+    fun insertPreservingSelection(
+        offsetUtf16: Int,
+        text: String,
+    ): EditorEditResult {
+        if (!isCaretBoundary(offsetUtf16)) return EditorEditResult.Rejected(EditorRejection.InvalidRange)
+
+        fun shifted(value: Int) = if (value >= offsetUtf16) value + text.length else value
+        return replace(
+            EditorRange(offsetUtf16, offsetUtf16),
+            text,
+            EditorHistoryKind.Atomic,
+            EditorChangeOrigin.User,
+            EditorSelection(shifted(selection.anchorUtf16), shifted(selection.caretUtf16)),
+        )
+    }
+
     fun replaceRange(
         range: EditorRange,
         text: String,

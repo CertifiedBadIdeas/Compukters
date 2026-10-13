@@ -76,6 +76,7 @@ data class IdeFocusState(
     val gitDraft: IdeGitDraftView? = null,
     val gitMenu: IdeGitMenu? = null,
     val gitFieldFocusScroll: Map<IdeGitField, Int> = emptyMap(),
+    val importFixesVisible: Boolean = false,
 ) {
     companion object {
         val Initial = IdeFocusState(IdeFocusArea.Editor)
@@ -393,6 +394,11 @@ class IdeInputAdapter(
                     sink.dispatch(IdeCommand.OpenUsage(target.choiceIndex))
                     return true
                 }
+                if (target.action == IdeHitAction.ImportFixChoice && target.choiceIndex != null) {
+                    sink.dispatch(IdeCommand.AcceptImportFix(target.choiceIndex))
+                    pointerActivity()
+                    return true
+                }
                 if (target.action == IdeHitAction.DeclarationChoice) {
                     val chooser =
                         ((context.editor?.analysis as? IdeAnalysisState.Active)?.interaction as? IdeSemanticInteraction.Chooser)
@@ -656,7 +662,9 @@ class IdeInputAdapter(
                 dispatch(IdeCommand.RefreshComputerTree)
             }
 
-            IdeHitAction.DeclarationChoice -> {
+            IdeHitAction.ImportFixChoice,
+            IdeHitAction.DeclarationChoice,
+            -> {
                 false
             }
 

@@ -212,6 +212,7 @@ sealed interface IdeAnalysisState {
         val interaction: IdeSemanticInteraction = IdeSemanticInteraction.None,
         val parameterInfo: IdeParameterInfoState? = null,
         val occurrenceRanges: List<EditorRange> = emptyList(),
+        val importFixes: IdeImportFixState? = null,
     ) : IdeAnalysisState
 
     data class Unavailable(
@@ -255,6 +256,7 @@ class IdeAnalysisCoordinator(
     private var navigationResult: CompletableFuture<IdeDeclarationOutcome>? = null
     private var parameterInfoRequested = false
     private var parameterInfoSelection: Pair<Int, String>? = null
+    private var importFixOperation = 0L
     private var parameterInfoOperation = 0L
     private var parameterInfoRequest: ParameterInfoRequest? = null
     private var closed = false
@@ -378,7 +380,78 @@ class IdeAnalysisCoordinator(
         }
     }
 
+    fun showImportFixes(): Boolean {
+        dismissCompletion()
+        dismissParameterInfo()
+        dismissSemanticInteraction()
+        val current = synchronized(lock) { session?.takeIf { !closed && it.snapshot != null } } ?: return false
+        val snapshot = requireNotNull(current.snapshot)
+        val (operation, expectedTarget) =
+            synchronized(lock) {
+                importFixOperation = Math.incrementExact(importFixOperation)
+                importFixOperation to targetRevision
+            }
+        requests.importFixes(current.path, current.caretOffsetUtf16).whenComplete { value, failure ->
+            synchronized(lock) {
+                if (closed || operation != importFixOperation || session?.snapshot !== snapshot ||
+                    session?.project !== current.project || session?.documentRevision != current.documentRevision ||
+                    session?.caretOffsetUtf16 != current.caretOffsetUtf16 || targetRevision != expectedTarget
+                ) {
+                    return@whenComplete
+                }
+                val result = (value as? AnalysisClientResult.Success)?.result as? AnalysisResult.ImportFixes
+                val active = publishedState.get() as? IdeAnalysisState.Active ?: return@whenComplete
+                if (failure != null || result?.identity != snapshot.identity ||
+                    result.items.any { !validRange(current.text, it.edit.range.startUtf16, it.edit.range.endUtf16) } ||
+                    result.reference?.let { !validRange(current.text, it.startUtf16, it.endUtf16) } == true
+                ) {
+                    return@whenComplete
+                }
+                publishedState.set(
+                    active.copy(importFixes = IdeImportFixState.create(result, current.path, current.documentRevision, expectedTarget)),
+                )
+            }
+        }
+        return true
+    }
+
+    fun dismissImportFixes() {
+        synchronized(lock) {
+            importFixOperation = Math.incrementExact(importFixOperation)
+            val active = publishedState.get() as? IdeAnalysisState.Active
+            if (active != null) publishedState.set(active.copy(importFixes = null))
+        }
+    }
+
+    fun moveImportFix(delta: Int) {
+        synchronized(lock) {
+            val active = publishedState.get() as? IdeAnalysisState.Active ?: return
+            val fixes = active.importFixes ?: return
+            publishedState.set(active.copy(importFixes = fixes.move(delta)))
+        }
+    }
+
+    fun selectImportFix(
+        document: EditorDocument,
+        path: VirtualSourcePath,
+        index: Int? = null,
+    ): ru.lazyhat.compukters.ide.analysis.ImportQuickFix? {
+        synchronized(lock) {
+            val active = publishedState.get() as? IdeAnalysisState.Active ?: return null
+            val fixes = active.importFixes ?: return null
+            val current = session ?: return null
+            val fresh =
+                !closed && fixes.path == path && current.path == path && current.snapshot?.identity == fixes.identity &&
+                    current.documentRevision == document.revision && fixes.documentRevision == document.revision &&
+                    fixes.targetRevision == targetRevision && document.contentEquals(current.text)
+            val item = if (fresh) fixes.items.getOrNull(index ?: fixes.selectedIndex) else null
+            dismissImportFixes()
+            return item
+        }
+    }
+
     fun manualCompletion() {
+        dismissImportFixes()
         dismissParameterInfo()
         val request: CompletionRequest?
         synchronized(lock) {
@@ -493,6 +566,7 @@ class IdeAnalysisCoordinator(
     }
 
     fun showParameterInfo() {
+        dismissImportFixes()
         requests.cancelCompletion()
         val request: ParameterInfoRequest?
         synchronized(lock) {
@@ -519,6 +593,7 @@ class IdeAnalysisCoordinator(
         synchronized(lock) {
             val current = session ?: return
             require(offsetUtf16 in 0..current.text.length) { "analysis caret exceeds current source" }
+            if (current.caretOffsetUtf16 != offsetUtf16) dismissImportFixes()
             val updated = current.copy(caretOffsetUtf16 = offsetUtf16)
             session = updated
             caretOccurrencesEnabled = requestOccurrences
@@ -708,6 +783,7 @@ class IdeAnalysisCoordinator(
     ) = updateCompletion { it.movePage(pages, pageSize) }
 
     fun focusLost() {
+        dismissImportFixes()
         synchronized(lock) {
             caretOccurrencesEnabled = false
             invalidateCaretOccurrencesLocked()
@@ -964,6 +1040,7 @@ class IdeAnalysisCoordinator(
                         prior?.interaction ?: IdeSemanticInteraction.None,
                         prior?.parameterInfo,
                         prior?.occurrenceRanges ?: emptyList(),
+                        prior?.importFixes,
                     )
                 visibleLatency.analysisPublished(IdeVisibleLatencyKind.Presentation, current.documentRevision)
                 publishedState.set(next)
@@ -1261,6 +1338,7 @@ class IdeAnalysisCoordinator(
     }
 
     private fun invalidateSemanticLocked() {
+        dismissImportFixes()
         invalidatePointerLocked()
         invalidateCaretOccurrencesLocked()
         navigationResult?.cancel(false)

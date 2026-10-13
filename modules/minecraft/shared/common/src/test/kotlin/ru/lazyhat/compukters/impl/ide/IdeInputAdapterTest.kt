@@ -49,6 +49,63 @@ import kotlin.test.assertTrue
 
 class IdeInputAdapterTest {
     @Test
+    fun `import candidate click chooses the explicit row`() {
+        val fixture = fixture()
+        val geometry = IdeRenderGeometry.compute(960, 540, 180, 120, true, true, IdeCodeFontProfile.DEFAULT)
+        val bounds = IdeRect(geometry.editor.left + 20, geometry.editor.top + 30, geometry.editor.left + 160, geometry.editor.top + 50)
+        val target =
+            IdeHitTarget(
+                IdeHitAction.ImportFixChoice,
+                bounds,
+                enabled = true,
+                tooltip = null,
+                focusGroup = IdeFocusGroup.Page,
+                zIndex = IdeDrawLayers.Z_POPUP_TARGET,
+                choiceIndex = 2,
+            )
+        assertTrue(
+            fixture.adapter.pointerClicked(
+                bounds.left + 2.0,
+                bounds.top + 2.0,
+                0,
+                IdePointerContext(geometry, hitTargets = listOf(target)),
+            ),
+        )
+        assertEquals(IdeCommand.AcceptImportFix(2), fixture.commands.first())
+    }
+
+    @Test
+    fun `Alt Enter opens import fixes and chooser keys leave the caret untouched`() {
+        val fixture = fixture()
+        fixture.adapter.keyPressed(key(IdeKeyCode.ENTER, IdeModifier.ALT), IdeFocusState.Editor)
+        assertEquals(listOf<IdeCommand>(IdeCommand.ShowImportFixes), fixture.commands)
+        fixture.commands.clear()
+        val focus = IdeFocusState.Editor.copy(importFixesVisible = true)
+        for (key in listOf(IdeKeyCode.DOWN, IdeKeyCode.UP, IdeKeyCode.PAGE_DOWN, IdeKeyCode.ENTER, IdeKeyCode.ESCAPE)) {
+            assertTrue(fixture.adapter.keyPressed(key(key), focus))
+        }
+        assertEquals(
+            listOf<IdeCommand>(
+                IdeCommand.MoveImportFix(1),
+                IdeCommand.MoveImportFix(-1),
+                IdeCommand.MoveImportFix(8),
+                IdeCommand.AcceptImportFix(),
+                IdeCommand.DismissImportFixes,
+            ),
+            fixture.commands,
+        )
+        fixture.commands.clear()
+        assertTrue(fixture.adapter.keyPressed(key(IdeKeyCode.LEFT), focus))
+        assertEquals(IdeCommand.DismissImportFixes, fixture.commands.first())
+        assertTrue(fixture.commands.last() is IdeCommand.Edit)
+        fixture.commands.clear()
+        assertFalse(fixture.adapter.keyPressed(key(IdeKeyCode.ENTER, IdeModifier.ALT), IdeFocusState.Tree))
+        assertTrue(fixture.commands.isEmpty())
+        fixture.adapter.keyPressed(key(IdeKeyCode.ENTER, IdeModifier.ALT), focus.copy(findVisible = true, findFocused = true))
+        assertTrue(fixture.commands.none { it == IdeCommand.ShowImportFixes })
+    }
+
+    @Test
     fun `domain dialog blocks search semantic navigation and editor shortcuts`() {
         val fixture = fixture()
         val focus =
@@ -59,6 +116,7 @@ class IdeInputAdapterTest {
                 declarationChooserVisible = true,
                 parameterInfoVisible = true,
                 completionVisible = true,
+                importFixesVisible = true,
             )
         assertTrue(fixture.adapter.keyPressed(key(IdeKeyCode.S, IdeModifier.CONTROL), focus))
         assertTrue(fixture.adapter.keyPressed(key(IdeKeyCode.DOWN), focus))
@@ -78,6 +136,7 @@ class IdeInputAdapterTest {
                 declarationChooserVisible = true,
                 parameterInfoVisible = true,
                 completionVisible = true,
+                importFixesVisible = true,
             )
         assertTrue(fixture.adapter.keyPressed(key(IdeKeyCode.S, IdeModifier.CONTROL), focus))
         assertTrue(fixture.commands.isEmpty())

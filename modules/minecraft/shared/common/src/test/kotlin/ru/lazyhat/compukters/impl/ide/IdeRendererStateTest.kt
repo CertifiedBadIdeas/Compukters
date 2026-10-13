@@ -94,6 +94,83 @@ import kotlin.test.assertTrue
 
 class IdeRendererStateTest {
     @Test
+    fun `import popup keeps selected candidate visible and paints controls above its surface`() {
+        val source = "fun main() { greet(2) }"
+        val editor = semanticEditor(source, caretUtf16 = source.indexOf("greet")) { _, _ -> IdeSemanticInteraction.None }
+        val active = editor.analysis as IdeAnalysisState.Active
+        val items =
+            (0..11).map { index ->
+                val name = "sample.package$index.greet"
+                ru.lazyhat.compukters.ide.analysis.ImportQuickFix(
+                    name,
+                    ru.lazyhat.compukters.ide.analysis
+                        .CompletionTextEdit(EditorRange(0, 0), "import $name\n\n"),
+                )
+            }
+        val fixes =
+            ru.lazyhat.compukters.ide.client.analysis.IdeImportFixState(
+                active.identity,
+                active.path,
+                0,
+                0,
+                EditorRange(source.indexOf("greet"), source.indexOf("greet") + 5),
+                items,
+                11,
+            )
+        val withFixes =
+            semanticEditor(source, caretUtf16 = source.indexOf("greet"), importFixes = fixes) { _, _ ->
+                IdeSemanticInteraction.None
+            }
+        val geometry = geometry()
+        val model = IdeRenderer.extract(workspaceState(withFixes, IdeBuildState.Idle), geometry)
+        val targets = model.hitTargets.filter { it.action == IdeHitAction.ImportFixChoice }
+        assertEquals((4..11).toList(), targets.map { it.choiceIndex })
+        assertEquals(11, targets.single { it.selected }.choiceIndex)
+        assertTrue(targets.all { geometry.editor.contains(it.bounds) })
+        val selected = targets.last()
+        var pixelColor = 0
+        val pointX = selected.bounds.left + 2.0
+        val pointY = selected.bounds.top + 2.0
+        val canvas =
+            object : IdeCanvas {
+                override fun fill(
+                    bounds: IdeRect,
+                    color: Int,
+                ) {
+                    if (bounds.containsPoint(pointX, pointY)) pixelColor = color
+                }
+
+                override fun text(draw: IdeTextDraw) = Unit
+
+                override fun icon(draw: IdeIconDraw) = Unit
+
+                override fun terminal(
+                    state: ru.lazyhat.compukters.lang.runtime.vm.TerminalState,
+                    geometry: ru.lazyhat.compukters.impl.terminal.TerminalGridGeometry,
+                    nowMillis: Long,
+                ) = Unit
+            }
+        IdeFramePainter.paint(
+            IdeScreenFrame(
+                ru.lazyhat.compukters.impl.ui.CompuktersUiViewport
+                    .admitIde(1920, 1080, 2),
+                geometry,
+                model,
+                ru.lazyhat.compukters.impl.ide.target.IdeTargetTerminalState.Closed,
+                false,
+                false,
+            ),
+            canvas,
+            0,
+        )
+        assertEquals(IdeColors.SELECTION, pixelColor)
+        val narrow = IdeRenderGeometry.compute(640, 360, 120, 80, true, true, IdeCodeFontProfile.DEFAULT)
+        val narrowModel = IdeRenderer.extract(workspaceState(withFixes, IdeBuildState.Idle), narrow)
+        assertTrue(narrowModel.hitTargets.filter { it.action == IdeHitAction.ImportFixChoice }.all { narrow.editor.contains(it.bounds) })
+        assertTrue(narrowModel.text.filter { it.kind == IdeTextKind.ImportFixChoice }.all { it.clip?.let(narrow.editor::contains) == true })
+    }
+
+    @Test
     fun `argument popup shows selected overload documentation and keeps wrapped text inside narrow editor`() {
         val source = "fun main() { send(1) }"
         val items =
@@ -2335,6 +2412,7 @@ class IdeRendererStateTest {
         firstVisibleColumn: Int = 0,
         selection: EditorRange? = null,
         parameterInfo: ((AnalysisSnapshotIdentity, VirtualSourcePath) -> IdeParameterInfoState)? = null,
+        importFixes: ru.lazyhat.compukters.ide.client.analysis.IdeImportFixState? = null,
         interaction: (AnalysisSnapshotIdentity, VirtualSourcePath) -> IdeSemanticInteraction,
     ): IdeEditorView.Text {
         val document = EditorDocument(source)
@@ -2369,6 +2447,7 @@ class IdeRendererStateTest {
                     completion = completion?.invoke(identity, virtualPath),
                     parameterInfo = parameterInfo?.invoke(identity, virtualPath),
                     interaction = interaction(identity, virtualPath),
+                    importFixes = importFixes,
                 ),
         )
     }

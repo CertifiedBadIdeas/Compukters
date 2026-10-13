@@ -39,6 +39,11 @@ internal class IdeEditorPopups(
         diagnostics: ru.lazyhat.compukters.ide.client.state.IdeDiagnostics,
     ) {
         val active = editor.analysis as? IdeAnalysisState.Active
+        val fixes = active?.importFixes
+        if (fixes != null) {
+            importFixes(fixes)
+            return
+        }
         when (val interaction = active?.interaction) {
             is IdeSemanticInteraction.Chooser -> {
                 semanticChooser(interaction)
@@ -61,6 +66,51 @@ internal class IdeEditorPopups(
                     }
                 }
             }
+        }
+    }
+
+    private fun importFixes(fixes: ru.lazyhat.compukters.ide.client.analysis.IdeImportFixState) {
+        val anchor = source.anchor(fixes.reference) ?: return
+        val labels = fixes.items.map { popupText(it.fqName) }
+        val header = "Import · ${fixes.selectedIndex + 1}/${labels.size}"
+        val width = maxOf(SEMANTIC_POPUP_MINIMUM_WIDTH, (maxOf(labels.maxOf(::visualColumns), visualColumns(header)) + 2) * font.cellWidth)
+        val popup = geometry.anchoredPopup(anchor, width, (minOf(8, labels.size) + 1) * UI_LINE_HEIGHT + POPUP_VERTICAL_PADDING)
+        val rows = ((popup.bounds.height - POPUP_VERTICAL_PADDING) / UI_LINE_HEIGHT - 1).coerceAtLeast(0)
+        if (rows == 0) return
+        val first = (fixes.selectedIndex - rows + 1).coerceIn(0, (labels.size - rows).coerceAtLeast(0))
+        semanticPopupPanel(popup.bounds)
+        output.ui(
+            IdeTextKind.ImportFixChoice,
+            header,
+            popup.bounds.left + 4,
+            popup.bounds.top + 4,
+            IdeColors.MUTED,
+            popup.bounds,
+            Z_POPUP_TEXT,
+        )
+        for (index in first until minOf(labels.size, first + rows)) {
+            val y = popup.bounds.top + 4 + (index - first + 1) * UI_LINE_HEIGHT
+            val bounds = IdeRect(popup.bounds.left + 4, y, popup.bounds.right - 4, y + UI_LINE_HEIGHT)
+            val selected = index == fixes.selectedIndex
+            output.target(
+                IdeHitAction.ImportFixChoice,
+                bounds,
+                enabled = true,
+                tooltip = fixes.items[index].fqName,
+                focusGroup = IdeFocusGroup.Page,
+                z = IdeDrawLayers.Z_POPUP_TARGET,
+                selected = selected,
+                choiceIndex = index,
+            )
+            output.ui(
+                IdeTextKind.ImportFixChoice,
+                labels[index],
+                bounds.left + 4,
+                y,
+                if (selected) IdeColors.ACCENT else IdeColors.TEXT,
+                bounds,
+                Z_POPUP_TEXT,
+            )
         }
     }
 
