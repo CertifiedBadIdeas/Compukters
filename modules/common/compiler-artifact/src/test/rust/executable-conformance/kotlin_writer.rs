@@ -131,6 +131,11 @@ fn main() {
         "map-not-null" => k2_map_not_null_preserves_order_types_and_identity(),
         "destination" => k2_destination_operations_append_and_preserve_identity(),
         "fold" => k2_fold_specializes_element_and_accumulator_types(),
+        "sequences" => {
+            k2_expected_prints_with_budget("COMPUKTER_KOTLIN_SEQUENCES_ARTIFACT", ["sequences ok\n"], 256);
+            k2_expected_prints_with_budget("COMPUKTER_KOTLIN_SEQUENCES_SIGNED_ARTIFACT", ["sequences signed ok\n"], 256);
+            k2_expected_prints_with_budget("COMPUKTER_KOTLIN_SEQUENCES_UNSIGNED_ARTIFACT", ["sequences unsigned ok\n"], 256);
+        },
         "collection-selection" => k2_collection_selection_preserves_values_and_traversal(),
         "nullable-collections" => k2_nullable_collections_preserve_values_and_nulls(),
         "list-any-quota" => k2_int_list_universal_reads_survive_quota_and_gc(),

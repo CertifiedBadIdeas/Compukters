@@ -276,6 +276,30 @@ class DiagnosticQueryTest {
     }
 
     @Test
+    fun `lazy sequences resolve with source and metadata inputs`() {
+        val source =
+            """
+            import kotlin.collections.*
+            import kotlin.sequences.*
+            fun main() {
+                val values: Sequence<Int?> = listOf<Int?>(null, 2, 3).asSequence()
+                val lazy = values.filter { it != null }.filterNot { it == 3 }.map { it }.take(1)
+                val result: List<Int?> = lazy.toList()
+                check(result[0] == 2 && lazy.firstOrNull { it != null } == 2)
+                val iterator = lazy.iterator()
+                check(iterator.hasNext() && iterator.next() == 2)
+            }
+            """.trimIndent()
+        for (attachedSources in listOf(false, true)) {
+            K2QueryFixture.sourceWithGuestApi(attachedSources, "main.kt" to source).use { fixture ->
+                val result = fixture.execute(fixture.presentation()) as AnalysisResult.Presentation
+                val active = result.value.accept(fixture.identity) as SnapshotPresentationAcceptance.Active
+                assertTrue(active.diagnostics.none { it.severity == EditorDiagnosticSeverity.Error }, active.diagnostics.toString())
+            }
+        }
+    }
+
+    @Test
     fun `generic class captures resolve with source and metadata inputs`() {
         val source =
             """

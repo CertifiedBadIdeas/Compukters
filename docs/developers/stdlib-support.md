@@ -17,7 +17,7 @@ Compukters provides native Guest Kotlin libraries, not a Kotlin/JVM classpath. T
 | [Mathematics](stdlib/math.md) | Scalar math, vectors, rectangles, matrices, rotations, rounding and IEEE edge semantics |
 | [Random numbers](stdlib/random.md) | Reproducible seeded and shared generators, bounded draws and byte filling |
 | [Arrays and ranges](stdlib/arrays-ranges.md) | All twelve primitive arrays, reference arrays, copying and stored progressions |
-| [Collections](stdlib/collections.md) | Lists, primitive specializations, selection, mutation and iterable helpers |
+| [Collections](stdlib/collections.md) | Lists, primitive specializations, selection, mutation, iterable helpers and lazy sequences |
 | [Console I/O and packages](stdlib/io.md) | Console overloads, module ownership and unavailable packages |
 
 ## Status and evidence

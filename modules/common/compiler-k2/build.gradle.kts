@@ -2127,3 +2127,21 @@ tasks.register<Test>("compilePidOneThrusterExample") {
     sable.orNull?.let { systemProperty("compukters.sablePidBundle", file(it).absolutePath) }
     propulsion.orNull?.let { systemProperty("compukters.propulsionPidBundle", file(it).absolutePath) }
 }
+
+tasks.register<Test>("generateSequencesConformanceArtifact") {
+    description = "Compiles lazy Guest sequence chains for pinned VM conformance."
+    group = "verification"
+    dependsOn(tasks.jar)
+    useJUnitPlatform()
+    testClassesDirs = sourceSets.test.get().output.classesDirs
+    classpath = sourceSets.test.get().runtimeClasspath
+    filter.includeTestsMatching("*sequences preserve lazy demand iterator state and nullable values*")
+    inputs.file(workerJar)
+    inputs.dir("src/test/resources/kotlin/sequences")
+    systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
+    for (fixture in listOf("main", "signed", "unsigned")) {
+        val artifact = layout.buildDirectory.file("generated/conformance/kotlin-sequences-$fixture.cpkt")
+        outputs.file(artifact)
+        systemProperty("compukter.vm.sequencesArtifact.$fixture", artifact.get().asFile.absolutePath)
+    }
+}

@@ -378,6 +378,41 @@ class MinimalScriptLoweringTest {
         }
 
     @Test
+    fun `sequences reject non local returns from deferred callbacks`() =
+        withAdapter { adapter ->
+            for (operation in listOf("map", "filter", "filterNot")) {
+                val source =
+                    """
+                    import kotlin.collections.*
+                    import kotlin.sequences.*
+                    fun probe(): Boolean {
+                        listOf(1).asSequence().$operation { return true }
+                        return false
+                    }
+                    fun main() { probe() }
+                    """.trimIndent()
+                val result = adapter.compile(request(source))
+                assertNull(result.artifact)
+                assertTrue(result.diagnostics.any { it.code == "RETURN_NOT_ALLOWED" }, result.diagnostics.toString())
+            }
+        }
+
+    @Test
+    fun `sequences preserve lazy demand iterator state and nullable values`() =
+        withAdapter { adapter ->
+            for (fixture in listOf("main", "signed", "unsigned")) {
+                val source = repositoryFile("modules/common/compiler-k2/src/test/resources/kotlin/sequences/$fixture.kt").readText()
+                val result = adapter.compile(request(source))
+                val bytes = assertNotNull(result.artifact, "$fixture: ${result.diagnostics}").toByteArray()
+                ArtifactReader.read(bytes)
+                assertContentEquals(bytes, assertNotNull(adapter.compile(request(source)).artifact).toByteArray())
+                System.getProperty("compukter.vm.sequencesArtifact.$fixture")?.let { output ->
+                    Path.of(output).also { it.parent.createDirectories() }.writeBytes(bytes)
+                }
+            }
+        }
+
+    @Test
     fun `generic methods preserve concrete owner and method captures`() =
         withAdapter { adapter ->
             val source = repositoryFile("modules/common/compiler-k2/src/test/resources/kotlin/generic-methods/main.kt").readText()

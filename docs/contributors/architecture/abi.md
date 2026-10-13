@@ -49,6 +49,16 @@ platform identity change; dependent libraries rebuild against the updated bundle
 VM instructions, native ABI and checkpoint schema remain unchanged. Existing artifacts retain their
 embedded generated runtime library. `testKotlinEnumEntriesVmConformance` checks project and library getters.
 
+## Guest lazy sequences
+
+`stdlib:core` 1.22.0 adds the ordinary Guest `kotlin.sequences.Sequence<T>` interface and
+lazy iterable adapters, map/filter/filterNot/take, firstOrNull and toList. Generic source
+bodies specialize in consuming artifacts; wrappers, iterators and captured callbacks use
+existing managed objects. The filtering cache uses nullable storage with existing primitive
+boxes. The module content identity changes; platform bundle encoding, executable format,
+Runtime ABI, host operations and checkpoint schema remain unchanged. Exact semantics and
+execution evidence live in [the collection inventory](../../developers/stdlib/collections.md#lazy-sequences).
+
 ## Guest enum entries
 
 `kotlin:builtins` 1.14.0 completes the structural Enum comparison declaration for frontend inheritance.
