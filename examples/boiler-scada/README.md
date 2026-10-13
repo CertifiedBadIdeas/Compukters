@@ -116,6 +116,8 @@ addons/createaddition/gradlew-sandbox-dev-parallel-summary check
 
 Controller behavior is exercised by `testKotlinBoilerControlVmConformance`, compiling the exact Guest controller
 and running all seven lifecycle/interlock scenarios in the pinned VM with native value records.
+`DiagnosticQueryTest` also analyzes the shipped controller through the native IDE frontend, with platform sources
+attached and without them; compiler-only checks do not establish that the editor accepts the same source.
 The Crafts & Additions real GameTest uses the actual burner, fuel capability, configurator, Guest compiler and VM;
 it verifies one-mB observation/recovery, device replacement and network loss.
 
