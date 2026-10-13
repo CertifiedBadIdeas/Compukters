@@ -13,6 +13,10 @@ headings so this page has one stable URL that can be shared outside the reposito
 
 ## 0.6.0 — In development
 
+- Added programmable Create pumps with persistent remotely reversible fluid flow and normally disengaged
+  programmable clutches that release their load when the controlling program or peripheral connection ends.
+  Their Guest value classes use the shared typed and named peripheral discovery; addon blocks share the Compukters creative tab.
+
 - Addon SDK 0.6.0 supports transient actuator acquisition/release callbacks and lazy item groups in the shared
   Compukters creative tab. Base items stay first; addon groups follow in stable order without extra tabs.
 
