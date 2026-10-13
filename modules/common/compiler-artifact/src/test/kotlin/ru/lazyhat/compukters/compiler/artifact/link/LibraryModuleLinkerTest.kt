@@ -55,7 +55,10 @@ import ru.lazyhat.compukters.compiler.artifact.model.StringId
 import ru.lazyhat.compukters.compiler.artifact.model.SymbolKind
 import ru.lazyhat.compukters.compiler.artifact.model.TypeId
 import ru.lazyhat.compukters.compiler.artifact.model.TypeRef
+import ru.lazyhat.compukters.compiler.artifact.model.Utf16Literal
+import ru.lazyhat.compukters.compiler.artifact.model.Utf16LiteralId
 import ru.lazyhat.compukters.compiler.artifact.model.ValueType
+import ru.lazyhat.compukters.compiler.artifact.pool.ConstantPoolBuilder
 import ru.lazyhat.compukters.compiler.artifact.write.ArtifactWriteErrorCode
 import ru.lazyhat.compukters.compiler.artifact.write.ArtifactWriteLimits
 import ru.lazyhat.compukters.compiler.artifact.write.ArtifactWriteResult
@@ -69,6 +72,83 @@ import kotlin.test.assertIs
 import kotlin.test.assertTrue
 
 class LibraryModuleLinkerTest {
+    @Test
+    fun `compacting literals restores constant byte order across the 256 boundary`() {
+        val library =
+            Module(
+                name = StringId.of(0u),
+                kind = ModuleKind.LIBRARY,
+                strings = listOf(MetadataText.of("kotlin.String")),
+                types = listOf(NominalType.Class(name = StringId.of(0u), final = true)),
+                exports =
+                    listOf(
+                        Export(SymbolKind.TYPE, ExportVisibility.PUBLIC_LIBRARY, StringId.of(0u), 0u, TypeRef.Local(TypeId.of(0u))),
+                    ),
+            )
+        val pool = ConstantPoolBuilder()
+        pool.intern(Constant.StringLiteral(Utf16LiteralId.of(1u)))
+        pool.intern(Constant.StringLiteral(Utf16LiteralId.of(256u)))
+        val original = pool.freeze().records
+        val stringType = ValueType.Ref(false, TypeRef.Imported(ImportId.of(0u)))
+        val app =
+            Module(
+                name = StringId.of(0u),
+                kind = ModuleKind.APPLICATION,
+                strings = listOf("app", "entry", "kotlin.String").map(MetadataText::of),
+                utf16Literals = (0..256).map { Utf16Literal.fromString(it.toString().padStart(3, '0')) }.sorted(),
+                types = listOf(signature(StringId.of(1u))),
+                constants = original,
+                imports =
+                    listOf(
+                        Import(
+                            SymbolKind.TYPE,
+                            ModuleId.of(1u),
+                            StringId.of(2u),
+                            TypeRef.Imported(ImportId.of(0u)),
+                            ArtifactWriter.moduleSemanticHash(library),
+                        ),
+                    ),
+                functions =
+                    listOf(
+                        function(StringId.of(1u), TypeId.of(0u), FunctionId.of(0u), BlockId.of(0u)).copy(
+                            values = listOf(FunctionValue.scalar(stringType), FunctionValue.scalar(stringType)),
+                        ),
+                    ),
+                blocks =
+                    listOf(
+                        Block(
+                            FunctionId.of(0u),
+                            false,
+                            listOf(
+                                Instruction.Const(RegisterId.of(0u), ConstantId.of(0u)),
+                                Instruction.Const(RegisterId.of(1u), ConstantId.of(1u)),
+                                Instruction.Return(Destination.Unit),
+                            ),
+                        ),
+                    ),
+            )
+        val source =
+            Artifact(
+                semanticFeatures = setOf(SemanticFeature.MODULE_IMPORTS),
+                manifest = Manifest.minimal(maximumBlockCost = 64u, minimumSliceCost = 64u),
+                entry = EntryPoint(ModuleId.of(0u), FunctionId.of(0u)),
+                modules = listOf(app),
+            )
+        val linked = LibraryModuleLinker.link(source, mapOf("kotlin.String" to library))
+        val relocated = linked.modules[0]
+        assertEquals(
+            listOf(Constant.StringLiteral(Utf16LiteralId.of(0u)), Constant.StringLiteral(Utf16LiteralId.of(1u))),
+            relocated.constants,
+        )
+        val loads = relocated.blocks[0].instructions.filterIsInstance<Instruction.Const>()
+        for ((index, load) in loads.withIndex()) {
+            val before = original[index] as Constant.StringLiteral
+            val after = relocated.constants[load.constant.value.toInt()] as Constant.StringLiteral
+            assertEquals(app.utf16Literals[before.literal.value.toInt()], relocated.utf16Literals[after.literal.value.toInt()])
+        }
+        assertIs<ArtifactWriteResult.Success>(ArtifactWriter.write(linked))
+    }
+
     @Test
     fun `prepared library linking preserves bytes across project changes fragments and replaced libraries`() {
         val first = libraryModule()

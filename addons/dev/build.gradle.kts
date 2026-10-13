@@ -51,6 +51,7 @@ val baseMod = files(rootProject.file("../../modules/minecraft/v1_21_1/v1_21_1-ne
     .builtBy(gradle.includedBuild("Compukters").task(":v1_21_1-neoforge:developmentModJar"))
 val addonMods = mapOf(
     "create" to "compukters-create",
+    "createaddition" to "compukters-createaddition",
     "sable" to "compukters-sable",
     "propulsion" to "compukters-propulsion",
     "cosmonautics" to "compukters-cosmonautics",
@@ -60,6 +61,7 @@ val addonMods = mapOf(
 }
 val addonGameTestMods = mapOf(
     "create" to "compukters-create",
+    "createaddition" to "compukters-createaddition",
     "sable" to "compukters-sable",
     "propulsion" to "compukters-propulsion",
 ).mapValues { (directory, buildName) ->
@@ -97,6 +99,8 @@ dependencies {
     modImplementation(sableLibraries)
     forgeRuntimeLibrary(veilLibraries)
     modImplementation("com.simibubi.create:create-1.21.1:6.0.10-280:slim") { isTransitive = false }
+    modRuntimeOnly("maven.modrinth:createaddition:hsjVajlP") { isTransitive = false }
+    modRuntimeOnly("maven.modrinth:create-connected:Xe7EqzfQ") { isTransitive = false }
     modRuntimeOnly("net.createmod.ponder:ponder-neoforge:1.0.82+mc1.21.1")
     modRuntimeOnly("dev.engine-room.flywheel:flywheel-neoforge-1.21.1:1.0.6")
     modImplementation("com.tterrag.registrate:Registrate:MC1.21-1.3.0+67")
@@ -214,6 +218,7 @@ tasks.register("verifyAddons") {
     group = "verification"
     dependsOn(verifyDevelopmentMods, verifyPhysicsMods, verifyGameTestPhysicsMods, verifyGameTestClasspath)
     dependsOn(gradle.includedBuild("compukters-create").task(":check"))
+    dependsOn(gradle.includedBuild("compukters-createaddition").task(":check"))
     dependsOn(gradle.includedBuild("compukters-sable").task(":check"))
     dependsOn(gradle.includedBuild("compukters-propulsion").task(":check"))
     dependsOn(gradle.includedBuild("compukters-cosmonautics").task(":check"))
@@ -235,7 +240,7 @@ listOf(false, true).forEach { release ->
                 if (release) ":stageReleaseDistributionModJars" else ":stageDistributionModJars",
             ))
         from(mods)
-        listOf("create", "sable", "propulsion", "cosmonautics").forEach { addon ->
+        listOf("create", "createaddition", "sable", "propulsion", "cosmonautics").forEach { addon ->
             val archives = files(layout.projectDirectory.dir("../$addon/build/distribution"))
                 .builtBy(gradle.includedBuild("compukters-$addon").task(":stageDistributionJar"))
             from(archives) { into("1.21.1") }

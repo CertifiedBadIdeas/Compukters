@@ -61,6 +61,7 @@ import ru.lazyhat.compukters.compiler.artifact.model.ValueType
 import ru.lazyhat.compukters.compiler.artifact.model.hasStructuredHostResponse
 import ru.lazyhat.compukters.compiler.artifact.model.hasValueHostResponse
 import ru.lazyhat.compukters.compiler.artifact.model.usesUnsignedSemantics
+import ru.lazyhat.compukters.compiler.artifact.pool.ConstantPoolBuilder
 import ru.lazyhat.compukters.compiler.artifact.write.ArtifactWriteLimits
 import ru.lazyhat.compukters.compiler.artifact.write.ArtifactWriteResult
 import ru.lazyhat.compukters.compiler.artifact.write.ArtifactWriter
@@ -231,6 +232,7 @@ object LibraryModuleLinker {
         val relocations =
             ordered.associateWith { old ->
                 ModuleRelocation(
+                    combined.modules[old],
                     reachability.modules[old],
                     capabilityIds[old]
                         .mapNotNull { (localId, applicationId) ->
@@ -515,6 +517,7 @@ private data class DenseIds(
 }
 
 private class ModuleRelocation(
+    module: Module,
     reachable: ModuleReachability,
     private val capabilityMap: Map<Int, Int>,
     importOrder: List<Int>,
@@ -522,7 +525,15 @@ private class ModuleRelocation(
     val strings = DenseIds(reachable.strings.toList())
     val literals = DenseIds(reachable.literals.toList())
     val types = DenseIds(reachable.types.toList())
-    val constants = DenseIds(reachable.constants.toList())
+
+    // Literal IDs are encoded little-endian; compacting them can change constant byte order.
+    val constants =
+        run {
+            val pool = ConstantPoolBuilder()
+            val keys = reachable.constants.associateWith { old -> pool.intern(relocateConstant(module.constants[old], this)) }
+            val frozen = pool.freeze()
+            DenseIds(reachable.constants.sortedBy { old -> frozen.idOf(keys.getValue(old)).value })
+        }
     val imports = DenseIds(importOrder)
     val exports = DenseIds(reachable.exports.toList())
     val fields = DenseIds(reachable.fields.toList())

@@ -117,7 +117,7 @@ def diagnose(checkout, *, java=None):
 def generated(path):
     # Worlds, IDE settings and temporary plans are deliberately not disposable.
     parts = Path(path).parts
-    return ('src' not in parts and any(part in ('build', '.gradle', '.kotlin') for part in parts)) or parts[0] in ('.gradle-sandbox', '.toolchain', 'target')
+    return '.gradle-sandbox' in parts or ('src' not in parts and any(part in ('build', '.gradle', '.kotlin') for part in parts)) or parts[0] in ('.toolchain', 'target')
 
 
 def check_clean(root):
@@ -140,8 +140,12 @@ def initialized_modules(root):
 
 @contextlib.contextmanager
 def idle_builds(roots):
+    build_roots = set(roots)
+    for root in roots:
+        wrappers = git(root, 'ls-files', '-z', '--', 'gradlew-sandbox', '*/gradlew-sandbox')
+        build_roots.update((root / path).parent for path in wrappers.split('\0') if path)
     with contextlib.ExitStack() as stack:
-        for root in roots:
+        for root in sorted(build_roots):
             home = root / '.gradle-sandbox'
             if home.is_symlink() or (home.exists() and not home.is_dir()):
                 raise RuntimeError(f'Gradle home must be an independent directory: {home}')

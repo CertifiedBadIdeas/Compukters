@@ -453,6 +453,19 @@ readings to their visual range.
 See the tracked [Create drive dashboard](https://github.com/CertifiedBadIdeas/Compukters/tree/dev/examples/create-scada)
 for live RPM, stress, controller commands, bounded history and connection/load alarms on a 3×3 display.
 
+### Crafts & Additions liquid burners
+
+The independent `createaddition` addon provides `createaddition.boiler.LiquidBurner` with the common typed
+peripheral queries. `status()` returns one immutable record containing recoverable liquid amount/capacity in mB,
+Create heat ordinal and remaining burning ticks. The adapter reads upstream state on the server thread and never
+mutates fuel. Exact-device replacement or connectivity loss invalidates the handle. See the
+[boiler SCADA project](https://github.com/CertifiedBadIdeas/Compukters/tree/dev/examples/boiler-scada) for battery-assisted
+startup, steam handover and fuel recovery through Redstone Port outputs.
+
+**Evidence:** `LiquidBurnerHostTest`, the actual `LiquidBurnerGameTests.namedBurnerLifecycle` server test and
+`compileBoilerScadaExample` against both actual addon bundles. API execution and compilation do not establish the
+complete physical pump/charging sequence, which additionally requires the documented client scenario.
+
 ### Batched drawing frames
 
 `compukter:core` 8.0.0 supplies a scoped `DisplayFrame` receiver:
