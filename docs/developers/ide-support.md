@@ -139,6 +139,26 @@ exact.
 tests `type error after supplementary character keeps UTF-16 range`, `diagnostics from multiple files retain
 their virtual paths`, and `incomplete syntax produces a bounded diagnostic instead of failing analysis`.
 
+### Explicit import quick fixes
+
+**Status:** Supported; manual client appearance check pending.
+
+`Alt+Enter` requests exact-name import candidates at the caret. The analysis protocol carries bounded,
+snapshot-scoped insertion edits rather than completion edits. The worker reuses the admitted declaration
+indexes and import planner, then previews at most 16 distinct imports with K2. Each accepted preview must
+resolve the chosen reference, preserve existing resolved bindings, and introduce no new errors. Syntax
+errors suppress the action; unrelated semantic errors may remain. Only admitted project and active library
+symbols participate. PSI-to-source coordinate mapping preserves raw UTF-16 positions and LF/CRLF.
+
+The client rejects stale snapshot, source, target and caret state. Applying an import preserves selection
+and call text with one undo entry. Keyboard and mouse selection share the canonical popup components.
+This action does not install dependencies or implement general intentions.
+
+**Evidence:** `ImportFixQueryTest`, the forked-worker import test in `CompletionIntegrationTest`,
+`AnalysisProtocolRoundTripTest`, `AnalysisProtocolHostileInputTest`, `EditorDocumentTest`,
+`IdeAnalysisFlowTest`, `IdeInputAdapterTest` and `IdeRendererStateTest` cover resolution, bounds,
+raw source coordinates, stale rejection, atomic application and popup/input ownership.
+
 ### Semantic completion with overloads
 
 **Status:** Supported.

@@ -75,6 +75,80 @@ import kotlin.test.assertTrue
 
 class IdeAnalysisFlowTest {
     @Test
+    fun `import choice preserves the call and caret through one undo and redo`() {
+        val requests = FlowAnalysisRequests()
+        val fixture =
+            ControllerFixture(
+                preferences("demo", "src/main.kt"),
+                analysisCoordinatorFactory = { workspace -> coordinator(workspace, requests) },
+            )
+        fixture.startAndTick()
+        val source = "fun main() { greet(2) }"
+        fixture.controller.dispatch(IdeCommand.Edit(IdeEditorInput.SelectAll))
+        fixture.controller.dispatch(IdeCommand.Edit(IdeEditorInput.Type(source)))
+        val caret = source.indexOf("greet") + 5
+        fixture.controller.dispatch(IdeCommand.Edit(IdeEditorInput.SetCaret(caret, false)))
+        fixture.controller.dispatch(IdeCommand.ShowImportFixes)
+        requests.completeImportFixes(0, source)
+        fixture.controller.tick()
+        assertNotNull((fixture.textEditor().analysis as IdeAnalysisState.Active).importFixes)
+        fixture.controller.dispatch(IdeCommand.MoveImportFix(1))
+        fixture.controller.dispatch(IdeCommand.AcceptImportFix())
+        val insertion = "import b.greet\n\n"
+        assertEquals(insertion + source, fixture.textEditor().visibleLines.joinToString("\n"))
+        assertEquals(caret + insertion.length, fixture.textEditor().caretUtf16)
+        assertTrue(fixture.workspace.saveRequests.isEmpty())
+        fixture.controller.dispatch(IdeCommand.Edit(IdeEditorInput.Undo))
+        assertEquals(source, fixture.textEditor().visibleLines.joinToString("\n"))
+        assertEquals(caret, fixture.textEditor().caretUtf16)
+        fixture.controller.dispatch(IdeCommand.Edit(IdeEditorInput.Redo))
+        assertEquals(insertion + source, fixture.textEditor().visibleLines.joinToString("\n"))
+        assertEquals(caret + insertion.length, fixture.textEditor().caretUtf16)
+        fixture.controller.close()
+    }
+
+    @Test
+    fun `typing dismissing changing caret and closing reject pending import proposals`() {
+        for (action in listOf<IdeCommand>(
+            IdeCommand.Edit(IdeEditorInput.Type("x")),
+            IdeCommand.DismissImportFixes,
+            IdeCommand.Edit(IdeEditorInput.SetCaret(0, false)),
+            IdeCommand.EditorFocusLost,
+        )) {
+            val requests = FlowAnalysisRequests()
+            val fixture =
+                ControllerFixture(
+                    preferences("demo", "src/main.kt"),
+                    analysisCoordinatorFactory = { workspace -> coordinator(workspace, requests) },
+                )
+            fixture.startAndTick()
+            val source = "fun main() { greet(2) }"
+            fixture.controller.dispatch(IdeCommand.Edit(IdeEditorInput.SelectAll))
+            fixture.controller.dispatch(IdeCommand.Edit(IdeEditorInput.Type(source)))
+            fixture.controller.dispatch(IdeCommand.Edit(IdeEditorInput.SetCaret(source.indexOf("greet"), false)))
+            fixture.controller.dispatch(IdeCommand.ShowImportFixes)
+            fixture.controller.dispatch(action)
+            requests.completeImportFixes(0, source)
+            fixture.controller.tick()
+            val view = fixture.textEditor()
+            assertNull((view.analysis as? IdeAnalysisState.Active)?.importFixes)
+            fixture.controller.dispatch(IdeCommand.AcceptImportFix())
+            assertEquals(view.visibleLines, fixture.textEditor().visibleLines)
+            fixture.controller.close()
+        }
+        val requests = FlowAnalysisRequests()
+        val fixture =
+            ControllerFixture(
+                preferences("demo", "src/main.kt"),
+                analysisCoordinatorFactory = { workspace -> coordinator(workspace, requests) },
+            )
+        fixture.startAndTick()
+        fixture.controller.dispatch(IdeCommand.ShowImportFixes)
+        fixture.controller.close()
+        requests.completeImportFixes(0, "fun main() { greet(2) }")
+    }
+
+    @Test
     fun `typing a call opening requests argument hints while strings and comments do not`() {
         fun fixture(requests: FlowAnalysisRequests) =
             ControllerFixture(
@@ -631,6 +705,7 @@ private class FlowAnalysisRequests : AnalysisRequestCoordinator {
     val manualOffsets = mutableListOf<Int>()
     val formatRequests = mutableListOf<FlowFormatRequest>()
     val parameterInfoRequests = mutableListOf<FlowParameterInfoRequest>()
+    val importFixRequests = mutableListOf<FlowParameterInfoRequest>()
     private var snapshot: AdmittedAnalysisSnapshot? = null
     private var formatFuture: CompletableFuture<AnalysisClientResult>? = null
 
@@ -666,6 +741,38 @@ private class FlowAnalysisRequests : AnalysisRequestCoordinator {
         val identity = checkNotNull(snapshot).identity
         formatRequests += FlowFormatRequest(identity, path, source, caretOffsetUtf16)
         return CompletableFuture<AnalysisClientResult>().also { formatFuture = it }
+    }
+
+    override fun importFixes(
+        path: VirtualSourcePath,
+        offsetUtf16: Int,
+    ): CompletableFuture<AnalysisClientResult> {
+        val future = CompletableFuture<AnalysisClientResult>()
+        importFixRequests += FlowParameterInfoRequest(checkNotNull(snapshot).identity, path, offsetUtf16, future)
+        return future
+    }
+
+    fun completeImportFixes(
+        index: Int,
+        source: String,
+    ) {
+        val request = importFixRequests[index]
+        val reference = source.indexOf("greet")
+        val items =
+            listOf("a.greet", "b.greet").map {
+                ru.lazyhat.compukters.ide.analysis
+                    .ImportQuickFix(it, CompletionTextEdit(EditorRange(0, 0), "import $it\n\n"))
+            }
+        request.future.complete(
+            AnalysisClientResult.Success(
+                AnalysisResult.ImportFixes.create(
+                    request.identity,
+                    EditorRange(reference, reference + 5),
+                    items,
+                    source.length,
+                ),
+            ),
+        )
     }
 
     override fun parameterInfo(

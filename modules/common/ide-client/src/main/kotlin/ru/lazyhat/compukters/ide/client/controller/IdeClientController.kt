@@ -728,6 +728,57 @@ class IdeClientController(
                 activeBuild?.cancel()
             }
 
+            IdeCommand.ShowImportFixes -> {
+                if (attachedSourcePreview == null && computerPreview == null && binary == null && editor?.path?.isKotlinSource == true &&
+                    state.dialog == null && state.busy.isEmpty()
+                ) {
+                    if (analysisCoordinator?.showImportFixes() != true) publishStatus("Analysis is not ready", IdeProblemSeverity.Info)
+                    refreshAnalysisState()
+                    publishWorkspace()
+                }
+            }
+
+            IdeCommand.DismissImportFixes -> {
+                analysisCoordinator?.dismissImportFixes()
+                refreshAnalysisState()
+                publishWorkspace()
+            }
+
+            is IdeCommand.MoveImportFix -> {
+                analysisCoordinator?.moveImportFix(command.delta)
+                refreshAnalysisState()
+                publishWorkspace()
+            }
+
+            is IdeCommand.AcceptImportFix -> {
+                if (attachedSourcePreview == null && computerPreview == null && state.dialog == null && state.busy.isEmpty()) {
+                    val active = editor
+                    val fix =
+                        active?.let {
+                            analysisCoordinator?.selectImportFix(
+                                it.document,
+                                VirtualSourcePath.kotlin(it.path.value),
+                                command.index,
+                            )
+                        }
+                    if (active != null && fix != null) {
+                        when (val result = active.document.insertPreservingSelection(fix.edit.range.startUtf16, fix.edit.text)) {
+                            is EditorEditResult.Applied -> {
+                                active.lastEditMillis = clock.nowMillis()
+                                visibleLatency.editApplied(active.document.revision)
+                                updateAnalysis(active, null, result.change)
+                            }
+
+                            else -> {
+                                publishStatus("Import edit was rejected", IdeProblemSeverity.Warning)
+                            }
+                        }
+                    }
+                    refreshAnalysisState()
+                    publishWorkspace()
+                }
+            }
+
             IdeCommand.ManualCompletion -> {
                 analysisCoordinator?.manualCompletion()
                 refreshAnalysisState()
@@ -1260,6 +1311,7 @@ class IdeClientController(
     }
 
     private fun edit(input: IdeEditorInput) {
+        analysisCoordinator?.dismissImportFixes()
         attachedSourcePreview?.let { preview ->
             editAttachedSourcePreview(preview, input)
             return

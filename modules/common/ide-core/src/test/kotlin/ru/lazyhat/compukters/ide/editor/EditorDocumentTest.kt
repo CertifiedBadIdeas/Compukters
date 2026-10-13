@@ -28,6 +28,34 @@ import kotlin.test.assertTrue
 
 class EditorDocumentTest {
     @Test
+    fun `insertion preserves both selection directions across atomic history`() {
+        for (backwards in listOf(false, true)) {
+            val source = "fun main() { greet(2) }"
+            val document = EditorDocument(source)
+            val start = source.indexOf("greet")
+            val end = start + 5
+            document.setCaret(if (backwards) end else start)
+            document.setCaret(if (backwards) start else end, true)
+            val caret = document.caretOffset
+            val before = document.selectionState
+            val insertion = "import sample.greet\n\n"
+            assertIs<EditorEditResult.Applied>(document.insertPreservingSelection(0, insertion))
+            assertEquals("greet", document.copySelection())
+            assertEquals(caret + insertion.length, document.caretOffset)
+            assertIs<EditorEditResult.Applied>(document.undo())
+            assertEquals(source, document.materialize())
+            assertEquals(before, document.selectionState)
+            assertIs<EditorEditResult.Applied>(document.redo())
+            assertEquals(insertion + source, document.materialize())
+            assertEquals("greet", document.copySelection())
+            assertEquals(caret + insertion.length, document.caretOffset)
+        }
+        val unicode = EditorDocument("😀")
+        assertIs<EditorEditResult.Rejected>(unicode.insertPreservingSelection(1, "x"))
+        assertEquals("😀", unicode.materialize())
+    }
+
+    @Test
     fun `whole document width follows edits and undo including tabs and surrogate pairs`() {
         val editor = EditorDocument("a\t😀\nshort")
         assertEquals(5, editor.maximumVisualWidth())

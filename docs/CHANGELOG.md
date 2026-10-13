@@ -534,6 +534,10 @@ listed in [Kotlin support](developers/kotlin-support.md) and [standard library s
 - `Alt+F7` opens semantic Find Usages with navigable context. Clickable problems, gutter markers, status counts
   and `F2` / `Shift+F2` navigation use matching source text and reject stale locations. Method declarations show
   non-zero project usage counts that distinguish overloads and remain stable during unrelated edits.
+- `Alt+Enter` offers explicit imports for unresolved Kotlin names from the project and enabled libraries.
+  Qualified candidates support keyboard and mouse selection; K2 rejects imports that introduce errors or
+  change resolved references. Import insertion preserves the call, caret and line endings in one Undo/Redo
+  step, and stale choices are dismissed after edits or navigation.
 - `Shift+F6` renames supported project symbols across files and unsaved buffers after K2 checks collisions and
   bindings, including infix calls and callable references. Unrelated semantic errors can remain, while new
   errors, reference capture and stale sources reject the entire operation. The change is undoable across

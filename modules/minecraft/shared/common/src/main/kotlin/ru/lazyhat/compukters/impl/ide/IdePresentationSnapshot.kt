@@ -92,6 +92,7 @@ internal class IdePresentationSnapshot(
             gitFieldFocusScroll = pointer.gitFieldFocusScroll,
             gitDraft = (state.page as? IdePageState.Workspace)?.value?.git?.draft,
             gitMenu = (state.page as? IdePageState.Workspace)?.value?.git?.menu,
+            importFixesVisible = analysis?.importFixes != null,
             findVisible = editor?.find != null,
             usagesFocused =
                 (state.page as? IdePageState.Workspace)?.value?.let {

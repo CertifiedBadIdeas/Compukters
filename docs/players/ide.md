@@ -125,6 +125,19 @@ with the same code/link formatting as hover. Long signatures wrap while keeping 
 long parameter descriptions are bounded with an ellipsis. **Esc** dismisses the popup, and typing an argument
 separator can reopen it. Typing `(` or `,` inside strings or comments does not open argument information.
 
+## Import quick fixes
+
+Place the caret on an unresolved Kotlin name and press **Alt+Enter**. The popup lists matching imports by
+fully qualified name. Use **↑ / ↓**, **Page Up / Page Down**, or click a row to choose; **Enter** adds the
+selected import and **Esc** closes the popup. The existing call and caret stay in place, and **Ctrl+Z**
+undoes the import in one step. Imports remain unsaved until you save the file.
+
+Candidates come from the current project and its enabled libraries. The IDE checks that each import resolves
+this reference without changing previously resolved references or introducing errors. It does not enable
+addons automatically. Unsupported references, conflicting imports and projects with syntax errors receive
+no action; unrelated semantic errors may remain. Editing, moving the caret or leaving the editor dismisses
+pending choices.
+
 ## UI scale
 
 Choose **Auto**, **2** or **3** beside **Scale** in the IDE header. The selection takes effect immediately and is

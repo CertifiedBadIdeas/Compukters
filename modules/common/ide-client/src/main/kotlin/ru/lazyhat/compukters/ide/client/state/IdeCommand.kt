@@ -250,6 +250,18 @@ sealed interface IdeCommand {
 
     data object CancelBuild : IdeCommand
 
+    data object ShowImportFixes : IdeCommand
+
+    data object DismissImportFixes : IdeCommand
+
+    data class MoveImportFix(
+        val delta: Int,
+    ) : IdeCommand
+
+    data class AcceptImportFix(
+        val index: Int? = null,
+    ) : IdeCommand
+
     data object ManualCompletion : IdeCommand
 
     data object DismissCompletion : IdeCommand

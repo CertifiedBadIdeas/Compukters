@@ -38,6 +38,20 @@ internal class IdeEditorInputRouter(
             if (focus.findVisible && event.key == IdeKeyCode.ESCAPE) return dispatch(IdeCommand.CloseFind)
             if (focus.findFocused) return findKey(event, focus)
         }
+        if (focus.importFixesVisible) {
+            val command =
+                when (event.key) {
+                    IdeKeyCode.ESCAPE -> IdeCommand.DismissImportFixes
+                    IdeKeyCode.ENTER -> if (event.modifiers == 0) IdeCommand.AcceptImportFix() else null
+                    IdeKeyCode.UP -> if (event.modifiers == 0) IdeCommand.MoveImportFix(-1) else null
+                    IdeKeyCode.DOWN -> if (event.modifiers == 0) IdeCommand.MoveImportFix(1) else null
+                    IdeKeyCode.PAGE_UP -> IdeCommand.MoveImportFix(-8)
+                    IdeKeyCode.PAGE_DOWN -> IdeCommand.MoveImportFix(8)
+                    else -> null
+                }
+            if (command != null) return dispatch(command)
+            dispatch(IdeCommand.DismissImportFixes)
+        }
         if (focus.declarationChooserVisible) chooserKey(event)?.let { return dispatch(it) }
         if (focus.parameterInfoVisible && event.modifiers == IdeModifier.CONTROL &&
             event.key in listOf(IdeKeyCode.UP, IdeKeyCode.DOWN)
@@ -79,6 +93,7 @@ internal class IdeEditorInputRouter(
                 when (event.key) {
                     IdeKeyCode.LEFT -> IdeCommand.NavigateBack
                     IdeKeyCode.RIGHT -> IdeCommand.NavigateForward
+                    IdeKeyCode.ENTER -> if (!shift) IdeCommand.ShowImportFixes else null
                     IdeKeyCode.F7 -> IdeCommand.FindUsages
                     else -> null
                 }
