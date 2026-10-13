@@ -95,7 +95,7 @@ Interactive flight under changing load remains a manual scenario; no additional 
 `addons/cosmonautics` owns the `cosmonautics` Guest capability, its ABI lock and typed server adapter.
 `Space.status()` observes dimension/Deep Space membership; `planet()` resolves the current linked planet;
 `orbit()` copies the loaded construction's Deep Space **instance** state in its named orbital frame.
-No controller, subscription or physics propagation is installed. Sable solver motion and orbital instance motion
+No host controller, subscription or physics propagation is installed. Sable solver motion and orbital instance motion
 remain separate. The generated value replies reuse existing SDK support and canonical Double vectors.
 
 Run the addon `check` and `developmentModJar`. `OrbitObservationTest` covers valid circular/elliptic/hyperbolic
@@ -106,6 +106,16 @@ From the workspace, `:compiler-k2:compileSpaceTelemetryExample` with
 actual addon bundle, including its Guest apsis helpers. The test fails if the bundle is missing.
 Real surface/Deep Space and dimension-transfer continuity require a dimension-capable world; focused adapter/build
 checks do not establish those scenarios or successful orbital insertion.
+
+`Space.guidance()` adds a one-request unit-direction triad with dimension/frame/instance/tick identity.
+`GuidanceDirectionsTest` verifies scaled normalization, handedness, zero/nonfinite and near-radial rejection.
+The pinned physics mixin transfers world velocity components directly into the current orbital frame, and only at
+the instance boundary. The addon README owns this upstream-specific coordinate contract.
+`testKotlinOrbitalPointingVmConformance` executes the shipped example controller's signs, damping, covariance and
+ideal-plant convergence. `:compiler-k2:compileOrbitalProgradeExample` accepts three absolute bundle properties:
+`compuktersCosmonauticsGuestApiBundle`, `compuktersSableGuestApiBundle`, `compuktersPropulsionGuestApiBundle`.
+The example README defines the pending in-world pointing scenario; focused tests do not establish nozzle dynamics,
+orbital burns or safe dimension-transfer control.
 
 ## Version and compatibility checks
 

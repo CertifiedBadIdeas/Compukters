@@ -11,15 +11,20 @@ permalink: /ARCHITECTURE/abi/
 
 This reference groups versioned representation boundaries by the version that introduced them. Those versions are minimum feature requirements, not a claim that older Runtime distributions implement today’s platform. The source owners below define the active contract. Before changing a wire format, inspect each producer, consumer and verifier. Runtime release pins in `build-scripts/src/main/kotlin/RuntimeBundleSupport.kt` describe published bundles separately from the local VM checkout.
 
-## Cosmonautics flight observations
+## Cosmonautics space observations
 
 Cosmonautics addon 1.0 introduces its first Guest capability and checked-in operation/record lock.
-The SDK generates immutable inline replies for flight status, linked planet parameters and Deep Space instance
+The SDK generates immutable inline replies for space status, linked planet parameters and Deep Space instance
 orbital observations, including canonical `Vector3d` fields. These use existing structured value-response support;
 no native ABI, artifact format, checkpoint schema or built-in platform version changes. The handler is stateless
 and checkpoints an empty payload. Each request copies current upstream state on the server owner thread.
 Applicability failures cross as `UNAVAILABLE`/Guest `IllegalStateException`, rather than NaN-filled records.
 The addon README owns coordinate, timing and instance-versus-construction contracts.
+`Space.guidance()` appends operation ID 3 in capability version 1; existing operation IDs 0..2 and records are
+unchanged. `GuidanceSnapshot` adds dimension/tick/instance/frame identity and three canonical Double unit vectors
+from one observation. The bundle content identity changes and dependent Guest projects must resolve/recompile.
+No additional frame rotation is introduced: pinned upstream transfers world velocity components directly to the
+current orbital frame. Direction normalization rejects degenerate planes explicitly.
 
 ## Guest value records
 

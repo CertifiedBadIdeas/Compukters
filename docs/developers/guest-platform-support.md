@@ -122,6 +122,21 @@ commands while client packets retain them for rendering.
 **Evidence:** `CreativeVectorThrusterGameTests.guestVectorControlLifetime` and `vectorAssemblyClearsControl`
 compile and execute real Guest programs through JNI on actual upstream blocks.
 
+### Cosmonautics space observations on Minecraft 1.21.1
+
+The independent Cosmonautics addon exposes `cosmonautics.space.Space.status()`, `planet()`, `orbit()` and
+`guidance()`. The latter copies dimension/frame/instance/tick identity with unit prograde, radial-out and orbit-normal
+vectors from one Deep Space instance observation. Missing or numerically degenerate state throws
+`IllegalStateException`. Separate Sable pose observations are not atomic with it. The addon README owns units,
+timing and the pinned upstream world-axis convention; instance orbital motion differs from construction solver motion.
+
+**Evidence:** addon `GuidanceDirectionsTest` and `OrbitObservationTest`, actual-bundle compilation through
+`:compiler-k2:compileSpaceTelemetryExample` and `:compiler-k2:compileOrbitalProgradeExample`, and
+`testKotlinOrbitalPointingVmConformance` for the shipped example's pure feedback logic. Real world telemetry and
+pointing convergence remain a separate manual scenario; no launch or orbital-insertion support is claimed.
+See [Cosmonautics addon](https://github.com/CertifiedBadIdeas/Compukters-cosmonautics/blob/main/README.md)
+and the workspace `examples/orbital-prograde/README.md`.
+
 ## Compukters Guest APIs
 
 ### Typed peripheral providers
