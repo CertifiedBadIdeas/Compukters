@@ -25,7 +25,7 @@ import kotlin.math.Vector2i
 
 /** Local pixel drawing clipped to this region and its ancestors. Does not clear or publish a frame. */
 public value class CanvasScope internal constructor(
-    private val display: GraphicalDisplay,
+    private val display: DisplayFrame,
     public val bounds: Rect2i,
     private val clip: Rect2i,
 ) {
@@ -100,7 +100,7 @@ public value class CanvasScope internal constructor(
 }
 
 /** Creates a bounded local drawing surface at an arbitrary screen position. */
-public fun GraphicalDisplay.canvas(bounds: Rect2i): CanvasScope = CanvasScope(this, bounds, bounds)
+public fun DisplayFrame.canvas(bounds: Rect2i): CanvasScope = CanvasScope(this, bounds, bounds)
 
 private fun canvasCoordinate(value: Long): Int {
     if (!(value >= Int.MIN_VALUE.toLong() && value <= Int.MAX_VALUE.toLong())) throw IllegalArgumentException("Canvas coordinate overflows")

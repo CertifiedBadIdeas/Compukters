@@ -21,6 +21,8 @@ headings so this page has one stable URL that can be shared outside the reposito
 
 - Guest Kotlin supports classic compile-time contracts for callback invocation counts, definite local initialization and conditional null/type smart casts. Contracts cover standard scope functions, preconditions, `buildString` and nested display UI construction; declarations add no runtime builder or VM operations.
 
+- Display frames record bounded drawing packets through `DisplayFrame`, reducing host round trips while
+  retaining clipping, atomic publication and drawing quotas. Canvas/widgets/UI draw through the frame recorder.
 - Guest displays provide a lightweight declarative widget DSL with explicit pixel viewports, rows/columns,
   reusable mutable widgets, a clipped drawing canvas and a rotation-slider cube example. Server-validated
   held-right-click gestures support captured dragging, release and cancellation without a reactive runtime;

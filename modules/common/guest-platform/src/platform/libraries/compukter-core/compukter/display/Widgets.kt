@@ -126,5 +126,5 @@ private fun historyValues(capacity: Int): FloatArray {
 }
 
 /** Uses whole-screen coordinates; passing a CanvasScope directly gives local clipped widgets. */
-public fun DisplayWidgets(display: GraphicalDisplay): DisplayWidgets =
+public fun DisplayWidgets(display: DisplayFrame): DisplayWidgets =
     DisplayWidgets(display.canvas(Rect2i(kotlin.math.Vector2i(0, 0), kotlin.math.Vector2i(Int.MAX_VALUE, Int.MAX_VALUE))))

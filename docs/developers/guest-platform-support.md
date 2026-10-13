@@ -449,6 +449,30 @@ readings to their visual range.
 See the tracked [Create drive dashboard](https://github.com/CertifiedBadIdeas/Compukters/tree/dev/examples/create-scada)
 for live RPM, stress, controller commands, bounded history and connection/load alarms on a 3×3 display.
 
+### Batched drawing frames
+
+`compukter:core` 8.0.0 supplies a scoped `DisplayFrame` receiver:
+
+```kotlin
+screen.frame {
+    clear(Colors.BLACK)
+    line(0, 0, 100, 100, Colors.CYAN)
+    ui.draw(this)
+}
+```
+
+Drawing is recorded into packets of at most 4096 bytes/128 commands, sent in order and published together.
+Exceptions discard the pending frame. Nested frames fail, and using the recorder after block exit throws
+`IllegalStateException`. Keep it within the calling task. Device state queries and input polling use `screen`;
+immediate scalar drawing remains available on that handle. `DisplayWidgets` and `DisplayUi.draw` now accept
+`DisplayFrame`; construct/use widgets inside the frame instead of retaining them across updates. `CanvasScope`
+uses the same recorder and retains local clipping. Text/image and frame pixel-work limits are unchanged.
+
+**Evidence:** `testKotlinDisplayUiVmConformance` executes the linked Guest recorder, nested-frame rejection,
+escaped-recorder rejection and 50 repeated SCADA-style frames plus two full-history frames. `DisplayHostStateTest`
+compares batched drawing pixels with scalar drawing, rejects malformed packets, validates task ownership and
+prevents failed packets from publishing partial frames.
+
 ### Declarative display UI
 
 `compukter:core` supplies a small persistent widget tree. `displayUi(bounds) { ... }` builds it once;
@@ -484,7 +508,7 @@ screen.frame { clear(Colors.BLACK); ui.draw(this) }
 
 `draw()` never invokes input handlers or publishes a frame. `CanvasScope` supplies local `pixel`, `line`,
 `fillRect`, `rect`, `text` and `image` drawing, with clipping to nested viewports; it is also available from
-`screen.canvas(bounds)` for low-level drawing. `UiCanvas.onPointer` receives widget-local pointer positions.
+`frame.canvas(bounds)` inside `screen.frame { ... }` for low-level drawing. `UiCanvas.onPointer` receives widget-local pointer positions.
 User drawing handlers still execute ordinary Guest code; use them only to draw, keeping device commands
 in input handlers or in the surrounding update loop.
 

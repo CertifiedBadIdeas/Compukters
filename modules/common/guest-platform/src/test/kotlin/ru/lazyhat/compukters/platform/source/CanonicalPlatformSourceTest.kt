@@ -85,7 +85,7 @@ class CanonicalPlatformSourceTest {
         )
         assertTrue(modulesById.getValue("kotlin:builtins").dependencies.isEmpty())
         assertEquals("1.20.0", modulesById.getValue("stdlib:core").version)
-        assertEquals("7.5.0", modulesById.getValue("compukter:core").version)
+        assertEquals("8.0.0", modulesById.getValue("compukter:core").version)
         assertEquals(listOf("kotlin:builtins"), modulesById.getValue("stdlib:core").dependencies)
         assertEquals(listOf("stdlib:core"), modulesById.getValue("compukter:core").dependencies)
         catalog.modules.forEach { module ->
