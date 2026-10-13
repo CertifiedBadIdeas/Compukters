@@ -56,8 +56,8 @@ with log.open('a') as f: f.write(json.dumps([label,'end'])+'\\n')
         rows = [json.loads(line) for line in self.log.read_text().splitlines()]
         self.assertEqual([(r[0], r[1]) for r in rows],
                          [('first', 'start'), ('first', 'end'), ('second', 'start'), ('second', 'end')])
-        self.assertEqual(rows[2][2][:4], ['--max-workers=8', '-PcompukterVmBuildJobs=8',
-                                        '--max-workers=2', '-PcompukterVmBuildJobs=1'])
+        self.assertEqual(rows[2][2][:2], ['--max-workers=2', '-PcompukterVmBuildJobs=1'])
+        self.assertEqual(rows[0][2][:2], ['--max-workers=8', '-PcompukterVmBuildJobs=8'])
 
     def test_failure_releases_slot_and_preserves_status(self):
         failure = Path(self.temp.name) / 'failure'
