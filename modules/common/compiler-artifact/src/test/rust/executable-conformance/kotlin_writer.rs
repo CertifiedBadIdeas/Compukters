@@ -178,6 +178,15 @@ fn main() {
                 profile,
             );
         },
+        "generic-initializer-captures" => {
+            let mut profile = list_no_io_profile();
+            profile.heap_bytes = 64 * 1024;
+            execute_primitive_program_with_profile(
+                std::env::var("COMPUKTER_KOTLIN_GENERIC_INITIALIZER_CAPTURES_ARTIFACT")
+                    .expect("generic initialization captures artifact path must be set"),
+                profile,
+            );
+        }
         "generic-local-functions" => execute_primitive_program(
             std::env::var("COMPUKTER_KOTLIN_GENERIC_LOCAL_FUNCTIONS_ARTIFACT")
                 .expect("generic local functions artifact path must be set"),

@@ -19,7 +19,12 @@ headings so this page has one stable URL that can be shared outside the reposito
   every configured burner is empty. Its panel shows boiler readings, per-burner fuel, cooldown and fault states.
   The development stand includes Crafts & Additions and Create: Connected.
 
-- Guest Kotlin enums expose immutable `EnumType.entries` in declaration order, including empty enums and enums from platform/addon libraries. Indexing, iteration, membership and IDE completion share the typed `EnumEntries<E>` API.
+- Guest generic classes support callbacks and local helpers in primary-constructor initialization, field
+  initializers and `init` blocks, with concrete capture types and independent state for each instance.
+
+- Added terminal history for the last 512 scrolled rows, available after reopening, with mouse-wheel and keyboard navigation, rectangular selection/copy, and ordinary input paste in standalone and IDE terminals.
+
+- Guest Kotlin enums expose immutable `EnumType.entries` in declaration order, including empty enums and enums from platform/addon libraries. Entries expose their declaration `name` and zero-based `ordinal`, including through `Enum<E>` and `Enum<*>` references. Indexing, iteration, membership and IDE completion share the typed `EnumEntries<E>` API.
 
 - Joining a peripheral network assigns unnamed devices unique numbered names such as `display_1`;
   existing names are preserved and generated names remain stable across reloads.
@@ -34,7 +39,7 @@ headings so this page has one stable URL that can be shared outside the reposito
 
 - The shell repeats the failure reason beneath multiline program diagnostics so it remains visible after a long stack trace.
 
-- Guest Kotlin supports classic compile-time contracts for callback invocation counts, definite local initialization and conditional null/type smart casts. Contracts cover standard scope functions, preconditions, `buildString` and nested display UI construction; declarations add no runtime builder or VM operations.
+- Guest Kotlin supports classic compile-time contracts for callback invocation counts, definite local initialization and conditional null/type smart casts. Contracts cover standard scope functions, preconditions, `buildString` and nested display UI construction; narrowed primitives retain explicit same-type casts and Elvis behavior. Declarations add no runtime builder or VM operations.
 
 - Display frames record bounded drawing packets through `DisplayFrame`, reducing host round trips while
   retaining clipping, atomic publication and drawing quotas. Canvas/widgets/UI draw through the frame recorder.
@@ -53,8 +58,10 @@ headings so this page has one stable URL that can be shared outside the reposito
   verified against its published SHA-256.
 
 - The IDE has a named peripheral selection window with shared window controls, block item icons and project-style cards.
-  Selecting a reachable device inserts its name as an undoable `const val` beneath imports in the active
-  Kotlin source, with an uppercase snake-case identifier, duplicate reuse and collision suffixes.
+  Selected cards offer server-validated rename, typed lookup copying with an API choice for shared devices, and
+  explicit undoable `const val` insertion beneath imports in the active Kotlin source. Rename rejects stale or replaced
+  devices and name conflicts throughout the network. Constants use uppercase snake-case identifiers, duplicate reuse
+  and collision suffixes; copying and rename leave existing source unchanged.
 
 - Displays accept empty-hand front-face clicks in whole-screen pixel coordinates, exposed through
   `GraphicalDisplay.pollClick()`. Input belongs to the drawing program and is bounded and transient.

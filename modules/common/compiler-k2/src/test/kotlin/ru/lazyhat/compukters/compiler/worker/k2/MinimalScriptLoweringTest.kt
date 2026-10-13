@@ -291,6 +291,43 @@ class MinimalScriptLoweringTest {
         }
 
     @Test
+    fun `expanding generic initialization reports bounded target diagnostics`() =
+        withAdapter { adapter ->
+            val result =
+                adapter.compile(
+                    request(
+                        """
+                        class Growing<T>(val value: T) {
+                            init { Growing(listOf(value)) }
+                        }
+                        fun main() { Growing(1) }
+                        """.trimIndent(),
+                    ),
+                )
+            assertNull(result.artifact)
+            assertTrue(
+                result.diagnostics.any { it.code == "UNSUPPORTED_IR" && it.message.contains("specialization") },
+                result.diagnostics.toString(),
+            )
+        }
+
+    @Test
+    fun `generic initialization captures preserve concrete symbols order and ownership`() =
+        withAdapter { adapter ->
+            val source =
+                repositoryFile(
+                    "modules/common/compiler-k2/src/test/resources/kotlin/generic-initializer-captures/main.kt",
+                ).readText()
+            val result = adapter.compile(request(source))
+            val bytes = assertNotNull(result.artifact, result.diagnostics.toString()).toByteArray()
+            ArtifactReader.read(bytes)
+            assertContentEquals(bytes, assertNotNull(adapter.compile(request(source)).artifact).toByteArray())
+            System.getProperty("compukter.vm.genericInitializerCapturesArtifact")?.let { output ->
+                Path.of(output).also { it.parent.createDirectories() }.writeBytes(bytes)
+            }
+        }
+
+    @Test
     fun `generic class captures preserve concrete owners and escaping callbacks`() =
         withAdapter { adapter ->
             val source = repositoryFile("modules/common/compiler-k2/src/test/resources/kotlin/generic-class-captures/main.kt").readText()
@@ -3515,6 +3552,9 @@ class MinimalScriptLoweringTest {
                             fun main() {
                                 check(Mode.entries.size == 2)
                                 check(Mode.entries[1] === Mode.SECOND)
+                                val generic: Enum<*> = Mode.SECOND
+                                check(generic.name == "SECOND" && generic.ordinal == 1)
+                                check(Mode.FIRST.name == "FIRST" && Mode.FIRST.ordinal == 0)
                                 check(Mode.entries === Mode.entries)
                                 check(Empty.entries.isEmpty())
                                 println("enum-only-entries-ok")
@@ -3561,8 +3601,32 @@ class MinimalScriptLoweringTest {
 
                 enum class Choice { FIRST, SECOND, THIRD }
                 enum class Empty
+                enum class Duplicate { FIRST }
+                fun <E : Enum<E>> describe(value: E): String = value.name
+                fun erased(value: Enum<*>): Int = value.ordinal
+                fun optional(value: Enum<*>?): String? = value?.name
 
                 fun main() {
+                    check(Choice.FIRST.name == "FIRST")
+                    check(Choice.THIRD.ordinal == 2)
+                    check(Duplicate.FIRST.name == Choice.FIRST.name)
+                    check(Duplicate.FIRST.ordinal == 0)
+                    check(describe(Choice.SECOND) == "SECOND")
+                    val base: Enum<Choice> = Choice.SECOND
+                    check(base.name == "SECOND" && base.ordinal == 1)
+                    check(erased(Choice.THIRD) == 2)
+                    check(optional(Choice.FIRST) == "FIRST")
+                    check(optional(null) == null)
+                    val opaque: Any = Choice.SECOND
+                    check(opaque is Enum<*>)
+                    check((opaque as Enum<*>).name == "SECOND")
+                    for (value in listOf<Enum<*>>(Choice.FIRST, FixtureMode.RUNNING)) {
+                        check(value.name.length > 0)
+                    }
+                    check(RedstonePort.Side.ALL.name == "ALL")
+                    check(RedstonePort.Side.BOTTOM.ordinal == 6)
+                    check(FixtureMode.RUNNING.name == "RUNNING")
+                    check(erased(FixtureMode.STOPPED) == 2)
                     val entries = Choice.entries
                     check(entries === Choice.entries)
                     check(entries.size == 3)
@@ -3573,6 +3637,7 @@ class MinimalScriptLoweringTest {
                     var count = 0
                     for (entry in entries) {
                         check(entry === entries[count])
+                        check(entry.ordinal == count)
                         count += 1
                     }
                     check(count == 3)
@@ -3619,6 +3684,15 @@ class MinimalScriptLoweringTest {
                     check(FixtureMode.entries[1] === FixtureMode.RUNNING)
                     check(EmptyMode.entries === Modes.emptyEntries())
                     check(EmptyMode.entries.isEmpty())
+                    var allocations = 0
+                    while (allocations < 256) {
+                        val bytes = ByteArray(8192)
+                        check(bytes.size == 8192)
+                        allocations += 1
+                    }
+                    check(base.name == "SECOND" && base.ordinal == 1)
+                    check(Choice.entries[0].name == "FIRST")
+                    check(FixtureMode.RUNNING.name == "RUNNING")
                     println("enum-entries-ok")
                 }
                 """.trimIndent()
@@ -4091,7 +4165,7 @@ class MinimalScriptLoweringTest {
     @Test
     fun `unsupported omitted constructor default publishes no artifact`() =
         withAdapter { adapter ->
-            val source = "class Box(val value: Int = 1 as Int)\nfun main() { Box() }"
+            val source = "class Box(val value: Any = object {})\nfun main() { Box() }"
             val result = adapter.compile(request(source))
             assertNull(result.artifact)
             assertTrue(result.diagnostics.any { it.code == "UNSUPPORTED_IR" }, result.diagnostics.toString())
@@ -5829,6 +5903,54 @@ class MinimalScriptLoweringTest {
                     val broad: Any? = first
                     require(broad is Int)
                     require((broad as Int) == 7)
+                    require((7 as Int) == 7)
+                    val castBoolean: Any? = true
+                    require(castBoolean is Boolean)
+                    require((castBoolean as Boolean) == true)
+                    val castByte: Any? = 7.toByte()
+                    require(castByte is Byte)
+                    require((castByte as Byte) == 7.toByte())
+                    val castShort: Any? = 7.toShort()
+                    require(castShort is Short)
+                    require((castShort as Short) == 7.toShort())
+                    val castInt: Any? = 7
+                    require(castInt is Int)
+                    require((castInt as Int) == 7)
+                    val castLong: Any? = 7L
+                    require(castLong is Long)
+                    require((castLong as Long) == 7L)
+                    val castFloat: Any? = 7.0f
+                    require(castFloat is Float)
+                    require((castFloat as Float) == 7.0f)
+                    val castDouble: Any? = 7.0
+                    require(castDouble is Double)
+                    require((castDouble as Double) == 7.0)
+                    val castChar: Any? = 'a'
+                    require(castChar is Char)
+                    require((castChar as Char) == 'a')
+                    val castUByte: Any? = 7.toUByte()
+                    require(castUByte is UByte)
+                    require((castUByte as UByte) == 7.toUByte())
+                    val castUShort: Any? = 7.toUShort()
+                    require(castUShort is UShort)
+                    require((castUShort as UShort) == 7.toUShort())
+                    val castUInt: Any? = 7u
+                    require(castUInt is UInt)
+                    require((castUInt as UInt) == 7u)
+                    val castULong: Any? = 7uL
+                    require(castULong is ULong)
+                    require((castULong as ULong) == 7uL)
+                    fun invalidIntCast(value: Any?): Boolean {
+                        try { value as Int } catch (expected: ClassCastException) { return true }
+                        return false
+                    }
+                    require(invalidIntCast(7.toByte()))
+                    require(invalidIntCast(7.toShort()))
+                    require(invalidIntCast(7u))
+                    require(invalidIntCast("seven"))
+                    var nullCastFailed = false
+                    try { echo(null) as Int } catch (expected: NullPointerException) { nullCastFailed = true }
+                    require(nullCastFailed)
                     val absent: Any? = missing
                     require(absent == null)
                     require(absent is Int?)

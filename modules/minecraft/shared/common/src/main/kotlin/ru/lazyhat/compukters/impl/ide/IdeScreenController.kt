@@ -30,6 +30,8 @@ import ru.lazyhat.compukters.ide.client.state.IdeViewState
 import ru.lazyhat.compukters.ide.client.target.IdeAttachedTarget
 import ru.lazyhat.compukters.ide.client.target.IdeTargetState
 import ru.lazyhat.compukters.ide.project.fs.ProjectPath
+import ru.lazyhat.compukters.impl.ide.target.IdeNamedPeripheral
+import ru.lazyhat.compukters.impl.ide.target.IdePeripheralReference
 import ru.lazyhat.compukters.impl.ide.target.IdeTargetReference
 import ru.lazyhat.compukters.impl.ide.target.IdeTargetReply
 import ru.lazyhat.compukters.impl.ide.target.IdeTargetTerminalClient
@@ -79,6 +81,12 @@ class IdeScreenController(
     private val peripheralRequest: (
         IdeTargetReference,
     ) -> CompletableFuture<IdeTargetReply>? = { null },
+    private val peripheralRename: (
+        IdeTargetReference,
+        IdePeripheralReference,
+        String,
+        String,
+    ) -> CompletableFuture<IdeTargetReply>? = { _, _, _, _ -> null },
 ) {
     private val overlays =
         IdeLocalOverlays(
@@ -116,6 +124,8 @@ class IdeScreenController(
     private var peripheralPicker: IdePeripheralPickerView? = null
     private var peripheralFuture: CompletableFuture<IdeTargetReply>? = null
     private var peripheralTarget: IdeTargetReference? = null
+    private var peripheralRenameEntry: IdeNamedPeripheral? = null
+    private var peripheralRenameFuture: CompletableFuture<IdeTargetReply>? = null
 
     private var fileTabFirstIndex = 0
     private var lastActiveTab: ProjectPath? = null
@@ -157,9 +167,7 @@ class IdeScreenController(
                     }
                 if (uiEvent.button() == 0 && hit?.enabled == true) {
                     if (hit.action == IdeHitAction.PeripheralChoice) {
-                        it.entries.getOrNull(hit.choiceIndex ?: -1)?.let { entry ->
-                            controller.dispatch(IdeCommand.InsertPeripheralConstant(entry.name))
-                        }
+                        peripheralPicker = it.copy(selectedIndex = hit.choiceIndex, lookupIndex = 0, message = null)
                     } else {
                         activateUiAction(hit.action)
                     }
@@ -194,6 +202,7 @@ class IdeScreenController(
             focusArea = IdeFocusArea.Terminal
             terminalOverlay.focus()
             if (overlay.title.contains(uiEvent.x(), uiEvent.y())) terminalOverlay.retry()
+            overlay.grid?.let { terminalOverlay.press(it, uiEvent.x(), uiEvent.y(), uiEvent.button()) }
             host.clearFocus()
             input.pointerActivity()
             return true
@@ -281,7 +290,11 @@ class IdeScreenController(
             return true
         }
         if (scrollbarInteraction.drag(uiEvent.x(), uiEvent.y(), ::moveScrollbar)) return true
-        if (terminalOverlay.visible && terminalOverlayGeometry(geometry).panel.contains(uiEvent.x(), uiEvent.y())) return true
+        if (terminalOverlay.visible) {
+            val overlay = terminalOverlayGeometry(geometry)
+            if (overlay.grid?.let { terminalOverlay.drag(it, uiEvent.x(), uiEvent.y()) } == true) return true
+            if (overlay.panel.contains(uiEvent.x(), uiEvent.y())) return true
+        }
         if (splitters.drag(uiEvent.x().toInt(), uiEvent.y().toInt(), geometry)) return true
         if (input.explorerDragged(uiEvent.x(), uiEvent.y(), pointerContext(geometry))) return true
         if (focusArea == IdeFocusArea.Editor) {
@@ -300,6 +313,7 @@ class IdeScreenController(
         if (!viewport.supported) return true
         val uiEvent = event.map(viewport)
         synchronizeQuickOpen()
+        if (terminalOverlay.release()) return true
         if (scrollbarInteraction.release()) return true
         if (overlays.release()) return true
         if (controller.viewState().dialog != null) return true
@@ -353,7 +367,10 @@ class IdeScreenController(
         }
         val hoverModel = presentation(geometry).model
         if (hoverViewport.scroll(hoverModel, uiMouseX, uiMouseY, scrollY)) return true
-        if (terminalOverlay.visible && terminalOverlayGeometry(geometry).panel.contains(uiMouseX, uiMouseY)) return true
+        if (terminalOverlay.visible && terminalOverlayGeometry(geometry).panel.contains(uiMouseX, uiMouseY)) {
+            terminalOverlay.scroll(scrollY)
+            return true
+        }
         if (geometry.fileTabs?.contains(uiMouseX, uiMouseY) == true) {
             if (scrollY != 0.0 ||
                 scrollX != 0.0
@@ -414,7 +431,7 @@ class IdeScreenController(
         }
         if (event.key == IdeKeyCode.ESCAPE && input.cancelExplorerDrag()) return true
         if (splitters.captured) return true
-        if (focusArea == IdeFocusArea.Terminal && terminalOverlay.keyPressed(event, host.clipboard)) {
+        if (focusArea == IdeFocusArea.Terminal && terminalOverlay.keyPressed(event, host.clipboard) { host.clipboard = it }) {
             return true
         }
         if (
@@ -616,7 +633,15 @@ class IdeScreenController(
         return IdePresentationSnapshot(state, geometry, model, treeFirstRow)
     }
 
+    private fun cancelPeripheralRename() {
+        peripheralRenameFuture?.cancel(false)
+        peripheralRenameFuture = null
+        peripheralRenameEntry = null
+        if (prompt.state?.kind is IdePromptKind.RenamePeripheral) prompt.cancel()
+    }
+
     private fun closePeripherals() {
+        cancelPeripheralRename()
         peripheralPicker = null
         peripheralFuture?.cancel(false)
         peripheralFuture = null
@@ -624,6 +649,7 @@ class IdeScreenController(
     }
 
     private fun refreshPeripherals() {
+        cancelPeripheralRename()
         peripheralFuture?.cancel(false)
         peripheralFuture = null
         peripheralTarget =
@@ -668,6 +694,7 @@ class IdeScreenController(
             refreshPeripherals()
             return
         }
+        pollPeripheralRename()
         val future = peripheralFuture ?: return
         if (!future.isDone) return
         peripheralFuture = null
@@ -710,6 +737,36 @@ class IdeScreenController(
 
             IdeHitAction.PeripheralClose -> {
                 closePeripherals()
+            }
+
+            IdeHitAction.PeripheralInsert -> {
+                val entry = peripheralPicker?.let(IdePeripheralPicker::selected) ?: return false
+                if (entry.duplicate || peripheralPicker?.loading == true) return false
+                controller.dispatch(IdeCommand.InsertPeripheralConstant(entry.name))
+            }
+
+            IdeHitAction.PeripheralCopyLookup -> {
+                val view = peripheralPicker ?: return false
+                if (view.loading) return false
+                host.clipboard = IdePeripheralPicker.lookup(view) ?: return false
+                peripheralPicker = view.copy(message = "Lookup copied")
+            }
+
+            IdeHitAction.PeripheralLookupType -> {
+                val view = peripheralPicker ?: return false
+                val count = IdePeripheralPicker.selected(view)?.lookupTypes?.size ?: return false
+                if (count == 0 || view.loading) return false
+                peripheralPicker = view.copy(lookupIndex = (view.lookupIndex + 1) % count, message = null)
+            }
+
+            IdeHitAction.PeripheralRename -> {
+                val view = peripheralPicker ?: return false
+                val entry = IdePeripheralPicker.selected(view) ?: return false
+                if (entry.reference == null || view.loading || peripheralTarget == null) return false
+                peripheralRenameEntry = entry
+                prompt.open(IdePromptKind.RenamePeripheral(entry.name), entry.name)
+                controller.dispatch(IdeCommand.EditorFocusLost)
+                host.clearFocus()
             }
 
             IdeHitAction.StatusDetails -> {
@@ -915,9 +972,66 @@ class IdeScreenController(
     }
 
     private fun confirmPrompt(): Boolean {
+        if (prompt.state?.kind is IdePromptKind.RenamePeripheral) return confirmPeripheralRename()
         val command = prompt.confirm() ?: return true
         controller.dispatch(command)
         return true
+    }
+
+    private fun confirmPeripheralRename(): Boolean {
+        if (peripheralRenameFuture != null) return true
+        val entry = peripheralRenameEntry ?: return true
+        val target = peripheralTarget ?: return true
+        val reference = entry.reference ?: return true
+        val name =
+            prompt.state
+                ?.value
+                ?.trim()
+                ?.lowercase(java.util.Locale.ROOT) ?: return true
+        if (!name.matches(Regex("[a-z][a-z0-9_-]{0,31}"))) {
+            prompt.error("Use 1–32 letters, digits, underscores or hyphens, starting with a letter")
+            return true
+        }
+        val current =
+            controller
+                .viewState()
+                .target
+                .attachedTarget()
+                ?.let { IdeTargetReference(it.id, it.profile) }
+        if (current != target) {
+            prompt.error("Computer attachment changed; refresh Devices")
+            return true
+        }
+        peripheralRenameFuture = runCatching { peripheralRename(target, reference, entry.name, name) }.getOrNull()
+        if (peripheralRenameFuture == null) {
+            prompt.error("Device rename unavailable")
+        } else {
+            peripheralPicker = peripheralPicker?.copy(loading = true, message = "Renaming…")
+        }
+        return true
+    }
+
+    private fun pollPeripheralRename() {
+        val future = peripheralRenameFuture ?: return
+        if (!future.isDone) return
+        peripheralRenameFuture = null
+        val entry = peripheralRenameEntry
+        val view = peripheralPicker ?: return
+        when (val reply = runCatching { future.join() }.getOrNull()) {
+            is IdeTargetReply.NamedPeripherals -> {
+                val index = reply.entries.indexOfFirst { it.reference == entry?.reference }.takeIf { it >= 0 }
+                peripheralPicker =
+                    view.copy(entries = reply.entries, selectedIndex = index, loading = false, lookupIndex = 0, message = "Device renamed")
+                if (prompt.state?.kind is IdePromptKind.RenamePeripheral) prompt.cancel()
+                peripheralRenameEntry = null
+            }
+
+            else -> {
+                val message = (reply as? IdeTargetReply.Failed)?.failure?.detail ?: "Device rename failed"
+                peripheralPicker = view.copy(loading = false, message = message)
+                if (prompt.state?.kind is IdePromptKind.RenamePeripheral) prompt.error(message)
+            }
+        }
     }
 
     private fun restoreParent() {

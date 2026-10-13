@@ -84,14 +84,51 @@ internal class TerminalScreen(
     ): Boolean {
         val viewport = viewport()
         if (!viewport.supported) return true
+        val grid = TerminalRenderGeometry(viewport.width, viewport.height).gridGeometry
+        if (replica.viewport.press(grid, viewport.toVirtualX(event.x()), viewport.toVirtualY(event.y()), event.button())) {
+            clearFocus()
+            return true
+        }
         val handled = super.mouseClicked(viewport.map(event), doubleClick)
         if (handled) clearFocus()
         return handled
     }
 
+    override fun mouseDragged(
+        event: MouseButtonEvent,
+        dragX: Double,
+        dragY: Double,
+    ): Boolean {
+        val viewport = viewport()
+        if (!viewport.supported) return true
+        return replica.viewport.drag(
+            TerminalRenderGeometry(viewport.width, viewport.height).gridGeometry,
+            viewport.toVirtualX(event.x()),
+            viewport.toVirtualY(event.y()),
+        ) ||
+            super.mouseDragged(viewport.map(event), viewport.toVirtualDelta(dragX), viewport.toVirtualDelta(dragY))
+    }
+
+    override fun mouseReleased(event: MouseButtonEvent): Boolean = replica.viewport.release() || super.mouseReleased(viewport().map(event))
+
+    override fun mouseScrolled(
+        mouseX: Double,
+        mouseY: Double,
+        scrollX: Double,
+        scrollY: Double,
+    ): Boolean {
+        val viewport = viewport()
+        if (!viewport.supported) return true
+        val grid = TerminalRenderGeometry(viewport.width, viewport.height).gridGeometry
+        if (!TerminalViewport.inside(grid.bounds, viewport.toVirtualX(mouseX), viewport.toVirtualY(mouseY))) return false
+        replica.viewport.wheel(scrollY)
+        return true
+    }
+
     fun update(payload: TerminalFullPayload): Boolean {
         if (payload.position != position || payload.machineId <= 0) return false
         if (!replica.replace(payload.state)) return false
+        if (machineId != payload.machineId) replica.viewport.reset()
         resourceReplica.replaceMachine(payload.machineId)
         machineId = payload.machineId
         return true
@@ -112,6 +149,7 @@ internal class TerminalScreen(
     override fun suspendForChild(): Screen {
         childLifecycle.suspend()
         pressedKeys.clear()
+        replica.viewport.release()
         return this
     }
 
@@ -120,17 +158,20 @@ internal class TerminalScreen(
     override fun abandonChild() {
         childLifecycle.abandon()
         pressedKeys.clear()
+        replica.viewport.release()
     }
 
     override fun removed() {
         if (!childLifecycle.suspended) transport.send(TerminalClosePayload(position, machineId))
         pressedKeys.clear()
+        replica.viewport.release()
         super.removed()
     }
 
     override fun keyPressed(event: KeyEvent): Boolean {
         if (childLifecycle.suspended) return true
         if (!viewport().supported) return if (event.key() == GLFW.GLFW_KEY_ESCAPE) super.keyPressed(event) else true
+        if (replica.viewport.key(event.key(), event.modifiers()) { minecraft.keyboardHandler.clipboard = it }) return true
         if (event.isPaste) {
             val pasted = TerminalInput.boundedText(minecraft.keyboardHandler.clipboard)
             if (pasted.isNotEmpty()) {
@@ -139,6 +180,7 @@ internal class TerminalScreen(
             return true
         }
         val key = TerminalInput.key(event.key(), event.modifiers()) ?: return super.keyPressed(event)
+        replica.viewport.input()
         val action = if (pressedKeys.add(event.key())) TerminalKeyAction.PRESS else TerminalKeyAction.REPEAT
         transport.send(
             TerminalKeyPayload(position, machineId, key, action, TerminalInput.modifiers(event.modifiers())),
@@ -202,14 +244,24 @@ internal class TerminalScreen(
             TerminalGridRenderer.draw(
                 graphics,
                 font,
-                replica.state,
+                replica.viewport.state(),
                 geometry.gridGeometry,
                 TerminalScreenStyle.animationMillis(),
             )
+            replica.viewport.selectionBounds(geometry.gridGeometry).forEach { bounds ->
+                graphics.fill(bounds.left, bounds.top, bounds.right, bounds.bottom, TerminalSurfaceStyle.SELECTION_COLOR)
+            }
             val resourceText =
                 Component
-                    .literal(TerminalResourceText.format(resourceGauges))
-                    .withStyle { style -> style.withFont(TerminalFontProfile.fontDescription) }
+                    .literal(
+                        if (replica.viewport.live) {
+                            TerminalResourceText.format(
+                                resourceGauges,
+                            )
+                        } else {
+                            "History: ${replica.viewport.rowsBehind} rows up · Shift+End"
+                        },
+                    ).withStyle { style -> style.withFont(TerminalFontProfile.fontDescription) }
             JetBrainsMonoRendering.drawString(
                 graphics,
                 font,
@@ -234,6 +286,7 @@ internal class TerminalScreen(
     }
 
     private fun sendText(text: String) {
+        replica.viewport.input()
         transport.send(TerminalTextPayload(position, machineId, text))
     }
 

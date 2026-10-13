@@ -43,6 +43,10 @@ class DiagnosticQueryTest {
                 val first: Choice = values[0]
                 for (entry in values) check(entry in values)
                 check(first === Choice.FIRST)
+                val name: String = first.name
+                val index: Int = first.ordinal
+                val generic: Enum<*> = first
+                check(generic.name == name && generic.ordinal == index)
                 check(Empty.entries.isEmpty())
                 val sides: EnumEntries<RedstonePort.Side> = RedstonePort.Side.entries
                 check(sides[0] === RedstonePort.Side.ALL)
@@ -164,6 +168,40 @@ class DiagnosticQueryTest {
                 val holder = Holder<Int> { it + value.next() }
                 holder.callback = { it * 2 }
                 check(holder.callback(3) == 6)
+            }
+            """.trimIndent()
+        for (attachedSources in listOf(false, true)) {
+            K2QueryFixture.sourceWithGuestApi(attachedSources, "main.kt" to source).use { fixture ->
+                val result = fixture.execute(fixture.presentation()) as AnalysisResult.Presentation
+                val active = result.value.accept(fixture.identity) as SnapshotPresentationAcceptance.Active
+                assertTrue(active.diagnostics.none { it.severity == EditorDiagnosticSeverity.Error }, active.diagnostics.toString())
+            }
+        }
+    }
+
+    @Test
+    fun `generic initialization captures resolve with source and metadata inputs`() {
+        val source =
+            """
+            class Holder<T>(initial: T, next: T) {
+                var value: T = initial
+                val snapshot: () -> T = { initial }
+                val live: () -> T = { value }
+                var take: () -> T = { initial }
+                init {
+                    var current = initial
+                    fun <R> identity(other: R): R = other
+                    fun advance(): T { val saved = current; current = identity(next); return saved }
+                    take = ::advance
+                }
+            }
+            fun main() {
+                val ints = Holder(3, 7)
+                check(ints.snapshot() == 3 && ints.take() == 3)
+                ints.value = 9
+                check(ints.live() == 9 && ints.take() == 7)
+                val nullable = Holder<Int?>(null, 2)
+                check(nullable.take() == null && nullable.take() == 2)
             }
             """.trimIndent()
         for (attachedSources in listOf(false, true)) {

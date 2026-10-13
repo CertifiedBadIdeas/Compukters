@@ -60,8 +60,22 @@ class CompuktersPeripheralContract<T : CompuktersPeripheralEndpoint>(
     val deviceKey: String,
     private val resolve: (CompuktersPeripheralLocation) -> T?,
 ) {
-    internal fun bind(providerId: String): ComputerPeripheralContract<T> =
-        ComputerPeripheralContract(id, providerId, deviceKey) { level, computer, identity ->
+    private var lookupType: String? = null
+    val guestLookupType: String? get() = lookupType
+
+    /** Optional fully qualified Guest provider type used by the IDE to copy named lookups. */
+    constructor(
+        id: String,
+        deviceKey: String,
+        guestLookupType: String,
+        resolve: (CompuktersPeripheralLocation) -> T?,
+    ) : this(id, deviceKey, resolve) {
+        require(guestLookupType.length <= 256 && guestLookupType.matches(Regex("[A-Za-z_][A-Za-z0-9_]*(\\.[A-Za-z_][A-Za-z0-9_]*)+")))
+        lookupType = guestLookupType
+    }
+
+    internal fun bind(providerId: String): ComputerPeripheralContract<T> {
+        val resolver: (ServerLevel, BlockPos, ComputerPeripheralIdentity) -> PeripheralEndpoint<T>? = { level, computer, identity ->
             resolve(CompuktersPeripheralLocation(level, identity.anchor, identity.deviceKey, computer, providerId))?.let { endpoint ->
                 PeripheralEndpoint(
                     endpoint,
@@ -70,6 +84,9 @@ class CompuktersPeripheralContract<T : CompuktersPeripheralEndpoint>(
                 ) { endpoint.valid() }
             }
         }
+        return lookupType?.let { ComputerPeripheralContract(id, providerId, deviceKey, false, it, resolver) }
+            ?: ComputerPeripheralContract(id, providerId, deviceKey, resolver)
+    }
 }
 
 /** Preserve host failure categories when forwarding typed peripheral operations to an addon capability. */

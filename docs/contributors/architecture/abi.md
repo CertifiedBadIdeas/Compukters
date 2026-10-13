@@ -11,6 +11,26 @@ permalink: /ARCHITECTURE/abi/
 
 This reference groups versioned representation boundaries by the version that introduced them. Those versions are minimum feature requirements, not a claim that older Runtime distributions implement today’s platform. The source owners below define the active contract. Before changing a wire format, inspect each producer, consumer and verifier. Runtime release pins in `build-scripts/src/main/kotlin/RuntimeBundleSupport.kt` describe published bundles separately from the local VM checkout.
 
+## Terminal scrollback transport (Runtime 0.24.0)
+
+Native C ABI **24** extends full-terminal results with the bounded 512-row history and introduces history
+append/replace delta tags 5/6. Both JNI and FFM reject older native ABI versions before decoding. The 49
+exported signatures and Guest terminal capability remain unchanged. Full snapshots and compacted deltas
+preserve authoritative history; client UI owns navigation, selection and clipboard operations. Logical
+checkpoint envelope/schema **5** retains history; older schemas use the existing cold-boot fallback.
+See the VM host-neutral terminal wire contract for field widths, order and bounds.
+
+## Guest enum identity
+
+`kotlin:builtins` 1.15.0 makes `Enum.name` and `Enum.ordinal` executable. The compiler-generated Kotlin
+runtime library adds a shared abstract nominal Enum base with String/Int fields, using ordinary managed
+objects, inheritance and field instructions. Concrete enum types remain distinct. `Enum<E>` and `Enum<*>`
+use the common base representation; enum initialization sets both fields before publishing singleton
+roots. Runtime imports are appended, preserving earlier import indices. The generated library hash and
+platform identity change; dependent libraries rebuild against the updated bundle. Artifact wire formats,
+VM instructions, native ABI and checkpoint schema remain unchanged. Existing artifacts retain their
+embedded generated runtime library. `testKotlinEnumEntriesVmConformance` checks project and library getters.
+
 ## Guest enum entries
 
 `kotlin:builtins` 1.14.0 completes the structural Enum comparison declaration for frontend inheritance.
@@ -243,7 +263,7 @@ producer/consumer update; platform, compiler framing, artifacts and native ABI r
 | Boundary | Current representation | Owner |
 | --- | --- | --- |
 | Executable container | Format 3; covariant method results require Runtime ABI 1.18 | `modules/common/compiler-artifact` and `host/compukter-vm/src/artifact/format.rs` |
-| Native session transport | C ABI 23, checked by both FFM and JNI | `host/compukter-vm/ffi/src/lib.rs` and `modules/common/native-runtime` |
+| Native session transport | C ABI 24, checked by both FFM and JNI | `host/compukter-vm/ffi/src/lib.rs` and `modules/common/native-runtime` |
 | Base platform | Bundle format 9, standalone module format 5, platform ABI 3 | `PlatformBundleCodec` in `modules/common/platform-bundle` |
 | Kotlin metadata carrier | Private format 6 | `platform-k2` |
 | Compiler worker | Protocol 5; explicit source-free library preparation | `compiler-client` and `compiler-k2` |
@@ -368,7 +388,7 @@ standalone module 5 and private metadata carrier 6 remain unchanged; rebuild dep
 
 ## Execution checkpoint development
 
-The VM has a logical computer checkpoint envelope (format 3), owned by
+The VM has a logical computer checkpoint envelope (format 5), owned by
 `host/compukter-vm/src/checkpoint/envelope.rs`. Its version, native runtime/schema identity, computer ID,
 filesystem generation, payload lengths and SHA-256 cover the execution and host descriptor bytes together.
 Runtime identity hashes the logical schema, a zero byte and the little-endian u32 native C ABI. Runtime
@@ -377,10 +397,10 @@ checkpoint restore in both directions, filesystem state, executable admission an
 contract or codec changes require an ABI increment; a revision must preserve those contracts. The earlier
 unpublished development identity based on the full version is rejected without a fallback. CI exchanges a
 full-computer checkpoint between two real builds of adjacent revisions in both directions.
-FFM/JNI admission checks native ABI 23 without a package-revision constraint. Release selection is
+FFM/JNI admission checks native ABI 24 without a package-revision constraint. Release selection is
 separate: `config/runtime-release.properties` selects one compatible published revision and its exact
 release commit, independently of the development VM submodule. Alternate descriptors may select any
-`0.23.x`; packaging still verifies the selected archive identity, formats and hashes. Both mod archives
+`0.24.x`; packaging still verifies the selected archive identity, formats and hashes. Both mod archives
 and the release inventory record the actual selected native component for future external delivery.
 Production version preparation queries the latest complete stable GitHub Release. Revision and ABI requests
 are idempotent within a release cycle; an ABI request updates the native constant and version together.
@@ -895,3 +915,13 @@ storage and typed reads.
 `stdlib:core` 1.20.0 publishes scope/assertion/buildString effects, and `compukter:core` 7.5.0
 publishes synchronous display frame and nested UI construction effects. Existing native K2 metadata
 carries these effects for compiler and IDE consumers, including when SDK sources are detached.
+
+## IDE device management transport
+
+IDE target payload registration version 2 extends bounded named-peripheral entries with optional exact instance/kind
+references and up to eight validated fully qualified Guest lookup types. A lease-authorized rename request carries
+that reference, an expected previous name and a bounded requested name; success returns refreshed discovery.
+Version 1 peers cannot decode the extended entry layout and are rejected by target payload registration.
+The optional lookup type constructors in ComputerPeripheralContract and CompuktersPeripheralContract retain all
+existing JVM constructor signatures. Missing metadata disables typed clipboard lookup generation only.
+Guest capabilities, platform bundles, saved network records and native Runtime ABIs are unchanged.

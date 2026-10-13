@@ -42,21 +42,21 @@ class RuntimeBundleSupportTest {
 
     @Test
     fun pinsTheCurrentRuntimeRelease() {
-        val contract = currentRuntimeBundleContract("0.23.0", "0".repeat(40))
+        val contract = currentRuntimeBundleContract("0.24.0", "0".repeat(40))
 
-        assertEquals("0.23.0", contract.runtimeVersion)
-        assertEquals("v0.23.0", contract.releaseTag)
-        assertEquals(23, contract.ffiAbi)
+        assertEquals("0.24.0", contract.runtimeVersion)
+        assertEquals("v0.24.0", contract.releaseTag)
+        assertEquals(24, contract.ffiAbi)
         assertEquals(3, contract.formats["artifact"])
         assertEquals(2, contract.formats["resource-snapshot"])
     }
 
     @Test
     fun selectsAnyRevisionOfTheSupportedAbiIndependentlyOfTheSourceCommit() {
-        for ((index, version) in listOf("0.23.0", "0.23.2", "0.23.3", "0.23.999").withIndex()) {
+        for ((index, version) in listOf("0.24.0", "0.24.2", "0.24.3", "0.24.999").withIndex()) {
             val commit = index.toString().repeat(40)
             val contract = parseRuntimeBundleContract("version=$version\nvmCommit=$commit\n")
-            assertEquals(23, contract.ffiAbi)
+            assertEquals(24, contract.ffiAbi)
             assertEquals(version, contract.runtimeVersion)
             assertEquals(commit, contract.vmCommit)
             assertEquals(true, runtimeBundleAssetNames(contract).all { version in it })
@@ -65,19 +65,19 @@ class RuntimeBundleSupportTest {
 
     @Test
     fun rejectsAnotherAbiAndIncompleteReleaseDescriptors() {
-        for (version in listOf("0.21.9", "0.24.0", "1.23.3", "0.23.03")) {
+        for (version in listOf("0.21.9", "0.25.0", "1.23.3", "0.24.03")) {
             assertThrows(IllegalArgumentException::class.java) {
                 parseRuntimeBundleContract("version=$version\nvmCommit=${"a".repeat(40)}\n")
             }
         }
-        for (text in listOf("version=0.23.3\n", "version=0.23.3\nvmCommit=HEAD\n", "version=0.23.3\nvmCommit=${"a".repeat(40)}\nextra=1\n")) {
+        for (text in listOf("version=0.24.3\n", "version=0.24.3\nvmCommit=HEAD\n", "version=0.24.3\nvmCommit=${"a".repeat(40)}\nextra=1\n")) {
             assertThrows(IllegalArgumentException::class.java) { parseRuntimeBundleContract(text) }
         }
     }
 
     @Test
     fun downloadsTheExactPinnedReleaseAssetsAndReusesTheCompleteCache() {
-        val contract = currentRuntimeBundleContract("0.23.3", "0".repeat(40))
+        val contract = currentRuntimeBundleContract("0.24.3", "0".repeat(40))
         val destination = temporary.resolve("downloaded")
         val requested = mutableListOf<URI>()
         val payloads =
@@ -110,7 +110,7 @@ class RuntimeBundleSupportTest {
 
     @Test
     fun failedAssetDownloadDoesNotPublishAPartialFileAndCanResume() {
-        val contract = currentRuntimeBundleContract("0.23.3", "0".repeat(40))
+        val contract = currentRuntimeBundleContract("0.24.3", "0".repeat(40))
         val destination = temporary.resolve("resume")
         val names = runtimeBundleAssetNames(contract)
         var fail = true
@@ -137,7 +137,7 @@ class RuntimeBundleSupportTest {
 
     @Test
     fun acceptsAnAssetPublishedConcurrentlyByAnotherDownloader() {
-        val contract = currentRuntimeBundleContract("0.23.3", "0".repeat(40))
+        val contract = currentRuntimeBundleContract("0.24.3", "0".repeat(40))
         val destination = temporary.resolve("concurrent")
         val firstAsset = runtimeBundleAssetNames(contract).first()
 

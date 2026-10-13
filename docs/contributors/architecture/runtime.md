@@ -87,7 +87,8 @@ share the exact content hash but are not interchangeable.
 `ProgramRuntimeHost` owns one current Rust `ComputerMachine`, advances it with bounded guest and maintenance budgets,
 commits terminal changes once per active server tick, and exposes typed full/delta states and failures through JDK 25
 FFM on the 26.1 product line. The Java 21 runtime API owns the same typed session boundary independently of its native
-transport. It does not own a second grid or output transcript. It is loader-independent and confined to its actor worker.
+transport. It does not own a second grid or output transcript; VM-owned terminal history travels through the same
+bounded snapshot/delta contract. It is loader-independent and confined to its actor worker.
 Within one process, the Rust VM may schedule several bounded cooperative Guest tasks. Exactly one task executes
 instructions at once; suspension on a host request or `Task.join()` transfers execution to the next runnable task in
 FIFO order. Pending requests retain their `(TaskId, RequestId)` owner, so independent reads and writes may remain in

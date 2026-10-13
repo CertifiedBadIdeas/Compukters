@@ -94,11 +94,27 @@ data class IdeTerminalOverlayGeometry(
 
 fun terminalOverlayTitle(state: IdeTargetTerminalState): String =
     when (state) {
-        IdeTargetTerminalState.Closed -> "Terminal unavailable"
-        is IdeTargetTerminalState.Opening -> "Opening target terminal..."
-        is IdeTargetTerminalState.Active -> "Target terminal"
-        is IdeTargetTerminalState.Resyncing -> "Resynchronizing target terminal..."
-        is IdeTargetTerminalState.Failed -> if (state.retryable) "${state.detail} · Click to retry" else state.detail
+        IdeTargetTerminalState.Closed -> {
+            "Terminal unavailable"
+        }
+
+        is IdeTargetTerminalState.Opening -> {
+            "Opening target terminal..."
+        }
+
+        is IdeTargetTerminalState.Active -> {
+            state.replica.viewport.rowsBehind.let { rows ->
+                if (rows == 0L) "Target terminal" else "Target terminal · $rows rows up"
+            }
+        }
+
+        is IdeTargetTerminalState.Resyncing -> {
+            "Resynchronizing target terminal..."
+        }
+
+        is IdeTargetTerminalState.Failed -> {
+            if (state.retryable) "${state.detail} · Click to retry" else state.detail
+        }
     }
 
 class IdeTerminalOverlayController(
@@ -113,6 +129,45 @@ class IdeTerminalOverlayController(
         private set
 
     fun state(): IdeTargetTerminalState = client.state()
+
+    private fun viewport() =
+        when (val state = state()) {
+            is IdeTargetTerminalState.Active -> state.replica.viewport
+            is IdeTargetTerminalState.Resyncing -> state.replica.viewport
+            else -> null
+        }
+
+    fun press(
+        grid: IdeRect,
+        x: Double,
+        y: Double,
+        button: Int,
+    ): Boolean =
+        viewport()?.press(
+            ru.lazyhat.compukters.impl.terminal
+                .TerminalGridGeometry(grid.left, grid.top),
+            x,
+            y,
+            button,
+        ) == true
+
+    fun drag(
+        grid: IdeRect,
+        x: Double,
+        y: Double,
+    ): Boolean =
+        viewport()?.drag(
+            ru.lazyhat.compukters.impl.terminal
+                .TerminalGridGeometry(grid.left, grid.top),
+            x,
+            y,
+        ) == true
+
+    fun release(): Boolean = viewport()?.release() == true
+
+    fun scroll(amount: Double) {
+        viewport()?.wheel(amount)
+    }
 
     fun setTarget(target: IdeTargetReference?) {
         client.setTarget(target)
@@ -133,6 +188,7 @@ class IdeTerminalOverlayController(
         visible = false
         focused = false
         pressedKeys.clear()
+        release()
         client.setVisible(false)
     }
 
@@ -144,6 +200,7 @@ class IdeTerminalOverlayController(
     fun focusLost() {
         focused = false
         pressedKeys.clear()
+        release()
     }
 
     fun retry(): Boolean {
@@ -157,14 +214,20 @@ class IdeTerminalOverlayController(
     fun keyPressed(
         event: IdeKeyInput,
         clipboard: String,
+        copy: (String) -> Unit = {},
     ): Boolean {
         if (!visible || !focused) return false
+        if (viewport()?.key(event.key, event.modifiers, copy) == true) return true
         if (event.paste) {
             val text = TerminalInput.boundedText(clipboard)
-            if (text.isNotEmpty()) client.sendText(text)
+            if (text.isNotEmpty()) {
+                viewport()?.input()
+                client.sendText(text)
+            }
             return true
         }
         val key = TerminalInput.key(event.key, event.modifiers) ?: return false
+        viewport()?.input()
         val action = if (pressedKeys.add(event.key)) TerminalKeyAction.PRESS else TerminalKeyAction.REPEAT
         client.sendKey(key, action, TerminalInput.modifiers(event.modifiers))
         return true
@@ -178,7 +241,10 @@ class IdeTerminalOverlayController(
     fun charTyped(event: IdeCharacterInput): Boolean {
         if (!visible || !focused) return false
         val text = TerminalInput.boundedText(event.text)
-        if (text.isNotEmpty()) client.sendText(text)
+        if (text.isNotEmpty()) {
+            viewport()?.input()
+            client.sendText(text)
+        }
         return true
     }
 }

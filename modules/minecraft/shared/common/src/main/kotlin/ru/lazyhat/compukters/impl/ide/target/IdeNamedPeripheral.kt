@@ -23,9 +23,25 @@ data class IdeNamedPeripheral(
     val name: String,
     val itemId: String,
     val duplicate: Boolean = false,
+    val reference: IdePeripheralReference? = null,
+    val lookupTypes: List<String> = emptyList(),
 ) {
     init {
         require(name.isNotBlank() && name.length <= 64 && name.none(Char::isISOControl))
+        require(lookupTypes.size <= 8 && lookupTypes.distinct().size == lookupTypes.size)
+        require(lookupTypes.all { it.length <= 256 && it.matches(Regex("[A-Za-z_][A-Za-z0-9_]*(\\.[A-Za-z_][A-Za-z0-9_]*)+")) })
         require(itemId.length <= 256 && itemId.matches(Regex("[a-z0-9_.-]+:[a-z0-9/._-]+")))
+    }
+}
+
+/** Exact logical instance and kind; positions may change without silently selecting another device. */
+data class IdePeripheralReference(
+    val instance: java.util.UUID,
+    val providerId: String,
+    val deviceKey: String,
+) {
+    init {
+        require(providerId.isNotBlank() && providerId.length <= 128 && providerId.none(Char::isISOControl))
+        require(deviceKey.isNotBlank() && deviceKey.length <= 128 && deviceKey.none(Char::isISOControl))
     }
 }

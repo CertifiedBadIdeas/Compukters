@@ -399,7 +399,7 @@ internal class JniBridge private constructor() : LowLevelVmBridge {
     override fun terminalCommit(handle: Long) = requireSuccess("terminal commit", JniNative.terminalCommit(handle))
 
     override fun terminalFullState(handle: Long): ByteArray =
-        fixedOutput("terminal full state", maximumOutcomeBytes) { output, written ->
+        fixedOutput("terminal full state", TerminalHistoryLimits.NATIVE_BUFFER_BYTES) { output, written ->
             JniNative.terminalFullState(handle, output, written)
         }
 
@@ -407,7 +407,7 @@ internal class JniBridge private constructor() : LowLevelVmBridge {
         handle: Long,
         revision: Long,
     ): ByteArray =
-        fixedOutput("terminal changes", maximumOutcomeBytes) { output, written ->
+        fixedOutput("terminal changes", TerminalHistoryLimits.NATIVE_BUFFER_BYTES) { output, written ->
             JniNative.terminalChangesSince(handle, revision, output, written)
         }
 
@@ -611,7 +611,7 @@ internal class JniBridge private constructor() : LowLevelVmBridge {
 
         fun open(library: Path): JniBridge {
             System.load(library.toAbsolutePath().normalize().toString())
-            if (JniNative.abiVersion() != 23) throw VmBridgeException("unsupported Compukter JNI ABI")
+            if (JniNative.abiVersion() != 24) throw VmBridgeException("unsupported Compukter JNI ABI")
             return JniBridge()
         }
     }

@@ -92,8 +92,10 @@ class ReusableTerminalWireTransportTest {
 
     private fun fullStateWire(revision: Long): ByteArray =
         ByteBuffer
-            .allocate(1 + Long.SIZE_BYTES + 2 * Short.SIZE_BYTES + Int.SIZE_BYTES + 969 * 6 + 2 * Short.SIZE_BYTES + 1)
-            .order(ByteOrder.LITTLE_ENDIAN)
+            .allocate(
+                1 + Long.SIZE_BYTES + 2 * Short.SIZE_BYTES + Int.SIZE_BYTES + 969 * 6 + 2 * Short.SIZE_BYTES + 1 + Long.SIZE_BYTES +
+                    Int.SIZE_BYTES,
+            ).order(ByteOrder.LITTLE_ENDIAN)
             .put(2)
             .putLong(revision)
             .putShort(51)
@@ -108,5 +110,7 @@ class ReusableTerminalWireTransportTest {
             }.putShort(0)
             .putShort(0)
             .put(1)
+            .putLong(0)
+            .putInt(0)
             .array()
 }

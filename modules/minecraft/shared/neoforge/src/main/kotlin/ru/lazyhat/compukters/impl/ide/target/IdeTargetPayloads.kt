@@ -102,6 +102,14 @@ internal object IdeTargetWireProtocol {
     ) {
         buffer.writeVarLong(payload.requestId)
         when (val request = payload.request) {
+            is IdeTargetRequest.RenamePeripheral -> {
+                buffer.writeByte(RENAME_PERIPHERAL)
+                buffer.writeTarget(request.target)
+                buffer.writePeripheralReference(request.device)
+                buffer.writeUtf(request.expectedName, 64)
+                buffer.writeUtf(request.requestedName, 64)
+            }
+
             is IdeTargetRequest.NamedPeripherals -> {
                 buffer.writeByte(NAMED_PERIPHERALS)
                 buffer.writeTarget(request.target)
@@ -193,6 +201,15 @@ internal object IdeTargetWireProtocol {
         val requestId = buffer.readVarLong()
         val request =
             when (val kind = buffer.readUnsignedByte().toInt()) {
+                RENAME_PERIPHERAL -> {
+                    IdeTargetRequest.RenamePeripheral(
+                        buffer.readTarget(),
+                        buffer.readPeripheralReference(),
+                        buffer.readUtf(64),
+                        buffer.readUtf(64),
+                    )
+                }
+
                 NAMED_PERIPHERALS -> {
                     IdeTargetRequest.NamedPeripherals(buffer.readTarget())
                 }
@@ -288,6 +305,10 @@ internal object IdeTargetWireProtocol {
                     buffer.writeUtf(entry.name, 64)
                     buffer.writeUtf(entry.itemId, 256)
                     buffer.writeBoolean(entry.duplicate)
+                    buffer.writeBoolean(entry.reference != null)
+                    entry.reference?.let { buffer.writePeripheralReference(it) }
+                    buffer.writeVarInt(entry.lookupTypes.size)
+                    entry.lookupTypes.forEach { buffer.writeUtf(it, 256) }
                 }
             }
 
@@ -368,7 +389,13 @@ internal object IdeTargetWireProtocol {
                     require(count in 0..1024) { "Invalid peripheral count" }
                     IdeTargetReply.NamedPeripherals(
                         List(count) {
-                            IdeNamedPeripheral(buffer.readUtf(64), buffer.readUtf(256), buffer.readBoolean())
+                            val name = buffer.readUtf(64)
+                            val itemId = buffer.readUtf(256)
+                            val duplicate = buffer.readBoolean()
+                            val reference = if (buffer.readBoolean()) buffer.readPeripheralReference() else null
+                            val types = buffer.readVarInt()
+                            require(types in 0..8) { "Invalid lookup type count" }
+                            IdeNamedPeripheral(name, itemId, duplicate, reference, List(types) { buffer.readUtf(256) })
                         },
                         truncated,
                     )
@@ -453,6 +480,7 @@ internal object IdeTargetWireProtocol {
     private const val FILE_LIST = 10
     private const val FILE_READ = 11
     private const val NAMED_PERIPHERALS = 12
+    private const val RENAME_PERIPHERAL = 13
     private const val REPLY_ATTACHED = 0
     private const val REPLY_UPLOAD_ACCEPTED = 1
     private const val REPLY_VERIFIED = 2
@@ -746,3 +774,12 @@ private fun RegistryFriendlyByteBuf.readFailure(): IdeTargetFailure {
     require(kind in IdeTargetFailureKind.entries.indices) { "unknown IDE target failure kind" }
     return IdeTargetFailure(IdeTargetFailureKind.entries[kind], readUtf(512))
 }
+
+private fun RegistryFriendlyByteBuf.writePeripheralReference(value: IdePeripheralReference) {
+    writeUUID(value.instance)
+    writeUtf(value.providerId, 128)
+    writeUtf(value.deviceKey, 128)
+}
+
+private fun RegistryFriendlyByteBuf.readPeripheralReference(): IdePeripheralReference =
+    IdePeripheralReference(readUUID(), readUtf(128), readUtf(128))
