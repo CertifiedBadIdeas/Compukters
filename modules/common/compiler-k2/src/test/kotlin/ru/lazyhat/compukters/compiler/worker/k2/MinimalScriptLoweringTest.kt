@@ -3801,6 +3801,42 @@ class MinimalScriptLoweringTest {
         }
 
     @Test
+    fun `platform dependencies do not consume guest class specialization budget`() =
+        withAdapter { adapter ->
+            val source =
+                buildString {
+                    appendLine("class Box<T>(val value: T)")
+                    repeat(256) { appendLine("class Tag$it") }
+                    appendLine("fun main() {")
+                    repeat(256) { appendLine("Box(Tag$it())") }
+                    appendLine("}")
+                }
+            val result = adapter.compile(request(source))
+            assertNotNull(result.artifact, result.diagnostics.joinToString())
+            assertTrue(result.diagnostics.none { it.severity.name == "ERROR" }, result.diagnostics.toString())
+        }
+
+    @Test
+    fun `platform class specialization has its own bounded budget`() =
+        withAdapter { adapter ->
+            val source =
+                buildString {
+                    repeat(257) { appendLine("enum class Choice$it { FIRST, SECOND }") }
+                    appendLine("fun main() {")
+                    repeat(257) { appendLine("check(Choice$it.entries.size == 2)") }
+                    appendLine("}")
+                }
+            val result = adapter.compile(request(source))
+            assertNull(result.artifact)
+            assertTrue(
+                result.diagnostics.any {
+                    it.code == "UNSUPPORTED_IR" && "exceeds 1024 platform class variants" in it.message
+                },
+                result.diagnostics.toString(),
+            )
+        }
+
+    @Test
     fun `class specialization remains bounded for guest projects`() =
         withAdapter { adapter ->
             val source =
