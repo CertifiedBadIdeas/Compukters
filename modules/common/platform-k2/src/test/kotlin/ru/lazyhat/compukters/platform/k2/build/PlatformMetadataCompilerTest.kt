@@ -45,6 +45,24 @@ class PlatformMetadataCompilerTest {
     private val module = PlatformModuleId("test", "library")
 
     @Test
+    fun `enum entries getters retain static typed library identities`() {
+        val result =
+            compiler.compile(
+                module,
+                listOf(source("Modes.kt", "package sample\nenum class Mode { A, B }\nclass Owner { enum class Empty }")),
+            )
+        for ((owner, type) in listOf("Mode" to "Mode", "Owner.Empty" to "Owner.Empty")) {
+            val symbol = "sample.$owner.<get-entries>"
+            val getter = result.declarations.single { it.symbol == symbol }
+            assertEquals("fun():EnumEntries<$type>", getter.signature)
+            assertContains(result.exportedSymbols, symbol)
+            assertTrue(result.libraryDeclarations.any { it.symbol == symbol && it.kind == PlatformLibraryDeclarationKind.FUNCTION })
+            assertFalse(result.sourceDeclarations.any { it.symbol == symbol })
+            assertContains(PlatformMetadataCodec.decode(result.metadata).declarations, getter)
+        }
+    }
+
+    @Test
     fun `extension property accessors retain receiver identity across equal result types`() {
         val result =
             compiler.compile(

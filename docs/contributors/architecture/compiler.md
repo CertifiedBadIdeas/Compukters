@@ -122,6 +122,11 @@ jump execute; cleanup can replace it with another exit. Optimized `for` loops em
 when the body can fall through or has a continue targeting that loop.
 
 
+Library compilation exports every enum cache together with its concrete collection read views. Its class
+specialization budget is 1024, separate from the existing 256-class project budget; the generic function
+budget remains 256. This keeps whole-platform exports bounded without reducing the immutable list contract
+or increasing user-program expansion limits.
+
 ## Value representations
 
 Scalar value classes retain their scalar representation for direct typed calls. Nullable/Any/interface boundaries and reference

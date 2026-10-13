@@ -1,17 +1,17 @@
 [[module]]
 id = "kotlin:builtins"
-version = "1.13.0"
+version = "1.14.0"
 dependencies = []
 sources = ["builtins/kotlin/**/*.kt"]
 
 [[module]]
 id = "stdlib:core"
-version = "1.20.0"
+version = "1.21.0"
 dependencies = ["kotlin:builtins"]
 sources = ["libraries/stdlib-core/**/*.kt"]
 
 [[module]]
 id = "compukter:core"
-version = "8.0.0"
+version = "8.1.0"
 dependencies = ["stdlib:core"]
 sources = ["libraries/compukter-core/**/*.kt"]

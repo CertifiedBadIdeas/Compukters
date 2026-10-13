@@ -44,6 +44,7 @@ import ru.lazyhat.compukters.compiler.artifact.model.ValueType
 import ru.lazyhat.compukters.compiler.artifact.read.ArtifactReader
 import ru.lazyhat.compukters.compiler.k2.engine.build.AddonAbiLock
 import ru.lazyhat.compukters.compiler.k2.engine.build.AddonAuthoringContract
+import ru.lazyhat.compukters.compiler.k2.engine.build.AddonContract
 import ru.lazyhat.compukters.compiler.k2.engine.build.buildAddonGuestApiBundle
 import ru.lazyhat.compukters.compiler.k2.engine.build.resolveAddonContract
 import ru.lazyhat.compukters.compiler.project.ProjectSnapshotLoader
@@ -60,6 +61,7 @@ import ru.lazyhat.compukters.compiler.worker.protocol.TrustedBundlePayload
 import ru.lazyhat.compukters.compiler.worker.protocol.VirtualSourcePath
 import ru.lazyhat.compukters.compiler.worker.protocol.WorkerIdentity
 import ru.lazyhat.compukters.compiler.worker.protocol.WorkerLimits
+import ru.lazyhat.compukters.platform.bundle.PlatformModuleId
 import ru.lazyhat.compukters.platform.k2.build.PlatformMetadataCompiler
 import java.nio.file.Path
 import java.security.MessageDigest
@@ -3481,6 +3483,150 @@ class MinimalScriptLoweringTest {
             val artifact = assertNotNull(result.artifact, result.diagnostics.joinToString()).toByteArray()
 
             assertTrue(0x40 in applicationCodeOpcodes(artifact), "computed getter must call its library implementation")
+        }
+
+    @Test
+    fun `enum entries from enum-only libraries export executable getters`() =
+        withAdapter { adapter ->
+            val root = createTempDirectory("compukters-enum-library-")
+            try {
+                root.resolve("fixtureenums/Modes.kt").also { it.parent.createDirectories() }.writeText(
+                    "package fixtureenums\nenum class Mode { FIRST, SECOND }\nenum class Empty",
+                )
+                val base = K2CompilerAdapter.loadPackagedPlatform()
+                val contract =
+                    AddonContract(
+                        "fixtureenums",
+                        PlatformModuleId("fixtureenums", "api"),
+                        "1.0.0",
+                        base.modules.map { it.id },
+                        emptyList(),
+                        emptyList(),
+                    )
+                val addon = AddonGuestApiBundleCodec.decode(buildAddonGuestApiBundle(base, root, contract))
+                val result =
+                    adapter.compile(
+                        request(
+                            """
+                            import fixtureenums.Mode
+                            import fixtureenums.Empty
+                            fun main() {
+                                check(Mode.entries.size == 2)
+                                check(Mode.entries[1] === Mode.SECOND)
+                                check(Mode.entries === Mode.entries)
+                                check(Empty.entries.isEmpty())
+                                println("enum-only-entries-ok")
+                            }
+                            """.trimIndent(),
+                            addonOverride = addon,
+                        ),
+                    )
+                val bytes = assertNotNull(result.artifact, result.diagnostics.joinToString()).toByteArray()
+                System.getProperty("compukter.vm.enumEntriesArtifact")?.let { output ->
+                    Path.of("$output.enum-only.cpkt").also { it.parent.createDirectories() }.writeBytes(bytes)
+                }
+            } finally {
+                root.toFile().deleteRecursively()
+            }
+        }
+
+    @Test
+    fun `class specialization remains bounded for guest projects`() =
+        withAdapter { adapter ->
+            val source =
+                buildString {
+                    appendLine("class Box<T>(val value: T)")
+                    repeat(257) { appendLine("class Tag$it") }
+                    appendLine("fun main() {")
+                    repeat(257) { appendLine("Box(Tag$it())") }
+                    appendLine("}")
+                }
+            val result = adapter.compile(request(source))
+            assertNull(result.artifact)
+            assertTrue(result.diagnostics.any { it.code == "UNSUPPORTED_IR" && "exceeds 256 class variants" in it.message })
+        }
+
+    @Test
+    fun `enum entries preserve ordered singleton references and collection identity`() =
+        withAdapter { adapter ->
+            val source =
+                """
+                import compukter.redstone.RedstonePort
+                import kotlin.enums.EnumEntries
+                import fixture.kinetics.FixtureMode
+                import fixture.kinetics.EmptyMode
+                import fixture.kinetics.Modes
+
+                enum class Choice { FIRST, SECOND, THIRD }
+                enum class Empty
+
+                fun main() {
+                    val entries = Choice.entries
+                    check(entries === Choice.entries)
+                    check(entries.size == 3)
+                    check(entries[0] === Choice.FIRST)
+                    check(entries[1] === Choice.SECOND)
+                    check(entries[2] === Choice.THIRD)
+                    check(Choice.SECOND in entries)
+                    var count = 0
+                    for (entry in entries) {
+                        check(entry === entries[count])
+                        count += 1
+                    }
+                    check(count == 3)
+                    check(Empty.entries.isEmpty())
+                    check(Empty.entries === Empty.entries)
+                    check(entries.indexOf(Choice.SECOND) == 1)
+                    check(entries.lastIndexOf(Choice.THIRD) == 2)
+                    val read: List<Choice> = entries
+                    check(read[1] === Choice.SECOND)
+                    val universal: List<Any> = entries
+                    check(universal[1] === Choice.SECOND)
+                    check("absent" !in universal)
+                    check(universal.indexOf("absent") == -1)
+                    check(universal.lastIndexOf("absent") == -1)
+                    var anyCount = 0
+                    for (value in universal) {
+                        check(value === entries[anyCount])
+                        anyCount += 1
+                    }
+                    check(anyCount == 3)
+                    val nullable: List<Choice?> = entries
+                    check(nullable[2] === Choice.THIRD && null !in nullable)
+                    val nullableAny: List<Any?> = entries
+                    check(nullableAny[0] === Choice.FIRST)
+                    check(nullableAny.indexOf(null) == -1)
+                    val erased: Any = entries
+                    check((erased as? MutableList<Choice>) == null)
+                    var badIndex = false
+                    try { entries[-1] } catch (error: IndexOutOfBoundsException) { badIndex = true }
+                    check(badIndex)
+                    badIndex = false
+                    try { entries[3] } catch (error: IndexOutOfBoundsException) { badIndex = true }
+                    check(badIndex)
+                    var exhausted = false
+                    try { Empty.entries.iterator().next() } catch (error: NoSuchElementException) { exhausted = true }
+                    check(exhausted)
+                    val sides: EnumEntries<RedstonePort.Side> = RedstonePort.Side.entries
+                    check(sides === RedstonePort.Side.entries)
+                    check(sides.size == 7)
+                    check(sides[0] === RedstonePort.Side.ALL)
+                    check(sides[6] === RedstonePort.Side.BOTTOM)
+                    check(FixtureMode.entries === Modes.entries())
+                    check(FixtureMode.entries.size == 3)
+                    check(FixtureMode.entries[1] === FixtureMode.RUNNING)
+                    check(EmptyMode.entries === Modes.emptyEntries())
+                    check(EmptyMode.entries.isEmpty())
+                    println("enum-entries-ok")
+                }
+                """.trimIndent()
+            val first = adapter.compile(request(source, includeAddonFixture = true))
+            val artifact = assertNotNull(first.artifact, first.diagnostics.joinToString()).toByteArray()
+            val second = adapter.compile(request(source, includeAddonFixture = true))
+            assertContentEquals(artifact, assertNotNull(second.artifact, second.diagnostics.joinToString()).toByteArray())
+            System.getProperty("compukter.vm.enumEntriesArtifact")?.let { output ->
+                Path.of(output).also { it.parent.createDirectories() }.writeBytes(artifact)
+            }
         }
 
     @Test

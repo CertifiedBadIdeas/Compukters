@@ -257,6 +257,12 @@ task `testKotlinObjectModelVmConformance`.
 
 **Related work:** not scheduled
 
+Stateless enums also expose cached, typed `EnumType.entries`, including empty enums and separately
+compiled library enums. The [collection contract](../stdlib/collections.md#immutable-enum-entries)
+owns its immutable list operations and executable evidence. This does not add `values()`, `valueOf()`,
+`name`, `ordinal` or `compareTo()` execution support. The structural `Enum.compareTo` declaration keeps
+IDE enum inheritance complete without claiming those runtime operations.
+
 ## Secondary constructors and stateful enums
 
 **Status:** Unsupported.
