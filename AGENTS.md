@@ -74,7 +74,9 @@ VM code lives in `host/compukter-vm`. Wiki guides are grouped under
   failure without changing the Gradle exit code.
 - Use `./gradlew-sandbox-dev-parallel <tasks>` only for interactive development runs such as `runClient` or
   `runGameTestServer`, or when the user explicitly requests live per-task output. It delegates to
-  `./gradlew-sandbox-dev --parallel <tasks> -PcompukterVmBuildJobs=$(nproc)`.
+  `./gradlew-sandbox-dev --parallel <tasks>`. Managed main and `addons/dev` builds share one workspace
+  slot and default to eight Gradle workers and eight Rust jobs. Override defaults with
+  `COMPUKTERS_GRADLE_WORKERS` / `COMPUKTERS_RUST_JOBS`, or explicit command-line limits.
 - `./gradlew-sandbox-dev-parallel verifyLocalFast` is the default fast feedback entrypoint. It runs build-script and
   policy checks plus a curated JVM test slice; it does not claim complete module coverage.
 - `./gradlew-sandbox-dev-parallel-summary verifyLocalFull` verifies the complete current checkout while keeping its

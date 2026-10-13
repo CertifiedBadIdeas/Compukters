@@ -6,4 +6,6 @@ APP_HOME=$(CDPATH= cd -P "$(dirname "$0")" >/dev/null && pwd) || exit 1
 
 export GRADLE_USER_HOME="$APP_HOME/../../.gradle-sandbox"
 
-exec "$APP_HOME/gradlew" --no-daemon -Dorg.gradle.vfs.watch=false "$@"
+export COMPUKTERS_BUILD_ROOT=$(CDPATH= cd -P "$APP_HOME/../.." >/dev/null && pwd)
+export COMPUKTERS_BUILD_GRADLE="$APP_HOME/gradlew"
+exec python3 "$COMPUKTERS_BUILD_ROOT/tools/gradle/run.py" --root "$COMPUKTERS_BUILD_ROOT" "$COMPUKTERS_BUILD_ROOT/tools/gradle/build.sh" "$@"

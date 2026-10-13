@@ -226,7 +226,9 @@ artifact.write_bytes(b'downloaded during first build')
 
     def install_wrapper(self, root):
         (root / "tools/gradle").mkdir(parents=True)
-        shutil.copy2(SCRIPT, root / "tools/gradle/cache.py")
+        subprocess.run(["git", "init", "-q", str(root)], check=True)
+        for name in ("cache.py", "run.py", "build.sh"):
+            shutil.copy2(ROOT / "tools/gradle" / name, root / "tools/gradle" / name)
         shutil.copy2(ROOT / "gradlew-sandbox", root / "gradlew-sandbox")
         gradle = root / "gradlew"
         gradle.write_text("""#!/usr/bin/env python3
@@ -256,7 +258,8 @@ sys.exit(int(os.environ.get('FAKE_GRADLE_EXIT', '0')))
             result = self.run_cache("seed", home)
             self.assertNotEqual(0, result.returncode)
             self.assertIn("in use", result.stderr)
-            self.assertEqual(["--no-daemon", "-Dorg.gradle.vfs.watch=false", "task",
+            self.assertEqual(["--no-daemon", "-Dorg.gradle.vfs.watch=false", "--max-workers=8",
+                              "-PcompukterVmBuildJobs=8", "task",
                               "-Pmessage=hello world"], (home / "arguments").read_text().splitlines())
             process.communicate(timeout=10)
             self.assertEqual(7, process.returncode)

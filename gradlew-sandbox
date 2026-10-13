@@ -6,11 +6,6 @@ APP_HOME=$(CDPATH= cd -P "$(dirname "$0")" >/dev/null && pwd) || exit 1
 
 export GRADLE_USER_HOME="$APP_HOME/.gradle-sandbox"
 
-python3 "$APP_HOME/tools/gradle/cache.py" --root "$APP_HOME" prepare
-if flock --shared "$GRADLE_USER_HOME/.compukters-cache.lock" \
-    "$APP_HOME/gradlew" --no-daemon -Dorg.gradle.vfs.watch=false "$@"; then
-    python3 "$APP_HOME/tools/gradle/cache.py" --root "$APP_HOME" finish || \
-        printf 'Gradle succeeded; its cache template could not be refreshed.\n' >&2
-else
-    exit "$?"
-fi
+export COMPUKTERS_BUILD_ROOT="$APP_HOME"
+export COMPUKTERS_BUILD_GRADLE="$APP_HOME/gradlew"
+exec python3 "$APP_HOME/tools/gradle/run.py" --root "$APP_HOME" "$APP_HOME/tools/gradle/build.sh" "$@"
