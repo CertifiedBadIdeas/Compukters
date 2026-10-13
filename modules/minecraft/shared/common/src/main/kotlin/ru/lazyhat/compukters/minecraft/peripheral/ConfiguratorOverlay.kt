@@ -11,7 +11,9 @@ import net.minecraft.core.Direction
 import net.minecraft.server.level.ServerLevel
 import net.minecraft.server.level.ServerPlayer
 import net.minecraft.world.InteractionHand
+import net.minecraft.world.phys.AABB
 import net.minecraft.world.phys.Vec3
+import ru.lazyhat.compukters.minecraft.computer.ComputerAddonHosts
 import ru.lazyhat.compukters.minecraft.computer.ComputerBlockEntity
 import ru.lazyhat.compukters.minecraft.display.DisplayBlockEntity
 import ru.lazyhat.compukters.minecraft.display.DisplayStorage
@@ -25,7 +27,51 @@ data class ConfiguratorOverlayDevice(
     val network: UUID? = null,
     val networkName: String = "",
     val screen: UUID? = null,
-)
+    val bounds: ConfiguratorDeviceBounds? = null,
+) {
+    init {
+        require(bounds == null || bounds.contains(position))
+    }
+
+    fun contains(block: BlockPos?): Boolean = block != null && (bounds?.contains(block) ?: (position == block))
+
+    fun box(): AABB = bounds?.box() ?: AABB(position)
+}
+
+/** Bounded block geometry; identities and exact-instance stamps remain anchored to one block entity. */
+data class ConfiguratorDeviceBounds(
+    val minimum: BlockPos,
+    val maximum: BlockPos,
+) {
+    init {
+        require(maximum.x.toLong() - minimum.x in 0L until 64L)
+        require(maximum.y.toLong() - minimum.y in 0L until 64L)
+        require(maximum.z.toLong() - minimum.z in 0L until 64L)
+    }
+
+    fun contains(block: BlockPos): Boolean =
+        block.x in minimum.x..maximum.x && block.y in minimum.y..maximum.y && block.z in minimum.z..maximum.z
+
+    fun box(): AABB = AABB(minimum).minmax(AABB(maximum))
+
+    companion object {
+        fun from(
+            box: AABB?,
+            anchor: BlockPos,
+            contact: BlockPos,
+        ): ConfiguratorDeviceBounds? {
+            if (box == null) return null
+            val coordinates = listOf(box.minX, box.minY, box.minZ, box.maxX, box.maxY, box.maxZ)
+            if (coordinates.any { !it.isFinite() || it != kotlin.math.floor(it) || it !in -30_000_000.0..30_000_000.0 }) return null
+            return runCatching {
+                ConfiguratorDeviceBounds(
+                    BlockPos.containing(box.minX, box.minY, box.minZ),
+                    BlockPos.containing(box.maxX - 1, box.maxY - 1, box.maxZ - 1),
+                ).takeIf { it.contains(anchor) && it.contains(contact) }
+            }.getOrNull()
+        }
+    }
+}
 
 data class ConfiguratorOverlayScreen(
     val id: UUID,
@@ -121,24 +167,40 @@ object ConfiguratorOverlayServer {
             ) {
                 continue
             }
-            val identities =
+            val geometry =
                 if (entity is ComputerBlockEntity) {
                     emptyList()
                 } else {
-                    Direction.entries.flatMap { PeripheralDeviceNames.resolveContact(level, entity.blockPos, it) }.distinct()
+                    Direction.entries
+                        .flatMap { ComputerAddonHosts.resolvePeripheralGeometry(level, entity.blockPos, it) }
+                        .distinctBy { it.identity }
                 }
-            if (entity !is ComputerBlockEntity && entity !is DisplayBlockEntity && identities.isEmpty()) continue
-            val screen = (entity as? DisplayBlockEntity)?.let { directory.byPanel(UUID.fromString(it.checkpointIdentity)) }
-            val instance = screen?.id ?: PeripheralNetworkAccess.instance(entity)
+            if (entity !is ComputerBlockEntity && entity !is DisplayBlockEntity && geometry.isEmpty()) continue
+            val position =
+                if (entity is ComputerBlockEntity || entity is DisplayBlockEntity) entity.blockPos else geometry.first().identity.anchor
+            if (devices.any { it.position == position } || !level.hasChunkAt(position)) continue
+            val anchor = level.getBlockEntity(position)?.takeUnless { it.isRemoved } ?: continue
+            val identities =
+                geometry.map {
+                    PeripheralDeviceIdentity(
+                        it.identity.providerId,
+                        level.dimension().toString(),
+                        it.identity.anchor,
+                        it.identity.deviceKey,
+                    )
+                }
+            val screen = (anchor as? DisplayBlockEntity)?.let { directory.byPanel(UUID.fromString(it.checkpointIdentity)) }
+            val instance = screen?.id ?: PeripheralNetworkAccess.instance(anchor)
             val network = instance?.let(networks::networkOf)
             val names =
                 identities.mapNotNull { identity ->
                     network?.members?.firstOrNull { it.instance == instance && it.identity == identity }?.name
                         ?: PeripheralDeviceNameStorage.get(level).directory.nameOf(identity)
                 }
-            val title = screen?.name ?: names.firstOrNull() ?: entity.blockState.block.descriptionId
+            val title = screen?.name ?: names.firstOrNull() ?: anchor.blockState.block.descriptionId
+            val bounds = geometry.firstNotNullOfOrNull { ConfiguratorDeviceBounds.from(it.bounds, position, entity.blockPos) }
             devices +=
-                ConfiguratorOverlayDevice(entity.blockPos.immutable(), title, network?.id, network?.name.orEmpty(), screen?.id)
+                ConfiguratorOverlayDevice(position.immutable(), title, network?.id, network?.name.orEmpty(), screen?.id, bounds)
         }
         val screens =
             directory

@@ -12,6 +12,7 @@ import net.minecraft.core.Direction
 import net.minecraft.core.RegistryAccess
 import net.minecraft.network.RegistryFriendlyByteBuf
 import net.minecraft.world.InteractionHand
+import ru.lazyhat.compukters.minecraft.peripheral.ConfiguratorDeviceBounds
 import ru.lazyhat.compukters.minecraft.peripheral.ConfiguratorOverlayDevice
 import ru.lazyhat.compukters.minecraft.peripheral.ConfiguratorOverlayScreen
 import ru.lazyhat.compukters.minecraft.peripheral.ConfiguratorOverlaySnapshot
@@ -32,7 +33,16 @@ class ConfiguratorOverlayPayloadTest {
                 42,
                 "minecraft:overworld",
                 ConfiguratorOverlaySnapshot(
-                    listOf(ConfiguratorOverlayDevice(BlockPos.ZERO, "panel", id, "factory", id)),
+                    listOf(
+                        ConfiguratorOverlayDevice(BlockPos.ZERO, "panel", id, "factory", id),
+                        ConfiguratorOverlayDevice(
+                            BlockPos(5, 0, 0),
+                            "boiler",
+                            id,
+                            "factory",
+                            bounds = ConfiguratorDeviceBounds(BlockPos(5, 0, 0), BlockPos(7, 7, 2)),
+                        ),
+                    ),
                     listOf(ConfiguratorOverlayScreen(id, "wall", BlockPos.ZERO, Direction.NORTH, 3, 2, listOf(BlockPos.ZERO))),
                     true,
                 ),
@@ -52,6 +62,28 @@ class ConfiguratorOverlayPayloadTest {
             } finally {
                 b.release()
             }
+        }
+    }
+
+    @Test
+    fun `oversized multiblock bounds are rejected on the wire`() {
+        val b = buffer()
+        try {
+            b.writeLong(1)
+            b.writeUtf("minecraft:overworld")
+            b.writeBoolean(false)
+            b.writeVarInt(1)
+            b.writeBlockPos(BlockPos.ZERO)
+            b.writeUtf("boiler")
+            b.writeBoolean(false)
+            b.writeUtf("")
+            b.writeBoolean(false)
+            b.writeBoolean(true)
+            b.writeBlockPos(BlockPos.ZERO)
+            b.writeBlockPos(BlockPos(0, 64, 0))
+            assertFailsWith<IllegalArgumentException> { OverlayReply.CODEC.decode(b) }
+        } finally {
+            b.release()
         }
     }
 

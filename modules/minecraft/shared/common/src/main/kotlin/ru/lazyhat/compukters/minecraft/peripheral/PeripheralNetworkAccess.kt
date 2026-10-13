@@ -50,7 +50,21 @@ object PeripheralNetworkAccess {
         computer: BlockPos,
     ): PeripheralNetwork? {
         if (!level.hasChunkAt(computer)) return null
-        val entity = level.getBlockEntity(computer) ?: return null
+        val contacted = level.getBlockEntity(computer) ?: return null
+        val anchor =
+            if (contacted is ru.lazyhat.compukters.minecraft.computer.ComputerBlockEntity ||
+                contacted is ru.lazyhat.compukters.minecraft.display.DisplayBlockEntity
+            ) {
+                computer
+            } else {
+                net.minecraft.core.Direction.entries
+                    .flatMap { PeripheralDeviceNames.resolveContact(level, computer, it) }
+                    .distinct()
+                    .singleOrNull()
+                    ?.anchor ?: computer
+            }
+        if (!level.hasChunkAt(anchor)) return null
+        val entity = level.getBlockEntity(anchor) ?: return null
         if (entity is ru.lazyhat.compukters.minecraft.display.DisplayBlockEntity) {
             val screen =
                 ru.lazyhat.compukters.minecraft.display.DisplayWorldAccess
@@ -155,7 +169,17 @@ object PeripheralNetworkAccess {
                 return DisplayNetworkAccess.reachable(level, computer, it, contact)
             }
         }
-        return member.identity.takeIf { (contact == null || contact == it.anchor) && available(level, computer, member) }
+        return member.identity.takeIf { identity ->
+            (
+                contact == null || contact == identity.anchor ||
+                    (
+                        level.hasChunkAt(contact) &&
+                            net.minecraft.core.Direction.entries
+                                .any { identity in PeripheralDeviceNames.resolveContact(level, contact, it) }
+                    )
+            ) &&
+                available(level, computer, member)
+        }
     }
 
     internal fun available(

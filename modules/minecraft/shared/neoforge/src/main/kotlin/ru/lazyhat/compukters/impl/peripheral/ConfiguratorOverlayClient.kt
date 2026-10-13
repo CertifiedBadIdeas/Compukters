@@ -118,7 +118,7 @@ internal object ConfiguratorOverlayClient {
                 Component.translatable("overlay.compukters.configurator.mode." + listOf("name", "network", "display")[mode]),
             )
         val hover = (minecraft.hitResult as? BlockHitResult)?.blockPos
-        val device = snapshot.devices.firstOrNull { it.position == hover }
+        val device = snapshot.devices.firstOrNull { it.contains(hover) }
         if (device != null) {
             result += Component.translatable(device.title)
             device.network?.let { result += Component.translatable("overlay.compukters.configurator.network", device.networkName) }

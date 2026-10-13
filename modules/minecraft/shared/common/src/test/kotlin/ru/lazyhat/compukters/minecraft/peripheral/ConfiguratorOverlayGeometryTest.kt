@@ -21,6 +21,45 @@ class ConfiguratorOverlayGeometryTest {
     private val id = UUID.fromString("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa")
 
     @Test
+    fun `multiblock hover and outline use whole geometry from every tank segment`() {
+        val origin = BlockPos(8, 10, -5)
+        val boiler = ConfiguratorOverlayDevice(origin, "boiler", id, bounds = ConfiguratorDeviceBounds(origin, origin.offset(2, 7, 2)))
+        val computer = ConfiguratorOverlayDevice(origin.west(3), "computer", id)
+        val other = ConfiguratorOverlayDevice(origin.east(5), "other")
+        val snapshot = ConfiguratorOverlaySnapshot(listOf(boiler, computer, other), emptyList())
+        for (mode in 0..2) {
+            for (hover in listOf(origin, origin.offset(1, 4, 1), origin.offset(2, 7, 2))) {
+                val outlines = ConfiguratorOverlayGeometry.outlines(snapshot, mode, hover, null, null)
+                assertEquals(3, outlines.size)
+                assertTrue(outlines[0].strong && outlines[1].strong && !outlines[2].strong)
+                assertEquals(3.016, outlines[0].bounds.xsize, 0.000001)
+                assertEquals(8.016, outlines[0].bounds.ysize, 0.000001)
+                assertEquals(3.016, outlines[0].bounds.zsize, 0.000001)
+            }
+        }
+        assertFalse(boiler.contains(origin.above(8)))
+        assertFalse(boiler.contains(null))
+    }
+
+    @Test
+    fun `provider geometry rejects unbounded fractional reversed or unrelated bounds`() {
+        val origin = BlockPos.ZERO
+        val valid =
+            net.minecraft.world.phys
+                .AABB(origin)
+                .expandTowards(2.0, 7.0, 2.0)
+        assertNotNull(ConfiguratorDeviceBounds.from(valid, origin, origin.above(7)))
+        assertNull(ConfiguratorDeviceBounds.from(valid, origin, origin.above(8)))
+        assertNull(ConfiguratorDeviceBounds.from(valid.move(0.5, 0.0, 0.0), origin, origin))
+        assertNull(ConfiguratorDeviceBounds.from(valid.expandTowards(64.0, 0.0, 0.0), origin, origin))
+        assertFailsWith<IllegalArgumentException> { ConfiguratorDeviceBounds(origin, origin.west()) }
+        assertFailsWith<IllegalArgumentException> { ConfiguratorDeviceBounds(origin, origin.above(64)) }
+        assertFailsWith<IllegalArgumentException> {
+            ConfiguratorOverlayDevice(origin.above(10), "invalid", bounds = ConfiguratorDeviceBounds(origin, origin.above(7)))
+        }
+    }
+
+    @Test
     fun `replacement inside a hole stays distinguishable until it joins`() {
         for (facing in listOf(Direction.NORTH, Direction.SOUTH, Direction.WEST, Direction.EAST)) {
             val origin = BlockPos(197, -58, 176)
