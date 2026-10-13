@@ -17,6 +17,10 @@ headings so this page has one stable URL that can be shared outside the reposito
   their dependency lines can be commented out. Loom supplies Connector's clean Minecraft path and remaps every
   Fabric API module for the development environment.
 
+- Immutable Guest records now use native value classes throughout the platform API, addon observations, system
+  programs and examples, including terminal events, process/compiler results and boiler telemetry. Recompile
+  Guest programs against the updated platform and addon bundles. Boiler controller checks execute in the Guest VM.
+
 - Added an empty independent Cosmonautics addon scaffold and pinned Cosmonautics in the all-addon development stand;
   Guest APIs and spacecraft controls will follow separately. The existing Crafts & Additions addon is also published
   independently and pinned as a submodule.

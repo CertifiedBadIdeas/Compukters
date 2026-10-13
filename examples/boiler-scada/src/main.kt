@@ -57,7 +57,7 @@ fun configuredBurners(): Array<String> =
         "boiler_burner_9",
     )
 
-data class Telemetry(
+value class Telemetry(
     val sequence: Int,
     val sample: BoilerSample,
     val burners: List<BurnerStatus>,

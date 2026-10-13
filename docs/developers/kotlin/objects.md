@@ -355,6 +355,12 @@ subset. `@JvmInline` is deliberately rejected as JVM syntax.
 See [value text and hashing]({{ '/STDLIB-SUPPORT/core-text/#value-text-and-hashing' | relative_url }}) for
 `toString`, `hashCode`, and generated-property rules.
 
+Platform metadata also discovers nested scalar value classes (for example `ProcessResult.Exited`), and
+linking an inline record imports nominal payload types even when the caller does not directly reference
+those properties. `nested value class scalar metadata uses the full owner path` covers metadata;
+`testKotlinBoilerControlVmConformance` executes platform results/events through interfaces, nullable
+metadata, `Any` and lists alongside all seven boiler controller lifecycle/interlock scenarios.
+
 ### Value-class initializer dependencies
 
 Value-class initializers retain their literal pool entries and admitted platform calls, including exception

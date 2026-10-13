@@ -39,11 +39,6 @@ dependencies {
     testImplementation(kotlin("test"))
 }
 
-// Exercise the exact portable controller shipped with the Guest example on the JVM.
-kotlin.sourceSets.named("test") {
-    kotlin.srcDir(rootProject.file("examples/boiler-scada/src/control"))
-}
-
 val compuktersPlatformBundle = configurations.create("compuktersPlatformBundle") {
     isCanBeConsumed = false
     isCanBeResolved = true
@@ -300,7 +295,7 @@ tasks.test {
     inputs.dir(rootProject.layout.projectDirectory.dir("examples/inventory-report/src"))
     dependsOn(tasks.jar)
     filter.excludeTestsMatching("ru.lazyhat.compukters.compiler.worker.integration.*")
-    filter.excludeTestsMatching("*SCADA example compiles against the actual addon bundle*")
+    filter.excludeTestsMatching("*example compiles against the actual addon bundle*")
     inputs.file(workerJar)
     inputs.files(addonGuestApiFixtureBundle)
     systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
@@ -2094,5 +2089,41 @@ tasks.register<Test>("compileBoilerScadaExample") {
 tasks.withType<org.jmailen.gradle.kotlinter.tasks.ConfigurableKtLintTask>().configureEach {
     if (name == "formatKotlinTest" || name == "lintKotlinTest") {
         source(rootProject.fileTree("examples/boiler-scada/src") { include("**/*.kt") })
+        source(file("src/test/resources/kotlin/boiler-control/ControllerScenarios.kt"))
     }
+}
+
+val boilerControlConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-boiler-control.cpkt")
+tasks.register<Test>("generateBoilerControlConformanceArtifact") {
+    description = "Compiles the shipped Guest boiler controller and its lifecycle and output interlock checks."
+    group = "verification"
+    dependsOn(tasks.jar)
+    useJUnitPlatform()
+    testClassesDirs = sourceSets.test.get().output.classesDirs
+    classpath = sourceSets.test.get().runtimeClasspath
+    filter.includeTestsMatching("*boiler controller value records execute startup drainage cooldown and interlocks*")
+    inputs.file(workerJar)
+    inputs.file(rootProject.file("examples/boiler-scada/src/control/BoilerControl.kt"))
+    inputs.file("src/test/resources/kotlin/boiler-control/ControllerScenarios.kt")
+    outputs.file(boilerControlConformanceArtifact)
+    systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
+    systemProperty("compukter.vm.boilerControlArtifact", boilerControlConformanceArtifact.get().asFile.absolutePath)
+}
+
+tasks.register<Test>("compilePidOneThrusterExample") {
+    group = "verification"
+    description = "Compiles the complete PID example against the actual Sable and Propulsion bundles."
+    dependsOn(tasks.jar)
+    useJUnitPlatform()
+    testClassesDirs = sourceSets.test.get().output.classesDirs
+    classpath = sourceSets.test.get().runtimeClasspath
+    filter.includeTestsMatching("*PID example compiles against the actual addon bundles*")
+    val sable = providers.gradleProperty("compuktersSableGuestApiBundle")
+    val propulsion = providers.gradleProperty("compuktersPropulsionGuestApiBundle")
+    inputs.files(sable, propulsion)
+    inputs.dir(rootProject.file("examples/pid-one-thruster/src"))
+    inputs.file(workerJar)
+    systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
+    sable.orNull?.let { systemProperty("compukters.sablePidBundle", file(it).absolutePath) }
+    propulsion.orNull?.let { systemProperty("compukters.propulsionPidBundle", file(it).absolutePath) }
 }

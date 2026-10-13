@@ -48,12 +48,12 @@ fun main(args: Array<String>) {
 }
 
 sealed interface KotlincArguments {
-    data class Source(
+    value class Source(
         val path: Path,
         val output: Path,
     ) : KotlincArguments
 
-    data class Error(
+    value class Error(
         val message: String,
     ) : KotlincArguments
 }
