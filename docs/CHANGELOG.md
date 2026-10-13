@@ -560,6 +560,7 @@ listed in [Kotlin support](developers/kotlin-support.md) and [standard library s
 - Identifier matching supports case-insensitive word fragments and CamelCase with prefix ranking and highlighted
   matches. Interpolation suggests visible variables after `$`. Hover shows structured English KDoc with parameter,
   return, exception and other documentation sections, Markdown prose and code examples, and scrolling for long text.
+  Hover requests start after a 150 ms pointer pause.
   The editor highlights KDoc tags, subjects, links and code. Documentation comes from project and attached
   library declarations. Completion temporarily pauses diagnostic passes while retaining unrelated problems.
 - Peripheral provider values use a dedicated color and `P` completion badge; device type references retain class
