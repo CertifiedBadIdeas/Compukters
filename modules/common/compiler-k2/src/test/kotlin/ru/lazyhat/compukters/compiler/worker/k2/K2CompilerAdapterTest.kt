@@ -153,7 +153,7 @@ class K2CompilerAdapterTest {
                     internal fun internalLabel(size: Int): String = label(size)
 
                     fun <T> nullableIdentity(value: T): T { val nullable: T? = value; return nullable!! }
-                    fun <T> bad(value: T): T { lateinit var delayed: Any; delayed = value as Any; return value }
+                    fun <T> bad(value: T): T { val unsupported = object {}; return value }
                     """.trimIndent(),
                 )
             }
