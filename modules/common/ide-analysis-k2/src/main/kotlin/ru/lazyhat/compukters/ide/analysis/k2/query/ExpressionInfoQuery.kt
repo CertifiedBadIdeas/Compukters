@@ -19,7 +19,6 @@
 package ru.lazyhat.compukters.ide.analysis.k2.query
 
 import org.jetbrains.kotlin.analysis.api.KaExperimentalApi
-import org.jetbrains.kotlin.analysis.api.KaSession
 import org.jetbrains.kotlin.analysis.api.analyze
 import org.jetbrains.kotlin.analysis.api.components.expressionType
 import org.jetbrains.kotlin.analysis.api.components.render
@@ -28,7 +27,6 @@ import org.jetbrains.kotlin.analysis.api.renderer.declarations.KaCallableReturnT
 import org.jetbrains.kotlin.analysis.api.renderer.declarations.impl.KaDeclarationRendererForSource
 import org.jetbrains.kotlin.analysis.api.renderer.types.impl.KaTypeRendererForSource
 import org.jetbrains.kotlin.analysis.api.symbols.KaCallableSymbol
-import org.jetbrains.kotlin.analysis.api.symbols.KaSymbol
 import org.jetbrains.kotlin.analysis.api.symbols.symbol
 import org.jetbrains.kotlin.psi.KtExpression
 import org.jetbrains.kotlin.psi.KtNameReferenceExpression
@@ -37,7 +35,6 @@ import org.jetbrains.kotlin.types.Variance
 import ru.lazyhat.compukters.ide.analysis.AnalysisQuery
 import ru.lazyhat.compukters.ide.analysis.AnalysisResult
 import ru.lazyhat.compukters.ide.analysis.AnalysisResultLimits
-import ru.lazyhat.compukters.ide.analysis.DeclarationLocation
 import ru.lazyhat.compukters.ide.analysis.EditorExpressionInfo
 import ru.lazyhat.compukters.ide.analysis.k2.standalone.AdmittedK2Snapshot
 import ru.lazyhat.compukters.ide.analysis.protocol.AnalysisLimits
@@ -98,7 +95,7 @@ internal object ExpressionInfoQuery {
                                 DeclarationOriginMapper
                                     .run { map(declarationSymbol, snapshot) }
                                     ?.let { mapped -> DeclarationOriginMapper.run { mapped.origin() } },
-                            documentation = documentation(declarationSymbol, snapshot, limits.detailTextBytes),
+                            documentation = SymbolDocumentation.run { documentation(declarationSymbol, snapshot, limits.detailTextBytes) },
                         )
                     }
                     val expression = expressions.firstOrNull { candidate -> candidate.expressionType != null } ?: return@analyze null
@@ -123,7 +120,7 @@ internal object ExpressionInfoQuery {
                         rendered,
                         signature = signature,
                         origin = origin,
-                        documentation = symbol?.let { documentation(it, snapshot, limits.detailTextBytes) },
+                        documentation = symbol?.let { SymbolDocumentation.run { documentation(it, snapshot, limits.detailTextBytes) } },
                     )
                 }
             }
@@ -133,57 +130,5 @@ internal object ExpressionInfoQuery {
             snapshot.sourceLengthsUtf16,
             AnalysisResultLimits(maxDetailUtf8Bytes = limits.detailTextBytes),
         )
-    }
-
-    private fun KaSession.documentation(
-        symbol: KaSymbol,
-        snapshot: AdmittedK2Snapshot,
-        maximumBytes: Int,
-    ): String? {
-        val source = symbol.psi as? KtNamedDeclaration
-        val declaration =
-            if (source?.docComment != null) {
-                source
-            } else {
-                val mapped = DeclarationOriginMapper.run { map(symbol, snapshot) }
-                val (file, range) =
-                    when (mapped) {
-                        is MappedDeclaration.PlatformTarget -> {
-                            (snapshot.platformSourceFiles[mapped.sourcePath] ?: return null) to
-                                EditorRange(mapped.startUtf16, mapped.endUtf16)
-                        }
-
-                        is MappedDeclaration.Location -> {
-                            val location = mapped.value as? DeclarationLocation.Source ?: return null
-                            (snapshot.files[location.path] ?: return null) to location.range
-                        }
-
-                        null -> {
-                            return null
-                        }
-                    }
-                if (file.textLength == 0) return null
-                generateSequence(file.findElementAt(range.startUtf16.coerceAtMost(file.textLength - 1))) { it.parent }
-                    .filterIsInstance<KtNamedDeclaration>()
-                    .firstOrNull { it.textRange.startOffset <= range.startUtf16 && it.textRange.endOffset >= range.endUtf16 }
-            }
-        val raw = declaration?.docComment?.text ?: return null
-        val text =
-            raw
-                .removePrefix("/**")
-                .removeSuffix("*/")
-                .lines()
-                .mapIndexed { index, line ->
-                    val margin = line.trimStart()
-                    when {
-                        margin.startsWith('*') -> margin.removePrefix("*").removePrefix(" ")
-                        index == 0 -> line.removePrefix(" ")
-                        else -> line
-                    }
-                }.dropWhile(String::isBlank)
-                .dropLastWhile(String::isBlank)
-                .joinToString("\n")
-                .trimEnd()
-        return boundedUtf8(text, maximumBytes).takeIf { it.isNotBlank() }
     }
 }

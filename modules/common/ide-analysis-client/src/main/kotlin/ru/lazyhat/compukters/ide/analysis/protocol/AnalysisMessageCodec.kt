@@ -821,6 +821,7 @@ private class MessageSink {
                 string(item.signature)
                 nullableRange(item.activeParameter)
                 boolean(item.bestCandidate)
+                nullableString(item.activeParameterDocumentation)
             }
         }
     }
@@ -1258,6 +1259,7 @@ private class MessageSource(
                         string(context.limits.detailTextBytes),
                         nullableRange(),
                         boolean(),
+                        nullableString(context.limits.detailTextBytes),
                     )
                 },
             )

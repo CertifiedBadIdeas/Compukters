@@ -51,7 +51,12 @@ import kotlin.test.assertIs
 class CompletionIntegrationTest {
     @Test
     fun `forked worker returns parameter information`() {
-        val source = "fun greet(name: String, count: Int) = Unit\nfun main() { greet(\"Ada\", 2) }"
+        val source =
+            """
+            /** @param count number of repetitions with Unicode 😀 */
+            fun greet(name: String, count: Int) = Unit
+            fun main() { greet("Ada", 2) }
+            """.trimIndent()
         val path = VirtualSourcePath.kotlin("main.kt")
         val sources =
             ProjectSnapshot.of(
@@ -83,6 +88,7 @@ class CompletionIntegrationTest {
 
             val item = assertIs<ru.lazyhat.compukters.ide.analysis.EditorParameterInfo>(parameterInfo.value).items.single()
             assertEquals("count: Int", item.activeParameter?.let { item.signature.substring(it.startUtf16, it.endUtf16) })
+            assertEquals("number of repetitions with Unicode 😀", item.activeParameterDocumentation)
         }
     }
 
