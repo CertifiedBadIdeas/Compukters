@@ -363,6 +363,16 @@ registerKotlinVmConformance(
 )
 
 registerKotlinVmConformance(
+    taskName = "testKotlinRocketAscentVmConformance",
+    taskDescription = "Executes the shipped rocket ascent feedback, bounds and handoff checks in the pinned VM.",
+    artifactTask = ":compiler-k2:generateRocketAscentConformanceArtifact",
+    artifact = project(":compiler-k2").layout.buildDirectory.file("generated/conformance/kotlin-rocket-ascent.cpkt"),
+    cargoTargetDirectory = ".toolchain/build/cargo/compiler-k2-math-conformance",
+    artifactEnvironmentVariable = "COMPUKTER_KOTLIN_ROCKET_ASCENT_ARTIFACT",
+    conformanceScenario = "rocket-ascent",
+)
+
+registerKotlinVmConformance(
     taskName = "testKotlinRotationsVmConformance",
     taskDescription = "Executes rotation factories, shortest-arc interpolation and long seeded chains.",
     artifactTask = ":compiler-k2:generateRotationsConformanceArtifact",
