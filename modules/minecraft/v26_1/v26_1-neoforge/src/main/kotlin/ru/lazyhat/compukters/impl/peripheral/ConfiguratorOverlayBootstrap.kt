@@ -46,13 +46,12 @@ internal object ConfiguratorOverlayBootstrap {
         val camera = event.levelRenderState.cameraRenderState.pos
         val pose = event.poseStack
         pose.pushPose()
-        val relative = frame.outlines.map { it.copy(bounds = it.bounds.move(-camera.x, -camera.y, -camera.z)) }
         event.submitNodeCollector.submitCustomGeometry(
             pose,
             net.minecraft.client.renderer.rendertype.RenderTypes
                 .entityTranslucentEmissive(texture),
         ) { saved, vertices ->
-            ConfiguratorOutlineMesh.draw(saved, vertices, relative, frame.time)
+            ConfiguratorOutlineMesh.draw(saved, vertices, frame.outlines, frame.time, camera)
         }
         pose.popPose()
     }

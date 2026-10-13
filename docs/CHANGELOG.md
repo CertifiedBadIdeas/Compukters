@@ -13,6 +13,9 @@ headings so this page has one stable URL that can be shared outside the reposito
 
 ## 0.6.0 — In development
 
+- Configurator outlines on Sable constructions transform block coordinates into the world before applying
+  the camera offset, preserving their placement and rotation while the player moves.
+
 - Added programmable Create pumps with persistent remotely reversible fluid flow and normally disengaged
   programmable clutches that release their load when the controlling program or peripheral connection ends.
   Their Guest value classes use the shared typed and named peripheral discovery; addon blocks share the Compukters creative tab.
