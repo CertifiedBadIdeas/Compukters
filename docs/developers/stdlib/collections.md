@@ -397,9 +397,11 @@ lower instruction cost or faster execution for small inputs.
 
 `sequence { yield(...) }`, `generateSequence`, `sequenceOf`, array/iterator adapters and
 other sequence operations are outside this supported subset. Covariant primitive-to-Any
-sequence views have no execution claim in this stage. Constructing `filter` with a retained
-`T`-typed callback inside an ordinary generic helper can produce an unresolved callable-signature
-diagnostic; that shape has no execution claim. Direct terminal calls inside generic helpers are
+sequence views have no execution claim in this stage. Ordinary generic helpers can forward existing
+callbacks or construct retained lambdas and bound member references for `filter`, `filterNot` and
+`map`. Their owners and generic callers specialize before closure layout, so captures retain their
+concrete scalar/reference types. Helpers returning a predicate or a sequence retain captured values
+and shared mutable cells after the helper returns. Direct terminal calls inside generic helpers are
 covered separately for primitive, nullable and reference elements.
 
 **Evidence:** `MinimalScriptLoweringTest`, test `sequences preserve lazy demand iterator state
@@ -414,8 +416,12 @@ families, nullable elements and reference accumulators, including ordered non-co
 empty inputs, availability-only queries, early stopping, non-local returns, callback/upstream
 exceptions and single evaluation of the initial accumulator. `checkGenericTerminals` exercises
 immediate terminal callbacks through an ordinary generic helper with Int, Int? and reference elements.
-Overflow guards are not exercised
-at the multi-billion-element threshold by this bounded conformance scenario.
+`checkGenericSequence` exercises retained filter/filterNot/map callbacks, generic forwarding callers,
+escaping predicate factories and bound member references across all twelve primitive families,
+nullable elements and references. The main fixture also covers different source/result types and
+mutation of captured generic values before returning a sequence. `generic sequence helpers specialize
+retained callback signatures` protects both forwarded and locally constructed callback lowering.
+Overflow guards are not exercised at the multi-billion-element threshold by this bounded conformance scenario.
 `sequences reject non local returns from deferred callbacks` covers map/filter/filterNot rejection.
 `DiagnosticQueryTest`,
 `lazy sequences resolve with source and metadata inputs`, covers both IDE platform modes.

@@ -57,7 +57,11 @@ References allocate ordinary managed closures and remain subject to heap and exe
 Local functions with their own type parameters specialize inferred or explicit concrete arguments,
 including all twelve primitive families, nullable values and admitted references. Local helpers inside
 generic top-level functions also specialize their enclosing captures before layout; defaults and escaping
-references retain the concrete types. Generic callers of these owners use the same lexical specialization.
+references retain the concrete types. A generic top-level owner that creates an anonymous callback or
+callable-reference adapter also receives a concrete lexical body even when it has no named local
+function. Generic callers of these owners use the same lexical specialization. Sequence conformance
+fixtures exercise this path with retained callbacks, bound references, escaping predicates and mutable
+captures; `generic sequence helpers specialize retained callback signatures` protects its lowering.
 Direct primitive calls stay unboxed; each invocation retains its own mutable capture cells.
 
 ```kotlin

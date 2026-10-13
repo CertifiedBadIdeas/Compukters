@@ -14,6 +14,8 @@ import org.jetbrains.kotlin.ir.declarations.IrSimpleFunction
 import org.jetbrains.kotlin.ir.expressions.IrBlockBody
 import org.jetbrains.kotlin.ir.expressions.IrCall
 import org.jetbrains.kotlin.ir.expressions.IrContainerExpression
+import org.jetbrains.kotlin.ir.expressions.IrFunctionExpression
+import org.jetbrains.kotlin.ir.expressions.IrFunctionReference
 import org.jetbrains.kotlin.ir.expressions.IrRichFunctionReference
 import org.jetbrains.kotlin.ir.symbols.IrTypeParameterSymbol
 import org.jetbrains.kotlin.ir.symbols.UnsafeDuringIrConstructionAPI
@@ -44,7 +46,7 @@ internal class GuestLocalSpecialization {
         otherRoots: List<IrElement>,
     ): List<IrSimpleFunction> {
         functions.filter { it.parent is IrFile && it.typeParameters.isNotEmpty() }.forEach { function ->
-            if (function.containsLocalDeclaration()) templates += function
+            if (function.requiresConcreteLexicalBody()) templates += function
         }
         // A generic caller must also have a concrete lexical body before rewriting its callee.
         do {
@@ -185,16 +187,21 @@ internal fun IrType.containsTypeParameter(): Boolean =
     this is IrSimpleType &&
         (classifier is IrTypeParameterSymbol || arguments.any { (it as? IrTypeProjection)?.type?.containsTypeParameter() == true })
 
-private fun IrSimpleFunction.containsLocalDeclaration(): Boolean {
+private fun IrSimpleFunction.requiresConcreteLexicalBody(): Boolean {
     var found = false
     accept(
         object : IrVisitorVoid() {
             override fun visitElement(element: IrElement) {
+                // Anonymous callbacks and reference adapters need the same concrete captures
+                // as named local functions, even when the owner has no named declaration.
+                if (element is IrFunctionExpression || element is IrFunctionReference || element is IrRichFunctionReference) {
+                    found = true
+                }
                 if (!found) element.acceptChildren(this, null)
             }
 
             override fun visitSimpleFunction(declaration: IrSimpleFunction) {
-                if (declaration !== this@containsLocalDeclaration && declaration.isGuestLocalFunction()) found = true
+                if (declaration !== this@requiresConcreteLexicalBody && declaration.isGuestLocalFunction()) found = true
                 super.visitSimpleFunction(declaration)
             }
         },
