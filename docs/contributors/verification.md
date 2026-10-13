@@ -52,6 +52,24 @@ reuse stabilizes. Build-version selection tracks Git tags on `HEAD`, so adding o
 the cached configuration when its output changes. Do not suppress Configuration Cache errors for an unverified
 graph, or treat successful cache storage as successful functional verification.
 
+## Agent build limits
+
+The main sandbox wrappers and `addons/dev` share one workspace build slot across linked worktrees.
+Competing builds wait before cache preparation or JVM startup. The OS releases the slot on process
+exit, including failures. Existing running builds and older checkouts without these wrappers are not
+retroactively limited. Direct `./gradlew` and standalone addon wrappers do not acquire the slot.
+
+Managed builds default to eight Gradle workers and eight Rust build jobs. Set `COMPUKTERS_GRADLE_WORKERS`
+and `COMPUKTERS_RUST_JOBS` to positive integers to change the defaults. Explicit `--max-workers=N`
+and `-PcompukterVmBuildJobs=N` arguments override them. The Gradle JVM heap remains 4 GiB; these limits
+bound concurrency, not the total memory of child processes.
+
+Run a standalone addon through the same slot from the parent checkout with:
+
+```sh
+(cd addons/create && python3 ../../tools/gradle/run.py --root ../.. ./gradlew-sandbox check)
+```
+
 ## Gradle caches in agent worktrees
 
 The sandbox wrappers keep each checkout's writable Gradle home in `.gradle-sandbox`. New homes are automatically
