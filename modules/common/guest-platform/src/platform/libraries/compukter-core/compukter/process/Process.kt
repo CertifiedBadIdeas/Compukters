@@ -31,11 +31,11 @@ public object Process {
 }
 
 public sealed interface ProcessResult {
-    public data class Exited(
+    public value class Exited(
         val code: Int,
     ) : ProcessResult
 
-    public data class Failed(
+    public value class Failed(
         val reason: ProcessFailureReason,
         val diagnostic: String,
     ) : ProcessResult

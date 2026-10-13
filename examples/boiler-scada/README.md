@@ -105,7 +105,8 @@ addons/createaddition/gradlew-sandbox-dev-parallel-summary check
   -PcompuktersCreateadditionGuestApiBundle="$PWD/addons/createaddition/build/compukters-addon/compukters-createaddition.cagb"
 ```
 
-Controller behavior is exercised by `BoilerScadaControllerTest`, compiling the exact portable controller on the JVM.
+Controller behavior is exercised by `testKotlinBoilerControlVmConformance`, compiling the exact Guest controller
+and running all seven lifecycle/interlock scenarios in the pinned VM with native value records.
 The Crafts & Additions real GameTest uses the actual burner, fuel capability, configurator, Guest compiler and VM;
 it verifies one-mB observation/recovery, device replacement and network loss.
 

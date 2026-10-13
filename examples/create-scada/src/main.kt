@@ -25,7 +25,7 @@ fun area(
 ): Rect2i = Rect2i(Vector2i(x, y), Vector2i(width, height))
 
 // Published as one immutable snapshot: device reads may suspend between fields.
-data class Telemetry(val sequence: Int, val rpm: Float, val load: Float, val target: Int, val connected: Boolean)
+value class Telemetry(val sequence: Int, val rpm: Float, val load: Float, val target: Int, val connected: Boolean)
 
 fun main() {
     runDashboard()

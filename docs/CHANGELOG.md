@@ -13,6 +13,10 @@ headings so this page has one stable URL that can be shared outside the reposito
 
 ## 0.6.0 — In development
 
+- Immutable Guest records now use native value classes throughout the platform API, addon observations, system
+  programs and examples, including terminal events, process/compiler results and boiler telemetry. Recompile
+  Guest programs against the updated platform and addon bundles. Boiler controller checks execute in the Guest VM.
+
 - The Crafts & Additions integration exposes named liquid Blaze Burners with atomic fuel quantity, capacity,
   heat and remaining burn-time readings. The separate `boiler-scada` project starts water/fuel pumps from a
   kinetic battery, switches to steam self-power with battery charging, and reverses the fuel pump on STOP until

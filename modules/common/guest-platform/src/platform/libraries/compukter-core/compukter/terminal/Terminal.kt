@@ -13,16 +13,16 @@ import kotlin.math.Vector2i
 
 /** An owned input snapshot. Receiving it releases the native event before returning. */
 public sealed interface TerminalEvent {
-    public data class Text(
+    public value class Text(
         val text: String,
     ) : TerminalEvent
 
     /** An atomic complete line from the host, admitted only by an opted-in receiver. */
-    public data class SubmittedLine(
+    public value class SubmittedLine(
         val text: String,
     ) : TerminalEvent
 
-    public data class Key(
+    public value class Key(
         val key: TerminalKey,
         val action: TerminalKeyAction,
         val modifiers: TerminalModifiers,

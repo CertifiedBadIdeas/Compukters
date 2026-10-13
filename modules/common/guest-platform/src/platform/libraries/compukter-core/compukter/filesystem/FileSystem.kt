@@ -176,7 +176,7 @@ public object FileSystem {
 
 public enum class FileKind { FILE, DIRECTORY }
 
-public data class FileInfo(
+public value class FileInfo(
     public val kind: FileKind,
     public val sizeBytes: Long,
     public val revision: Long,
