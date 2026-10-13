@@ -18,8 +18,9 @@ headings so this page has one stable URL that can be shared outside the reposito
 
 - Added read-only Cosmonautics space telemetry for Guest Kotlin: Deep Space membership, linked planet parameters,
   instance orbital observations and an atomic snapshot of orbital guidance directions in Sable world axes.
-  Examples cover telemetry and experimental prograde pointing with a creative vector engine; launch and orbital
-  insertion remain separate work.
+  Examples cover telemetry, experimental prograde pointing and a bounded vertical rocket ascent with a creative
+  vector engine. The ascent example handles observed Deep Space entry; uninterrupted transfer and orbital insertion
+  remain separate work.
 
 - The addon development stand loads optional Connector, Forgified Fabric API, Sodium, Voxy and Voxy Worldgen through Gradle;
   their dependency lines can be commented out. Loom supplies Connector's clean Minecraft path and remaps every
