@@ -90,6 +90,23 @@ Mount observations are checked in the ordinary world and on an assembled four-en
 peripheral names, including neutral force directions and read-only ownership.
 Interactive flight under changing load remains a manual scenario; no additional VM or Propulsion ticks are introduced.
 
+## Cosmonautics telemetry
+
+`addons/cosmonautics` owns the `cosmonautics` Guest capability, its ABI lock and typed server adapter.
+`Space.status()` observes dimension/Deep Space membership; `planet()` resolves the current linked planet;
+`orbit()` copies the loaded construction's Deep Space **instance** state in its named orbital frame.
+No controller, subscription or physics propagation is installed. Sable solver motion and orbital instance motion
+remain separate. The generated value replies reuse existing SDK support and canonical Double vectors.
+
+Run the addon `check` and `developmentModJar`. `OrbitObservationTest` covers valid circular/elliptic/hyperbolic
+observations and rejection of nonfinite, inconsistent, singular and unrepresentable numerical inputs.
+The archive check requires the generated contract and Guest bundle and rejects bundled upstream implementations.
+From the workspace, `:compiler-k2:compileSpaceTelemetryExample` with
+`-PcompuktersCosmonauticsGuestApiBundle=<absolute path to the built .cagb>` compiles the real example against the
+actual addon bundle, including its Guest apsis helpers. The test fails if the bundle is missing.
+Real surface/Deep Space and dimension-transfer continuity require a dimension-capable world; focused adapter/build
+checks do not establish those scenarios or successful orbital insertion.
+
 ## Version and compatibility checks
 
 The shared [addon versioning policy]({{ '/ADDON-DEVELOPMENT/' | relative_url }}#first-party-addon-versions) keeps the
