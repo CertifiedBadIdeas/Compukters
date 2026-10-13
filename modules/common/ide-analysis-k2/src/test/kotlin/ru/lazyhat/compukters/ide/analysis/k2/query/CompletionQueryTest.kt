@@ -54,6 +54,23 @@ class CompletionQueryTest {
     }
 
     @Test
+    fun `enum identity properties complete on entries and base references`() {
+        for (attachedSources in listOf(false, true)) {
+            for (expression in listOf("Choice.FIRST", "RedstonePort.Side.ALL", "base")) {
+                val source =
+                    "import compukter.redstone.RedstonePort\nenum class Choice { FIRST }\n" +
+                        "fun main() { val base: Enum<*> = Choice.FIRST; $expression. }"
+                K2QueryFixture.sourceWithGuestApi(attachedSources, "main.kt" to source).use { fixture ->
+                    val items = fixture.complete("main.kt", source.lastIndexOf(". ") + 1).items
+                    for (name in listOf("name", "ordinal")) {
+                        assertTrue(items.any { it.insertText == name && it.kind == CompletionKind.Property }, "$expression: $items")
+                    }
+                }
+            }
+        }
+    }
+
+    @Test
     fun `completion suppresses literal content and comments including nested template literals`() {
         val contexts =
             listOf(
