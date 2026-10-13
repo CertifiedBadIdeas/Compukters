@@ -7,7 +7,7 @@
 import boiler.control.BoilerControl
 import boiler.control.BoilerSample
 import boiler.control.Channel
-import boiler.control.FuelDirection
+import boiler.control.FuelMode
 import boiler.control.Outputs
 import boiler.control.Phase
 import boiler.control.PowerSource
@@ -94,7 +94,7 @@ fun runDashboard(iterations: Int = -1) {
     var applying = false
     var revision = 0
     var requested = ""
-    var applied = Outputs(PowerSource.NONE, FuelDirection.OFF)
+    var applied = Outputs(PowerSource.NONE, FuelMode.OFF)
     val phaseText: UiIndicator
     val waterText: UiText
     val heatText: UiText
@@ -290,7 +290,7 @@ fun runDashboard(iterations: Int = -1) {
                     } catch (ignored: Exception) {
                     }
                     port = null
-                    applied = Outputs(PowerSource.NONE, FuelDirection.OFF)
+                    applied = Outputs(PowerSource.NONE, FuelMode.OFF)
                 } finally {
                     applying = false
                 }
@@ -327,11 +327,11 @@ fun runDashboard(iterations: Int = -1) {
                 }
             pumps.label =
                 when (applied.fuel) {
-                    FuelDirection.FEED -> "FEED CMD"
-                    FuelDirection.DRAIN -> "DRAIN CMD"
+                    FuelMode.FEED -> "FEED PUMP"
+                    FuelMode.DRAIN -> "DRAIN PUMP"
                     else -> "PUMPS OFF"
                 }
-            pumps.color = if (applied.fuel == FuelDirection.OFF) 0x687D8C else Colors.CYAN
+            pumps.color = if (applied.fuel == FuelMode.OFF) 0x687D8C else Colors.CYAN
             boiler.color = if (available && sample.heatLevel > 0) Colors.YELLOW else 0x687D8C
             engine.color = if (available && abs(sample.engineRpm) >= 8f) Colors.GREEN else 0x687D8C
             fuelText.text = if (available) "Liquid fuel: ${sample.fuelAmount}/${sample.fuelCapacity} mB" else "Liquid fuel: --"
@@ -386,8 +386,8 @@ fun sideFor(channel: Channel): RedstonePort.Side =
         Channel.BATTERY -> RedstonePort.Side.FRONT
         Channel.BATTERY_CLUTCH -> RedstonePort.Side.RIGHT
         Channel.STEAM_CLUTCH -> RedstonePort.Side.LEFT
-        Channel.FUEL_CLUTCH -> RedstonePort.Side.TOP
-        Channel.FUEL_REVERSE -> RedstonePort.Side.BOTTOM
+        Channel.FUEL_FEED_CLUTCH -> RedstonePort.Side.TOP
+        Channel.FUEL_DRAIN_CLUTCH -> RedstonePort.Side.BOTTOM
         else -> error("WAIT has no port side")
     }
 
