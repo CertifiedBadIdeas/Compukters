@@ -32,7 +32,7 @@ data class IdePeripheralPickerView(
 
 internal object IdePeripheralPicker {
     const val ROW_HEIGHT = 40
-    private const val DETAILS_HEIGHT = 108
+    private const val DETAILS_HEIGHT = 132
 
     fun selected(view: IdePeripheralPickerView): IdeNamedPeripheral? = view.entries.getOrNull(view.selectedIndex ?: -1)
 
@@ -178,32 +178,42 @@ internal object IdePeripheralPicker {
             )
             val hint =
                 when {
-                    entry == null -> "Select a device to rename or copy its lookup"
+                    entry == null -> "Select a device to rename or copy its name"
                     entry.duplicate -> "Duplicate name: rename before using a lookup"
                     entry.reference == null -> "Bind the device to a network to rename it"
                     else -> "Renaming does not update names in source code"
                 }
             ui(IdeTextKind.Status, fitUi(hint, bounds.width - 16), bounds.left + 8, detailsTop + 54, IdeColors.MUTED, bounds, textZ)
-            val width = (bounds.width - 24) / 3
-            val top = bounds.bottom - 30
+            val width = (bounds.width - 20) / 2
+            val left = bounds.left + 8
+            val right = bounds.left + 12 + width
+            val copyTop = bounds.bottom - 54
+            val editTop = bounds.bottom - 30
+            button(
+                IdeHitAction.PeripheralCopyName,
+                "Copy name",
+                IdeRect(left, copyTop, left + width, copyTop + 22),
+                entry != null,
+                "Copy the exact device name in the network",
+            )
+            button(
+                IdeHitAction.PeripheralCopyLookup,
+                "Copy lookup",
+                IdeRect(right, copyTop, bounds.right - 8, copyTop + 22),
+                lookup(view) != null,
+            )
             button(
                 IdeHitAction.PeripheralInsert,
                 "Insert constant",
-                IdeRect(bounds.left + 8, top, bounds.left + 8 + width, top + 22),
+                IdeRect(left, editTop, left + width, editTop + 22),
                 entry != null && !entry.duplicate && view.writable,
                 "Insert a name constant into the writable Kotlin file",
             )
             button(
                 IdeHitAction.PeripheralRename,
                 "Rename",
-                IdeRect(bounds.left + 12 + width, top, bounds.left + 12 + width * 2, top + 22),
+                IdeRect(right, editTop, bounds.right - 8, editTop + 22),
                 entry?.reference != null,
-            )
-            button(
-                IdeHitAction.PeripheralCopyLookup,
-                "Copy lookup",
-                IdeRect(bounds.left + 16 + width * 2, top, bounds.right - 8, top + 22),
-                lookup(view) != null,
             )
         }
 }

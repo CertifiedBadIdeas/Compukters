@@ -58,6 +58,37 @@ import kotlin.test.assertTrue
 
 class IdeScreenControllerTest {
     @Test
+    fun `plain device name copies without lookup metadata or a source file despite duplicates`() {
+        val entries =
+            listOf(
+                IdeNamedPeripheral("device_1", "minecraft:stone", duplicate = true),
+                IdeNamedPeripheral("device_1", "minecraft:dirt", duplicate = true),
+            )
+        Fixture({ CompletableFuture.completedFuture(IdeTargetReply.NamedPeripherals(entries)) }).use { fixture ->
+            fixture.controller.dispatch(IdeCommand.CreateProject("demo"))
+            fixture.awaitWorkspace()
+            val main =
+                ru.lazyhat.compukters.ide.project.fs.ProjectPath
+                    .file("src/main.kt")
+            fixture.awaitFile(main)
+            fixture.controller.dispatch(IdeCommand.CloseFileTab(main))
+            fixture.attach()
+            fixture.click(IdeHitAction.Peripherals)
+            fixture.ui.tick()
+            fixture.click(IdeHitAction.PeripheralChoice, 1)
+            fixture.click(IdeHitAction.PeripheralCopyName)
+            assertEquals("device_1", fixture.host.clipboard)
+            val frame = fixture.ui.frame(0, 0)
+            assertFalse(
+                frame.model.hitTargets
+                    .single { it.action == IdeHitAction.PeripheralCopyLookup }
+                    .enabled,
+            )
+            assertTrue((fixture.controller.viewState().page as IdePageState.Workspace).value.editor is IdeEditorView.Empty)
+        }
+    }
+
+    @Test
     fun `device selection and copy leave source unchanged while rename updates exact selected instance`() {
         val reference = IdePeripheralReference(java.util.UUID.randomUUID(), "compukters-display", "text")
         val entry =
@@ -91,6 +122,9 @@ class IdeScreenControllerTest {
             fixture.ui.tick()
             fixture.click(IdeHitAction.PeripheralChoice, 0)
             assertEquals(before, text().visibleLines)
+            fixture.click(IdeHitAction.PeripheralCopyName)
+            assertEquals("display_1", fixture.host.clipboard)
+            assertEquals(before, text().visibleLines)
             fixture.click(IdeHitAction.PeripheralLookupType)
             fixture.click(IdeHitAction.PeripheralCopyLookup)
             assertEquals("compukter.display.GraphicalDisplay.named(\"display_1\")", fixture.host.clipboard)
@@ -102,6 +136,8 @@ class IdeScreenControllerTest {
             assertEquals(Triple(reference, "display_1", "screen"), renamed)
             rename.complete(IdeTargetReply.NamedPeripherals(listOf(entry.copy(name = "screen"))))
             fixture.ui.tick()
+            fixture.click(IdeHitAction.PeripheralCopyName)
+            assertEquals("screen", fixture.host.clipboard)
             fixture.click(IdeHitAction.PeripheralCopyLookup)
             assertEquals("compukter.display.TextDisplay.named(\"screen\")", fixture.host.clipboard)
             assertEquals(before, text().visibleLines)

@@ -88,9 +88,9 @@ headings so this page has one stable URL that can be shared outside the reposito
   verified against its published SHA-256.
 
 - The IDE has a named peripheral selection window with shared window controls, block item icons and project-style cards.
-  Selected cards offer server-validated rename, typed lookup copying with an API choice for shared devices, and
-  explicit undoable `const val` insertion beneath imports in the active Kotlin source. Rename rejects stale or replaced
-  devices and name conflicts throughout the network. Constants use uppercase snake-case identifiers, duplicate reuse
+  Selected cards offer plain network-name copying, server-validated rename, typed lookup copying with an API choice
+  for shared devices, and explicit undoable `const val` insertion beneath imports in the active Kotlin source.
+  Rename rejects stale or replaced devices and name conflicts throughout the network. Constants use uppercase snake-case identifiers, duplicate reuse
   and collision suffixes; copying and rename leave existing source unchanged.
 
 - Displays accept empty-hand front-face clicks in whole-screen pixel coordinates, exposed through

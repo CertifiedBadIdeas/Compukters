@@ -107,6 +107,7 @@ enum class IdeHitAction {
     PeripheralClose,
     PeripheralInsert,
     PeripheralRename,
+    PeripheralCopyName,
     PeripheralCopyLookup,
     PeripheralLookupType,
     StatusDetails,

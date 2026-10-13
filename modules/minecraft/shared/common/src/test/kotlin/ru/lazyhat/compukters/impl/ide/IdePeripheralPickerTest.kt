@@ -175,6 +175,41 @@ class IdePeripheralPickerTest {
     }
 
     @Test
+    fun `copy name requires selection but allows duplicate untyped devices and action rows fit narrow windows`() {
+        val entry = IdeNamedPeripheral("device_1", "minecraft:stone", duplicate = true)
+        val selected = IdePeripheralPickerView(listOf(entry), selectedIndex = 0)
+        for (area in listOf(IdeRect(0, 0, 800, 500), IdeRect(0, 0, 248, 208))) {
+            for (view in listOf(selected, selected.copy(selectedIndex = null), selected.copy(loading = true))) {
+                val output = IdeDrawBuilder(IdeCodeFontProfile.DEFAULT)
+                IdePeripheralPicker.draw(output, area, view)
+                val actions = output.build().hitTargets
+                val copy = actions.single { it.action == IdeHitAction.PeripheralCopyName }
+                assertEquals(view.selectedIndex != null && !view.loading, copy.enabled)
+                assertFalse(actions.single { it.action == IdeHitAction.PeripheralCopyLookup }.enabled)
+                assertTrue(actions.all { IdePeripheralPicker.bounds(area).contains(it.bounds) })
+                val buttons =
+                    actions.filter {
+                        it.action in
+                            setOf(
+                                IdeHitAction.PeripheralCopyName,
+                                IdeHitAction.PeripheralCopyLookup,
+                                IdeHitAction.PeripheralInsert,
+                                IdeHitAction.PeripheralRename,
+                            )
+                    }
+                for ((index, button) in buttons.withIndex()) {
+                    assertTrue(
+                        buttons.drop(index + 1).none { other ->
+                            button.bounds.left < other.bounds.right && other.bounds.left < button.bounds.right &&
+                                button.bounds.top < other.bounds.bottom && other.bounds.top < button.bounds.bottom
+                        },
+                    )
+                }
+            }
+        }
+    }
+
+    @Test
     fun `scroll window bounds rows and keeps full device indices`() {
         val output = IdeDrawBuilder(IdeCodeFontProfile.DEFAULT)
         val area = IdeRect(0, 0, 800, 500)
