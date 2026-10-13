@@ -309,6 +309,12 @@ read-view interfaces regardless of consumer usage, so covariance cannot change a
 User-defined concrete type arguments retain their qualified identity, with a separate root-package namespace, rather than
 Kotlin metadata's short display names. User classes named `String` therefore cannot reuse a built-in String variant.
 
+Inline source normalization admits top-level functions and methods of named objects and companions.
+Generic object methods specialize under their original owner, preserving the dispatch receiver; class
+traversal snapshots tolerate new variants. Unused inline templates are removed recursively from objects,
+while runtime-referenced methods remain available. Ordinary class/local, suspend and reified inline
+methods remain outside this subset. The expansion and specialization budgets are unchanged.
+
 ## Built-in module graph
 
 Math public functions and extension getters are ordinary canonical library bodies; their internal

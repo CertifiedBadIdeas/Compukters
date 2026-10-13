@@ -213,7 +213,7 @@ private data class GuestClassLayout(
     val declaration: IrClass get() = instance.declaration
 }
 
-private fun IrClass.isManagedPlatformObject(): Boolean =
+internal fun IrClass.isManagedPlatformObject(): Boolean =
     kind == ClassKind.OBJECT && (
         GuestEnumEntries.isHolder(this) ||
             superTypes.any { type ->
