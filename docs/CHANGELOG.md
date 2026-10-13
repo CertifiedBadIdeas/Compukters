@@ -45,6 +45,7 @@ headings so this page has one stable URL that can be shared outside the reposito
   `GraphicalDisplay.pollClick()`. Input belongs to the drawing program and is bounded and transient.
   Guest widgets provide buttons, indicators, gauges and history charts. The `create-scada` example
   controls a Create kinetic drive with real speed/load readings, RPM commands and connection/load alarms.
+  Its input loop runs independently of telemetry sampling, applies commands before drawing and avoids unchanged redraws.
 
 - The all-addon development build uses Loom directly and enables Configuration Cache and parallel execution,
   allowing independent built-in program artifacts to compile concurrently inside the included Compukters project.
