@@ -11,3 +11,6 @@
 [submodule "addons/propulsion"]
 	path = addons/propulsion
 	url = https://github.com/CertifiedBadIdeas/Compukers-propulsion.git
+[submodule "addons/cosmonautics"]
+	path = addons/cosmonautics
+	url = https://github.com/CertifiedBadIdeas/Compukters-cosmonautics.git
