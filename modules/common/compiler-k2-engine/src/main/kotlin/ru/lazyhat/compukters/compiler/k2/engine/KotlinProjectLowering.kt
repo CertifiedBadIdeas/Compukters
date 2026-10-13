@@ -6315,6 +6315,12 @@ private class FunctionCompiler(
                         }
                     return unboxValueClass(reference, valueBox)
                 }
+                val primitive = GuestPrimitive.scalar(resolvedType(expression.typeOperand))
+                if (primitive != null && registerValueType(source) == target &&
+                    GuestPrimitive.scalar(resolvedType(expression.argument.type)) == primitive
+                ) {
+                    return source
+                }
                 if (scalarBoxes.none { it.valueType == target } || registerValueType(source) !is ValueType.Ref) {
                     throw UnsupportedKotlinIr(expression, "scalar cast requires a supported box and reference operand")
                 }
@@ -8877,6 +8883,11 @@ private class FunctionCompiler(
         if (name in setOf("EQEQ", "equals", "eqeq") || floatIeeeEquality) {
             if (!numeric && (registerValueType(operands[0]) is ValueType.Ref || registerValueType(operands[1]) is ValueType.Ref)) {
                 if (expressions.any { it is IrConst && it.value == null }) {
+                    if (operands.any { registerValueType(it) !is ValueType.Ref }) {
+                        return allocate(ValueType.Bool).also {
+                            emit(Instruction.Const(it, requireNotNull(constantIds[Constant.Bool(false)])))
+                        }
+                    }
                     return allocate(ValueType.Bool).also { emit(Instruction.RefEqual(it, operands[0], operands[1])) }
                 }
                 return equalsValue(operands[0], operands[1])
