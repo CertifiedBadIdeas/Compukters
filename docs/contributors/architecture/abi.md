@@ -19,6 +19,13 @@ the adapter supplies lifecycle callbacks through a new overload, using the exist
 Discovery never acquires actuator ownership. This changes neither native/Guest capability ABI nor checkpoint
 encoding. Addons using the new API require a host containing SDK 0.6.0.
 
+## Explicit construction transfer preparation
+
+SDK 0.6.0 adds `CompuktersPeripheralWorldIntegration.prepareTransfer` for adapters that copy block NBT before
+removing a construction. It captures computer host resources before source blocks move, then publishes the existing
+checkpoint asynchronously. The filesystem attachment barrier prevents destination execution from racing that
+publication. Existing SDK signatures, Guest capabilities and native ABI remain unchanged.
+
 ## Scoped Guest line reading
 
 `compukter:core` 9.1.0 adds eager `FileSystem.readLines`, inline scoped `FileSystem.useLines`,
