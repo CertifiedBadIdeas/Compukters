@@ -39,7 +39,10 @@ scenario `nullable-references`.
 
 `Int?` stores a managed Int box or null in locals, fields, parameters, and results. Assigning `Int` boxes at
 the nullable boundary; widening to `Any?` preserves the reference. Checked casts and Elvis recover unboxed Int
-values. Equality compares boxed payloads and treats null according to Kotlin semantics.
+values. Explicit same-type casts also accept an already unboxed primitive after a smart cast, including
+contract-driven narrowing by `require`; Elvis and null comparisons remain valid after narrowing.
+Distinct nominal primitive types still undergo runtime box checks.
+Equality compares boxed payloads and treats null according to Kotlin semantics.
 
 **Evidence:** `MinimalScriptLoweringTest`, test `nullable Int and collection elements preserve values and
 nulls`, executed by `testKotlinNullableCollectionsVmConformance`.

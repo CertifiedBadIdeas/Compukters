@@ -4052,7 +4052,7 @@ class MinimalScriptLoweringTest {
     @Test
     fun `unsupported omitted constructor default publishes no artifact`() =
         withAdapter { adapter ->
-            val source = "class Box(val value: Int = 1 as Int)\nfun main() { Box() }"
+            val source = "class Box(val value: Any = object {})\nfun main() { Box() }"
             val result = adapter.compile(request(source))
             assertNull(result.artifact)
             assertTrue(result.diagnostics.any { it.code == "UNSUPPORTED_IR" }, result.diagnostics.toString())
@@ -5790,6 +5790,54 @@ class MinimalScriptLoweringTest {
                     val broad: Any? = first
                     require(broad is Int)
                     require((broad as Int) == 7)
+                    require((7 as Int) == 7)
+                    val castBoolean: Any? = true
+                    require(castBoolean is Boolean)
+                    require((castBoolean as Boolean) == true)
+                    val castByte: Any? = 7.toByte()
+                    require(castByte is Byte)
+                    require((castByte as Byte) == 7.toByte())
+                    val castShort: Any? = 7.toShort()
+                    require(castShort is Short)
+                    require((castShort as Short) == 7.toShort())
+                    val castInt: Any? = 7
+                    require(castInt is Int)
+                    require((castInt as Int) == 7)
+                    val castLong: Any? = 7L
+                    require(castLong is Long)
+                    require((castLong as Long) == 7L)
+                    val castFloat: Any? = 7.0f
+                    require(castFloat is Float)
+                    require((castFloat as Float) == 7.0f)
+                    val castDouble: Any? = 7.0
+                    require(castDouble is Double)
+                    require((castDouble as Double) == 7.0)
+                    val castChar: Any? = 'a'
+                    require(castChar is Char)
+                    require((castChar as Char) == 'a')
+                    val castUByte: Any? = 7.toUByte()
+                    require(castUByte is UByte)
+                    require((castUByte as UByte) == 7.toUByte())
+                    val castUShort: Any? = 7.toUShort()
+                    require(castUShort is UShort)
+                    require((castUShort as UShort) == 7.toUShort())
+                    val castUInt: Any? = 7u
+                    require(castUInt is UInt)
+                    require((castUInt as UInt) == 7u)
+                    val castULong: Any? = 7uL
+                    require(castULong is ULong)
+                    require((castULong as ULong) == 7uL)
+                    fun invalidIntCast(value: Any?): Boolean {
+                        try { value as Int } catch (expected: ClassCastException) { return true }
+                        return false
+                    }
+                    require(invalidIntCast(7.toByte()))
+                    require(invalidIntCast(7.toShort()))
+                    require(invalidIntCast(7u))
+                    require(invalidIntCast("seven"))
+                    var nullCastFailed = false
+                    try { echo(null) as Int } catch (expected: NullPointerException) { nullCastFailed = true }
+                    require(nullCastFailed)
                     val absent: Any? = missing
                     require(absent == null)
                     require(absent is Int?)
