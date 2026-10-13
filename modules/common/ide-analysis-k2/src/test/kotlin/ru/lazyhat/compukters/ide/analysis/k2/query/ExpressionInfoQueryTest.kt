@@ -34,6 +34,45 @@ import kotlin.test.assertTrue
 
 class ExpressionInfoQueryTest {
     @Test
+    fun `line reading hover resolves filesystem reader and optional path documentation`() {
+        val source =
+            """
+            import compukter.filesystem.FileSystem
+            import compukter.filesystem.Path
+            import compukter.io.path.readLines
+            import compukter.io.path.useLines
+            import kotlin.sequences.firstOrNull
+            fun main() {
+                val path = Path("/home/example.txt")
+                FileSystem.readLines(path)
+                FileSystem.useLines(path) { it.firstOrNull() }
+                path.readLines()
+                path.useLines { it.firstOrNull() }
+                val reader = FileSystem.openRead(path)
+                reader.lineSequence()
+            }
+            """.trimIndent()
+        K2QueryFixture.sourceWithGuestApi(true, "main.kt" to source).use { fixture ->
+            for ((site, keyword) in listOf(
+                "FileSystem.readLines" to "UTF-8",
+                "FileSystem.useLines" to "maximumLineBytes",
+                "path.readLines" to "file-size bound",
+                "path.useLines" to "single-pass",
+                "reader.lineSequence" to "current snapshot position",
+            )) {
+                val offset = source.lastIndexOf(site) + site.indexOf('.') + 1
+                val result =
+                    assertIs<AnalysisResult.ExpressionInfo>(
+                        fixture.execute(AnalysisQuery.ExpressionInfo(fixture.identity, VirtualSourcePath.kotlin("main.kt"), offset)),
+                    )
+                val info = assertNotNull(result.value, site)
+                assertNotNull(info.signature, site)
+                assertTrue(keyword in assertNotNull(info.documentation, site), site)
+            }
+        }
+    }
+
+    @Test
     fun `project documentation preserves initial indented examples and hard breaks`() {
         val source =
             """

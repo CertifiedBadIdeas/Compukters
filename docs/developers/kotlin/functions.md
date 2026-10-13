@@ -363,16 +363,19 @@ primitive payloads remain unboxed.
 `ArrayList<Item>` may be captured through `val` or `var`; shared cells follow later reassignment.
 
 **Evidence:** `Iterable destination operations append preserve types and return identity` in
-`MinimalScriptLoweringTest`, executed by `testKotlinDestinationVmConformance`. Programs can declare top-level
-and extension `inline` functions in project or admitted source-library files. Supported non-suspend,
+`MinimalScriptLoweringTest`, executed by `testKotlinDestinationVmConformance`. Programs can declare top-level,
+extension and object (including companion object) `inline` functions in project or admitted source-library files.
+Supported non-suspend,
 non-reified calls are expanded before closure discovery; concrete generic inline calls retain scalar types.
 Local/non-local and nested returns, Unit/Nothing, nullable and wide results, default callbacks and class
 initializers are covered by `GuestInlineIntegrationTest` and `testKotlinInlineBlocksVmConformance`. Direct
 scalar-only callbacks emit no object allocations in the focused artifact test. Stored/noinline callbacks,
 escaping crossinline wrappers, nested captures and shared mutable cells retain ordinary managed ownership.
+The filesystem VM scenario also covers generic object/companion methods, receiver and argument evaluation
+order, default arguments, receiver aliases and retained method references.
 Runtime-referenced inline definitions remain usable; unused templates are discarded. Canonical
 platform/intrinsic calls remain atomic, including transparent suspension through an expanded callback.
-Member/local, suspend and reified inline declarations, unavailable/unadmitted bodies and unresolved type
+Ordinary class member/local, suspend and reified inline declarations, unavailable/unadmitted bodies and unresolved type
 arguments outside a supported enclosing generic owner are rejected with TARGET diagnostics. Preflight rejects
 recursive inline dependencies, depth above 64 and cumulative projected work above 1,000,000 units;
 specialization allows at most 256 variants and 64 active levels. These are conservative compiler safety

@@ -365,6 +365,11 @@ immutable read snapshots, sorted directory snapshots, directory operations and a
 Transfers are bounded independently of file size. Resources belong to each foreground program and survive
 hibernation with their positions and revision guards; terminal program outcomes release them.
 Optional separately imported `compukter.io.path` extensions delegate to the same operations.
+Eager `FileSystem.readLines` and inline `useLines` expose strict UTF-8 line processing; the latter uses a
+scoped single-pass Sequence with bounded per-line storage. `FileReader.lineSequence` leaves lifetime to its
+caller. Optional Path extensions delegate to the explicit facade. LF/CRLF/CR, lazy validation, encoded byte
+bounds and cleanup on early/exceptional/non-local exits follow the [line-reading contract](filesystem.md#reading-lines).
+
 See [Guest filesystem]({{ '/FILESYSTEM/' | relative_url }}) for limits, cleanup and the 0.6.0 source migration.
 
 **Evidence:**
@@ -380,7 +385,8 @@ tests `lexical Guest paths execute without filesystem access`,
 Native lifecycle, quotas, guarded replacements and checkpoint rejection are exercised in
 [`computer_filesystem.rs`](https://github.com/CertifiedBadIdeas/Compukter-VM/blob/main/src/computer_filesystem.rs).
 
-**Related work:** [#734](https://github.com/CertifiedBadIdeas/Compukters/issues/734)
+**Related work:** [#734](https://github.com/CertifiedBadIdeas/Compukters/issues/734),
+[#780](https://github.com/CertifiedBadIdeas/Compukters/issues/780)
 
 ### Process facade
 

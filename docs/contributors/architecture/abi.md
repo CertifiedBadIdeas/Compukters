@@ -11,6 +11,16 @@ permalink: /ARCHITECTURE/abi/
 
 This reference groups versioned representation boundaries by the version that introduced them. Those versions are minimum feature requirements, not a claim that older Runtime distributions implement today’s platform. The source owners below define the active contract. Before changing a wire format, inspect each producer, consumer and verifier. Runtime release pins in `build-scripts/src/main/kotlin/RuntimeBundleSupport.kt` describe published bundles separately from the local VM checkout.
 
+## Scoped Guest line reading
+
+`compukter:core` 9.1.0 adds eager `FileSystem.readLines`, inline scoped `FileSystem.useLines`,
+single-pass `FileReader.lineSequence` and explicitly imported Path conveniences. `useLines` and portable
+`Closeable.use` advertise compile-time `EXACTLY_ONCE` callback invocation; the existing inline/finally
+lowering implements resource cleanup. UTF-8 line decoding, buffering and limits are ordinary Guest code
+over existing filesystem capability ABI 2 operations. Native ABI, artifact format, filesystem schemas,
+checkpoint format and capability operation count are unchanged. Platform module content identities cover
+the added declarations and changed fragments; compile against matching platform/addon identities.
+
 ## Cosmonautics space observations
 
 Cosmonautics addon 1.0 introduces its first Guest capability and checked-in operation/record lock.

@@ -4,10 +4,16 @@
  * Licensed under the Apache License, Version 2.0.
  */
 
+@file:OptIn(kotlin.contracts.ExperimentalContracts::class)
+
 package compukter.filesystem
 
 import compukter.io.Closeable
 import compukter.io.IOException
+import kotlin.contracts.InvocationKind
+import kotlin.contracts.contract
+import kotlin.sequences.Sequence
+import kotlin.sequences.toList
 
 /** Access to the current computer's storage. Paths are independent lexical values. */
 public object FileSystem {
@@ -71,6 +77,60 @@ public object FileSystem {
         path: Path,
         maximumBytes: Int = 65536,
     ): String = decodeUtf8(readBytes(path, maximumBytes), path.value)
+
+    /**
+     * Reads all strict UTF-8 lines from one snapshot, within the encoded file-size bound.
+     * LF, CRLF and CR are removed. Empty files have no lines; a final delimiter adds no extra line.
+     */
+    public fun readLines(
+        path: Path,
+        maximumBytes: Int = 65536,
+    ): List<String> {
+        require(maximumBytes >= 0)
+        val reader = openRead(path)
+        try {
+            if (reader.sizeBytes > maximumBytes) fail(FileSystemError.QUOTA_EXCEEDED, path.value, "readLines")
+            return reader.lineSequence(maximumBytes).toList()
+        } finally {
+            reader.close()
+        }
+    }
+
+    /**
+     * Processes strict UTF-8 lines lazily and closes the snapshot reader after [block], including failure
+     * and non-local return. The sequence can be traversed once and is usable only inside the block.
+     *
+     * @param maximumLineBytes encoded bytes per line, excluding LF/CRLF/CR delimiters; zero permits empty lines.
+     * @param block processing called once, receiving a single-pass sequence. Unconsumed lines are not decoded.
+     * @return the block result.
+     * @throws FileSystemException for storage failures, invalid consumed UTF-8 or an oversized line.
+     */
+    public inline fun <R> useLines(
+        path: Path,
+        maximumLineBytes: Int = 65536,
+        block: (Sequence<String>) -> R,
+    ): R {
+        contract { callsInPlace(block, InvocationKind.EXACTLY_ONCE) }
+        require(maximumLineBytes >= 0)
+        val reader = openRead(path)
+        var failed = false
+        try {
+            return block(reader.lineSequence(maximumLineBytes))
+        } catch (failure: Throwable) {
+            failed = true
+            throw failure
+        } finally {
+            if (failed) {
+                try {
+                    reader.close()
+                } catch (cleanupFailure: Throwable) {
+                    // Preserve the body failure, as in Closeable.use.
+                }
+            } else {
+                reader.close()
+            }
+        }
+    }
 
     public fun writeBytes(
         path: Path,
@@ -228,10 +288,110 @@ public class FileReader internal constructor(
         return byteRange(response, 1, response.size)
     }
 
+    /**
+     * Reads strict UTF-8 lines lazily from the current snapshot position. The caller must close this reader.
+     * Each sequence permits one traversal, including after exhaustion. Do not interleave binary reads or
+     * other sequences: line iteration reads ahead in bounded chunks. All iteration checks the reader lifetime.
+     *
+     * @param maximumLineBytes encoded bytes per line excluding delimiters; zero permits empty lines.
+     */
+    public fun lineSequence(maximumLineBytes: Int = 65536): Sequence<String> {
+        require(maximumLineBytes >= 0)
+        checkLineReaderOpen()
+        return FileLineSequence(this, maximumLineBytes)
+    }
+
+    internal fun checkLineReaderOpen() {
+        ensureOpen(closed, path.value, "readLines")
+    }
+
     override fun close() {
         if (!closed) {
             check(FileSystemBindings.close(handle), path.value, "close")
             closed = true
+        }
+    }
+}
+
+private class FileLineSequence(
+    private val reader: FileReader,
+    private val maximumLineBytes: Int,
+) : Sequence<String> {
+    private var consumed = false
+
+    override fun iterator(): Iterator<String> {
+        reader.checkLineReaderOpen()
+        if (consumed) throw IllegalStateException("A file line sequence can be traversed only once")
+        consumed = true
+        return FileLineIterator(reader, maximumLineBytes)
+    }
+}
+
+private class FileLineIterator(
+    private val reader: FileReader,
+    private val maximumLineBytes: Int,
+) : Iterator<String> {
+    private var chunk = ByteArray(0)
+    private var chunkOffset = 0
+    private var eof = false
+    private var skipLineFeed = false
+    private var lineBuffer = ByteArray(if (maximumLineBytes < 256) maximumLineBytes else 256)
+    private var ready = false
+    private var nextLine: String? = null
+
+    override fun hasNext(): Boolean {
+        reader.checkLineReaderOpen()
+        if (!ready) {
+            nextLine = readLine()
+            ready = true
+        }
+        return nextLine != null
+    }
+
+    override fun next(): String {
+        if (!hasNext()) throw NoSuchElementException("File line sequence is exhausted")
+        val result = nextLine!!
+        nextLine = null
+        ready = false
+        return result
+    }
+
+    private fun nextByte(): Int {
+        if (chunkOffset == chunk.size) {
+            if (eof) return -1
+            chunk = reader.read()
+            chunkOffset = 0
+            if (chunk.size == 0) {
+                eof = true
+                return -1
+            }
+        }
+        return unsigned(chunk[chunkOffset++])
+    }
+
+    private fun readLine(): String? {
+        var length = 0
+        while (true) {
+            val byte = nextByte()
+            if (skipLineFeed) {
+                skipLineFeed = false
+                if (byte == 10) continue
+            }
+            if (byte < 0) {
+                return if (length == 0) null else decodeUtf8(lineBuffer, reader.path.value, length, "readLines")
+            }
+            if (byte == 10 || byte == 13) {
+                skipLineFeed = byte == 13
+                return decodeUtf8(lineBuffer, reader.path.value, length, "readLines")
+            }
+            if (length >= maximumLineBytes) fail(FileSystemError.QUOTA_EXCEEDED, reader.path.value, "readLines")
+            if (length == lineBuffer.size) {
+                val capacity = if (lineBuffer.size > maximumLineBytes / 2) maximumLineBytes else lineBuffer.size * 2
+                val grown = ByteArray(capacity)
+                lineBuffer.copyInto(grown, 0, 0, length)
+                lineBuffer = grown
+            }
+            lineBuffer[length++] = byte.toByte()
         }
     }
 }
@@ -419,6 +579,8 @@ private fun utf8CodePoint(
     bytes: ByteArray,
     index: Int,
     path: String,
+    limit: Int,
+    operation: String,
 ): Int {
     val first = unsigned(bytes[index])
     if (first < 128) return first
@@ -432,19 +594,19 @@ private fun utf8CodePoint(
         } else {
             0
         }
-    if (count == 0 || bytes.size - index < count) fail(FileSystemError.INVALID_UTF8, path, "readText")
+    if (count == 0 || limit - index < count) fail(FileSystemError.INVALID_UTF8, path, operation)
     var value = first and (127 shr count)
     var part = 1
     while (part < count) {
         val next = unsigned(bytes[index + part])
-        if (next < 128 || next > 191) fail(FileSystemError.INVALID_UTF8, path, "readText")
+        if (next < 128 || next > 191) fail(FileSystemError.INVALID_UTF8, path, operation)
         value = value * 64 + next - 128
         part++
     }
     if ((count == 2 && value < 128) || (count == 3 && value < 2048) || (count == 4 && value < 65536) ||
         value > 1114111 || value in 55296..57343
     ) {
-        fail(FileSystemError.INVALID_UTF8, path, "readText")
+        fail(FileSystemError.INVALID_UTF8, path, operation)
     }
     return value
 }
@@ -463,19 +625,26 @@ private fun utf8Width(first: Int): Int =
 private fun decodeUtf8(
     bytes: ByteArray,
     path: String,
+): String = decodeUtf8(bytes, path, bytes.size, "readText")
+
+private fun decodeUtf8(
+    bytes: ByteArray,
+    path: String,
+    byteCount: Int,
+    operation: String,
 ): String {
     var length = 0
     var index = 0
-    while (index < bytes.size) {
-        val point = utf8CodePoint(bytes, index, path)
+    while (index < byteCount) {
+        val point = utf8CodePoint(bytes, index, path, byteCount, operation)
         length += if (point > 65535) 2 else 1
         index += utf8Width(unsigned(bytes[index]))
     }
     val chars = CharArray(length)
     var output = 0
     index = 0
-    while (index < bytes.size) {
-        val point = utf8CodePoint(bytes, index, path)
+    while (index < byteCount) {
+        val point = utf8CodePoint(bytes, index, path, byteCount, operation)
         if (point < 65536) {
             chars[output++] = point.toChar()
         } else {

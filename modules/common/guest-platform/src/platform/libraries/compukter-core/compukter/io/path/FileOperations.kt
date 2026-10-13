@@ -4,6 +4,8 @@
  * Licensed under the Apache License, Version 2.0.
  */
 
+@file:OptIn(kotlin.contracts.ExperimentalContracts::class)
+
 package compukter.io.path
 
 import compukter.filesystem.AtomicFileWriter
@@ -12,6 +14,9 @@ import compukter.filesystem.FileInfo
 import compukter.filesystem.FileReader
 import compukter.filesystem.FileSystem
 import compukter.filesystem.Path
+import kotlin.contracts.InvocationKind
+import kotlin.contracts.contract
+import kotlin.sequences.Sequence
 
 /** Optional storage conveniences. Every operation delegates to the explicit FileSystem facade. */
 public fun Path.stat(): FileInfo = FileSystem.stat(this)
@@ -27,6 +32,18 @@ public fun Path.openDirectory(): DirectoryReader = FileSystem.openDirectory(this
 public fun Path.readBytes(maximumBytes: Int = 65536): ByteArray = FileSystem.readBytes(this, maximumBytes)
 
 public fun Path.readText(maximumBytes: Int = 65536): String = FileSystem.readText(this, maximumBytes)
+
+/** Reads all lines within the encoded file-size bound; see [FileSystem.readLines]. */
+public fun Path.readLines(maximumBytes: Int = 65536): List<String> = FileSystem.readLines(this, maximumBytes)
+
+/** Processes a scoped single-pass sequence, closing on every exit; see [FileSystem.useLines]. */
+public inline fun <R> Path.useLines(
+    maximumLineBytes: Int = 65536,
+    block: (Sequence<String>) -> R,
+): R {
+    contract { callsInPlace(block, InvocationKind.EXACTLY_ONCE) }
+    return FileSystem.useLines(this, maximumLineBytes, block)
+}
 
 public fun Path.writeBytes(contents: ByteArray): Unit = FileSystem.writeBytes(this, contents)
 

@@ -13,6 +13,10 @@ headings so this page has one stable URL that can be shared outside the reposito
 
 ## 0.6.0 — In development
 
+- Guest files support eager `readLines` and scoped streaming `useLines`, with strict UTF-8 across transfer chunks,
+  LF/CRLF/CR delimiters, explicit byte limits and guaranteed reader cleanup. Low-level readers expose a single-pass
+  line sequence; optional Path extensions retain the separation between paths and storage.
+
 - Agent sandbox builds share one workspace build slot across worktrees and the all-addon development stand,
   with eight Gradle workers and eight Rust jobs by default. Explicit build limits remain configurable.
 
@@ -407,7 +411,7 @@ listed in [Kotlin support](developers/kotlin-support.md) and [standard library s
 - Supported function values can be passed, returned, stored and invoked without a JVM arity cutoff. Lambdas retain
   immutable captures and share mutable capture cells across nested closures; captured variables that are never
   reassigned avoid the extra cell. Top-level, bound/unbound method and constructor references retain dispatch and
-  supported constructor defaults. Top-level and extension `inline` functions support concrete generic callbacks
+  supported constructor defaults. Top-level, extension and object/companion `inline` functions support concrete generic callbacks
   and non-local returns within bounded compiler expansion limits.
 - Supported nullable references and values provide null comparisons, Elvis and safe calls. Nullable value-class
   assertions and safe casts recover their concrete layouts. Operations waiting for the world, a task or a channel
