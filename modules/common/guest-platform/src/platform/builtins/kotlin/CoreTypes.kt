@@ -46,6 +46,8 @@ public open class Throwable external constructor(
 }
 
 public abstract class Enum<E : Enum<E>> external constructor() : Comparable<E> {
+    public external override fun compareTo(other: E): Int
+
     public external val name: String
 
     public external val ordinal: Int

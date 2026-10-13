@@ -46,7 +46,11 @@ internal object CollectionReadBridges {
             "ArrayList" to View("List", true, listMethods + ("iteratorReadOnly" to "iterator")),
             "ArrayListIterator" to View("Iterator", true, iteratorMethods),
             "ArrayListAnyIterator" to View("Iterator", false, iteratorMethods),
-        ).mapKeys { (name, _) -> "kotlin.collections.$name" }
+        ).mapKeys { (name, _) -> "kotlin.collections.$name" } +
+            mapOf(
+                "kotlin.enums.EnumEntriesList" to View("List", true, listMethods),
+                "kotlin.enums.EnumEntriesIterator" to View("Iterator", true, iteratorMethods),
+            )
 
     fun methodName(function: IrSimpleFunction): String? {
         val owner = function.parent as? IrClass ?: return null

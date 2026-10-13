@@ -684,7 +684,22 @@ class PlatformMetadataCompiler {
             } else {
                 null
             }
-        return listOf(parsed) + listOfNotNull(getter, setter, singleton) + nested
+        val enumEntries =
+            if (declaration is KtClass && declaration.isEnum()) {
+                ParsedDeclaration(
+                    platformDeclaration.copy(
+                        symbol = "$symbol.<get-entries>",
+                        signature = "fun():EnumEntries<${(owners + name).joinToString(".")}>",
+                    ),
+                    private,
+                    hasBody = true,
+                    libraryKind = PlatformLibraryDeclarationKind.FUNCTION,
+                    requiresSource = requiresSource,
+                )
+            } else {
+                null
+            }
+        return listOf(parsed) + listOfNotNull(getter, setter, singleton, enumEntries) + nested
     }
 
     private fun defaultArguments(

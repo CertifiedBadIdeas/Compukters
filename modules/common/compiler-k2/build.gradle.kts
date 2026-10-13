@@ -408,6 +408,24 @@ val generateDispatchConformanceArtifact = tasks.register<Test>("generateDispatch
     systemProperty("compukter.vm.dispatchArtifact", dispatchConformanceArtifact.get().asFile.absolutePath)
 }
 
+val enumEntriesConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-enum-entries.cpkt")
+val generateEnumEntriesConformanceArtifact = tasks.register<Test>("generateEnumEntriesConformanceArtifact") {
+    description = "Compiles immutable enum entries for pinned VM conformance."
+    group = "verification"
+    dependsOn(tasks.jar)
+    useJUnitPlatform()
+    testClassesDirs = sourceSets.test.get().output.classesDirs
+    classpath = sourceSets.test.get().runtimeClasspath
+    filter.includeTestsMatching("*enum entries*")
+    inputs.file(workerJar)
+    inputs.files(addonGuestApiFixtureBundle)
+    systemProperty("compukters.addonGuestApiFixture", addonGuestApiFixtureBundle.singleFile.absolutePath)
+    outputs.file(enumEntriesConformanceArtifact)
+    outputs.file(enumEntriesConformanceArtifact.map { "${it.asFile.absolutePath}.enum-only.cpkt" })
+    systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
+    systemProperty("compukter.vm.enumEntriesArtifact", enumEntriesConformanceArtifact.get().asFile.absolutePath)
+}
+
 val generateObjectModelConformanceArtifact = tasks.register<Test>("generateObjectModelConformanceArtifact") {
     description = "Compiles sealed, data, and enum Guest objects for pinned VM conformance."
     group = "verification"

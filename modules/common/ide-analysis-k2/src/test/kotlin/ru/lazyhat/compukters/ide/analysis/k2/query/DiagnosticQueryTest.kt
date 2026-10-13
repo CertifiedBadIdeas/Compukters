@@ -31,6 +31,33 @@ import kotlin.test.assertTrue
 
 class DiagnosticQueryTest {
     @Test
+    fun `enum entries resolve typed indexing iteration and platform enums`() {
+        val source =
+            """
+            import compukter.redstone.RedstonePort
+            import kotlin.enums.EnumEntries
+            enum class Choice { FIRST, SECOND }
+            enum class Empty
+            fun main() {
+                val values: EnumEntries<Choice> = Choice.entries
+                val first: Choice = values[0]
+                for (entry in values) check(entry in values)
+                check(first === Choice.FIRST)
+                check(Empty.entries.isEmpty())
+                val sides: EnumEntries<RedstonePort.Side> = RedstonePort.Side.entries
+                check(sides[0] === RedstonePort.Side.ALL)
+            }
+            """.trimIndent()
+        for (attachedSources in listOf(false, true)) {
+            K2QueryFixture.sourceWithGuestApi(attachedSources, "main.kt" to source).use { fixture ->
+                val result = fixture.execute(fixture.presentation()) as AnalysisResult.Presentation
+                val active = result.value.accept(fixture.identity) as SnapshotPresentationAcceptance.Active
+                assertTrue(active.diagnostics.none { it.severity == EditorDiagnosticSeverity.Error }, active.diagnostics.toString())
+            }
+        }
+    }
+
+    @Test
     fun `classic contracts and platform construction effects resolve with source and metadata inputs`() {
         val source =
             """
