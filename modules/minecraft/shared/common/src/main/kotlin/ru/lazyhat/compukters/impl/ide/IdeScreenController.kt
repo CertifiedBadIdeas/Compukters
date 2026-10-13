@@ -745,6 +745,13 @@ class IdeScreenController(
                 controller.dispatch(IdeCommand.InsertPeripheralConstant(entry.name))
             }
 
+            IdeHitAction.PeripheralCopyName -> {
+                val view = peripheralPicker ?: return false
+                if (view.loading) return false
+                host.clipboard = IdePeripheralPicker.selected(view)?.name ?: return false
+                peripheralPicker = view.copy(message = "Name copied")
+            }
+
             IdeHitAction.PeripheralCopyLookup -> {
                 val view = peripheralPicker ?: return false
                 if (view.loading) return false

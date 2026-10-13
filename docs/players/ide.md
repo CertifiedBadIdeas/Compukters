@@ -17,12 +17,16 @@ target; the project and its Git repository live on your own Minecraft client. Th
 With a computer attached, open **Devices** in the workspace toolbar. The separate window lists reachable named
 peripherals with 32×32 block item icons. Scroll through the cards and use **Refresh** after renaming, reconnecting or
 replacing a device. Unnamed devices are omitted. Select a card to see its actions; selection itself does not edit code.
-Duplicate names can be renamed, but cannot be copied or inserted until the ambiguity is resolved.
+Duplicate names can be renamed and copied as plain text; lookup copying and constant insertion remain disabled
+until the ambiguity is resolved.
 
 **Rename** uses the existing network naming rules: 1–32 letters, digits, underscores or hyphens, starting with a letter.
 Names are normalized to lowercase. The server checks the exact device instance, its previous name and conflicts across
 the whole network, including unavailable members. Replaced devices or stale names require **Refresh**. Renaming does not
 rewrite existing string constants or running programs.
+
+**Copy name** copies the exact name in the network as plain text, without quotes. This works without an open
+source file or lookup API, including devices with duplicate names.
 
 **Copy lookup** copies a call such as `compukter.display.TextDisplay.named("display_1")`. Click the API selector to switch
 between supported types, such as `TextDisplay` and `GraphicalDisplay`. The fully qualified type avoids requiring an import;

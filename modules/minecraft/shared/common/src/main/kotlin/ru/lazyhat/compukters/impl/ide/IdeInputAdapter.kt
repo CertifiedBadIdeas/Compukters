@@ -596,6 +596,7 @@ class IdeInputAdapter(
             IdeHitAction.PeripheralClose,
             IdeHitAction.PeripheralInsert,
             IdeHitAction.PeripheralRename,
+            IdeHitAction.PeripheralCopyName,
             IdeHitAction.PeripheralCopyLookup,
             IdeHitAction.PeripheralLookupType,
             IdeHitAction.ScaleAuto,
