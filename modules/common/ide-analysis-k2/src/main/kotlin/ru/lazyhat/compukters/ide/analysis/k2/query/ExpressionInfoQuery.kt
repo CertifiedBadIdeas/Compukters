@@ -173,13 +173,17 @@ internal object ExpressionInfoQuery {
                 .removePrefix("/**")
                 .removeSuffix("*/")
                 .lines()
-                .joinToString("\n") {
-                    it
-                        .trimStart()
-                        .removePrefix("*")
-                        .removePrefix(" ")
-                        .trimEnd()
-                }.trim()
+                .mapIndexed { index, line ->
+                    val margin = line.trimStart()
+                    when {
+                        margin.startsWith('*') -> margin.removePrefix("*").removePrefix(" ")
+                        index == 0 -> line.removePrefix(" ")
+                        else -> line
+                    }
+                }.dropWhile(String::isBlank)
+                .dropLastWhile(String::isBlank)
+                .joinToString("\n")
+                .trimEnd()
         return boundedUtf8(text, maximumBytes).takeIf { it.isNotBlank() }
     }
 }
