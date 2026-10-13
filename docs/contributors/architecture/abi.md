@@ -11,6 +11,21 @@ permalink: /ARCHITECTURE/abi/
 
 This reference groups versioned representation boundaries by the version that introduced them. Those versions are minimum feature requirements, not a claim that older Runtime distributions implement today’s platform. The source owners below define the active contract. Before changing a wire format, inspect each producer, consumer and verifier. Runtime release pins in `build-scripts/src/main/kotlin/RuntimeBundleSupport.kt` describe published bundles separately from the local VM checkout.
 
+## Guest enum entries
+
+`kotlin:builtins` 1.14.0 completes the structural Enum comparison declaration for frontend inheritance.
+`stdlib:core` 1.21.0 adds sealed `kotlin.enums.EnumEntries<E>` and its private immutable array-backed
+implementation. `compukter:core` 7.6.0 exports generated static `entries` getters for its enums. Library
+metadata records these generated functions with their canonical typed signatures, including enum-only
+libraries; consumers import the same cached collection and singleton entries through ordinary links.
+Dependent libraries rebuild against the resulting platform identities.
+
+Compiler-generated private cache holders use existing managed objects, checked reference arrays, static
+initialization and generic collection specializations. Each cache initializes after the enum singleton roots.
+No instruction, CPKT/CAGB encoding, platform encoding, Runtime/native C ABI or checkpoint schema changes.
+`testKotlinEnumEntriesVmConformance` exercises immutable operations and cross-library identity; the
+[collection inventory](../../developers/stdlib/collections.md#immutable-enum-entries) owns source semantics.
+
 ## Value-class host responses — Runtime ABI 1.20
 
 Asynchronous structured replies admit nominal inline destinations and flattened value boxes, including nested

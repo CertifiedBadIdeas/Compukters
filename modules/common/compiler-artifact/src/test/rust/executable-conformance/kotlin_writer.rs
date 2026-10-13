@@ -145,6 +145,10 @@ fn main() {
         "subset" => k2_string_materialization_executes_char_arrays_and_scalar_templates(),
         "named-calls" => k2_same_named_guest_calls_preserve_resolved_targets(),
         "dispatch" => k2_class_and_interface_dispatch_select_runtime_implementations(),
+        "enum-entries" => {
+            k2_expected_prints_with_budget("COMPUKTER_KOTLIN_ENUM_ENTRIES_ARTIFACT", ["enum-entries-ok\n"], 256);
+            k2_expected_prints_with_budget("COMPUKTER_KOTLIN_ENUM_ONLY_ENTRIES_ARTIFACT", ["enum-only-entries-ok\n"], 256);
+        },
         "object-model" => k2_sealed_data_and_enum_objects_execute(),
         "property-accessors" => k2_property_accessors_preserve_backing_and_dispatch(),
         "abstract-properties" => k2_abstract_properties_dispatch_through_base_and_interface(),

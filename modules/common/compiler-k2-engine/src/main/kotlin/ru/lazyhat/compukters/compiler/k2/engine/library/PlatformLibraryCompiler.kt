@@ -105,6 +105,14 @@ class PlatformLibraryCompiler {
                 it.fqNameWhenAvailable?.asString() in
                     dependencyTemplateSymbols
             }
+        val enumEntries =
+            ru.lazyhat.compukters.compiler.k2.engine.GuestEnumEntries.lower(
+                collected.classes + dependencyTemplateClasses,
+                pluginContext,
+                collected.classes,
+            )
+        collected.classes += enumEntries.classes
+        collected.functions += enumEntries.functions
         val dependencyTemplateFunctions =
             dependencyDeclarations.functions.filter { function ->
                 !function.isInline && (

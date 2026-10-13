@@ -15,6 +15,29 @@ permalink: /STDLIB-SUPPORT/collections/
 This is an executable API inventory for the current checkout. [Status and evidence policy]({{ '/STDLIB-SUPPORT/#status-and-evidence' | relative_url }}) applies to every entry. Signatures are indexed in
 the [generated Guest API reference]({{ '/guest-api/' | relative_url }}).
 
+## Immutable enum entries
+
+**Status:** Supported for admitted stateless Guest enum classes.
+
+`EnumType.entries` returns `kotlin.enums.EnumEntries<E>`, an invariant type implementing read-only
+`List<E>`. Elements retain declaration order and enum singleton identity. Every read for the same type
+returns the same collection, including reads across a separately compiled platform or addon library.
+Empty enums have a shared empty collection per type. The private backing array never escapes;
+casting the collection to `MutableList<E>` fails rather than enabling mutation.
+
+`size`, `isEmpty`, indexed access, `contains` / `in`, `indexOf`, `lastIndexOf` and ordinary iteration
+use the existing managed collection interfaces, including reference-preserving `List<Any>`,
+`List<Any?>` and nullable-element read views. Indexed access outside `0 until size` throws catchable
+`IndexOutOfBoundsException`; exhausted iterators throw `NoSuchElementException`. Searches compare
+singleton references and run in linear time. Each iterator is a fresh managed object. The cached collection
+and backing array allocate during enum cache initialization; repeated `entries` reads do not allocate.
+Other generated enum methods and structural list equality retain their existing support limits.
+
+**Evidence:** `MinimalScriptLoweringTest`, test `enum entries preserve ordered singleton references and
+collection identity`, executed by `testKotlinEnumEntriesVmConformance` for project, platform and addon types.
+`PlatformMetadataCompilerTest` covers generated getter identities; `CompletionQueryTest` and
+`DiagnosticQueryTest` cover IDE source and metadata inputs.
+
 ## Lists and selection
 
 ### `Iterable<T>` search and predicate operations

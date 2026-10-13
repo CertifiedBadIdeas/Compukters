@@ -70,6 +70,7 @@ object CanonicalTrustedIntrinsics {
                 primitive("kotlin", "builtins", "kotlin", primitive.arrayFactory.removePrefix("kotlin."), "fun($name):$array")
             }
             primitive("kotlin", "builtins", "kotlin", "Comparable.compareTo", "fun(T):Int")
+            primitive("kotlin", "builtins", "kotlin", "Enum.compareTo", "fun(E):Int")
             primitive("kotlin", "builtins", "kotlin", "Enum.name", "val():String")
             primitive("kotlin", "builtins", "kotlin", "Enum.ordinal", "val():Int")
             primitive("kotlin", "builtins", "kotlin", "Enum.<init>", "constructor()")
