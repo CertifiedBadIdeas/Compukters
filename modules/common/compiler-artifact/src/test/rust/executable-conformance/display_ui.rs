@@ -59,6 +59,8 @@ pub(super) fn execute() {
     session.start(&[]).unwrap();
     let mut fills = Vec::new();
     let mut printed = false;
+    let mut frame_start = None;
+    let mut frames = Vec::new();
     for _ in 0..10000 {
         match session.advance(1024, 64).unwrap() {
             AdvanceOutcome::SliceExhausted => {}
@@ -82,6 +84,7 @@ pub(super) fn execute() {
                     assert_eq!(request.name(), "display");
                     assert_eq!(args.get(0), Some(HostValueView::I32(7)));
                     match request.operation() {
+                        14 | 15 => {}
                         11 => fills.push(
                             (0..6)
                                 .map(|i| match args.get(i) {
@@ -90,11 +93,21 @@ pub(super) fn execute() {
                                 })
                                 .collect::<Vec<_>>(),
                         ),
-                        9 | 14 | 15 | 16 | 19 | 20 => {}
+                        9 | 16 | 19 | 20 => {}
                         value => panic!("unexpected display operation {value}"),
                     }
                 }
                 let id = request.id();
+                let operation = request.operation();
+                let is_display = request.name() == "display";
+                if is_display && operation == 14 { frame_start = Some(session.accounting()); }
+                if is_display && operation == 15 {
+                    let before = frame_start.take().unwrap();
+                    let after = session.accounting();
+                    frames.push((after.published_requests - before.published_requests + 1,
+                        after.fixed_guest_units - before.fixed_guest_units,
+                        after.dynamic_guest_units - before.dynamic_guest_units));
+                }
                 session.resume(id, HostResponse::Success(response)).unwrap();
             }
             AdvanceOutcome::UncaughtException => panic!(
@@ -110,8 +123,11 @@ pub(super) fn execute() {
                         .iter()
                         .filter(|fill| **fill == vec![7, 12, 308, 84, 26, 0x30363C])
                         .count(),
-                    50
+                    52
                 );
+                assert_eq!(frames.len(), 52);
+                assert_eq!(frames[0].0, frames[49].0);
+                println!("SCADA frame (requests, fixed Guest units, dynamic Guest units): empty={:?}, full={:?}", frames[49], frames[51]);
                 return;
             }
             outcome => panic!("unexpected UI outcome: {outcome:?}"),
