@@ -109,3 +109,8 @@ exit, loss of connectivity, removal or unload clears all outputs. Port output le
 transient: they are not restored from saves. After hibernation a retained port handle is stale and a waiting
 operation reports `compukter.io.IOException`; reacquire the port explicitly. This lifetime applies to the remote
 port; the computer's own GPIO retains its existing persisted output register.
+
+Each Redstone Port face has a red signal indicator. Its brightness follows the greater of the sampled input
+and the program output on that face (0–15). Four small indicators repeat that face's state along the adjacent
+faces, so its signal remains visible when another block covers the main indicator. Indicators are visual only;
+they do not emit redstone or preserve control across reloads.

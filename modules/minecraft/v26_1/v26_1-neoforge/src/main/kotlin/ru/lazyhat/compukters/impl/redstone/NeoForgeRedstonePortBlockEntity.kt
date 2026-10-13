@@ -14,4 +14,18 @@ import ru.lazyhat.compukters.minecraft.redstone.RedstonePortBlockEntity
 class NeoForgeRedstonePortBlockEntity(
     position: BlockPos,
     state: BlockState,
-) : RedstonePortBlockEntity(CompuktersRegistry.REDSTONE_PORT_BLOCK_ENTITY.get(), position, state)
+) : RedstonePortBlockEntity(CompuktersRegistry.REDSTONE_PORT_BLOCK_ENTITY.get(), position, state) {
+    override fun getUpdateTag(registries: net.minecraft.core.HolderLookup.Provider): net.minecraft.nbt.CompoundTag =
+        net.minecraft.nbt
+            .CompoundTag()
+            .also { it.putInt("IndicatorLevels", indicatorLevels) }
+
+    override fun getUpdatePacket(): net.minecraft.network.protocol.game.ClientboundBlockEntityDataPacket =
+        net.minecraft.network.protocol.game.ClientboundBlockEntityDataPacket
+            .create(this)
+
+    override fun loadAdditional(input: net.minecraft.world.level.storage.ValueInput) {
+        super.loadAdditional(input)
+        acceptIndicatorLevels(input.getIntOr("IndicatorLevels", 0))
+    }
+}

@@ -57,7 +57,20 @@ fun main() {
         }
     }
     check(first == 0 && second == 0 && draws == 0)
-    ui.draw(GraphicalDisplay.named("screen"))
+    var escaped: DisplayFrame? = null
+    val firstScreen = GraphicalDisplay.named("screen")
+    firstScreen.frame {
+        escaped = this
+        ui.draw(this)
+        var nestedRejected = false
+        try { firstScreen.frame { error("nested block must not run") } }
+        catch (error: Exception) { nestedRejected = true }
+        check(nestedRejected)
+    }
+    var closedRejected = false
+    try { escaped!!.pixel(0, 0, Colors.WHITE) }
+    catch (error: IllegalStateException) { closedRejected = true }
+    check(closedRejected)
     check(draws == 1)
     check(ui.contentSize == 50 by 50)
     check(ui.dispatch(DisplayClick(100 xy 50)) && first == 1)
@@ -124,6 +137,8 @@ fun main() {
     }
     val screen = GraphicalDisplay.named("screen")
     repeat(50) { renderDashboard(scada, screen) }
+    repeat(96) { history.add((it - 48).toFloat()) }
+    repeat(2) { renderDashboard(scada, screen) }
     println("display ui ok")
 }
 
