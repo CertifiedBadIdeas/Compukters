@@ -36,6 +36,13 @@ internal object IdeTargetClientNetwork : IdeClientTargetTransport {
     fun namedPeripherals(target: IdeTargetReference): CompletableFuture<IdeTargetReply>? =
         current?.request(IdeTargetRequest.NamedPeripherals(target))
 
+    fun renamePeripheral(
+        target: IdeTargetReference,
+        device: IdePeripheralReference,
+        expected: String,
+        requested: String,
+    ): CompletableFuture<IdeTargetReply>? = current?.request(IdeTargetRequest.RenamePeripheral(target, device, expected, requested))
+
     override fun openPort(): NetworkIdeTargetPort {
         disconnect()
         val broker =
