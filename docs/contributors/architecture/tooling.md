@@ -108,10 +108,14 @@ Analysis protocol v15 adds a peripheral-provider role to semantic tokens and com
 The protocol also carries explicit Kotlin format, rename-admission, and parameter-information requests.
 Completion records carry immutable ordered UTF-16 label-relative name-match ranges, derived by the same worker-owned
 contiguous word-fragment matcher used for filtering and ranking. The client renders these ranges without repeating
-the matching algorithm. Expression information carries optional bounded plain-text KDoc from the resolved project
+the matching algorithm. Expression information carries optional bounded KDoc text from the resolved project
 declaration or its exact attached platform source. Both fields are validated at the worker/client boundary, including
 Unicode boundaries, nonoverlapping ranges and negotiated UTF-8 documentation limits. Hover wraps documentation and
-bounds its visible height; it does not execute HTML or fetch external content.
+bounds its visible height, with local scrolling that consumes wheel input inside the popup without moving the source.
+The shared `KDocDocument` parser keeps tag identities, subjects and descriptions separate from English presentation
+labels. Hover presents standard tag sections, Markdown paragraphs and lists, styled references and literal code
+examples. Comment extraction retains code indentation and Markdown hard breaks; indented examples cannot open or
+close fences or introduce documentation tags. The renderer does not execute HTML or fetch external content.
 Callable completions carry bounded independent presentation fields for the declared extension receiver, package and
 specialized return type. Type-scope member signatures retain K2 substitutions; extension applicability supplies
 receiver substitutions through the pinned K2 completion checker. Explicit receiver checks use a query-only contextual

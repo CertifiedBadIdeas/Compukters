@@ -83,4 +83,27 @@ class IdeKDocPresentationTest {
         assertEquals("**literal**", lines.last().text)
         assertTrue(lines.last().code)
     }
+
+    @Test
+    fun `indented code at the start of documentation remains literal before return section`() {
+        for (indent in listOf("    ", "\t")) {
+            val lines = IdeKDocPresentation.lines("$indent```kotlin\n$indent@param literal\n\n@return actual")
+            assertEquals(listOf("```kotlin", "@param literal"), lines.filter { it.code }.map { it.text })
+            assertTrue(lines.any { it.text == "Returns" })
+            assertTrue(lines.any { it.text == "actual" })
+        }
+    }
+
+    @Test
+    fun `return section can begin with an indented example`() {
+        val lines = IdeKDocPresentation.lines("@return\n\n    val answer = 42")
+        assertEquals("val answer = 42", lines.single { it.code }.text)
+    }
+
+    @Test
+    fun `deeply indented fence remains part of a fenced example`() {
+        val lines = IdeKDocPresentation.lines("```kotlin\n    ```\n@param literal\n```\n@return actual")
+        assertEquals(listOf("    ```", "@param literal"), lines.filter { it.code }.map { it.text })
+        assertTrue(lines.any { it.text == "Returns" })
+    }
 }
