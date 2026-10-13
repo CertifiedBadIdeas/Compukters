@@ -395,3 +395,11 @@ layout/verifier contract are unchanged; already compiled artifacts retain their 
 `ServerCompilerService` performs bounded asynchronous preparation, persistent-cache lookup, and single-flight
 deduplication by compilation identity. Minecraft-facing code submits requests and drains completions; worker and cache
 I/O run outside the server tick thread.
+
+## Enum identity storage
+
+The generated Kotlin runtime module owns a non-generic abstract `kotlin.Enum` class with name/ordinal
+fields. Guest source `Enum<E>` and `Enum<*>` map to this base, while each concrete enum retains its own
+nominal type and singleton fields. Initializers create entry objects, set exact declaration names and
+indices, then publish static references. Trusted getters emit ordinary base field reads, including for
+separately compiled enums. This introduces no host lookup, per-enum dispatch table or VM instruction.

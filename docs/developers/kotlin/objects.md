@@ -261,9 +261,9 @@ task `testKotlinObjectModelVmConformance`.
 
 Stateless enums also expose cached, typed `EnumType.entries`, including empty enums and separately
 compiled library enums. The [collection contract](../stdlib/collections.md#immutable-enum-entries)
-owns its immutable list operations and executable evidence. This does not add `values()`, `valueOf()`,
-`name`, `ordinal` or `compareTo()` execution support. The structural `Enum.compareTo` declaration keeps
-IDE enum inheritance complete without claiming those runtime operations.
+owns its immutable list operations and executable evidence. Entries also expose the [name and ordinal](#enum-names-and-declaration-indices)
+properties. `values()`, `valueOf()` and `compareTo()` remain outside executable support. The structural `Enum.compareTo` declaration keeps
+IDE enum inheritance complete without claiming comparison runtime support.
 
 ## Secondary constructors and stateful enums
 
@@ -368,3 +368,22 @@ Platform libraries export mutable property accessors, including custom setter va
 side effects. Private setters remain inaccessible from external Kotlin source. `PlatformMetadataCompilerTest` exercises setter
 metadata; `testKotlinDisplayUiVmConformance` executes the validated slider setter and viewport setter
 cancellation through the compiled Guest library.
+
+## Enum names and declaration indices
+
+**Status:** Supported.
+
+Every admitted enum entry exposes its exact source `name` and zero-based `ordinal` in declaration order.
+The common managed `kotlin.Enum` base preserves these properties through `Enum<E>`, `Enum<*>`, generic
+functions bounded by `Enum<E>`, nullable references and separately compiled platform/addon libraries.
+Each entry stores one String reference and one Int in addition to its object header; property reads
+use ordinary field access without allocation. Name strings initialize before singleton publication and
+remain reachable through the entry. Enum constructor state remains unsupported. `compareTo`, `values()`
+and `valueOf()` remain outside executable support.
+
+**Evidence:** `MinimalScriptLoweringTest`, tests `enum entries preserve ordered singleton references and
+collection identity` and `enum entries from enum-only libraries export executable getters`, paired with
+`testKotlinEnumEntriesVmConformance`. IDE test `enum entries resolve typed indexing iteration and platform enums`
+covers typed properties and base references with source and metadata platform inputs.
+
+**Related work:** [#773](https://github.com/CertifiedBadIdeas/Compukters/issues/773).

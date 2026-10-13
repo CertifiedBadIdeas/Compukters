@@ -48,8 +48,10 @@ public open class Throwable external constructor(
 public abstract class Enum<E : Enum<E>> external constructor() : Comparable<E> {
     public external override fun compareTo(other: E): Int
 
+    /** Exact declaration name, shared by all references to this entry. */
     public external val name: String
 
+    /** Zero-based index in the enum declaration and its entries collection. */
     public external val ordinal: Int
 }
 

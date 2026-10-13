@@ -1204,7 +1204,15 @@ private const val ANY_EQUALS_IMPORT = 50u
 private const val CHAR_SEQUENCE_RUNTIME_TYPE = 39u
 private const val CHAR_SEQUENCE_IMPORT = 57u
 private const val CHAR_SEQUENCE_LENGTH_IMPORT = 58u
-private const val RUNTIME_IMPORT_COUNT = 61
+private const val ENUM_RUNTIME_TYPE = 40u
+private const val ENUM_FIELD_START = 15u
+private const val ENUM_IMPORT = 61u
+private const val ENUM_NAME_IMPORT = 62u
+private const val ENUM_ORDINAL_IMPORT = 63u
+private const val ENUM_NAME = "kotlin.Enum"
+private const val ENUM_NAME_FIELD = "kotlin.Enum.name"
+private const val ENUM_ORDINAL_FIELD = "kotlin.Enum.ordinal"
+private const val RUNTIME_IMPORT_COUNT = 64
 private const val CHAR_SEQUENCE_NAME = "kotlin.CharSequence"
 private val charSequenceMethods = listOf("<get-length>", "get", "subSequence")
 private val charSequenceMemberNames = charSequenceMethods.map { "$CHAR_SEQUENCE_NAME.$it" }
@@ -1227,7 +1235,8 @@ private val scalarBoxes = GuestPrimitive.entries.map(::ScalarBox)
 private val runtimeMemberNames =
     listOf(INT_BOX_VALUE_NAME, THROWABLE_MESSAGE_NAME, THROWABLE_CAUSE_NAME) +
         scalarBoxes.drop(1).take(5).map { it.name } + UNIT_INSTANCE_NAME + ANY_TO_STRING_NAME + ANY_HASH_CODE_NAME + ANY_EQUALS_NAME +
-        scalarBoxes.drop(6).map { it.name } + CHAR_SEQUENCE_NAME + charSequenceMemberNames
+        scalarBoxes.drop(6).map { it.name } + CHAR_SEQUENCE_NAME + charSequenceMemberNames +
+        listOf(ENUM_NAME, ENUM_NAME_FIELD, ENUM_ORDINAL_FIELD)
 private const val INT_BOX_VALUE_NAME = "kotlin.Int.<boxed-value>"
 private const val THROWABLE_MESSAGE_NAME = "kotlin.Throwable.message"
 private const val THROWABLE_CAUSE_NAME = "kotlin.Throwable.cause"
@@ -1296,6 +1305,9 @@ private fun mapGuestValueType(
             classInstanceTypeIds = classInstanceTypeIds,
             resolveUnderlyingType = resolveUnderlyingType,
         )
+    }
+    if (((type as? IrSimpleType)?.classifier as? IrClassSymbol)?.owner?.fqNameWhenAvailable?.asString() == ENUM_NAME) {
+        return ValueType.Ref(type.isNullable(), TypeRef.Imported(ImportId.of(ENUM_IMPORT)))
     }
     if (type.isNullableUnit()) return ValueType.Ref(true, TypeRef.Imported(ImportId.of(UNIT_RUNTIME_TYPE)))
     if (type.isNullable() && (type as? IrSimpleType)?.classifier == pluginContext.irBuiltIns.nothingClass) {
@@ -2040,8 +2052,10 @@ internal object KotlinProjectLowering {
                         ?.accept(collector, null)
                 }
             }
+        val enumEntries = userClasses.flatMap { it.declarations.filterIsInstance<IrEnumEntry>() }
+        val enumNames = enumEntries.map { it.name.asString() }
         val literals =
-            (literalCollector.strings + guestTypes.valueClassBoxes.values.flatMap { it.stringParts })
+            (literalCollector.strings + guestTypes.valueClassBoxes.values.flatMap { it.stringParts } + enumNames)
                 .distinct()
                 .map {
                     Utf16Literal.fromString(it)
@@ -2050,7 +2064,13 @@ internal object KotlinProjectLowering {
         val constantPool = ConstantPoolBuilder()
         (
             (
-                literalCollector.values + guestTypes.valueClassBoxes.values.flatMap { it.stringParts } +
+                literalCollector.values + guestTypes.valueClassBoxes.values.flatMap { it.stringParts } + enumNames +
+                    userClasses.flatMap {
+                        it.declarations
+                            .filterIsInstance<IrEnumEntry>()
+                            .indices
+                            .toList()
+                    } +
                     topLevelProperties.mapNotNull { property ->
                         when (val initializer = property.initializer) {
                             TopLevelInitializer.Null -> null
@@ -3119,6 +3139,30 @@ internal object KotlinProjectLowering {
                         instructions =
                             listOf(
                                 Instruction.NewObject(RegisterId.of(index.toUInt()), TypeRef.Local(layout.typeId)),
+                                Instruction.Const(
+                                    RegisterId.of(layout.enumEntries.size.toUInt()),
+                                    requireNotNull(
+                                        constantIds[
+                                            Constant.StringLiteral(
+                                                requireNotNull(literalIds[Utf16Literal.fromString(enumEntry.declaration.name.asString())]),
+                                            ),
+                                        ],
+                                    ),
+                                ),
+                                Instruction.FieldSet(
+                                    RegisterId.of(index.toUInt()),
+                                    FieldRef.Imported(ImportId.of(ENUM_NAME_IMPORT)),
+                                    RegisterId.of(layout.enumEntries.size.toUInt()),
+                                ),
+                                Instruction.Const(
+                                    RegisterId.of(layout.enumEntries.size.toUInt() + 1u),
+                                    requireNotNull(constantIds[Constant.I32(index)]),
+                                ),
+                                Instruction.FieldSet(
+                                    RegisterId.of(index.toUInt()),
+                                    FieldRef.Imported(ImportId.of(ENUM_ORDINAL_IMPORT)),
+                                    RegisterId.of(layout.enumEntries.size.toUInt() + 1u),
+                                ),
                                 Instruction.StaticSet(FieldRef.Local(enumEntry.fieldId), RegisterId.of(index.toUInt())),
                                 Instruction.Jump(BlockId.of(nextBlock.toUInt())),
                             ),
@@ -3134,7 +3178,7 @@ internal object KotlinProjectLowering {
                     values =
                         List(layout.enumEntries.size) {
                             FunctionValue.scalar(ValueType.Ref(nullable = false, type = TypeRef.Local(layout.typeId)))
-                        },
+                        } + listOf(FunctionValue.scalar(stringType), FunctionValue.scalar(ValueType.I32)),
                     parameterCount = 0u,
                     firstBlock = BlockId.of(firstBlock.toUInt()),
                     blockCount = (layout.enumEntries.size + 1).toUInt(),
@@ -3355,6 +3399,8 @@ internal object KotlinProjectLowering {
                         } ?: ((resolved as? IrSimpleType)?.classifier as? IrClassSymbol)?.let { symbol ->
                             if (symbol.owner.fqNameWhenAvailable?.asString() == CHAR_SEQUENCE_NAME) {
                                 symbol to TypeRef.Imported(ImportId.of(CHAR_SEQUENCE_IMPORT))
+                            } else if (symbol.owner.fqNameWhenAvailable?.asString() == ENUM_NAME) {
+                                symbol to TypeRef.Imported(ImportId.of(ENUM_IMPORT))
                             } else {
                                 externalClassTypes[symbol]?.let { symbol to it }
                             }
@@ -4284,7 +4330,8 @@ internal object KotlinProjectLowering {
                 return true
             }
             if (((type as? IrSimpleType)?.classifier as? IrClassSymbol)?.owner?.fqNameWhenAvailable?.asString() ==
-                CHAR_SEQUENCE_NAME
+                CHAR_SEQUENCE_NAME ||
+                ((type as? IrSimpleType)?.classifier as? IrClassSymbol)?.owner?.fqNameWhenAvailable?.asString() == ENUM_NAME
             ) {
                 return true
             }
@@ -4485,7 +4532,7 @@ internal object KotlinProjectLowering {
                     if (owner == STRING_RUNTIME_TYPE) charSequenceMethods.map { owner to it } else emptyList()
             }
         val methodStarts = owners.associateWith { owner -> methods.indexOfFirst { it.first == owner }.toUInt() }
-        val runtimeTypeCount = runtimeTypeNames.size + 1
+        val runtimeTypeCount = runtimeTypeNames.size + 2
         val textType = TypeRef.Local(TypeId.of(CHAR_SEQUENCE_RUNTIME_TYPE))
         val blockCounts =
             methods.map { (owner, name) ->
@@ -4970,7 +5017,13 @@ internal object KotlinProjectLowering {
                             storage = primitive.arrayStorage,
                         )
                     } + NominalType.Interface(requireNotNull(ids[CHAR_SEQUENCE_NAME]), methodStart = initializerId + 1u, methodCount = 3u) +
-                    signatures,
+                    NominalType.Class(
+                        requireNotNull(ids[ENUM_NAME]),
+                        abstract = true,
+                        superType = anyType,
+                        fieldStart = ENUM_FIELD_START,
+                        fieldCount = 2u,
+                    ) + signatures,
             fields =
                 listOf(
                     Field(
@@ -5019,10 +5072,26 @@ internal object KotlinProjectLowering {
                             mutable = true,
                             static = false,
                         )
-                    },
+                    } +
+                    listOf(
+                        Field(
+                            TypeRef.Local(TypeId.of(ENUM_RUNTIME_TYPE)),
+                            requireNotNull(ids[ENUM_NAME_FIELD]),
+                            string,
+                            mutable = true,
+                            static = false,
+                        ),
+                        Field(
+                            TypeRef.Local(TypeId.of(ENUM_RUNTIME_TYPE)),
+                            requireNotNull(ids[ENUM_ORDINAL_FIELD]),
+                            ValueType.I32,
+                            mutable = true,
+                            static = false,
+                        ),
+                    ),
             exports =
                 (
-                    (runtimeTypeNames + CHAR_SEQUENCE_NAME).mapIndexed { index, name ->
+                    (runtimeTypeNames + CHAR_SEQUENCE_NAME + ENUM_NAME).mapIndexed { index, name ->
                         Export(
                             kind = SymbolKind.TYPE,
                             visibility = ExportVisibility.PUBLIC_LIBRARY,
@@ -5084,6 +5153,15 @@ internal object KotlinProjectLowering {
                             2u,
                             TypeRef.Local(TypeId.of(runtimeTypeCount.toUInt() + 2u)),
                         ) +
+                        listOf(ENUM_NAME_FIELD, ENUM_ORDINAL_FIELD).mapIndexed { index, name ->
+                            Export(
+                                SymbolKind.FIELD,
+                                ExportVisibility.PUBLIC_LIBRARY,
+                                requireNotNull(ids[name]),
+                                ENUM_FIELD_START + index.toUInt(),
+                                TypeRef.Local(TypeId.of(ENUM_RUNTIME_TYPE)),
+                            )
+                        } +
                         charSequenceMemberNames.mapIndexed { index, name ->
                             Export(
                                 SymbolKind.FUNCTION,
@@ -5176,6 +5254,22 @@ internal object KotlinProjectLowering {
                     ModuleId.of(1u),
                     requireNotNull(metadataIds[name]),
                     TypeRef.Local(TypeId.of((functionTypeBase + 3 + index).toUInt())),
+                    libraryHash,
+                )
+            } +
+            Import(
+                SymbolKind.TYPE,
+                ModuleId.of(1u),
+                requireNotNull(metadataIds[ENUM_NAME]),
+                TypeRef.Imported(ImportId.of(ENUM_IMPORT)),
+                libraryHash,
+            ) +
+            listOf(ENUM_NAME_FIELD, ENUM_ORDINAL_FIELD).map { name ->
+                Import(
+                    SymbolKind.FIELD,
+                    ModuleId.of(1u),
+                    requireNotNull(metadataIds[name]),
+                    TypeRef.Imported(ImportId.of(ENUM_IMPORT)),
                     libraryHash,
                 )
             }
@@ -6893,6 +6987,14 @@ private class FunctionCompiler(
                 call.symbol.owner.resolveFakeOverrideMaybeAbstract() ?: call.symbol.owner
             }
         val targetName = target.fqNameWhenAvailable?.asString()
+        if (targetName in setOf("$ENUM_NAME.<get-name>", "$ENUM_NAME.<get-ordinal>")) {
+            val argument = call.dispatchReceiver ?: throw UnsupportedKotlinIr(call, "enum identity receiver is missing")
+            val receiver = compileExpression(argument)
+            val field = if (target.name.asString() == "<get-name>") ENUM_NAME_IMPORT else ENUM_ORDINAL_IMPORT
+            return allocate(
+                valueType(call.type, call),
+            ).also { emit(Instruction.FieldGet(it, receiver, FieldRef.Imported(ImportId.of(field)))) }
+        }
         if (targetName == "kotlin.internal.ir.EQEQEQ") {
             val operands = call.arguments.filterNotNull()
             if (operands.size != 2 || operands.any { !(it is IrConst && it.value == null) && valueType(it.type, it) !is ValueType.Ref }) {
@@ -10782,6 +10884,9 @@ private class GuestArrayUsageCollector(
             when {
                 ((element as? IrSimpleType)?.classifier as? IrClassSymbol)?.owner?.fqNameWhenAvailable?.asString() ==
                     CHAR_SEQUENCE_NAME -> CHAR_SEQUENCE_IMPORT
+
+                ((element as? IrSimpleType)?.classifier as? IrClassSymbol)?.owner?.fqNameWhenAvailable?.asString() ==
+                    ENUM_NAME -> ENUM_IMPORT
 
                 element.isKotlinAny() -> ANY_RUNTIME_TYPE
 
