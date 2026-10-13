@@ -9,3 +9,7 @@ trim_trailing_whitespace = true
 # ROM program source names match their shell commands.
 [system/programs/*.kt]
 ktlint_standard_filename = disabled
+
+# Guest project entrypoints use the conventional main.kt filename.
+[examples/*/src/main.kt]
+ktlint_standard_filename = disabled

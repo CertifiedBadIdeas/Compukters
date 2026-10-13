@@ -2359,6 +2359,45 @@ class MinimalScriptLoweringTest {
         }
 
     @Test
+    fun `boiler SCADA example compiles against the actual addon bundles`() =
+        withAdapter { adapter ->
+            val create = checkNotNull(System.getProperty("compukters.createScadaBundle"))
+            val addition = checkNotNull(System.getProperty("compukters.createadditionScadaBundle"))
+            val root = repositoryFile("examples/boiler-scada/src").toFile()
+            val sources =
+                root
+                    .walkTopDown()
+                    .filter { it.isFile && it.extension == "kt" }
+                    .sortedBy { it.relativeTo(root).path }
+                    .map { "project/" + it.relativeTo(root).invariantSeparatorsPath to it.readText() }
+                    .toList()
+            val addons =
+                listOf(create, addition).map { path ->
+                    AddonGuestApiBundleCodec.decode(
+                        java.nio.file.Files
+                            .readAllBytes(Path.of(path)),
+                    )
+                }
+            val base = request(sources, WorkerLimits())
+            val modules =
+                addons.map { addon ->
+                    TrustedBundleIdentity.of(addon.moduleDescriptor.id.toString(), Hash256.of(addon.identity.contentHash.toByteArray()))
+                }
+            val payloads =
+                addons.map { addon ->
+                    TrustedBundlePayload(
+                        TrustedBundleIdentity.of(
+                            addon.identity.id,
+                            Hash256.of(addon.identity.contentHash.toByteArray()),
+                        ),
+                        BinaryValue.of(AddonGuestApiBundleCodec.encode(addon)),
+                    )
+                }
+            val result = adapter.compile(base.copy(platformModules = base.platformModules + modules, addonBundles = payloads))
+            assertNotNull(result.artifact, result.diagnostics.joinToString())
+        }
+
+    @Test
     fun `contract descriptions emit the same executable instructions as plain functions`() =
         withAdapter { adapter ->
             val description = "contract { returns(true) implies (value is String) }"

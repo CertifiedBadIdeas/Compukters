@@ -47,6 +47,7 @@ includeBuild("../..") {
 
 // Every addon stays an independent build. This run build owns their composition.
 includeBuild("../create") { name = "compukters-create" }
+includeBuild("../createaddition") { name = "compukters-createaddition" }
 includeBuild("../sable") { name = "compukters-sable" }
 includeBuild("../propulsion") { name = "compukters-propulsion" }
 rootProject.name = "compukters-addons-dev"
