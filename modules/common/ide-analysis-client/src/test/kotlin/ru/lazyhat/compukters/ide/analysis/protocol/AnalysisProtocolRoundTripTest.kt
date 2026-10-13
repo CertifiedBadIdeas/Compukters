@@ -105,7 +105,7 @@ class AnalysisProtocolRoundTripTest {
                 )
             assertEquals(diagnostic, active.diagnostics.single())
             val frame = AnalysisMessageCodec.encode(message, correlated)
-            val invalid = frame.copy(payload = frame.payload.copyOf().also { it[it.size - 13] = 127 })
+            val invalid = frame.copy(payload = frame.payload.copyOf().also { it[it.size - 17] = 127 })
             val failure = assertFailsWith<AnalysisProtocolException> { AnalysisMessageCodec.decode(invalid, correlated) }
             assertEquals(AnalysisProtocolError.UnknownEnumValue, failure.error)
         }
@@ -187,6 +187,42 @@ class AnalysisProtocolRoundTripTest {
             roundTrip(
                 AnalysisQuerySuccess(requestId, AnalysisResult.Presentation(admittedIdentity, invalid)),
                 AnalysisProtocolContext.of(input).forQuery(AnalysisQuery.Presentation(admittedIdentity, path())),
+            )
+        }
+    }
+
+    @Test
+    fun `peripheral facts retain exact source evidence and reject out of source ranges`() {
+        val fact =
+            ru.lazyhat.compukters.ide.analysis.PeripheralLookup(
+                path(),
+                EditorRange(4, 10),
+                "compukter.display.TextDisplay",
+                "panel",
+                true,
+            )
+        val value = SnapshotPresentation.create(identity, sourceLengths(), peripheralLookups = listOf(fact))
+        val decoded =
+            assertIs<AnalysisQuerySuccess>(
+                roundTrip(
+                    AnalysisQuerySuccess(requestId, AnalysisResult.Presentation(identity, value)),
+                    context.forQuery(AnalysisQuery.Presentation(identity, path())),
+                ),
+            )
+        val active =
+            assertIs<SnapshotPresentationAcceptance.Active>(assertIs<AnalysisResult.Presentation>(decoded.result).value.accept(identity))
+        assertEquals(listOf(fact), active.peripheralLookups)
+        assertFailsWith<IllegalArgumentException> {
+            SnapshotPresentation.create(identity, sourceLengths(), peripheralLookups = listOf(fact.copy(range = EditorRange(0, 100))))
+        }
+        assertFailsWith<IllegalArgumentException> {
+            SnapshotPresentation.create(
+                identity,
+                sourceLengths(),
+                peripheralLookups = listOf(fact),
+                limits =
+                    ru.lazyhat.compukters.ide.analysis
+                        .EditorPresentationLimits(maxLocations = 0),
             )
         }
     }

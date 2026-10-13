@@ -335,7 +335,7 @@ class AnalysisProtocolHostileInputTest {
                 AnalysisQuerySuccess(RequestId.of(1uL), AnalysisResult.Presentation(identity, presentation)),
                 context.forQuery(query),
             )
-        val malformed = encoded.copy(payload = encoded.payload.copyOf().also { it[it.lastIndex - 8] = 2 })
+        val malformed = encoded.copy(payload = encoded.payload.copyOf().also { it[it.lastIndex - 12] = 2 })
 
         assertEquals(AnalysisProtocolError.InvalidMessageValue, messageFailure(malformed, context.forQuery(query)).error)
     }
