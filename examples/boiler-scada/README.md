@@ -3,8 +3,9 @@
 A separate Guest project for a Create boiler heated by liquid Blaze Burners from **Create: Crafts & Additions**.
 START runs the water and fuel pumps from a **Create: Connected Kinetic Battery**. After sustained engine-only RPM,
 water and active boiler readings, the installation switches to steam power and charges the battery.
-STOP reverses the fuel pump from battery power, returning recoverable liquid to the reservoir. Once **every configured
-burner** is empty for eight consecutive samples, pumps stop and the panel waits for already-burning fuel to cool.
+STOP disables the feed pump and runs a separate drain pump from battery power, returning recoverable liquid to
+the reservoir. Once **every configured burner** is empty for eight consecutive samples, pumps stop and the panel
+waits for already-burning fuel to cool.
 
 ## Devices and screen
 
@@ -32,16 +33,22 @@ The program selects HIGH density, producing a 384x384 panel on a 3x3 screen.
 Steam Engine -> engine-only Speedometer -> [steam clutch] ---+
                                                            +-> pump bus -> water pump -> boiler
 Kinetic Battery <----------------------- [battery clutch] --+          |
-                                                                       +-> [fuel clutch] -> Gearshift -> fuel pump
-                                                                                                   |
-Fuel reservoir <----------------------- reversible pipe manifold ----------------------------------+-> straw burners
+                                                                       +-> [feed clutch] -> feed pump
+                                                                       +-> [drain clutch] -> drain pump
+
+Fuel reservoir -> feed pump -> feed manifold -> straw burners
+Fuel reservoir <- drain pump <- return manifold <- straw burners
 ```
 
 The common bus must have compatible rotation direction and speed from either source. Gear the engine branch to
 match the battery's configured discharge RPM and choose pump gearing that supplies enough water for the desired
 boiler level. Give the battery enough charge for startup **and** shutdown. Leave room in the reservoir for all stored
-burner fuel. The reversible fuel pipe manifold must connect only that reservoir and the configured burners; isolate
-other fuel consumers. Use separate water plumbing. A clutch at each power branch isolates both sources during switching.
+burner fuel. Use two separate fuel paths: a feed line from the reservoir to the burners and a return line from the burners
+back to the reservoir. Orient each pump's flow arrow accordingly; changing shaft rotation does not reverse fluid
+flow. Connect the feed and return manifolds to the burners through separate pipe connections, and keep the lines
+separate between the burners and reservoir so drainage cannot bypass the burners. Do not put the two pumps in
+series or use a Gearshift to select fuel flow. Isolate other fuel consumers and use separate water plumbing.
+A clutch at each power branch isolates both sources during switching.
 
 Port sides are relative to **the port's front**, independently of the computer orientation:
 
@@ -50,24 +57,26 @@ Port sides are relative to **the port's front**, independently of the computer o
 | FRONT | Kinetic Battery, directly | Discharge | Charge if mechanically connected |
 | RIGHT | Battery branch clutch **through a redstone torch inverter** | Connect battery | Isolate battery |
 | LEFT | Steam branch clutch **through a redstone torch inverter** | Connect engine | Isolate engine |
-| TOP | Fuel pump clutch **through a redstone torch inverter** | Run fuel pump | Stop fuel pump |
-| BOTTOM | Fuel pump Gearshift, directly | Drain burners into reservoir | Feed burners from reservoir |
+| TOP | Feed pump clutch **through a redstone torch inverter** | Feed reservoir → burners | Stop feed pump |
+| BOTTOM | Drain pump clutch **through a redstone torch inverter** | Drain burners → reservoir | Stop drain pump |
 | BACK | Unused | — | — |
 
 The clutch lines are inverted because Create clutches disconnect when powered. With all port outputs zero, both
-power branches and the fuel pump must be isolated. Keep the five redstone circuits separate; direct short runs or
+power branches and both fuel pumps must be isolated. Keep the five redstone circuits separate; direct short runs or
 independent Redstone Links can carry them. Test the polarity before attaching fluid supplies.
 For steam operation, FRONT is zero and both source clutches are connected: the engine drives the pumps and charges
-the battery. Before discharge can be enabled again, the engine branch is isolated. The fuel clutch opens before
-changing pump direction. Two-tick waits allow redstone torch and mechanical updates to settle between stages.
+the battery. Before discharge can be enabled again, the engine branch is isolated. Both fuel clutches disconnect before
+switching pumps or power sources; the feed and drain pumps are never enabled together. Two-tick waits allow
+redstone torch and mechanical updates to settle between stages.
 
 ## Controls and observations
 
 - **START** is available in IDLE with valid telemetry. It enables battery power and fuel feed. Handover requires
   eight consecutive completed samples with engine-only absolute RPM at least 8, positive water supply/water level,
   active heat and effective boiler level. Rotation from the battery must not reach the engine Speedometer.
-- **STOP / DRAIN** uses the battery to reverse the pump. A single remaining mB keeps drainage active. Eight
-  consecutive all-empty samples enter COOLING; burning time and active heat must then reach zero before IDLE.
+- **STOP / DRAIN** stops the feed pump and uses the battery to run the separate drain pump. A single remaining mB
+  keeps drainage active. Eight consecutive all-empty samples enter COOLING; burning time and active heat must then
+  reach zero before IDLE.
 - **RESET** clears a latched fault only when valid readings confirm no stored liquid, no burning time and no active
   heat. It does not start the installation. STOP can recover fuel after a fault while telemetry is available.
 
@@ -112,7 +121,8 @@ it verifies one-mB observation/recovery, device replacement and network loss.
 
 For the complete client check: start with empty burners and a charged, isolated battery. Verify IDLE and zero outputs,
 press START, observe battery-driven water/fuel pumping, then RUNNING with the discharge signal removed and battery
-charging. Press STOP, observe reversed fuel flow and falling per-burner amounts, then COOLING with every amount zero,
-then IDLE after the displayed burning time reaches zero. Block the return line and repeat STOP to check DRAIN TIMEOUT;
+charging. Check that only the feed pump is running. Press STOP, observe the feed pump stopping before the drain
+pump starts, fuel returning through its separate line and falling per-burner amounts, then COOLING with both fuel
+pumps stopped and every amount zero, then IDLE after the displayed burning time reaches zero. Block the return line and repeat STOP to check DRAIN TIMEOUT;
 remove a named device during operation to check a latched fault and absent automatic restart on recovery.
 A successful compilation or client launch alone does not establish this complete physical/visual scenario.
