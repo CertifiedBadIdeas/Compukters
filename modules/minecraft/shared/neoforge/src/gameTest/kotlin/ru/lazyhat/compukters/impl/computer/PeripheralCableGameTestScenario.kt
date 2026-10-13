@@ -140,6 +140,19 @@ internal object PeripheralCableGameTestScenario {
                 helper.setBlock(highDevice, Blocks.BARREL)
                 PeripheralNetworkGameTestFixtures.bind(helper, computer, highDevice)
                 val highIdentity = ComputerPeripheralIdentity(TEST_PROVIDER_ID, helper.absolutePos(highDevice), FIRST_DEVICE_KEY)
+                assertStatus(helper, computer, "barrel_1", ComputerPeripheralLookupStatus.MISSING)
+                val named =
+                    PeripheralConfiguratorServer.inspect(
+                        level,
+                        PeripheralConfiguratorContext(helper.absolutePos(highDevice), Direction.WEST),
+                        ru.lazyhat.compukters.minecraft.peripheral.PeripheralConfiguratorMode.EDIT_DEVICE,
+                    )
+                helper.assertTrue(named.targetName == "barrel_1", "network join did not assign a default device name")
+                PeripheralNetworkGameTestFixtures.bind(helper, computer, highDevice)
+                helper.assertTrue(
+                    PeripheralConfiguratorServer.inspect(level, named.context, named.mode).targetName == "barrel_1",
+                    "repeated binding changed the generated name",
+                )
                 ComputerPeripheralNames.setName(level, highIdentity, "distant")
                 assertStatus(helper, computer, "distant", ComputerPeripheralLookupStatus.MISSING)
                 // An independently connected computer can reach that same member.

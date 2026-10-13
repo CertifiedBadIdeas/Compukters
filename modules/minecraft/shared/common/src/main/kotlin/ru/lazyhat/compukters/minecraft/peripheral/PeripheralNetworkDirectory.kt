@@ -112,6 +112,23 @@ internal class PeripheralNetworkDirectory(
         membership[member.instance] = id
     }
 
+    /** Assign a free numbered name only during an explicit network join. */
+    fun bindWithDefaultName(
+        id: UUID,
+        member: PeripheralNetworkMember,
+        base: String,
+    ) {
+        val network = requireNotNull(networks[id]) { "Peripheral network does not exist" }
+        val existing =
+            network.members.firstOrNull {
+                it.instance == member.instance && it.identity.providerId == member.identity.providerId &&
+                    it.identity.deviceKey == member.identity.deviceKey
+            }
+        val name = existing?.name ?: member.name ?: defaultPeripheralName(base, network.members.mapNotNull { it.name }.toSet())
+        bind(id, member.copy(name = name))
+        if (existing != null && existing.name == null) setName(member.instance, member.identity, name)
+    }
+
     fun setName(
         instance: UUID,
         identity: PeripheralDeviceIdentity,
@@ -166,12 +183,15 @@ internal class PeripheralNetworkDirectory(
         networks[id] = network.copy(name = normalizePeripheralName(name))
     }
 
-    fun createFor(member: PeripheralNetworkMember): PeripheralNetwork {
+    fun createFor(
+        member: PeripheralNetworkMember,
+        defaultNameBase: String? = null,
+    ): PeripheralNetwork {
         require(memberCount < MAXIMUM_TOTAL_MEMBERS) { "Peripheral member limit reached" }
         require(member.instance !in membership) { "Device belongs to another network" }
         val id = UUID.randomUUID()
         val network = create("network-${id.toString().take(8)}", id)
-        bind(id, member)
+        if (defaultNameBase == null) bind(id, member) else bindWithDefaultName(id, member, defaultNameBase)
         return get(network.id)!!
     }
 

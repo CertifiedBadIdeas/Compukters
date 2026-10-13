@@ -67,7 +67,12 @@ map contacts to canonical logical identities. A versioned overworld SavedData di
 and member identities independently of computer lifetime; NeoForge persistent block-entity UUIDs prevent replacement
 blocks from inheriting membership. Member names belong to that directory; unbound adjacent devices retain the separate
 world-owned naming directory. Configurator selection lives in item custom data, with server-side proximity, held-item
-and exact-instance validation for edits. Chunk-load callbacks refresh address hints without forcing chunk loads.
+and exact-instance validation for edits. Explicit configurator joins assign unnamed members the first free
+`device_kind_N` name in that network, including unavailable members in collision checks. Existing names survive
+repeated joins; ordinary binding used by migration, screen assembly and split does not generate names. Composite
+display names remain authoritative in DisplayStorage, so configurator joins synchronize the generated name there.
+Numbered names use stable technical kinds rather than translated labels, and reuse vacated suffixes without a new
+persisted counter or schema. Chunk-load callbacks refresh address hints without forcing chunk loads.
 
 Membership does not imply reachability. A computer resolves only loaded, same-dimension members within the configured
 Euclidean radius (64 blocks by default), then deduplicates them with direct contacts. Discovery sorts canonical
