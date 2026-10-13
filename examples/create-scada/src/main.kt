@@ -24,6 +24,9 @@ fun area(
     height: Int,
 ): Rect2i = Rect2i(Vector2i(x, y), Vector2i(width, height))
 
+// Published as one immutable snapshot: device reads may suspend between fields.
+data class Telemetry(val sequence: Int, val rpm: Float, val load: Float, val target: Int, val connected: Boolean)
+
 fun main() {
     runDashboard()
 }
@@ -39,9 +42,17 @@ fun runDashboard(iterations: Int = -1) {
     var controller: RotationController? = null
     var resumeSpeed = 32
     var tick = 0
+    var running = true
+    var telemetry = Telemetry(0, Float.NaN, Float.NaN, 0, false)
+    var previousSequence = -1
+    var previousSample = telemetry
     var previouslyConnected = false
+    var connected = false
     var requested: Int? = null
     var currentTarget = 0
+    var commandFailed = false
+    var commandPending = false
+    var controlRevision = 0
     val connection: UiIndicator
     val speedText: UiText
     val targetText: UiText
@@ -76,82 +87,140 @@ fun runDashboard(iterations: Int = -1) {
         }
         at(12 xy 350) { alarm = indicator("ALARM: TELEMETRY LOST", 360 by 14) }
     }
-    while (iterations < 0 || tick < iterations) {
-        var rpm = Float.NaN
-        var load = Float.NaN
-        var target = 0
-        var connected = false
-        var commandFailed = false
-        try {
-            if (speedometer == null) speedometer = Speedometer.named(SPEED)
-            if (stressometer == null) stressometer = Stressometer.named(STRESS)
-            if (controller == null) controller = RotationController.named(CONTROL)
-            rpm = speedometer.speed()
-            val stress = stressometer.stress()
-            val capacity = stressometer.capacity()
-            require(finite(rpm) && finite(stress) && finite(capacity) && stress >= 0f && capacity >= 0f)
-            load =
-                if (capacity > 0f) {
-                    (stress.toDouble() * 100.0 / capacity).toFloat()
-                } else if (stress == 0f) {
-                    0f
-                } else {
-                    Float.NaN
-                }
-            target = controller.targetSpeed()
-            require(target in -256..256)
-            if (target != 0) resumeSpeed = target
-            connected = finite(load)
-        } catch (error: Exception) {
-            speedometer = null
-            stressometer = null
-            controller = null
-            rpm = Float.NaN
-            load = Float.NaN
+    val sampler = Tasks.launch {
+        while (running) {
+            while (running && commandPending) Tasks.sleepTicks(1)
+            if (!running) break
+            val sampleRevision = controlRevision
+            var rpm = Float.NaN
+            var load = Float.NaN
+            var target = 0
+            var connected = false
+            try {
+                val speedDevice = speedometer ?: Speedometer.named(SPEED)
+                val stressDevice = stressometer ?: Stressometer.named(STRESS)
+                val controlDevice = controller ?: RotationController.named(CONTROL)
+                speedometer = speedDevice
+                stressometer = stressDevice
+                controller = controlDevice
+                rpm = speedDevice.speed()
+                val stress = stressDevice.stress()
+                val capacity = stressDevice.capacity()
+                require(finite(rpm) && finite(stress) && finite(capacity) && stress >= 0f && capacity >= 0f)
+                load =
+                    if (capacity > 0f) {
+                        (stress.toDouble() * 100.0 / capacity).toFloat()
+                    } else if (stress == 0f) {
+                        0f
+                    } else {
+                        Float.NaN
+                    }
+                target = controlDevice.targetSpeed()
+                require(target in -256..256)
+                connected = finite(load)
+            } catch (error: Exception) {
+                speedometer = null
+                stressometer = null
+                controller = null
+                rpm = Float.NaN
+                load = Float.NaN
+            }
+            // A target read started before a command must not overwrite its accepted result.
+            if (!commandPending && sampleRevision == controlRevision) {
+                telemetry = Telemetry(telemetry.sequence + 1, rpm, load, target, connected)
+            }
+            Tasks.sleepTicks(5)
         }
-        history.add(rpm)
-        // Consume only one click per sample, then discard the bounded backlog. Never replay commands on reconnect.
+    }
+    while (iterations < 0 || tick < iterations) {
+        val sample = telemetry
+        var dirty = sample.sequence != previousSequence
+        if (dirty) {
+            previousSequence = sample.sequence
+            dirty = !sameReading(sample.rpm, previousSample.rpm) || !sameReading(sample.load, previousSample.load) ||
+                sample.target != previousSample.target || sample.connected != previousSample.connected
+            var historyChanged = history.size < history.capacity
+            if (!historyChanged) {
+                for (index in 0 until history.size) {
+                    val next = if (index + 1 < history.size) history[index + 1] else sample.rpm
+                    if (!sameReading(history[index], next)) historyChanged = true
+                }
+            }
+            dirty = dirty || historyChanged
+            previousSample = sample
+            val rpm = sample.rpm
+            val load = sample.load
+            val target = sample.target
+            connected = sample.connected
+            currentTarget = target
+            if (target != 0) resumeSpeed = target
+            history.add(rpm)
+            connection.label = if (connected) "CONNECTED" else "NO TELEMETRY"
+            connection.color = if (connected) Colors.GREEN else Colors.RED
+            speedText.text = "Speed: " + if (finite(rpm)) "${rpm.toInt()} rpm" else "--"
+            targetText.text = "Target: " + if (connected) "$target rpm" else "--"
+            controlIndicator.color = if (connected && target != 0) Colors.CYAN else 0x687D8C
+            shaftIndicator.color = if (finite(rpm) && abs(rpm) > .01f) Colors.GREEN else 0x687D8C
+            loadText.text = "Load: " + if (finite(load)) "${load.toInt()}%" else "--"
+            loadGauge.value = load
+            loadGauge.color = if (load >= ALARM_LOAD) Colors.RED else Colors.GREEN
+            slower.enabled = connected
+            faster.enabled = connected
+            stop.enabled = connected
+            resume.enabled = connected && target == 0
+            alarm.label = if (!connected) "ALARM: TELEMETRY LOST" else if (load >= ALARM_LOAD) "ALARM: HIGH LOAD" else "STATUS: NORMAL"
+            alarm.color = if (!connected || load >= ALARM_LOAD) Colors.RED else Colors.GREEN
+        }
+        // Do not replay stale input while disconnected or on the first recovered snapshot.
         val received = screen.pollClick()
         val click = if (connected && previouslyConnected) received else null
-        var drained = 0
-        while (drained < 64 && screen.pollClick() != null) drained++
+        if (received != null && (!connected || !previouslyConnected)) {
+            var drained = 0
+            while (drained < 63 && screen.pollClick() != null) drained++
+        }
         previouslyConnected = connected
-        currentTarget = target
         requested = null
-        connection.label = if (connected) "CONNECTED" else "NO TELEMETRY"
-        connection.color = if (connected) Colors.GREEN else Colors.RED
-        speedText.text = "Speed: " + if (finite(rpm)) "${rpm.toInt()} rpm" else "--"
-        targetText.text = "Target: " + if (connected) "$target rpm" else "--"
-        controlIndicator.color = if (connected && target != 0) Colors.CYAN else 0x687D8C
-        shaftIndicator.color = if (finite(rpm) && abs(rpm) > .01f) Colors.GREEN else 0x687D8C
-        loadText.text = "Load: " + if (finite(load)) "${load.toInt()}%" else "--"
-        loadGauge.value = load
-        loadGauge.color = if (load >= ALARM_LOAD) Colors.RED else Colors.GREEN
-        slower.enabled = connected
-        faster.enabled = connected
-        stop.enabled = connected
-        resume.enabled = connected && target == 0
-        alarm.label = if (!connected) "ALARM: TELEMETRY LOST" else if (load >= ALARM_LOAD) "ALARM: HIGH LOAD" else "STATUS: NORMAL"
-        alarm.color = if (!connected || load >= ALARM_LOAD) Colors.RED else Colors.GREEN
         ui.dispatch(click)
-        screen.frame {
+        val command = requested
+        if (connected && command != null && command != currentTarget) {
+            controlRevision++
+            commandPending = true
+            try {
+                currentTarget = controller!!.setTargetSpeed(command)
+                if (currentTarget != 0) resumeSpeed = currentTarget
+                targetText.text = "Target: $currentTarget rpm"
+                controlIndicator.color = if (currentTarget != 0) Colors.CYAN else 0x687D8C
+                resume.enabled = currentTarget == 0
+                commandFailed = false
+            } catch (error: Exception) {
+                controller = null
+                connected = false
+                previouslyConnected = false
+                slower.enabled = false
+                faster.enabled = false
+                stop.enabled = false
+                resume.enabled = false
+                commandFailed = true
+            } finally {
+                commandPending = false
+            }
+            dirty = true
+        }
+        if (commandFailed) {
+            alarm.label = "ALARM: COMMAND FAILED"
+            alarm.color = Colors.RED
+        }
+        if (dirty) screen.frame {
             clear(0x101820)
             ui.draw(this)
         }
-        val command = requested
-        if (connected && command != null && command != target) {
-            try {
-                target = controller!!.setTargetSpeed(command)
-                if (target != 0) resumeSpeed = target
-            } catch (error: Exception) {
-                controller = null
-                commandFailed = true
-            }
-        }
-        if (commandFailed) screen.text(12, 350, "ALARM: COMMAND FAILED", Colors.RED)
         tick++
-        Tasks.sleepTicks(5)
+        Tasks.sleepTicks(1)
     }
+    running = false
+    sampler.join()
 }
 
 fun finite(value: Float): Boolean = value >= -Float.MAX_VALUE && value <= Float.MAX_VALUE
+
+fun sameReading(left: Float, right: Float): Boolean = left == right || (!finite(left) && !finite(right))
