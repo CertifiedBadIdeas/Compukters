@@ -76,7 +76,7 @@ enum class RuntimeBundleDownloadResult {
     DOWNLOADED,
 }
 
-private const val SUPPORTED_RUNTIME_ABI = 23
+private const val SUPPORTED_RUNTIME_ABI = 24
 
 fun currentRuntimeBundleContract(runtimeVersion: String, vmCommit: String): RuntimeBundleContract {
     val version = Regex("0\\.([1-9][0-9]*)\\.(0|[1-9][0-9]*)").matchEntire(runtimeVersion)

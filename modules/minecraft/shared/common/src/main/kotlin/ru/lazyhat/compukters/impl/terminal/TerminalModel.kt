@@ -20,6 +20,7 @@ package ru.lazyhat.compukters.impl.terminal
 
 import ru.lazyhat.compukters.lang.runtime.vm.TerminalCell
 import ru.lazyhat.compukters.lang.runtime.vm.TerminalChange
+import ru.lazyhat.compukters.lang.runtime.vm.TerminalHistoryLimits
 import ru.lazyhat.compukters.lang.runtime.vm.TerminalPosition
 import ru.lazyhat.compukters.lang.runtime.vm.TerminalState
 import ru.lazyhat.compukters.lang.runtime.vm.TerminalUpdate
@@ -27,6 +28,8 @@ import ru.lazyhat.compukters.lang.runtime.vm.TerminalUpdate
 object TerminalModel {
     const val WIDTH = 51
     const val HEIGHT = 19
+    const val HISTORY_ROWS = TerminalHistoryLimits.ROWS
+    const val HISTORY_CELLS = HISTORY_ROWS * WIDTH
     const val CELL_COUNT = WIDTH * HEIGHT
     const val MAXIMUM_TEXT_CODE_UNITS = 4_096
     const val MAXIMUM_CHANGES = 4_096
@@ -39,6 +42,7 @@ object TerminalModel {
         require(state.cells.size == CELL_COUNT) { "invalid terminal cell count" }
         state.cells.forEach(::validateCell)
         validatePosition(state.cursor)
+        validateHistory(state.historyStart, state.historyCells)
     }
 
     fun validateDelta(delta: TerminalUpdate.Delta) {
@@ -49,6 +53,8 @@ object TerminalModel {
             delta.changes.sumOf { change ->
                 when (change) {
                     is TerminalChange.Patch -> change.cells.size
+                    is TerminalChange.HistoryAppend -> change.cells.size
+                    is TerminalChange.HistoryReplace -> change.cells.size
                     is TerminalChange.Fill, is TerminalChange.Scroll -> 1
                     is TerminalChange.Cursor, TerminalChange.Reset -> 0
                 }
@@ -80,10 +86,27 @@ object TerminalModel {
                 validatePosition(change.position)
             }
 
+            is TerminalChange.HistoryAppend -> {
+                validateHistory(change.firstRow, change.cells)
+            }
+
+            is TerminalChange.HistoryReplace -> {
+                validateHistory(change.firstRow, change.cells)
+            }
+
             TerminalChange.Reset -> {
                 Unit
             }
         }
+    }
+
+    fun validateHistory(
+        firstRow: Long,
+        cells: List<TerminalCell>,
+    ) {
+        require(firstRow >= 0 && firstRow <= Long.MAX_VALUE - cells.size / WIDTH - HEIGHT) { "invalid terminal history identity" }
+        require(cells.size <= HISTORY_CELLS && cells.size % WIDTH == 0) { "invalid terminal history cells" }
+        cells.forEach(::validateCell)
     }
 
     fun validateCell(cell: TerminalCell) {

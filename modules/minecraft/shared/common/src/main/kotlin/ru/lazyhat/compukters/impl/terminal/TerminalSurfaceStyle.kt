@@ -14,5 +14,6 @@ package ru.lazyhat.compukters.impl.terminal
 
 /** Terminal content background shared by standalone screens and the IDE overlay. */
 object TerminalSurfaceStyle {
+    const val SELECTION_COLOR: Int = 0x605580CC
     const val BACKGROUND_COLOR: Int = 0xFF161616.toInt()
 }

@@ -194,6 +194,7 @@ class IdeScreenController(
             focusArea = IdeFocusArea.Terminal
             terminalOverlay.focus()
             if (overlay.title.contains(uiEvent.x(), uiEvent.y())) terminalOverlay.retry()
+            overlay.grid?.let { terminalOverlay.press(it, uiEvent.x(), uiEvent.y(), uiEvent.button()) }
             host.clearFocus()
             input.pointerActivity()
             return true
@@ -281,7 +282,11 @@ class IdeScreenController(
             return true
         }
         if (scrollbarInteraction.drag(uiEvent.x(), uiEvent.y(), ::moveScrollbar)) return true
-        if (terminalOverlay.visible && terminalOverlayGeometry(geometry).panel.contains(uiEvent.x(), uiEvent.y())) return true
+        if (terminalOverlay.visible) {
+            val overlay = terminalOverlayGeometry(geometry)
+            if (overlay.grid?.let { terminalOverlay.drag(it, uiEvent.x(), uiEvent.y()) } == true) return true
+            if (overlay.panel.contains(uiEvent.x(), uiEvent.y())) return true
+        }
         if (splitters.drag(uiEvent.x().toInt(), uiEvent.y().toInt(), geometry)) return true
         if (input.explorerDragged(uiEvent.x(), uiEvent.y(), pointerContext(geometry))) return true
         if (focusArea == IdeFocusArea.Editor) {
@@ -300,6 +305,7 @@ class IdeScreenController(
         if (!viewport.supported) return true
         val uiEvent = event.map(viewport)
         synchronizeQuickOpen()
+        if (terminalOverlay.release()) return true
         if (scrollbarInteraction.release()) return true
         if (overlays.release()) return true
         if (controller.viewState().dialog != null) return true
@@ -353,7 +359,10 @@ class IdeScreenController(
         }
         val hoverModel = presentation(geometry).model
         if (hoverViewport.scroll(hoverModel, uiMouseX, uiMouseY, scrollY)) return true
-        if (terminalOverlay.visible && terminalOverlayGeometry(geometry).panel.contains(uiMouseX, uiMouseY)) return true
+        if (terminalOverlay.visible && terminalOverlayGeometry(geometry).panel.contains(uiMouseX, uiMouseY)) {
+            terminalOverlay.scroll(scrollY)
+            return true
+        }
         if (geometry.fileTabs?.contains(uiMouseX, uiMouseY) == true) {
             if (scrollY != 0.0 ||
                 scrollX != 0.0
@@ -414,7 +423,7 @@ class IdeScreenController(
         }
         if (event.key == IdeKeyCode.ESCAPE && input.cancelExplorerDrag()) return true
         if (splitters.captured) return true
-        if (focusArea == IdeFocusArea.Terminal && terminalOverlay.keyPressed(event, host.clipboard)) {
+        if (focusArea == IdeFocusArea.Terminal && terminalOverlay.keyPressed(event, host.clipboard) { host.clipboard = it }) {
             return true
         }
         if (

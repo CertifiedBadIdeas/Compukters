@@ -16,6 +16,8 @@ headings so this page has one stable URL that can be shared outside the reposito
 - Guest generic classes support callbacks and local helpers in primary-constructor initialization, field
   initializers and `init` blocks, with concrete capture types and independent state for each instance.
 
+- Added terminal history for the last 512 scrolled rows, available after reopening, with mouse-wheel and keyboard navigation, rectangular selection/copy, and ordinary input paste in standalone and IDE terminals.
+
 - Guest Kotlin enums expose immutable `EnumType.entries` in declaration order, including empty enums and enums from platform/addon libraries. Indexing, iteration, membership and IDE completion share the typed `EnumEntries<E>` API.
 
 - Joining a peripheral network assigns unnamed devices unique numbered names such as `display_1`;
