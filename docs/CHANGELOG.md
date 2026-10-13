@@ -52,7 +52,7 @@ headings so this page has one stable URL that can be shared outside the reposito
   name and network, with one outline around the complete tank. Explicit interaction consolidates older per-block
   bindings; addon providers can opt into the same bounded structure geometry.
 
-- Redstone Ports show input/output strength independently on all six faces, with small edge indicators visible when a face is covered.
+- Redstone Ports show input/output strength independently on all six faces; the central and all four edge indicators on each face light together according to that face’s signal.
 
 - Newly compiled Guest programs allow 64 nested calls, matching the runtime limit, so framed nested UI drawing fits within the declared stack budget.
 
