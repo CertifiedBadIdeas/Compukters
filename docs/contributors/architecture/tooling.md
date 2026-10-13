@@ -90,7 +90,7 @@ separate executor after the query frame is sent, keeping pipe backpressure off t
 cancellation acknowledgements retain their existing protocol contract.
 
 After preparation, the production client coalesces presentation changes for 100 ms and automatic completion for 50 ms;
-hover waits 400 ms. These delays share the visible response budget with K2 processing, the client tick and
+hover waits 150 ms. These delays share the visible response budget with K2 processing, the client tick and
 the next rendered frame. Manual completion enqueues immediately for an admitted snapshot and is retained while
 preparation is pending. Newer edits cancel obsolete work before their replacement snapshot is prepared.
 
