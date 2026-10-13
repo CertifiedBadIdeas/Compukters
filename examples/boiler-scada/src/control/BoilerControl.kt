@@ -59,8 +59,11 @@ class BoilerControl(
                 else -> Outputs(PowerSource.NONE, FuelMode.OFF)
             }
 
+    val canStart: Boolean
+        get() = alarm.isEmpty() && (phase == Phase.IDLE || phase == Phase.COOLING)
+
     fun start(sample: BoilerSample) {
-        if (phase == Phase.IDLE && sample.available) enter(Phase.STARTING)
+        if (canStart && sample.available) enter(Phase.STARTING)
     }
 
     fun stop(sample: BoilerSample) {

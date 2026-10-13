@@ -255,7 +255,7 @@ fun runDashboard(iterations: Int = -1) {
                 history.add(if (sample.available) sample.level.toFloat() else Float.NaN)
             }
             val available = sample.available && ports != null
-            start.enabled = available && control.phase == Phase.IDLE
+            start.enabled = available && control.canStart
             stop.enabled = available && control.phase != Phase.DRAINING && control.phase != Phase.COOLING
             reset.enabled =
                 available && control.phase == Phase.FAULT && sample.fuelAmount == 0 && sample.heatLevel == 0 && sample.burnTicks == 0
@@ -304,7 +304,7 @@ fun runDashboard(iterations: Int = -1) {
                     drainClicks(screen)
                 }
             }
-            start.enabled = available && ports != null && control.phase == Phase.IDLE
+            start.enabled = available && ports != null && control.canStart
             stop.enabled = available && ports != null && control.phase != Phase.DRAINING && control.phase != Phase.COOLING
             reset.enabled =
                 available && ports != null && control.phase == Phase.FAULT && sample.fuelAmount == 0 && sample.heatLevel == 0 &&

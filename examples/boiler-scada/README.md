@@ -77,9 +77,11 @@ redstone torch and mechanical updates to settle between stages.
 
 ## Controls and observations
 
-- **START** is available in IDLE with valid telemetry. It enables battery power and fuel feed. Handover requires
-  eight consecutive completed samples with engine-only absolute RPM at least 8, positive water supply/water level,
-  active heat and effective boiler level. Rotation from the battery must not reach the engine Speedometer.
+- **START** is available in IDLE or COOLING with valid telemetry and no latched alarm.
+  It enables battery power and fuel feed.
+  Restarting during COOLING resumes battery-assisted startup without waiting for the burners to burn out.
+  Handover requires eight consecutive completed samples with engine-only absolute RPM at least 8, positive water
+  supply/water level, active heat and effective boiler level. Rotation from the battery must not reach the engine Speedometer.
 - **STOP / DRAIN** stops the feed pump and uses the battery to run the separate drain pump. A single remaining mB
   keeps drainage active. Eight consecutive all-empty samples enter COOLING; burning time and active heat must then
   reach zero before IDLE.
@@ -122,7 +124,7 @@ addons/createaddition/gradlew-sandbox-dev-parallel-summary check
 ```
 
 Controller behavior is exercised by `testKotlinBoilerControlVmConformance`, compiling the exact Guest controller
-and running all seven lifecycle/interlock scenarios in the pinned VM with native value records.
+and running all eight lifecycle/interlock scenarios in the pinned VM with native value records.
 `DiagnosticQueryTest` also analyzes the shipped controller through the native IDE frontend, with platform sources
 attached and without them; compiler-only checks do not establish that the editor accepts the same source.
 The Crafts & Additions real GameTest uses the actual burner, fuel capability, configurator, Guest compiler and VM;

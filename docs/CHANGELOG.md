@@ -32,7 +32,8 @@ headings so this page has one stable URL that can be shared outside the reposito
   kinetic battery, switches to steam self-power with battery charging, and selects a separate drain pump on STOP until
   every configured burner is empty. Feed and drain pumps have separate, mutually interlocked clutch outputs;
   all five actuator channels use individual named Redstone Ports placed beside their consumers.
-  Its panel shows boiler readings, per-burner fuel, cooldown and fault states.
+  Its panel shows boiler readings, per-burner fuel, cooldown and fault states; normal cooldown allows
+  an explicit restart before the burners finish burning.
   The development stand includes Crafts & Additions and Create: Connected.
 
 - Task worktree completion checks active builds in nested independent Gradle projects and excludes their
