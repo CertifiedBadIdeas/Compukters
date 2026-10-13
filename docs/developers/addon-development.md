@@ -54,11 +54,10 @@ For existing local first-party builds, `:addon-gradle-plugin:publishAddonSdkToMa
 The common API and target adapters are compile-only dependencies and carry the SDK version. Isolated TestKit
 verification creates its own temporary Maven layout directly from the built SDK artifacts.
 
-Create, Sable, Propulsion and Cosmonautics live in separate repositories, pinned as submodules under `addons/create`,
-`addons/sable`, `addons/propulsion` and `addons/cosmonautics`. Initialize them with `git submodule update --init --recursive`.
-
-The Crafts & Additions integration is an additional independent build tracked under `addons/createaddition`;
-it provides liquid Blaze Burner observations without depending on the Create integration implementation.
+Create, Crafts & Additions, Sable, Propulsion and Cosmonautics live in separate repositories, pinned as submodules
+under `addons/create`, `addons/createaddition`, `addons/sable`, `addons/propulsion` and `addons/cosmonautics`.
+Initialize them with `git submodule update --init --recursive`. The Crafts & Additions integration provides liquid
+Blaze Burner observations without depending on the Create integration implementation.
 The first-party Create addon is itself a separate Gradle root and serves as the complete example.
 It owns its Gradle wrapper and explicitly includes the configured Compukters checkout as a composite build for
 local co-development.

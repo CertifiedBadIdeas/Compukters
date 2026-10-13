@@ -14,7 +14,8 @@ headings so this page has one stable URL that can be shared outside the reposito
 ## 0.6.0 — In development
 
 - Added an empty independent Cosmonautics addon scaffold and pinned Cosmonautics in the all-addon development stand;
-  Guest APIs and spacecraft controls will follow separately.
+  Guest APIs and spacecraft controls will follow separately. The existing Crafts & Additions addon is also published
+  independently and pinned as a submodule.
 
 - The Crafts & Additions integration exposes named liquid Blaze Burners with atomic fuel quantity, capacity,
   heat and remaining burn-time readings. The separate `boiler-scada` project starts water/fuel pumps from a
