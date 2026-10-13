@@ -609,6 +609,22 @@ val generateGenericInitializerCapturesConformanceArtifact = tasks.register<Test>
     systemProperty("compukter.vm.genericInitializerCapturesArtifact", genericInitializerCapturesConformanceArtifact.get().asFile.absolutePath)
 }
 
+val genericMethodsConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-generic-methods.cpkt")
+val generateGenericMethodsConformanceArtifact = tasks.register<Test>("generateGenericMethodsConformanceArtifact") {
+    description = "Compiles Guest generic methods for pinned VM conformance."
+    group = "verification"
+    dependsOn(tasks.jar)
+    useJUnitPlatform()
+    testClassesDirs = sourceSets.test.get().output.classesDirs
+    classpath = sourceSets.test.get().runtimeClasspath
+    filter.includeTestsMatching("*generic methods preserve concrete owner and method captures*")
+    inputs.file(workerJar)
+    inputs.file("src/test/resources/kotlin/generic-methods/main.kt")
+    outputs.file(genericMethodsConformanceArtifact)
+    systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
+    systemProperty("compukter.vm.genericMethodsArtifact", genericMethodsConformanceArtifact.get().asFile.absolutePath)
+}
+
 val genericLocalFunctionsConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-generic-local-functions.cpkt")
 val generateGenericLocalFunctionsConformanceArtifact = tasks.register<Test>("generateGenericLocalFunctionsConformanceArtifact") {
     description = "Compiles generic Guest local functions for pinned VM conformance."

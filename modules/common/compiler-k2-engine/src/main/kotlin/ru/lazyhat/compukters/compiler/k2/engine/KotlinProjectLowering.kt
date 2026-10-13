@@ -387,8 +387,8 @@ private data class GuestFunctionInstance(
 
     val substitution: IrTypeSubstitutor =
         IrTypeSubstitutor(
-            declaration.typeParameters.map { it.symbol },
-            arguments.map { makeTypeProjection(it, Variance.INVARIANT) },
+            (declaration.typeParameters + ownerClass?.declaration?.typeParameters.orEmpty()).map { it.symbol },
+            (arguments + ownerClass?.arguments.orEmpty()).map { makeTypeProjection(it, Variance.INVARIANT) },
             false,
         )
 
@@ -480,10 +480,22 @@ private fun collectGuestFunctionInstances(
     initializationRoots: List<IrElement>,
     memberInstances: List<GuestFunctionInstance> = emptyList(),
     lexicalVariantCount: Int = 0,
+    concreteBodies: MutableMap<GuestFunctionInstance, IrSimpleFunction>,
+    lexicalSpecialization: GuestLocalSpecialization,
 ): List<GuestFunctionInstance> {
-    functions.firstOrNull { it.parent is IrClass && it.typeParameters.isNotEmpty() }?.let { function ->
-        throw UnsupportedKotlinIr(function, "generic instance methods are not supported")
-    }
+    functions
+        .firstOrNull {
+            (it.parent as? IrClass)?.isValue == true && !it.isGuestLocalFunction() && it.typeParameters.isNotEmpty()
+        }?.let { function ->
+            throw UnsupportedKotlinIr(function, "generic value class methods are not supported")
+        }
+    functions
+        .firstOrNull {
+            it.parent is IrClass && !it.isGuestLocalFunction() && it.typeParameters.isNotEmpty() &&
+                ((it.parent as IrClass).kind == ClassKind.INTERFACE || it.modality != Modality.FINAL || it.overriddenSymbols.isNotEmpty())
+        }?.let { function ->
+            throw UnsupportedKotlinIr(function, "generic virtual and interface methods are not supported")
+        }
     functions.firstOrNull { function -> function.typeParameters.any { it.isReified } }?.let { function ->
         throw UnsupportedKotlinIr(function, "reified generic parameters are not supported")
     }
@@ -496,6 +508,24 @@ private fun collectGuestFunctionInstances(
         if (instances.add(instance)) {
             if (instance.arguments.isNotEmpty() && ++genericVariantCount > 256) {
                 throw UnsupportedKotlinIr(instance.declaration, "generic specialization exceeds 256 function variants")
+            }
+            if (instance.declaration.typeParameters.isNotEmpty() && instance.declaration.parent is IrClass) {
+                val function = instance.declaration
+                instance.concreteDeclaration =
+                    concreteBodies.getOrPut(instance) {
+                        copyGuestFunction(
+                            function,
+                            instance.arguments,
+                            instance.ownerClass
+                                ?.declaration
+                                ?.typeParameters
+                                .orEmpty(),
+                            instance.ownerClass?.arguments.orEmpty(),
+                        ).also { copy ->
+                            copy.patchDeclarationParents(function.parent)
+                            lexicalSpecialization.lower(listOf(copy), emptyList())
+                        }
+                    }
             }
             pending.addLast(instance)
         }
@@ -518,6 +548,27 @@ private fun collectGuestFunctionInstances(
                     element.acceptChildren(this, null)
                 }
 
+                private fun rejectGenericReference(
+                    function: IrSimpleFunction?,
+                    expression: IrElement,
+                ) {
+                    if (function?.symbol in projectSymbols && function?.parent is IrClass &&
+                        function.typeParameters.isNotEmpty() && !function.isGuestLocalFunction()
+                    ) {
+                        throw UnsupportedKotlinIr(expression, "generic method references are not supported")
+                    }
+                }
+
+                override fun visitFunctionReference(expression: IrFunctionReference) {
+                    rejectGenericReference(expression.symbol.owner as? IrSimpleFunction, expression)
+                    super.visitFunctionReference(expression)
+                }
+
+                override fun visitRichFunctionReference(expression: IrRichFunctionReference) {
+                    rejectGenericReference(expression.reflectionTargetSymbol?.owner as? IrSimpleFunction, expression)
+                    super.visitRichFunctionReference(expression)
+                }
+
                 override fun visitCall(expression: IrCall) {
                     val target = expression.symbol.owner
                     if (target.symbol in projectSymbols && target.typeParameters.isNotEmpty()) {
@@ -527,11 +578,31 @@ private fun collectGuestFunctionInstances(
                                 owner?.substitute(type) ?: type
                             }
                         if (arguments.size != target.typeParameters.size ||
-                            arguments.any { (it as? IrSimpleType)?.classifier is IrTypeParameterSymbol }
+                            arguments.any { it.containsTypeParameter() }
                         ) {
                             throw UnsupportedKotlinIr(expression, "generic call has unresolved type arguments")
                         }
-                        add(GuestFunctionInstance(target, arguments))
+                        val classOwner = (target.parent as? IrClass)?.takeUnless { target.isGuestLocalFunction() }
+                        val receiver = expression.dispatchReceiver?.type?.let { owner?.substitute(it) ?: it } as? IrSimpleType
+                        val ownerInstance =
+                            classOwner?.let { declaration ->
+                                if (receiver?.classifier != declaration.symbol) {
+                                    throw UnsupportedKotlinIr(expression, "generic method requires its concrete declaring receiver")
+                                }
+                                val types =
+                                    receiver.arguments.map {
+                                        (it as? IrTypeProjection)?.type
+                                            ?: throw UnsupportedKotlinIr(
+                                                expression,
+                                                "generic method receiver has an unresolved type argument",
+                                            )
+                                    }
+                                if (types.any { it.containsTypeParameter() }) {
+                                    throw UnsupportedKotlinIr(expression, "generic method receiver has unresolved type arguments")
+                                }
+                                GuestClassInstance(declaration, types)
+                            }
+                        add(GuestFunctionInstance(target, arguments, ownerInstance))
                     }
                     super.visitCall(expression)
                 }
@@ -576,7 +647,10 @@ private fun prepareGuestFunctionBodies(
         }
     var initializationRoots: List<IrElement> = ordinaryInitializationRoots
     var closureRoots: List<IrElement> =
-        rootFunctions.filter { (it.parent as? IrClass)?.typeParameters?.isNotEmpty() != true } + initializationRoots
+        rootFunctions.filter {
+            (it.parent as? IrClass)?.typeParameters?.isNotEmpty() != true &&
+                !(it.parent is IrClass && it.typeParameters.isNotEmpty())
+        } + initializationRoots
     var localFunctions = collectGuestLocalFunctions(closureRoots)
     var userFunctions = rootFunctions + localFunctions.values.map { it.declaration }
     val userClasses =
@@ -593,8 +667,15 @@ private fun prepareGuestFunctionBodies(
             declaration.kind in setOf(ClassKind.CLASS, ClassKind.OBJECT) &&
                 declaration.constructors.any { it.isPrimary }
         }
+    val concreteMemberBodies = linkedMapOf<GuestFunctionInstance, IrSimpleFunction>()
     var functionInstances =
-        collectGuestFunctionInstances(userFunctions, initializationRoots, lexicalVariantCount = lexicalSpecialization.variantCount)
+        collectGuestFunctionInstances(
+            userFunctions,
+            initializationRoots,
+            lexicalVariantCount = lexicalSpecialization.variantCount,
+            concreteBodies = concreteMemberBodies,
+            lexicalSpecialization = lexicalSpecialization,
+        )
     val specializationClasses = (userClasses + sourceClasses.filter { inlineValueClasses.contains(it.symbol) }).distinctBy { it.symbol }
     var allClassInstances =
         collectGuestClassInstances(
@@ -607,7 +688,6 @@ private fun prepareGuestFunctionBodies(
     var classInstances = allClassInstances.filterNot { inlineValueClasses.contains(it.declaration.symbol) }
     // Generic member bodies can call helpers whose signatures/body introduce further class instances.
     // Discover functions and classes together until their dependencies stop adding specializations.
-    val concreteMemberBodies = linkedMapOf<GuestFunctionInstance, IrSimpleFunction>()
     val initializations = linkedMapOf<GuestClassInstance, GuestClassInitialization>()
     while (true) {
         classInstances
@@ -629,29 +709,36 @@ private fun prepareGuestFunctionBodies(
                     if (classInstance.arguments.isEmpty()) {
                         emptyList()
                     } else {
-                        userFunctions.filter { it.parent == classInstance.declaration && !it.isGuestLocalFunction() }.map { function ->
-                            GuestFunctionInstance(function, emptyList(), classInstance).also { instance ->
-                                instance.concreteDeclaration =
-                                    concreteMemberBodies.getOrPut(instance) {
-                                        copyGuestFunction(
-                                            function,
-                                            emptyList(),
-                                            classInstance.declaration.typeParameters,
-                                            classInstance.arguments,
-                                        ).also { copy ->
-                                            copy.patchDeclarationParents(function.parent)
-                                            lexicalSpecialization.lower(listOf(copy), emptyList())
+                        userFunctions
+                            .filter {
+                                it.parent == classInstance.declaration && !it.isGuestLocalFunction() && it.typeParameters.isEmpty()
+                            }.map { function ->
+                                GuestFunctionInstance(function, emptyList(), classInstance).also { instance ->
+                                    instance.concreteDeclaration =
+                                        concreteMemberBodies.getOrPut(instance) {
+                                            copyGuestFunction(
+                                                function,
+                                                emptyList(),
+                                                classInstance.declaration.typeParameters,
+                                                classInstance.arguments,
+                                            ).also { copy ->
+                                                copy.patchDeclarationParents(function.parent)
+                                                lexicalSpecialization.lower(listOf(copy), emptyList())
+                                            }
                                         }
-                                    }
+                                }
                             }
-                        }
                     }
                 },
                 lexicalVariantCount = lexicalSpecialization.variantCount,
+                concreteBodies = concreteMemberBodies,
+                lexicalSpecialization = lexicalSpecialization,
             )
         closureRoots =
             rootFunctions.flatMap { function ->
-                if ((function.parent as? IrClass)?.typeParameters?.isNotEmpty() == true) {
+                if ((function.parent as? IrClass)?.typeParameters?.isNotEmpty() == true ||
+                    (function.parent is IrClass && function.typeParameters.isNotEmpty())
+                ) {
                     functionInstances.filter { it.declaration === function }.map { it.concreteDeclaration }
                 } else {
                     listOf(function)
@@ -676,11 +763,24 @@ private fun prepareGuestFunctionBodies(
         allClassInstances = discoveredClasses
         classInstances = allClassInstances.filterNot { inlineValueClasses.contains(it.declaration.symbol) }
     }
+    val functionOrder = rootFunctions.withIndex().associate { it.value to it.index }
     return PreparedGuestFunctionBodies(
         userFunctions,
         userClasses,
         constructorClasses,
-        functionInstances,
+        functionInstances.sortedWith(
+            compareBy(
+                { instance ->
+                    val owner = (instance.declaration.parent as? IrClass)?.takeUnless { instance.declaration.isGuestLocalFunction() }
+                    if (owner == null || inlineValueClasses.contains(owner.symbol)) {
+                        ""
+                    } else {
+                        (instance.ownerClass ?: GuestClassInstance(owner, emptyList())).name
+                    }
+                },
+                { instance -> functionOrder[instance.declaration] ?: Int.MAX_VALUE },
+            ),
+        ),
         classInstances,
         localFunctions,
         closureRoots,
@@ -1603,7 +1703,12 @@ internal object KotlinProjectLowering {
         val classInstances = prepared.classInstances
         val localFunctions = prepared.locals
         val closureRoots = prepared.closureRoots
-        val concreteInitializationRoots = prepared.initializations.values.flatMap { it.roots }
+        val concreteExecutableRoots =
+            prepared.initializations.values.flatMap { it.roots } +
+                functionInstances
+                    .filter {
+                        it.declaration.typeParameters.isNotEmpty() && it.ownerClass != null
+                    }.map { it.concreteDeclaration }
         require(userFunctions.firstOrNull() === entry)
         session.recordPlatformSpecializations(
             classInstances
@@ -1646,9 +1751,9 @@ internal object KotlinProjectLowering {
             }
         val platformLinks =
             discoverGuestPlatformLinks(
-                functionRoots = userFunctions + constructorDeclarations + inlineInitializers + concreteInitializationRoots,
+                functionRoots = userFunctions + constructorDeclarations + inlineInitializers + concreteExecutableRoots,
                 symbolRoots =
-                    userFunctions + constructorDeclarations + concreteInitializationRoots +
+                    userFunctions + constructorDeclarations + concreteExecutableRoots +
                         sourceClasses.filter { inlineValueClasses.contains(it.symbol) },
                 session = session,
             )
@@ -1660,7 +1765,7 @@ internal object KotlinProjectLowering {
             }
         userFunctions.forEach { function -> function.accept(intrinsicCollector, null) }
         constructorClasses.forEach { declaration -> declaration.accept(intrinsicCollector, null) }
-        concreteInitializationRoots.forEach { it.accept(intrinsicCollector, null) }
+        concreteExecutableRoots.forEach { it.accept(intrinsicCollector, null) }
         inlineInitializers.forEach { initializer -> initializer.accept(intrinsicCollector, null) }
         val capabilityIdentities =
             (
@@ -1685,7 +1790,7 @@ internal object KotlinProjectLowering {
 
         val stringArrayUsage = StringArrayUsageCollector(guestTypes)
         userFunctions.forEach { function -> function.accept(stringArrayUsage, null) }
-        concreteInitializationRoots.forEach { it.accept(stringArrayUsage, null) }
+        concreteExecutableRoots.forEach { it.accept(stringArrayUsage, null) }
         val usesStringArray =
             stringArrayUsage.used ||
                 userFunctions.any { function ->
@@ -1780,7 +1885,7 @@ internal object KotlinProjectLowering {
                 null,
             )
         }
-        concreteInitializationRoots.forEach { discoverValueClassUses(it) { type -> type } }
+        concreteExecutableRoots.forEach { discoverValueClassUses(it) { type -> type } }
         functionInstances.forEach { instance ->
             discoverValueClassUses(instance.concreteDeclaration, instance::substitute)
             discoverValueClass(instance.substitute(instance.declaration.returnType))
@@ -1822,7 +1927,7 @@ internal object KotlinProjectLowering {
         classInstances.forEach { instance ->
             guestArrayUsage.scan(instance.declaration, instance::substitute)
         }
-        concreteInitializationRoots.forEach { guestArrayUsage.scan(it) }
+        concreteExecutableRoots.forEach { guestArrayUsage.scan(it) }
         topLevelProperties.forEach { guestArrayUsage.scan(it.declaration) }
         val guestArrays = guestArrayUsage.arrays.toSortedMap()
         val functionArtifactNames =
@@ -1834,7 +1939,12 @@ internal object KotlinProjectLowering {
                 } else if (bridgeName != null) {
                     bridgeName
                 } else if (instance.ownerClass != null) {
-                    function.name.asString()
+                    function.name.asString() +
+                        if (instance.arguments.isEmpty()) {
+                            ""
+                        } else {
+                            "<${instance.arguments.joinToString(",") { it.specializationTypeIdentity() }}>"
+                        }
                 } else if (instance.arguments.isEmpty()) {
                     artifactFunctionName(function, pluginContext, inlineValueClasses, session)
                 } else {
@@ -1933,7 +2043,7 @@ internal object KotlinProjectLowering {
                 userFunctions.forEach { function -> function.accept(collector, null) }
                 constructorClasses.forEach { declaration -> declaration.accept(collector, null) }
                 constructorInstances.forEach { it.declaration.accept(collector, null) }
-                concreteInitializationRoots.forEach { it.accept(collector, null) }
+                concreteExecutableRoots.forEach { it.accept(collector, null) }
                 inlineInitializers.forEach { initializer -> initializer.body.accept(collector, null) }
                 topLevelProperties.forEach { property ->
                     property.declaration.backingField
@@ -2402,13 +2512,13 @@ internal object KotlinProjectLowering {
             userFunctions
                 .filter { function ->
                     val owner = function.parent as? IrClass
-                    function.symbol !in localFunctions &&
+                    function.symbol !in localFunctions && function.typeParameters.isEmpty() &&
                         owner?.symbol in classLayoutsBySymbol && !inlineValueClasses.contains(owner?.symbol)
                 }.groupBy { function -> (function.parent as IrClass).symbol }
         val genericMemberFunctionsByOwner =
             functionInstances.filter { it.ownerClass != null }.groupBy { requireNotNull(it.ownerClass) }
         val genericMemberFunctionIds =
-            functionInstances.filter { it.ownerClass != null }.associate { instance ->
+            functionInstances.filter { it.ownerClass != null && it.arguments.isEmpty() }.associate { instance ->
                 (instance.declaration.symbol to requireNotNull(instance.ownerClass)) to requireNotNull(instanceFunctionIds[instance])
             }
         val firstTopLevelField = nextClosureField
@@ -3339,9 +3449,10 @@ internal object KotlinProjectLowering {
                         superType = superType,
                         interfaces = interfaces,
                         methodStart =
-                            genericMethods.firstOrNull()?.let { requireNotNull(instanceFunctionIds[it]).value }
-                                ?: methods.firstOrNull()?.let { requireNotNull(functionIds[it.symbol]).value }
-                                ?: 0u,
+                            listOfNotNull(
+                                genericMethods.firstOrNull()?.let { requireNotNull(instanceFunctionIds[it]).value },
+                                methods.firstOrNull()?.let { requireNotNull(functionIds[it.symbol]).value },
+                            ).minOrNull() ?: 0u,
                         methodCount = (methods.size + genericMethods.size).toUInt(),
                     )
                 } else {
@@ -3366,9 +3477,10 @@ internal object KotlinProjectLowering {
                                     }
                             ).toUInt(),
                         methodStart =
-                            genericMethods.firstOrNull()?.let { requireNotNull(instanceFunctionIds[it]).value }
-                                ?: methods.firstOrNull()?.let { requireNotNull(functionIds[it.symbol]).value }
-                                ?: 0u,
+                            listOfNotNull(
+                                genericMethods.firstOrNull()?.let { requireNotNull(instanceFunctionIds[it]).value },
+                                methods.firstOrNull()?.let { requireNotNull(functionIds[it.symbol]).value },
+                            ).minOrNull() ?: 0u,
                         methodCount = (methods.size + genericMethods.size).toUInt(),
                         initializer = initializerFunctionIds[declaration.symbol],
                     )
@@ -4192,9 +4304,6 @@ internal object KotlinProjectLowering {
         if (owner != null && !inlineValueClasses.contains(owner.symbol)) {
             if (function.isSuspend) {
                 throw UnsupportedKotlinIr(function, "suspending instance methods are not supported")
-            }
-            if (function.typeParameters.isNotEmpty()) {
-                throw UnsupportedKotlinIr(function, "generic instance methods are not supported")
             }
             if (function.parameters.any { it.kind == IrParameterKind.ExtensionReceiver }) {
                 throw UnsupportedKotlinIr(function, "member extension functions are not supported")
@@ -7511,6 +7620,13 @@ private class FunctionCompiler(
         target: IrSimpleFunction,
         substitute: (IrType) -> IrType = { it },
     ): List<RegisterId> {
+        val executableTarget =
+            projectFunctionInstance(call, target)?.let { instance ->
+                genericFunctionIds.keys.firstOrNull { it == instance }?.concreteDeclaration
+            }
+        if (executableTarget != null && executableTarget !== target) {
+            return compileProjectCallArguments(call, executableTarget, substitute)
+        }
         val parameters = loweredParameters(target, session)
         val resolved = resolveProjectCallArguments(call, target)
         if (parameters.all { parameter ->
@@ -7520,7 +7636,11 @@ private class FunctionCompiler(
         ) {
             val arguments = mutableListOf<RegisterId>()
             resolved.zip(parameters).forEach { (argument, parameter) ->
-                arguments += compileCallArgument(argument, substitute(parameter.type), arguments)
+                arguments +=
+                    withSource((argument as ResolvedCallArgument.Expression).expression) {
+                        val value = compileCallArgument(argument, substitute(parameter.type), arguments)
+                        allocate(registerValueType(value)).also { emit(Instruction.Move(it, value)) }
+                    }
             }
             return arguments
         }
@@ -7541,8 +7661,11 @@ private class FunctionCompiler(
                     ),
                 )
         order.forEach { index ->
-            val value = compileCallArgument(resolved[index], substitute(parameters[index].type))
-            registers[index] = allocate(registerValueType(value)).also { emit(Instruction.Move(it, value)) }
+            registers[index] =
+                withSource((resolved[index] as ResolvedCallArgument.Expression).expression) {
+                    val value = compileCallArgument(resolved[index], substitute(parameters[index].type))
+                    allocate(registerValueType(value)).also { emit(Instruction.Move(it, value)) }
+                }
         }
         val owners =
             parameters.indices
@@ -9681,7 +9804,13 @@ private class FunctionCompiler(
                 val type = argument ?: throw UnsupportedKotlinIr(call, "generic call has an inferred type hole")
                 resolvedType(type)
             }
-        return GuestFunctionInstance(target, arguments)
+        val owner = (target.parent as? IrClass)?.takeUnless { target.symbol in localFunctions }
+        val receiver =
+            owner?.let {
+                resolveClassInstance(call.dispatchReceiver?.type)?.let { instance -> resolveMemberOwner(instance, it) }
+                    ?: throw UnsupportedKotlinIr(call, "generic method receiver has no concrete class instance")
+            }
+        return GuestFunctionInstance(target, arguments, receiver)
     }
 
     private inline fun withLoopContext(

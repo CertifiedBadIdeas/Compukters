@@ -180,6 +180,35 @@ class DiagnosticQueryTest {
     }
 
     @Test
+    fun `generic methods resolve with source and metadata inputs`() {
+        val source =
+            """
+            class Box<T>(var value: T) {
+                fun <R> map(transform: (T) -> R): Box<R> = Box(transform(value))
+                fun <R> reader(seed: R, take: () -> R = { seed }): () -> R = take
+                fun <R> cell(seed: R, next: R): () -> R {
+                    var local = seed
+                    fun take(): R { val saved = local; local = next; return saved }
+                    return ::take
+                }
+            }
+            fun main() {
+                val box = Box(3)
+                check(box.map { it.toLong() }.value == 3L)
+                check(box.reader<Int?>(null)() == null)
+                check(box.cell("first", "next")() == "first")
+            }
+            """.trimIndent()
+        for (attachedSources in listOf(false, true)) {
+            K2QueryFixture.sourceWithGuestApi(attachedSources, "main.kt" to source).use { fixture ->
+                val result = fixture.execute(fixture.presentation()) as AnalysisResult.Presentation
+                val active = result.value.accept(fixture.identity) as SnapshotPresentationAcceptance.Active
+                assertTrue(active.diagnostics.none { it.severity == EditorDiagnosticSeverity.Error }, active.diagnostics.toString())
+            }
+        }
+    }
+
+    @Test
     fun `generic initialization captures resolve with source and metadata inputs`() {
         val source =
             """
