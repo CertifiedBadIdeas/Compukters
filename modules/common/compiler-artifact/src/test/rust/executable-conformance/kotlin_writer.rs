@@ -10,6 +10,8 @@ use compukter_vm::{
 mod random;
 #[path = "terminal_output.rs"]
 mod terminal_output;
+#[path = "display_ui.rs"]
+mod display_ui;
 #[path = "addon_values.rs"]
 mod addon_values;
 
@@ -44,10 +46,7 @@ fn main() {
             let mut session = k2_stdio_session_with_heap("COMPUKTER_KOTLIN_CONTRACTS_ARTIFACT", 1, 256 * 1024);
             k2_assert_prints(&mut session, ["contracts ok\n"], 1024);
         },
-        "display-ui" => {
-            let mut session = k2_stdio_session_with_heap("COMPUKTER_KOTLIN_DISPLAY_UI_ARTIFACT", 1, 256 * 1024);
-            k2_assert_prints(&mut session, ["display ui ok\n"], 1024);
-        },
+        "display-ui" => display_ui::execute(),
         "random" => random::execute(),
         "terminal-output" => terminal_output::execute(),
         "addon-values" => addon_values::execute(),
