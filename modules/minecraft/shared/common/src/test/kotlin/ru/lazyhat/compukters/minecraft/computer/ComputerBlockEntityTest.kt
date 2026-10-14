@@ -63,6 +63,33 @@ class ComputerBlockEntityTest {
     }
 
     @Test
+    fun `pre-copy transfer detaches execution once and saves required resume identity`() {
+        val original = fixture()
+        original.entity.serverTick()
+        val carrier = original.carriers.single()
+        original.entity.prepareBlockTransfer()
+        assertEquals(1, carrier.closeCalls)
+        val saved = original.entity.saveForTest()
+        original.entity.setRemoved()
+        assertEquals(1, carrier.closeCalls)
+        val loaded = fixture()
+        loaded.entity.loadForTest(saved)
+        loaded.entity.serverTick()
+        assertEquals(listOf(true), loaded.carriers.single().restoreRequirements)
+        assertEquals(original.entity.computerId(), loaded.entity.computerId())
+    }
+
+    @Test
+    fun `cancelled block transfer can restore the original computer`() {
+        val original = fixture()
+        original.entity.serverTick()
+        original.entity.prepareBlockTransfer()
+        original.entity.serverTick()
+        assertEquals(2, original.carriers.size)
+        assertEquals(listOf(true), original.carriers.last().restoreRequirements)
+    }
+
+    @Test
     fun `halted computer remains powered off after load and explicit reboot preserves identity`() {
         val original = fixture()
         original.entity.serverTick()

@@ -229,6 +229,12 @@ open class ComputerBlockEntity internal constructor(
         }
     }
 
+    /** Capture world-owned resources before a construction copies or removes any source block. */
+    fun prepareBlockTransfer() {
+        check((level as? ServerLevel)?.server?.isSameThread != false)
+        closeCarrier()
+    }
+
     override fun setRemoved() {
         closeCarrier()
         super.setRemoved()
