@@ -41,7 +41,8 @@ headings so this page has one stable URL that can be shared outside the reposito
 
 - Added programmable Create pumps with persistent remotely reversible fluid flow and normally disengaged
   programmable clutches that release their load when the controlling program or peripheral connection ends.
-  The clutch has a blue casing band preserving the original redstone stripe's contour, shading and grey trim.
+  The clutch has a blue casing band preserving the original redstone stripe's contour and shading,
+  with a one-pixel grey outline around the blue stripe.
   Flush, grey-framed rectangular indicators show its state on all four sides.
   The bars have grey end caps: green parallel to the shaft when engaged, or red across it when disengaged.
   It retains cutout rendering around its shaft openings. The pump has an unmarked copper tube and
