@@ -344,3 +344,23 @@ For an artifact or release-readiness claim, record:
 
 Building or verifying an artifact does not authorize creating a tag, pushing commits, uploading files, or publishing a
 release. Those external mutations require an explicit user request.
+
+
+## Display pipeline measurements
+
+Run `./gradlew-sandbox-dev-parallel-summary :v1_21_1-common:benchmarkDisplayPipeline` for an opt-in host
+microbenchmark. It measures the real canvas, raster font, RGB tile encoder and client image assembler without starting
+Minecraft. Reports are in `modules/minecraft/v1_21_1/v1_21_1-common/build/reports/benchmarks/display/`.
+Keep `results.csv` and `environment.txt` together. Each invocation is a fresh JVM; retain at least two runs on an idle
+machine. This task is deliberately absent from `check` and has no machine-sensitive pass/fail time threshold.
+
+The matrix covers 1x1, 3x3 and 8x8 panels at all four densities. Stages cover click offer/poll, an atomic button update,
+a dashboard redraw, all RGB tiles, client receive/publication and a render pass while the final tile is missing.
+The dashboard uses fixed pixel geometry; small modes clip the off-screen widgets. Text measurements use warmed glyphs.
+Unsupported atomic-frame sizes and one-panel incomplete frames are explicitly marked rather than timed.
+
+Times are p50/p95 of 31 **batch means**, after 250ms warmup per case; they are not individual input latency percentiles.
+Allocation is current-thread allocated bytes per operation when the JVM supports it. The synchronization column is a
+model of the current 512KiB/tick admission charge for one fully loaded screen, including the membership string and
+fixed admission allowance. It is not measured network throughput or end-to-end latency. NBT, compression, competing
+screens, tick phase, Guest execution, native image upload and GPU presentation are outside this microbenchmark.
