@@ -46,7 +46,7 @@ Guest bundle and bounded Compukters dependency are verified before staging.
 The `development` entry records the SDK version, archive filename, byte length and hashes.
 The SDK ZIP contains a file Maven repository with the plugin marker, plugin, compiler tooling, platform bundle,
 host contracts, both adapters and both development mod JARs, plus metadata, licenses and shared tag-only addon release tools.
-GitHub receives the addons and SDK; Modrinth receives only the two base-mod artifacts.
+GitHub receives the addons and SDK; Modrinth and CurseForge receive only the two base-mod artifacts.
 Readers accept schema 3 without development assets, schema 1 without addons and schema 2 without a native component identity
 for recovery of previously staged releases. All schemas deliberately admit only the
 current autonomous composition. A future downloaded composition must add an
@@ -56,6 +56,32 @@ behavior instead of inferring delivery from absent JAR entries or using `latest`
 `release.py github --directory build/release` uses the authenticated `gh` CLI to
 create or resume a draft, verify the remote tag and every existing asset, upload
 missing files, and publish only the complete release. It never uses `--clobber`.
+
+## CurseForge
+
+`curseforge.py publish --directory build/release` submits the two base JARs to
+project `1528063` using `CURSEFORGE_TOKEN` (author upload API) and the authenticated
+`gh` CLI (read contents, write deployments). Destination and loader mapping are
+fixed in reviewed source; inventory schema 4 remains unchanged. Each upload uses
+markdown notes, release type `release` and exact `gameVersionNames` for its Minecraft
+target plus NeoForge, Client and Server. The API names are preflighted before any intent.
+Credentials stay in headers, redirects are refused, responses are bounded and HTTP/
+transport errors are redacted. No upload POST is automatically retried.
+
+GitHub Deployments with task/environment `curseforge-upload` form a durable journal:
+intent precedes upload, success records the accepted file ID. The payload binds the
+project, candidate revision, inventory, artifact bytes and metadata. All known
+conflicts and ambiguous outcomes are checked before any target is uploaded. A
+successful upload is skipped on retry, including files awaiting moderation; acceptance
+is not a visibility or approval claim. The journal is separate from immutable release assets.
+
+For an unresolved intent, inspect the CurseForge author portal first, including
+pending files. With no other publisher running, `curseforge.py reconcile --directory
+build/release --artifact FILENAME --file-id ID` attests that the exact staged file and
+metadata were accepted. Use `--not-uploaded` instead only after confirming that no file
+was created; then retry. Recovery never uploads, and does not use an undocumented
+read API or require a second CurseForge developer API key. Details and credential
+setup are in [the publication guide](../../docs/contributors/releases.md).
 
 Run tests with `python3 -m unittest discover -s tools/release -v`.
 

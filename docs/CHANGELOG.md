@@ -13,6 +13,9 @@ headings so this page has one stable URL that can be shared outside the reposito
 
 ## 0.6.0 — In development
 
+- Tagged releases can submit both supported NeoForge base-mod JARs to CurseForge alongside Modrinth,
+  with independent publication jobs, recorded upload outcomes and explicit recovery after interrupted submissions.
+
 - IDE checks constant named peripheral lookups against the attached computer’s current network, with warnings
   for mandatory searches and informational hover/Problems entries for optional searches. Network observations
   refresh independently of Devices and explain unavailable devices without blocking compilation.
