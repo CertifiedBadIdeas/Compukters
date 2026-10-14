@@ -20,6 +20,8 @@ package ru.lazyhat.compukters.ide.editor
 
 import ru.lazyhat.compukters.ide.highlight.IncrementalKotlinHighlighter
 import ru.lazyhat.compukters.ide.highlight.KotlinLexicalKind
+import ru.lazyhat.compukters.ide.highlight.KotlinLexicalState
+import ru.lazyhat.compukters.ide.highlight.KotlinLineLexer
 
 class KotlinSmartTyping(
     private val document: EditorDocument,
@@ -58,6 +60,57 @@ class KotlinSmartTyping(
         val result = document.replaceSelection(inserted, EditorHistoryKind.Atomic, after)
         if (result is EditorEditResult.Applied) automaticClosers[range.startUtf16 + inserted.length - 1] = closer
         return result
+    }
+
+    /** Rebase a code fragment's common indentation without changing string literal content. */
+    fun paste(text: String): EditorEditResult {
+        val start = document.selectionState.range.startUtf16
+        if (closed || ('\n' !in text && '\r' !in text) || !isCodeAtCaret(start)) return document.paste(text)
+        val parts = Regex("\\r\\n|\\r|\\n").split(text)
+        var state = KotlinLexicalState()
+        for (part in parts) {
+            val scanned = KotlinLineLexer.scan(part, state)
+            if (scanned.spans.any { it.kind == KotlinLexicalKind.MultilineString }) return document.paste(text)
+            state = scanned.endState
+        }
+        val base = parts.filter { it.isNotBlank() }.minOfOrNull(::indentColumns) ?: return document.paste(text)
+        val line = document.line(document.lineOfOffset(start))
+        val target = leadingIndent(line.startUtf16, minOf(start, line.contentEndUtf16))
+        val separator = document.preferredLineSeparator
+        val maximumInserted = document.limits.maxCodeUnits - document.length + document.selectionState.range.length
+        val adjusted = StringBuilder()
+        for ((index, part) in parts.withIndex()) {
+            val content = removeIndent(part, base)
+            val prefix = if (index == 0 || (part.isBlank() && index != parts.lastIndex)) "" else target
+            val ending = if (index == parts.lastIndex) "" else separator
+            if (adjusted.length.toLong() + prefix.length + content.length + ending.length > maximumInserted) {
+                return EditorEditResult.Rejected(EditorRejection.CodeUnitLimit)
+            }
+            adjusted.append(prefix).append(content).append(ending)
+        }
+        return document.paste(adjusted.toString())
+    }
+
+    private fun indentColumns(text: String): Int {
+        var column = 0
+        for (char in text) {
+            column =
+                when (char) {
+                    ' ' -> column + 1
+                    '\t' -> column + document.limits.tabWidth - column % document.limits.tabWidth
+                    else -> return column
+                }
+        }
+        return column
+    }
+
+    private fun removeIndent(
+        text: String,
+        columns: Int,
+    ): String {
+        val prefixLength = text.takeWhile { it == ' ' || it == '\t' }.length
+        val remaining = (indentColumns(text) - columns).coerceAtLeast(0)
+        return " ".repeat(remaining) + text.substring(prefixLength)
     }
 
     fun backspace(): EditorEditResult {

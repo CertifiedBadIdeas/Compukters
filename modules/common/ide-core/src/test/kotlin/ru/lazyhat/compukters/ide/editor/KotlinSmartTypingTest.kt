@@ -166,6 +166,88 @@ class KotlinSmartTypingTest {
         highlighter.close()
     }
 
+    @Test
+    fun `paste rebases common indentation and preserves nested offsets with atomic undo`() {
+        for (separator in listOf("\n", "\r\n")) {
+            val source = "fun main() {$separator    $separator}"
+            fixture(source) { document, typing ->
+                val caret = source.indexOf("    ") + 4
+                document.setCaret(caret)
+                val fragment = "        if (ready) {\n            run()\n        }"
+                assertIs<EditorEditResult.Applied>(typing.paste(fragment))
+                val expected = "fun main() {$separator    if (ready) {$separator        run()$separator    }$separator}"
+                assertEquals(expected, document.materialize())
+                assertEquals(expected.lastIndexOf(separator + "}"), document.caretOffset)
+                assertEquals(1, document.undoEntryCount)
+                document.undo()
+                assertEquals(source, document.materialize())
+                assertEquals(caret, document.caretOffset)
+                document.redo()
+                assertEquals(expected, document.materialize())
+            }
+        }
+    }
+
+    @Test
+    fun `paste retains relative tab indentation blank lines and replaces backward selection`() {
+        fixture("    old") { document, typing ->
+            document.setCaret(7)
+            document.setCaret(4, true)
+            typing.paste("\tfirst\n\t\tsecond\n\n\tthird\n")
+            assertEquals("    first\n        second\n\n    third\n    ", document.materialize())
+            document.undo()
+            assertEquals("    old", document.materialize())
+            assertEquals("old", document.copySelection())
+            assertEquals(4, document.caretOffset)
+        }
+        fixture("  ") { document, typing ->
+            document.setCaret(2)
+            typing.paste("\tfirst\n\t\tsecond")
+            assertEquals("  first\n      second", document.materialize())
+        }
+        fixture("\t") { document, typing ->
+            document.setCaret(1)
+            typing.paste("  first\n\tsecond")
+            assertEquals("\tfirst\n\t  second", document.materialize())
+        }
+    }
+
+    @Test
+    fun `paste in literals comments plain text or fragments containing raw strings remains exact`() {
+        for (source in listOf("// note ", "val s = \"text", "val s = \"\"\"text", "/* note ")) {
+            fixture(source) { document, typing ->
+                document.setCaret(document.length)
+                val fragment = "    a\r\n        b"
+                typing.paste(fragment)
+                assertEquals(source + fragment, document.materialize())
+            }
+        }
+        fixture("    ") { document, typing ->
+            document.setCaret(4)
+            val fragment = "val raw = \"\"\"\n  literal\n\"\"\"\nnext()"
+            typing.paste(fragment)
+            assertEquals("    " + fragment, document.materialize())
+        }
+        fixture("") { document, typing ->
+            typing.paste("(")
+            assertEquals("(", document.materialize())
+        }
+    }
+
+    @Test
+    fun `rejected indented paste preserves source caret and history`() {
+        val document = EditorDocument("    ", EditorLimits(maxCodeUnits = 8))
+        val highlighter = IncrementalKotlinHighlighter(document)
+        KotlinSmartTyping(document, highlighter).use { typing ->
+            document.setCaret(4)
+            assertEquals(EditorEditResult.Rejected(EditorRejection.CodeUnitLimit), typing.paste("a\nb"))
+            assertEquals("    ", document.materialize())
+            assertEquals(4, document.caretOffset)
+            assertEquals(0, document.undoEntryCount)
+        }
+        highlighter.close()
+    }
+
     private fun fixture(
         source: String,
         block: (EditorDocument, KotlinSmartTyping) -> Unit,

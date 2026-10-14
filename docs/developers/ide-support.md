@@ -29,6 +29,26 @@ physical paths are bounded`.
 
 ## IDE and tooling
 
+### Kotlin typing and indentation
+
+**Status:** Supported.
+
+Enter preserves indentation, adds one level after a code opening brace and splits empty brace pairs. Tab/Shift+Tab
+indent/outdent touched lines as atomic edits. Clipboard paste in Kotlin code removes the fragment's common visual
+indentation and rebases subsequent lines to the destination prefix, preserving relative nesting and document line
+endings. Single-line paste, insertion inside literals/comments, fragments containing multiline string tokens and
+non-Kotlin files remain literal. Clipboard admission and editor/history limits apply before accepting the edit.
+
+**Evidence:** `KotlinSmartTypingTest`, tests `structural enter preserves CRLF and splits an automatic brace pair`,
+`enter splits existing spaced lambda braces and preserves endings indentation and caret history`,
+`paste rebases common indentation and preserves nested offsets with atomic undo`,
+`paste retains relative tab indentation blank lines and replaces backward selection`,
+`paste in literals comments plain text or fragments containing raw strings remains exact` and
+`rejected indented paste preserves source caret and history`; `EditorDocumentTest` block indentation coverage;
+`IdeClientControllerTest`, tests `editor fundamentals flow through controller state as atomic edits and navigation`
+and `clipboard paste uses Kotlin indentation and plain files remain literal`; `IdeInputAdapterTest`,
+`paste is bounded on UTF-16 and UTF-8 boundaries`.
+
 ### Live named peripheral availability
 
 **Status:** Implemented; in-client observation pending for [#787](https://github.com/CertifiedBadIdeas/Compukters/issues/787).
