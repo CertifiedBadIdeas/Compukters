@@ -64,7 +64,7 @@ jobs:
           retention-days: 7
 
   publish:
-    name: Publish GitHub and Modrinth
+    name: Publish GitHub release
     if: github.event_name == 'push' && github.ref_type == 'tag'
     needs: build
     runs-on: ubuntu-latest
@@ -80,21 +80,51 @@ jobs:
         with:
           name: ${{ needs.build.outputs.release_artifact }}
           path: build/release
-      - name: Verify staged release and credentials
-        env:
-          MODRINTH_TOKEN: ${{ secrets.MODRINTH_TOKEN }}
-        run: |
-          python3 tools/release/release.py verify --directory build/release
-          python3 - <<'PY'
-          import os
-          if not os.environ.get('MODRINTH_TOKEN'):
-              raise SystemExit('Configure MODRINTH_TOKEN in the mod-release environment or repository secrets')
-          PY
+      - name: Verify staged release
+        run: python3 tools/release/release.py verify --directory build/release
       - name: Publish immutable GitHub assets
         env:
           GH_TOKEN: ${{ github.token }}
         run: python3 tools/release/release.py github --directory build/release
+
+  modrinth:
+    name: Publish Modrinth versions
+    needs: [build, publish]
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: mod-release
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.ref }}
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: ${{ needs.build.outputs.release_artifact }}
+          path: build/release
       - name: Publish matching Modrinth versions
         env:
           MODRINTH_TOKEN: ${{ secrets.MODRINTH_TOKEN }}
         run: python3 tools/release/release.py modrinth --directory build/release
+
+  curseforge:
+    name: Submit CurseForge files
+    needs: [build, publish]
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: mod-release
+    permissions:
+      contents: read
+      deployments: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.ref }}
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: ${{ needs.build.outputs.release_artifact }}
+          path: build/release
+      - name: Submit matching CurseForge files
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CURSEFORGE_TOKEN: ${{ secrets.CURSEFORGE_TOKEN }}
+        run: python3 tools/release/curseforge.py publish --directory build/release
