@@ -589,6 +589,9 @@ listed in [Kotlin support](developers/kotlin-support.md) and [standard library s
   Scale controls remain available when the selected scale is too large for the window.
 - Kotlin lexical highlighting colors the `value` modifier, function calls, qualified/use-site annotations and Unicode
   escapes; numeric literals remain separate from range operators and member access while semantic colors take precedence.
+  Named argument labels have a distinct semantic color, including incomplete calls.
+- Problems rows and diagnostic tooltips render multiline compiler messages without control-character glyphs;
+  tooltips preserve line breaks and indentation.
 - `Alt+F7` opens semantic Find Usages with navigable context. Clickable problems, gutter markers, status counts
   and `F2` / `Shift+F2` navigation use matching source text and reject stale locations. Method declarations show
   non-zero project usage counts that distinguish overloads and remain stable during unrelated edits.
