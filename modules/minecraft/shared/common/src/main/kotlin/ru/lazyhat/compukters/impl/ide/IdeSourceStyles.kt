@@ -80,6 +80,8 @@ internal object IdeSourceStyles {
 
             SemanticCategory.Property -> IdeColors.PROPERTY
 
+            SemanticCategory.NamedArgument -> IdeColors.NAMED_ARGUMENT
+
             SemanticCategory.LocalVariable, SemanticCategory.Parameter -> IdeColors.LOCAL_VARIABLE
 
             SemanticCategory.InferredExpression,

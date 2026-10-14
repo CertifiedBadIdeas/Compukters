@@ -44,10 +44,8 @@ internal object IdeDiagnosticTooltip {
                 .flatMap { row ->
                     val title = row.diagnostic.severity.name
                     listOf(title to IdeSourceStyles.diagnosticColor(row.diagnostic.severity)) +
-                        IdePopupText.wrap(row.diagnostic.message, columns, maximumRows + 1).map { range ->
-                            row.diagnostic.message
-                                .substring(range.startUtf16, range.endUtf16)
-                                .trimEnd() to IdeColors.TEXT
+                        IdePopupText.lines(row.diagnostic.message, columns, maximumRows + 1).map { text ->
+                            text to IdeColors.TEXT
                         }
                 }.take(maximumRows + 1)
                 .toMutableList()

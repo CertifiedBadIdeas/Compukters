@@ -134,25 +134,31 @@ overwrites or saves newer typing`, `format failure warns without saving the unfo
 
 Declarations, extension functions, inferred expressions, and smart casts receive K2-backed semantic tokens;
 mutable properties, locals, and their resolved references carry the Islands Dark underline effect.
+Named argument labels have a distinct color, including incomplete overloaded calls; the argument
+expression and ordinary parameter colors remain unchanged.
 
 **Evidence:**
 [`SemanticTokenQueryTest`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/ide-analysis-k2/src/test/kotlin/ru/lazyhat/compukters/ide/analysis/k2/query/SemanticTokenQueryTest.kt),
 tests `presentation classifies declarations and extension functions`, `presentation marks inferred and smart
 cast expressions`, and `presentation marks mutable declarations and references`, plus
 [`IdeRendererStateTest`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/minecraft/shared/common/src/test/kotlin/ru/lazyhat/compukters/impl/ide/IdeRendererStateTest.kt),
-test `expression metadata does not override lexical code colors`.
+tests `expression metadata does not override lexical code colors` and `named argument label uses its own
+color without changing the argument expression`; `SemanticTokenQueryTest` also covers `named argument
+labels retain distinct highlighting in incomplete overloaded calls`.
 
 ### K2 diagnostics
 
 **Status:** Supported.
 
 Incomplete syntax remains analyzable, multi-file diagnostics retain virtual paths, and UTF-16 ranges remain
-exact.
+exact. Problems rows flatten multiline messages into printable text; diagnostic tooltips preserve
+line breaks and indentation without rendering CR/LF, tabs or other control characters as glyphs.
 
 **Evidence:**
 [`DiagnosticQueryTest`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/ide-analysis-k2/src/test/kotlin/ru/lazyhat/compukters/ide/analysis/k2/query/DiagnosticQueryTest.kt),
 tests `type error after supplementary character keeps UTF-16 range`, `diagnostics from multiple files retain
-their virtual paths`, and `incomplete syntax produces a bounded diagnostic instead of failing analysis`.
+their virtual paths`, and `incomplete syntax produces a bounded diagnostic instead of failing analysis`;
+`IdeRendererStateTest`, test `multiline diagnostics render printable problem rows and preserve tooltip lines`.
 
 ### Explicit import quick fixes
 
