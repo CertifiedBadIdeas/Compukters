@@ -51,6 +51,18 @@ Closing the handle removes program overrides and returns the engine to ordinary 
 can restart thrust. Propulsion startup, shutdown and nozzle smoothing affect actual motion; zero throttle alone is
 not a guarantee of immediate zero physical thrust. A single engine has no attitude authority at zero thrust.
 
+## Program organization
+
+`src/main.kt` owns the flight loop, observation timing and the engine handle lifetime. `FlightHardware.kt` adapts
+preflight, command delivery and cleanup to the addon APIs; `FlightReporting.kt` owns status output.
+Pure logic in `src/control` has no peripheral calls: `FlightModels.kt` defines state and outputs,
+`FlightPhases.kt` owns mission transitions, `VerticalCommand.kt` owns speed/thrust PI, and `AttitudeCommand.kt`
+owns upright steering. `FlightControl.kt` validates the feedback and combines their commands; `FlightMath.kt`
+provides finite bounded command arithmetic. VM conformance compiles this same control directory.
+
+The wider orbital mission is tracked in [#795](https://github.com/CertifiedBadIdeas/Compukters/issues/795).
+Horizontal return, orbital insertion, revolution counting and deorbit guidance are subsequent stages.
+
 ## Verification
 
 `testKotlinRocketLandingVmConformance` runs the shipped controller in the pinned VM. It checks descent braking,

@@ -5,7 +5,6 @@
  */
 
 import compukter.concurrent.Tasks
-import cosmonautics.space.Space
 import propulsion.thrusters.CreativeVectorThruster
 import sable.physics.Physics
 import kotlin.math.Vector3d
@@ -20,24 +19,12 @@ const val MAX_DRIFT = 2.0
 const val MAX_FLIGHT_SECONDS = 120.0
 
 fun main() {
-    val status = Space.status()
-    require(!status.inDeepSpace) { "Start rocket-landing on a planet's clear launch pad" }
-    val planet = Space.planet()
     val engine = CreativeVectorThruster.named(ENGINE_NAME)
     try {
-        engine.setThrottle(0.0)
-        val first = Physics.snapshot()
-        require(!first.paused && first.dimension == status.dimension)
-        require(first.linearVelocity.length <= 0.1 && first.angularVelocity.length <= 0.1) { "Start stationary on the pad" }
-        require(first.orientation.transform(Vector3d(0.0, 1.0, 0.0)).y >= 0.999) { "Start upright" }
-        require(first.position.y + CLIMB_HEIGHT + 10.0 < planet.transitionHeight) { "Keep flight below Deep Space transition" }
-        val mount = engine.mount()
-        require(mount.constructionId == first.constructionId)
-        require(mount.forceX == 0 && mount.forceY == 1 && mount.forceZ == 0) { "Mount +Y engine below center of mass" }
-        val saved = engine.state()
-        val hover = if (HOVER_KN > 0.0) HOVER_KN else saved.thrustKn
-        require(hover > 0.0 && hover <= saved.maxThrustKn / 1.2) { "Calibrate hover with at least 20% thrust reserve" }
-        val maximum = if (hover <= saved.maxThrustKn / 2.0) hover * 2.0 else saved.maxThrustKn
+        val setup = prepareFlight(engine)
+        val first = setup.reference
+        val hover = setup.hoverKn
+        val maximum = setup.maximumKn
         var state = FlightState(FlightPhase.ASCENT, 0.0, 0.0)
         var previousPosition = first.position
         var previousTick = first.gameTick
@@ -83,31 +70,13 @@ fun main() {
                 println("COMPLETE: stationary near pad reference; releasing engine control.")
                 break
             }
-            engine.setVector(command.vectorX, command.vectorY)
-            engine.setThrustKn(command.thrustKn)
-            engine.setThrottle(1.0)
+            applyFlightCommand(engine, command)
             if (changed || current.gameTick - lastReport >= 20L) {
-                println(
-                    "${state.phase.name}: height ${offset.y} m; speed ${current.linearVelocity.y}/${command.targetSpeed} m/s; ${command.thrustKn} kN; drift $lateral m",
-                )
-                if (state.phase == FlightPhase.DESCENT) {
-                    println(
-                        "Landing: pose speed ${positionVelocity.length} m/s; angular ${current.angularVelocity.length} rad/s",
-                    )
-                }
+                reportFlight(state, current, offset, command, positionVelocity, lateral)
                 lastReport = current.gameTick
             }
         }
     } finally {
-        try {
-            engine.setThrottle(0.0)
-        } catch (_: Exception) {
-            println("Throttle command unavailable; check engine")
-        }
-        try {
-            engine.close()
-        } catch (_: Exception) {
-            println("Engine handle unavailable; process exit releases control")
-        }
+        releaseFlightEngine(engine)
     }
 }
