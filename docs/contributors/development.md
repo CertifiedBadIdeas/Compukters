@@ -105,6 +105,36 @@ checkout location. For a task created with an older helper, explicitly register 
 repeating its setup command with `--resume` before using `finish`. A new task always starts from the
 updated local base.
 
+## Reviewing textures and block models
+
+Keep visual changes in a task worktree until their final in-client appearance is approved. For a Create
+asset change, initialize `addons/create` with the worktree helper and launch the isolated addon client:
+
+```bash
+./gradlew-sandbox-dev-parallel -p addons/create runClient
+```
+
+Its game directory is `<task-checkout>/addons/create/run/client`. Create a disposable creative flat world
+there rather than opening a normal development world. Place the candidate beside its original Create
+counterpart, compare the inventory item and every visible side, and check horizontal and vertical
+orientations and both flow/state variants. Use daylight first, then check a shaded placement. Record the
+candidate commit, observations and screenshots under `build/agent-logs/` before asking for integration.
+A successful build or client launch does not establish visual approval.
+
+For edits to existing addon assets while the preview is running, copy the resources to the existing
+runtime output, then press F3+T in the client:
+
+```bash
+cp -a addons/create/src/main/resources/. addons/create/build/resources/main/
+```
+
+This refreshes edited files; it does not remove deleted or renamed outputs. Stop the client and run
+`processResources` through the summary wrapper for those changes. Managed clients hold the workspace
+Gradle slot, so a second managed Gradle invocation waits until the client exits. After preview iterations,
+stop the client and rerun the focused checks against source files before committing. Leave the worktree
+available until the user approves; then use the normal integration and finish workflow. Resource reload
+cannot apply Kotlin, registration or block-state property changes.
+
 ## Minecraft development
 
 Run Gradle with JDK 25 selected through `JAVA_HOME` or a Gradle-discoverable
