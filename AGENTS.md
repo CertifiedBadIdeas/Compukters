@@ -38,6 +38,8 @@ force-removed. For older helper checkouts, register them explicitly with setup `
 
 ## Visual asset review before integration
 
+Read `.agents/skills/compukters-visual-assets/SKILL.md` for texture and block-model work. Use
+`./visual-preview` for supported standalone addon previews and retain its capture/approval records.
 For texture, block model and other subjective visual changes, keep the candidate in its task worktree
 until the user has reviewed the final appearance and explicitly approved integration. Automated checks do
 not replace this review. Before requesting approval, build the candidate, launch the owning development
