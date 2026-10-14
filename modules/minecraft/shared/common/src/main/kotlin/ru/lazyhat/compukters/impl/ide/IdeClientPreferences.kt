@@ -128,6 +128,7 @@ class IdeClientPreferences(
             "format=1" -> decodeFormatOne(lines, currentLayout)
             "format=2" -> decodeFormatTwo(lines, currentLayout)
             "format=3" -> decodeFormatThree(lines, currentLayout)
+            "format=4" -> decodeFormatFour(lines, currentLayout)
             else -> null
         }
     }
@@ -209,19 +210,55 @@ class IdeClientPreferences(
         return remembered
     }
 
+    private fun decodeFormatFour(
+        lines: List<String>,
+        currentLayout: IdeLayoutSettings,
+    ): IdePreferences? {
+        if (lines.size !in 4..(IdePreferences.MAX_PROJECT_STATES + IdePreferences.MAX_COMPUTER_PROJECTS + 4)) return null
+        val stateLines = lines.drop(4).filterNot { it.startsWith("computer=") }
+        val base = decodeFormatThree(lines.take(4) + stateLines, currentLayout) ?: return null
+        val computers = linkedMapOf<UUID, String>()
+        for (line in lines.drop(4).filter { it.startsWith("computer=") }) {
+            val fields = line.removePrefix("computer=").split('|')
+            if (fields.size != 2) return null
+            val id = runCatching { UUID.fromString(fields[0]) }.getOrNull() ?: return null
+            if (id.toString() != fields[0] || id in computers) return null
+            computers[id] = decodeValue(fields[1]) ?: return null
+        }
+        val result =
+            IdePreferences.admit(
+                base.lastProjectDirectory,
+                base.projectStates,
+                base.treeWidth,
+                base.diagnosticsHeight,
+                base.diagnosticsExpanded,
+                base.gitAuthorName,
+                base.gitAuthorEmail,
+                computers,
+            )
+        if (result.computerProjects != computers) return null
+        return result
+    }
+
     private fun encode(preferences: IdePreferences): String {
         val header =
-            "format=3\nactive=${encodeNullable(preferences.lastProjectDirectory)}\n" +
+            "format=4\nactive=${encodeNullable(preferences.lastProjectDirectory)}\n" +
                 "authorName=${encodeValue(preferences.gitAuthorName)}\nauthorEmail=${encodeValue(preferences.gitAuthorEmail)}\n"
         val result = StringBuilder(header)
-        val ordered =
-            preferences.projectStates.entries.sortedByDescending {
-                it.key == preferences.lastProjectDirectory
+        val states =
+            preferences.projectStates.map { (directoryName, state) ->
+                directoryName to (
+                    "state=${encodeValue(directoryName)}|${encodeNullable(state.file?.value)}|" +
+                        "${state.caretUtf16}|${state.firstVisibleLine}|${state.firstVisibleColumn}\n"
+                )
             }
-        for ((directoryName, state) in ordered) {
-            val line =
-                "state=${encodeValue(directoryName)}|${encodeNullable(state.file?.value)}|" +
-                    "${state.caretUtf16}|${state.firstVisibleLine}|${state.firstVisibleColumn}\n"
+        val active = states.firstOrNull { it.first == preferences.lastProjectDirectory }
+        // Keep the active editor first, then computer associations before optional old editor positions.
+        val lines =
+            listOfNotNull(active?.second) +
+                preferences.computerProjects.map { (id, directory) -> "computer=$id|${encodeValue(directory)}\n" } +
+                states.filter { it.first != preferences.lastProjectDirectory }.map { it.second }
+        for (line in lines) {
             if ((result.toString() + line).encodeToByteArray().size > MAXIMUM_FILE_BYTES) break
             result.append(line)
         }

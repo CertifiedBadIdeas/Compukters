@@ -272,6 +272,9 @@ class IdeClientController(
     private val targetBuildActions = mutableMapOf<Long, PendingBuildAction>()
     private val computerFiles = targetCoordinator?.let { IdeComputerFileCoordinator(it, limits.eventQueueCapacity) }
     private var computerTarget: IdeAttachedTarget? = null
+    private var catalogLoaded = false
+    private var restoreComputerProjectPending = false
+    private var projectComputerId: java.util.UUID? = null
     private val navigationHistory = IdeNavigationHistory(limits.navigationHistory)
 
     init {
@@ -900,6 +903,7 @@ class IdeClientController(
         continueTabClose()
         targetCoordinator?.tick()
         refreshTargetState()
+        restoreComputerProject()
         refreshComputerFiles()
         val active =
             documents.values.firstOrNull {
@@ -933,6 +937,8 @@ class IdeClientController(
             publishProblem("Target integration is unavailable")
             return
         }
+        projectComputerId = null
+        restoreComputerProjectPending = true
         coordinator.attach(claim)
         refreshTargetState()
     }
@@ -940,6 +946,8 @@ class IdeClientController(
     fun detachTarget() {
         checkOwner()
         if (closed) return
+        restoreComputerProjectPending = false
+        projectComputerId = null
         targetCoordinator?.detach()
         refreshTargetState()
         refreshComputerFiles()
@@ -2415,10 +2423,11 @@ class IdeClientController(
 
     private fun acceptCatalog(event: IdeEvent.ProjectCatalogLoaded) {
         catalog = event.projects
+        catalogLoaded = true
         val summaries = catalog.take(limits.projectRows).map(::summary)
-        val remembered = preferencesSnapshot.lastProjectDirectory
+        val remembered = preferencesSnapshot.lastProjectDirectory.takeUnless { restoreComputerProjectPending }
         val restoreProject = remembered != null && catalog.any { it.directoryName == remembered }
-        val page = if (restoreProject) IdePageState.Opening else IdePageState.Start(summaries, null)
+        val page = if (restoreProject || restoreComputerProjectPending) IdePageState.Opening else IdePageState.Start(summaries, null)
         state = IdeViewState(generation, page, null, emptySet(), state.target, state.tooling)
         if (restoreProject) openProject(requireNotNull(remembered))
     }
@@ -2555,6 +2564,7 @@ class IdeClientController(
         gitCancellation = null
         refreshAnalysisAfterGit = false
         project = event.project
+        rememberComputerProject(event.project.directoryName)
         catalog =
             if (catalog.any { it.directoryName == event.project.directoryName }) {
                 catalog.map { if (it.directoryName == event.project.directoryName) event.project else it }
@@ -3979,6 +3989,27 @@ class IdeClientController(
         if (preparationTarget != compileProfile) {
             preparationTarget = compileProfile
             requestLibraryPreparation()
+        }
+    }
+
+    private fun rememberComputerProject(directoryName: String) {
+        val id = projectComputerId ?: return
+        preferencesSnapshot = preferencesSnapshot.rememberComputer(id, directoryName)
+        runCatching { preferences.save(preferencesSnapshot) }
+    }
+
+    private fun restoreComputerProject() {
+        if (!restoreComputerProjectPending || !catalogLoaded || state.target is IdeTargetState.Attaching) return
+        restoreComputerProjectPending = false
+        projectComputerId = targetCoordinator?.attachedTarget()?.computerId
+        val remembered = projectComputerId?.let(preferencesSnapshot.computerProjects::get)
+        if (remembered != null && catalog.any { it.directoryName == remembered }) {
+            if (project?.directoryName == remembered) rememberComputerProject(remembered) else requestProjectSwitch(remembered)
+        } else if (project != null) {
+            // Attaching from an existing workspace does not discard its open documents.
+            rememberComputerProject(requireNotNull(project).directoryName)
+        } else if (state.page is IdePageState.Opening) {
+            state = state.copy(page = IdePageState.Start(catalog.take(limits.projectRows).map(::summary), null))
         }
     }
 

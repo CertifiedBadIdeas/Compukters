@@ -59,6 +59,7 @@ data class IdeResolvedTarget(
     val fileSystem: IdeTargetFileSystemOperations? = null,
     val namedPeripherals: ((Boolean) -> IdeTargetReply.NamedPeripherals)? = null,
     val renamePeripheral: ((IdePeripheralReference, String, String) -> IdeTargetReply)? = null,
+    val computerId: UUID? = null,
 ) {
     init {
         require(machineIdentity.isNotBlank()) { "machine identity must not be blank" }
@@ -122,6 +123,7 @@ class IdeTargetLeaseService(
                 compileProfile = resolved.profile,
                 capabilities = resolved.capabilities,
                 displayName = resolved.displayName,
+                computerId = resolved.computerId,
             )
         removeLease(player)
         leases[player] = Lease(attached, resolved, expiresAt(tick))

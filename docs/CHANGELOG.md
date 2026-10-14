@@ -13,6 +13,9 @@ headings so this page has one stable URL that can be shared outside the reposito
 
 ## 0.6.0 — In development
 
+- IDE remembers the last opened project separately for each computer and restores it on reopening,
+  including after a client or world restart. Missing projects return to the project selector.
+
 - IDE Devices inserts a peripheral name constant on double-click and copies the selected device's exact
   network name with Ctrl+C while the device window has focus.
 

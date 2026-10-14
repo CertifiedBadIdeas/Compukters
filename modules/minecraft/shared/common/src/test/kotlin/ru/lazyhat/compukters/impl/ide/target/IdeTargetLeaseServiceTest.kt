@@ -34,7 +34,7 @@ class IdeTargetLeaseServiceTest {
     @Test
     fun `attach binds an opaque lease to one player and renews only the matching live target`() {
         var alive = true
-        val resolved = resolvedTarget { alive }
+        val resolved = resolvedTarget { alive }.copy(computerId = UUID(0, 1))
         val service =
             IdeTargetLeaseService(
                 resolver = IdeTargetClaimResolver { _, _ -> IdeClaimResolution.Resolved(resolved) },
@@ -46,6 +46,7 @@ class IdeTargetLeaseServiceTest {
         val attached = assertIs<IdeAttachResult.Attached>(service.attach(player, claim(), tick = 10)).target
         assertEquals(IdeTargetId("lease-1"), attached.id)
         assertEquals(resolved.profile, attached.compileProfile)
+        assertEquals(resolved.computerId, attached.computerId)
         assertEquals(IdeHeartbeatResult.Alive, service.heartbeat(player, attached, tick = 29))
         assertEquals(resolved, service.access(player, attached, tick = 48))
 

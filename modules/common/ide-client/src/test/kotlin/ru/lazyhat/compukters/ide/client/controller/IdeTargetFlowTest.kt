@@ -48,6 +48,8 @@ import ru.lazyhat.compukters.ide.client.target.IdeTargetClaim
 import ru.lazyhat.compukters.ide.client.target.IdeTargetCoordinator
 import ru.lazyhat.compukters.ide.client.target.IdeTargetDirectoryEntry
 import ru.lazyhat.compukters.ide.client.target.IdeTargetDirectoryListing
+import ru.lazyhat.compukters.ide.client.target.IdeTargetFailure
+import ru.lazyhat.compukters.ide.client.target.IdeTargetFailureKind
 import ru.lazyhat.compukters.ide.client.target.IdeTargetFileChunk
 import ru.lazyhat.compukters.ide.client.target.IdeTargetFileKind
 import ru.lazyhat.compukters.ide.client.target.IdeTargetFileMetadata
@@ -77,6 +79,155 @@ import kotlin.test.assertEquals
 import kotlin.test.assertIs
 
 class IdeTargetFlowTest {
+    @Test
+    fun `failed project open preserves the previous computer association`() {
+        val id = java.util.UUID(0, 6)
+        val port = TargetPort()
+        port.attachment = CompletableFuture.completedFuture(IdeAttachResult.Attached(target().copy(computerId = id)))
+        val fixture =
+            ControllerFixture(
+                preferences = preferences("demo", "src/main.kt").rememberComputer(id, "demo"),
+                additionalProject = true,
+                targetCoordinatorFactory = { IdeTargetCoordinator(port, it) },
+            )
+        fixture.controller.start()
+        fixture.controller.attachTarget(IdeTargetClaim.of(byteArrayOf(1)))
+        repeat(4) { fixture.controller.tick() }
+        fixture.workspace.treeResult = CompletableFuture.failedFuture(IllegalStateException("unavailable"))
+        fixture.controller.dispatch(IdeCommand.OpenProject("second"))
+        repeat(3) { fixture.controller.tick() }
+        assertEquals("demo", fixture.preferences.current()!!.computerProjects[id])
+        fixture.controller.close()
+    }
+
+    @Test
+    fun `each computer restores its project independently of the lease and remembers switches`() {
+        val first = java.util.UUID(0, 1)
+        val second = java.util.UUID(0, 2)
+        var saved =
+            preferences("demo", "src/main.kt")
+                .remember("second", "src/main.kt", 2, 0, 0)
+                .rememberComputer(first, "demo")
+                .rememberComputer(second, "second")
+        for ((id, expected) in listOf(first to "demo", second to "second", first to "demo")) {
+            val port = TargetPort()
+            port.attachment =
+                CompletableFuture.completedFuture(
+                    IdeAttachResult.Attached(
+                        target().copy(
+                            id =
+                                IdeTargetId(
+                                    java.util.UUID
+                                        .randomUUID()
+                                        .toString(),
+                                ),
+                            computerId = id,
+                        ),
+                    ),
+                )
+            val fixture =
+                ControllerFixture(
+                    preferences = saved,
+                    additionalProject = true,
+                    targetCoordinatorFactory = { IdeTargetCoordinator(port, it) },
+                )
+            fixture.controller.start()
+            fixture.controller.attachTarget(IdeTargetClaim.of(byteArrayOf(1)))
+            repeat(4) { fixture.controller.tick() }
+            assertEquals(expected, fixture.workspaceView().project.directoryName)
+            assertEquals("src/main.kt", fixture.workspaceView().activeFile?.value)
+            if (id == second) {
+                fixture.controller.dispatch(IdeCommand.OpenProject("demo"))
+                repeat(3) { fixture.controller.tick() }
+                assertEquals("demo", fixture.preferences.current()!!.computerProjects[second])
+            }
+            fixture.controller.close()
+            saved = fixture.preferences.current()!!
+            assertEquals("demo", saved.computerProjects[first])
+        }
+        assertEquals("demo", saved.computerProjects[second])
+    }
+
+    @Test
+    fun `computer restoration waits for both catalog and attachment in either order`() {
+        val id = java.util.UUID(0, 3)
+        for (catalogFirst in listOf(true, false)) {
+            val port = TargetPort()
+            val attach = CompletableFuture<IdeAttachResult>()
+            port.attachment = attach
+            val fixture =
+                ControllerFixture(
+                    preferences = preferences("demo", "src/main.kt").rememberComputer(id, "second"),
+                    additionalProject = true,
+                    targetCoordinatorFactory = { IdeTargetCoordinator(port, it) },
+                )
+            val catalog = CompletableFuture<List<ru.lazyhat.compukters.ide.project.ProjectDescriptor>>()
+            val projects = fixture.workspace.projects().join()
+            fixture.workspace.catalogResult = catalog
+            fixture.controller.start()
+            fixture.controller.attachTarget(IdeTargetClaim.of(byteArrayOf(1)))
+            if (catalogFirst) catalog.complete(projects) else attach.complete(IdeAttachResult.Attached(target().copy(computerId = id)))
+            repeat(3) { fixture.controller.tick() }
+            kotlin.test.assertFalse(fixture.controller.viewState().page is ru.lazyhat.compukters.ide.client.state.IdePageState.Workspace)
+            if (catalogFirst) attach.complete(IdeAttachResult.Attached(target().copy(computerId = id))) else catalog.complete(projects)
+            repeat(4) { fixture.controller.tick() }
+            assertEquals("second", fixture.workspaceView().project.directoryName)
+            fixture.controller.close()
+        }
+    }
+
+    @Test
+    fun `new computer missing project and rejected attachment show catalog instead of global last project`() {
+        val id = java.util.UUID(0, 4)
+        for (mode in listOf("new", "missing", "rejected")) {
+            val port = TargetPort()
+            port.attachment =
+                CompletableFuture.completedFuture(
+                    if (mode == "rejected") {
+                        IdeAttachResult.Rejected(IdeTargetFailure(IdeTargetFailureKind.TargetLost, "gone"))
+                    } else {
+                        IdeAttachResult.Attached(target().copy(computerId = id))
+                    },
+                )
+            var saved = preferences("demo", "src/main.kt")
+            if (mode == "missing") saved = saved.rememberComputer(id, "missing")
+            val fixture = ControllerFixture(preferences = saved, targetCoordinatorFactory = { IdeTargetCoordinator(port, it) })
+            fixture.controller.start()
+            fixture.controller.attachTarget(IdeTargetClaim.of(byteArrayOf(1)))
+            repeat(4) { fixture.controller.tick() }
+            assertIs<ru.lazyhat.compukters.ide.client.state.IdePageState.Start>(fixture.controller.viewState().page)
+            if (mode != "rejected") {
+                fixture.controller.dispatch(IdeCommand.OpenProject("demo"))
+                repeat(3) { fixture.controller.tick() }
+                assertEquals("demo", fixture.preferences.current()!!.computerProjects[id])
+            }
+            fixture.controller.close()
+        }
+    }
+
+    @Test
+    fun `attaching another computer saves dirty documents before restoring its project`() {
+        val id = java.util.UUID(0, 5)
+        val port = TargetPort()
+        port.attachment = CompletableFuture.completedFuture(IdeAttachResult.Attached(target().copy(computerId = id)))
+        val fixture =
+            ControllerFixture(
+                preferences = preferences("demo", "src/main.kt").rememberComputer(id, "second"),
+                additionalProject = true,
+                targetCoordinatorFactory = { IdeTargetCoordinator(port, it) },
+            )
+        fixture.startAndTick()
+        fixture.controller.dispatch(IdeCommand.Edit(IdeEditorInput.Type("// unsaved")))
+        fixture.controller.attachTarget(IdeTargetClaim.of(byteArrayOf(1)))
+        fixture.controller.tick()
+        assertEquals("demo", fixture.workspaceView().project.directoryName)
+        assertEquals("second", fixture.preferences.current()!!.computerProjects[id])
+        fixture.workspace.completeSave()
+        repeat(4) { fixture.controller.tick() }
+        assertEquals("second", fixture.workspaceView().project.directoryName)
+        fixture.controller.close()
+    }
+
     @Test
     fun `live network observations merge with compiler diagnostics and disappear on edit or detach`() {
         val requests = ControllerRecordingAnalysisRequests()
@@ -449,14 +600,14 @@ private class TargetCompilation : ClientCompilationService {
 }
 
 private class TargetPort : IdeTargetPort {
+    var attachment: CompletableFuture<IdeAttachResult> = CompletableFuture.completedFuture(IdeAttachResult.Attached(target()))
     private val previewText = "fun main() = Unit".encodeToByteArray()
     val verifications = mutableListOf<Verification>()
     val revisions = mutableListOf<Revision>()
     val deployments = mutableListOf<Deployment>()
     val submissions = mutableListOf<Submission>()
 
-    override fun attach(claim: IdeTargetClaim): CompletableFuture<IdeAttachResult> =
-        CompletableFuture.completedFuture(IdeAttachResult.Attached(target()))
+    override fun attach(claim: IdeTargetClaim): CompletableFuture<IdeAttachResult> = attachment
 
     override fun verify(
         target: IdeAttachedTarget,

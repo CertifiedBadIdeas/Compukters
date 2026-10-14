@@ -1070,6 +1070,14 @@ carries these effects for compiler and IDE consumers, including when SDK sources
 
 ## IDE device management transport
 
+The active IDE target payload registration version is **4**. Attached replies append a boolean and, when present,
+the computer's durable 128-bit identity as a Minecraft UUID (two longs). This identity is independent of the opaque
+lease ID and VM/session epoch and is used only for client-local project preferences; authorization continues to use
+the player-owned lease reference. Version 3 and older peers are rejected by payload registration because they cannot
+read this attached-target layout. The production resolver always supplies the existing persisted computer identity;
+non-computer/test targets may omit it.
+
+
 IDE target payload registration version 2 extends bounded named-peripheral entries with optional exact instance/kind
 references and up to eight validated fully qualified Guest lookup types. A lease-authorized rename request carries
 that reference, an expected previous name and a bounded requested name; success returns refreshed discovery.

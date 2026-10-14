@@ -20,6 +20,7 @@ package ru.lazyhat.compukters.ide.client.preferences
 
 import ru.lazyhat.compukters.ide.project.fs.ProjectPath
 import java.util.Collections
+import java.util.UUID
 
 @ConsistentCopyVisibility
 data class IdeProjectEditorState private constructor(
@@ -52,8 +53,32 @@ class IdePreferences private constructor(
     val diagnosticsExpanded: Boolean,
     val gitAuthorName: String,
     val gitAuthorEmail: String,
+    computerProjects: Map<UUID, String>,
 ) {
     val projectStates: Map<String, IdeProjectEditorState> = Collections.unmodifiableMap(LinkedHashMap(projectStates))
+
+    val computerProjects: Map<UUID, String> = Collections.unmodifiableMap(LinkedHashMap(computerProjects))
+
+    fun rememberComputer(
+        computerId: UUID,
+        projectDirectory: String,
+    ): IdePreferences {
+        if (!isDirectCanonicalName(projectDirectory)) return this
+        val updated = linkedMapOf(computerId to projectDirectory)
+        computerProjects.forEach { (id, directory) ->
+            if (id != computerId && updated.size < MAX_COMPUTER_PROJECTS) updated[id] = directory
+        }
+        return admit(
+            lastProjectDirectory,
+            projectStates,
+            treeWidth,
+            diagnosticsHeight,
+            diagnosticsExpanded,
+            gitAuthorName,
+            gitAuthorEmail,
+            updated,
+        )
+    }
 
     private val activeState: IdeProjectEditorState?
         get() = lastProjectDirectory?.let(projectStates::get)
@@ -95,6 +120,7 @@ class IdePreferences private constructor(
             diagnosticsExpanded = diagnosticsExpanded,
             gitAuthorName = gitAuthorName,
             gitAuthorEmail = gitAuthorEmail,
+            computerProjects = computerProjects,
         )
     }
 
@@ -113,6 +139,12 @@ class IdePreferences private constructor(
             diagnosticsExpanded = diagnosticsExpanded,
             gitAuthorName = gitAuthorName,
             gitAuthorEmail = gitAuthorEmail,
+            computerProjects =
+                computerProjects
+                    .mapNotNull { (id, directory) ->
+                        val replacement = if (directory == source) target else directory
+                        replacement?.let { id to it }
+                    }.toMap(),
         )
     }
 
@@ -132,6 +164,7 @@ class IdePreferences private constructor(
             diagnosticsExpanded,
             normalizedName,
             normalizedEmail,
+            computerProjects,
         )
     }
 
@@ -139,6 +172,7 @@ class IdePreferences private constructor(
         const val MIN_PANEL_SIZE = 32
         const val MAX_PANEL_SIZE = 16 * 1024
         const val MAX_PROJECT_STATES = 64
+        const val MAX_COMPUTER_PROJECTS = 64
 
         fun admit(
             projectDirectory: String?,
@@ -167,6 +201,7 @@ class IdePreferences private constructor(
             diagnosticsExpanded: Boolean,
             gitAuthorName: String = "",
             gitAuthorEmail: String = "",
+            computerProjects: Map<UUID, String> = emptyMap(),
         ): IdePreferences {
             val admitted = linkedMapOf<String, IdeProjectEditorState>()
             projectStates.forEach { (directoryName, state) ->
@@ -177,6 +212,12 @@ class IdePreferences private constructor(
             return IdePreferences(
                 lastProjectDirectory = lastProjectDirectory?.takeIf { it in admitted },
                 projectStates = admitted,
+                computerProjects =
+                    computerProjects
+                        .filterValues(::isDirectCanonicalName)
+                        .entries
+                        .take(MAX_COMPUTER_PROJECTS)
+                        .associate { it.toPair() },
                 treeWidth = treeWidth.coerceIn(MIN_PANEL_SIZE, MAX_PANEL_SIZE),
                 diagnosticsHeight = diagnosticsHeight.coerceIn(MIN_PANEL_SIZE, MAX_PANEL_SIZE),
                 diagnosticsExpanded = diagnosticsExpanded,
