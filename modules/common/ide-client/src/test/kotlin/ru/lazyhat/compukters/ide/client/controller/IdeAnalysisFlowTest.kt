@@ -601,6 +601,42 @@ class IdeAnalysisFlowTest {
     }
 
     @Test
+    fun `named argument completion places caret after equals and is one undoable edit`() {
+        val requests = FlowAnalysisRequests()
+        val fixture =
+            ControllerFixture(preferences("demo", "src/main.kt"), analysisCoordinatorFactory = { workspace ->
+                coordinator(workspace, requests)
+            })
+        fixture.startAndTick()
+        val source = "fun main() { send(po) }"
+        val start = source.indexOf("po")
+        fixture.controller.dispatch(IdeCommand.Edit(IdeEditorInput.SelectAll))
+        fixture.controller.dispatch(IdeCommand.Edit(IdeEditorInput.Type(source)))
+        fixture.controller.dispatch(IdeCommand.Edit(IdeEditorInput.SetCaret(start + 2, false)))
+        val active = assertIs<IdeAnalysisState.Active>(fixture.analysisCoordinator?.state())
+        requests.publish(
+            AnalysisClientResult.Success(
+                AnalysisResult.Completion.create(
+                    active.identity,
+                    EditorRange(start, start + 2),
+                    listOf(CompletionItem("position =", "position = ", CompletionKind.Parameter, "Int")),
+                    source.length,
+                ),
+            ),
+        )
+        fixture.controller.tick()
+        fixture.controller.dispatch(IdeCommand.Edit(IdeEditorInput.Tab))
+        val completed = "fun main() { send(position = ) }"
+        assertEquals(completed, fixture.textEditor().visibleLines.single())
+        assertEquals(completed.lastIndexOf(')'), fixture.textEditor().caretUtf16)
+        fixture.controller.dispatch(IdeCommand.Edit(IdeEditorInput.Undo))
+        assertEquals(source, fixture.textEditor().visibleLines.single())
+        fixture.controller.dispatch(IdeCommand.Edit(IdeEditorInput.Redo))
+        assertEquals(completed, fixture.textEditor().visibleLines.single())
+        fixture.controller.close()
+    }
+
+    @Test
     fun `import completion applies one undoable compound editor change`() {
         val requests = FlowAnalysisRequests()
         val fixture =

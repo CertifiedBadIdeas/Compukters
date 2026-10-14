@@ -168,6 +168,25 @@ internal object CompletionQuery {
             return signature.substitute(substitutor)
         }
 
+        NamedArgumentCompletion.run { candidates(context, file, limits) }.forEach { candidate ->
+            ranked.offer(
+                RankedCompletion(
+                    candidate.item,
+                    "argument\u0000${candidate.item.insertText}\u0000${candidate.item.detail}",
+                    CompletionRank(
+                        applicability = if (candidate.best) 4 else 3,
+                        prefixQuality = matcher.quality(candidate.name),
+                        locality = Int.MAX_VALUE,
+                        nameUtf8 = candidate.name.encodeToByteArray(),
+                        signatureUtf8 =
+                            candidate.item.detail
+                                .orEmpty()
+                                .encodeToByteArray(),
+                    ),
+                ),
+            )
+        }
+
         KeywordCompletion.candidates(context).forEach { keyword ->
             val item = CompletionItem(keyword, keyword, CompletionKind.Keyword, matchedNameRanges = matcher.ranges(keyword))
             ranked.offer(
