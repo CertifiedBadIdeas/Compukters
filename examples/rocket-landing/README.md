@@ -2,7 +2,7 @@
 
 Experimental Guest Kotlin project for Minecraft 1.21.1 with Compukters, Sable, Propulsion Simulated and
 Cosmonautics. A single +Y creative vector thruster lifts a rocket, holds height, descends and releases
-control after a sustained near-pad stop. This is a local flight experiment, not orbital flight or terrain navigation.
+control as soon as a near-pad stop is observed. This is a local flight experiment, not orbital flight or terrain navigation.
 
 ## Setup
 
@@ -29,15 +29,15 @@ control after a sustained near-pad stop. This is a local flight experiment, not 
 - **HOLD:** hold height for five consecutive settled seconds; movement resets the hold timer.
 - **DESCENT:** target is proportional to remaining height over the last four metres, capped at 2 m/s downward
   and tapering to 0.25 m/s for the final half metre. PI feedback raises thrust to brake a fall rather than cutting it.
-- **COMPLETE:** two consecutive seconds within 0.25 m of the pad reference with vertical/horizontal pose-displacement speeds
-  at most 0.05 m/s and angular speed at most 0.1 rad/s. Then command zero throttle and close the engine handle.
+- **COMPLETE:** the first observation within 0.25 m of the pad reference with vertical/horizontal pose-displacement speeds
+  at most 0.05 m/s and angular speed at most 0.1 rad/s. Immediately command zero throttle and close the engine handle.
 
 Pose-displacement speed is measured between consecutive position snapshots at their server ticks. The controller
 continues to use the solver linear velocity for thrust feedback, but does not require that instantaneous velocity
 to become zero for completion: it can differ from observed pose motion near contact. The landing diagnostic reports
-pose speed, angular speed and the settling timer; flight phases print their enum names.
+pose speed and angular speed; flight phases print their enum names.
 
-There is no contact sensor: COMPLETE means sustained stationary telemetry near the reference, not proof of ground
+There is no contact sensor: COMPLETE means near-stationary telemetry near the reference, not proof of ground
 contact. Downward motion remains requested during final approach; stationarity far above the pad does not satisfy
 completion. Stationary hovering within the 0.25 m reference window cannot be distinguished from contact. An obstacle
 at the same reference height cannot be distinguished from the chosen pad. This experiment requires a known, clear pad throughout; arbitrary terrain and landing at other coordinates need further sensing/control.
@@ -54,7 +54,7 @@ not a guarantee of immediate zero physical thrust. A single engine has no attitu
 ## Verification
 
 `testKotlinRocketLandingVmConformance` runs the shipped controller in the pinned VM. It checks descent braking,
-near-pad approach, touchdown debounce with solver/pose motion disagreement, saturation/anti-windup, attitude correction,
+near-pad approach, immediate touchdown cutoff with solver/pose motion disagreement, saturation/anti-windup, attitude correction,
 invalid observations and a complete launch/hold/descent/contact cycle in an independent ideal vertical plant, including 10% hover-calibration error.
 `:compiler-k2:compileRocketLandingExample` compiles the full program against actual Sable/Propulsion/Cosmonautics bundles.
 These checks do not model the actual engine startup/nozzle envelope or establish Minecraft landing stability.
