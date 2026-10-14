@@ -58,7 +58,7 @@ fun interface IdeProjectActionSink {
     ): Boolean
 }
 
-enum class IdeFocusArea { Editor, Tree, Panel, Terminal, None }
+enum class IdeFocusArea { Editor, Tree, Panel, Peripherals, Terminal, None }
 
 data class IdeFocusState(
     val area: IdeFocusArea,

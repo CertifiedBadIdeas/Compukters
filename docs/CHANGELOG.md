@@ -13,6 +13,9 @@ headings so this page has one stable URL that can be shared outside the reposito
 
 ## 0.6.0 — In development
 
+- IDE Devices inserts a peripheral name constant on double-click and copies the selected device's exact
+  network name with Ctrl+C while the device window has focus.
+
 - Guest Kotlin supports covariant read views for custom `out` interfaces, Sequence and Iterator,
   including primitive-to-nullable and Any views. Widening preserves object identity and scalar
   storage, boxing only widened reads; nested results and precompiled library owners share the same model.
