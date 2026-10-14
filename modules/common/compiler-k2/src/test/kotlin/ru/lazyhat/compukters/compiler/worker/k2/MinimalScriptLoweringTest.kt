@@ -2830,6 +2830,34 @@ class MinimalScriptLoweringTest {
         }
 
     @Test
+    fun `rocket landing example compiles against the actual addon bundles`() =
+        withAdapter { adapter ->
+            val cosmonautics = checkNotNull(System.getProperty("compukters.cosmonauticsTelemetryBundle"))
+            val sable = checkNotNull(System.getProperty("compukters.sablePidBundle"))
+            val propulsion = checkNotNull(System.getProperty("compukters.propulsionPidBundle"))
+            val result = adapter.compile(projectRequest("examples/rocket-landing/src", listOf(cosmonautics, sable, propulsion)))
+            assertNotNull(result.artifact, result.diagnostics.joinToString())
+        }
+
+    @Test
+    fun `rocket landing controller executes bounded launch hold descent and touchdown`() =
+        withAdapter { adapter ->
+            val result =
+                adapter.compile(
+                    request(
+                        "project/control.kt" to repositoryFile("examples/rocket-landing/src/FlightControl.kt").readText(),
+                        "project/main.kt" to
+                            repositoryFile("modules/common/compiler-k2/src/test/resources/kotlin/rocket-landing/Scenarios.kt").readText(),
+                    ),
+                )
+            val bytes = assertNotNull(result.artifact, result.diagnostics.toString()).toByteArray()
+            ArtifactReader.read(bytes)
+            System.getProperty("compukter.vm.rocketLandingArtifact")?.let { output ->
+                Path.of(output).also { it.parent.createDirectories() }.writeBytes(bytes)
+            }
+        }
+
+    @Test
     fun `space telemetry example compiles against the actual addon bundle`() =
         withAdapter { adapter ->
             val bundle = checkNotNull(System.getProperty("compukters.cosmonauticsTelemetryBundle"))
