@@ -24,6 +24,21 @@ object CompuktersPeripheralWorldIntegration {
         PeripheralWorldPositions.install(project, nearby)
     }
 
+    /** Call before serializing source blocks. Checkpoint publication stays asynchronous. */
+    @JvmStatic
+    fun prepareTransfer(
+        source: ServerLevel,
+        positions: Iterable<BlockPos>,
+    ) {
+        check(source.server.isSameThread)
+        positions.forEach { position ->
+            if (source.hasChunkAt(position)) {
+                (source.getBlockEntity(position) as? ru.lazyhat.compukters.minecraft.computer.ComputerBlockEntity)
+                    ?.prepareBlockTransfer()
+            }
+        }
+    }
+
     /** Close in finally after the complete batch, including source destruction, on the server thread. */
     @JvmStatic
     fun beginTransfer(

@@ -26,6 +26,9 @@ headings so this page has one stable URL that can be shared outside the reposito
   flow/contact indicators. The clutch casing retains Create's cutout rendering around its shaft openings.
   Their Guest value classes use the shared typed and named peripheral discovery; addon blocks share the Compukters creative tab.
 
+- Retained peripheral handles restore network devices by their saved instance UUID after address changes;
+  translated direct devices use computer-relative locations. Replacements and competing process owners remain rejected.
+
 - Addon SDK 0.6.0 supports transient actuator acquisition/release callbacks and lazy item groups in the shared
   Compukters creative tab. Base items stay first; addon groups follow in stable order without extra tabs.
 
@@ -39,8 +42,9 @@ headings so this page has one stable URL that can be shared outside the reposito
 - Added read-only Cosmonautics space telemetry for Guest Kotlin: Deep Space membership, linked planet parameters,
   instance orbital observations and an atomic snapshot of orbital guidance directions in Sable world axes.
   Examples cover telemetry, experimental prograde pointing and a bounded vertical rocket ascent with a creative
-  vector engine. The ascent example handles observed Deep Space entry; uninterrupted transfer and orbital insertion
-  remain separate work.
+  vector engine. Cosmonautics construction transfers checkpoint the computer before copying and preserve peripheral
+  network addresses and exact-device handles across dimensions. The ascent example confirms Deep Space after interrupted
+  world calls and cuts engine throttle; physics continues during asynchronous restoration. Orbital insertion remains separate work.
 
 - The addon development stand loads optional Connector, Forgified Fabric API, Sodium, Voxy and Voxy Worldgen through Gradle;
   their dependency lines can be commented out. Loom supplies Connector's clean Minecraft path and remaps every

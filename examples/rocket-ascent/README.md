@@ -50,12 +50,17 @@ Status is read before surface feedback. On observing Deep Space, the program com
 and releases the engine. It does not reuse the surface +Y target in the new coordinate system or automatically start
 a prograde burn. Inspect `space-telemetry` afterward; Deep Space membership alone does not prove a bound orbit.
 
-Sable block transfers preserve peripheral network membership, and computer removal starts asynchronous hibernation.
-That is not evidence of uninterrupted execution: transfer can suspend the process, invalidate its handle, release
-engine control or restore a previously saved command before this loop observes the new dimension. A stale feedback
-tick gap stops the example. If it terminates or fails to resume, check the engine and stop it manually; do not infer
-that COMPLETE or a cleanup command executed. Handle errors during cleanup are reported and process exit releases leases.
-There is no cross-dimension thrust-cutoff guarantee in this example.
+The Cosmonautics addon captures computer resources before copying source blocks and preserves the peripheral network
+through the complete plot transfer. The destination restores the same engine handle by its saved device identity;
+it does not acquire a different engine by name. Pending world requests can be interrupted by hibernation, so the loop
+rechecks actual Deep Space membership after an exception. Only a confirmed destination completes ascent; failures on
+the surface still propagate. A replacement engine or competing process remains an error.
+
+Restoration is asynchronous and physics keeps running. Control may be released during transfer, and saved commands
+may briefly resume before the loop observes Deep Space and commands cutoff. A stale feedback tick gap on the surface
+stops the example. If it terminates or fails to resume, check the engine and stop it manually; do not infer that COMPLETE
+or a cleanup command executed. Handle errors during cleanup are reported and process exit releases leases. There is no
+uninterrupted cross-dimension thrust guarantee in this example.
 
 ## Verification
 

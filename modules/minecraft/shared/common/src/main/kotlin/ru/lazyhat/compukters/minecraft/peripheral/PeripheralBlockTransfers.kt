@@ -118,8 +118,10 @@ object PeripheralBlockTransfers {
         private fun finish() {
             val successful =
                 blocks.filter { block ->
-                    if (!source.hasChunkAt(block.from) || !destination.hasChunkAt(block.to)) return@filter false
-                    val old = source.getBlockEntity(block.from)
+                    if (!destination.hasChunkAt(block.to)) return@filter false
+                    val sourceLoaded = source.hasChunkAt(block.from)
+                    if (!sourceLoaded && !block.entity.isRemoved) return@filter false
+                    val old = if (sourceLoaded) source.getBlockEntity(block.from) else null
                     val next = destination.getBlockEntity(block.to) ?: return@filter false
                     if (old === block.entity || next.type !== block.entity.type) return@filter false
                     if (block.entity is DisplayBlockEntity) {
@@ -189,7 +191,9 @@ object PeripheralBlockTransfers {
             blocks
                 .filter {
                     it.entity !is DisplayBlockEntity && it.stamp != null &&
-                        it !in successful && source.hasChunkAt(it.from) && source.getBlockEntity(it.from) !== it.entity
+                        it !in successful && (
+                            if (source.hasChunkAt(it.from)) source.getBlockEntity(it.from) !== it.entity else it.entity.isRemoved
+                        )
                 }.forEach { block ->
                     if (storage.directory.remove(requireNotNull(block.stamp))) storage.setDirty()
                 }

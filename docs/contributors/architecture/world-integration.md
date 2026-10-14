@@ -263,6 +263,23 @@ one computer on a two-block construction and 68 ms for both computers on a 29-bl
 computer eight blocks from the assembly anchor. Cold compilation precedes the measured interval. These results do
 not bound arbitrary heaps, construction sizes, disk latency or server load.
 
+### Cosmonautics dimensional construction transfer
+
+The independent Cosmonautics addon wraps the pinned `SubLevelWarper.WarpSubLevels` transaction. All source computers
+capture their world-owned resources before template serialization, using asynchronous hibernation and the existing
+filesystem attachment barrier. The adapter opens one explicit block-transfer scope using upstream MoveInfo plot
+translations before any destination template loads, and closes it after source plots are retired, including exceptional
+completion. A source plot's removed chunks do not invalidate an otherwise verified exact-instance destination.
+Network member UUIDs follow the moved addresses; copied live source metadata outside this scope cannot steal membership.
+Retained handles resolve their saved member UUID through the authoritative directory and still require the same endpoint
+stamp and exclusive process ownership. Unbound direct devices use computer-relative offsets for translated constructions.
+A removed or replaced peripheral remains stale; a failed/partial move does not adopt an arbitrary same-name device.
+
+Physics continues while checkpoints publish and restore. Pending world requests can resume with their ordinary
+interruption failure; ascent programs recheck actual Deep Space membership before issuing cutoff through the retained
+handle. This is not an activation barrier or a guarantee of uninterrupted thrust. Old absolute-location checkpoints
+can resume at their saved addresses, but do not gain portable identities retroactively.
+
 ### Interactive display input
 
 Display capability 1.2 preserves operations 0–16 and appends operation 17, `pollClick(handle: I32): BYTE_ARRAY`.
