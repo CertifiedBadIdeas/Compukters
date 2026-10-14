@@ -111,6 +111,9 @@ headings so this page has one stable URL that can be shared outside the reposito
 
 - Display frames record bounded drawing packets through `DisplayFrame`, reducing host round trips while
   retaining clipping, atomic publication and drawing quotas. Canvas/widgets/UI draw through the frame recorder.
+  Retained UI rendering skips unchanged frames and repaints damaged regions, with explicit invalidation for custom
+  animation. Display synchronization sends RGB rectangles, keeps multi-panel updates coherent and restores missing
+  client bases from complete snapshots; unchanged panels avoid texture uploads.
 - Guest displays provide a lightweight declarative widget DSL with explicit pixel viewports, rows/columns,
   reusable mutable widgets, a clipped drawing canvas and a rotation-slider cube example. Server-validated
   held-right-click gestures support captured dragging, release and cancellation without a reactive runtime;

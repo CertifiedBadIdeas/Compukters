@@ -42,7 +42,18 @@ internal object DisplayTextureCache {
             entries[entity] = entry
         }
         if (entry.revision != entity.displayRevision()) {
+            val trace =
+                ru.lazyhat.compukters.core.display.DisplayPerformanceTrace
+                    .begin("texture.upload")
             DisplayTextureCompat.upload(entry.texture, entity.displayDensity(), entity.displayPixels())
+            trace?.apply {
+                surface = entity.displaySurfaceIdentity()
+                publication = entity.displayPublication()
+                revision = entity.displayRevision()
+                panel = entity.blockPos.asLong()
+                bytes = entity.displayPixels().size
+                commit()
+            }
             entry.revision = entity.displayRevision()
         }
         return entry.location

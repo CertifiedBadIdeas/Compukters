@@ -32,6 +32,7 @@ internal object DisplayWorldAccess {
         val tiles: Map<UUID, ByteArray>,
         val remaining: MutableSet<UUID>,
         val sourceRevision: Long,
+        val updates: Map<UUID, DisplayTileUpdate>,
     )
 
     private val publications = java.util.WeakHashMap<ServerLevel, MutableMap<UUID, Publication>>()
@@ -60,15 +61,51 @@ internal object DisplayWorldAccess {
         ) {
             return previous
         }
+        val trace =
+            ru.lazyhat.compukters.core.display.DisplayPerformanceTrace
+                .begin("sync.publication")
+        val tiles = surface.panels.associate { it.instance to surface.canvas.tile(it.column, it.row) }
+        val compatible =
+            previous != null && previous.mode == surface.canvas.mode && previous.panels == positions && previous.tiles.keys == members.keys
+        val density = ru.lazyhat.compukters.core.display.DisplayCanvas.DENSITIES[surface.canvas.mode]
+        val updates =
+            tiles.mapValues { (id, bytes) ->
+                DisplayTileUpdate.between(if (compatible) previous?.tiles?.get(id) else null, bytes, density, previous?.revision ?: -1)
+            }
+        if (compatible && updates.values.all { it.rgb.isEmpty() }) {
+            val unchanged = checkNotNull(previous).copy(sourceRevision = surface.canvas.revision)
+            cache[surface.id] = unchanged
+            trace?.apply {
+                phase = "sync.unchanged"
+                canvas = System.identityHashCode(surface.canvas)
+                this.surface = surface.id.toString()
+                revision = unchanged.sourceRevision
+                publication = unchanged.revision
+                commit()
+            }
+            return unchanged
+        }
         return Publication(
             surface.id,
             ++publicationSequence,
             surface.canvas.mode,
             positions,
-            surface.panels.associate { it.instance to surface.canvas.tile(it.column, it.row) },
+            tiles,
             members.filterValues { level.hasChunkAt(it) }.keys.toMutableSet(),
             surface.canvas.revision,
-        ).also { cache[surface.id] = it }
+            updates,
+        ).also { publication ->
+            cache[surface.id] = publication
+            trace?.apply {
+                canvas = System.identityHashCode(surface.canvas)
+                this.surface = surface.id.toString()
+                revision = publication.sourceRevision
+                this.publication = publication.revision
+                bytes = publication.updates.values.sumOf { it.rgb.size }
+                panels = publication.tiles.size
+                commit()
+            }
+        }
     }
 
     private val budgets = java.util.WeakHashMap<ServerLevel, TickBudget>()

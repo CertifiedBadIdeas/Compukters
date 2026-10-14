@@ -25,11 +25,26 @@ import net.minecraft.network.protocol.common.ServerboundCustomPayloadPacket
 internal object DisplayPointerClient {
     private var held = false
 
+    /** Raw world mouse edges; this observer never changes event handling or key bindings. */
+    fun onMouse(event: net.neoforged.neoforge.client.event.InputEvent.MouseButton.Pre) {
+        val client = Minecraft.getInstance()
+        if (client.screen != null || client.player?.mainHandItem?.isEmpty != true) return
+        ru.lazyhat.compukters.core.display.DisplayPerformanceTrace.begin("input.mouse")?.apply {
+            x = event.button
+            kind = event.action
+            commit()
+        }
+    }
+
     fun tick() {
         val client = Minecraft.getInstance()
         val next = client.options.keyUse.isDown
         val valid = client.screen == null && client.player?.mainHandItem?.isEmpty == true && client.player?.isShiftKeyDown == false
         if (client.connection != null && (next || held)) {
+            ru.lazyhat.compukters.core.display.DisplayPerformanceTrace.begin("input.send")?.apply {
+                this.held = next
+                commit()
+            }
             client.connection?.send(ServerboundCustomPayloadPacket(DisplayPointerHeldPayload(next, !valid)))
         }
         held = next

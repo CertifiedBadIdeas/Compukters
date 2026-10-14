@@ -253,6 +253,15 @@ public value class GraphicalDisplay internal constructor(private val handle: Int
 
     @PublishedApi
     internal fun abortFrame() { DisplayBindings.abortFrame(handle) }
+
+    @PublishedApi
+    internal fun publishFrame(frame: DisplayFrame) { frame.flush(); commitFrame() }
+
+    @PublishedApi
+    internal fun closeFrame(frame: DisplayFrame, completed: Boolean) {
+        frame.close()
+        if (!completed) abortFrame()
+    }
 }
 
 /** Records bounded drawing packets and publishes them together. Exceptions discard the frame; nesting fails. */
@@ -263,12 +272,10 @@ public inline fun GraphicalDisplay.frame(block: DisplayFrame.() -> Unit) {
     var completed = false
     try {
         frame.block()
-        frame.flush()
-        commitFrame()
+        publishFrame(frame)
         completed = true
     } finally {
-        frame.close()
-        if (!completed) abortFrame()
+        closeFrame(frame, completed)
     }
 }
 

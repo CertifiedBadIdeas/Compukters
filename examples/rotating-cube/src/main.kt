@@ -21,7 +21,7 @@ import compukter.display.*
 import kotlin.math.*
 
 // Assemble nine displays into one 3x3 screen and connect it to the computer.
-// Resolve Dependencies, then Run. Ctrl+C stops the animation.
+// Resolve Dependencies, then Run. Ctrl+T stops the animation.
 const val BACKGROUND = 0x080E1B
 const val CAMERA_DISTANCE = 4f
 
@@ -84,10 +84,11 @@ fun main() {
     val axisBits = intArrayOf(1, 2, 4)
     val axisColors = intArrayOf(0xFF6688, 0x66EEAA, 0x66BBFF)
     val rotationControl: UiSlider
+    val drawing: UiCanvas
     val ui = displayUi(Rect2i(12 xy 12, uiSize)) {
         column(spacing = 6) {
             text("Hold RMB and aim to rotate", uiSize.x by 14) { color = 0x66BBFF }
-            canvas(drawingSize) {
+            drawing = canvas(drawingSize) {
                 onDraw = {
                     clear(BACKGROUND)
                     for (index in 0 until 8) {
@@ -101,7 +102,8 @@ fun main() {
             rotationControl = slider(uiSize.x by 20, 0f, (PI * 2.0).toFloat())
         }
     }
-    println("Cube slider on ${screen.width}x${screen.height}; hold RMB and aim; Ctrl+C stops")
+    println("Cube slider on ${screen.width}x${screen.height}; hold RMB and aim; Ctrl+T stops")
+    var previousAngle = Float.NaN
     while (true) {
         var count = 0
         while (count < 64) {
@@ -109,13 +111,15 @@ fun main() {
             ui.dispatch(event)
             count++
         }
-        val orientation = Rotation3f.fromAxisAngle(Vector3f(0.7f, 1f, 0.3f), rotationControl.value)
-        val transform = viewProjection * orientation.toMatrix4f()
-        for (index in 0 until 8) projected[index] = project(transform * corners[index], viewport)
-        screen.frame {
-            clear(BACKGROUND)
-            ui.draw(this)
+        val angle = rotationControl.value
+        if (angle != previousAngle) {
+            val orientation = Rotation3f.fromAxisAngle(Vector3f(0.7f, 1f, 0.3f), angle)
+            val transform = viewProjection * orientation.toMatrix4f()
+            for (index in 0 until 8) projected[index] = project(transform * corners[index], viewport)
+            drawing.invalidate()
+            previousAngle = angle
         }
+        ui.render(screen, BACKGROUND)
         Tasks.sleepTicks(1)
     }
 }

@@ -30,6 +30,7 @@ class DisplayCanvas(
     private var draft: IntArray? = null
     private var draftMode: Int = mode
     private var frameWork = 0L
+    private var frameTrace: DisplayPhaseEvent? = null
     private val clicks = ArrayDeque<DisplayClick>()
     private val pointer = DisplayPointerQueue()
 
@@ -71,6 +72,7 @@ class DisplayCanvas(
         expire()
         if (writer == null || x !in 0 until width || y !in 0 until height || clicks.size >= 64) return false
         clicks.addLast(DisplayClick(x, y))
+        DisplayPerformanceTrace.pointer("input.queued", this, 0, 0, x, y)
         return true
     }
 
@@ -78,7 +80,9 @@ class DisplayCanvas(
         expire()
         if (writer == null) return false
         if (event.kind <= 1 && (event.x !in 0 until width || event.y !in 0 until height)) return false
-        return pointer.offer(event)
+        return pointer.offer(event).also { accepted ->
+            if (accepted) DisplayPerformanceTrace.pointer("input.queued", this, event.kind, event.gesture, event.x, event.y)
+        }
     }
 
     fun pointerActive(gesture: Int): Boolean {
@@ -88,12 +92,16 @@ class DisplayCanvas(
 
     fun pollPointer(owner: Any): DisplayPointerEvent? {
         requireOwner(owner)
-        return pointer.poll()
+        return pointer.poll()?.also { event ->
+            DisplayPerformanceTrace.pointer("input.polled", this, event.kind, event.gesture, event.x, event.y)
+        }
     }
 
     fun pollClick(owner: Any): DisplayClick? {
         requireOwner(owner)
-        return clicks.removeFirstOrNull()
+        return clicks.removeFirstOrNull()?.also { event ->
+            DisplayPerformanceTrace.pointer("input.polled", this, 0, 0, event.x, event.y)
+        }
     }
 
     fun release(owner: Any) {
@@ -103,6 +111,7 @@ class DisplayCanvas(
             writer = null
             connected = { false }
             draft = null
+            frameTrace = null
             frameWork = 0
         }
     }
@@ -121,7 +130,9 @@ class DisplayCanvas(
         check(draft == null) { "A display frame is already open" }
         check(pixels.size <= MAXIMUM_FRAME_PIXELS) { "Display exceeds coherent frame pixel limit" }
         charge(pixels.size.toLong())
+        val trace = DisplayPerformanceTrace.begin("frame.published")
         draft = pixels.copyOf()
+        frameTrace = trace
         draftMode = mode
         frameWork = pixels.size.toLong()
     }
@@ -133,6 +144,8 @@ class DisplayCanvas(
         requireOwner(owner)
         val pending = checkNotNull(draft) { "No display frame is open" }
         draft = null
+        val trace = frameTrace
+        frameTrace = null
         frameWork = 0
         if (publish) {
             check(admitMode(draftMode)) { "World display pixel budget exceeded" }
@@ -143,6 +156,12 @@ class DisplayCanvas(
             pixels = pending
             mode = draftMode
             touch()
+        }
+        trace?.apply {
+            phase = if (publish) "frame.published" else "frame.aborted"
+            canvas = System.identityHashCode(this@DisplayCanvas)
+            revision = this@DisplayCanvas.revision
+            commit()
         }
     }
 

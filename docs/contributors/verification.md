@@ -356,6 +356,9 @@ machine. This task is deliberately absent from `check` and has no machine-sensit
 
 The matrix covers 1x1, 3x3 and 8x8 panels at all four densities. Stages cover click offer/poll, an atomic button update,
 a dashboard redraw, all RGB tiles, client receive/publication and a render pass while the final tile is missing.
+Additional delta stages encode a 40x16 button color change and receive alternating patch publications, including
+empty acknowledgments for unchanged panels. Their byte/scheduling columns use actual encoded RGB rectangles;
+other rows retain the full-snapshot model for comparison.
 The dashboard uses fixed pixel geometry; small modes clip the off-screen widgets. Text measurements use warmed glyphs.
 Unsupported atomic-frame sizes and one-panel incomplete frames are explicitly marked rather than timed.
 
@@ -364,3 +367,29 @@ Allocation is current-thread allocated bytes per operation when the JVM supports
 model of the current 512KiB/tick admission charge for one fully loaded screen, including the membership string and
 fixed admission allowance. It is not measured network throughput or end-to-end latency. NBT, compression, competing
 screens, tick phase, Guest execution, native image upload and GPU presentation are outside this microbenchmark.
+
+### Interactive phase recording
+
+Display phase probes are disabled by default and never start JFR themselves. With the dev client running, use
+its JDK's tools (replace `<pid>` with that client JVM):
+
+```sh
+jfr configure --input profile.jfc --output /tmp/display.jfc '+ru.lazyhat.compukters.DisplayPhase#enabled=true'
+jcmd <pid> JFR.start name=display settings=/tmp/display.jfc duration=60s maxsize=128m filename=/tmp/display.jfr
+jfr print --events ru.lazyhat.compukters.DisplayPhase /tmp/display.jfr
+```
+
+For a controlled scenario, assemble a 3x3 display, run the rotation-slider cube example, wait until idle, make
+separate presses/drags and repeat with continuous custom-canvas invalidation. Record mode, screen size, JVM,
+server/client separation and competing load with the capture. Compare the same actions and scene before/after.
+Thirty separated idle presses and ten seconds of dragging make a bounded first observation.
+
+Events distinguish raw world mouse edges, tick heartbeat send, server handling, queue offer/poll, frame lifetime,
+publication encoding/admission, client receipt/barrier readiness and texture upload submission. A frame duration
+includes Guest execution and scheduling between begin and finish. Raw mouse observations include every world
+mouse button; keyboard use bindings and free hover are not measured (Guest input currently starts with held use).
+Follow canvas identity/revision into surface publication and client upload; no new causal input ID is sent.
+Do not pair arbitrary next animation frames with inputs, or directly subtract timestamps from separate JVM
+recordings. Queue coalescing and superseded publications are meaningful outcomes. Texture submission does not
+measure GPU completion or physical presentation. `DisplayPerformanceTraceTest` verifies real JFR event capture;
+unit/conformance/host measurements do not establish interactive latency without this manual observation.
