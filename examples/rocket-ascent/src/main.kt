@@ -41,45 +41,51 @@ fun main() {
         var lastReport = previousTick
         println("ASCENT: hover $hoverKn kN; transition Y ${planet.transitionHeight}")
         println("No redstone/other engine inputs. Deep Space ends this experiment, not orbit insertion.")
-        while (true) {
-            Tasks.sleepTicks(1)
-            val status = Space.status()
-            if (ascentPhase(first.dimension, status.dimension, status.inDeepSpace) == AscentPhase.COMPLETE) {
-                engine.setThrottle(0.0)
-                println("COMPLETE: Deep Space detected; ascent control stopped. Check orbital telemetry separately.")
-                return
+        try {
+            while (true) {
+                Tasks.sleepTicks(1)
+                val status = Space.status()
+                if (ascentPhase(first.dimension, status.dimension, status.inDeepSpace) == AscentPhase.COMPLETE) {
+                    break
+                }
+                val physics = Physics.snapshot()
+                require(physics.dimension == first.dimension && physics.constructionId == first.constructionId)
+                require(!physics.paused) { "Physics paused; ascent stopped" }
+                require(physics.gameTick >= status.gameTick && physics.gameTick - status.gameTick <= 2L)
+                val elapsed = physics.gameTick - previousTick
+                require(elapsed >= 0L && elapsed <= 10L) { "Physics tick gap; ascent stopped" }
+                if (elapsed == 0L) continue
+                previousTick = physics.gameTick
+                val dt = elapsed.toDouble() / 20.0
+                targetSpeed += SPEED_RAMP * dt
+                if (targetSpeed > ASCENT_SPEED) targetSpeed = ASCENT_SPEED
+                val command =
+                    ascentCommand(
+                        physics.orientation,
+                        physics.angularVelocity,
+                        physics.linearVelocity.y,
+                        targetSpeed,
+                        hoverKn,
+                        maxKn,
+                        integral,
+                        dt,
+                    )
+                integral = command.integral
+                engine.setVector(command.vectorX, command.vectorY)
+                engine.setThrustKn(command.thrustKn)
+                engine.setThrottle(1.0)
+                if (physics.gameTick - lastReport >= 40L) {
+                    println("ASCENT: Y ${physics.position.y}; speed ${physics.linearVelocity.y}/$targetSpeed m/s; ${command.thrustKn} kN")
+                    lastReport = physics.gameTick
+                }
             }
-            val physics = Physics.snapshot()
-            require(physics.dimension == first.dimension && physics.constructionId == first.constructionId)
-            require(!physics.paused) { "Physics paused; ascent stopped" }
-            require(physics.gameTick >= status.gameTick && physics.gameTick - status.gameTick <= 2L)
-            val elapsed = physics.gameTick - previousTick
-            require(elapsed >= 0L && elapsed <= 10L) { "Physics tick gap; ascent stopped" }
-            if (elapsed == 0L) continue
-            previousTick = physics.gameTick
-            val dt = elapsed.toDouble() / 20.0
-            targetSpeed += SPEED_RAMP * dt
-            if (targetSpeed > ASCENT_SPEED) targetSpeed = ASCENT_SPEED
-            val command =
-                ascentCommand(
-                    physics.orientation,
-                    physics.angularVelocity,
-                    physics.linearVelocity.y,
-                    targetSpeed,
-                    hoverKn,
-                    maxKn,
-                    integral,
-                    dt,
-                )
-            integral = command.integral
-            engine.setVector(command.vectorX, command.vectorY)
-            engine.setThrustKn(command.thrustKn)
-            engine.setThrottle(1.0)
-            if (physics.gameTick - lastReport >= 40L) {
-                println("ASCENT: Y ${physics.position.y}; speed ${physics.linearVelocity.y}/$targetSpeed m/s; ${command.thrustKn} kN")
-                lastReport = physics.gameTick
-            }
+        } catch (failure: Exception) {
+            // Transfer cancels unfinished world requests. Only the actual destination can complete ascent.
+            if (!Space.status().inDeepSpace) throw failure
+            println("Deep Space confirmed after an interrupted world operation.")
         }
+        engine.setThrottle(0.0)
+        println("COMPLETE: Deep Space detected; ascent control stopped. Check orbital telemetry separately.")
     } finally {
         // A transferred/disconnected handle may already be invalid. Exit releases the process's leases too.
         try {
