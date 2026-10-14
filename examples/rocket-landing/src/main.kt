@@ -46,7 +46,7 @@ fun main() {
             previousTick = current.gameTick
             val offset = current.position - first.position
             val lateral = Vector3d(offset.x, 0.0, offset.z).length
-            require(lateral <= MAX_DRIFT) { "Outside pad corridor; horizontal navigation unavailable" }
+            require(lateral <= MAX_DRIFT) { "Outside horizontal return corridor" }
             val horizontalSpeed = Vector3d(current.linearVelocity.x, 0.0, current.linearVelocity.z).length
             val command =
                 flightCommand(
@@ -62,6 +62,7 @@ fun main() {
                     hover,
                     maximum,
                     dt,
+                    offset,
                 )
             val changed = command.state.phase != state.phase
             state = command.state

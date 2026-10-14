@@ -138,9 +138,11 @@ See [Cosmonautics addon](https://github.com/CertifiedBadIdeas/Compukters-cosmona
 and the workspace `examples/orbital-prograde/README.md`.
 
 The separate `examples/rocket-landing` project uses existing telemetry and engine APIs for an experimental local
-vertical climb/hold/descent onto a known pad reference. `testKotlinRocketLandingVmConformance` exercises its shipped
-feedback in an ideal plant; `:compiler-k2:compileRocketLandingExample` compiles its complete source against actual
-addon bundles. It has no terrain/contact sensor or lateral navigation, and real-world landing remains a manual check.
+vertical climb/hold/descent and bounded horizontal return to a known pad reference. `testKotlinRocketLandingVmConformance`
+exercises the shipped controllers in ideal vertical and coupled translation/rotation plants, including nozzle tween,
+frame heading changes, drift recovery and final descent gates; `:compiler-k2:compileRocketLandingExample` compiles its
+complete source against actual addon bundles. There is no terrain/contact sensor; the horizontal return corridor is
+2 m and real-world stability remains a manual check. Orbital insertion and return remain future mission stages.
 
 ## Compukters Guest APIs
 

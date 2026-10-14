@@ -17,19 +17,22 @@ value class AttitudeCommand(
 )
 
 // A single +Y engine below COM steers two tilt axes; rotation about +Y is uncontrolled.
-fun uprightCommand(
+fun attitudeCommand(
     orientation: Rotation3d,
     worldAngularVelocity: Vector3d,
+    targetUp: Vector3d,
 ): AttitudeCommand {
     val inverse = orientation.inverse()
-    val error = Rotation3d.fromTo(Vector3d(0.0, 1.0, 0.0), inverse.transform(Vector3d(0.0, 1.0, 0.0)))
-    val axis = Vector3d(error.x, error.y, error.z)
-    val tilt = 2.0 * atan2(axis.length, abs(error.w))
+    val worldUp = orientation.transform(Vector3d(0.0, 1.0, 0.0))
+    val tilt = atan2(Vector3d(worldUp.x, 0.0, worldUp.z).length, worldUp.y)
     require(tilt <= 0.5235987755982988) { "Tilt exceeds 30 degrees" }
-    val rotationVector = if (axis.length == 0.0) Vector3d(0.0, 0.0, 0.0) else axis.normalized() * tilt
+    val error = Rotation3d.fromTo(Vector3d(0.0, 1.0, 0.0), inverse.transform(targetUp))
+    val axis = Vector3d(error.x, error.y, error.z)
+    val angle = 2.0 * atan2(axis.length, abs(error.w))
+    val rotationVector = if (axis.length == 0.0) Vector3d(0.0, 0.0, 0.0) else axis.normalized() * angle
     val rate = inverse.transform(worldAngularVelocity)
     require(rate.length <= 2.0) { "Angular speed exceeds flight envelope" }
-    val vectorX = flightBound(1.2 * rotationVector.z - 0.6 * rate.z, -0.5, 0.5)
-    val vectorY = flightBound(-1.2 * rotationVector.x + 0.6 * rate.x, -0.5, 0.5)
+    val vectorX = flightBound(1.2 * rotationVector.z - 1.8 * rate.z, -0.5, 0.5)
+    val vectorY = flightBound(-1.2 * rotationVector.x + 1.8 * rate.x, -0.5, 0.5)
     return AttitudeCommand(vectorX, vectorY, tilt, rate.length)
 }

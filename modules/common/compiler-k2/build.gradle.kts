@@ -2116,7 +2116,7 @@ tasks.withType<org.jmailen.gradle.kotlinter.tasks.ConfigurableKtLintTask>().conf
         source(rootProject.fileTree("examples/rocket-ascent/src") { include("**/*.kt") })
         source(file("src/test/resources/kotlin/rocket-ascent/Scenarios.kt"))
         source(rootProject.fileTree("examples/rocket-landing/src") { include("**/*.kt") })
-        source(file("src/test/resources/kotlin/rocket-landing/Scenarios.kt"))
+        source(fileTree("src/test/resources/kotlin/rocket-landing") { include("**/*.kt") })
     }
 }
 
@@ -2308,7 +2308,7 @@ tasks.register<Test>("generateRocketLandingConformanceArtifact") {
     classpath = sourceSets.test.get().runtimeClasspath
     filter.includeTestsMatching("*rocket landing controller executes bounded launch hold descent and touchdown*")
     inputs.dir(rootProject.file("examples/rocket-landing/src/control"))
-    inputs.file("src/test/resources/kotlin/rocket-landing/Scenarios.kt")
+    inputs.dir("src/test/resources/kotlin/rocket-landing")
     inputs.file(workerJar)
     outputs.file(rocketLandingArtifact)
     systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
