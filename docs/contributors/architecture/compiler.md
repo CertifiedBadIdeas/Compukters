@@ -359,6 +359,11 @@ VM executable ABI. Tooling and addons using removed split-module IDs must rebuil
 ## Collection storage and universal views
 
 The standard library publishes read-only lists and public `ArrayList<T>` with source bodies for specialization.
+When consecutive platform libraries reuse dependency IR, collection value bridges retain their original
+internal read-protocol declarations and methods. Lowering recovers those declarations from the existing
+bridges and traverses their result types before using plugin-context lookup. This keeps protocol types
+and interface dispatch available even when the next module cannot reference the internal class by name.
+Bridge probing skips local types carrying enclosing arguments that do not instantiate their own declaration.
 `listOf` and `emptyList` create fresh `ArrayList<T>` instances exposed as `List<T>`, with capacity equal to the
 number of elements. Factories fill them through the specialized `add` method in source order. A read-only view can be
 cast to `MutableList<T>` or `ArrayList<T>` and changed; it is not an immutable object. All twelve non-null primitive families use their corresponding primitive arrays, including compact Byte/Short and unsigned storage; reference and nullable storage uses typed reference arrays. Collection interfaces
