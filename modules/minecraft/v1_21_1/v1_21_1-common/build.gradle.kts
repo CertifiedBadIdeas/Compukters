@@ -34,3 +34,17 @@ tasks.processTestResources {
         into("assets/compukters/font/ide")
     }
 }
+
+// Opt-in machine-sensitive measurements; never part of the regular test/check graph.
+tasks.register<JavaExec>("benchmarkDisplayPipeline") {
+    group = "benchmark"
+    description = "Measures display host drawing, RGB publication and client frame assembly without a game client."
+    dependsOn(tasks.testClasses)
+    classpath = sourceSets.test.get().runtimeClasspath
+    mainClass.set("ru.lazyhat.compukters.minecraft.display.DisplayPipelineBenchmark")
+    minHeapSize = "256m"
+    maxHeapSize = "1g"
+    systemProperty("java.awt.headless", "true")
+    args(layout.buildDirectory.dir("reports/benchmarks/display").get().asFile.absolutePath)
+    outputs.upToDateWhen { false }
+}
