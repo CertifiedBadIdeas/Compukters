@@ -264,7 +264,67 @@ fn main() {
     println!("Kotlin-to-VM conformance scenario passed: {scenario}");
 }
 
+fn k2_require_exception_diagnostics_survive_cleanup() {
+    let root = std::env::var("COMPUKTER_KOTLIN_EXCEPTIONS_ARTIFACT").expect("exception artifact path");
+    for (name, cleanup_fails) in [
+        ("plain", false), ("rethrow", false), ("finally", false), ("cause", false),
+        ("cleanup-caught", false), ("gc-rethrow", false),
+        ("host-cleanup", false), ("host-cleanup", true), ("rocket", false), ("rocket", true),
+    ] {
+        let bytes = fs::read(format!("{root}.require-{name}.cpkt")).expect("require artifact");
+        let verified = verify_artifact(Arc::from(bytes), ArtifactLimits::default()).expect("require artifact verifies");
+        let artifact = verified.clone();
+        let argument = [HostValueType::String];
+        let operations = [
+            OperationSchema::asynchronous(&[], HostValueType::String),
+            OperationSchema::synchronous(&argument, HostValueType::Unit),
+            OperationSchema::synchronous(&argument, HostValueType::Unit),
+        ];
+        let bindings = [CapabilityBinding::new("compukter", "stdio", 1, 0, &operations)];
+        let bindings = if matches!(name, "host-cleanup" | "rocket") { &bindings[..] } else { &[] };
+        let mut session = Session::admit(verified, list_no_io_profile(), bindings).expect("require program admits");
+        session.start(&[]).expect("require program starts");
+        let mut finished = false;
+        let mut cleanup_requests = 0;
+        for _ in 0..10000 {
+            match session.advance(if name == "rocket" { 1024 } else { 64 }, 1).expect("require program advances") {
+                AdvanceOutcome::SliceExhausted => {},
+                AdvanceOutcome::UncaughtException => {
+                    let diagnostic = session.uncaught_exception_diagnostic(&artifact).expect("exception diagnostic");
+                    let expected = if name == "rocket" {
+                        "kotlin.IllegalArgumentException: Invalid flight setup: climb 40.0 m; hold -4.0 s"
+                    } else {
+                        "kotlin.IllegalArgumentException: require detail"
+                    };
+                    assert!(diagnostic.contains(expected), "{name}: {diagnostic}");
+                    if name == "cause" {
+                        assert!(diagnostic.contains("kotlin.IllegalStateException: outer detail"), "{diagnostic}");
+                    }
+                    finished = true;
+                    break;
+                },
+                AdvanceOutcome::HostRequestBatch(batch) if matches!(name, "host-cleanup" | "rocket") => {
+                    let request = batch.get(0).unwrap().id();
+                    cleanup_requests += 1;
+                    let response = if cleanup_fails {
+                        HostResponse::Failure(HostFailure::new(HostFailureKind::Unavailable, "cleanup handle unavailable"))
+                    } else {
+                        HostResponse::Success(HostValueInput::String(&[]))
+                    };
+                    session.resume(request, response).expect("cleanup response resumes");
+                },
+                outcome => panic!("{name}: unexpected outcome {outcome:?}"),
+            }
+        }
+        assert!(finished, "{name}: require must fail");
+        if matches!(name, "host-cleanup" | "rocket") {
+            assert_eq!(2, cleanup_requests, "both cleanup operations must execute");
+        }
+    }
+}
+
 fn k2_explicit_exception_unwinds_across_guest_calls() {
+    k2_require_exception_diagnostics_survive_cleanup();
     k2_host_failures_preserve_tasks_and_call_sites();
     k2_expected_prints_with_budget("COMPUKTER_KOTLIN_EXCEPTIONS_ARTIFACT_OPERATIONS", ["operations ok\n"], 64);
     k2_expected_prints_with_budget("COMPUKTER_KOTLIN_EXCEPTIONS_ARTIFACT_ARITHMETIC", ["arithmetic ok\n"], 64);
