@@ -322,6 +322,15 @@ templates. Only concrete variants are shared; inline and generic top-level sourc
 consumer specialization behavior. K2 still materializes a consumer variant transiently for type and layout checking;
 this linking contract does not yet skip that lowering work. Trusted collection variants include their supported
 read-view interfaces regardless of consumer usage, so covariance cannot change a specialization's nominal layout.
+Collection value semantics add internal read-only nominal protocols after frontend analysis. Generated bridges
+use the concrete receiver's typed size, iterator and entry reads, boxing only returned values; trusted hash
+containers use internal Any-key lookups, while custom reference implementations scan typed elements/entries.
+Protocol methods have reserved artifact names separate from user declarations. Covariant source views
+exclude these compiler-only protocols as widening targets. The protocols participate in
+trusted specialization ownership, so a precompiled library and consumer agree on their type and method identity.
+Repeated lowering of reused library IR retains the existing synthetic wrappers as executable roots; source
+declaration collectors omit their undefined offsets. They expose no source API or mutable widening and
+reuse existing dispatch, boxes and artifact representations.
 User-defined concrete type arguments retain their qualified identity, with a separate root-package namespace, rather than
 Kotlin metadata's short display names. User classes named `String` therefore cannot reuse a built-in String variant.
 

@@ -1026,6 +1026,20 @@ registerKotlinVmConformance(
     conformanceScenario = "filter-not-null",
 )
 registerKotlinVmConformance(
+    taskName = "testKotlinCollectionSemanticsVmConformance",
+    taskDescription = "Executes Guest collection equality, hashing and text with the pinned VM.",
+    artifactTask = ":compiler-k2:generateCollectionSemanticsConformanceArtifact",
+    artifact = project(":compiler-k2").layout.buildDirectory.file("generated/conformance/kotlin-collection-semantics.cpkt"),
+    cargoTargetDirectory = ".toolchain/build/cargo/compiler-k2-collection-semantics-conformance",
+    artifactEnvironmentVariable = "COMPUKTER_KOTLIN_COLLECTION_SEMANTICS_ARTIFACT",
+    conformanceScenario = "collection-semantics",
+    additionalArtifacts = (0..5).associate { batch ->
+        "COMPUKTER_KOTLIN_COLLECTION_SCALARS_$batch" to project(":compiler-k2").layout.buildDirectory.file("generated/conformance/collection-scalars-$batch.cpkt")
+    } + listOf("maps", "nested", "map-values", "set-nested", "keys", "custom", "value-types", "self", "callbacks", "library").associate { fixture ->
+        "COMPUKTER_KOTLIN_COLLECTION_${fixture.uppercase().replace('-', '_')}_ARTIFACT" to project(":compiler-k2").layout.buildDirectory.file("generated/conformance/collection-$fixture.cpkt")
+    },
+)
+registerKotlinVmConformance(
     taskName = "testKotlinHashCollectionsVmConformance",
     taskDescription = "Executes bounded Guest hash maps and sets with the pinned Compukter VM.",
     artifactTask = ":compiler-k2:generateHashCollectionsConformanceArtifact",

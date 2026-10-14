@@ -117,6 +117,22 @@ fn main() {
         "list" => k2_lists_retain_typed_elements(),
         "list-any" => k2_int_list_covariance_boxes_universal_reads(),
         "mutable-list" => k2_mutable_list_preserves_growth_mutation_and_views(),
+        "collection-semantics" => {
+            k2_collection_values("COMPUKTER_KOTLIN_COLLECTION_SEMANTICS_ARTIFACT", "collection semantics ok\n");
+            k2_collection_values("COMPUKTER_KOTLIN_COLLECTION_MAPS_ARTIFACT", "collection maps ok\n");
+            k2_collection_values("COMPUKTER_KOTLIN_COLLECTION_NESTED_ARTIFACT", "collection nested ok\n");
+            k2_collection_values("COMPUKTER_KOTLIN_COLLECTION_MAP_VALUES_ARTIFACT", "collection map-values ok\n");
+            k2_collection_values("COMPUKTER_KOTLIN_COLLECTION_SET_NESTED_ARTIFACT", "collection set-nested ok\n");
+            k2_collection_values("COMPUKTER_KOTLIN_COLLECTION_KEYS_ARTIFACT", "collection keys ok\n");
+            k2_collection_values("COMPUKTER_KOTLIN_COLLECTION_CUSTOM_ARTIFACT", "collection custom ok\n");
+            k2_collection_values("COMPUKTER_KOTLIN_COLLECTION_VALUE_TYPES_ARTIFACT", "collection value-types ok\n");
+            k2_collection_values("COMPUKTER_KOTLIN_COLLECTION_SELF_ARTIFACT", "collection self ok\n");
+            k2_collection_values("COMPUKTER_KOTLIN_COLLECTION_CALLBACKS_ARTIFACT", "collection callbacks ok\n");
+            k2_collection_values("COMPUKTER_KOTLIN_COLLECTION_LIBRARY_ARTIFACT", "collection library ok\n");
+            for batch in 0..6 {
+                k2_collection_values(&format!("COMPUKTER_KOTLIN_COLLECTION_SCALARS_{batch}"), "collection scalars ok\n");
+            }
+        },
         "hash-collections" => {
             k2_expected_prints_with_budget("COMPUKTER_KOTLIN_HASH_INVENTORY_ARTIFACT", [
                 "iron: 14 / 12 (ready)\n", "copper: 3 / 8 (low)\n", "gold: 2 / 0 (ready)\n", "Distinct items: 3\n",
@@ -1283,7 +1299,7 @@ fn k2_generic_cell_preserves_typed_fields_and_aliases() {
 }
 
 fn k2_generic_interface_dispatches_concrete_types() {
-    k2_expected_prints("COMPUKTER_KOTLIN_GENERIC_INTERFACE_ARTIFACT", ["7\n", "hello\n"]);
+    k2_expected_prints_with_budget("COMPUKTER_KOTLIN_GENERIC_INTERFACE_ARTIFACT", ["7\n", "hello\n"], 128);
 }
 
 fn k2_lists_retain_typed_elements() {
@@ -1569,6 +1585,37 @@ fn k2_nullable_references_preserve_branch_and_call_semantics() {
     );
 }
 
+fn k2_collection_values(artifact_variable: &str, expected_output: &str) {
+    let path = std::env::var(artifact_variable).expect("collection artifact must be configured");
+    let verified = verify_artifact(Arc::from(fs::read(path).expect("collection artifact must exist")), ArtifactLimits::default())
+        .expect("collection artifact must verify");
+    let mut session = k2_stdio_session_with_heap(artifact_variable, 1, 256 * 1024);
+    let expected = utf16(expected_output);
+    let mut printed = false;
+    for _ in 0..10_000 {
+        match session.advance(4096, 64).expect("collection program must advance") {
+            AdvanceOutcome::SliceExhausted => {},
+            AdvanceOutcome::HostRequestBatch(batch) => {
+                assert_eq!(batch.len(), 1);
+                let request = batch.get(0).unwrap();
+                assert_eq!(request.name(), "stdio");
+                assert_eq!(request.operation(), 1);
+                assert_eq!(request.arguments().get(0), Some(HostValueView::String(&expected)));
+                assert!(!printed);
+                printed = true;
+                let id = request.id();
+                session.resume(id, HostResponse::Success(HostValueInput::Unit)).unwrap();
+            },
+            AdvanceOutcome::Halted(None) => { assert!(printed); return; },
+            AdvanceOutcome::UncaughtException => panic!(
+                "{artifact_variable}: {}", session.uncaught_exception_diagnostic(&verified).unwrap(),
+            ),
+            outcome => panic!("unexpected collection outcome: {outcome:?}"),
+        }
+    }
+    panic!("collection program failed to finish within bounded slices");
+}
+
 fn k2_expected_prints<const N: usize>(artifact_variable: &str, expected_output: [&str; N]) {
     k2_expected_prints_with_budget(artifact_variable, expected_output, 64)
 }
@@ -1616,7 +1663,7 @@ fn k2_stdio_session_with_heap(artifact_variable: &str, maximum_coroutines: u32, 
         maximum_accepted_responses: 64,
         entry_argument_limits: entry_argument_limits(),
     };
-    let mut session = Session::admit(verified, profile, &[stdio]).expect("K2 program must admit");
+    let mut session = Session::admit(verified, profile, &[stdio]).unwrap_or_else(|error| panic!("{artifact_variable} must admit: {error:?}"));
     session.start(&[]).expect("K2 program must start");
     session
 }

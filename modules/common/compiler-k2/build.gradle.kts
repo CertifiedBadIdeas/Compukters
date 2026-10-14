@@ -1295,6 +1295,27 @@ val generateTextStdlibConformanceArtifact = tasks.register<Test>("generateTextSt
     systemProperty("compukter.vm.textStdlibArtifact", textStdlibConformanceArtifact.get().asFile.absolutePath)
 }
 
+val generateCollectionSemanticsConformanceArtifact = tasks.register<Test>("generateCollectionSemanticsConformanceArtifact") {
+    description = "Compiles Guest collection equality, hashing and text for pinned VM conformance."
+    group = "verification"
+    dependsOn(tasks.jar)
+    useJUnitPlatform()
+    testClassesDirs = sourceSets.test.get().output.classesDirs
+    classpath = sourceSets.test.get().runtimeClasspath
+    filter.includeTestsMatching("*collection value semantics compare specializations entries and live views*")
+    filter.includeTestsMatching("*collection value semantics preserve all scalar families and floating boxes*")
+    filter.includeTestsMatching("*collection read adapters are absent from source API*")
+    inputs.file(workerJar)
+    inputs.files(addonGuestApiFixtureBundle)
+    systemProperty("compukters.addonGuestApiFixture", addonGuestApiFixtureBundle.singleFile.absolutePath)
+    val artifact = layout.buildDirectory.file("generated/conformance/kotlin-collection-semantics.cpkt")
+    outputs.file(artifact)
+    listOf("maps", "nested", "map-values", "set-nested", "keys", "custom", "value-types", "self", "callbacks", "library").forEach { fixture -> outputs.file(artifact.map { it.asFile.resolveSibling("collection-$fixture.cpkt") }) }
+    (0..5).forEach { batch -> outputs.file(artifact.map { it.asFile.resolveSibling("collection-scalars-$batch.cpkt") }) }
+    systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
+    systemProperty("compukter.vm.collectionSemanticsArtifact", artifact.get().asFile.absolutePath)
+}
+
 val generateHashCollectionsConformanceArtifact = tasks.register<Test>("generateHashCollectionsConformanceArtifact") {
     description = "Compiles Guest hash maps and sets for pinned VM conformance."
     group = "verification"

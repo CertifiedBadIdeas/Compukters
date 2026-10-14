@@ -31,7 +31,8 @@ use the existing managed collection interfaces, including reference-preserving `
 `IndexOutOfBoundsException`; exhausted iterators throw `NoSuchElementException`. Searches compare
 singleton references and run in linear time. Each iterator is a fresh managed object. The cached collection
 and backing array allocate during enum cache initialization; repeated `entries` reads do not allocate.
-Other generated enum methods and structural list equality retain their existing support limits.
+The collection follows the List equality, hashing and text rules below; other generated enum methods retain
+their existing support limits.
 
 **Evidence:** `MinimalScriptLoweringTest`, test `enum entries preserve ordered singleton references and
 collection identity`, executed by `testKotlinEnumEntriesVmConformance` for project, platform and addon types.
@@ -314,7 +315,7 @@ removal requires one preceding `next` and preserves that iterator's traversal. I
 `IllegalStateException`; exhaustion throws `NoSuchElementException`. Negative capacities or capacities above
 1,073,741,824 throw `IllegalArgumentException`; actual allocation remains subject to the much smaller VM heap.
 
-The current subset does not implement spread factories, bulk operations, mutable key/value/entry views, structural collection or entry equality/hashing/text, linked/sorted collections,
+The current subset does not implement spread factories, bulk operations, mutable key/value/entry views, linked/sorted collections,
 or collection type-argument widening. Retain exact key/value/element types in read-only views; for example,
 `HashSet<Int>` to `Set<Int>` works, while `Set<Int>` to `Set<Any>` and `Map<String, Int>` to `Map<String, Any>`
 produce a target diagnostic. Mutable contracts remain invariant.
@@ -349,6 +350,50 @@ sequence subset is described below.
 Multi-field value classes use nominal managed boxes in list storage. Their construction, filtering, mapping
 and mutable-list updates execute in `testKotlinMfvcVmConformance`; direct primitive list storage remains
 unboxed.
+
+## Collection equality, hashing and text
+
+**Status:** Supported in `stdlib:core` 1.26.0.
+
+`ArrayList` (including `listOf` results) and `EnumEntries` compare lists by size and corresponding
+ordered elements. Their hash starts at 1 and accumulates `31 * hash + element.hashCode()`.
+`HashSet` compares sets independently of iteration order and sums element hashes. `HashMap`
+compares key/value associations independently of iteration order, distinguishing a missing key
+from a stored null; its hash sums entry hashes. Entries compare their key and current value and
+hash as `key.hashCode() xor value.hashCode()`. All arithmetic uses ordinary Int overflow and
+null contributes zero. Lists and sets never compare equal to one another.
+
+Equal contents can compare across concrete type specializations and through `Any`, including
+nullable primitives and nominal value classes. Generic floating comparisons make NaNs equal and
+keep signed zeros distinct. Scalar and value-class reads use the established managed boxes.
+Supported custom reference implementations of List, Set, Map, Entry and Iterator receive hidden
+read adapters from the compiler; comparison does not require inheriting a particular implementation.
+Built-in hash adapters reuse the hash table; custom Set/Map adapters scan typed elements/entries,
+so comparing custom containers can take quadratic time.
+Custom implementations still choose their own `equals` and `hashCode` methods; the interfaces do
+not supply structural equality automatically. The adapters expose no writes and add no public API.
+Mutable contracts stay invariant, and previously unsupported public hash-collection widening remains
+unsupported. Reading equal values across specializations does not make unlike nominal values equal.
+
+Map `keys` and `entries` views have Set equality/hash; `values` retains Collection identity equality
+and hashing, including between two separately obtained values views. All views reflect later map
+changes. Do not mutate collections used as map keys or set elements: content-based hashing changes
+when their contents change, just as mutable element hashes can change.
+
+Collection text uses `[a, b]`, map text `{key=value}`, and entry text `key=value`; null appears as
+`null`. Empty collections print `[]`, empty maps `{}`. Map and set order remains unspecified.
+A direct self element prints `(this Collection)`; a map directly used as its own key or value prints
+`(this Map)`. Arbitrary indirect cycles in equality, hashing or text are not detected.
+Element equality, hash and text callbacks retain effects and propagate exceptions. Text uses a
+managed StringBuilder; traversal, boxing and text allocation consume normal heap/instruction budgets.
+Nested generic collection types remain subject to the compiler’s specialization limits.
+
+**Evidence:** `MinimalScriptLoweringTest`, tests `collection value semantics compare specializations
+entries and live views` and `collection value semantics preserve all scalar families and floating boxes`,
+executed by `testKotlinCollectionSemanticsVmConformance`. The fixtures cover nested collections,
+custom reference implementations and iterators, project/platform/addon enum entries, live views, all twelve scalar families,
+nullable/mixed types, value-class identity, self text and callback exceptions. Existing mutation,
+iterator, quota and variance scenarios remain in `testKotlinHashCollectionsVmConformance`.
 
 ## Lazy sequences
 

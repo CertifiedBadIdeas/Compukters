@@ -6,6 +6,10 @@
 
 package kotlin.enums
 
+import kotlin.collections.collectionListEquals
+import kotlin.collections.collectionListHash
+import kotlin.collections.collectionText
+
 import kotlin.Enum
 import kotlin.collections.Iterator
 import kotlin.collections.List
@@ -31,6 +35,15 @@ internal class EnumEntriesList<T : Enum<T>>(private val elements: Array<T>) : En
     override fun iterator(): Iterator<T> = EnumEntriesIterator(elements)
 
     internal fun getNullableElement(index: Int): T? = get(index)
+    /** Compares elements using the list's ordering rules and nullable generic equality. */
+    public override fun equals(other: Any?): Boolean = collectionListEquals(this, other)
+
+    /** Combines element hashes with ordinary Int overflow; null contributes zero. */
+    public override fun hashCode(): Int = collectionListHash(this)
+
+    /** Formats elements in brackets; a direct self reference uses `(this Collection)`. */
+    public override fun toString(): String = collectionText(this)
+
     internal fun getAny(index: Int): Any = get(index)
     internal fun getAnyNullable(index: Int): Any? = get(index)
     internal fun indexOfNullableElement(element: T?): Int = indexOfAnyNullable(element)

@@ -195,6 +195,30 @@ public class HashMap<K, V>(
      */
     public override val entries: Set<Map.Entry<K, V>> get() = HashMapEntries(this)
 
+    /** Compares associations independently of iteration order, distinguishing missing keys from null values. */
+    public override fun equals(other: Any?): Boolean = collectionMapEquals(this, other)
+
+    /** Sums entry hashes; each entry contributes key hash XOR value hash. */
+    public override fun hashCode(): Int = collectionMapHash(this)
+
+    /** Formats associations as `{key=value}`; a direct self reference uses `(this Map)`. */
+    public override fun toString(): String = collectionMapText(this)
+
+    internal fun containsAnyKey(key: Any?): Boolean = findAnyKey(key) != null
+
+    internal fun getAnyKey(key: Any?): Any? = findAnyKey(key)?.value
+
+    private fun findAnyKey(key: Any?): HashMapNode<K, V>? {
+        val rawHash = key.hashCode()
+        val hash = rawHash xor (rawHash ushr 16)
+        var node = buckets[bucketIndex(hash)]
+        while (node != null) {
+            if (node.hash == hash && key == node.key) return node
+            node = node.next
+        }
+        return null
+    }
+
     private fun bucketIndex(hash: Int): Int = hash and (buckets.size - 1)
 
     private fun keyHash(key: K): Int {
@@ -285,6 +309,12 @@ internal class HashMapNode<K, V>(
     public override var value: V = value
         private set
 
+    public override fun equals(other: Any?): Boolean = collectionEntryEquals(this, other)
+
+    public override fun hashCode(): Int = key.hashCode() xor value.hashCode()
+
+    public override fun toString(): String = "$key=$value"
+
     public override fun setValue(newValue: V): V {
         val previous = value
         value = newValue
@@ -340,6 +370,13 @@ internal class HashMapKeys<K, V>(
     public override fun contains(element: K): Boolean = map.containsKey(element)
 
     public override fun iterator(): Iterator<K> = HashMapKeyIterator(map.nodeIterator())
+    public override fun toString(): String = collectionText(this)
+
+    public override fun equals(other: Any?): Boolean = collectionSetEquals(this, other)
+
+    public override fun hashCode(): Int = collectionSetHash(this)
+
+    internal fun containsAnyElement(element: Any?): Boolean = map.containsAnyKey(element)
 }
 
 internal class HashMapKeyIterator<K, V>(
@@ -362,6 +399,7 @@ internal class HashMapValues<K, V>(
     public override fun contains(element: V): Boolean = map.containsValue(element)
 
     public override fun iterator(): Iterator<V> = HashMapValueIterator(map.nodeIterator())
+    public override fun toString(): String = collectionText(this)
 }
 
 internal class HashMapValueIterator<K, V>(
@@ -382,6 +420,17 @@ internal class HashMapEntries<K, V>(
     public override fun contains(element: Map.Entry<K, V>): Boolean = map.containsKey(element.key) && map[element.key] == element.value
 
     public override fun iterator(): Iterator<Map.Entry<K, V>> = HashMapEntryIterator(map.nodeIterator())
+    public override fun toString(): String = collectionText(this)
+
+    public override fun equals(other: Any?): Boolean = collectionSetEquals(this, other)
+
+    public override fun hashCode(): Int = collectionSetHash(this)
+
+    internal fun containsAnyElement(element: Any?): Boolean {
+        if (!(element is EntryRead)) return false
+        val key = element.readKey()
+        return map.containsAnyKey(key) && map.getAnyKey(key) == element.readValue()
+    }
 }
 
 internal class HashMapEntryIterator<K, V>(

@@ -402,12 +402,16 @@ listed in [Kotlin support](developers/kotlin-support.md) and [standard library s
 
 ### Guest Kotlin
 
+- Guest lists, enum entries, hash sets/maps and map entries support content equality, consistent
+  hashing and readable text. Map keys/entries views follow set semantics; values views retain identity
+  equality. Hidden read adapters allow comparison across element types and supported custom collections.
+
 - Guest `HashMap` and `HashSet` support typed and nullable keys/elements, lookup, mutation, growth and
   iteration under ordinary VM heap and instruction budgets. Maps expose live key/value/entry views;
   value-class keys retain nominal value equality, including multi-field layouts. `Pair`/`to`, direct
   `mapOf`/`mutableMapOf`/`setOf`/`mutableSetOf` factories and inline `getOrPut` simplify construction and
   defaults; a runnable inventory-report example demonstrates stock totals and thresholds.
-  Structural collection equality and type-argument widening remain outside this subset.
+  Public hash-collection type-argument widening remains outside this subset.
 
 - Compilation reuses prepared libraries for repeated module selections, avoids repeated module hashing during
   linking, and allocates less temporary memory when encoding executable artifacts and library identities. Semantic

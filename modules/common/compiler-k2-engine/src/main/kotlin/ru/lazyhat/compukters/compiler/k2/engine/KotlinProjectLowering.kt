@@ -1539,11 +1539,13 @@ internal object KotlinProjectLowering {
         session: CompilationSession,
         includeTrustedPlatformBodies: Boolean = false,
     ): Artifact {
+        val bridgeClasses = (classes + CollectionValueBridges.protocolClasses(pluginContext)).distinctBy { it.symbol }
+        val valueBridges = CollectionValueBridges.lower(bridgeClasses, functions, pluginContext)
         val enumEntries = GuestEnumEntries.lower(classes, pluginContext)
         return lowerPrepared(
-            functions + enumEntries.functions,
+            functions + valueBridges + enumEntries.functions,
             properties,
-            classes + enumEntries.classes,
+            bridgeClasses + enumEntries.classes,
             entry,
             pluginContext,
             session,
@@ -1695,6 +1697,7 @@ internal object KotlinProjectLowering {
                         ) &&
                         !(
                             !includeTrustedPlatformBodies &&
+                                !CollectionValueBridges.isBridge(function) &&
                                 owner?.fqNameWhenAvailable?.asString() !in specializedPlatformBaseTypes &&
                                 function.fqNameWhenAvailable?.asString() !in session.sourcePlatformSymbols &&
                                 function.correspondingPropertySymbol
@@ -1774,12 +1777,15 @@ internal object KotlinProjectLowering {
         session.recordPlatformSpecializations(
             classInstances
                 .filter { instance ->
-                    (instance.arguments.isNotEmpty() || instance.declaration.hasParameterizedSupertype()) &&
-                        (
-                            instance.declaration.fqNameWhenAvailable?.asString() in specializedPlatformBaseTypes ||
-                                session.trustedPlatformModule(instance.declaration.file.fileEntry.name) != null ||
-                                session.virtualSourcePath(instance.declaration.file.fileEntry.name) in session.sourcePlatformPaths
-                        )
+                    val sharedProtocol = instance.declaration.fqNameWhenAvailable?.asString() in CollectionValueBridges.protocolNames
+                    val sharedVariant =
+                        (instance.arguments.isNotEmpty() || instance.declaration.hasParameterizedSupertype()) &&
+                            (
+                                instance.declaration.fqNameWhenAvailable?.asString() in specializedPlatformBaseTypes ||
+                                    session.trustedPlatformModule(instance.declaration.file.fileEntry.name) != null ||
+                                    session.virtualSourcePath(instance.declaration.file.fileEntry.name) in session.sourcePlatformPaths
+                            )
+                    sharedProtocol || sharedVariant
                 }.map(GuestClassInstance::name),
         )
         val closureSources = collectGuestClosures(closureRoots, session, localFunctions)
@@ -1994,7 +2000,7 @@ internal object KotlinProjectLowering {
         val functionArtifactNames =
             functionInstances.associateWith { instance ->
                 val function = instance.declaration
-                val bridgeName = CollectionReadBridges.methodName(function)
+                val bridgeName = CollectionValueBridges.methodName(function) ?: CollectionReadBridges.methodName(function)
                 if (function.symbol in localFunctions) {
                     "<local-${localFunctions.getValue(function.symbol).ordinal}-${function.name.asString()}>"
                 } else if (bridgeName != null) {
@@ -2017,7 +2023,8 @@ internal object KotlinProjectLowering {
             if (includeTrustedPlatformBodies) {
                 functionInstances
                     .filter { instance ->
-                        instance.arguments.isEmpty() && instance.ownerClass?.arguments.isNullOrEmpty() &&
+                        !CollectionValueBridges.isBridge(instance.declaration) &&
+                            instance.arguments.isEmpty() && instance.ownerClass?.arguments.isNullOrEmpty() &&
                             instance.declaration.symbol !in localFunctions
                     }.associateWith { instance ->
                         ru.lazyhat.compukters.compiler.k2.engine.library.platformFunctionExportName(
@@ -10744,12 +10751,13 @@ private val specializedPlatformBaseTypes =
         "kotlin.collections.MutableMap",
         "kotlin.collections.Map.Entry",
         "kotlin.collections.MutableMap.MutableEntry",
-    )
+    ) + CollectionValueBridges.protocolNames
 
 private fun isLinkedPlatformFunction(
     function: IrSimpleFunction,
     session: CompilationSession,
 ): Boolean {
+    if (CollectionValueBridges.isProtocolMethod(function)) return false
     val candidates = session.platformFunctionsFor(function.fqNameWhenAvailable?.asString())
     if (candidates.isEmpty()) return false
     val signature = function.canonicalPlatformSignature()
