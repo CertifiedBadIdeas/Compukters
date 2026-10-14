@@ -406,9 +406,11 @@ and universal views keep their ordinary boxing boundaries. Avoiding intermediate
 lower instruction cost or faster execution for small inputs.
 
 `sequence { yield(...) }`, `generateSequence`, `sequenceOf`, array/iterator adapters and
-other sequence operations are outside this supported subset. Covariant primitive-to-Any
-and primitive-to-nullable sequence views have no execution claim in this stage; the nullable
-selection contract uses explicitly nullable source/result types. Ordinary generic helpers can forward existing
+other sequence operations are outside this supported subset. Covariant primitive-to-nullable and
+primitive-to-Any/Any? Sequence and Iterator views preserve the source object and specialize reads
+through the compiler's [covariant interface bridges](../kotlin/functions.md#covariant-interface-read-views).
+Nullable selection can consume a widened source without an explicit nullable map result type.
+Ordinary generic helpers can forward existing
 callbacks or construct retained lambdas and bound member references for `filter`, `filterNot` and
 `map`/`mapNotNull`. Their owners and generic callers specialize before closure layout, so captures retain their
 concrete scalar/reference types. Helpers returning a predicate or a sequence retain captured values
@@ -439,5 +441,8 @@ repeated availability checks, nullable inputs, non-null result types, early stop
 iterators, empty/all-null inputs, exhaustion, reference identity, mutable captures and callback/upstream
 exceptions. Scalar cache and no-boxing assertions also cover NotNullIterator.calculateNext.
 `sequences reject non local returns from deferred callbacks` covers map/mapNotNull/filter/filterNot rejection.
+`checkCovariantViews` additionally exercises all twelve primitive families through nullable and
+Any/Any? Sequence and Iterator views, checking identity, shared traversal state and exact callback
+demand. `checkCustomCovariance` covers custom/inherited producers, nested results, nulls and failures.
 `DiagnosticQueryTest`,
 `lazy sequences resolve with source and metadata inputs`, covers both IDE platform modes.

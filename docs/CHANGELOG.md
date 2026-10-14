@@ -13,6 +13,10 @@ headings so this page has one stable URL that can be shared outside the reposito
 
 ## 0.6.0 — In development
 
+- Guest Kotlin supports covariant read views for custom `out` interfaces, Sequence and Iterator,
+  including primitive-to-nullable and Any views. Widening preserves object identity and scalar
+  storage, boxing only widened reads; nested results and precompiled library owners share the same model.
+
 - Tagged releases can submit both supported NeoForge base-mod JARs to CurseForge alongside Modrinth,
   with independent publication jobs, recorded upload outcomes and explicit recovery after interrupted submissions.
 

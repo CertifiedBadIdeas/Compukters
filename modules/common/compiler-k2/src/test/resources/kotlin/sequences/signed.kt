@@ -136,6 +136,7 @@ fun <T : Any> genericNotNull(source: Sequence<T?>): Sequence<T> = source.filterN
 fun <T, R : Any> genericMapNotNull(source: Sequence<T>, transform: (T) -> R?): Sequence<R> =
     source.mapNotNull { transform(it) }
 fun <T : Any> checkNullSelection(value: T) {
+    checkCovariantViews(value)
     val source = listOf<T?>(null, value, null, value).asSequence()
     val filtered: Sequence<T> = genericNotNull(source)
     check(filtered.count() == 2 && filtered.firstOrNull() == value)
@@ -152,4 +153,49 @@ fun <T : Any> checkNullSelection(value: T) {
         if (produced == 1) null else it
     }
     check(nonNullableSource.firstOrNull() == value && produced == 2)
+}
+
+interface Producer<out T> {
+    fun produce(): T
+}
+
+class SingleProducer<T>(private val value: T) : Producer<T> {
+    var reads = 0
+    override fun produce(): T {
+        reads += 1
+        return value
+    }
+}
+
+fun <T : Any> checkCovariantViews(value: T) {
+    val source = SingleProducer<T>(value)
+    val nullable: Producer<T?> = source
+    val objects: Producer<Any> = source
+    val optionalObjects: Producer<Any?> = source
+    check(nullable === source && objects === source && optionalObjects === source)
+    check(source.reads == 0)
+    check(nullable.produce() == value && source.reads == 1)
+    check(objects.produce() == value && source.reads == 2)
+    check(optionalObjects.produce() == value && source.reads == 3)
+    check(source.produce() == value && source.reads == 4)
+
+    var transforms = 0
+    val sequence: Sequence<T> = listOf<T>(value, value).asSequence().map { transforms += 1; it }.filter { true }.take(2)
+    val nullableSequence: Sequence<T?> = sequence
+    val objectSequence: Sequence<Any> = sequence
+    val optionalSequence: Sequence<Any?> = sequence
+    check(nullableSequence === sequence && objectSequence === sequence && optionalSequence === sequence)
+    check(transforms == 0)
+    val iterator: Iterator<T> = sequence.iterator()
+    val nullableIterator: Iterator<T?> = iterator
+    val objectIterator: Iterator<Any> = iterator
+    check(nullableIterator === iterator && objectIterator === iterator)
+    check(nullableIterator.hasNext() && nullableIterator.hasNext() && transforms == 1)
+    check(objectIterator.next() == value && transforms == 1)
+    check(nullableIterator.next() == value && transforms == 2)
+    check(!iterator.hasNext())
+    check(nullableSequence.firstOrNull() == value && transforms == 3)
+    check(objectSequence.firstOrNull() == value && transforms == 4)
+    check(optionalSequence.firstOrNull() == value && transforms == 5)
+    check(nullableSequence.filterNotNull().firstOrNull() == value && transforms == 6)
 }

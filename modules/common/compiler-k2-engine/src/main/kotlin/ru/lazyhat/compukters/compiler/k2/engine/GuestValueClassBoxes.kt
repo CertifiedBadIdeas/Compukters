@@ -88,6 +88,7 @@ internal data class GuestValueClassBridge(
     val result: ValueType,
     val suspending: Boolean,
     val propertyIndex: Int? = null,
+    val managedReceiver: ValueType.Ref? = null,
 )
 
 /** A nominal managed wrapper; the underlying scalar remains the direct-call representation. */
@@ -316,18 +317,21 @@ internal fun lowerValueClassBoxes(
             types += NominalType.Function(requireNotNull(strings[bridge.name]), bridge.suspending, bridge.result, parameters)
             val id = FunctionId.of(functionBase + functions.size.toUInt())
             val start = blockBase + blocks.size.toUInt()
-            val scalarReceiver = register(parameters.size.toUInt())
+            val directReceiver = register(parameters.size.toUInt())
             val resultRegister = register(parameters.size.toUInt() + 1u)
             val destination = if (bridge.result == ValueType.Unit) Destination.Unit else Destination.Register(resultRegister)
-            val instructions = mutableListOf<Instruction>(Instruction.FieldGet(scalarReceiver, register(0u), box.field))
+            val receiverRead =
+                bridge.managedReceiver?.let { Instruction.CheckedCast(directReceiver, register(0u), it.type) }
+                    ?: Instruction.FieldGet(directReceiver, register(0u), box.field)
+            val instructions = mutableListOf<Instruction>(receiverRead)
             if (bridge.target == null) {
-                instructions += Instruction.Return(Destination.Register(scalarReceiver))
+                instructions += Instruction.Return(Destination.Register(directReceiver))
             } else {
                 instructions +=
                     Instruction.Call(
                         destination,
                         bridge.target,
-                        listOf(scalarReceiver) + bridge.parameters.indices.map { register(it.toUInt() + 1u) },
+                        listOf(directReceiver) + bridge.parameters.indices.map { register(it.toUInt() + 1u) },
                     )
                 instructions += Instruction.Return(destination)
             }
@@ -339,7 +343,7 @@ internal fun lowerValueClassBoxes(
                     signature,
                     setOf(FunctionFlag.VIRTUAL) + if (bridge.suspending) setOf(FunctionFlag.SUSPENDING) else emptySet(),
                     (
-                        parameters + box.scalar +
+                        parameters + (bridge.managedReceiver ?: box.scalar) +
                             listOfNotNull(
                                 bridge.result.takeUnless {
                                     it == ValueType.Unit || bridge.target == null

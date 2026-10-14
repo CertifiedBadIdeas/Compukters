@@ -232,6 +232,46 @@ contract. Generic classes extending a class other than `Any` remain rejected.
 **Evidence:** `canonical peripheral companion specializes shared typed queries`, executed by
 `testKotlinPeripheralQueriesVmConformance`.
 
+### Covariant interface read views
+
+**Status:** Supported for declaration-site `out` interfaces whose widened methods preserve their
+parameter signatures and have compatible results. This includes custom `Producer<out T>`,
+`Iterator<T>`, property getters and nested `Sequence<T>` iterator results. Several `out` arguments can
+widen independently; invariant type arguments stay unchanged.
+
+The compiler derives a canonical set of nullable, `Any`/`Any?`, supported declared supertype and
+nested covariant views from each specialization, subject to its type parameter bounds. Libraries
+and consumers derive identical nominal layouts regardless of which views the consumer uses.
+Widening preserves the source object and its identity; it does not copy values or allocate a wrapper.
+Primitive storage and direct calls stay scalar. Generated read bridges call the original method once
+and box the result only when the widened signature requires a reference. Existing reference results
+use nominal covariance, retaining reference identity and nullability. Interface results widened
+to `Any` use a forwarding bridge without allocating a wrapper, because artifact interfaces have no class
+parent. Unit uses its shared singleton; value-class results use the ordinary managed boxing boundary.
+Value-class implementations receive the same bridges in their managed method tables. Those bridges
+retain the original managed receiver, including when a default interface body observes `this`.
+
+Changed element/callback parameter signatures and changed callable result signatures are rejected
+with source diagnostics. Primitive `Number`/`Comparable` views and generic declaration-site `in`
+remain outside this contract. Trusted List/Collection views retain their existing explicit bridges.
+View expansion is bounded to depth 64 and 1024 combinations per specialization; generated result
+bridges have a compilation-wide limit of 4096 methods, alongside the existing class/function budgets.
+
+**Evidence:** `sequences preserve lazy demand iterator state and nullable values`, executed by
+`testKotlinSequencesVmConformance`, covers all twelve primitive families, custom and inherited
+producers, iterator/source identity, nested covariant results, nulls, reference identity, Unit,
+value-class results and scalar/aggregate/generic value-class implementations, property getters,
+mixed invariant/covariant arguments, early stopping and exception propagation.
+Default interface bodies also check receiver identity and exact call counts for a value-class implementation.
+Its artifact assertions protect scalar
+producer fields/direct reads and exactly one allocation per widened primitive read.
+`source library generic functions and classes specialize in consumer`, executed by
+`testKotlinGenericLibraryVmConformance`, covers precompiled producer reuse with one nominal owner.
+`covariant interfaces reject changed callback parameter signatures`, `covariant interfaces reject changed callable results`
+and `covariant interfaces bound canonical view expansion` protect the unsupported boundaries and budget;
+IDE test `lazy sequences resolve with source and metadata inputs` checks both platform input modes.
+**Related work:** [#789](https://github.com/CertifiedBadIdeas/Compukters/issues/789).
+
 ### Direct generic methods
 
 Ordinary Guest classes and objects may declare final, non-suspending methods with their own non-reified

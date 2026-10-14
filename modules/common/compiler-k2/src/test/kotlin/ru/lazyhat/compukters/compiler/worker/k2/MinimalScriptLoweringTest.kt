@@ -398,6 +398,66 @@ class MinimalScriptLoweringTest {
         }
 
     @Test
+    fun `covariant interfaces reject changed callback parameter signatures`() =
+        withAdapter { adapter ->
+            val source =
+                """
+                interface Selector<out T> { fun accepts(predicate: (T) -> Boolean): Boolean }
+                fun widen(value: Selector<Int>): Selector<Any> = value
+                fun main() {}
+                """.trimIndent()
+            val result = adapter.compile(request(source))
+            assertNull(result.artifact)
+            assertTrue(
+                result.diagnostics.any { it.code == "UNSUPPORTED_IR" && "parameter adaptation" in it.message && it.path != null },
+                result.diagnostics.toString(),
+            )
+        }
+
+    @Test
+    fun `covariant interfaces reject changed callable results`() =
+        withAdapter { adapter ->
+            val sources =
+                listOf(
+                    """
+                    interface Factory<out T> { fun make(): () -> T }
+                    fun widen(value: Factory<Int>): Factory<Any> = value
+                    fun main() {}
+                    """.trimIndent(),
+                    """
+                    interface Producer<out T> { fun produce(): T }
+                    fun widen(value: Producer<() -> Int>): Producer<Any> = value
+                    fun main() {}
+                    """.trimIndent(),
+                )
+            for (source in sources) {
+                val result = adapter.compile(request(source))
+                assertNull(result.artifact)
+                assertTrue(
+                    result.diagnostics.any { it.code == "UNSUPPORTED_IR" && "result representations" in it.message && it.path != null },
+                    result.diagnostics.toString(),
+                )
+            }
+        }
+
+    @Test
+    fun `covariant interfaces bound canonical view expansion`() =
+        withAdapter { adapter ->
+            val source =
+                """
+                interface Wide<out A, out B, out C, out D, out E, out F>
+                fun consume(value: Wide<Int, Int, Int, Int, Int, Int>) {}
+                fun main() {}
+                """.trimIndent()
+            val result = adapter.compile(request(source))
+            assertNull(result.artifact)
+            assertTrue(
+                result.diagnostics.any { it.code == "UNSUPPORTED_IR" && "1024 variants" in it.message },
+                result.diagnostics.toString(),
+            )
+        }
+
+    @Test
     fun `generic sequence helpers specialize retained callback signatures`() =
         withAdapter { adapter ->
             val cases =
@@ -460,6 +520,58 @@ class MinimalScriptLoweringTest {
                         else -> listOf("Double", "UByte", "UShort", "UInt", "ULong")
                     }
                 for (name in names) {
+                    val (producerModule, producer) =
+                        decoded.modules
+                            .flatMap { candidate ->
+                                candidate.types
+                                    .filterIsInstance<NominalType.Class>()
+                                    .filter {
+                                        candidate.strings[it.name.value.toInt()].toString() == "SingleProducer<$name>"
+                                    }.map { candidate to it }
+                            }.single()
+                    val valueField =
+                        producerModule.fields
+                            .subList(
+                                producer.fieldStart.toInt(),
+                                (producer.fieldStart + producer.fieldCount).toInt(),
+                            ).single {
+                                producerModule.strings[it.name.value.toInt()].toString() == "value"
+                            }
+                    assertEquals(primitives.getValue(name), valueField.type, "$name producer storage remains scalar")
+                    val producerMethods =
+                        producerModule.functions
+                            .subList(
+                                producer.methodStart.toInt(),
+                                (
+                                    producer.methodStart +
+                                        producer.methodCount
+                                ).toInt(),
+                            ).filter {
+                                producerModule.strings[it.name.value.toInt()].toString() == "produce"
+                            }
+                    val producerResults =
+                        producerMethods.map {
+                            producerModule.types[(it.signature as TypeRef.Local).id.value.toInt()] as NominalType.Function
+                        }
+                    assertTrue(producerResults.any { it.result == primitives.getValue(name) }, "$name direct result remains scalar")
+                    assertTrue(producerResults.any { (it.result as? ValueType.Ref)?.nullable == false }, "$name Any bridge")
+                    assertTrue(producerResults.any { (it.result as? ValueType.Ref)?.nullable == true }, "$name nullable bridge")
+                    for ((method, signature) in producerMethods.zip(producerResults)) {
+                        val instructions =
+                            producerModule.blocks
+                                .subList(
+                                    method.firstBlock.value.toInt(),
+                                    (
+                                        method.firstBlock.value +
+                                            method.blockCount
+                                    ).toInt(),
+                                ).flatMap(Block::instructions)
+                        if (signature.result is ValueType.Ref) {
+                            assertEquals(1, instructions.count { it is Instruction.NewObject }, "$name widened read boxes exactly once")
+                        } else {
+                            assertTrue(instructions.none { it is Instruction.NewObject }, "$name direct read does not box")
+                        }
+                    }
                     val (module, cache) =
                         decoded.modules
                             .flatMap { module ->
