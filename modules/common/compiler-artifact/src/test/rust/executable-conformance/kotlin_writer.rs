@@ -50,6 +50,10 @@ fn main() {
             let mut session = k2_stdio_session_with_heap("COMPUKTER_KOTLIN_ROCKET_ASCENT_ARTIFACT", 1, 256 * 1024);
             k2_assert_prints(&mut session, ["rocket ascent ok\n"], 32768);
         },
+        "rocket-landing" => {
+            let mut session = k2_stdio_session_with_heap("COMPUKTER_KOTLIN_ROCKET_LANDING_ARTIFACT", 1, 256 * 1024);
+            k2_assert_prints(&mut session, ["rocket landing ok\n"], 32768);
+        },
         "rotations" => {
             let mut session = k2_stdio_session_with_heap("COMPUKTER_KOTLIN_ROTATIONS_ARTIFACT", 1, 256 * 1024);
             k2_assert_prints(&mut session, ["rotations ok\n"], 1024);
