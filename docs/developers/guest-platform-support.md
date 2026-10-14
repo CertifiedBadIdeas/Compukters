@@ -136,6 +136,8 @@ timing and the pinned upstream world-axis convention; instance orbital motion di
 pointing convergence remain a separate manual scenario; orbital insertion is not provided by these examples.
 See [Cosmonautics addon](https://github.com/CertifiedBadIdeas/Compukters-cosmonautics/blob/main/README.md)
 and the workspace `examples/orbital-prograde/README.md`.
+The pinned upstream coordinate, region-motion and transfer constraints are recorded in
+[orbital navigation](orbital-navigation.md); returning to a surface pad requires additional navigation data.
 
 The separate `examples/rocket-landing` project uses existing telemetry and engine APIs for an experimental local
 vertical climb/hold/descent and bounded horizontal return to a known pad reference. `testKotlinRocketLandingVmConformance`

@@ -17,6 +17,7 @@
  */
 
 import cosmonautics.space.Space
+import kotlin.math.sqrt
 
 fun main() {
     val status = Space.status()
@@ -29,11 +30,25 @@ fun main() {
         if (status.inDeepSpace) {
             val orbit = Space.orbit()
             println("Orbit frame: " + orbit.frame)
+            println("Instance: " + orbit.instanceId + "; orbit tick: " + orbit.universeTick)
+            val radius = orbit.position.length
+            val radialOut = orbit.position.normalized()
+            val radialSpeed = orbit.velocity.x * radialOut.x + orbit.velocity.y * radialOut.y + orbit.velocity.z * radialOut.z
+            val transverseSpeed = (orbit.velocity - radialOut * radialSpeed).length
+            println("Orbital radius (m): " + radius)
+            println("Orbital speed (m/s): " + orbit.velocity.length)
+            println("Radial speed (m/s): " + radialSpeed)
+            println("Transverse speed (m/s): " + transverseSpeed)
+            println("Circular speed at radius (m/s): " + sqrt(orbit.gravitationalParameter / radius))
             println("Bound: " + orbit.bound)
             if (orbit.frame == planet.frame) {
-                println("Periapsis altitude (m): " + (orbit.periapsisRadius() - planet.radius))
-                if (orbit.bound) println("Apoapsis altitude (m): " + (orbit.apoapsisRadius() - planet.radius))
+                println("Radius above planet radius (m): " + (radius - planet.radius))
+                println("Periapsis above planet radius (m): " + (orbit.periapsisRadius() - planet.radius))
+                if (orbit.bound) println("Apoapsis above planet radius (m): " + (orbit.apoapsisRadius() - planet.radius))
+            } else {
+                println("Planet frame changed between observations; planet-relative distances omitted.")
             }
+            println("Bound does not prove planet clearance. Distances use the planet radius, not its shape.")
         }
     } catch (failure: IllegalStateException) {
         println("Space observation unavailable: " + failure.message)

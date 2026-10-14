@@ -78,6 +78,7 @@ headings so this page has one stable URL that can be shared outside the reposito
 
 - Added read-only Cosmonautics space telemetry for Guest Kotlin: Deep Space membership, linked planet parameters,
   instance orbital observations and an atomic snapshot of orbital guidance directions in Sable world axes.
+  Telemetry reports orbital radial/transverse speeds and a circular-speed reference for assessing burns.
   Examples cover telemetry, experimental prograde pointing and a bounded vertical rocket ascent with a creative
   vector engine. Cosmonautics construction transfers checkpoint the computer before copying and preserve peripheral
   network addresses and exact-device handles across dimensions. The ascent example confirms Deep Space after interrupted
