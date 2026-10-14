@@ -244,7 +244,7 @@ private val hashCollectionFactories =
         "kotlin.collections.mutableSetOf" to "kotlin.collections.HashSet",
     )
 
-private data class GuestClassInstance(
+internal data class GuestClassInstance(
     val declaration: IrClass,
     val arguments: List<IrType>,
 ) {
@@ -279,7 +279,7 @@ private fun collectGuestClassInstances(
     classes: List<IrClass>,
     functions: List<GuestFunctionInstance>,
     properties: List<TopLevelProperty>,
-    anyType: IrType,
+    pluginContext: IrPluginContext,
     isPlatformClass: (IrClass) -> Boolean,
     initializationRoots: List<IrElement> = emptyList(),
 ): List<GuestClassInstance> {
@@ -396,9 +396,12 @@ private fun collectGuestClassInstances(
     while (pending.isNotEmpty()) {
         val instance = pending.removeFirst()
         // Concrete collection ownership must not depend on which read views a consumer happens to use.
-        CollectionReadBridges.interfaces(instance.declaration, instance.arguments, anyType).forEach { (name, argument) ->
-            byName[name]?.let { add(GuestClassInstance(it, listOf(argument))) }
-        }
+        CollectionReadBridges
+            .interfaces(instance.declaration, instance.arguments, pluginContext.irBuiltIns.anyType)
+            .forEach { (name, argument) ->
+                byName[name]?.let { add(GuestClassInstance(it, listOf(argument))) }
+            }
+        CovariantInterfaceBridges.views(instance, pluginContext).forEach(::add)
         instance.declaration.superTypes.forEach { consider(it, instance::substitute) }
         // Nested classes own independent type parameters and are scanned through their own instances.
         instance.declaration.declarations.filterNot { it is IrClass }.forEach { declaration ->
@@ -415,7 +418,7 @@ private data class GuestConstructorTarget(
     val layout: GuestClassLayout? = null,
 )
 
-private data class GuestFunctionInstance(
+internal data class GuestFunctionInstance(
     val declaration: IrSimpleFunction,
     val arguments: List<IrType>,
     val ownerClass: GuestClassInstance? = null,
@@ -666,6 +669,7 @@ private data class PreparedGuestFunctionBodies(
     val locals: Map<IrSimpleFunctionSymbol, GuestLocalFunction>,
     val closureRoots: List<IrElement>,
     val initializations: Map<GuestClassInstance, GuestClassInitialization>,
+    val covariance: CovariantInterfaceBridges,
 )
 
 @OptIn(UnsafeDuringIrConstructionAPI::class)
@@ -719,7 +723,7 @@ private fun prepareGuestFunctionBodies(
             specializationClasses,
             functionInstances,
             topLevelProperties,
-            pluginContext.irBuiltIns.anyType,
+            pluginContext,
             isPlatformClass,
         )
     var classInstances = allClassInstances.filterNot { inlineValueClasses.contains(it.declaration.symbol) }
@@ -789,7 +793,7 @@ private fun prepareGuestFunctionBodies(
                 specializationClasses,
                 functionInstances,
                 topLevelProperties,
-                pluginContext.irBuiltIns.anyType,
+                pluginContext,
                 isPlatformClass,
                 initializationRoots,
             )
@@ -800,6 +804,8 @@ private fun prepareGuestFunctionBodies(
         allClassInstances = discoveredClasses
         classInstances = allClassInstances.filterNot { inlineValueClasses.contains(it.declaration.symbol) }
     }
+    val covariance = CovariantInterfaceBridges.discover(allClassInstances, pluginContext)
+    functionInstances = functionInstances + covariance.methods
     val functionOrder = rootFunctions.withIndex().associate { it.value to it.index }
     return PreparedGuestFunctionBodies(
         userFunctions,
@@ -822,6 +828,7 @@ private fun prepareGuestFunctionBodies(
         localFunctions,
         closureRoots,
         initializations,
+        covariance,
     )
 }
 
@@ -854,7 +861,7 @@ private data class GuestClosureSource(
     val boundParameter: IrValueSymbol? = null,
 )
 
-private data class GuestFunctionShape(
+internal data class GuestFunctionShape(
     val parameters: List<IrType>,
     val result: IrType,
 ) {
@@ -1746,6 +1753,15 @@ internal object KotlinProjectLowering {
         val constructorClasses = prepared.constructors
         val functionInstances = prepared.instances
         val classInstances = prepared.classInstances
+
+        fun boxInterfaceMethods(box: GuestValueClassBox): List<IrSimpleFunction> {
+            val source = box.sourceType as IrSimpleType
+            val owner = GuestClassInstance(box.symbol.owner, source.arguments.filterIsInstance<IrTypeProjection>().map { it.type })
+            return valueClassInterfaceMethods(box.symbol) +
+                prepared.covariance.methods
+                    .filter { it.ownerClass == owner }
+                    .map { it.declaration }
+        }
         val localFunctions = prepared.locals
         val closureRoots = prepared.closureRoots
         val concreteExecutableRoots =
@@ -2038,7 +2054,7 @@ internal object KotlinProjectLowering {
                     guestTypes.valueClassBoxes.keys.map { "$it.<inline-value>" } +
                     listOf("<boxed-value>", "toString", "hashCode", "equals") +
                     guestTypes.valueClassBoxes.values.flatMap { box ->
-                        valueClassInterfaceMethods(box.symbol).map { method ->
+                        boxInterfaceMethods(box).map { method ->
                             artifactFunctionName(method.overriddenSymbols.first().owner, pluginContext, inlineValueClasses, session)
                         }
                     } +
@@ -2272,7 +2288,7 @@ internal object KotlinProjectLowering {
             if (imported == null) {
                 box.type =
                     TypeRef.Local(TypeId.of((externalFunctionTypeBase + externalFunctionImports.size + 6 + localBoxTypeCount).toUInt()))
-                localBoxTypeCount += 4 + valueClassInterfaceMethods(box.symbol).size
+                localBoxTypeCount += 4 + boxInterfaceMethods(box).size
             } else {
                 box.type = imported
                 box.payloadFields = platformImports.boxPayloadFields.getValue(box)
@@ -3464,7 +3480,12 @@ internal object KotlinProjectLowering {
                 val interfaces =
                     (
                         sourceParents.filter { (symbol, _) -> symbol.owner.kind == ClassKind.INTERFACE }.map { it.second } +
-                            bridgeInterfaces
+                            bridgeInterfaces +
+                            prepared.covariance.interfaces[layout.instance].orEmpty().map {
+                                TypeRef.Local(
+                                    requireNotNull(classInstanceTypeIds[it]),
+                                )
+                            }
                     ).distinct()
                         .sortedWith(
                             compareBy<TypeRef>({ if (it is TypeRef.Local) 0 else 1 }, {
@@ -3679,7 +3700,7 @@ internal object KotlinProjectLowering {
                         }),
                     )
             box.bridges =
-                valueClassInterfaceMethods(box.symbol).map { method ->
+                boxInterfaceMethods(box).map { method ->
                     fun mapped(type: IrType) =
                         valueType(
                             ownerInstance.substitute(type),
@@ -3720,6 +3741,11 @@ internal object KotlinProjectLowering {
                             ?.getters
                             ?.indexOf(method.symbol)
                             ?.takeIf { it >= 0 },
+                        managedReceiver =
+                            method.parameters.firstOrNull { it.kind == IrParameterKind.DispatchReceiver }?.type?.let { type ->
+                                val owner = ((type as? IrSimpleType)?.classifier as? IrClassSymbol)?.owner
+                                if (owner?.kind == ClassKind.INTERFACE) mapped(type) as? ValueType.Ref else null
+                            },
                     )
                 }
         }
@@ -5945,7 +5971,10 @@ private class FunctionCompiler(
         expression: IrExpression,
         expectedType: IrType?,
     ): RegisterId {
-        if (expectedType != null) validateHashCollectionView(expression, expectedType)
+        if (expectedType != null) {
+            validateHashCollectionView(expression, expectedType)
+            CovariantInterfaceBridges.validate(resolvedType(expression.type), resolvedType(expectedType), expression, pluginContext)
+        }
         val source =
             if (resolvedType(expression.type) == unitType &&
                 expectedType?.let { resolvedType(it).isKotlinAny() || resolvedType(it).isNullableUnit() } == true
@@ -6459,6 +6488,12 @@ private class FunctionCompiler(
     private fun compileTypeOperator(expression: IrTypeOperatorCall): RegisterId {
         if (expression.operator == IrTypeOperator.IMPLICIT_CAST) {
             rejectFunctionVariance(expression.argument.type, expression.typeOperand, expression)
+            CovariantInterfaceBridges.validate(
+                resolvedType(expression.argument.type),
+                resolvedType(expression.typeOperand),
+                expression,
+                pluginContext,
+            )
         }
         val source =
             if (expression.operator == IrTypeOperator.INSTANCEOF &&
@@ -10284,7 +10319,7 @@ private fun IrType.isKotlinAny(): Boolean =
     ((this as? IrSimpleType)?.classifier as? IrClassSymbol)?.owner?.fqNameWhenAvailable?.asString() == "kotlin.Any"
 
 @OptIn(UnsafeDuringIrConstructionAPI::class)
-private fun IrType.guestFunctionShape(): GuestFunctionShape? {
+internal fun IrType.guestFunctionShape(): GuestFunctionShape? {
     val simple = this as? IrSimpleType ?: return null
     val owner = (simple.classifier as? IrClassSymbol)?.owner ?: return null
     val name = owner.fqNameWhenAvailable?.asString() ?: return null

@@ -168,7 +168,7 @@ internal fun lowerAggregateValueClassBox(
         }
         when {
             bridge != null -> {
-                val direct = readInline()
+                val direct = bridge.managedReceiver?.let { cast(RegisterId.of(0u), it) } ?: readInline()
                 if (bridge.target != null) {
                     val destination = if (result == ValueType.Unit) Destination.Unit else Destination.Register(register(result))
                     emit(

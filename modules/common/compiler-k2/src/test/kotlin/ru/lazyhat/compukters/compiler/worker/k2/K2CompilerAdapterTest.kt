@@ -139,6 +139,11 @@ class K2CompilerAdapterTest {
 
                     open class LibraryMessage() { override fun toString(): String = "library"; override fun hashCode(): Int = 27; override fun equals(other: Any?): Boolean = other is LibraryMessage }
                     fun message(): Any = LibraryMessage()
+                    interface LibraryProducer<out T> { fun produce(): T }
+                    class LibrarySingle<T>(private val value: T): LibraryProducer<T> {
+                        override fun produce(): T = value
+                    }
+                    fun producer(): LibraryProducer<Int> = LibrarySingle<Int>(42)
                     fun <T> identity(value: T): T = value
                     inline fun <T, R> transform(value: T, block: (T) -> R): R = block(value)
 
@@ -278,6 +283,11 @@ class K2CompilerAdapterTest {
                         override fun equals(other: Any?): Boolean = super.equals(other)
                     }
                     fun main() {
+                        val produced = sample.producer()
+                        val producedNullable: sample.LibraryProducer<Int?> = produced
+                        val producedObjects: sample.LibraryProducer<Any> = produced
+                        require(produced === producedNullable && produced === producedObjects)
+                        require(produced.produce() == 42 && producedNullable.produce() == 42 && producedObjects.produce() == 42)
                         require(message().toString() == "library")
                         require(message().hashCode() == 27)
                         val inherited: Any = InheritedMessage()
@@ -341,6 +351,13 @@ class K2CompilerAdapterTest {
                 artifact.modules.flatMap { module ->
                     module.functions.map { module.strings[it.name.value.toInt()].toString() }
                 }
+            val producerOwners =
+                artifact.modules.flatMap { module ->
+                    module.types.filterIsInstance<ru.lazyhat.compukters.compiler.artifact.model.NominalType.Class>().map {
+                        module.strings[it.name.value.toInt()].toString()
+                    }
+                }
+            assertEquals(1, producerOwners.count { it == "sample.LibrarySingle<Int>" }, producerOwners.toString())
             assertEquals(1, emittedFunctions.count { it == "label" }, emittedFunctions.toString())
             assertEquals(1, emittedFunctions.count { it == "describeSize" }, emittedFunctions.toString())
             assertEquals(1, emittedFunctions.count { it == "require" }, emittedFunctions.toString())

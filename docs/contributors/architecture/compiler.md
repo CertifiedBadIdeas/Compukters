@@ -111,6 +111,19 @@ the canonical managed Unit singleton or null, while direct Unit calls retain the
 an older alias live across 200 allocations of 12 KiB captured arrays with mutable capture cells. No artifact
 encoding, instruction or GC protocol change is introduced.
 
+`CovariantInterfaceBridges` derives canonical concrete read views for supported declaration-site
+`out` interfaces during class discovery. The set depends on the specialization and its bounds,
+rather than consumer demand, preserving identical layouts when a trusted library owner is reused.
+Interface parent edges express reference and nested result covariance. Concrete implementations
+receive synthetic result-adapting methods for scalar, Unit and value-class results; managed value-class
+method tables share these generated methods. Interface results widened to `Any` receive
+reference forwarding methods because artifact interfaces cannot have a class parent. These methods
+reuse the normal function compiler and managed boxing/cast instructions. The original object, fields
+and direct methods retain their layouts. Parameters and callable result signatures must remain unchanged.
+Existing trusted collection bridges remain canonical. Depth/combination/method limits
+bound expansion, and library specialization validation retains one nominal owner. Sequence and
+generic-library conformance exercise this path through the unchanged artifact/VM contract.
+
 Canonical `IntRange` and `IntProgression` declarations let K2 resolve ascending, descending, and stepped `Int` loops.
 The compiler recognizes only their canonical `for` shape and evaluates start, end, and step once into scalar registers;
 no range or iterator object enters the VM. It validates a positive step before iteration, calculates the next index in

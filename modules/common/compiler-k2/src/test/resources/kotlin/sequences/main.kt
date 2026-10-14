@@ -25,6 +25,7 @@ fun findInline(): Int {
     return 0
 }
 fun main() {
+    checkCustomCovariance()
     checkIntTerminals(1)
     checkNullSelection(1)
     checkGenericSequence(1)
@@ -336,6 +337,7 @@ fun <T : Any> genericNotNull(source: Sequence<T?>): Sequence<T> = source.filterN
 fun <T, R : Any> genericMapNotNull(source: Sequence<T>, transform: (T) -> R?): Sequence<R> =
     source.mapNotNull { transform(it) }
 fun <T : Any> checkNullSelection(value: T) {
+    checkCovariantViews(value)
     val source = listOf<T?>(null, value, null, value).asSequence()
     val filtered: Sequence<T> = genericNotNull(source)
     check(filtered.count() == 2 && filtered.firstOrNull() == value)
@@ -352,4 +354,173 @@ fun <T : Any> checkNullSelection(value: T) {
         if (produced == 1) null else it
     }
     check(nonNullableSource.firstOrNull() == value && produced == 2)
+}
+
+interface Producer<out T> {
+    fun produce(): T
+}
+
+class SingleProducer<T>(private val value: T) : Producer<T> {
+    var reads = 0
+    override fun produce(): T {
+        reads += 1
+        return value
+    }
+}
+
+fun <T : Any> checkCovariantViews(value: T) {
+    val source = SingleProducer<T>(value)
+    val nullable: Producer<T?> = source
+    val objects: Producer<Any> = source
+    val optionalObjects: Producer<Any?> = source
+    check(nullable === source && objects === source && optionalObjects === source)
+    check(source.reads == 0)
+    check(nullable.produce() == value && source.reads == 1)
+    check(objects.produce() == value && source.reads == 2)
+    check(optionalObjects.produce() == value && source.reads == 3)
+    check(source.produce() == value && source.reads == 4)
+
+    var transforms = 0
+    val sequence: Sequence<T> = listOf<T>(value, value).asSequence().map { transforms += 1; it }.filter { true }.take(2)
+    val nullableSequence: Sequence<T?> = sequence
+    val objectSequence: Sequence<Any> = sequence
+    val optionalSequence: Sequence<Any?> = sequence
+    check(nullableSequence === sequence && objectSequence === sequence && optionalSequence === sequence)
+    check(transforms == 0)
+    val iterator: Iterator<T> = sequence.iterator()
+    val nullableIterator: Iterator<T?> = iterator
+    val objectIterator: Iterator<Any> = iterator
+    check(nullableIterator === iterator && objectIterator === iterator)
+    check(nullableIterator.hasNext() && nullableIterator.hasNext() && transforms == 1)
+    check(objectIterator.next() == value && transforms == 1)
+    check(nullableIterator.next() == value && transforms == 2)
+    check(!iterator.hasNext())
+    check(nullableSequence.firstOrNull() == value && transforms == 3)
+    check(objectSequence.firstOrNull() == value && transforms == 4)
+    check(optionalSequence.firstOrNull() == value && transforms == 5)
+    check(nullableSequence.filterNotNull().firstOrNull() == value && transforms == 6)
+}
+
+value class CovariantValue(val code: Int)
+class UnitProducer : Producer<Unit> {
+    override fun produce() {}
+}
+value class ScalarProducer(val value: Int) : DerivedProducer<Int> {
+    override fun produce(): Int = value
+}
+value class AggregateProducer(val value: Int, val tag: String) : Producer<Int> {
+    override fun produce(): Int = value
+}
+value class GenericValueProducer<T>(val first: T, val second: T) : Producer<T> {
+    override fun produce(): T = first
+}
+
+interface DerivedProducer<out T> : Producer<T>
+object DefaultProducerProbe {
+    var receiver: Any? = null
+    var reads: Int = 0
+}
+interface DefaultProducer : Producer<Int> {
+    override fun produce(): Int {
+        check(this === DefaultProducerProbe.receiver)
+        DefaultProducerProbe.reads++
+        return 47
+    }
+}
+value class DefaultValueProducer(val marker: Int) : DefaultProducer
+interface PropertyProducer<out T> {
+    val value: T
+}
+class PropertyValue<T>(override val value: T) : PropertyProducer<T>
+value class InlinePropertyValue(override val value: Int) : PropertyProducer<Int>
+interface KeyedProducer<K, out A, out B> {
+    fun key(): K
+    fun first(): A
+    fun second(): B
+}
+class KeyedValues<K, A, B>(private val key: K, private val first: A, private val second: B) : KeyedProducer<K, A, B> {
+    override fun key(): K = key
+    override fun first(): A = first
+    override fun second(): B = second
+}
+class InheritedProducer : DerivedProducer<Int> {
+    override fun produce(): Int = 7
+}
+class CustomSequence(private val probe: Probe) : Sequence<Int> {
+    override fun iterator(): Iterator<Int> = probe.iterator()
+}
+fun checkCustomCovariance() {
+    val defaultProducer: Producer<Int> = DefaultValueProducer(1)
+    DefaultProducerProbe.receiver = defaultProducer
+    val defaultObjects: Producer<Any> = defaultProducer
+    val defaultNullable: Producer<Int?> = defaultProducer
+    check(defaultObjects === defaultProducer && defaultNullable === defaultProducer)
+    check(defaultProducer.produce() == 47 && defaultObjects.produce() == 47 && defaultNullable.produce() == 47)
+    check(DefaultProducerProbe.reads == 3)
+    val property: PropertyProducer<Int> = PropertyValue<Int>(41)
+    val propertyObjects: PropertyProducer<Any> = property
+    val propertyNullable: PropertyProducer<Int?> = property
+    check(propertyObjects === property && propertyNullable === property)
+    check(propertyObjects.value == 41 && propertyNullable.value == 41)
+    val inlineProperty: PropertyProducer<Int> = InlinePropertyValue(43)
+    val inlinePropertyObjects: PropertyProducer<Any> = inlineProperty
+    check(inlinePropertyObjects === inlineProperty && inlinePropertyObjects.value == 43)
+    val keyed: KeyedProducer<String, Int, Long> = KeyedValues<String, Int, Long>("key", 31, 37L)
+    val keyedObjects: KeyedProducer<String, Any, Any?> = keyed
+    val keyedNullable: KeyedProducer<String, Int?, Long?> = keyed
+    check(keyedObjects === keyed && keyedNullable === keyed)
+    check(keyedObjects.key() == "key" && keyedObjects.first() == 31 && keyedObjects.second() == 37L)
+    check(keyedNullable.first() == 31 && keyedNullable.second() == 37L)
+    val scalarProducer: Producer<Int> = ScalarProducer(13)
+    val scalarObjects: Producer<Any> = scalarProducer
+    val scalarNullable: Producer<Int?> = scalarProducer
+    check(scalarObjects === scalarProducer && scalarNullable === scalarProducer)
+    check(scalarObjects.produce() == 13 && scalarNullable.produce() == 13 && scalarProducer.produce() == 13)
+    val aggregateProducer: Producer<Int> = AggregateProducer(17, "tag")
+    val aggregateObjects: Producer<Any> = aggregateProducer
+    check(aggregateObjects === aggregateProducer && aggregateObjects.produce() == 17)
+    val genericProducer: Producer<Int> = GenericValueProducer<Int>(19, 23)
+    val genericObjects: Producer<Any> = genericProducer
+    val genericNullable: Producer<Int?> = genericProducer
+    check(genericObjects === genericProducer && genericNullable === genericProducer)
+    check(genericObjects.produce() == 19 && genericNullable.produce() == 19)
+    val unitSource: Producer<Unit> = UnitProducer()
+    val unitView: Producer<Any> = unitSource
+    check(unitView.produce() === unitView.produce())
+    val valueSource: Producer<CovariantValue> = SingleProducer<CovariantValue>(CovariantValue(9))
+    val nullableValue: Producer<CovariantValue?> = valueSource
+    val objectValue: Producer<Any> = valueSource
+    check(nullableValue.produce()?.code == 9 && (objectValue.produce() as CovariantValue).code == 9)
+    val nestedSource: Producer<Sequence<Int>> = SingleProducer<Sequence<Int>>(listOf(6).asSequence())
+    val nestedView: Producer<Sequence<Any>> = nestedSource
+    check(nestedView.produce().firstOrNull() == 6)
+    val nestedObjects: Producer<Any> = nestedSource
+    check(nestedObjects.produce() === nestedSource.produce())
+    val absentNested: Producer<Sequence<Int>?> = SingleProducer<Sequence<Int>?>(null)
+    val absentNestedObjects: Producer<Any?> = absentNested
+    check(absentNestedObjects.produce() == null)
+    val inherited = InheritedProducer()
+    val widened: Producer<Any> = inherited
+    val widenedDerived: DerivedProducer<Int?> = inherited
+    check(widened === inherited && widenedDerived === inherited)
+    check(widened.produce() == 7 && widenedDerived.produce() == 7)
+    val probe = Probe()
+    val custom = CustomSequence(probe)
+    val nullable: Sequence<Int?> = custom
+    val objects: Sequence<Any> = custom
+    check(nullable === custom && objects === custom && probe.iterators == 0 && probe.reads == 0)
+    check(objects.take(2).count() == 2 && probe.iterators == 1 && probe.reads == 2)
+    check(nullable.firstOrNull() == 1 && probe.iterators == 2 && probe.reads == 3)
+    val nullProducer: Producer<Int?> = SingleProducer<Int?>(null)
+    val nullableObjects: Producer<Any?> = nullProducer
+    check(nullableObjects === nullProducer && nullableObjects.produce() == null)
+    val item = Item(3)
+    val refProducer: Producer<Item> = SingleProducer<Item>(item)
+    val referenceObjects: Producer<Any> = refProducer
+    check(referenceObjects.produce() === item)
+    var failed = false
+    val throwing: Sequence<Int> = listOf(1).asSequence().map { throw IllegalStateException("widened"); it }
+    val throwingObjects: Sequence<Any> = throwing
+    try { throwingObjects.firstOrNull() } catch (e: IllegalStateException) { failed = true }
+    check(failed)
 }
