@@ -733,7 +733,7 @@ class IdeInputAdapterTest {
 
         assertTrue(fixture.adapter.keyPressed(key(IdeKeyCode.V, IdeModifier.CONTROL), IdeFocusState.Editor))
 
-        assertEquals(listOf<IdeCommand>(IdeCommand.Edit(IdeEditorInput.Type("😀аб"))), fixture.commands)
+        assertEquals(listOf<IdeCommand>(IdeCommand.Edit(IdeEditorInput.Paste("😀аб"))), fixture.commands)
     }
 
     @Test

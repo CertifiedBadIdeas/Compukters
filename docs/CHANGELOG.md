@@ -13,6 +13,9 @@ headings so this page has one stable URL that can be shared outside the reposito
 
 ## 0.6.0 — In development
 
+- IDE rebases pasted multiline Kotlin code to the insertion indentation, preserving relative nesting and atomic undo;
+  insertion inside literals/comments and fragments containing raw strings stay literal.
+
 - IDE supports Alt+Up/Down to move the current line or selected block, preserving selection and one-step undo.
 
 - Added an experimental `rocket-landing` Guest project for a controlled vertical climb, height hold and soft
