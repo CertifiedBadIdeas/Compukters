@@ -40,11 +40,35 @@ object DisplayPipelineBenchmark {
         val tiles: List<ByteArray>
         var sequence = 0L
         var iteration = 0
+        val deltaImages = positions.associateWith { DisplayClientImage() }
+        lateinit var changedTiles: List<ByteArray>
+        lateinit var forward: List<DisplayTileUpdate>
+        lateinit var backward: List<DisplayTileUpdate>
+        var deltaSequence = 1L
 
         init {
             canvas.acquire(owner) { true }
             canvas.fill(owner, 0, 0, canvas.width, canvas.height, 0x102030)
             tiles = tiles()
+            changedTiles =
+                tiles.mapIndexed { index, tile ->
+                    tile.copyOf().also { changed ->
+                        for (y in 0 until density) {
+                            for (x in 0 until density) {
+                                if (index / side * density + y < 16 && index % side * density + x < min(40, canvas.width)) {
+                                    val offset = (y * density + x) * 3
+                                    changed[offset] = 0x28
+                                    changed[offset + 1] = 0x4C
+                                    changed[offset + 2] = 0x68
+                                }
+                            }
+                        }
+                    }
+                }
+            forward = tiles.indices.map { DisplayTileUpdate.between(tiles[it], changedTiles[it], density, 1) }
+            backward = tiles.indices.map { DisplayTileUpdate.between(changedTiles[it], tiles[it], density, 1) }
+            positions.forEachIndexed { index, position -> deltaImages.getValue(position).receive(mode, tiles[index], id, 1, members) }
+            deltaImages.values.first().publish(deltaImages::get)
             positions.dropLast(1).forEachIndexed { index, position ->
                 incomplete.getValue(position).receive(mode, tiles[index], id, 1, members)
             }
@@ -90,10 +114,58 @@ object DisplayPipelineBenchmark {
             sink = incomplete.values.first().revision
         }
 
-        // Exact current admission charge, with one fully loaded screen and no competing displays.
+        fun encodeButtonDelta() {
+            sink = tiles.indices.map { DisplayTileUpdate.between(tiles[it], changedTiles[it], density, 1) }
+        }
+
+        fun receiveDelta() {
+            val base = deltaSequence++
+            val updates = if (base % 2L == 1L) forward else backward
+            positions.forEachIndexed { index, position ->
+                val patch = updates[index]
+                deltaImages.getValue(position).receive(
+                    mode,
+                    patch.rgb,
+                    id,
+                    deltaSequence,
+                    members,
+                    if (patch.base ==
+                        -1L
+                    ) {
+                        -1
+                    } else {
+                        base
+                    },
+                    patch.x,
+                    patch.y,
+                    patch.width,
+                    patch.height,
+                )
+            }
+            deltaImages.values.forEach { it.publish(deltaImages::get) }
+            sink = deltaImages.values.first().revision
+        }
+
+        fun deltaBytes(): Int = forward.sumOf { it.rgb.size }
+
+        fun deltaSyncTicks(): Int {
+            var ticks = 1
+            var used = 0
+            for (patch in forward) {
+                val charge = patch.rgb.size + members.length * 2 + 192
+                if (used + charge > 512 * 1024) {
+                    ticks++
+                    used = 0
+                }
+                used += charge
+            }
+            return ticks
+        }
+
+        // Full-snapshot admission charge, with one fully loaded screen and no competing displays.
         // This is a deterministic scheduling model, not a network/latency measurement.
         fun syncTicks(): Int {
-            val charge = density * density * 3 + members.length * 2 + 128
+            val charge = density * density * 3 + members.length * 2 + 192
             val perTick = (512 * 1024) / charge
             return (count + perTick - 1) / perTick
         }
@@ -131,7 +203,9 @@ object DisplayPipelineBenchmark {
                         },
                 )
                 appendLine("JVM arguments=${ManagementFactory.getRuntimeMXBean().inputArguments}")
-                appendLine("Sync ticks model: DisplayWorldAccess 512KiB/tick admission, full loaded membership, full RGB per panel.")
+                appendLine(
+                    "Sync ticks model: 512KiB/tick admission, full loaded membership; full RGB except *_delta stages (40x16 button color change).",
+                )
                 appendLine(
                     "Excludes NBT/compression/framing overhead; no competing screens; does not model tick phase or Guest scheduling.",
                 )
@@ -154,11 +228,21 @@ object DisplayPipelineBenchmark {
                         "frame_dashboard" to if (pixels <= DisplayCanvas.MAXIMUM_FRAME_PIXELS) fixture::dashboard else null,
                         "rgb_tiles" to { sink = fixture.tiles() },
                         "client_receive_publish" to fixture::receivePublish,
+                        "encode_button_delta" to fixture::encodeButtonDelta,
+                        "client_receive_delta" to fixture::receiveDelta,
                         "client_incomplete_pass" to if (fixture.count > 1) fixture::incompletePass else null,
                     )
                 for ((stage, operation) in stages) {
                     val prefix = "$side,${fixture.density},${fixture.count},$stage,$batch"
-                    val suffix = "${pixels * 3},${fixture.syncTicks()}"
+                    val suffix =
+                        if (stage.endsWith(
+                                "_delta",
+                            )
+                        ) {
+                            "${fixture.deltaBytes()},${fixture.deltaSyncTicks()}"
+                        } else {
+                            "${pixels * 3},${fixture.syncTicks()}"
+                        }
                     if (operation == null) {
                         csv.appendLine("$prefix,,,,$suffix,unsupported")
                         continue

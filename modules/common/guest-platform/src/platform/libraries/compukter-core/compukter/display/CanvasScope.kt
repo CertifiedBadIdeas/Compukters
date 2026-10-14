@@ -30,6 +30,7 @@ public value class CanvasScope internal constructor(
     private val clip: Rect2i,
 ) {
     public val size: Size2i get() = bounds.size
+    internal val isEmpty: Boolean get() = clip.isEmpty
 
     public fun pixel(x: Int, y: Int, color: Int) {
         val position = global(Vector2i(x, y))

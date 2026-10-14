@@ -34,6 +34,23 @@ public abstract class UiElement internal constructor(public val size: Size2i) {
         require(size.x >= 0 && size.y >= 0)
     }
 
+    private var dirty: Rect2i? = Rect2i(Vector2i(0, 0), size)
+    private var version: Long = 0
+    private var drawingVersion: Long = 0
+
+    /** Request repaint after changing state captured by custom drawing callbacks. Coordinates are local. */
+    public fun invalidate() { invalidate(Rect2i(Vector2i(0, 0), size)) }
+
+    public fun invalidate(bounds: Rect2i) {
+        val clipped = bounds.intersection(Rect2i(Vector2i(0, 0), size))
+        if (clipped.isEmpty) return
+        dirty = uiUnion(dirty, clipped)
+        version++
+    }
+
+    internal open fun damage(): Rect2i? = dirty
+    internal open fun prepare() { drawingVersion = version }
+    internal open fun painted() { if (version == drawingVersion) dirty = null }
     internal abstract fun draw(canvas: CanvasScope)
 
     internal open fun hit(point: Position2i, position: Position2i): UiHit? =
@@ -42,9 +59,13 @@ public abstract class UiElement internal constructor(public val size: Size2i) {
     internal open fun pointer(event: DisplayPointerEvent) {}
 }
 
-public class UiText internal constructor(size: Size2i, public var text: String) : UiElement(size) {
+public class UiText internal constructor(size: Size2i, text: String) : UiElement(size) {
+    public var text: String = text
+        set(value) { val changed = field != value; field = value; if (changed) invalidate() }
     public var color: Int = Colors.WHITE
+        set(value) { if (field != value) { field = value; invalidate() } }
     public var scale: Int = 1
+        set(value) { if (field != value) { field = value; invalidate() } }
 
     internal override fun draw(canvas: CanvasScope) {
         canvas.text(0, 0, text, color, scale)
@@ -52,8 +73,11 @@ public class UiText internal constructor(size: Size2i, public var text: String) 
 }
 
 /** A disabled button still blocks clicks. Registering or drawing a button never invokes [onClick]. */
-public class UiButton internal constructor(size: Size2i, public var label: String) : UiElement(size) {
+public class UiButton internal constructor(size: Size2i, label: String) : UiElement(size) {
+    public var label: String = label
+        set(value) { val changed = field != value; field = value; if (changed) invalidate() }
     public var enabled: Boolean = true
+        set(value) { if (field != value) { field = value; invalidate() } }
     public var onClick: (() -> Unit)? = null
 
     internal override fun pointer(event: DisplayPointerEvent) {
@@ -65,8 +89,11 @@ public class UiButton internal constructor(size: Size2i, public var label: Strin
     }
 }
 
-public class UiIndicator internal constructor(size: Size2i, public var label: String) : UiElement(size) {
+public class UiIndicator internal constructor(size: Size2i, label: String) : UiElement(size) {
+    public var label: String = label
+        set(value) { val changed = field != value; field = value; if (changed) invalidate() }
     public var color: Int = Colors.GREEN
+        set(value) { if (field != value) { field = value; invalidate() } }
 
     internal override fun draw(canvas: CanvasScope) {
         DisplayWidgets(canvas).indicator(Rect2i(Vector2i(0, 0), size), label, color)
@@ -75,9 +102,13 @@ public class UiIndicator internal constructor(size: Size2i, public var label: St
 
 public class UiGauge internal constructor(size: Size2i) : UiElement(size) {
     public var value: Float = Float.NaN
+        set(value) { val changed = field != value && !(field != field && value != value); field = value; if (changed) invalidate() }
     public var minimum: Float = 0f
+        set(value) { val changed = field != value && !(field != field && value != value); field = value; if (changed) invalidate() }
     public var maximum: Float = 100f
+        set(value) { val changed = field != value && !(field != field && value != value); field = value; if (changed) invalidate() }
     public var color: Int = Colors.GREEN
+        set(value) { if (field != value) { field = value; invalidate() } }
 
     internal override fun draw(canvas: CanvasScope) {
         DisplayWidgets(canvas).gauge(Rect2i(Vector2i(0, 0), size), value, minimum, maximum, color)
@@ -85,9 +116,20 @@ public class UiGauge internal constructor(size: Size2i) : UiElement(size) {
 }
 
 public class UiChart internal constructor(size: Size2i, public val history: DisplayHistory) : UiElement(size) {
+    private var historyRevision: Long = -1
+    private var drawingHistoryRevision: Long = -1
+    internal override fun damage(): Rect2i? {
+        if (historyRevision != history.revision) invalidate()
+        return super.damage()
+    }
+    internal override fun prepare() { super.prepare(); drawingHistoryRevision = history.revision }
+    internal override fun painted() { super.painted(); historyRevision = drawingHistoryRevision }
     public var minimum: Float = 0f
+        set(value) { val changed = field != value && !(field != field && value != value); field = value; if (changed) invalidate() }
     public var maximum: Float = 100f
+        set(value) { val changed = field != value && !(field != field && value != value); field = value; if (changed) invalidate() }
     public var color: Int = Colors.CYAN
+        set(value) { if (field != value) { field = value; invalidate() } }
 
     internal override fun draw(canvas: CanvasScope) {
         DisplayWidgets(canvas).chart(Rect2i(Vector2i(0, 0), size), history, minimum, maximum, color)
@@ -97,9 +139,10 @@ public class UiChart internal constructor(size: Size2i, public val history: Disp
 internal class UiHit(val element: UiElement, val position: Position2i)
 internal class UiCapture(val gesture: Int, val hit: UiHit)
 
-/** General local drawing and pointer surface. Callbacks receive positions relative to this widget. */
+/** Local drawing and pointer surface. Call invalidate after changing captured drawing state. */
 public class UiCanvas internal constructor(size: Size2i) : UiElement(size) {
     public var onDraw: (CanvasScope.() -> Unit)? = null
+        set(value) { field = value; invalidate() }
     public var onPointer: ((DisplayPointerEvent) -> Unit)? = null
 
     internal override fun draw(canvas: CanvasScope) { onDraw?.invoke(canvas) }
@@ -114,12 +157,17 @@ public class UiSlider internal constructor(size: Size2i, public val minimum: Flo
     }
 
     public var enabled: Boolean = true
+        set(value) { if (field != value) { field = value; invalidate() } }
     public var color: Int = Colors.CYAN
+        set(value) { if (field != value) { field = value; invalidate() } }
     public var onValueChange: ((Float) -> Unit)? = null
     public var value: Float = minimum
         set(value) {
             require(value >= -Float.MAX_VALUE && value <= Float.MAX_VALUE)
-            field = if (value < minimum) minimum else if (value > maximum) maximum else value
+            val next = if (value < minimum) minimum else if (value > maximum) maximum else value
+            val changed = field != next
+            field = next
+            if (changed) invalidate()
         }
 
     internal override fun pointer(event: DisplayPointerEvent) {
@@ -145,8 +193,23 @@ public class UiSlider internal constructor(size: Size2i, public val minimum: Flo
 internal class UiPlacement(val element: UiElement, val position: Position2i)
 
 internal class UiGroup(val children: List<UiPlacement>, size: Size2i) : UiElement(size) {
+    internal override fun damage(): Rect2i? {
+        var result = super.damage()
+        for (child in children) {
+            val area = child.element.damage()
+            if (area != null) result = uiUnion(result, Rect2i(uiPosition(child.position, area.position), area.size))
+        }
+        return result
+    }
+
+    internal override fun prepare() { super.prepare(); for (child in children) child.element.prepare() }
+    internal override fun painted() { super.painted(); for (child in children) child.element.painted() }
+
     internal override fun draw(canvas: CanvasScope) {
-        for (child in children) child.element.draw(canvas.child(child.position, child.element.size))
+        for (child in children) {
+            val target = canvas.child(child.position, child.element.size)
+            if (!target.isEmpty) child.element.draw(target)
+        }
     }
 
     internal override fun hit(point: Position2i, position: Position2i): UiHit? {
@@ -280,13 +343,19 @@ public class UiBuilder internal constructor(private val direction: Int, private 
     }
 }
 
-/** A reusable tree in an explicit screen viewport. The caller owns polling, clearing and frames. */
+/** A retained tree in an explicit screen viewport. The caller owns polling; render owns incremental frames. */
 public class DisplayUi internal constructor(bounds: Rect2i, private val root: UiGroup) {
     private var captures: MutableList<UiCapture> = ArrayList()
     private var dispatching: Boolean = false
+    private var renderedBounds: Rect2i? = null
+    private var renderedBackground: Int = -1
+    private var rendering: Boolean = false
+    private var renderedDisplay: GraphicalDisplay? = null
+    private var invalidation: Long = 1
+    private var paintedInvalidation: Long = 0
     public var bounds: Rect2i = bounds
         set(value) {
-            if (value != field) cancelInput()
+            if (value != field) { cancelInput(); invalidate() }
             field = value
         }
     public val size: Size2i get() = bounds.size
@@ -357,6 +426,54 @@ public class DisplayUi internal constructor(bounds: Rect2i, private val root: Ui
         } finally { dispatching = previousDispatching }
     }
 
+    /** True until the first successful render, or after visible widget/state changes. */
+    public val needsRedraw: Boolean get() = paintedInvalidation != invalidation || renderedBounds != bounds || root.damage() != null
+
+    public fun invalidate() { invalidation++ }
+
+    /**
+     * Repaint only the damaged region, including overlapping widgets in their original order.
+     * Owns the background in [bounds]. An unchanged UI makes no display calls and opens no frame.
+     * Custom animations call their widget's invalidate(); failures leave damage pending for retry.
+     * Use draw() instead when the caller owns a larger composition and its frame lifecycle.
+     */
+    public fun render(display: GraphicalDisplay, background: Int = 0x000000): Boolean {
+        if (rendering) throw IllegalStateException("Recursive UI rendering")
+        require(background in 0..0xFFFFFF)
+        val full = paintedInvalidation != invalidation || renderedBounds != bounds || renderedBackground != background || renderedDisplay != display
+        val localDamage = root.damage()
+        if (!full && localDamage == null) return false
+        val targetBounds = bounds
+        val oldBounds = if (renderedDisplay == display) renderedBounds else null
+        val area = if (full) targetBounds else Rect2i(uiGlobal(targetBounds.position, localDamage!!.position), localDamage.size).intersection(targetBounds)
+        val version = invalidation
+        root.prepare()
+        rendering = true
+        try {
+            val changed = !area.isEmpty || (oldBounds != null && oldBounds != targetBounds && !oldBounds.isEmpty)
+            if (changed) {
+                display.beginFrame()
+                val frame = display.recorder()
+                var completed = false
+                try {
+                    if (oldBounds != null && oldBounds != targetBounds) frame.fillRect(oldBounds, background)
+                    if (!area.isEmpty) {
+                        frame.fillRect(area, background)
+                        root.draw(CanvasScope(frame, targetBounds, area))
+                    }
+                    display.publishFrame(frame)
+                    completed = true
+                } finally { display.closeFrame(frame, completed) }
+            }
+            root.painted()
+            renderedBounds = targetBounds
+            renderedBackground = background
+            renderedDisplay = display
+            paintedInvalidation = version
+            return changed
+        } finally { rendering = false }
+    }
+
     /** Clipped drawing in [bounds]; does not clear, publish a frame or invoke input handlers. */
     public fun draw(display: DisplayFrame) { root.draw(display.canvas(bounds)) }
 
@@ -382,3 +499,20 @@ private fun uiExtent(value: Long): Int {
 
 private fun uiPosition(parent: Position2i, child: Position2i): Position2i =
     Vector2i(uiExtent(parent.x.toLong() + child.x), uiExtent(parent.y.toLong() + child.y))
+
+private fun uiUnion(first: Rect2i?, second: Rect2i): Rect2i {
+    if (first == null || first.isEmpty) return second
+    if (second.isEmpty) return first
+    val left = if (first.left < second.left) first.left else second.left
+    val top = if (first.top < second.top) first.top else second.top
+    val right = if (first.right > second.right) first.right else second.right
+    val bottom = if (first.bottom > second.bottom) first.bottom else second.bottom
+    return Rect2i(Vector2i(left, top), Vector2i(right - left, bottom - top))
+}
+
+private fun uiGlobal(origin: Position2i, local: Position2i): Position2i {
+    val x = origin.x.toLong() + local.x
+    val y = origin.y.toLong() + local.y
+    require(x >= Int.MIN_VALUE.toLong() && x <= Int.MAX_VALUE.toLong() && y >= Int.MIN_VALUE.toLong() && y <= Int.MAX_VALUE.toLong())
+    return Vector2i(x.toInt(), y.toInt())
+}

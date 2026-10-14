@@ -251,7 +251,31 @@ internal object GraphicalDisplayGameTestScenario {
                 helper.assertTrue(other.displayColor(36, 18) == 0x654321, "pointer lifecycle did not traverse the Guest binding")
                 helper.assertTrue(display.displayColor(14, 6) == 0x00FF00, "local canvas RGB image did not use its viewport offset")
                 helper.assertTrue(display.displayColor(24, 4) == 0x101820, "canvas drawing escaped its viewport")
-            }.thenExecute {
+            }.thenIdle(2)
+            .thenExecute {
+                val fullTag = other.getUpdateTag(helper.level.registryAccess())
+                val deltaTag = (other.updatePacket as net.minecraft.network.protocol.game.ClientboundBlockEntityDataPacket).tag
+
+                fun rgb(tag: net.minecraft.nbt.CompoundTag): java.nio.ByteBuffer =
+                    com.mojang.serialization.Codec.BYTE_BUFFER
+                        .fieldOf("display_rgb")
+                        .codec()
+                        .parse(net.minecraft.nbt.NbtOps.INSTANCE, tag)
+                        .result()
+                        .orElseThrow()
+                val base =
+                    com.mojang.serialization.Codec.LONG
+                        .fieldOf("display_base")
+                        .codec()
+                        .parse(net.minecraft.nbt.NbtOps.INSTANCE, deltaTag)
+                        .result()
+                        .orElseThrow()
+                helper.assertTrue(rgb(fullTag).remaining() == 16 * 16 * 3, "initial/recovery tag must contain an independent full tile")
+                helper.assertTrue(
+                    base >= 0 && rgb(deltaTag).remaining() < rgb(fullTag).remaining(),
+                    "small Guest pixel changes were sent as a full tile",
+                )
+                helper.assertTrue(other.snapshotPacket() != null, "bounded full-snapshot recovery did not produce a packet")
                 helper.assertTrue(display.screenMode() == 0, "applied ultra-low mode was not retained")
                 helper.assertTrue(
                     display.displayColor(2, 2) == 0xFF0000 && display.displayColor(3, 2) == 0x0000FF,

@@ -66,6 +66,7 @@ class CompuktersMod(
         eventBus.addListener(TerminalNetwork::register)
         eventBus.addListener(IdeTargetNetwork::register)
         eventBus.addListener(ru.lazyhat.compukters.impl.display.DisplayPointerNetwork::register)
+        eventBus.addListener(ru.lazyhat.compukters.impl.display.DisplaySnapshotNetwork::register)
         eventBus.addListener(PeripheralConfiguratorNetwork::register)
         if (FMLEnvironment.dist == Dist.CLIENT) {
             IdeClientBootstrap.register(eventBus)

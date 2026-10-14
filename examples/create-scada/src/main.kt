@@ -210,10 +210,7 @@ fun runDashboard(iterations: Int = -1) {
             alarm.label = "ALARM: COMMAND FAILED"
             alarm.color = Colors.RED
         }
-        if (dirty) screen.frame {
-            clear(0x101820)
-            ui.draw(this)
-        }
+        if (dirty) ui.render(screen, 0x101820)
         tick++
         Tasks.sleepTicks(1)
     }

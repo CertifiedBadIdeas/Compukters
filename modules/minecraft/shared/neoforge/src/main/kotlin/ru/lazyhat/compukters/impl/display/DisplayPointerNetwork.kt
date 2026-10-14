@@ -68,11 +68,19 @@ object DisplayPointerNetwork {
 
     fun register(event: RegisterPayloadHandlersEvent) {
         event.registrar("1").playToServer(DisplayPointerHeldPayload.TYPE, DisplayPointerHeldPayload.STREAM_CODEC) { payload, context ->
+            ru.lazyhat.compukters.core.display.DisplayPerformanceTrace.begin("input.network")?.apply {
+                held = payload.held
+                commit()
+            }
             context.enqueueWork {
                 val player = context.player() as? ServerPlayer ?: return@enqueueWork
                 val server = player.compuktersServer()
                 val controller = controllers.getOrPut(server) { DisplayPointerController() }
                 val tick = server.tickCount.toLong()
+                ru.lazyhat.compukters.core.display.DisplayPerformanceTrace.begin("input.server")?.apply {
+                    held = payload.held
+                    commit()
+                }
                 if (payload.cancelled) {
                     controller.cancel(player.uuid, tick, payload.held)
                 } else {

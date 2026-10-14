@@ -139,9 +139,67 @@ fun main() {
     repeat(50) { renderDashboard(scada, screen) }
     repeat(96) { history.add((it - 48).toFloat()) }
     repeat(2) { renderDashboard(scada, screen) }
+    verifyIncremental(screen)
     println("display ui ok")
 }
 
 fun renderDashboard(ui: DisplayUi, screen: GraphicalDisplay) {
     screen.frame { ui.draw(this) }
+}
+
+fun verifyIncremental(screen: GraphicalDisplay) {
+    val label: UiText
+    val custom: UiCanvas
+    val control: UiSlider
+    val hidden: UiText
+    val chart: UiChart
+    val history = DisplayHistory(8)
+    var customDraws = 0
+    val ui = displayUi(Rect2i(200 xy 20, 100 by 100)) {
+        label = text("LONG LABEL", 80 by 12)
+        at(0 xy 20) { custom = canvas(20 by 20) { onDraw = { customDraws++; clear(0x123456) } } }
+        at(0 xy 45) { control = slider(80 by 10) }
+        at(0 xy 60) { chart = chart(80 by 20, history) }
+        at(0 xy 120) { hidden = text("hidden", 80 by 10) }
+    }
+    check(ui.needsRedraw)
+    check(ui.render(screen))
+    check(!ui.needsRedraw && customDraws == 1)
+    println("display idle begin")
+    repeat(50) { check(!ui.render(screen)) }
+    println("display idle end")
+    label.text = "LONG LABEL"
+    chart.minimum = 0f
+    chart.minimum = -0f
+    check(1f / chart.minimum < 0f) // Equal-looking values still retain assignment semantics.
+    check(!ui.render(screen))
+    label.text = "A"
+    check(ui.render(screen) && customDraws == 1)
+    history.add(50f)
+    check(ui.needsRedraw && ui.render(screen) && customDraws == 1)
+    custom.invalidate(Rect2i(2 xy 3, 4 by 5))
+    check(ui.render(screen) && customDraws == 2)
+    control.value = 0.5f
+    check(ui.render(screen) && customDraws == 2)
+    hidden.text = "changed outside viewport"
+    check(!ui.render(screen) && !ui.needsRedraw)
+    ui.invalidate()
+    check(ui.render(screen) && customDraws == 3)
+    var fail = true
+    custom.onDraw = { if (fail) error("drawing failed"); customDraws++ }
+    try { ui.render(screen); error("drawing must fail") }
+    catch (error: IllegalStateException) { check(error.message == "drawing failed") }
+    check(ui.needsRedraw)
+    fail = false
+    check(ui.render(screen) && customDraws == 4)
+    custom.onDraw = { customDraws++; custom.invalidate() }
+    check(ui.render(screen) && ui.needsRedraw)
+    custom.onDraw = { customDraws++ }
+    check(ui.render(screen) && !ui.needsRedraw)
+    ui.bounds = Rect2i(210 xy 20, 100 by 100)
+    check(ui.render(screen) && !ui.render(screen))
+    val empty = displayUi(Rect2i(0 xy 0, 0 by 0)) {}
+    check(!empty.render(screen))
+    empty.bounds = Rect2i(0 xy 0, 1 by 1)
+    check(empty.render(screen) && !empty.render(screen))
 }

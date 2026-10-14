@@ -16,9 +16,12 @@ public class DisplayHistory(
     private var next: Int = 0
     private var count: Int = 0
     public val size: Int get() = count
+    internal var revision: Long = 0
+        private set
 
     public fun add(value: Float) {
         values[next] = if (finite(value)) value else Float.NaN
+        revision++
         next = (next + 1) % capacity
         if (count < capacity) count++
     }

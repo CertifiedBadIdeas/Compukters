@@ -521,8 +521,8 @@ extents, and resizing the viewport clips content rather than rebuilding/reflowin
 properties. Construction blocks on `displayUi`, `row`, `column` and `at` have `EXACTLY_ONCE`
 contracts, so nested blocks can initialize non-null local `val` references. Optional nullable widget
 configuration blocks have no definite-initialization guarantee; assign the returned widget instead.
-Deferred input/drawing handlers have no calls-in-place contract. There is no dependency tracking,
-recomposition, polling or background scheduler.
+Deferred input/drawing handlers have no calls-in-place contract. Visual property setters and chart history
+updates invalidate their widget. There is no recomposition, polling or background scheduler.
 
 ```kotlin
 val rotation: UiSlider
@@ -541,8 +541,17 @@ val ui = displayUi(Rect2i(12 xy 12, 168 by 160)) {
 // In the program's update loop:
 ui.dispatch(screen.pollPointer())
 val angle = rotation.value // Non-null reference initialized during construction.
-screen.frame { clear(Colors.BLACK); ui.draw(this) }
+ui.render(screen, Colors.BLACK) // No frame or host calls while unchanged.
 ```
+
+`render(screen, background)` owns the UI viewport and opens a frame only when pixels need repainting.
+It clears the damaged rectangle, then repaints intersecting widgets in their original order, including overlays.
+Equal property assignments do not invalidate; chart history changes do. `UiElement.invalidate()` or
+`invalidate(localBounds)` requests repaint for state captured by custom drawing; an animation must call it
+explicitly. `ui.invalidate()` repaints the whole viewport after external drawing or a mode change. Changing
+bounds clears the previous viewport; rendering to a different display paints the entire new viewport. Use one
+render target per retained tree. Rendering failures retain damage for retry, and invalidation during drawing
+remains pending for the next pass. The caller still owns input polling and scheduling.
 
 `draw()` never invokes input handlers or publishes a frame. `CanvasScope` supplies local `pixel`, `line`,
 `fillRect`, `rect`, `text` and `image` drawing, with clipping to nested viewports; it is also available from
@@ -572,7 +581,9 @@ reconnecting controls as the SCADA example does.
 Evidence: `testKotlinDisplayUiVmConformance` executes layout, viewport boundaries, overlays, disabled/passive
 blocking, capture, local coordinates, cancellation and callback failures. It also records raster host calls
 for nested enabled/disabled buttons and 50 framed drawing passes of a SCADA-shaped layout with telemetry
-widgets, called through a separate dashboard function to exercise its library-call depth.
+widgets, called through a separate dashboard function to exercise its library-call depth. Incremental cases
+cover fifty idle passes without a frame, equal and off-screen updates, shorter text erasure, chart revision,
+custom subregions, slider changes, failure/retry, invalidation during drawing and viewport movement.
 `DisplayPointerTest` covers queue
 limits/coalescing, independent players, release/re-entry, expiry and clipping. `DisplayHostStateTest` checks
 capability revisions, little-endian input and clipped drawing. The graphical display GameTest exercises

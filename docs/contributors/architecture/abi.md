@@ -940,6 +940,30 @@ an external component mode requires an explicit contract extension. This invento
 worker protocols or the packaged tooling manifest. See [release publication](../releases.md) and the
 [transfer contract](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/tools/release/README.md).
 
+### Incremental display rendering and world synchronization
+
+`compukter:core` 9.2.0 adds retained `DisplayUi.render` and explicit widget/UI invalidation. It uses existing
+`compukters:display` 1.4 frame/raster operations; CPKT, Runtime ABI and persisted canvas formats are unchanged.
+The public manual `draw`/`frame` lifecycle stays available. Platform content identity changes with these sources.
+
+Minecraft display image wire format 1 uses the existing block-entity update channel with `display_wire=1`.
+Initial chunk tags and recovery packets always contain full tight RGB tiles. Incremental packets add
+`display_base`, `display_x/y/width/height`; base -1 denotes a full tile, otherwise it names the exact previous
+surface publication. Width/height zero with empty bytes acknowledges an unchanged tile. Coordinates and byte
+counts are validated against the selected density. Mode/membership changes force full tiles. Each tile also
+carries surface identity, publication sequence and the complete bounded panel membership; a client commits only
+when all loaded members have the same publication. Pending patches can compose before rendering. Unchanged
+panels advance publication without a texture upload. Pixel-identical surfaces do not publish another revision.
+
+A missing or incompatible base keeps the old image and schedules `compukters:display_snapshot` (payload version
+1, packed BlockPos Long) at most once per panel per 20 client ticks while rendered. The logical server accepts
+at most 64 requests/player/tick for loaded display blocks within 64 blocks, charges the ordinary world sync
+budget and sends a full current snapshot. Requests never load chunks or accept client pixel data. Recovery
+state and publication caches are transient. Old full RGB tags remain readable; patch producers and consumers
+must run matching mod code. This is a Minecraft transport change, not a Guest capability version change.
+
+Evidence: `DisplayClientImageTest`, `testKotlinDisplayUiVmConformance`, `GraphicalDisplayGameTestScenario`.
+
 ### Interactive display input
 
 Display capability 1.2 preserves operations 0–16 and appends operation 17, `pollClick(handle: I32): BYTE_ARRAY`.

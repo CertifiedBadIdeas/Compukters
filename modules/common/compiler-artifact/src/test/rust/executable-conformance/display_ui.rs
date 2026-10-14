@@ -63,6 +63,9 @@ pub(super) fn execute() {
     let mut frame_start = None;
     let mut frames = Vec::new();
     let mut open_frame = false;
+    let mut idle_start = None;
+    let mut idle_requests = 0;
+    let mut idle_measured = false;
     for _ in 0..10000 {
         match session.advance(1024, 64).unwrap() {
             AdvanceOutcome::SliceExhausted => {}
@@ -72,19 +75,24 @@ pub(super) fn execute() {
                 let args = request.arguments();
                 let mut response = HostValueInput::Unit;
                 let mut nested_frame = false;
+                let mut idle_marker = 0;
                 if request.name() == "peripheral" {
                     assert_eq!(request.operation(), 5);
                     response = HostValueInput::I32(7);
                 } else if request.name() == "stdio" {
                     assert_eq!(request.operation(), 1);
-                    assert_eq!(
-                        args.get(0),
-                        Some(HostValueView::String(&utf16("display ui ok\n")))
-                    );
-                    assert!(!printed);
-                    printed = true;
+                    if args.get(0) == Some(HostValueView::String(&utf16("display idle begin\n"))) {
+                        idle_marker = 1;
+                    } else if args.get(0) == Some(HostValueView::String(&utf16("display idle end\n"))) {
+                        idle_marker = 2;
+                    } else {
+                        assert_eq!(args.get(0), Some(HostValueView::String(&utf16("display ui ok\n"))));
+                        assert!(!printed);
+                        printed = true;
+                    }
                 } else {
                     assert_eq!(request.name(), "display");
+                    if idle_start.is_some() { idle_requests += 1; }
                     assert_eq!(args.get(0), Some(HostValueView::I32(7)));
                     match request.operation() {
                         14 => { nested_frame = open_frame; if !nested_frame { open_frame = true; } }
@@ -108,6 +116,18 @@ pub(super) fn execute() {
                 let id = request.id();
                 let operation = request.operation();
                 let is_display = request.name() == "display";
+                if idle_marker == 1 {
+                    assert!(idle_start.is_none());
+                    idle_start = Some(session.accounting());
+                } else if idle_marker == 2 {
+                    let before = idle_start.take().unwrap();
+                    assert_eq!(idle_requests, 0, "idle rendering must make no display requests");
+                    let after = session.accounting();
+                    println!("50 idle UI passes: display_requests=0, fixed Guest units={}, dynamic Guest units={}",
+                        after.fixed_guest_units - before.fixed_guest_units,
+                        after.dynamic_guest_units - before.dynamic_guest_units);
+                    idle_measured = true;
+                }
                 if is_display && operation == 14 && !nested_frame { frame_start = Some(session.accounting()); }
                 if is_display && operation == 15 {
                     let before = frame_start.take().unwrap();
@@ -125,7 +145,7 @@ pub(super) fn execute() {
                 session.uncaught_exception_diagnostic(&verified).unwrap()
             ),
             AdvanceOutcome::Halted(None) => {
-                assert!(printed);
+                assert!(printed && idle_measured);
                 assert_eq!(fills.first(), Some(&vec![7, 100, 50, 10, 10, 0x284C68]));
                 assert!(fills.contains(&vec![7, 100, 90, 10, 10, 0x30363C]));
                 assert_eq!(
@@ -135,7 +155,11 @@ pub(super) fn execute() {
                         .count(),
                     52
                 );
-                assert_eq!(frames.len(), 53);
+                // 53 explicit compatibility frames, then 11 successful incremental renders.
+                // Fifty idle passes and all equal/offscreen updates must open no frame.
+                assert_eq!(frames.len(), 64);
+                assert!(fills.contains(&vec![7, 200, 20, 80, 12, 0x000000]), "shorter text must erase its old region");
+                assert!(fills.contains(&vec![7, 202, 43, 4, 5, 0x000000]), "custom invalidation must retain its tight clip");
                 assert_eq!(frames[1].0, frames[50].0);
                 assert!(frames[50].0 <= 3 && frames[52].0 <= 4, "drawing regressed to scalar round trips");
                 println!("SCADA frame (requests, fixed Guest units, dynamic Guest units): empty={:?}, full={:?}", frames[50], frames[52]);
