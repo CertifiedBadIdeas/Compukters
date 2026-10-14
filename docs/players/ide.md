@@ -90,6 +90,15 @@ Each duplication is one undo step with **Ctrl+Z** and can be restored with **Ctr
 selection follow the moved text; a selection ending at the next line's start does not include that next line.
 Moving beyond the beginning or end of the file has no effect. Each move is one undo step.
 
+In Kotlin files, **Enter** retains the current indentation and adds one indentation level after an opening brace.
+Between empty braces it creates an indented blank line and moves the closing brace to its own line.
+**Tab/Shift+Tab** indents/outdents all selected lines; a selection ending at the next line's start excludes that line.
+**Ctrl+V** rebases a multiline code fragment's common indentation to the insertion line, preserving nested indentation
+and using the document's line endings. The existing prefix before the caret supplies the first line's indentation.
+Paste inside strings/comments, fragments containing raw strings, and plain text files remain literal.
+Each paste or block indentation is one undo step.
+
+
 Opening project files adds tabs above the editor. Click a tab to switch files while retaining its edits, caret,
 selection, scrolling and undo history. The active tab has a colored underline. A **•** marks unsaved changes;
 **!** marks a save conflict.

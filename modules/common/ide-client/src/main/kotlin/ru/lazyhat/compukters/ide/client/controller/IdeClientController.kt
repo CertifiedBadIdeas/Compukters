@@ -1384,6 +1384,10 @@ class IdeClientController(
                     if (active.path.isKotlinSource) active.smartTyping.type(input.text) else active.document.type(input.text)
                 }
 
+                is IdeEditorInput.Paste -> {
+                    if (active.path.isKotlinSource) active.smartTyping.paste(input.text) else active.document.paste(input.text)
+                }
+
                 is IdeEditorInput.SetCaret -> {
                     active.document.setCaret(input.offsetUtf16, input.extendSelection)
                     null

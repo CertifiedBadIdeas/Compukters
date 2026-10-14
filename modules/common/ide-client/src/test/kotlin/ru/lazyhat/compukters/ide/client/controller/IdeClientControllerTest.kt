@@ -1370,6 +1370,24 @@ class IdeClientControllerTest {
     }
 
     @Test
+    fun `clipboard paste uses Kotlin indentation and plain files remain literal`() {
+        for (path in listOf("src/main.kt", "notes.txt")) {
+            val fixture = ControllerFixture(preferences = preferences("demo", path))
+            fixture.startAndTick()
+            fixture.controller.dispatch(IdeCommand.Edit(IdeEditorInput.SelectAll))
+            fixture.controller.dispatch(IdeCommand.Edit(IdeEditorInput.Type("    ")))
+            fixture.controller.dispatch(IdeCommand.Edit(IdeEditorInput.Paste("  first\n    second")))
+            val expected = if (path.endsWith(".kt")) "    first\n      second" else "      first\n    second"
+            assertEquals(expected, fixture.textEditor().visibleLines.joinToString("\n"))
+            assertTrue(fixture.textEditor().dirty)
+            fixture.controller.dispatch(IdeCommand.Edit(IdeEditorInput.Undo))
+            assertEquals("    ", fixture.textEditor().visibleLines.joinToString("\n"))
+            assertEquals(4, fixture.textEditor().caretUtf16)
+            fixture.controller.close()
+        }
+    }
+
+    @Test
     fun `save completion marks only submitted editor revision`() {
         val fixture = ControllerFixture(preferences = preferences("demo", "src/main.kt"))
         fixture.startAndTick()
