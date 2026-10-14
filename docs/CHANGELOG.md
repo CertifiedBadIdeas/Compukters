@@ -39,8 +39,9 @@ headings so this page has one stable URL that can be shared outside the reposito
 
 - Added programmable Create pumps with persistent remotely reversible fluid flow and normally disengaged
   programmable clutches that release their load when the controlling program or peripheral connection ends.
-  The clutch has a blue casing band and Compukters controller panel with a cable socket and flat contact
-  indicator, retaining cutout rendering around its shaft openings. The pump has an unmarked copper tube and
+  The clutch has a blue casing band and flush rectangular indicators on all four sides: a green bar
+  parallel to the shaft when engaged, or a red bar across it when disengaged. It retains cutout rendering
+  around its shaft openings. The pump has an unmarked copper tube and
   compact flat displays at both ends on all four sides, each with three flow arrows and no protruding
   controller or socket.
   Its casing and displays stay stationary when flow reverses; only the arrows change.
