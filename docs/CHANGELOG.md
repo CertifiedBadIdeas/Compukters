@@ -25,8 +25,9 @@ headings so this page has one stable URL that can be shared outside the reposito
 
 - Added programmable Create pumps with persistent remotely reversible fluid flow and normally disengaged
   programmable clutches that release their load when the controlling program or peripheral connection ends.
-  Both mechanisms combine Create bodies with blue Compukters controller panels, cable sockets and visible
-  flow/contact indicators. The clutch casing retains Create's cutout rendering around its shaft openings.
+  Both mechanisms combine blue Compukters controller panels, cable sockets and flat display indicators.
+  The pump has an unmarked copper tube and keeps its casing and panel orientation when flow reverses;
+  only the display arrow changes. The clutch has a blue casing band and retains cutout rendering around its shaft openings.
   Their Guest value classes use the shared typed and named peripheral discovery; addon blocks share the Compukters creative tab.
 
 - Retained peripheral handles restore network devices by their saved instance UUID after address changes;
