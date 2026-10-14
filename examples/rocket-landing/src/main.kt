@@ -39,6 +39,7 @@ fun main() {
         require(hover > 0.0 && hover <= saved.maxThrustKn / 1.2) { "Calibrate hover with at least 20% thrust reserve" }
         val maximum = if (hover <= saved.maxThrustKn / 2.0) hover * 2.0 else saved.maxThrustKn
         var state = FlightState(FlightPhase.ASCENT, 0.0, 0.0)
+        var previousPosition = first.position
         var previousTick = first.gameTick
         var lastReport = previousTick
         println("PAD reference Y ${first.position.y}; climb $CLIMB_HEIGHT m; hover $hover kN")
@@ -52,23 +53,28 @@ fun main() {
             require(elapsed >= 0L && elapsed <= 10L) { "Stale flight feedback" }
             require(current.gameTick - first.gameTick <= (MAX_FLIGHT_SECONDS * 20.0).toLong()) { "Flight timeout" }
             if (elapsed == 0L) continue
+            val dt = elapsed.toDouble() / 20.0
+            val positionVelocity = (current.position - previousPosition) / dt
+            previousPosition = current.position
             previousTick = current.gameTick
             val offset = current.position - first.position
             val lateral = Vector3d(offset.x, 0.0, offset.z).length
             require(lateral <= MAX_DRIFT) { "Outside pad corridor; horizontal navigation unavailable" }
+            val horizontalSpeed = Vector3d(current.linearVelocity.x, 0.0, current.linearVelocity.z).length
             val command =
                 flightCommand(
                     state,
                     offset.y,
                     current.linearVelocity.y,
-                    Vector3d(current.linearVelocity.x, 0.0, current.linearVelocity.z).length,
+                    horizontalSpeed,
+                    positionVelocity,
                     current.orientation,
                     current.angularVelocity,
                     CLIMB_HEIGHT,
                     HOLD_SECONDS,
                     hover,
                     maximum,
-                    elapsed.toDouble() / 20.0,
+                    dt,
                 )
             val changed = command.state.phase != state.phase
             state = command.state
@@ -82,8 +88,13 @@ fun main() {
             engine.setThrottle(1.0)
             if (changed || current.gameTick - lastReport >= 20L) {
                 println(
-                    "${state.phase}: height ${offset.y} m; speed ${current.linearVelocity.y}/${command.targetSpeed} m/s; ${command.thrustKn} kN; drift $lateral m",
+                    "${state.phase.name}: height ${offset.y} m; speed ${current.linearVelocity.y}/${command.targetSpeed} m/s; ${command.thrustKn} kN; drift $lateral m",
                 )
+                if (state.phase == FlightPhase.DESCENT) {
+                    println(
+                        "Landing: pose speed ${positionVelocity.length} m/s; angular ${current.angularVelocity.length} rad/s; settled ${state.settledSeconds}/2.0 s",
+                    )
+                }
                 lastReport = current.gameTick
             }
         }

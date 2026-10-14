@@ -33,6 +33,7 @@ fun flightCommand(
     height: Double,
     verticalSpeed: Double,
     horizontalSpeed: Double,
+    positionVelocity: Vector3d,
     orientation: Rotation3d,
     worldAngularVelocity: Vector3d,
     climbHeight: Double,
@@ -44,6 +45,7 @@ fun flightCommand(
     require(height >= -0.5 && height <= climbHeight + 10.0) { "Outside vertical flight envelope" }
     require(climbHeight >= 5.0 && climbHeight <= 100.0 && holdSeconds >= 1.0 && holdSeconds <= 30.0)
     require(verticalSpeed >= -20.0 && verticalSpeed <= 20.0 && horizontalSpeed >= 0.0 && horizontalSpeed <= 2.0)
+    require(positionVelocity.length <= 20.0) { "Invalid observed position motion" }
     require(hoverKn > 0.0 && hoverKn <= maxKn && maxKn <= Double.MAX_VALUE)
     require(dt > 0.0 && dt <= 0.5 && state.settledSeconds >= 0.0 && state.settledSeconds <= 60.0)
     require(state.integral >= -9.81 && state.integral <= 9.81)
@@ -72,9 +74,16 @@ fun flightCommand(
             settled = 0.0
         }
     } else if (phase == FlightPhase.DESCENT) {
-        // Still request downward motion until stopped near the known pad; hovering high cannot complete.
+        // Use measured pose displacement for settling; solver velocity can differ near contact.
+        // Continue requesting descent until a sustained stop near the known pad reference.
         settled =
-            if (abs(height) <= 0.15 && abs(verticalSpeed) <= 0.1 && horizontalSpeed <= 0.1 && rate.length <= 0.1) settled + dt else 0.0
+            if (abs(height) <= 0.25 && abs(positionVelocity.y) <= 0.05 &&
+                Vector3d(positionVelocity.x, 0.0, positionVelocity.z).length <= 0.05 && rate.length <= 0.1
+            ) {
+                settled + dt
+            } else {
+                0.0
+            }
         if (settled >= 2.0) phase = FlightPhase.COMPLETE
     }
     if (phase == FlightPhase.COMPLETE) return FlightCommand(FlightState(phase, settled, 0.0), 0.0, 0.0, 0.0, 0.0)
