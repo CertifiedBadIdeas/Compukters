@@ -237,6 +237,37 @@ class IdeClientController(
     private var latestCompletionOperation = 0L
     private var activeBuild: IdeBuildJob? = null
     private val buildJobs = mutableMapOf<Long, IdeBuildJob>()
+    private var peripheralObservationTarget: ru.lazyhat.compukters.ide.client.target.IdeAttachedTarget? = null
+    private var peripheralObservations: List<ru.lazyhat.compukters.ide.analysis.PeripheralObservation>? = null
+    private var peripheralObservationComplete = false
+
+    fun observePeripherals(
+        target: ru.lazyhat.compukters.ide.client.target.IdeAttachedTarget?,
+        observations: List<ru.lazyhat.compukters.ide.analysis.PeripheralObservation>?,
+        complete: Boolean = false,
+    ) {
+        if (isClosed()) return
+        require(observations == null || observations.size <= 1024)
+        peripheralObservationTarget = target
+        peripheralObservations = observations?.toList()
+        peripheralObservationComplete = complete
+        publishWorkspace()
+    }
+
+    private fun networkDiagnostics(): List<ru.lazyhat.compukters.ide.analysis.EditorDiagnostic> {
+        val target = targetCoordinator?.attachedTarget() ?: return emptyList()
+        if (target != peripheralObservationTarget) return emptyList()
+        val observations = peripheralObservations ?: return emptyList()
+        val active = editor ?: return emptyList()
+        val state = observedAnalysisState as? IdeAnalysisState.Active ?: return emptyList()
+        if (state.documentRevision != active.document.revision || state.path.value != active.path.value) return emptyList()
+        return ru.lazyhat.compukters.ide.analysis.PeripheralDiagnostics.collect(
+            state.presentation.peripheralLookups,
+            observations,
+            peripheralObservationComplete,
+        )
+    }
+
     private var observedAnalysisState: IdeAnalysisState = IdeAnalysisState.Idle
     private val targetBuildActions = mutableMapOf<Long, PendingBuildAction>()
     private val computerFiles = targetCoordinator?.let { IdeComputerFileCoordinator(it, limits.eventQueueCapacity) }
@@ -3560,7 +3591,7 @@ class IdeClientController(
         val rows = mutableListOf<IdeDiagnosticRow>()
         val active = editor
         if (attachedSourcePreview == null && computerPreview == null && active != null) {
-            val values = observedAnalysisState.presentationOrNull()?.diagnostics.orEmpty()
+            val values = observedAnalysisState.presentationOrNull()?.diagnostics.orEmpty() + networkDiagnostics()
             if (values.isNotEmpty()) {
                 val text = active.document.materialize()
                 rows +=
@@ -4173,7 +4204,17 @@ class IdeClientController(
         val path = VirtualSourcePath.kotlin(active.path.value)
         return when (current) {
             is IdeAnalysisState.Active -> {
-                current.takeIf { it.path == path && it.documentRevision == active.document.revision } ?: IdeAnalysisState.Idle
+                current.takeIf { it.path == path && it.documentRevision == active.document.revision }?.let { state ->
+                    state.copy(
+                        presentation =
+                            ru.lazyhat.compukters.ide.client.analysis.IdeAnalysisPresentation.of(
+                                state.presentation.diagnostics + networkDiagnostics(),
+                                state.presentation.semanticTokens,
+                                state.presentation.methodUsages,
+                                state.presentation.peripheralLookups,
+                            ),
+                    )
+                } ?: IdeAnalysisState.Idle
             }
 
             is IdeAnalysisState.Loading -> {

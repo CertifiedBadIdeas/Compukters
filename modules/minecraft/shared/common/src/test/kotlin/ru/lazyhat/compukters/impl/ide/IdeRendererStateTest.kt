@@ -244,6 +244,33 @@ class IdeRendererStateTest {
         )
     }
 
+    @Test
+    fun `informational peripheral diagnostics have hover targets without waves`() {
+        val source = "val screen = Screen.namedOrNull(\"screen\")"
+        val path = VirtualSourcePath.kotlin("src/main.kt")
+        val start = source.indexOf("\"screen\"")
+        val row =
+            IdeDiagnosticRow(
+                EditorDiagnostic(
+                    EditorDiagnosticSeverity.Info,
+                    "Peripheral is unavailable",
+                    path,
+                    EditorRange(start, start + 8),
+                    ru.lazyhat.compukters.ide.analysis.EditorDiagnosticHighlight.None,
+                ),
+                source,
+            )
+        val editor = semanticEditor(source) { _, _ -> IdeSemanticInteraction.None }
+        val base = workspaceState(editor, IdeBuildState.Idle)
+        val workspace = (base.page as IdePageState.Workspace).value
+        val state = base.copy(page = IdePageState.Workspace(workspace.copy(diagnostics = IdeDiagnostics(listOf(row)))))
+        val model = IdeRenderer.extract(state, geometry())
+        assertTrue(model.fills.none { it.kind == IdeFillKind.DiagnosticUnderline })
+        val hit = model.hitTargets.first { it.diagnostic == row && !it.enabled }
+        val hovered = IdeRenderer.extract(state, geometry(), pointerX = hit.bounds.left + 1, pointerY = hit.bounds.top + 1)
+        assertTrue(hovered.text.any { it.kind == IdeTextKind.Tooltip && it.value == "Peripheral is unavailable" })
+    }
+
     private fun visualColumnsForTest(value: String): Int = value.codePointCount(0, value.length)
 
     @Test

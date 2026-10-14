@@ -104,10 +104,11 @@ internal class NeoForgeIdeTargetResolver(
                         requested,
                     )
                 },
-                namedPeripherals = {
+                namedPeripherals = { includeUnavailable ->
                     ru.lazyhat.compukters.minecraft.peripheral.IdePeripheralDiscovery.snapshot(
                         serverPlayer.level() as net.minecraft.server.level.ServerLevel,
                         position,
+                        includeUnavailable,
                     )
                 },
                 fileSystem =

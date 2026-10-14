@@ -13,6 +13,10 @@ headings so this page has one stable URL that can be shared outside the reposito
 
 ## 0.6.0 — In development
 
+- IDE checks constant named peripheral lookups against the attached computer’s current network, with warnings
+  for mandatory searches and informational hover/Problems entries for optional searches. Network observations
+  refresh independently of Devices and explain unavailable devices without blocking compilation.
+
 - Configurator outlines on Sable constructions transform block coordinates into the world before applying
   the camera offset, preserving their placement and rotation while the player moves.
 

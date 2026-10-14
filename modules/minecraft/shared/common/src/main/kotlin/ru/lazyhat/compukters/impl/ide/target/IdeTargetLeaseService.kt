@@ -57,7 +57,7 @@ data class IdeResolvedTarget(
     val deployment: IdeTargetDeploymentOperations,
     val terminal: IdeTargetTerminalOperations? = null,
     val fileSystem: IdeTargetFileSystemOperations? = null,
-    val namedPeripherals: (() -> IdeTargetReply.NamedPeripherals)? = null,
+    val namedPeripherals: ((Boolean) -> IdeTargetReply.NamedPeripherals)? = null,
     val renamePeripheral: ((IdePeripheralReference, String, String) -> IdeTargetReply)? = null,
 ) {
     init {

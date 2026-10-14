@@ -90,6 +90,7 @@ internal class IdeScreen(
                 override fun closeSession() = session.close()
             },
             peripheralRequest = ru.lazyhat.compukters.impl.ide.target.IdeTargetClientNetwork::namedPeripherals,
+            peripheralInspection = ru.lazyhat.compukters.impl.ide.target.IdeTargetClientNetwork::inspectPeripherals,
             peripheralRename = ru.lazyhat.compukters.impl.ide.target.IdeTargetClientNetwork::renamePeripheral,
         )
 
