@@ -83,6 +83,10 @@ The picker shows up to 100 results; type more of the name or path to narrow a la
 Use **Up/Down** or **Page Up/Down** to select, **Enter** or a double click to open, and **Esc** to cancel.
 The query supports the same selection, clipboard and undo actions as dialog fields.
 
+In the source editor, **Ctrl+D** duplicates the current line below and moves the caret to its copy. With a selection,
+it duplicates exactly the selected text immediately after it and selects the copy; press Ctrl+D again to repeat.
+Each duplication is one undo step with **Ctrl+Z** and can be restored with **Ctrl+Shift+Z** or **Ctrl+Y**.
+
 Opening project files adds tabs above the editor. Click a tab to switch files while retaining its edits, caret,
 selection, scrolling and undo history. The active tab has a colored underline. A **•** marks unsaved changes;
 **!** marks a save conflict.
