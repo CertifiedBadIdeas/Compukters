@@ -1539,11 +1539,13 @@ internal object KotlinProjectLowering {
         session: CompilationSession,
         includeTrustedPlatformBodies: Boolean = false,
     ): Artifact {
-        val bridgeClasses = (classes + CollectionValueBridges.protocolClasses(pluginContext)).distinctBy { it.symbol }
+        val protocolClasses = CollectionValueBridges.protocolClasses(pluginContext, classes)
+        val bridgeClasses = (classes + protocolClasses).distinctBy { it.symbol }
+        val protocolMethods = protocolClasses.flatMap { it.declarations.filterIsInstance<IrSimpleFunction>() }
         val valueBridges = CollectionValueBridges.lower(bridgeClasses, functions, pluginContext)
         val enumEntries = GuestEnumEntries.lower(classes, pluginContext)
         return lowerPrepared(
-            functions + valueBridges + enumEntries.functions,
+            functions + valueBridges + protocolMethods + enumEntries.functions,
             properties,
             bridgeClasses + enumEntries.classes,
             entry,

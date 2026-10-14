@@ -44,8 +44,39 @@ internal object CollectionValueBridges {
 
     val protocolNames: Set<String> = protocols.mapTo(linkedSetOf()) { "kotlin.collections.$it" }
 
-    fun protocolClasses(context: IrPluginContext): List<IrClass> =
-        protocolNames.mapNotNull { context.referenceClass(ClassId.topLevel(FqName(it)))?.owner }
+    fun protocolClasses(
+        context: IrPluginContext,
+        classes: List<IrClass>,
+    ): List<IrClass> {
+        val protocols = linkedMapOf<String, IrClass>()
+        val pending = ArrayDeque<IrClass>()
+
+        fun consider(declaration: IrClass) {
+            val name = declaration.fqNameWhenAvailable?.asString() ?: return
+            if (name in protocolNames && protocols.putIfAbsent(name, declaration) == null) pending.addLast(declaration)
+        }
+
+        fun consider(type: IrType) {
+            ((type as? IrSimpleType)?.classifier as? IrClassSymbol)?.owner?.let(::consider)
+        }
+
+        // Reused dependency IR retains its original internal protocol declarations. They may
+        // be unavailable through referenceClass in the next library's plugin context.
+        classes.forEach { owner ->
+            consider(owner)
+            owner.superTypes.forEach(::consider)
+            owner.declarations
+                .filterIsInstance<IrSimpleFunction>()
+                .filter(::isBridge)
+                .forEach { consider(it.returnType) }
+        }
+        while (pending.isNotEmpty()) {
+            val protocol = pending.removeFirst()
+            protocol.superTypes.forEach(::consider)
+            protocol.declarations.filterIsInstance<IrSimpleFunction>().forEach { consider(it.returnType) }
+        }
+        return protocolNames.mapNotNull { name -> protocols[name] ?: context.referenceClass(ClassId.topLevel(FqName(name)))?.owner }
+    }
 
     fun isBridge(function: IrSimpleFunction): Boolean = function.origin == origin
 
@@ -81,6 +112,9 @@ internal object CollectionValueBridges {
             val declaration = (simple.classifier as? IrClassSymbol)?.owner ?: return null
             if (declaration.fqNameWhenAvailable?.asString() == "kotlin.collections.$name") return simple
             if (declaration.symbol in visited) return null
+            // Local declarations may carry enclosing generic arguments in defaultType. They
+            // do not form a concrete collection specialization for this bridge probe.
+            if (simple.arguments.size != declaration.typeParameters.size) return null
             val substitution = IrTypeSubstitutor(declaration.typeParameters.map { it.symbol }, simple.arguments, true)
             return declaration.superTypes.firstNotNullOfOrNull {
                 supertype(
