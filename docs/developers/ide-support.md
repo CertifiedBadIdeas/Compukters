@@ -329,6 +329,9 @@ Ctrl+P also opens a call-anchored popup for the innermost call, lists bounded an
 overload signatures, and highlights the active positional, named, or vararg parameter. The popup follows edits
 and caret movement, wraps long signatures while keeping the active parameter visible, rejects stale snapshot results,
 and allows Ctrl+Up/Down overload selection without source edits. Selection persists while refreshing the same call.
+Typing argument identifiers still requests automatic completion, and Ctrl+Space keeps parameter hints available.
+The completion list takes rendering and keyboard priority; Escape closes that list first, revealing retained hints.
+
 The active parameter's `@param` description is resolved through the same source/attached-library lookup as hover,
 transmitted under the negotiated detail byte limit, and rendered with shared English KDoc presentation. Descriptions
 use at most six rows with an ellipsis when the available viewport cannot show the complete body. The popup

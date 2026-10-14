@@ -171,6 +171,55 @@ class IdeRendererStateTest {
     }
 
     @Test
+    fun `completion takes precedence over argument hints and closing it reveals retained hints`() {
+        val source = "send(va)"
+        val editor =
+            semanticEditor(
+                source,
+                caretUtf16 = 7,
+                completion = { identity, path ->
+                    IdeCompletionState.create(
+                        identity,
+                        path,
+                        0,
+                        0,
+                        EditorRange(5, 7),
+                        listOf(IdeCompletionEntry(CompletionItem("value", "value", CompletionKind.LocalVariable), null, null)),
+                    )
+                },
+                parameterInfo = { identity, path ->
+                    IdeParameterInfoState(
+                        identity,
+                        path,
+                        0,
+                        7,
+                        EditorRange(0, 8),
+                        listOf(ParameterInfoItem("send(value: Int): Unit", EditorRange(5, 15), true)),
+                        32,
+                    )
+                },
+            ) { _, _ -> IdeSemanticInteraction.None }
+        val active = editor.analysis as IdeAnalysisState.Active
+        val model = IdeRenderer.extract(workspaceState(editor, IdeBuildState.Idle), geometry())
+        assertEquals(
+            "value",
+            model.text
+                .filter {
+                    it.kind in setOf(IdeTextKind.Completion, IdeTextKind.CompletionMatch)
+                }.joinToString("") { it.value },
+        )
+        assertTrue(model.text.none { it.kind == IdeTextKind.ParameterInfo })
+        assertTrue(model.fills.none { it.kind == IdeFillKind.ParameterInfoActive })
+        val withoutCompletion =
+            semanticEditor(source, caretUtf16 = 7, parameterInfo = { _, _ -> active.parameterInfo!! }) { _, _ ->
+                IdeSemanticInteraction.None
+            }
+        val restored = IdeRenderer.extract(workspaceState(withoutCompletion, IdeBuildState.Idle), geometry())
+        assertTrue(restored.text.any { it.kind == IdeTextKind.ParameterInfo && it.value.contains("send(") })
+        assertTrue(restored.text.none { it.kind == IdeTextKind.Completion })
+    }
+
+    @Test
     fun `argument popup shows selected overload documentation and keeps wrapped text inside narrow editor`() {
         val source = "fun main() { send(1) }"
         val items =

@@ -345,7 +345,7 @@ class IdeAnalysisCoordinator(
                     caretOffsetUtf16 = caretOffsetUtf16,
                     snapshot = null,
                     pendingCompletion =
-                        if (trigger && !parameterInfoRequested) PendingCompletion.Automatic else null,
+                        if (trigger) PendingCompletion.Automatic else null,
                     provisionalPresentation = presentation,
                     overlays = sourceOverlays.toMap(),
                 )
@@ -458,7 +458,6 @@ class IdeAnalysisCoordinator(
 
     fun manualCompletion() {
         dismissImportFixes()
-        dismissParameterInfo()
         val request: CompletionRequest?
         synchronized(lock) {
             check(!closed) { "analysis coordinator is closed" }

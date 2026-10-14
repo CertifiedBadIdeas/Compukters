@@ -20,7 +20,7 @@ import ru.lazyhat.compukters.ide.client.state.IdeHorizontalDirection
 import ru.lazyhat.compukters.ide.client.state.IdeMoveDirection
 import ru.lazyhat.compukters.ide.client.state.IdeVerticalDirection
 
-/** Editor-local ordering: search, semantic chooser, parameter info, completion, ordinary editing. */
+/** Editor-local ordering: search, semantic chooser, completion, parameter info, ordinary editing. */
 internal class IdeEditorInputRouter(
     private val sink: IdeCommandSink,
     private val clipboard: IdeClipboard,
@@ -53,6 +53,7 @@ internal class IdeEditorInputRouter(
             dispatch(IdeCommand.DismissImportFixes)
         }
         if (focus.declarationChooserVisible) chooserKey(event)?.let { return dispatch(it) }
+        if (focus.completionVisible) completionKey(event)?.let { return dispatch(it) }
         if (focus.parameterInfoVisible && event.modifiers == IdeModifier.CONTROL &&
             event.key in listOf(IdeKeyCode.UP, IdeKeyCode.DOWN)
         ) {
@@ -61,7 +62,6 @@ internal class IdeEditorInputRouter(
         if (focus.parameterInfoVisible && event.key == IdeKeyCode.ESCAPE) {
             return dispatch(IdeCommand.DismissParameterInfo)
         }
-        if (focus.completionVisible) completionKey(event)?.let { return dispatch(it) }
         if (focus.area != IdeFocusArea.Editor) return false
         if (event.paste) return dispatchType(boundedClipboard(clipboard.text()))
         val control = event.modifiers and IdeModifier.CONTROL != 0

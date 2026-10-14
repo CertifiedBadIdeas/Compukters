@@ -323,7 +323,9 @@ emit directly into the existing frame collector and use the same source geometry
 
 `IdeEditorInputRouter` owns search, semantic navigation and ordinary editor keys and characters. Local screen overlays
 and domain dialogs are routed first, followed by focused Git/usage-panel input. Within editing, focused search takes
-precedence over the declaration chooser, parameter-info dismissal, completion navigation and ordinary editing.
+precedence over the declaration chooser, completion navigation, parameter-info dismissal and ordinary editing.
+Completion takes precedence over argument hints in rendering and input; hint requests continue
+while identifiers are completed, so closing completion reveals the current parameter information.
 Screen-wide shortcuts retain their explicit screen-controller ordering. Clipboard bounds have one shared owner,
 `IdeClipboardText`, used by source editing, search and Git drafts. Authoritative document and analysis state remains
 in `ide-client`; these components do not cache or independently mutate it.

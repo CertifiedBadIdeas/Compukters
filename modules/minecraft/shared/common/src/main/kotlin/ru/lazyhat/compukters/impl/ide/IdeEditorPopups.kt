@@ -51,10 +51,10 @@ internal class IdeEditorPopups(
 
             else -> {
                 val parameterInfo = active?.parameterInfo
-                if (parameterInfo != null) {
-                    parameterInfo(parameterInfo)
-                } else {
+                if (active?.completion != null) {
                     completion(editor)
+                } else if (parameterInfo != null) {
+                    parameterInfo(parameterInfo)
                 }
                 if (active?.completion == null && active?.parameterInfo == null && interaction is IdeSemanticInteraction.Hover) {
                     if (diagnostics.rows.none {
