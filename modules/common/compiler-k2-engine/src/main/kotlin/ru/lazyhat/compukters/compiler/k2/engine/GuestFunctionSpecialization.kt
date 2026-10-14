@@ -14,7 +14,10 @@ import org.jetbrains.kotlin.ir.declarations.IrTypeParametersContainer
 import org.jetbrains.kotlin.ir.expressions.IrCall
 import org.jetbrains.kotlin.ir.expressions.IrFunctionReference
 import org.jetbrains.kotlin.ir.expressions.IrRichFunctionReference
+import org.jetbrains.kotlin.ir.expressions.IrStatementOriginImpl
+import org.jetbrains.kotlin.ir.symbols.IrTypeParameterSymbol
 import org.jetbrains.kotlin.ir.symbols.UnsafeDuringIrConstructionAPI
+import org.jetbrains.kotlin.ir.types.IrSimpleType
 import org.jetbrains.kotlin.ir.types.IrType
 import org.jetbrains.kotlin.ir.types.IrTypeSubstitutor
 import org.jetbrains.kotlin.ir.types.impl.makeTypeProjection
@@ -24,6 +27,9 @@ import org.jetbrains.kotlin.ir.util.DeepCopyTypeRemapper
 import org.jetbrains.kotlin.ir.util.TypeRemapper
 import org.jetbrains.kotlin.ir.visitors.IrVisitorVoid
 import org.jetbrains.kotlin.types.Variance
+
+/** Keeps generic equality semantics after specialization replaces an operand's type parameter. */
+internal val guestGenericEqualityOrigin = IrStatementOriginImpl("COMPUKTERS_GENERIC_EQUALITY")
 
 /** Copy lexical symbols together, substituting only the selected owner's type parameters. */
 @OptIn(UnsafeDuringIrConstructionAPI::class)
@@ -92,5 +98,16 @@ internal fun guestIrCopier(
 
             override fun remapType(type: IrType): IrType = copiedTypes.remapType(substitution.substitute(type))
         }
-    return DeepCopyIrTreeWithSymbols(symbols, types).also { copiedTypes.deepCopy = it }
+    return object : DeepCopyIrTreeWithSymbols(symbols, types) {
+        override fun visitCall(expression: IrCall): IrCall {
+            val copy = super.visitCall(expression)
+            if (expression.symbol.owner.name
+                    .asString() in setOf("EQEQ", "equals", "eqeq") &&
+                expression.arguments.filterNotNull().any { (it.type as? IrSimpleType)?.classifier is IrTypeParameterSymbol }
+            ) {
+                copy.origin = guestGenericEqualityOrigin
+            }
+            return copy
+        }
+    }.also { copiedTypes.deepCopy = it }
 }

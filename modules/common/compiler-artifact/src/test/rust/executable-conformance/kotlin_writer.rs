@@ -142,7 +142,7 @@ fn main() {
             k2_expected_prints_with_budget("COMPUKTER_KOTLIN_HASH_FACTORIES_ARTIFACT", ["hash factories ok\n"], 256);
             k2_expected_prints_with_budget("COMPUKTER_KOTLIN_HASH_COLLECTIONS_ARTIFACT", ["hash collections ok\n"], 128);
             k2_expected_prints_with_budget("COMPUKTER_KOTLIN_HASH_VALUES_ARTIFACT", ["hash value classes ok\n"], 64);
-            k2_expected_prints_with_budget("COMPUKTER_KOTLIN_HASH_PRIMITIVES_ARTIFACT", ["hash primitive storage ok\n"], 64);
+            k2_collection_values("COMPUKTER_KOTLIN_HASH_PRIMITIVES_ARTIFACT", "hash primitive storage ok\n");
             k2_hash_collections_enforce_heap_and_capacity_limits();
             for batch in 0..6 {
                 execute_primitive_program(std::env::var(format!("COMPUKTER_KOTLIN_HASH_SCALARS_{batch}")).expect("hash primitive artifact must be set"));

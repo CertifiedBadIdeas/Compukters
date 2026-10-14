@@ -58,7 +58,9 @@ the 256 function-variant budget with ordinary emitter specialization and bounds 
 before capture discovery. Function/class dependencies and copied local declarations iterate to a fixed
 point. A generic member instance retains its source declaration for dispatch/signature identity and a
 separate symbol-remapped concrete declaration for executable bodies. The shared IR copier substitutes
-owner parameters while preserving nested local parameters until lexical specialization. Member bodies
+owner parameters while preserving nested local parameters until lexical specialization. Copies retain a
+generic-equality origin so Float/Double specializations keep boxed NaN and signed-zero semantics; the
+collection value conformance also exercises generic class comparisons and floating map keys. Member bodies
 are cached per declaration and concrete class instance; recursive calls and member references retain
 the source dispatch symbol while returns target their concrete executable copy. Generic class discovery defers unresolved lexical types rather than treating
 them as concrete instances. `testKotlinGenericClassCapturesVmConformance` exercises owner retention,

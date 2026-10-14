@@ -9183,11 +9183,13 @@ private class FunctionCompiler(
         ) {
             return compileNullableFloatingEquality(arguments, requireNotNull(floatingPrimitive))
         }
-        // Generic Kotlin equality uses wrapper semantics even in an unboxed specialization.
-        if (name in setOf("EQEQ", "equals", "eqeq") &&
-            expressions.any { expression ->
-                (expression.type as? IrSimpleType)?.classifier is IrTypeParameterSymbol &&
-                    GuestPrimitive.scalar(resolvedType(expression.type).makeNotNull()) in setOf(GuestPrimitive.FLOAT, GuestPrimitive.DOUBLE)
+        // Generic Kotlin equality uses wrapper semantics even after its type parameters are substituted.
+        val genericEquality =
+            call.origin == guestGenericEqualityOrigin ||
+                expressions.any { (it.type as? IrSimpleType)?.classifier is IrTypeParameterSymbol }
+        if (name in setOf("EQEQ", "equals", "eqeq") && genericEquality &&
+            listOf(leftType, rightType).any {
+                GuestPrimitive.scalar(it.makeNotNull()) in setOf(GuestPrimitive.FLOAT, GuestPrimitive.DOUBLE)
             }
         ) {
             val references =
