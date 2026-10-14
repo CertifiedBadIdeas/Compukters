@@ -13,6 +13,9 @@ headings so this page has one stable URL that can be shared outside the reposito
 
 ## 0.6.0 — In development
 
+- Cosmonautics exposes read-only planet shape, surface border, dated rotation model and Deep Space region geometry,
+  clocks and construction sharing to Guest Kotlin; `space-telemetry` reports these navigation observations.
+
 - IDE rebases pasted multiline Kotlin code to the insertion indentation, preserving relative nesting and atomic undo;
   insertion inside literals/comments and fragments containing raw strings stay literal.
 
