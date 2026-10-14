@@ -23,12 +23,13 @@ fun prepareFlight(engine: CreativeVectorThruster): FlightSetup {
     val planet = Space.planet()
     engine.setThrottle(0.0)
     val first = Physics.snapshot()
-    require(!first.paused && first.dimension == status.dimension)
+    require(!first.paused) { "Physics paused during flight preparation" }
+    require(first.dimension == status.dimension) { "Physics and space status disagree on the dimension" }
     require(first.linearVelocity.length <= 0.1 && first.angularVelocity.length <= 0.1) { "Start stationary on the pad" }
     require(first.orientation.transform(Vector3d(0.0, 1.0, 0.0)).y >= 0.999) { "Start upright" }
     require(first.position.y + CLIMB_HEIGHT + 10.0 < planet.transitionHeight) { "Keep flight below Deep Space transition" }
     val mount = engine.mount()
-    require(mount.constructionId == first.constructionId)
+    require(mount.constructionId == first.constructionId) { "Engine must share the computer's construction" }
     require(mount.forceX == 0 && mount.forceY == 1 && mount.forceZ == 0) { "Mount +Y engine below center of mass" }
     val saved = engine.state()
     val hover = if (HOVER_KN > 0.0) HOVER_KN else saved.thrustKn

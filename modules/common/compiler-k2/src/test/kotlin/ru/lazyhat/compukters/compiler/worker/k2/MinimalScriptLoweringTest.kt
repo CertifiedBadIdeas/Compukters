@@ -8370,6 +8370,76 @@ class MinimalScriptLoweringTest {
         }
 
     @Test
+    fun `require exception diagnostic preserves messages through catch and finally for vm execution`() =
+        withAdapter { adapter ->
+            val cases =
+                mapOf(
+                    "plain" to "require(false) { \"require detail\" }",
+                    "host-cleanup" to "try { require(false) { \"require detail\" } } finally { releaseEngine() }",
+                    "cleanup-caught" to
+                        "try { require(false) { \"require detail\" } } finally { try { throw IllegalStateException(\"cleanup\") } catch (_: Exception) {} }",
+                    "gc-rethrow" to
+                        "try { require(false) { \"require detail ${'$'}count\" } } catch (failure: Exception) { var n = 0; while (n < 1000) { IntArray(1024); n++; }; throw failure }",
+                    "rethrow" to "try { require(false) { \"require detail\" } } catch (failure: Exception) { throw failure }",
+                    "finally" to "try { require(false) { \"require detail\" } } finally { val marker = 1 }",
+                    "cause" to
+                        "try { require(false) { \"require detail\" } } catch (failure: Exception) { throw IllegalStateException(\"outer detail\", failure) }",
+                )
+            for ((name, body) in cases) {
+                val source =
+                    "fun releaseEngine() { try { readln() } catch (_: Exception) {}; try { readln() } catch (_: Exception) {} }; " +
+                        "fun fail(count: Int) { $body }; fun main() { fail(42) }"
+                val result = adapter.compile(request(source))
+                val artifact = assertNotNull(result.artifact, "$name: ${result.diagnostics}").toByteArray()
+                System.getProperty("compukter.vm.exceptionsArtifact")?.let { output ->
+                    Path.of("$output.require-$name.cpkt").also { it.parent.createDirectories() }.writeBytes(artifact)
+                }
+            }
+        }
+
+    @Test
+    fun `rocket landing require diagnostic survives asynchronous finally cleanup for vm execution`() =
+        withAdapter { adapter ->
+            val source =
+                """
+                import kotlin.math.Vector3d
+                import kotlin.math.Rotation3d
+                fun releaseEngine() {
+                    try { readln() } catch (_: Exception) {}
+                    try { readln() } catch (_: Exception) {}
+                }
+                fun main() {
+                    try {
+                        flightCommand(
+                            FlightState(FlightPhase.ASCENT, 0.0, 0.0),
+                            0.0, 0.0, 0.0,
+                            Vector3d(0.0, 0.0, 0.0), Rotation3d.identity(), Vector3d(0.0, 0.0, 0.0),
+                            40.0, -4.0, 55.0, 110.0, 0.05,
+                        )
+                    } finally { releaseEngine() }
+                }
+                """.trimIndent()
+            val result =
+                adapter.compile(
+                    request(
+                        *repositoryFile("examples/rocket-landing/src/control")
+                            .toFile()
+                            .walkTopDown()
+                            .filter { it.isFile && it.extension == "kt" }
+                            .sortedBy { it.name }
+                            .map { "project/control/${it.name}" to it.readText() }
+                            .toList()
+                            .toTypedArray(),
+                        "project/main.kt" to source,
+                    ),
+                )
+            val artifact = assertNotNull(result.artifact, result.diagnostics.toString()).toByteArray()
+            System.getProperty("compukter.vm.exceptionsArtifact")?.let { output ->
+                Path.of("$output.require-rocket.cpkt").also { it.parent.createDirectories() }.writeBytes(artifact)
+            }
+        }
+
+    @Test
     fun `caught exception preserves identity hierarchy cause and expression result for vm execution`() =
         withAdapter { adapter ->
             val source =

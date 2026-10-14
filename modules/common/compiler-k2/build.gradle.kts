@@ -774,6 +774,8 @@ val generateExceptionsConformanceArtifact = tasks.register<Test>("generateExcept
     testClassesDirs = sourceSets.test.get().output.classesDirs
     classpath = sourceSets.test.get().runtimeClasspath
     filter.includeTestsMatching("*explicit exception preserves class and message for vm execution*")
+    filter.includeTestsMatching("*require exception diagnostic preserves messages through catch and finally for vm execution*")
+    filter.includeTestsMatching("*rocket landing require diagnostic survives asynchronous finally cleanup for vm execution*")
     filter.includeTestsMatching("*caught exception preserves identity hierarchy cause and expression result for vm execution*")
     filter.includeTestsMatching("*finally preserves normal exceptional and nonlocal exits for vm execution*")
     filter.includeTestsMatching("*assertions and exhaustive reference when share exceptions for vm execution*")
@@ -781,8 +783,12 @@ val generateExceptionsConformanceArtifact = tasks.register<Test>("generateExcept
     filter.includeTestsMatching("*integer arithmetic errors are catchable across calls and preserve finally for vm execution*")
     filter.includeTestsMatching("*array string null and cast errors are catchable with cleanup for vm execution*")
     filter.includeTestsMatching("*host failures preserve task identity call sites and cleanup for vm execution*")
+    inputs.dir(rootProject.file("examples/rocket-landing/src/control"))
     inputs.file(workerJar)
     outputs.file(exceptionsConformanceArtifact)
+    for (name in listOf("plain", "rethrow", "finally", "cause", "cleanup-caught", "gc-rethrow", "host-cleanup", "rocket")) {
+        outputs.file(exceptionsConformanceArtifact.map { file -> File(file.asFile.absolutePath + ".require-$name.cpkt") })
+    }
     outputs.file(exceptionsConformanceArtifact.map { file -> File(file.asFile.absolutePath + ".caught.cpkt") })
     outputs.file(exceptionsConformanceArtifact.map { file -> File(file.asFile.absolutePath + ".finally.cpkt") })
     outputs.file(exceptionsConformanceArtifact.map { file -> File(file.asFile.absolutePath + ".stdlib.cpkt") })

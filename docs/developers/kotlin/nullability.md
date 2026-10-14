@@ -82,7 +82,10 @@ handlers of the try being exited. Legacy exception artifacts must be rebuilt for
 terminal-trap fallback.
 
 **Evidence:** `MinimalScriptLoweringTest`, test `explicit exception preserves class and message for vm
-execution`, and `testKotlinExceptionsVmConformance`; source catch evidence: `caught exception preserves
+execution`, and `testKotlinExceptionsVmConformance`; source `require` diagnostics:
+`require exception diagnostic preserves messages through catch and finally for vm execution`
+and `rocket landing require diagnostic survives asynchronous finally cleanup for vm execution` verify messages,
+cause chains, collection and asynchronous cleanup; source catch evidence: `caught exception preserves
 identity hierarchy cause and expression result for vm execution`; finally evidence: `finally preserves normal
 exceptional and nonlocal exits for vm execution` in the same Kotlin-to-VM conformance task, including nested
 cleanup, local versus nonlocal inline returns and return snapshots; task/suspension evidence: `exceptions
