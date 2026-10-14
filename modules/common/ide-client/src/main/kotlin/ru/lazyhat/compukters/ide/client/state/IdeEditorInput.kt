@@ -76,6 +76,8 @@ sealed interface IdeEditorInput {
 
     data object ToggleLineComment : IdeEditorInput
 
+    data object Duplicate : IdeEditorInput
+
     data object Cut : IdeEditorInput
 
     data object Undo : IdeEditorInput

@@ -13,6 +13,8 @@ headings so this page has one stable URL that can be shared outside the reposito
 
 ## 0.6.0 — In development
 
+- IDE supports Ctrl+D to duplicate the current line below or the exact selection with one-step undo.
+
 - IDE remembers the last opened project separately for each computer and restores it on reopening,
   including after a client or world restart. Missing projects return to the project selector.
 
