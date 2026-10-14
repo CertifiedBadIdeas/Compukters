@@ -1456,6 +1456,10 @@ class IdeClientController(
                     }
                 }
 
+                IdeEditorInput.Duplicate -> {
+                    active.document.duplicate()
+                }
+
                 IdeEditorInput.Cut -> {
                     active.document.cut()
                 }

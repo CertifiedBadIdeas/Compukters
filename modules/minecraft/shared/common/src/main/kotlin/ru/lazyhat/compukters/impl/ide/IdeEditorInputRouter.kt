@@ -73,6 +73,7 @@ internal class IdeEditorInputRouter(
         val command =
             if (control) {
                 when (event.key) {
+                    IdeKeyCode.D -> if (!alt && !shift) IdeCommand.Edit(IdeEditorInput.Duplicate) else null
                     IdeKeyCode.SLASH -> if (!alt && !shift) IdeCommand.Edit(IdeEditorInput.ToggleLineComment) else null
                     IdeKeyCode.S -> IdeCommand.Save
                     IdeKeyCode.L -> if (alt && !shift) IdeCommand.Format else null
