@@ -216,7 +216,7 @@ class DiagnosticQueryTest {
     fun `generic methods resolve with source and metadata inputs`() {
         val source =
             """
-            class Box<T>(var value: T) {
+            open class Box<T>(var value: T) {
                 fun <R> map(transform: (T) -> R): Box<R> = Box(transform(value))
                 fun <R> reader(seed: R, take: () -> R = { seed }): () -> R = take
                 fun <R> cell(seed: R, next: R): () -> R {
@@ -225,11 +225,17 @@ class DiagnosticQueryTest {
                     return ::take
                 }
             }
+            open class Middle<A, B>(value: B) : Box<B>(value)
+            class Derived<T>(value: List<T>) : Middle<String, List<T>>(value)
             fun main() {
                 val box = Box(3)
                 check(box.map { it.toLong() }.value == 3L)
                 check(box.reader<Int?>(null)() == null)
                 check(box.cell("first", "next")() == "first")
+                val inherited = Derived(listOf(7))
+                check(inherited.map { it[0].toLong() }.value == 7L)
+                inherited.value = listOf(9)
+                check(inherited.reader<Int?>(null)() == null)
             }
             """.trimIndent()
         for (attachedSources in listOf(false, true)) {

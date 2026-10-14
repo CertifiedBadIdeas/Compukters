@@ -272,8 +272,12 @@ state remains local to each function compiler. This phase split preserves the ar
 versus concrete function identity used by specialization and dispatch.
 
 Guest generic functions and supported generic classes are specialized before artifact writing. Final classes,
-concrete value classes and the admitted abstract/open generic provider hierarchies share the bounded specialization model. Function and class
-specializations are discovered together until no further dependencies appear, including helpers called from generic
+concrete value classes and the admitted abstract/open generic provider hierarchies share the bounded specialization model.
+Ordinary generic subclasses retain substituted superclass layouts. Final generic method discovery
+resolves K2 fake overrides to the executable declaring method; discovery, field-accessor lookup and
+call emission share traversal of the substituted superclass graph. Specialization identity belongs
+to the original declaration and its instantiated owner, independent of the subclass used at the call site.
+Function and class specializations are discovered together until no further dependencies appear, including helpers called from generic
 members whose bodies introduce other generic classes. The VM receives ordinary
 concrete function and class records, with typed scalar or reference fields and calls. Platform ABI 3 records the
 symbol and signature of each declaration requiring source compilation: generic implementations, classes with generic

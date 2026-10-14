@@ -65,7 +65,9 @@ A concrete method declared in a final class uses a direct call when the target i
 bound and unbound method references. Its virtual declaration remains available to calls through parent classes
 and interfaces. Inherited fake overrides retain their existing dispatch path. Nullable receiver checks and
 exceptions from reading an uninitialized non-null field still precede method execution.
-Final ordinary class/object methods with their own type parameters support direct concrete calls; see
+Final ordinary class/object methods with their own type parameters support direct and inherited calls.
+Ordinary generic class inheritance uses concrete superclass type
+arguments for construction, fields, accessors and retained callbacks; see
 [direct generic methods](functions.md#direct-generic-methods). Generic virtual/interface methods, generic
 method references, suspending methods and member extensions remain unsupported. Interface methods may have supported
 non-suspending bodies; an inherited default uses the most specific interface declaration unless a class

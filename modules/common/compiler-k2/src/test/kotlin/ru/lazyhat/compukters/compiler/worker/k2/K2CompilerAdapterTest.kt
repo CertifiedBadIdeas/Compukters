@@ -164,7 +164,16 @@ class K2CompilerAdapterTest {
             }
             root.resolve("libraries/generic-class/Cell.kt").apply {
                 parent.createDirectories()
-                writeText("package sample\nclass Cell<T>(var value: T) { fun replace(next: T) { value = next } }\n")
+                writeText(
+                    """
+                    package sample
+                    open class Cell<T>(var value: T) {
+                        fun replace(next: T) { value = next }
+                        fun <R> keep(seed: R, token: Int = 0): R = seed
+                    }
+                    open class LibraryDerived<T>(value: T) : Cell<T>(value)
+                    """.trimIndent(),
+                )
             }
             root.resolve("libraries/generic/FirstCollision.kt").writeText(
                 "package sample.one\nfun collision(value: Int): Int = value + 1\n",
@@ -277,12 +286,19 @@ class K2CompilerAdapterTest {
                     import sample.nullableIdentity
 
                     class InheritedMessage: LibraryMessage()
+                    class InheritedCell<T>(value: T): sample.LibraryDerived<T>(value)
                     class OverrideMessage: LibraryMessage() {
                         override fun toString(): String = super.toString() + "/child"
                         override fun hashCode(): Int = super.hashCode()
                         override fun equals(other: Any?): Boolean = super.equals(other)
                     }
                     fun main() {
+                        val derived = InheritedCell(7)
+                        require(derived.keep(11L) == 11L && derived.value == 7)
+                        derived.replace(9)
+                        require(derived.value == 9)
+                        val cellAlias: Cell<Int> = derived
+                        require(cellAlias === derived && cellAlias.keep(13L) == 13L)
                         val produced = sample.producer()
                         val producedNullable: sample.LibraryProducer<Int?> = produced
                         val producedObjects: sample.LibraryProducer<Any> = produced

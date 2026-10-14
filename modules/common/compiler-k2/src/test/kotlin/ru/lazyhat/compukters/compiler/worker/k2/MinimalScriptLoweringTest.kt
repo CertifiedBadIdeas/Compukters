@@ -344,6 +344,11 @@ class MinimalScriptLoweringTest {
                     fun main() { val f: (Int) -> Int = Factory()::keep; f(1) }
                     """.trimIndent() to "generic method references",
                     """
+                    open class Factory<T> { fun <R> keep(value: R): R = value }
+                    class Derived<T> : Factory<List<T>>()
+                    fun main() { val f: (Int) -> Int = Derived<String>()::keep; f(1) }
+                    """.trimIndent() to "generic method references",
+                    """
                     class Factory { fun <T> grow(value: T) { grow(listOf(value)) } }
                     fun main() { Factory().grow(1) }
                     """.trimIndent() to "specialization",
@@ -353,6 +358,53 @@ class MinimalScriptLoweringTest {
                 assertNull(result.artifact, source)
                 assertTrue(result.diagnostics.any { it.code == "UNSUPPORTED_IR" && message in it.message }, result.diagnostics.toString())
             }
+        }
+
+    @Test
+    fun `inherited generic methods reuse declaring owner specializations without boxing`() =
+        withAdapter { adapter ->
+            val result =
+                adapter.compile(
+                    request(
+                        """
+                        open class Base<T> {
+                            fun <R> keep(seed: R): R = seed
+                        }
+                        open class Middle<A, B> : Base<B>()
+                        class First : Middle<String, Int>()
+                        class Second : Base<Int>()
+                        fun main() {
+                            val first = First()
+                            check(first.keep(11) == 11)
+                            check(Second().keep(13) == 13)
+                            val base: Base<Int> = first
+                            check(base.keep(17) == 17)
+                        }
+                        """.trimIndent(),
+                    ),
+                )
+            val artifact = ArtifactReader.read(assertNotNull(result.artifact, result.diagnostics.toString()).toByteArray())
+            val signatures = artifact.modules.flatMap { it.types }.filterIsInstance<NominalType.Function>()
+            assertEquals(
+                1,
+                signatures.count {
+                    it.parameters.size == 2 && it.parameters.last() == ValueType.I32 &&
+                        it.result == ValueType.I32
+                },
+            )
+            val allocations =
+                artifact.modules.flatMap { module ->
+                    module.blocks.flatMap { it.instructions }.filterIsInstance<Instruction.NewObject>().map { allocation ->
+                        val name =
+                            when (val type = allocation.type) {
+                                is TypeRef.Local -> module.types[type.id.value.toInt()].name
+                                is TypeRef.Imported -> module.imports[type.id.value.toInt()].targetName
+                            }
+                        module.strings[name.value.toInt()].toString()
+                    }
+                }
+            // check's failure path allocates its exception; inherited calls introduce no scalar boxes.
+            assertEquals(listOf("First", "Second", "kotlin.IllegalStateException"), allocations.sorted())
         }
 
     @Test
