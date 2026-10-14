@@ -356,7 +356,10 @@ class IdeAnalysisCoordinator(
             rebuild = updated.input?.let { Rebuild(version, updated) }
         }
         if (completionExpected) visibleLatency.automaticCompletionExpected(documentRevision)
-        rebuild?.let { pending -> scheduleRebuild(pending.version, requireNotNull(pending.session.input), preparationDebounceNanos) }
+        rebuild?.let { pending ->
+            val delay = if (completionExpected) 0L else preparationDebounceNanos
+            scheduleRebuild(pending.version, requireNotNull(pending.session.input), delay)
+        }
     }
 
     fun reload(sourceOverlays: Map<VirtualSourcePath, String>? = null) {

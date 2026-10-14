@@ -33,6 +33,10 @@ headings so this page has one stable URL that can be shared outside the reposito
 - Configurator outlines on Sable constructions transform block coordinates into the world before applying
   the camera offset, preserving their placement and rotation while the player moves.
 
+- IDE automatic completion after dots and identifier edits starts without preparation or request debounce delays.
+  Variable, parameter and destructuring declaration names suppress completion candidates while types,
+  initializers and existing-variable references retain semantic suggestions.
+
 - Added programmable Create pumps with persistent remotely reversible fluid flow and normally disengaged
   programmable clutches that release their load when the controlling program or peripheral connection ends.
   The clutch has a blue casing band and Compukters controller panel with a cable socket and flat contact
