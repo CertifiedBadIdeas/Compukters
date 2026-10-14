@@ -126,6 +126,9 @@ Unknown references color the complete identifier. Errors and warnings underline 
 a mismatched property initializer marks its value. Hover a marked token to read the overlapping problems together.
 Clicking that token still places the caret normally. The Problems window and **F2**/**Shift+F2** retain problem navigation.
 
+At the start of an argument, completion offers names such as `position = ` alongside matching values.
+Parameters already supplied in the call are omitted; accepting a name places the caret after `= `.
+
 Argument information opens automatically when you type `(` in Kotlin code, and **Ctrl+P** opens it manually
 inside a call. The resolved signatures follow the caret; the current positional, named or vararg parameter is
 highlighted. **Ctrl+↑ / Ctrl+↓** cycles through overloads without moving the caret; the choice is retained

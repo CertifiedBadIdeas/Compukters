@@ -26,10 +26,8 @@ import org.jetbrains.kotlin.analysis.api.components.resolveToCallCandidates
 import org.jetbrains.kotlin.analysis.api.renderer.types.impl.KaTypeRendererForSource
 import org.jetbrains.kotlin.analysis.api.resolution.KaFunctionCall
 import org.jetbrains.kotlin.analysis.api.signatures.KaFunctionSignature
-import org.jetbrains.kotlin.lexer.KtTokens
 import org.jetbrains.kotlin.psi.KtCallElement
 import org.jetbrains.kotlin.psi.KtElement
-import org.jetbrains.kotlin.psi.KtValueArgumentList
 import org.jetbrains.kotlin.types.Variance
 import ru.lazyhat.compukters.ide.analysis.AnalysisQuery
 import ru.lazyhat.compukters.ide.analysis.AnalysisResult
@@ -50,11 +48,11 @@ internal object ParameterInfoQuery {
         val file = requireNotNull(snapshot.files[query.path]) { "analysis source path is not active" }
         val sourceLength = snapshot.sourceLengthsUtf16.getValue(query.path)
         require(query.offsetUtf16 <= sourceLength) { "analysis cursor exceeds source" }
-        val arguments = argumentListAt(file, query.offsetUtf16, sourceLength)
+        val arguments = CallArguments.listAt(file, query.offsetUtf16, sourceLength)
         val value =
             arguments?.let { list ->
                 val call = list.parent as? KtCallElement ?: return@let null
-                val activeArgument = activeArgument(list, query.offsetUtf16)
+                val activeArgument = CallArguments.indexAt(list, query.offsetUtf16)
                 val activeName =
                     list.arguments
                         .getOrNull(activeArgument)
@@ -98,28 +96,6 @@ internal object ParameterInfoQuery {
             ),
         )
     }
-
-    private fun argumentListAt(
-        file: org.jetbrains.kotlin.psi.KtFile,
-        offsetUtf16: Int,
-        sourceLength: Int,
-    ): KtValueArgumentList? {
-        if (sourceLength == 0) return null
-        val probes = listOf(offsetUtf16.coerceAtMost(sourceLength - 1), (offsetUtf16 - 1).coerceAtLeast(0)).distinct()
-        return probes
-            .asSequence()
-            .flatMap { probe -> generateSequence(file.findElementAt(probe)) { it.parent }.filterIsInstance<KtValueArgumentList>() }
-            .filter { list ->
-                val left = list.leftParenthesis?.textRange?.endOffset ?: return@filter false
-                val right = list.rightParenthesis?.textRange?.startOffset ?: list.textRange.endOffset
-                offsetUtf16 in left..right
-            }.minByOrNull { it.textRange.length }
-    }
-
-    private fun activeArgument(
-        list: KtValueArgumentList,
-        offsetUtf16: Int,
-    ): Int = list.node.getChildren(null).count { child -> child.elementType == KtTokens.COMMA && child.startOffset < offsetUtf16 }
 
     private fun KaSession.renderCandidate(
         call: KtCallElement,

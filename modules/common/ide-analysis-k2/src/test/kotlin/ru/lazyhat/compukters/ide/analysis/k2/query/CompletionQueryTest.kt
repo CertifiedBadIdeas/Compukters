@@ -1214,7 +1214,7 @@ class CompletionQueryTest {
     }
 }
 
-private fun K2QueryFixture.complete(
+internal fun K2QueryFixture.complete(
     path: String,
     offset: Int,
     trigger: CompletionTrigger = CompletionTrigger.Automatic,

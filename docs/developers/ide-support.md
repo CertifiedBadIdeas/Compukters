@@ -205,6 +205,17 @@ references, type positions and shorthand string interpolation still insert only 
 suppressed at function declaration names, including extension and local functions, without suppressing type or
 body completion or explicit requests. Variable, parameter and destructuring declaration names produce no
 completion candidates; type annotations, initializers and existing-variable references retain semantic completion.
+At the start of a call argument, completion also offers `parameter = ` names from K2 call candidates,
+including constructors and member/extension overloads. Already bound positional, named and trailing-lambda
+parameters are excluded. Candidates retain the substituted parameter type, reuse an existing `=`, and do not
+appear inside argument values or nested expressions. Functions without stable parameter names do not offer
+named arguments. Accepting a name leaves the caret after `= ` and uses one undoable edit.
+
+**Evidence:** `NamedArgumentCompletionTest`, tests `named arguments complete missing names without replacing expression completion`,
+`named arguments exclude positional named and trailing lambda bindings`, `named arguments complete constructor and member overload parameters`,
+and `named argument labels preserve existing equals and values do not offer labels`; `IdeAnalysisFlowTest`,
+test `named argument completion places caret after equals and is one undoable edit`.
+
 Dot and identifier edits request background snapshot preparation and automatic completion without intentional
 debounce delays; worker analysis and the next client frame still determine when the list appears. Literal content
 in quoted and raw strings, character literals and comments produces no completion candidates, including explicit
