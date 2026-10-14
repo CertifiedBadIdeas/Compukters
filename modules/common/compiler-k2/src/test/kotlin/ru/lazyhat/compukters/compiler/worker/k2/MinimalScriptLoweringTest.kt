@@ -8415,6 +8415,7 @@ class MinimalScriptLoweringTest {
                             0.0, 0.0, 0.0,
                             Vector3d(0.0, 0.0, 0.0), Rotation3d.identity(), Vector3d(0.0, 0.0, 0.0),
                             40.0, -4.0, 55.0, 110.0, 0.05,
+                            profile = FlightProfile(20.0, 15.0, 1.0, 1.0),
                         )
                     } finally { releaseEngine() }
                 }
