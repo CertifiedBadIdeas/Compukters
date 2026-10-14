@@ -1,0 +1,4 @@
+#!/bin/sh
+set -eu
+PREVIEW_ROOT=$(CDPATH= cd -P "$(dirname "$0")" && pwd)
+exec python3 "$PREVIEW_ROOT/tools/visual/preview.py" "$@"

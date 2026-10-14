@@ -54,8 +54,8 @@ headings so this page has one stable URL that can be shared outside the reposito
   Flush, grey-framed rectangular indicators show its state on all four sides.
   The bars have grey end caps: green parallel to the shaft when engaged, or red across it when disengaged.
   It retains cutout rendering around its shaft openings. The pump has an unmarked copper tube and
-  compact flat displays at both ends on all four sides, each with three flow arrows and no protruding
-  controller or socket.
+  continuous dark display rings at both ends, with three subdued cyan flow arrows on each of their
+  four faces and no protruding controller or socket; the pipe ends retain Create's original recessed shading.
   Its casing and displays stay stationary when flow reverses; only the arrows change.
   Their Guest value classes use the shared typed and named peripheral discovery; addon blocks share the Compukters creative tab.
 
