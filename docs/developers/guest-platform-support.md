@@ -142,7 +142,7 @@ vertical climb/hold/descent and bounded horizontal return to a known pad referen
 exercises the shipped controllers in ideal vertical and coupled translation/rotation plants, including nozzle tween,
 frame heading changes, drift recovery and final descent gates; `:compiler-k2:compileRocketLandingExample` compiles its
 complete source against actual addon bundles. There is no terrain/contact sensor; the horizontal return corridor is
-2 m and real-world stability remains a manual check. Orbital insertion and return remain future mission stages.
+6 m, with additional 1 m/s descent-impulse scenarios; real-world stability remains a manual check. Orbital insertion and return remain future mission stages.
 
 ## Compukters Guest APIs
 

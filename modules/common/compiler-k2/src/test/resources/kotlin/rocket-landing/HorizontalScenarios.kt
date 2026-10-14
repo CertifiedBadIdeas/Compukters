@@ -20,7 +20,8 @@ fun runHorizontalScenarios() {
     check(!padGuidance(origin, Vector3d(0.101, 0.0, 0.0)).centered)
     rejects { padGuidance(Vector3d(Double.NaN, 0.0, 0.0), origin) }
     rejects { padGuidance(origin, Vector3d(0.0, 0.0, Double.POSITIVE_INFINITY)) }
-    rejects { padGuidance(Vector3d(2.01, 0.0, 0.0), origin) }
+    check(!padGuidance(Vector3d(6.0, 0.0, 0.0), origin).centered)
+    rejects { padGuidance(Vector3d(6.01, 0.0, 0.0), origin) }
     val alignedOrientation = Rotation3d.rotationZ(0.04)
     val aligned = attitudeCommand(alignedOrientation, origin, alignedOrientation.transform(Vector3d(0.0, 1.0, 0.0)))
     check(abs(aligned.vectorX) <= 1e-12 && abs(aligned.vectorY) <= 1e-12)
@@ -63,11 +64,11 @@ fun runHorizontalScenarios() {
     check(waiting.state.phase == FlightPhase.HOLD && waiting.state.settledSeconds == 0.0)
     // Independent 3D rigid-body plant. An off-centre nozzle force supplies BOTH force and torque.
     // Isotropic inertia/mass (m²), lever 2 m, nominal gravity; no atmosphere or engine startup model.
-    for (scenario in 0 until 4) {
+    for (scenario in 0 until 6) {
         val inertiaPerMass =
             if (scenario == 0) {
                 6.0
-            } else if (scenario == 1) {
+            } else if (scenario == 1 || scenario == 4) {
                 12.0
             } else if (scenario == 2) {
                 24.0
@@ -82,6 +83,8 @@ fun runHorizontalScenarios() {
             } else {
                 PI / 3.0
             }
+        val strongImpulse = scenario >= 4
+        val climb = if (strongImpulse) 40.0 else 5.0
         var orientation = Rotation3d.rotationY(yaw)
         var localRate = origin
         var position = origin
@@ -97,7 +100,9 @@ fun runHorizontalScenarios() {
         var maximumDrift = 0.0
         var contactSpeed = 0.0
         for (step in 0 until 2400) {
-            if (!disturbed && position.y > 3.0) {
+            if (!disturbed &&
+                ((strongImpulse && state.phase == FlightPhase.DESCENT && position.y < 36.0) || (!strongImpulse && position.y > 3.0))
+            ) {
                 val shift =
                     if (scenario ==
                         0
@@ -108,7 +113,7 @@ fun runHorizontalScenarios() {
                     } else {
                         Vector3d(0.48, 0.0, -0.36)
                     }
-                velocity += shift.normalized() * 0.15
+                velocity += shift.normalized() * (if (strongImpulse) 1.0 else 0.15)
                 disturbed = true
             }
             val observedVelocity = (position - previousPosition) / 0.05
@@ -122,7 +127,7 @@ fun runHorizontalScenarios() {
                     observedVelocity,
                     orientation,
                     orientation.transform(localRate),
-                    5.0,
+                    climb,
                     5.0,
                     10.0,
                     20.0,
@@ -160,7 +165,7 @@ fun runHorizontalScenarios() {
             }
             val distance = Vector3d(position.x, 0.0, position.z).length
             if (distance > maximumDrift) maximumDrift = distance
-            check(distance <= 2.0) { "Coupled drift exceeded corridor: scenario=$scenario; drift=$distance" }
+            check(distance <= RETURN_CORRIDOR_METERS) { "Coupled drift exceeded corridor: scenario=$scenario; drift=$distance" }
         }
         check(disturbed && hold && descent && complete) {
             "Coupled flight incomplete: scenario=$scenario; phase=${state.phase.name}; height=${position.y}; drift=${Vector3d(
@@ -169,6 +174,7 @@ fun runHorizontalScenarios() {
                 position.z,
             ).length}"
         }
+        if (strongImpulse) check(maximumDrift > 2.0)
         check(maximumDrift >= 0.2 && Vector3d(position.x, 0.0, position.z).length <= 0.2)
         check(abs(contactSpeed) <= 0.5 && position.y <= 0.25 && velocity.length <= 0.08 && localRate.length <= 0.1)
     }

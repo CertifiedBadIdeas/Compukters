@@ -25,12 +25,13 @@ fun command(
     climb: Double = 40.0,
     positionVelocity: Vector3d = Vector3d(0.0, speed, 0.0),
     angularVelocity: Vector3d = Vector3d(0.0, 0.0, 0.0),
+    horizontalSpeed: Double = 0.0,
 ): FlightCommand =
     flightCommand(
         state,
         height,
         speed,
-        0.0,
+        horizontalSpeed,
         positionVelocity,
         Rotation3d.identity(),
         angularVelocity,
@@ -113,6 +114,11 @@ fun runScenarios() {
             0.05,
         )
     check(tilt.vectorX < 0.0)
+    // Solver and observed pose speeds are separate guards; finite boundary values remain accepted.
+    check(command(descent, 10.0, 0.0, horizontalSpeed = 2.0).state.phase == FlightPhase.DESCENT)
+    rejects { command(descent, 10.0, 0.0, horizontalSpeed = 2.01) }
+    rejects { command(descent, 10.0, 0.0, horizontalSpeed = Double.NaN) }
+    rejects { command(descent, 10.0, 0.0, positionVelocity = Vector3d(2.01, 0.0, 0.0)) }
     rejects { command(descent, Double.NaN, 0.0) }
     rejects { command(descent, -0.6, 0.0) }
     rejects { command(descent, 10.0, Double.POSITIVE_INFINITY) }

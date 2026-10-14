@@ -15,7 +15,6 @@ const val ENGINE_NAME = "ascent_engine"
 const val HOVER_KN = 0.0
 const val CLIMB_HEIGHT = 40.0
 const val HOLD_SECONDS = 5.0
-const val MAX_DRIFT = 2.0
 const val MAX_FLIGHT_SECONDS = 120.0
 
 fun main() {
@@ -46,7 +45,6 @@ fun main() {
             previousTick = current.gameTick
             val offset = current.position - first.position
             val lateral = Vector3d(offset.x, 0.0, offset.z).length
-            require(lateral <= MAX_DRIFT) { "Outside horizontal return corridor" }
             val horizontalSpeed = Vector3d(current.linearVelocity.x, 0.0, current.linearVelocity.z).length
             val command =
                 flightCommand(
