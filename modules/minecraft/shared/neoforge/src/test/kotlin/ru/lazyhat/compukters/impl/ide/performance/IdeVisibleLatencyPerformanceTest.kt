@@ -131,6 +131,20 @@ internal class IdeVisibleLatencyPerformanceTest {
                     println("compukters.ide.burst inputMedianMs=${durations[25] / 1_000_000.0} inputP95Ms=${durations[47] / 1_000_000.0}")
                     assertTrue(durations[47] < TimeUnit.MILLISECONDS.toNanos(16), "burst input p95 must fit a frame")
                     assertEquals(priorUpdates + 1, processes.incrementalUpdates, "burst must analyze only its final revision")
+                    val identifierDurations =
+                        (1..50)
+                            .map {
+                                val start = System.nanoTime()
+                                controller.dispatch(IdeCommand.Edit(IdeEditorInput.Type("a")))
+                                System.nanoTime() - start
+                            }.sorted()
+                    val identifierRevision = textEditor(controller).contentRevision
+                    awaitVisibleSample(controller, trace, IdeVisibleLatencyKind.Presentation, identifierRevision)
+                    println(
+                        "compukters.ide.identifierBurst inputMedianMs=${identifierDurations[25] / 1_000_000.0} " +
+                            "inputP95Ms=${identifierDurations[47] / 1_000_000.0}",
+                    )
+                    assertTrue(identifierDurations[47] < TimeUnit.MILLISECONDS.toNanos(16), "identifier burst input p95 must fit a frame")
                     assertEquals(1, processes.starts)
                 }
         } finally {

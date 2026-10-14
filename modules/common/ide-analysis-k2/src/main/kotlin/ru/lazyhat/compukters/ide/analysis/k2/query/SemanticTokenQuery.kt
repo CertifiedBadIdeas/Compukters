@@ -48,6 +48,7 @@ import org.jetbrains.kotlin.psi.KtProperty
 import org.jetbrains.kotlin.psi.KtSimpleNameExpression
 import org.jetbrains.kotlin.psi.KtTreeVisitorVoid
 import org.jetbrains.kotlin.psi.KtTypeParameter
+import org.jetbrains.kotlin.psi.KtValueArgumentName
 import ru.lazyhat.compukters.compiler.worker.protocol.VirtualSourcePath
 import ru.lazyhat.compukters.ide.analysis.SemanticCategory
 import ru.lazyhat.compukters.ide.analysis.SemanticToken
@@ -100,6 +101,17 @@ internal object SemanticTokenQuery {
                 }
 
                 override fun visitSimpleNameExpression(expression: KtSimpleNameExpression) {
+                    if (expression.parent is KtValueArgumentName) {
+                        result.addBounded(
+                            path,
+                            expression.textRange.startOffset,
+                            expression.textRange.endOffset,
+                            SemanticCategory.NamedArgument,
+                            limits,
+                        )
+                        super.visitSimpleNameExpression(expression)
+                        return
+                    }
                     if (expression is KtNameReferenceExpression) {
                         with(session) { expression.resolveSymbol() ?: expression.mainReference.resolveToSymbols().singleOrNull() }
                             ?.semanticClassification(isPeripheralValuePosition(expression))

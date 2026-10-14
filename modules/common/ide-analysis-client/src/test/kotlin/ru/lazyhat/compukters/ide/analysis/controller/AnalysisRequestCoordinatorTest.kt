@@ -323,6 +323,26 @@ class AnalysisRequestCoordinatorTest {
     }
 
     @Test
+    fun `zero-delay automatic completion dispatches without advancing time and replaces obsolete requests`() {
+        val scheduler = ManualAnalysisTaskScheduler()
+        val client = RecordingAnalysisClient()
+        val coordinator = DefaultAnalysisRequestCoordinator(client, scheduler, 100, 0)
+        val first = admittedSnapshot("value.")
+        coordinator.sourceChanged(first, testPath())
+        coordinator.automaticCompletion(testPath(), 6)
+        scheduler.advanceBy(0)
+        assertEquals(6, assertIs<AnalysisQuery.Completion>(client.queries.single()).offsetUtf16)
+        val old = client.queryFutures.single()
+        val latest = admittedSnapshot("value.m")
+        coordinator.sourceChanged(latest, testPath())
+        coordinator.automaticCompletion(testPath(), 7)
+        scheduler.advanceBy(0)
+        assertTrue(old in client.cancelled)
+        assertEquals(7, assertIs<AnalysisQuery.Completion>(client.queries.last()).offsetUtf16)
+        assertSame(latest, client.querySnapshots.last())
+    }
+
+    @Test
     fun `automatic completion waits for its debounce and uses the latest snapshot`() {
         val scheduler = ManualAnalysisTaskScheduler()
         val client = RecordingAnalysisClient()

@@ -134,25 +134,31 @@ overwrites or saves newer typing`, `format failure warns without saving the unfo
 
 Declarations, extension functions, inferred expressions, and smart casts receive K2-backed semantic tokens;
 mutable properties, locals, and their resolved references carry the Islands Dark underline effect.
+Named argument labels have a distinct color, including incomplete overloaded calls; the argument
+expression and ordinary parameter colors remain unchanged.
 
 **Evidence:**
 [`SemanticTokenQueryTest`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/ide-analysis-k2/src/test/kotlin/ru/lazyhat/compukters/ide/analysis/k2/query/SemanticTokenQueryTest.kt),
 tests `presentation classifies declarations and extension functions`, `presentation marks inferred and smart
 cast expressions`, and `presentation marks mutable declarations and references`, plus
 [`IdeRendererStateTest`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/minecraft/shared/common/src/test/kotlin/ru/lazyhat/compukters/impl/ide/IdeRendererStateTest.kt),
-test `expression metadata does not override lexical code colors`.
+tests `expression metadata does not override lexical code colors` and `named argument label uses its own
+color without changing the argument expression`; `SemanticTokenQueryTest` also covers `named argument
+labels retain distinct highlighting in incomplete overloaded calls`.
 
 ### K2 diagnostics
 
 **Status:** Supported.
 
 Incomplete syntax remains analyzable, multi-file diagnostics retain virtual paths, and UTF-16 ranges remain
-exact.
+exact. Problems rows flatten multiline messages into printable text; diagnostic tooltips preserve
+line breaks and indentation without rendering CR/LF, tabs or other control characters as glyphs.
 
 **Evidence:**
 [`DiagnosticQueryTest`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/ide-analysis-k2/src/test/kotlin/ru/lazyhat/compukters/ide/analysis/k2/query/DiagnosticQueryTest.kt),
 tests `type error after supplementary character keeps UTF-16 range`, `diagnostics from multiple files retain
-their virtual paths`, and `incomplete syntax produces a bounded diagnostic instead of failing analysis`.
+their virtual paths`, and `incomplete syntax produces a bounded diagnostic instead of failing analysis`;
+`IdeRendererStateTest`, test `multiline diagnostics render printable problem rows and preserve tooltip lines`.
 
 ### Explicit import quick fixes
 
@@ -197,11 +203,20 @@ Existing delimiters are reused; autoimports and caret placement share an atomic 
 an empty lambda into an indented block while preserving LF/CRLF and leading indentation. Imports, callable
 references, type positions and shorthand string interpolation still insert only names. Automatic completion is
 suppressed at function declaration names, including extension and local functions, without suppressing type or
-body completion or explicit requests. Literal content in quoted and raw strings, character literals and comments
-produces no completion candidates, including explicit requests. Shorthand `$name`, a bare unescaped `$` and
+body completion or explicit requests. Variable, parameter and destructuring declaration names produce no
+completion candidates; type annotations, initializers and existing-variable references retain semantic completion.
+Dot and identifier edits request background snapshot preparation and automatic completion without intentional
+debounce delays; worker analysis and the next client frame still determine when the list appears. Literal content
+in quoted and raw strings, character literals and comments produces no completion candidates, including explicit
+requests. Shorthand `$name`, a bare unescaped `$` and
 `${...}` interpolation retain completion; nested string literals and comments inside interpolation are excluded.
 
-**Evidence:**
+**Evidence:** `IdeAnalysisCoordinatorTest`, test `dot and identifier edits prepare completion without waiting for
+the presentation debounce`; `AnalysisRequestCoordinatorTest`, test `zero-delay automatic completion dispatches
+without advancing time and replaces obsolete requests`; `IdeClientServicesTest`, test `production analysis timing
+favors completion without starving presentation`; `IdeVisibleLatencyPerformanceTest`, tests `production analysis
+reaches the first visible frame latency targets` and `production burst keeps input responsive and analyzes its
+final revision`, cover the real worker, including rapid identifier edits.
 [`CompletionQueryTest`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/ide-analysis-k2/src/test/kotlin/ru/lazyhat/compukters/ide/analysis/k2/query/CompletionQueryTest.kt),
 tests `qualified completion uses inferred receiver members and applicable extensions`, `completion preserves
 overloads and orders them deterministically`, and `completion gives standard library overloads distinct
@@ -211,7 +226,8 @@ test `forked worker returns semantic completion`; `CompletionQueryTest`, tests `
 from resolved function parameters`, `autoimported project functions retain semantic call shapes`, and `block
 interpolation permits calls but an empty shorthand template does not`, `automatic completion suppresses
 function declaration names`, and `function declarations retain completion in types bodies and explicit
-requests`, `completion suppresses literal content and comments including nested template literals`, and
+requests`, `variable parameter and destructuring declaration names do not offer existing symbols`,
+`variable declarations keep type initializer and existing-variable completion`, `completion suppresses literal content and comments including nested template literals`, and
 `completion remains available inside quoted and raw string interpolations`; `CompletionQueryTest`, tests
 `completion labels single lambda arguments with braces and unnamed function types` and
 `autoimported lambda function labels use the same brace presentation`;

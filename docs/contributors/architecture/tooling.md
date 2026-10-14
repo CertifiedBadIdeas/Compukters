@@ -89,18 +89,18 @@ decision. A cancellation accepted before retirement receives an acknowledgement;
 by the server as completed work. Response callbacks run outside the queue lock.
 
 The IDE prepares admitted analysis snapshots on a screen-owned background scheduler, outside the input thread.
-Opening and reloading prepare immediately; source edits coalesce for 25 ms before manifest/profile admission and
-snapshot hashing. Cancelled preparation is removed from the timer queue; only one preparation can run and one latest
-revision can wait. Caret and manual-completion changes are read at publication, while source, target-profile and
+Opening, reloading and edits that trigger automatic completion prepare immediately; other source edits coalesce
+for 25 ms before manifest/profile admission and snapshot hashing. Cancelled preparation is removed from the timer
+queue; only one preparation can run and one latest revision can wait. Caret and manual-completion changes are read at publication, while source, target-profile and
 lifecycle revisions reject obsolete preparation. Closing the screen cancels preparation and closes its scheduler.
 Rebased semantic tokens and diagnostics remain visible while a new snapshot is pending; interactive queries require
 an admitted snapshot. Query pipe writes run outside the worker-controller lock, and cancellation writes run on a
 separate executor after the query frame is sent, keeping pipe backpressure off the input thread. Request IDs and
 cancellation acknowledgements retain their existing protocol contract.
 
-After preparation, the production client coalesces presentation changes for 100 ms and automatic completion for 50 ms;
-hover waits 150 ms. These delays share the visible response budget with K2 processing, the client tick and
-the next rendered frame. Manual completion enqueues immediately for an admitted snapshot and is retained while
+After preparation, automatic completion enqueues without a debounce delay. Presentation changes still coalesce
+for 100 ms and hover waits 150 ms. K2 processing, the client tick and the next rendered frame contribute to
+the visible completion response time. Manual completion enqueues immediately for an admitted snapshot and is retained while
 preparation is pending. Newer edits cancel obsolete work before their replacement snapshot is prepared.
 
 Analysis protocol v18 carries a validated diagnostic highlight kind alongside severity and exact source ranges.
@@ -313,7 +313,10 @@ shared gutter, row, caret, source anchor and pointer mapping. Its code bounds ex
 selection, carets and underlines stay inside those bounds when horizontally scrolled. Styled fragments expand tabs from the line's actual
 column. `IdeEditorRenderer` owns source, selection, highlights and gutter indicators; `IdeFindRenderer` owns search
 controls; `IdeEditorPopups` owns hover, declaration chooser, completion and parameter information.
-`IdePopupText` wraps source slices without changing UTF-16 offsets; `IdeDiagnosticRenderer` clips source-evidenced
+`IdePopupText` wraps source slices without changing UTF-16 offsets; its diagnostic display helpers
+normalize CR/LF, expand tabs and keep control characters out of Problems rows and tooltip glyphs.
+Named argument labels have a distinct semantic color, including calls still missing arguments;
+ordinary parameter and argument-expression colors remain unchanged. `IdeDiagnosticRenderer` clips source-evidenced
 diagnostic spans and `IdeDiagnosticTooltip` groups their messages. Disabled token tooltip targets preserve normal
 source clicks. These components
 emit directly into the existing frame collector and use the same source geometry for anchors.

@@ -11,6 +11,12 @@ permalink: /ARCHITECTURE/abi/
 
 This reference groups versioned representation boundaries by the version that introduced them. Those versions are minimum feature requirements, not a claim that older Runtime distributions implement today’s platform. The source owners below define the active contract. Before changing a wire format, inspect each producer, consumer and verifier. Runtime release pins in `build-scripts/src/main/kotlin/RuntimeBundleSupport.kt` describe published bundles separately from the local VM checkout.
 
+## Named argument semantic highlighting
+
+Analysis protocol **20** adds the `NamedArgument` semantic category for argument labels,
+including incomplete calls. It preserves existing category ordinals; older workers fail the
+handshake before replies are decoded. Guest/runtime/artifact contracts remain unchanged.
+
 ## Live named peripheral diagnostics
 
 Analysis protocol **19** appends bounded `PeripheralLookup` facts to presentation replies: source path,

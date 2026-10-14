@@ -66,6 +66,7 @@ object IdeColors {
     const val COMPLETION_VARIABLE = 0xFFC77DBB.toInt()
     const val COMPLETION_CLASS = 0xFF56A8F5.toInt()
     const val COMPLETION_INTERFACE = 0xFF6AAB73.toInt()
+    const val NAMED_ARGUMENT = 0xFFC77DBB.toInt()
     const val LOCAL_VARIABLE = 0xFFBCBEC4.toInt()
     const val MUTABLE_UNDERLINE = 0xFF84868C.toInt()
     const val HYPERLINK = 0xFF548AF7.toInt()
