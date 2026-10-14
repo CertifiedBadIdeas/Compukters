@@ -21,16 +21,19 @@ package ru.lazyhat.compukters.minecraft.peripheral
 import net.minecraft.core.BlockPos
 import net.minecraft.core.registries.BuiltInRegistries
 import net.minecraft.server.level.ServerLevel
+import ru.lazyhat.compukters.ide.analysis.PeripheralAvailability
 import ru.lazyhat.compukters.ide.client.target.IdeTargetFailure
 import ru.lazyhat.compukters.ide.client.target.IdeTargetFailureKind
 import ru.lazyhat.compukters.impl.ide.target.IdeNamedPeripheral
 import ru.lazyhat.compukters.impl.ide.target.IdePeripheralReference
 import ru.lazyhat.compukters.impl.ide.target.IdeTargetReply
+import ru.lazyhat.compukters.minecraft.computer.ComputerAddonHosts
 
 object IdePeripheralDiscovery {
     fun snapshot(
         level: ServerLevel,
         computer: BlockPos,
+        includeUnavailable: Boolean = false,
     ): IdeTargetReply.NamedPeripherals {
         val traversal = PeripheralWorldDiscovery.discover(level, computer)
         require(traversal is PeripheralCableTraversal.Complete) { "Peripheral discovery limit exceeded" }
@@ -39,6 +42,7 @@ object IdePeripheralDiscovery {
             traversal.contacts
                 .mapNotNull { identity -> names.nameOf(identity)?.let { identity to it } }
                 .distinctBy { (identity, _) -> reference(level, identity) ?: identity }
+        if (includeUnavailable) return inspection(level, computer, named)
         val counts = named.groupingBy { it.second }.eachCount()
         val entries =
             named
@@ -51,13 +55,73 @@ object IdePeripheralDiscovery {
                         BuiltInRegistries.ITEM.getKey(item).toString(),
                         counts.getValue(name) > 1,
                         reference(level, identity),
-                        ru.lazyhat.compukters.minecraft.computer.ComputerAddonHosts.peripheralLookupTypes(
+                        ComputerAddonHosts.peripheralLookupTypes(
                             identity.providerId,
                             identity.deviceKey,
                         ),
                     )
                 }
         return IdeTargetReply.NamedPeripherals(entries, named.size > entries.size)
+    }
+
+    private fun inspection(
+        level: ServerLevel,
+        computer: BlockPos,
+        reachable: List<Pair<PeripheralDeviceIdentity, String>>,
+    ): IdeTargetReply.NamedPeripherals {
+        check(level.server.isSameThread)
+        val observed = linkedMapOf<Any, IdeNamedPeripheral>()
+        reachable.forEach { (identity, name) ->
+            val ref = reference(level, identity)
+            observed[ref ?: identity] =
+                IdeNamedPeripheral(
+                    name,
+                    "minecraft:air",
+                    reference = ref,
+                    lookupTypes =
+                        ComputerAddonHosts.peripheralLookupTypes(
+                            identity.providerId,
+                            identity.deviceKey,
+                        ),
+                )
+        }
+        val network = PeripheralNetworkAccess.network(level, computer)
+        if (network != null) {
+            val names = PeripheralNetworkAccess.names(level, network.members.map { it.identity }.toSet())
+            network.members.filterNot { it.isComputer }.forEach { member ->
+                val name = names.nameOf(member.identity) ?: return@forEach
+                val ref = IdePeripheralReference(member.instance, member.identity.providerId, member.identity.deviceKey)
+                if (ref in observed) return@forEach
+                val availability =
+                    when (PeripheralNetworkAccess.availability(level, computer, member)) {
+                        PeripheralNetworkAvailability.AVAILABLE -> PeripheralAvailability.Available
+                        PeripheralNetworkAvailability.OUT_OF_RANGE -> PeripheralAvailability.OutOfRange
+                        PeripheralNetworkAvailability.OTHER_DIMENSION -> PeripheralAvailability.OtherDimension
+                        PeripheralNetworkAvailability.UNLOADED -> PeripheralAvailability.Unloaded
+                        PeripheralNetworkAvailability.REPLACED -> PeripheralAvailability.Replaced
+                        else -> PeripheralAvailability.Unavailable
+                    }
+                observed[ref] =
+                    IdeNamedPeripheral(
+                        name,
+                        "minecraft:air",
+                        reference = ref,
+                        lookupTypes =
+                            ComputerAddonHosts.peripheralLookupTypes(
+                                member.identity.providerId,
+                                member.identity.deviceKey,
+                            ),
+                        availability = availability,
+                    )
+            }
+        }
+        val counts = observed.values.groupingBy { it.name }.eachCount()
+        val entries =
+            observed.values
+                .sortedBy { it.name }
+                .take(1024)
+                .map { it.copy(duplicate = counts.getValue(it.name) > 1) }
+        return IdeTargetReply.NamedPeripherals(entries, observed.size > entries.size)
     }
 
     private fun reference(

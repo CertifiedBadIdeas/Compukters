@@ -31,6 +31,22 @@ public fun <T, R> Sequence<T>.map(transform: (T) -> R): Sequence<R> =
     TransformingSequence<T, R>(this, transform)
 
 /**
+ * Transforms elements on demand and skips null results, preserving source order.
+ * Repeated hasNext calls reuse the accepted result without invoking [transform] again.
+ * The callback is retained; exceptions propagate and non-local returns are unavailable.
+ * Nullable primitive results use their ordinary boxes before non-null scalar caching.
+ */
+public fun <T, R : Any> Sequence<T>.mapNotNull(transform: (T) -> R?): Sequence<R> =
+    TransformingSequence<T, R?>(this, transform).filterNotNull()
+
+/**
+ * Lazily skips null elements and exposes a non-null element type.
+ * Searches only as far as the consumer requests; repeated hasNext calls reuse the cache.
+ * Primitive accepted values use the existing scalar cache; reference slots clear on consumption.
+ */
+public fun <T : Any> Sequence<T?>.filterNotNull(): Sequence<T> = NotNullSequence<T>(this)
+
+/**
  * Retains matching elements in source order, testing only as far as the consumer requests.
  * hasNext may advance the source and invoke the retained predicate. Repeated hasNext calls
  * reuse a cached element, including null. Each traversal has its own cache.
@@ -251,4 +267,38 @@ internal class EmptySequence<T> : Sequence<T> {
 internal class EmptySequenceIterator<T> : Iterator<T> {
     override fun hasNext(): Boolean = false
     override fun next(): T = throw NoSuchElementException("Sequence iterator is exhausted")
+}
+
+internal class NotNullSequence<T : Any>(private val source: Sequence<T?>) : Sequence<T> {
+    override fun iterator(): Iterator<T> = NotNullIterator<T>(source.iterator())
+}
+
+internal class NotNullIterator<T : Any>(private val source: Iterator<T?>) : Iterator<T> {
+    // -1: not searched yet; 0: exhausted; 1: a non-null value is cached.
+    private var nextState: Int = -1
+    private val cache: SequenceCache<T> = sequenceCache<T>()
+
+    private fun calculateNext() {
+        while (source.hasNext()) {
+            val value = source.next()
+            if (value != null) {
+                cache.store(value)
+                nextState = 1
+                return
+            }
+        }
+        nextState = 0
+    }
+
+    override fun hasNext(): Boolean {
+        if (nextState == -1) calculateNext()
+        return nextState == 1
+    }
+
+    override fun next(): T {
+        if (nextState == -1) calculateNext()
+        if (nextState == 0) throw NoSuchElementException("Sequence iterator is exhausted")
+        nextState = -1
+        return cache.take()
+    }
 }

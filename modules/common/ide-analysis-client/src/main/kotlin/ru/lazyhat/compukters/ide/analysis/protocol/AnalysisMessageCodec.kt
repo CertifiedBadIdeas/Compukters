@@ -50,6 +50,7 @@ import ru.lazyhat.compukters.ide.analysis.ImportQuickFix
 import ru.lazyhat.compukters.ide.analysis.MAX_RENAME_NAME_BYTES
 import ru.lazyhat.compukters.ide.analysis.MethodUsageCount
 import ru.lazyhat.compukters.ide.analysis.ParameterInfoItem
+import ru.lazyhat.compukters.ide.analysis.PeripheralLookup
 import ru.lazyhat.compukters.ide.analysis.SemanticCategory
 import ru.lazyhat.compukters.ide.analysis.SemanticToken
 import ru.lazyhat.compukters.ide.analysis.SnapshotPresentation
@@ -463,6 +464,7 @@ private fun validateResult(
             require(active.semanticTokens.all { it.path == query.path }) {
                 "presentation semantic token does not belong to the active source"
             }
+            require(active.peripheralLookups.all { it.path == query.path }) { "peripheral lookup does not belong to the active source" }
             require(active.methodUsages.all { it.path == query.path }) { "method usage count does not belong to the active source" }
             SnapshotPresentation.create(
                 result.identity,
@@ -472,6 +474,7 @@ private fun validateResult(
                 active.locations,
                 limits.presentationLimits(),
                 active.methodUsages,
+                active.peripheralLookups,
             )
         }
 
@@ -788,6 +791,14 @@ private class MessageSink {
             string(usage.path.value)
             range(usage.range)
             u32(usage.count)
+        }
+        u32(active.peripheralLookups.size)
+        active.peripheralLookups.forEach { lookup ->
+            string(lookup.path.value)
+            range(lookup.range)
+            string(lookup.type)
+            string(lookup.name)
+            boolean(lookup.optional)
         }
     }
 
@@ -1244,6 +1255,10 @@ private class MessageSource(
             List(boundedCount(context.limits.semanticTokens, "method usage count")) {
                 MethodUsageCount(kotlinPath(), range(), u32())
             }
+        val peripheralLookups =
+            List(boundedCount(context.limits.declarationLocations, "peripheral lookup")) {
+                PeripheralLookup(kotlinPath(), range(), string(256), string(256), boolean())
+            }
         val value =
             SnapshotPresentation.create(
                 identity,
@@ -1253,6 +1268,7 @@ private class MessageSource(
                 locations,
                 context.limits.presentationLimits(),
                 methodUsages,
+                peripheralLookups,
             )
         return AnalysisResult.Presentation(identity, value, diagnosticsIncluded)
     }

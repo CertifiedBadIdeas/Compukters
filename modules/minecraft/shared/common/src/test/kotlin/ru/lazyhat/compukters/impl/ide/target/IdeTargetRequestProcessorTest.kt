@@ -66,27 +66,29 @@ internal class IdeTargetRequestProcessorTest {
     @Test
     fun `peripheral snapshot requires exact live player lease`() =
         runServerTest {
-            var calls = 0
+            val inspections = mutableListOf<Boolean>()
             val expected = IdeTargetReply.NamedPeripherals(listOf(IdeNamedPeripheral("drive_speed", "create:speedometer")))
             val fixture =
                 fixture(IdeTargetDeploymentOperations(verifyForDeploy = { null })) {
-                    calls++
+                    inspections += it
                     expected
                 }
             val attached = assertIs<IdeTargetReply.Attached>(fixture.processor.handle(fixture.player, attach(), 1)).target
             val reference = IdeTargetReference(attached.id, attached.profile)
             assertEquals(expected, fixture.processor.handle(fixture.player, IdeTargetRequest.NamedPeripherals(reference), 2))
-            assertIs<IdeTargetReply.Failed>(fixture.processor.handle(UUID.randomUUID(), IdeTargetRequest.NamedPeripherals(reference), 3))
+            val inspection = IdeTargetRequest.NamedPeripherals(reference, includeUnavailable = true)
+            assertEquals(expected, fixture.processor.handle(fixture.player, inspection, 2))
+            assertIs<IdeTargetReply.Failed>(fixture.processor.handle(UUID.randomUUID(), inspection, 3))
             assertIs<IdeTargetReply.Failed>(
                 fixture.processor.handle(
                     fixture.player,
-                    IdeTargetRequest.NamedPeripherals(reference.copy(profile = IdeTargetProfileId(hash(7)))),
+                    inspection.copy(target = reference.copy(profile = IdeTargetProfileId(hash(7)))),
                     3,
                 ),
             )
             fixture.processor.handle(fixture.player, IdeTargetRequest.Detach(reference), 4)
-            assertIs<IdeTargetReply.Failed>(fixture.processor.handle(fixture.player, IdeTargetRequest.NamedPeripherals(reference), 5))
-            assertEquals(1, calls)
+            assertIs<IdeTargetReply.Failed>(fixture.processor.handle(fixture.player, inspection, 5))
+            assertEquals(listOf(false, true), inspections)
         }
 
     @Test
@@ -205,7 +207,7 @@ internal class IdeTargetRequestProcessorTest {
     private fun fixture(
         operations: IdeTargetDeploymentOperations,
         rename: ((IdePeripheralReference, String, String) -> IdeTargetReply)? = null,
-        peripherals: (() -> IdeTargetReply.NamedPeripherals)? = null,
+        peripherals: ((Boolean) -> IdeTargetReply.NamedPeripherals)? = null,
     ): Fixture {
         val profile = TargetCompileProfile(toolchain(), emptyList(), WorkerLimits(artifactBytes = 32))
         val resolved =

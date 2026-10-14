@@ -87,6 +87,7 @@ class IdeScreenController(
         String,
         String,
     ) -> CompletableFuture<IdeTargetReply>? = { _, _, _, _ -> null },
+    private val peripheralInspection: (IdeTargetReference) -> CompletableFuture<IdeTargetReply>? = { null },
 ) {
     private val overlays =
         IdeLocalOverlays(
@@ -121,6 +122,7 @@ class IdeScreenController(
     private var pointerX: Double? = null
     private var pointerY: Double? = null
     private var projectSwitcherOpen = false
+    private val peripheralObserver = IdePeripheralObserver(peripheralInspection, controller::observePeripherals)
     private var peripheralPicker: IdePeripheralPickerView? = null
     private var peripheralFuture: CompletableFuture<IdeTargetReply>? = null
     private var peripheralTarget: IdeTargetReference? = null
@@ -478,6 +480,7 @@ class IdeScreenController(
     fun tick() {
         if (sessionClosed || controller.isClosed()) return
         controller.tick()
+        peripheralObserver.tick(controller.viewState().target.attachedTarget())
         pollPeripherals()
         terminalOverlay.setTarget(
             controller
@@ -1051,6 +1054,7 @@ class IdeScreenController(
         closePeripherals()
         if (sessionClosed) return
         sessionClosed = true
+        peripheralObserver.close()
         host.closeSession()
     }
 

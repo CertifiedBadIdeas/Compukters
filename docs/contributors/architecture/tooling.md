@@ -341,6 +341,26 @@ viewport. `IdeTextFieldLayout` supplies the same code-point geometry to painting
 keeps the field rectangle shared with the dialog. Closing or advancing a prompt releases its document and history.
 The component uses the existing editor engine without Minecraft types or version-specific widgets.
 
+## Live named peripheral diagnostics
+
+The analysis worker emits bounded immutable facts for successfully resolved platform `PeripheralProvider.named`
+and `namedOrNull` calls, unwrapping inherited symbols and evaluating constant string arguments through K2.
+It carries the substituted return type and exact UTF-16 argument range, so aliases, addon providers and `const val`
+work without inspecting source spelling. Dynamic names and unrelated/custom methods contribute no facts.
+Analysis protocol 19 carries these facts with the presentation; edits discard them until fresh analysis is accepted.
+
+A shared client observer requests an opt-in network inspection every second, independently of the Devices window.
+Only one request is pending at a time; five-second expiry/timeout, attachment replacement and closure invalidate
+observations. Target payload registration 3 admits the flag and availability enum. The server validates the lease,
+uses existing discovery and saved-network membership on the server thread and never loads chunks for inspection.
+It includes reachable names plus unavailable saved members with existing availability reasons.
+
+The IDE controller combines source facts with current matching-target observations. Complete observations can
+report absent names, incompatible lookup types, ambiguous reachable devices, range/dimension/chunk/replacement
+failures. Unknown contracts and truncated or failed observations never prove absence. Mandatory calls produce
+warnings; optional calls produce information with `None` highlight and retain hover/Problems navigation.
+Network observations remain advisory and never alter compilation, Build results or Guest execution.
+
 ## IDE named peripheral selection
 
 The workspace picker requests a bounded snapshot through the existing IDE target request broker. The server validates
