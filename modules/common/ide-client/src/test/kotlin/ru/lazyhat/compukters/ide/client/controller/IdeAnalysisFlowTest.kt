@@ -292,7 +292,7 @@ class IdeAnalysisFlowTest {
         fixture.controller.dispatch(IdeCommand.Edit(IdeEditorInput.Type("y")))
         val edited = source.replace("\"x\"", "\"yx\"")
         assertEquals(3, requests.parameterInfoRequests.size)
-        assertTrue(requests.automaticOffsets.isEmpty())
+        assertEquals(listOf(source.indexOf("x") + 1), requests.automaticOffsets)
         requests.completeParameterInfo(2, edited)
         fixture.controller.tick()
         assertNotNull((fixture.textEditor().analysis as IdeAnalysisState.Active).parameterInfo)
@@ -306,6 +306,52 @@ class IdeAnalysisFlowTest {
         fixture.controller.dispatch(IdeCommand.ShowParameterInfo)
         fixture.controller.dispatch(IdeCommand.DismissParameterInfo)
         assertNull((fixture.textEditor().analysis as IdeAnalysisState.Active).parameterInfo)
+        fixture.controller.close()
+    }
+
+    @Test
+    fun `argument hints remain available while edits and manual requests offer completion`() {
+        val requests = FlowAnalysisRequests()
+        val fixture =
+            ControllerFixture(preferences("demo", "src/main.kt"), analysisCoordinatorFactory = { workspace ->
+                coordinator(workspace, requests)
+            })
+        fixture.startAndTick()
+        val source = "fun main() { println(va) }"
+        fixture.controller.dispatch(IdeCommand.Edit(IdeEditorInput.SelectAll))
+        fixture.controller.dispatch(IdeCommand.Edit(IdeEditorInput.Type(source)))
+        fixture.controller.dispatch(IdeCommand.Edit(IdeEditorInput.SetCaret(source.indexOf("va") + 2, false)))
+        fixture.controller.dispatch(IdeCommand.ShowParameterInfo)
+        requests.completeParameterInfo(0, source)
+        fixture.controller.tick()
+        assertNotNull((fixture.textEditor().analysis as IdeAnalysisState.Active).parameterInfo)
+        fixture.controller.dispatch(IdeCommand.Edit(IdeEditorInput.Type("l")))
+        val edited = source.replace("va)", "val)")
+        val caret = edited.indexOf("val") + 3
+        assertEquals(listOf(caret), requests.automaticOffsets)
+        requests.completeParameterInfo(1, edited)
+        val active = fixture.analysisCoordinator!!.state() as IdeAnalysisState.Active
+        requests.publish(
+            AnalysisClientResult.Success(
+                AnalysisResult.Completion.create(
+                    active.identity,
+                    EditorRange(caret - 3, caret),
+                    listOf(CompletionItem("value", "value", CompletionKind.LocalVariable)),
+                    edited.length,
+                ),
+            ),
+        )
+        fixture.controller.tick()
+        val both = fixture.textEditor().analysis as IdeAnalysisState.Active
+        assertNotNull(both.parameterInfo)
+        assertNotNull(both.completion)
+        fixture.controller.dispatch(IdeCommand.DismissCompletion)
+        fixture.controller.tick()
+        assertNotNull((fixture.textEditor().analysis as IdeAnalysisState.Active).parameterInfo)
+        fixture.controller.dispatch(IdeCommand.ManualCompletion)
+        fixture.controller.tick()
+        assertEquals(listOf(caret), requests.manualOffsets)
+        assertNotNull((fixture.textEditor().analysis as IdeAnalysisState.Active).parameterInfo)
         fixture.controller.close()
     }
 

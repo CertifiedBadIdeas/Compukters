@@ -668,12 +668,15 @@ class IdeInputAdapterTest {
     }
 
     @Test
-    fun `escape dismisses parameter info before completion`() {
+    fun `escape dismisses visible completion before parameter info`() {
         val fixture = fixture()
         val focus = IdeFocusState(IdeFocusArea.Editor, completionVisible = true, parameterInfoVisible = true)
 
         fixture.adapter.keyPressed(key(IdeKeyCode.ESCAPE), focus)
 
+        assertEquals(listOf<IdeCommand>(IdeCommand.DismissCompletion), fixture.commands)
+        fixture.commands.clear()
+        fixture.adapter.keyPressed(key(IdeKeyCode.ESCAPE), focus.copy(completionVisible = false))
         assertEquals(listOf<IdeCommand>(IdeCommand.DismissParameterInfo), fixture.commands)
     }
 
