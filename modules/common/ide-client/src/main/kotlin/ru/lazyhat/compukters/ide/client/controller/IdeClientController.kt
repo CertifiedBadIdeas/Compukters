@@ -1456,6 +1456,10 @@ class IdeClientController(
                     }
                 }
 
+                is IdeEditorInput.MoveLines -> {
+                    active.document.moveLines(input.direction == IdeVerticalDirection.Down)
+                }
+
                 IdeEditorInput.Duplicate -> {
                     active.document.duplicate()
                 }

@@ -13,6 +13,8 @@ headings so this page has one stable URL that can be shared outside the reposito
 
 ## 0.6.0 — In development
 
+- IDE supports Alt+Up/Down to move the current line or selected block, preserving selection and one-step undo.
+
 - Added an experimental `rocket-landing` Guest project for a controlled vertical climb, height hold and soft
   descent onto a known launch pad, with bounded horizontal return within a 2 m corridor, final descent after
   centering, and immediate near-pad stop detection using measured position changes, plus named phases and

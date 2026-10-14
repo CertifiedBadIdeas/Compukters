@@ -37,6 +37,10 @@ sealed interface IdeEditorInput {
         val extendSelection: Boolean,
     ) : IdeEditorInput
 
+    data class MoveLines(
+        val direction: IdeVerticalDirection,
+    ) : IdeEditorInput
+
     data class MoveWord(
         val direction: IdeHorizontalDirection,
         val extendSelection: Boolean,

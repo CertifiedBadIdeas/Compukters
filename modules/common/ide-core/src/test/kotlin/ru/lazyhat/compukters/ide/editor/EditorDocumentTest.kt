@@ -28,6 +28,115 @@ import kotlin.test.assertTrue
 
 class EditorDocumentTest {
     @Test
+    fun `moving blank and identical lines still carries caret and undo state`() {
+        for ((source, caret, expected) in listOf(Triple("x\n\nlast", 2, "x\nlast\n"), Triple("same\nsame", 1, "same\nsame"))) {
+            val editor = EditorDocument(source)
+            editor.setCaret(caret)
+            assertIs<EditorEditResult.Applied>(editor.moveLines(true))
+            assertEquals(expected, editor.materialize())
+            assertEquals(if (caret == 1) 6 else expected.length, editor.caretOffset)
+            editor.undo()
+            assertEquals(source, editor.materialize())
+            assertEquals(caret, editor.caretOffset)
+        }
+    }
+
+    @Test
+    fun `rejected line movement does not bypass undo budget or change selection`() {
+        val editor = EditorDocument("a\nbb", EditorLimits(maxUndoCodeUnits = 4))
+        editor.setCaret(1)
+        assertEquals(EditorEditResult.Rejected(EditorRejection.UndoLimit), editor.moveLines(true))
+        assertEquals("a\nbb", editor.materialize())
+        assertEquals(1, editor.caretOffset)
+        assertEquals(0, editor.undoEntryCount)
+    }
+
+    @Test
+    fun `move line preserves caret unicode line separators and final newline with atomic undo`() {
+        for (source in listOf("a\nbb\n😀c", "a\r\nbb\r\n😀c", "a\r\nbb\n😀c", "a\nbb\n😀c\n")) {
+            val editor = EditorDocument(source)
+            val caret = editor.lineStartOffset(1) + 1
+            editor.setCaret(caret)
+            val separators =
+                (0 until editor.lineCount).map { index ->
+                    val line = editor.line(index)
+                    source.substring(line.contentEndUtf16, line.separatorEndUtf16)
+                }
+            assertIs<EditorEditResult.Applied>(editor.moveLines(true))
+            val contents = if (source.endsWith("\n")) listOf("a", "😀c", "bb", "") else listOf("a", "😀c", "bb")
+            val expected = contents.mapIndexed { index, content -> content + separators[index] }.joinToString("")
+            assertEquals(expected, editor.materialize())
+            assertEquals(editor.lineStartOffset(2) + 1, editor.caretOffset)
+            assertEquals(1, editor.undoEntryCount)
+            editor.undo()
+            assertEquals(source, editor.materialize())
+            assertEquals(caret, editor.caretOffset)
+            editor.redo()
+            assertEquals(expected, editor.materialize())
+            editor.moveLines(false)
+            assertEquals(source, editor.materialize())
+            assertEquals(caret, editor.caretOffset)
+        }
+    }
+
+    @Test
+    fun `move selected block preserves selection direction and excludes ending next line`() {
+        for (backward in listOf(false, true)) {
+            val source = "top\r\naa\nbb\r\nbottom"
+            val editor = EditorDocument(source)
+            val start = editor.lineStartOffset(1)
+            val end = editor.lineStartOffset(3)
+            val anchor = if (backward) end else start
+            val caret = if (backward) start else end
+            editor.setCaret(anchor)
+            editor.setCaret(caret, true)
+            editor.moveLines(false)
+            assertEquals("aa\r\nbb\ntop\r\nbottom", editor.materialize())
+            assertEquals(EditorRange(0, editor.lineStartOffset(2)), editor.selectionRange)
+            assertEquals(if (backward) 0 else editor.lineStartOffset(2), editor.caretOffset)
+            editor.moveLines(true)
+            assertEquals(source, editor.materialize())
+            assertEquals(EditorRange(start, end), editor.selectionRange)
+            assertEquals(caret, editor.caretOffset)
+            editor.undo()
+            editor.undo()
+            assertEquals(source, editor.materialize())
+            assertEquals(caret, editor.caretOffset)
+        }
+    }
+
+    @Test
+    fun `partial multiline selection follows moved block at unterminated end of file`() {
+        val editor = EditorDocument("top\nhello\nworld\nend")
+        editor.setCaret(5)
+        editor.setCaret(13, true)
+        editor.moveLines(true)
+        assertEquals("top\nend\nhello\nworld", editor.materialize())
+        assertEquals(EditorRange(9, 17), editor.selectionRange)
+        assertEquals("ello\nwor", editor.copySelection())
+        editor.undo()
+        assertEquals(EditorRange(5, 13), editor.selectionRange)
+        assertEquals("top\nhello\nworld\nend", editor.materialize())
+    }
+
+    @Test
+    fun `line movement at boundaries or after closing preserves document and history`() {
+        for (source in listOf("", "only", "a\nb")) {
+            val editor = EditorDocument(source)
+            assertEquals(EditorEditResult.NoChange, editor.moveLines(false))
+            editor.setCaret(source.length)
+            assertEquals(EditorEditResult.NoChange, editor.moveLines(true))
+            editor.selectAll()
+            assertEquals(EditorEditResult.NoChange, editor.moveLines(false))
+            assertEquals(EditorEditResult.NoChange, editor.moveLines(true))
+            assertEquals(source, editor.materialize())
+            assertEquals(0, editor.undoEntryCount)
+            editor.close()
+            assertEquals(EditorEditResult.Rejected(EditorRejection.Closed), editor.moveLines(true))
+        }
+    }
+
+    @Test
     fun `duplicate line moves caret to copy and is a single undoable edit with original line endings`() {
         for ((source, caret, result) in listOf(
             Triple("one\ntwo", 1, "one\none\ntwo" to 5),

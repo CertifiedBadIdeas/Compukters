@@ -86,6 +86,9 @@ The query supports the same selection, clipboard and undo actions as dialog fiel
 In the source editor, **Ctrl+D** duplicates the current line below and moves the caret to its copy. With a selection,
 it duplicates exactly the selected text immediately after it and selects the copy; press Ctrl+D again to repeat.
 Each duplication is one undo step with **Ctrl+Z** and can be restored with **Ctrl+Shift+Z** or **Ctrl+Y**.
+**Alt+Up/Down** moves the current line or every line touched by the selection one position up/down. The caret and
+selection follow the moved text; a selection ending at the next line's start does not include that next line.
+Moving beyond the beginning or end of the file has no effect. Each move is one undo step.
 
 Opening project files adds tabs above the editor. Click a tab to switch files while retaining its edits, caret,
 selection, scrolling and undo history. The active tab has a colored underline. A **•** marks unsaved changes;
