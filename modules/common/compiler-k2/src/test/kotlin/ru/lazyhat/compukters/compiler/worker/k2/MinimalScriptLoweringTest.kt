@@ -5190,6 +5190,7 @@ class MinimalScriptLoweringTest {
             cases.chunked(2).forEachIndexed { batch, entries ->
                 val source =
                     """
+                    class GenericEquality<T> { fun same(left: T, right: T): Boolean = left == right }
                     fun <T> verify(first: T, second: T) {
                         val typed = listOf(first, second)
                         val universal = listOf<Any?>(first, second)
@@ -5212,6 +5213,16 @@ class MinimalScriptLoweringTest {
                         ${entries.joinToString("\n") { (type, first, second) -> "verify<$type>($first, $second)" }}
                         ${if (entries.any { it.first == "Float" }) {
                         """
+                            check(GenericEquality<Float>().same(Float.NaN, 0f / 0f))
+                            check(GenericEquality<Double>().same(Double.NaN, 0.0 / 0.0))
+                            check(!GenericEquality<Float>().same(-0.0f, 0.0f))
+                            check(!GenericEquality<Double>().same(-0.0, 0.0))
+                            val floats = mutableMapOf(Float.NaN to 1)
+                            check(floats.put(0f / 0f, 2) == 1 && floats.size == 1)
+                            check(floats[Float.NaN] == 2 && floats.remove(0f / 0f) == 2)
+                            val doubles = mutableMapOf(Double.NaN to 1)
+                            check(doubles.put(0.0 / 0.0, 2) == 1 && doubles.size == 1)
+                            check(doubles[Double.NaN] == 2 && doubles.remove(0.0 / 0.0) == 2)
                             check(listOf(Float.NaN) == listOf(Float.NaN))
                             check(listOf(Double.NaN) == listOf(Double.NaN))
                             check(listOf(-0.0f) != listOf(0.0f))
@@ -5573,8 +5584,11 @@ class MinimalScriptLoweringTest {
                     nullable["a"] = 42
                     check(nullable["a"] == 42)
                     val floats = HashSet<Float>()
-                    check(floats.add(Float.NaN) && !floats.add(0f / 0f))
-                    check(floats.add(0f) && floats.add(-0f) && floats.size == 3)
+                    check(floats.add(Float.NaN)) { "first NaN" }
+                    check(!floats.add(0f / 0f)) { "duplicate NaN" }
+                    check(floats.add(0f)) { "positive zero" }
+                    check(floats.add(-0f)) { "negative zero" }
+                    check(floats.size == 3) { "Float set cardinality" }
                     check(emptyMap<Int, Int>().isEmpty() && emptySet<Float>().isEmpty())
                     println("hash primitive storage ok")
                 }
