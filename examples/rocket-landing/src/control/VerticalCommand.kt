@@ -24,11 +24,17 @@ fun verticalCommand(
     maxKn: Double,
     tilt: Double,
     dt: Double,
+    centered: Boolean,
 ): VerticalCommand {
     val target =
         if (state.phase == FlightPhase.DESCENT) {
-            // Slow down over the last four metres, allowing the speed loop time to brake.
-            -flightBound(0.5 * height, 0.25, 2.0)
+            if (centered) {
+                // Slow down over the last four metres, allowing the speed loop time to brake.
+                -flightBound(0.5 * height, 0.25, 2.0)
+            } else {
+                // Approach and hold a two-metre clearance until horizontal return is settled.
+                flightBound(0.5 * (2.0 - height), -2.0, 1.0)
+            }
         } else {
             val difference = climbHeight - height
             val magnitude = flightBound(sqrt(abs(difference)), 0.0, 4.0)

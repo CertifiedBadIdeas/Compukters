@@ -2905,6 +2905,10 @@ class MinimalScriptLoweringTest {
                             .map { "project/control/${it.name}" to it.readText() }
                             .toList()
                             .toTypedArray(),
+                        "project/horizontal-scenarios.kt" to
+                            repositoryFile(
+                                "modules/common/compiler-k2/src/test/resources/kotlin/rocket-landing/HorizontalScenarios.kt",
+                            ).readText(),
                         "project/main.kt" to
                             repositoryFile("modules/common/compiler-k2/src/test/resources/kotlin/rocket-landing/Scenarios.kt").readText(),
                     ),

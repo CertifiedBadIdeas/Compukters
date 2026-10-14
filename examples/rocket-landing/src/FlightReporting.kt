@@ -18,6 +18,10 @@ fun reportFlight(
     println(
         "${state.phase.name}: height ${offset.y} m; speed ${current.linearVelocity.y}/${command.targetSpeed} m/s; ${command.thrustKn} kN; drift $lateral m",
     )
+    val horizontal = padGuidance(offset, positionVelocity)
+    if (!horizontal.centered) {
+        println("CENTERING: drift ${horizontal.distance} m; lateral speed ${horizontal.speed} m/s; final descent waits for return.")
+    }
     if (state.phase == FlightPhase.DESCENT) {
         println(
             "Landing: pose speed ${positionVelocity.length} m/s; angular ${current.angularVelocity.length} rad/s",

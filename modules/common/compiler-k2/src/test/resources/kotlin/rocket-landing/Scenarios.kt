@@ -204,6 +204,7 @@ fun runScenarios() {
             ) { "Contact too fast: $contactSpeed; climb=$climb; gravity=$gravity; height=$height; speed=$speed" }
         }
     }
+    runHorizontalScenarios()
     println("rocket landing ok")
 }
 

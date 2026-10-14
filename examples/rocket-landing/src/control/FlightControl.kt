@@ -21,6 +21,7 @@ fun flightCommand(
     hoverKn: Double,
     maxKn: Double,
     dt: Double,
+    padOffset: Vector3d = Vector3d(0.0, 0.0, 0.0),
 ): FlightCommand {
     require(height >= -0.5 && height <= climbHeight + 10.0) { "Outside vertical flight envelope" }
     require(climbHeight >= 5.0 && climbHeight <= 100.0 && holdSeconds >= 1.0 && holdSeconds <= 30.0)
@@ -29,12 +30,24 @@ fun flightCommand(
     require(hoverKn > 0.0 && hoverKn <= maxKn && maxKn <= Double.MAX_VALUE)
     require(dt > 0.0 && dt <= 0.5 && state.settledSeconds >= 0.0 && state.settledSeconds <= 60.0)
     require(state.integral >= -9.81 && state.integral <= 9.81)
-    val attitude = uprightCommand(orientation, worldAngularVelocity)
-    val next = nextFlightState(state, height, verticalSpeed, positionVelocity, attitude.angularSpeed, climbHeight, holdSeconds, dt)
+    val horizontal = padGuidance(padOffset, positionVelocity)
+    val attitude = attitudeCommand(orientation, worldAngularVelocity, horizontal.targetUp)
+    val next =
+        nextFlightState(
+            state,
+            height,
+            verticalSpeed,
+            positionVelocity,
+            attitude.angularSpeed,
+            climbHeight,
+            holdSeconds,
+            dt,
+            horizontal.centered,
+        )
     if (next.phase == FlightPhase.COMPLETE) {
         return FlightCommand(FlightState(next.phase, next.settledSeconds, 0.0), 0.0, 0.0, 0.0, 0.0)
     }
-    val vertical = verticalCommand(next, height, verticalSpeed, climbHeight, hoverKn, maxKn, attitude.tilt, dt)
+    val vertical = verticalCommand(next, height, verticalSpeed, climbHeight, hoverKn, maxKn, attitude.tilt, dt, horizontal.centered)
     return FlightCommand(
         FlightState(next.phase, next.settledSeconds, vertical.integral),
         vertical.targetSpeed,
