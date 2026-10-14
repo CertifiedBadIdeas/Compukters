@@ -83,6 +83,23 @@ import kotlin.test.assertTrue
 
 class IdeAnalysisCoordinatorTest {
     @Test
+    fun `dot and identifier edits prepare completion without waiting for the presentation debounce`() {
+        val scheduler = ControlledPreparationScheduler()
+        val fixture = AnalysisFixture("receiver", preparationScheduler = scheduler)
+        fixture.coordinator.open(fixture.project, path(), fixture.text, 0)
+        scheduler.runNext()
+        fixture.coordinator.sourceChanged(fixture.project, path(), "receiver.", 1, ".")
+        assertEquals(0L, scheduler.delays.last())
+        scheduler.runNext()
+        fixture.coordinator.sourceChanged(fixture.project, path(), "receiver.m", 2, "m")
+        assertEquals(0L, scheduler.delays.last())
+        scheduler.runNext()
+        fixture.coordinator.sourceChanged(fixture.project, path(), "receiver.m ", 3, " ")
+        assertTrue(scheduler.delays.last() > 0L)
+        fixture.coordinator.close()
+    }
+
+    @Test
     fun `target change during preparation discards the old profile`() {
         val scheduler = ControlledPreparationScheduler()
         val fixture = AnalysisFixture("a", preparationScheduler = scheduler)
@@ -1692,6 +1709,7 @@ private fun hash(seed: Int) = Hash256.of(ByteArray(32) { seed.toByte() })
 private val ANALYSIS_LIMITS = WorkerLimits(sourceFiles = 8, sourceFileBytes = 4096, sourceBytes = 8192)
 
 private class ControlledPreparationScheduler : AnalysisTaskScheduler {
+    val delays = mutableListOf<Long>()
     private val tasks = mutableListOf<() -> Unit>()
     var closed = false
     val pendingCount: Int get() = tasks.size
@@ -1701,6 +1719,7 @@ private class ControlledPreparationScheduler : AnalysisTaskScheduler {
         action: () -> Unit,
     ): AnalysisScheduledTask {
         check(!closed)
+        delays += delayNanos
         tasks += action
         return AnalysisScheduledTask { tasks.remove(action) }
     }

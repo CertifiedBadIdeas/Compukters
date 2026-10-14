@@ -33,6 +33,10 @@ headings so this page has one stable URL that can be shared outside the reposito
 - Configurator outlines on Sable constructions transform block coordinates into the world before applying
   the camera offset, preserving their placement and rotation while the player moves.
 
+- IDE automatic completion after dots and identifier edits starts without preparation or request debounce delays.
+  Variable, parameter and destructuring declaration names suppress completion candidates while types,
+  initializers and existing-variable references retain semantic suggestions.
+
 - Added programmable Create pumps with persistent remotely reversible fluid flow and normally disengaged
   programmable clutches that release their load when the controlling program or peripheral connection ends.
   The clutch has a blue casing band and Compukters controller panel with a cable socket and flat contact
@@ -590,6 +594,9 @@ listed in [Kotlin support](developers/kotlin-support.md) and [standard library s
   Scale controls remain available when the selected scale is too large for the window.
 - Kotlin lexical highlighting colors the `value` modifier, function calls, qualified/use-site annotations and Unicode
   escapes; numeric literals remain separate from range operators and member access while semantic colors take precedence.
+  Named argument labels have a distinct semantic color, including incomplete calls.
+- Problems rows and diagnostic tooltips render multiline compiler messages without control-character glyphs;
+  tooltips preserve line breaks and indentation.
 - `Alt+F7` opens semantic Find Usages with navigable context. Clickable problems, gutter markers, status counts
   and `F2` / `Shift+F2` navigation use matching source text and reject stale locations. Method declarations show
   non-zero project usage counts that distinguish overloads and remain stable during unrelated edits.

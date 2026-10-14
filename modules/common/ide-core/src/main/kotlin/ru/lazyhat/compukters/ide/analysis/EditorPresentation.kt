@@ -98,6 +98,7 @@ enum class SemanticCategory {
     InferredExpression,
     SmartCastExpression,
     PeripheralProvider,
+    NamedArgument,
 }
 
 data class SemanticToken(

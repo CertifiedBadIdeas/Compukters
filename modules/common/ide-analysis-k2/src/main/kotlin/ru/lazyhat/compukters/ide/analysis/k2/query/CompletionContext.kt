@@ -25,6 +25,7 @@ import org.jetbrains.kotlin.psi.KtBlockExpression
 import org.jetbrains.kotlin.psi.KtBlockStringTemplateEntry
 import org.jetbrains.kotlin.psi.KtClassBody
 import org.jetbrains.kotlin.psi.KtDeclarationWithBody
+import org.jetbrains.kotlin.psi.KtDestructuringDeclarationEntry
 import org.jetbrains.kotlin.psi.KtElement
 import org.jetbrains.kotlin.psi.KtFile
 import org.jetbrains.kotlin.psi.KtImportDirective
@@ -32,6 +33,8 @@ import org.jetbrains.kotlin.psi.KtLiteralStringTemplateEntry
 import org.jetbrains.kotlin.psi.KtNameReferenceExpression
 import org.jetbrains.kotlin.psi.KtNamedFunction
 import org.jetbrains.kotlin.psi.KtPackageDirective
+import org.jetbrains.kotlin.psi.KtParameter
+import org.jetbrains.kotlin.psi.KtProperty
 import org.jetbrains.kotlin.psi.KtQualifiedExpression
 import org.jetbrains.kotlin.psi.KtSimpleNameStringTemplateEntry
 import org.jetbrains.kotlin.psi.KtStringTemplateEntry
@@ -52,6 +55,7 @@ internal data class CompletionContext(
     val receiver: org.jetbrains.kotlin.psi.KtExpression?,
     val keywordContext: KeywordContext,
     val isFunctionDeclarationName: Boolean,
+    val isVariableDeclarationName: Boolean,
     val allowsCompletion: Boolean,
 ) {
     companion object {
@@ -89,6 +93,15 @@ internal data class CompletionContext(
                 generateSequence(leaf) { it.parent }
                     .filterIsInstance<KtNamedFunction>()
                     .any { it.nameIdentifier == leaf }
+            val isVariableDeclarationName =
+                generateSequence(leaf) { it.parent }.any {
+                    when (it) {
+                        is KtProperty -> it.nameIdentifier == leaf
+                        is KtParameter -> it.nameIdentifier == leaf
+                        is KtDestructuringDeclarationEntry -> it.nameIdentifier == leaf
+                        else -> false
+                    }
+                }
             return CompletionContext(
                 prefix,
                 EditorRange(start, offsetUtf16),
@@ -96,6 +109,7 @@ internal data class CompletionContext(
                 receiver,
                 keywordContext,
                 isFunctionDeclarationName,
+                isVariableDeclarationName,
                 allowsCompletion(leaf, source, offsetUtf16),
             )
         }

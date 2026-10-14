@@ -1158,6 +1158,55 @@ class IdeRendererStateTest {
     }
 
     @Test
+    fun `named argument label uses its own color without changing the argument expression`() {
+        val source = "pixel(position = point)"
+        val path = VirtualSourcePath.kotlin("src/main.kt")
+        val tokens =
+            listOf(
+                ru.lazyhat.compukters.ide.analysis.SemanticToken(
+                    path,
+                    EditorRange(6, 14),
+                    ru.lazyhat.compukters.ide.analysis.SemanticCategory.NamedArgument,
+                ),
+                ru.lazyhat.compukters.ide.analysis.SemanticToken(
+                    path,
+                    EditorRange(17, 22),
+                    ru.lazyhat.compukters.ide.analysis.SemanticCategory.LocalVariable,
+                ),
+            )
+        val editor = semanticEditor(source, semanticTokens = tokens) { _, _ -> IdeSemanticInteraction.None }
+        val model = IdeRenderer.extract(workspaceState(editor, IdeBuildState.Idle), geometry())
+        assertEquals(IdeColors.NAMED_ARGUMENT, model.sourceDraw("position").color)
+        assertEquals(IdeColors.LOCAL_VARIABLE, model.sourceDraw("point").color)
+        assertTrue(model.sourceDraw("position").color != model.sourceDraw("point").color)
+    }
+
+    @Test
+    fun `multiline diagnostics render printable problem rows and preserve tooltip lines`() {
+        val source = "fun main() = missing()"
+        val editor = semanticEditor(source, caretUtf16 = 13) { _, _ -> IdeSemanticInteraction.None }
+        val path = VirtualSourcePath.kotlin("src/main.kt")
+        val message = "No applicable candidates:\r\n\tfun pixel(position: Point, color: Int)\rDetails\u0000"
+        val row = IdeDiagnosticRow(EditorDiagnostic(EditorDiagnosticSeverity.Error, message, path, EditorRange(13, 20)), source)
+        val base = workspaceState(editor, IdeBuildState.Idle)
+        val workspace = (base.page as IdePageState.Workspace).value
+        val state = base.copy(page = IdePageState.Workspace(workspace.copy(diagnostics = IdeDiagnostics(listOf(row)))))
+        val bounds = geometry()
+        val model = IdeRenderer.extract(state, bounds)
+        val problem = model.text.single { it.kind == IdeTextKind.Diagnostic && it.value.contains("No applicable") }
+        assertTrue(problem.value.none { it.isISOControl() }, problem.value)
+        assertTrue(problem.value.contains("fun pixel(position: Point, color: Int)"))
+        val target = model.hitTargets.first { it.diagnostic == row && bounds.editor.contains(it.bounds) }
+        val hovered = IdeRenderer.extract(state, bounds, pointerX = target.bounds.left + 1, pointerY = target.bounds.top + 1)
+        val lines = hovered.text.filter { it.kind == IdeTextKind.Tooltip }.map { it.value }
+        assertTrue(lines.any { it == "No applicable candidates:" }, lines.toString())
+        assertTrue(lines.any { it.startsWith("    fun pixel") }, lines.toString())
+        assertTrue(lines.any { it == "Details" }, lines.toString())
+        assertTrue(lines.all { line -> line.none { it.isISOControl() } }, lines.toString())
+        assertEquals(message, row.diagnostic.message)
+    }
+
+    @Test
     fun `diagnostic rows and gutter use exact locations without shifting code and expose counts`() {
         val source = "fun work() = 1\nfun second() = 2"
         val editor = semanticEditor(source) { _, _ -> IdeSemanticInteraction.None }
@@ -2482,6 +2531,7 @@ class IdeRendererStateTest {
         find: IdeFindView? = null,
         occurrences: List<EditorRange> = emptyList(),
         methodUsages: List<ru.lazyhat.compukters.ide.analysis.MethodUsageCount> = emptyList(),
+        semanticTokens: List<ru.lazyhat.compukters.ide.analysis.SemanticToken> = emptyList(),
         caretUtf16: Int = 0,
         completion: ((AnalysisSnapshotIdentity, VirtualSourcePath) -> IdeCompletionState)? = null,
         gitLineChanges: List<ru.lazyhat.compukters.ide.git.GitLineChange> = emptyList(),
@@ -2519,7 +2569,7 @@ class IdeRendererStateTest {
                     identity,
                     virtualPath,
                     0,
-                    IdeAnalysisPresentation.of(emptyList(), emptyList(), methodUsages),
+                    IdeAnalysisPresentation.of(emptyList(), semanticTokens, methodUsages),
                     completion = completion?.invoke(identity, virtualPath),
                     parameterInfo = parameterInfo?.invoke(identity, virtualPath),
                     interaction = interaction(identity, virtualPath),

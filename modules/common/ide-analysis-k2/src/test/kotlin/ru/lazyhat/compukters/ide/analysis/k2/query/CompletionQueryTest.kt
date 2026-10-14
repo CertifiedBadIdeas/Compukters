@@ -543,6 +543,48 @@ class CompletionQueryTest {
     }
 
     @Test
+    fun `variable parameter and destructuring declaration names do not offer existing symbols`() {
+        val declarations =
+            listOf(
+                "val Pre",
+                "var Pre = 1",
+                "class Host { val Pre = 1 }",
+                "fun test() { val Pre = 1 }",
+                "fun test(Pre: Int) {}",
+                "class Host(val Pre: Int)",
+                "fun test() { for (Pre in listOf(1)) {} }",
+                "fun test() { listOf(1).map { Pre -> Pre } }",
+                "fun test() { val (Pre, other) = Pair(1, 2) }",
+                "fun test() { try {} catch (Pre: Exception) {} }",
+                "val `Pre` = 1",
+            )
+        val sources = declarations.mapIndexed { index, declaration -> "case$index.kt" to "class PrefixType$index\n$declaration" }
+        K2QueryFixture.source(*sources.toTypedArray()).use { fixture ->
+            for ((path, source) in sources) {
+                val start = source.indexOf("Pre", source.indexOf('\n') + 1)
+                for (trigger in CompletionTrigger.entries) {
+                    for (length in 1..3) {
+                        val result = fixture.complete(path, start + length, trigger)
+                        assertTrue(result.items.isEmpty(), "$source at $length ($trigger): ${result.items}")
+                        assertEquals(EditorRange(start, start + length), result.replacement)
+                    }
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `variable declarations keep type initializer and existing-variable completion`() {
+        val source = "class PrefixType\nval localValue = 1\nval value: Pre = Pre()\nfun test() { loc }"
+        K2QueryFixture.source("main.kt" to source).use { fixture ->
+            for (start in listOf(source.indexOf("Pre ="), source.indexOf("Pre()"))) {
+                assertTrue(fixture.complete("main.kt", start + 3).items.any { it.insertText == "PrefixType" })
+            }
+            assertTrue(fixture.complete("main.kt", source.lastIndexOf("loc") + 3).items.any { it.insertText == "localValue" })
+        }
+    }
+
+    @Test
     fun `function declarations retain completion in types bodies and explicit requests`() {
         val source = "class PrefixType\nfun printTarget() {}\nfun pri(value: Pre): Pre { printT }\nfun Pre.extension() {}"
         K2QueryFixture.source("main.kt" to source).use { fixture ->
