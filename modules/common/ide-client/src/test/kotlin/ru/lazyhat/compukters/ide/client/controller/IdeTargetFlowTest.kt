@@ -78,6 +78,94 @@ import kotlin.test.assertIs
 
 class IdeTargetFlowTest {
     @Test
+    fun `live network observations merge with compiler diagnostics and disappear on edit or detach`() {
+        val requests = ControllerRecordingAnalysisRequests()
+        val fixture =
+            ControllerFixture(
+                preferences = preferences("demo", "src/main.kt"),
+                targetCoordinatorFactory = { clock -> IdeTargetCoordinator(TargetPort(), clock) },
+                analysisCoordinatorFactory = { workspace ->
+                    ru.lazyhat.compukters.ide.client.analysis.IdeAnalysisCoordinator(
+                        ru.lazyhat.compukters.ide.client.analysis
+                            .IdeAnalysisInputLoader(workspace::buildInput),
+                        ru.lazyhat.compukters.ide.client.analysis.IdeAnalysisSnapshotFactory {
+                            input,
+                            path,
+                            text,
+                            _,
+                            ->
+                            latencyAnalysisSnapshot(input.sources, path, text)
+                        },
+                        ru.lazyhat.compukters.ide.client.analysis
+                            .IdeAnalysisRequestFactory { sink -> requests.apply { this.sink = sink } },
+                        platformCatalog = TEST_PLATFORM_CATALOG,
+                        preparationScheduler = ru.lazyhat.compukters.ide.client.analysis.ImmediateAnalysisTaskScheduler,
+                    )
+                },
+            )
+        fixture.workspace.installLock(ProjectLockCodec.encode(ProjectLock.of(toolchain(), emptyList())).encodeToByteArray())
+        fixture.startAndTick()
+        fixture.controller.attachTarget(IdeTargetClaim.of(byteArrayOf(1)))
+        fixture.controller.tick()
+        val path =
+            ru.lazyhat.compukters.compiler.worker.protocol.VirtualSourcePath
+                .kotlin("src/main.kt")
+        val fact =
+            ru.lazyhat.compukters.ide.analysis.PeripheralLookup(
+                path,
+                ru.lazyhat.compukters.ide.editor
+                    .EditorRange(0, 1),
+                "compukter.display.TextDisplay",
+                "screen",
+                false,
+            )
+        val diagnostic =
+            ru.lazyhat.compukters.ide.analysis.EditorDiagnostic(
+                ru.lazyhat.compukters.ide.analysis.EditorDiagnosticSeverity.Error,
+                "Compiler error",
+                path,
+                ru.lazyhat.compukters.ide.editor
+                    .EditorRange(2, 3),
+            )
+        requests.publishFreshPresentation(listOf(diagnostic), listOf(fact))
+        fixture.controller.tick()
+        fixture.controller.observePeripherals(target(), emptyList(), true)
+        assertEquals(
+            2,
+            fixture
+                .workspaceView()
+                .diagnostics.rows.size,
+        )
+        assertEquals(1, fixture.workspaceView().diagnostics.warnings)
+        val presentation =
+            assertIs<ru.lazyhat.compukters.ide.client.analysis.IdeAnalysisState.Active>(
+                fixture.textEditor().analysis,
+            ).presentation
+        assertEquals(2, presentation.diagnostics.size)
+        fixture.controller.observePeripherals(
+            target(),
+            listOf(
+                ru.lazyhat.compukters.ide.analysis
+                    .PeripheralObservation("screen", listOf(fact.type)),
+            ),
+            true,
+        )
+        assertEquals(
+            1,
+            fixture
+                .workspaceView()
+                .diagnostics.rows.size,
+        )
+        fixture.controller.observePeripherals(target(), emptyList(), true)
+        fixture.controller.dispatch(IdeCommand.Edit(IdeEditorInput.Type("x")))
+        assertEquals(0, fixture.workspaceView().diagnostics.warnings)
+        requests.publishFreshPresentation(listOf(diagnostic), listOf(fact))
+        fixture.controller.tick()
+        fixture.controller.detachTarget()
+        assertEquals(0, fixture.workspaceView().diagnostics.warnings)
+    }
+
+    @Test
     fun `computer preview is read only and closes with its target`() {
         val fixture = fixture()
         fixture.startAttached()

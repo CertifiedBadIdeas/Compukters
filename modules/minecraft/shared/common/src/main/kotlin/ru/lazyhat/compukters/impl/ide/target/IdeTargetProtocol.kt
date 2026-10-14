@@ -70,6 +70,7 @@ sealed interface IdeTargetRequest {
 
     data class NamedPeripherals(
         val target: IdeTargetReference,
+        val includeUnavailable: Boolean = false,
     ) : IdeTargetRequest
 
     data class Attach(

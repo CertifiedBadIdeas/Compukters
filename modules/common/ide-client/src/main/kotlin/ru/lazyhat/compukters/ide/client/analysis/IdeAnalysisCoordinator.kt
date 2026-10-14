@@ -84,7 +84,9 @@ class IdeAnalysisPresentation private constructor(
     diagnostics: List<EditorDiagnostic>,
     semanticTokens: List<SemanticToken>,
     methodUsages: List<ru.lazyhat.compukters.ide.analysis.MethodUsageCount> = emptyList(),
+    peripheralLookups: List<ru.lazyhat.compukters.ide.analysis.PeripheralLookup> = emptyList(),
 ) {
+    val peripheralLookups = Collections.unmodifiableList(peripheralLookups.toList())
     val diagnostics: List<EditorDiagnostic> = Collections.unmodifiableList(diagnostics.toList())
     val semanticTokens: List<SemanticToken> = Collections.unmodifiableList(semanticTokens.toList())
     val methodUsages: List<ru.lazyhat.compukters.ide.analysis.MethodUsageCount> =
@@ -190,7 +192,8 @@ class IdeAnalysisPresentation private constructor(
             diagnostics: List<EditorDiagnostic>,
             semanticTokens: List<SemanticToken>,
             methodUsages: List<ru.lazyhat.compukters.ide.analysis.MethodUsageCount> = emptyList(),
-        ): IdeAnalysisPresentation = IdeAnalysisPresentation(diagnostics, semanticTokens, methodUsages)
+            peripheralLookups: List<ru.lazyhat.compukters.ide.analysis.PeripheralLookup> = emptyList(),
+        ): IdeAnalysisPresentation = IdeAnalysisPresentation(diagnostics, semanticTokens, methodUsages, peripheralLookups)
     }
 }
 
@@ -1035,6 +1038,7 @@ class IdeAnalysisCoordinator(
                             },
                             accepted.semanticTokens,
                             accepted.methodUsages,
+                            accepted.peripheralLookups,
                         ),
                         prior?.completion,
                         prior?.interaction ?: IdeSemanticInteraction.None,

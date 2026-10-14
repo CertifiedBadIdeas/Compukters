@@ -13,8 +13,17 @@ headings so this page has one stable URL that can be shared outside the reposito
 
 ## 0.6.0 — In development
 
+- IDE checks constant named peripheral lookups against the attached computer’s current network, with warnings
+  for mandatory searches and informational hover/Problems entries for optional searches. Network observations
+  refresh independently of Devices and explain unavailable devices without blocking compilation.
+
+- Configurator outlines on Sable constructions transform block coordinates into the world before applying
+  the camera offset, preserving their placement and rotation while the player moves.
+
 - Added programmable Create pumps with persistent remotely reversible fluid flow and normally disengaged
   programmable clutches that release their load when the controlling program or peripheral connection ends.
+  Both mechanisms combine Create bodies with blue Compukters controller panels, cable sockets and visible
+  flow/contact indicators.
   Their Guest value classes use the shared typed and named peripheral discovery; addon blocks share the Compukters creative tab.
 
 - Retained peripheral handles restore network devices by their saved instance UUID after address changes;
@@ -63,11 +72,12 @@ headings so this page has one stable URL that can be shared outside the reposito
 - Task worktree completion checks active builds in nested independent Gradle projects and excludes their
   sandbox caches from its archive while retaining worlds and IDE data.
 
-- Guest Kotlin provides lazy `Sequence<T>` chains with `Iterable.asSequence()`, `map`, `filter`,
-  `filterNot`, `take`, `firstOrNull` and `toList`, with terminal `forEach`, `fold`, `count`, `any`, `all` and `none`.
+- Guest Kotlin provides lazy `Sequence<T>` chains with `Iterable.asSequence()`, `map`, `mapNotNull`, `filter`,
+  `filterNot`, `filterNotNull`, `take`, `firstOrNull` and `toList`, with terminal `forEach`, `fold`, `count`, `any`, `all` and `none`.
   Terminal callbacks support non-local returns; predicate queries stop as soon as their result is known.
   Chains defer callbacks until consumption,
   stop at the requested prefix or first match and retain independent iterator state, including nullable elements.
+  Nullable selection skips nulls on demand and exposes non-null result types.
   Filtering caches all twelve non-null primitive families in unboxed scalar fields. Generic helpers can construct
   retained callbacks and bound member references for `filter`, `filterNot` and `map`, including escaping captures.
 

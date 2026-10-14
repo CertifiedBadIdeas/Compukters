@@ -57,7 +57,6 @@ internal object PeripheralCableGameTestScenario {
         helper.setBlock(secondDevice, Blocks.DROPPER)
 
         val level = helper.level
-        var firstReference: ru.lazyhat.compukters.impl.ide.target.IdePeripheralReference? = null
         val firstIdentity =
             ComputerPeripheralIdentity(TEST_PROVIDER_ID, helper.absolutePos(firstDevice), FIRST_DEVICE_KEY)
         val secondIdentity =
@@ -89,8 +88,7 @@ internal object PeripheralCableGameTestScenario {
                     } == listOf("minecraft:barrel", "minecraft:dropper"),
                     "IDE discovery lost block item icons",
                 )
-                firstReference = peripherals.entries.single { it.name == "input" }.reference
-                val device = checkNotNull(firstReference)
+                val device = checkNotNull(peripherals.entries.single { it.name == "input" }.reference)
 
                 fun rename(
                     expected: String,
@@ -124,23 +122,23 @@ internal object PeripheralCableGameTestScenario {
                     "IDE rename could not restore the original name",
                 )
                 verifyConfiguratorSave(helper, computer, firstIdentity, secondIdentity)
-            }.thenExecute {
+
                 // Membership is independent of cable topology.
                 helper.setBlock(junction, Blocks.AIR)
                 assertFound(helper, computer, "input", firstIdentity.anchor)
                 PeripheralNetworkGameTestFixtures.unbind(helper, firstDevice)
                 assertStatus(helper, computer, "input", ComputerPeripheralLookupStatus.MISSING)
-                val peripherals =
+                val afterUnbind =
                     ru.lazyhat.compukters.minecraft.peripheral.IdePeripheralDiscovery.snapshot(
                         level,
                         helper.absolutePos(computer),
                     )
                 helper.assertTrue(
-                    peripherals.entries.none { it.itemId == "minecraft:barrel" },
+                    afterUnbind.entries.none { it.itemId == "minecraft:barrel" },
                     "IDE discovery retained an unbound peripheral",
                 )
                 assertFound(helper, computer, "output", secondIdentity.anchor)
-            }.thenExecute {
+
                 PeripheralNetworkGameTestFixtures.bind(helper, computer, firstDevice)
                 ComputerPeripheralNames.setName(level, firstIdentity, "input")
                 assertFound(helper, computer, "input", firstIdentity.anchor)
@@ -151,13 +149,13 @@ internal object PeripheralCableGameTestScenario {
                     ru.lazyhat.compukters.minecraft.peripheral.IdePeripheralDiscovery.rename(
                         level,
                         helper.absolutePos(computer),
-                        checkNotNull(firstReference),
+                        device,
                         "input",
                         "replacement",
                     ) is ru.lazyhat.compukters.impl.ide.target.IdeTargetReply.Failed,
                     "IDE rename silently selected a replacement instance",
                 )
-            }.thenExecute {
+
                 // A fresh computer does not inherit membership by position; reconnect explicitly.
                 helper.setBlock(computer, Blocks.AIR)
                 helper.setBlock(computer, CompuktersRegistry.COMPUTER.get())
@@ -220,6 +218,22 @@ internal object PeripheralCableGameTestScenario {
                 )
                 ComputerPeripheralNames.setName(level, highIdentity, "distant")
                 assertStatus(helper, computer, "distant", ComputerPeripheralLookupStatus.MISSING)
+                val inspected =
+                    ru.lazyhat.compukters.minecraft.peripheral.IdePeripheralDiscovery.snapshot(
+                        level,
+                        helper.absolutePos(computer),
+                        includeUnavailable = true,
+                    )
+                helper.assertTrue(
+                    inspected.entries.single { it.name == "distant" }.availability ==
+                        ru.lazyhat.compukters.ide.analysis.PeripheralAvailability.OutOfRange,
+                    "IDE network inspection lost the distant member's reason",
+                )
+                helper.assertTrue(
+                    inspected.entries.single { it.name == "output" }.availability ==
+                        ru.lazyhat.compukters.ide.analysis.PeripheralAvailability.Available,
+                    "IDE network inspection marked a reachable member unavailable",
+                )
                 // An independently connected computer can reach that same member.
                 val highComputer = BlockPos(5, 72, 2)
                 helper.setBlock(highComputer, CompuktersRegistry.COMPUTER.get())

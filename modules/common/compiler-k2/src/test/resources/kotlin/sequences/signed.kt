@@ -3,16 +3,22 @@ import kotlin.sequences.*
 
 fun main() {
     checkBooleanTerminals(true)
+    checkNullSelection(true)
     checkGenericSequence(true)
     checkByteTerminals(2.toByte())
+    checkNullSelection(2.toByte())
     checkGenericSequence(2.toByte())
     checkShortTerminals(3.toShort())
+    checkNullSelection(3.toShort())
     checkGenericSequence(3.toShort())
     checkCharTerminals('x')
+    checkNullSelection('x')
     checkGenericSequence('x')
     checkLongTerminals(4L)
+    checkNullSelection(4L)
     checkGenericSequence(4L)
     checkFloatTerminals(1.5f)
+    checkNullSelection(1.5f)
     checkGenericSequence(1.5f)
 
     check(listOf(true).asSequence().filter { it }.map { !it }.toList()[0] == false)
@@ -27,6 +33,8 @@ fun main() {
     check(shorts[0] == (-32768).toShort() && shorts[1] == 32767.toShort())
     val floats = listOf(Float.NaN, -0.0f).asSequence().filter { true }.toList()
     check(floats[0] != floats[0] && 1.0f / floats[1] == Float.NEGATIVE_INFINITY)
+    val selectedFloats = listOf(Float.NaN, -0.0f).asSequence().mapNotNull { it }.toList()
+    check(selectedFloats[0] != selectedFloats[0] && 1.0f / selectedFloats[1] == Float.NEGATIVE_INFINITY)
     println("sequences signed ok")
 }
 
@@ -122,4 +130,26 @@ fun <T> checkGenericSequence(value: T) {
     check(chain.take(1).count() == 1 && callbacks == 5)
     check(source.filter(genericPredicate(value)).count() == 2)
     check(genericBound(source, value).count() == 2)
+}
+
+fun <T : Any> genericNotNull(source: Sequence<T?>): Sequence<T> = source.filterNotNull()
+fun <T, R : Any> genericMapNotNull(source: Sequence<T>, transform: (T) -> R?): Sequence<R> =
+    source.mapNotNull { transform(it) }
+fun <T : Any> checkNullSelection(value: T) {
+    val source = listOf<T?>(null, value, null, value).asSequence()
+    val filtered: Sequence<T> = genericNotNull(source)
+    check(filtered.count() == 2 && filtered.firstOrNull() == value)
+    var calls = 0
+    val mapped: Sequence<T> = genericMapNotNull(source) { calls += 1; it }
+    val iterator = mapped.iterator()
+    check(iterator.hasNext() && iterator.hasNext() && calls == 2)
+    check(iterator.next() == value && calls == 2)
+    check(iterator.next() == value && calls == 4 && !iterator.hasNext())
+    check(mapped.take(1).count() == 1 && calls == 6)
+    var produced = 0
+    val nonNullableSource: Sequence<T> = genericMapNotNull(listOf<T>(value, value).asSequence()) {
+        produced += 1
+        if (produced == 1) null else it
+    }
+    check(nonNullableSource.firstOrNull() == value && produced == 2)
 }

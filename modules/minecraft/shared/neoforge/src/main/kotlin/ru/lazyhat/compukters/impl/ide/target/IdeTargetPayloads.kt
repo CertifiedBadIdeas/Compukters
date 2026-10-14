@@ -113,6 +113,7 @@ internal object IdeTargetWireProtocol {
             is IdeTargetRequest.NamedPeripherals -> {
                 buffer.writeByte(NAMED_PERIPHERALS)
                 buffer.writeTarget(request.target)
+                buffer.writeBoolean(request.includeUnavailable)
             }
 
             is IdeTargetRequest.Attach -> {
@@ -211,7 +212,7 @@ internal object IdeTargetWireProtocol {
                 }
 
                 NAMED_PERIPHERALS -> {
-                    IdeTargetRequest.NamedPeripherals(buffer.readTarget())
+                    IdeTargetRequest.NamedPeripherals(buffer.readTarget(), buffer.readBoolean())
                 }
 
                 ATTACH -> {
@@ -309,6 +310,7 @@ internal object IdeTargetWireProtocol {
                     entry.reference?.let { buffer.writePeripheralReference(it) }
                     buffer.writeVarInt(entry.lookupTypes.size)
                     entry.lookupTypes.forEach { buffer.writeUtf(it, 256) }
+                    buffer.writeEnum(entry.availability)
                 }
             }
 
@@ -395,7 +397,16 @@ internal object IdeTargetWireProtocol {
                             val reference = if (buffer.readBoolean()) buffer.readPeripheralReference() else null
                             val types = buffer.readVarInt()
                             require(types in 0..8) { "Invalid lookup type count" }
-                            IdeNamedPeripheral(name, itemId, duplicate, reference, List(types) { buffer.readUtf(256) })
+                            IdeNamedPeripheral(
+                                name,
+                                itemId,
+                                duplicate,
+                                reference,
+                                List(types) {
+                                    buffer.readUtf(256)
+                                },
+                                buffer.readEnum(ru.lazyhat.compukters.ide.analysis.PeripheralAvailability::class.java),
+                            )
                         },
                         truncated,
                     )
