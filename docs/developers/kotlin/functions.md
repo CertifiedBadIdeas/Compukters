@@ -242,6 +242,8 @@ widen independently; invariant type arguments stay unchanged.
 The compiler derives a canonical set of nullable, `Any`/`Any?`, supported declared supertype and
 nested covariant views from each specialization, subject to its type parameter bounds. Libraries
 and consumers derive identical nominal layouts regardless of which views the consumer uses.
+Generated bridges participate in platform dependency discovery, including imported result interfaces
+such as `Peripheral` that the original source does not mention.
 Widening preserves the source object and its identity; it does not copy values or allocate a wrapper.
 Primitive storage and direct calls stay scalar. Generated read bridges call the original method once
 and box the result only when the widened signature requires a reference. Existing reference results
@@ -267,6 +269,10 @@ Its artifact assertions protect scalar
 producer fields/direct reads and exactly one allocation per widened primitive read.
 `source library generic functions and classes specialize in consumer`, executed by
 `testKotlinGenericLibraryVmConformance`, covers precompiled producer reuse with one nominal owner.
+`peripheral collections retain platform types introduced by covariant bridges` protects compilation of
+built-in device lists without explicit base-interface imports; `boiler SCADA example compiles against the
+actual addon bundles` covers the complete dashboard. `testKotlinPeripheralQueriesVmConformance` executes
+typed, `Peripheral` and nullable `Peripheral` iterator views with shared iterator state.
 `covariant interfaces reject changed callback parameter signatures`, `covariant interfaces reject changed callable results`
 and `covariant interfaces bound canonical view expansion` protect the unsupported boundaries and budget;
 IDE test `lazy sequences resolve with source and metadata inputs` checks both platform input modes.

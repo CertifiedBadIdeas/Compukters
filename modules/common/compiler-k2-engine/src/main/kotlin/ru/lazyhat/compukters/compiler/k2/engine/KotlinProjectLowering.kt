@@ -1769,6 +1769,8 @@ internal object KotlinProjectLowering {
         val closureRoots = prepared.closureRoots
         val concreteExecutableRoots =
             prepared.initializations.values.flatMap { it.roots } +
+                // Generated bridges can introduce platform types absent from the source roots.
+                prepared.covariance.methods.map { it.concreteDeclaration } +
                 functionInstances
                     .filter {
                         it.declaration.typeParameters.isNotEmpty() && it.ownerClass != null

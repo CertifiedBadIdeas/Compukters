@@ -3724,6 +3724,25 @@ class MinimalScriptLoweringTest {
         }
 
     @Test
+    fun `peripheral collections retain platform types introduced by covariant bridges`() =
+        withAdapter { adapter ->
+            val result =
+                adapter.compile(
+                    request(
+                        """
+                        import compukter.redstone.RedstonePort
+                        fun main() {
+                            val handles = ArrayList<RedstonePort>()
+                            handles.add(RedstonePort.named("output"))
+                            for (handle in handles) println(handle.front.get())
+                        }
+                        """.trimIndent(),
+                    ),
+                )
+            assertNotNull(result.artifact, result.diagnostics.joinToString())
+        }
+
+    @Test
     fun `addon scalar handles support typed lists and forEach`() =
         withAdapter { adapter ->
             val result =
@@ -11142,6 +11161,15 @@ class MinimalScriptLoweringTest {
                     require(provider.filter { it.value() > 3 }.size == 1)
                     require(provider.all().size == 2)
                     require(provider.at(Side.front).value() == 3)
+                    val typedIterator = provider.all().iterator()
+                    val peripheralIterator: Iterator<Peripheral> = typedIterator
+                    val nullableIterator: Iterator<Peripheral?> = typedIterator
+                    require(typedIterator === peripheralIterator && typedIterator === nullableIterator)
+                    val firstPeripheral = peripheralIterator.next()
+                    require(firstPeripheral is Meter && firstPeripheral.value() == 3)
+                    val secondPeripheral = nullableIterator.next()
+                    require(secondPeripheral is Meter && secondPeripheral.value() == 7)
+                    require(!typedIterator.hasNext())
                     require(provider.atOrNull(Side.back) == null)
                     require(provider.named("front").value() == 3)
                     require(provider.namedOrNull("missing") == null)
