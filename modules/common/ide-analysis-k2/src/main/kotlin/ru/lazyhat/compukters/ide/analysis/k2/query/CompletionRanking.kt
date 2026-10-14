@@ -26,11 +26,12 @@ internal data class CompletionRank(
     val locality: Int,
     val nameUtf8: ByteArray,
     val signatureUtf8: ByteArray,
+    val expectedTypeQuality: Int = 0,
 )
 
 internal val completionRankComparator: Comparator<CompletionRank> =
     Comparator { left, right ->
-        compareValuesBy(left, right, { -it.applicability }, { -it.prefixQuality }, { -it.locality })
+        compareValuesBy(left, right, { -it.applicability }, { -it.expectedTypeQuality }, { -it.prefixQuality }, { -it.locality })
             .takeIf { it != 0 }
             ?: compareUnsigned(left.nameUtf8, right.nameUtf8).takeIf { it != 0 }
             ?: compareUnsigned(left.signatureUtf8, right.signatureUtf8)
