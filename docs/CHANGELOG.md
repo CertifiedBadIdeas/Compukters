@@ -17,7 +17,8 @@ headings so this page has one stable URL that can be shared outside the reposito
 
 - Added an experimental `rocket-landing` Guest project for a controlled vertical climb, height hold and soft
   descent onto a known launch pad, with bounded horizontal return within a 6 m corridor, final descent after
-  centering, and immediate near-pad stop detection using measured position changes, plus named phases and
+  centering, configurable faster ascent/descent with braking-distance planning and height-dependent timeouts,
+  and immediate near-pad stop detection using measured position changes, plus named phases and
   landing diagnostics.
 
 - IDE supports Ctrl+D to duplicate the current line below or the exact selection with one-step undo.

@@ -43,6 +43,18 @@ fun command(
     )
 
 fun runScenarios() {
+    val profile = FlightProfile()
+    check(approachSpeed(1000.0, profile.ascentSpeed, profile) == 20.0)
+    check(approachSpeed(1000.0, profile.descentSpeed, profile) == 15.0)
+    check(approachSpeed(0.0, profile.ascentSpeed, profile) == 0.0)
+    check(approachSpeed(-10.0, profile.ascentSpeed, profile) < 0.0)
+    val brakingSpeed = approachSpeed(100.0, profile.descentSpeed, profile)
+    check(abs(brakingSpeed * profile.responseSeconds + brakingSpeed * brakingSpeed / (2.0 * profile.brakingAcceleration) - 100.0) <= 1e-10)
+    check(approachSpeed(1e-12, 20.0, profile) > 0.0)
+    check(flightTimeoutSeconds(200.0, 5.0, profile) > 160.0)
+    rejects { validateFlightProfile(profile, 1000.01, 5.0) }
+    rejects { validateFlightProfile(FlightProfile(Double.NaN, 15.0), 200.0, 5.0) }
+    rejects { validateFlightProfile(FlightProfile(20.0, 26.0), 200.0, 5.0) }
     val descent = FlightState(FlightPhase.DESCENT, 0.0, 0.0)
     val falling = command(descent, 10.0, -5.0)
     check(falling.thrustKn > 10.0) // Arrest descent, unlike ascent's nonnegative-speed contract.
@@ -172,7 +184,7 @@ fun runScenarios() {
     }
     // Independent ideal plant: calibrated upward force, gravity, and inelastic contact with a flat pad.
     // Include a 10% hover calibration error; PI must recover and still complete the full flight.
-    for (climb in listOf(5.0, 40.0)) {
+    for (climb in listOf(5.0, 40.0, 200.0, 1000.0)) {
         for (gravity in listOf(8.829, 9.81, 10.791)) {
             var state = FlightState(FlightPhase.ASCENT, 0.0, 0.0)
             var height = 0.0
@@ -182,7 +194,11 @@ fun runScenarios() {
             var hold = false
             var descentSeen = false
             var complete = false
-            for (step in 0 until 2400) {
+            var maximumAscentSpeed = 0.0
+            var maximumDescentSpeed = 0.0
+            var elapsedSeconds = 0.0
+            for (step in 0 until 12000) {
+                elapsedSeconds = step * 0.05
                 val output = command(state, height, speed, climb)
                 state = output.state
                 check(output.thrustKn >= 0.0 && output.thrustKn <= 20.0)
@@ -194,6 +210,8 @@ fun runScenarios() {
                 }
                 speed += (output.thrustKn / 10.0 * 9.81 - gravity) * 0.05
                 height += speed * 0.05
+                if (speed > maximumAscentSpeed) maximumAscentSpeed = speed
+                if (-speed > maximumDescentSpeed) maximumDescentSpeed = -speed
                 if (height < 0.0) {
                     if (descentSeen && speed < contactSpeed) contactSpeed = speed
                     height = 0.0
@@ -204,6 +222,12 @@ fun runScenarios() {
             check(
                 hold && descentSeen && complete,
             ) { "Flight did not complete: gravity=$gravity; phase=${state.phase}; height=$height; speed=$speed" }
+            check(elapsedSeconds < flightTimeoutSeconds(climb, 5.0, profile))
+            if (climb >= 200.0) {
+                check(maximumAscentSpeed > 10.0 && maximumDescentSpeed > 10.0)
+                check(maximumAscentSpeed <= 21.0 && maximumDescentSpeed <= 16.0)
+                if (climb == 200.0) check(elapsedSeconds < 90.0)
+            }
             check(maximumHeight >= climb - 0.3 && maximumHeight < climb + 2.0) { "Flight height exceeded envelope: $maximumHeight" }
             check(
                 abs(contactSpeed) <= 0.5 && height <= 0.15 && abs(speed) <= 0.1,
