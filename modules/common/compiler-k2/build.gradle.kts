@@ -2307,7 +2307,7 @@ tasks.register<Test>("generateRocketLandingConformanceArtifact") {
     testClassesDirs = sourceSets.test.get().output.classesDirs
     classpath = sourceSets.test.get().runtimeClasspath
     filter.includeTestsMatching("*rocket landing controller executes bounded launch hold descent and touchdown*")
-    inputs.file(rootProject.file("examples/rocket-landing/src/FlightControl.kt"))
+    inputs.dir(rootProject.file("examples/rocket-landing/src/control"))
     inputs.file("src/test/resources/kotlin/rocket-landing/Scenarios.kt")
     inputs.file(workerJar)
     outputs.file(rocketLandingArtifact)

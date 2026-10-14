@@ -2845,7 +2845,14 @@ class MinimalScriptLoweringTest {
             val result =
                 adapter.compile(
                     request(
-                        "project/control.kt" to repositoryFile("examples/rocket-landing/src/FlightControl.kt").readText(),
+                        *repositoryFile("examples/rocket-landing/src/control")
+                            .toFile()
+                            .walkTopDown()
+                            .filter { it.isFile && it.extension == "kt" }
+                            .sortedBy { it.name }
+                            .map { "project/control/${it.name}" to it.readText() }
+                            .toList()
+                            .toTypedArray(),
                         "project/main.kt" to
                             repositoryFile("modules/common/compiler-k2/src/test/resources/kotlin/rocket-landing/Scenarios.kt").readText(),
                     ),
