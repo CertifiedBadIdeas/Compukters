@@ -2115,6 +2115,8 @@ tasks.withType<org.jmailen.gradle.kotlinter.tasks.ConfigurableKtLintTask>().conf
         source(file("src/test/resources/kotlin/orbital-pointing/Scenarios.kt"))
         source(rootProject.fileTree("examples/rocket-ascent/src") { include("**/*.kt") })
         source(file("src/test/resources/kotlin/rocket-ascent/Scenarios.kt"))
+        source(rootProject.fileTree("examples/rocket-landing/src") { include("**/*.kt") })
+        source(file("src/test/resources/kotlin/rocket-landing/Scenarios.kt"))
     }
 }
 
@@ -2274,4 +2276,41 @@ tasks.register<Test>("generateRocketAscentConformanceArtifact") {
     outputs.file(rocketAscentArtifact)
     systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
     systemProperty("compukter.vm.rocketAscentArtifact", rocketAscentArtifact.get().asFile.absolutePath)
+}
+
+tasks.register<Test>("compileRocketLandingExample") {
+    group = "verification"
+    description = "Compiles rocket landing against the actual Cosmonautics, Sable and Propulsion bundles."
+    dependsOn(tasks.jar)
+    useJUnitPlatform()
+    testClassesDirs = sourceSets.test.get().output.classesDirs
+    classpath = sourceSets.test.get().runtimeClasspath
+    filter.includeTestsMatching("*rocket landing example compiles against the actual addon bundles*")
+    val cosmonautics = providers.gradleProperty("compuktersCosmonauticsGuestApiBundle")
+    val sable = providers.gradleProperty("compuktersSableGuestApiBundle")
+    val propulsion = providers.gradleProperty("compuktersPropulsionGuestApiBundle")
+    inputs.files(cosmonautics, sable, propulsion)
+    inputs.dir(rootProject.file("examples/rocket-landing/src"))
+    inputs.file(workerJar)
+    systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
+    cosmonautics.orNull?.let { systemProperty("compukters.cosmonauticsTelemetryBundle", file(it).absolutePath) }
+    sable.orNull?.let { systemProperty("compukters.sablePidBundle", file(it).absolutePath) }
+    propulsion.orNull?.let { systemProperty("compukters.propulsionPidBundle", file(it).absolutePath) }
+}
+
+val rocketLandingArtifact = layout.buildDirectory.file("generated/conformance/kotlin-rocket-landing.cpkt")
+tasks.register<Test>("generateRocketLandingConformanceArtifact") {
+    group = "verification"
+    description = "Compiles the shipped vertical flight controller and touchdown scenarios."
+    dependsOn(tasks.jar)
+    useJUnitPlatform()
+    testClassesDirs = sourceSets.test.get().output.classesDirs
+    classpath = sourceSets.test.get().runtimeClasspath
+    filter.includeTestsMatching("*rocket landing controller executes bounded launch hold descent and touchdown*")
+    inputs.file(rootProject.file("examples/rocket-landing/src/FlightControl.kt"))
+    inputs.file("src/test/resources/kotlin/rocket-landing/Scenarios.kt")
+    inputs.file(workerJar)
+    outputs.file(rocketLandingArtifact)
+    systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
+    systemProperty("compukter.vm.rocketLandingArtifact", rocketLandingArtifact.get().asFile.absolutePath)
 }

@@ -133,9 +133,14 @@ timing and the pinned upstream world-axis convention; instance orbital motion di
 **Evidence:** addon `GuidanceDirectionsTest` and `OrbitObservationTest`, actual-bundle compilation through
 `:compiler-k2:compileSpaceTelemetryExample` and `:compiler-k2:compileOrbitalProgradeExample`, and
 `testKotlinOrbitalPointingVmConformance` for the shipped example's pure feedback logic. Real world telemetry and
-pointing convergence remain a separate manual scenario; no launch or orbital-insertion support is claimed.
+pointing convergence remain a separate manual scenario; orbital insertion is not provided by these examples.
 See [Cosmonautics addon](https://github.com/CertifiedBadIdeas/Compukters-cosmonautics/blob/main/README.md)
 and the workspace `examples/orbital-prograde/README.md`.
+
+The separate `examples/rocket-landing` project uses existing telemetry and engine APIs for an experimental local
+vertical climb/hold/descent onto a known pad reference. `testKotlinRocketLandingVmConformance` exercises its shipped
+feedback in an ideal plant; `:compiler-k2:compileRocketLandingExample` compiles its complete source against actual
+addon bundles. It has no terrain/contact sensor or lateral navigation, and real-world landing remains a manual check.
 
 ## Compukters Guest APIs
 
