@@ -95,6 +95,17 @@ public class HashSet<T>(
      */
     public override fun iterator(): MutableIterator<T> = HashMapKeyIterator(map.nodeIterator())
 
+    /** Compares elements using the set's ordering rules and nullable generic equality. */
+    public override fun equals(other: Any?): Boolean = collectionSetEquals(this, other)
+
+    /** Combines element hashes with ordinary Int overflow; null contributes zero. */
+    public override fun hashCode(): Int = collectionSetHash(this)
+
+    /** Formats elements in brackets; a direct self reference uses `(this Collection)`. */
+    public override fun toString(): String = collectionText(this)
+
+    internal fun containsAnyElement(element: Any?): Boolean = map.containsAnyKey(element)
+
     internal fun iteratorReadOnly(): Iterator<T> = HashMapKeyIterator(map.nodeIterator())
 }
 

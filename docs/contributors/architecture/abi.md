@@ -114,6 +114,20 @@ platform identity change; dependent libraries rebuild against the updated bundle
 VM instructions, native ABI and checkpoint schema remain unchanged. Existing artifacts retain their
 embedded generated runtime library. `testKotlinEnumEntriesVmConformance` checks project and library getters.
 
+## Guest collection value semantics
+
+`stdlib:core` 1.26.0 adds ordinary Guest List/Set/Map/Entry equality, hashing and text.
+Internal nominal read protocols support comparison across concrete generic specializations.
+The compiler generates private wrappers for collection, entry and iterator implementations after
+frontend analysis; wrappers retain typed receivers, box scalar/value-class reads and permit no
+mutation. Trusted hash collections use boxed key lookup; custom implementations retain typed
+traversal. Public collection interfaces and their variance remain unchanged.
+
+The stdlib module content identity changes and dependent bundles rebuild. CPKT/CAGB encoding,
+platform encoding, instructions, Runtime/native C ABI and checkpoint schemas remain unchanged.
+`testKotlinCollectionSemanticsVmConformance` owns execution evidence; exact source contracts live
+in [the collection inventory](../../developers/stdlib/collections.md#collection-equality-hashing-and-text).
+
 ## Guest lazy sequences
 
 `stdlib:core` 1.22.0 adds the ordinary Guest `kotlin.sequences.Sequence<T>` interface and

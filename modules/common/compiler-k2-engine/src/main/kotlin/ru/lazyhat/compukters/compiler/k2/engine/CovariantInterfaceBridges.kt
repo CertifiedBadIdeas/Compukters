@@ -196,9 +196,10 @@ internal class CovariantInterfaceBridges private constructor(
                             },
                         )
                     }
+                    // Compiler-only read adapters are not source-level covariance targets.
                     for (parent in owner.superTypes.filterNot {
                         ((it as? IrSimpleType)?.classifier as? IrClassSymbol)?.owner?.fqNameWhenAvailable?.asString() in
-                            setOf("kotlin.Comparable", "kotlin.Number")
+                            (setOf("kotlin.Comparable", "kotlin.Number") + CollectionValueBridges.protocolNames)
                     }) {
                         for (wide in widen(current.substitute(parent), depth + 1)) {
                             add(if (argument.isNullable()) wide.makeNullable() else wide)

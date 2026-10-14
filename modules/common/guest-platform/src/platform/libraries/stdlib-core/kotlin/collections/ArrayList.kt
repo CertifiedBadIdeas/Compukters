@@ -223,6 +223,15 @@ public class ArrayList<T>(
 
     internal fun iteratorNullableElement(): Iterator<T?> = ArrayListIterator(this)
 
+    /** Compares elements using the list's ordering rules and nullable generic equality. */
+    public override fun equals(other: Any?): Boolean = collectionListEquals(this, other)
+
+    /** Combines element hashes with ordinary Int overflow; null contributes zero. */
+    public override fun hashCode(): Int = collectionListHash(this)
+
+    /** Formats elements in brackets; a direct self reference uses `(this Collection)`. */
+    public override fun toString(): String = collectionText(this)
+
     internal fun getAny(index: Int): Any = get(index) as Any
 
     internal fun getAnyNullable(index: Int): Any? = get(index)

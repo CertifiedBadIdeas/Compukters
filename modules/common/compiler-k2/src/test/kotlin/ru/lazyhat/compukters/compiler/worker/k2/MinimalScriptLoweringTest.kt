@@ -5125,6 +5125,122 @@ class MinimalScriptLoweringTest {
         }
 
     @Test
+    fun `collection value semantics compare specializations entries and live views`() =
+        withAdapter { adapter ->
+            for (fixture in listOf(
+                "main",
+                "maps",
+                "nested",
+                "map-values",
+                "set-nested",
+                "keys",
+                "custom",
+                "value-types",
+                "self",
+                "callbacks",
+                "library",
+            )) {
+                val source =
+                    repositoryFile(
+                        "modules/common/compiler-k2/src/test/resources/kotlin/collection-semantics/$fixture.kt",
+                    ).readText()
+                val result = adapter.compile(request(source, includeAddonFixture = fixture == "library"))
+                val bytes = assertNotNull(result.artifact, "$fixture: ${result.diagnostics.joinToString()}").toByteArray()
+                assertContentEquals(
+                    bytes,
+                    assertNotNull(adapter.compile(request(source, includeAddonFixture = fixture == "library")).artifact).toByteArray(),
+                )
+                System.getProperty("compukter.vm.collectionSemanticsArtifact")?.let { output ->
+                    val path = Path.of(output)
+                    val target = if (fixture == "main") path else path.resolveSibling("collection-$fixture.cpkt")
+                    target.also { it.parent.createDirectories() }.writeBytes(bytes)
+                }
+            }
+        }
+
+    @Test
+    fun `collection read adapters are absent from source API`() =
+        withAdapter { adapter ->
+            val result = adapter.compile(request("fun main() { listOf(1).readSize() }"))
+            assertNull(result.artifact)
+            assertTrue(result.diagnostics.any { it.code == "UNRESOLVED_REFERENCE" }, result.diagnostics.toString())
+            val protocol = adapter.compile(request("fun main() { val hidden: kotlin.collections.ListRead? = null }"))
+            assertNull(protocol.artifact, "Internal collection read protocols must not be source-visible")
+            assertTrue(protocol.diagnostics.isNotEmpty())
+        }
+
+    @Test
+    fun `collection value semantics preserve all scalar families and floating boxes`() =
+        withAdapter { adapter ->
+            val cases =
+                listOf(
+                    Triple("Boolean", "true", "false"),
+                    Triple("Byte", "(-128).toByte()", "127.toByte()"),
+                    Triple("Short", "(-32768).toShort()", "32767.toShort()"),
+                    Triple("Char", "'x'", "'y'"),
+                    Triple("Int", "-1", "1"),
+                    Triple("Long", "-1L", "1L"),
+                    Triple("Float", "Float.NaN", "-0.0f"),
+                    Triple("Double", "Double.NaN", "-0.0"),
+                    Triple("UByte", "255u.toUByte()", "0u.toUByte()"),
+                    Triple("UShort", "65535u.toUShort()", "0u.toUShort()"),
+                    Triple("UInt", "4294967295u", "0u"),
+                    Triple("ULong", "18446744073709551615uL", "0uL"),
+                )
+            cases.chunked(2).forEachIndexed { batch, entries ->
+                val source =
+                    """
+                    fun <T> verify(first: T, second: T) {
+                        val typed = listOf(first, second)
+                        val universal = listOf<Any?>(first, second)
+                        check(typed == universal && universal == typed)
+                        check(typed.hashCode() == universal.hashCode())
+                        check(typed.toString() == universal.toString())
+                        check(listOf(first, null) == listOf<Any?>(first, null))
+                        val typedSet = setOf(first, second)
+                        val universalSet = setOf<Any?>(second, first)
+                        check(typedSet == universalSet && universalSet == typedSet)
+                        check(typedSet.hashCode() == universalSet.hashCode())
+                        val typedMap = mapOf(first to second)
+                        val universalMap = mapOf<Any?, Any?>(first to second)
+                        check(typedMap == universalMap && universalMap == typedMap)
+                        check(typedMap.hashCode() == universalMap.hashCode())
+                        check(typedMap.toString() == universalMap.toString())
+                        check(typedMap.entries == universalMap.entries)
+                    }
+                    fun main() {
+                        ${entries.joinToString("\n") { (type, first, second) -> "verify<$type>($first, $second)" }}
+                        ${if (entries.any { it.first == "Float" }) {
+                        """
+                            check(listOf(Float.NaN) == listOf(Float.NaN))
+                            check(listOf(Double.NaN) == listOf(Double.NaN))
+                            check(listOf(-0.0f) != listOf(0.0f))
+                            check(listOf(-0.0) != listOf(0.0))
+                            check(setOf(-0.0f) != setOf(0.0f))
+                            check(setOf(-0.0) != setOf(0.0))
+                            check(mapOf(Float.NaN to Double.NaN) == mapOf(Float.NaN to Double.NaN))
+                            check(mapOf(-0.0f to 1) != mapOf(0.0f to 1))
+                        """
+                    } else {
+                        ""
+                    }}
+                        println("collection scalars ok")
+                    }
+                    """.trimIndent()
+                val result = adapter.compile(request(source))
+                val bytes = assertNotNull(result.artifact, result.diagnostics.joinToString()).toByteArray()
+                System.getProperty("compukter.vm.collectionSemanticsArtifact")?.let { output ->
+                    Path
+                        .of(
+                            output,
+                        ).resolveSibling("collection-scalars-$batch.cpkt")
+                        .also { it.parent.createDirectories() }
+                        .writeBytes(bytes)
+                }
+            }
+        }
+
+    @Test
     fun `hash maps and sets preserve collisions nulls mutation and live views`() =
         withAdapter { adapter ->
             val source =

@@ -410,7 +410,7 @@ private fun linkedPlatformFunctions(
             override fun visitCall(expression: IrCall) {
                 val target = expression.symbol.owner.resolveFakeOverrideMaybeAbstract() ?: expression.symbol.owner
                 val symbol = target.fqNameWhenAvailable?.asString()
-                if (symbol != null) {
+                if (symbol != null && !CollectionValueBridges.isProtocolMethod(target)) {
                     val signature = target.canonicalPlatformSignature()
                     session.platformFunctions
                         .singleOrNull { link -> link.symbol == symbol && link.signature == signature }
