@@ -219,7 +219,13 @@ class CompletionQueryTest {
                 for (name in listOf("trim", "trimStart", "trimEnd", "substringBeforeLast", "removeSuffix", "replace")) {
                     val matches = items.filter { it.insertText == name }
                     assertTrue(matches.isNotEmpty(), name)
-                    assertTrue(matches.all { it.callablePresentation?.returnType == "String" }, name)
+                    val expectedTypes =
+                        if (name in setOf("trim", "trimStart", "trimEnd", "removeSuffix")) {
+                            setOf("String", "CharSequence")
+                        } else {
+                            setOf("String")
+                        }
+                    assertEquals(expectedTypes, matches.map { it.callablePresentation?.returnType }.toSet(), name)
                 }
                 for (name in listOf("isBlank", "isEmpty", "isNotBlank", "isNotEmpty")) {
                     assertEquals("Boolean", items.single { it.insertText == name }.callablePresentation?.returnType)
