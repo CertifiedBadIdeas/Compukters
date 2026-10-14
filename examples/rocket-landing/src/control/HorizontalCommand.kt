@@ -6,6 +6,8 @@
 
 import kotlin.math.Vector3d
 
+const val RETURN_CORRIDOR_METERS = 6.0
+
 value class HorizontalCommand(
     val targetUp: Vector3d,
     val distance: Double,
@@ -21,7 +23,8 @@ fun padGuidance(
 ): HorizontalCommand {
     val offset = Vector3d(padOffset.x, 0.0, padOffset.z)
     val velocity = Vector3d(positionVelocity.x, 0.0, positionVelocity.z)
-    require(offset.length <= 2.0 && velocity.length <= 2.0) { "Outside horizontal flight envelope" }
+    require(offset.length <= RETURN_CORRIDOR_METERS) { "Pad drift exceeds $RETURN_CORRIDOR_METERS m: ${offset.length} m" }
+    require(velocity.length <= 2.0) { "Horizontal pose speed exceeds 2 m/s: ${velocity.length} m/s" }
     val requested = offset * -0.02 - velocity * 0.2
     val acceleration = if (requested.length > 0.5) requested.normalized() * 0.5 else requested
     return HorizontalCommand(

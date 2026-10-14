@@ -19,7 +19,7 @@ control as soon as a near-pad stop is observed. This is a local flight experimen
    computer. Default settings climb 40 m above that reference and hold for five seconds. Keep at least 10 m between
    the planned top height and the planet's Deep Space transition. Start lower by setting `CLIMB_HEIGHT = 5.0`.
 5. Observe phase, relative height, measured/target vertical speed, thrust and horizontal drift. Horizontal feedback
-   requests a small tilt to slow drift and return to the recorded starting position, within a 2 m corridor.
+   requests a small tilt to slow drift and return to the recorded starting position, within a 6 m corridor.
    Roll around +Y is uncontrolled. Ctrl+C exits and releases program ownership.
 
 ## Flight phases
@@ -51,6 +51,12 @@ stronger damping (1.8 rather than the original 0.6 nozzle units per rad/s) to re
 thrust compensation uses the actual tilt, rather than the error from the desired tilt. PI commands have
 saturation and anti-windup. Gains remain experimental and depend on engine lever arm, inertia and startup/nozzle
 response; the numerical tests are not automatic tuning for arbitrary constructions.
+Abort diagnostics distinguish solver speed from observed pose speed and report the offending value. A 6 m
+return corridor does not guarantee recovery from every speed below 2 m/s: braking distance and attitude response
+also matter. Start disturbance trials around 0.15 m/s; 1 m/s descent impulses are covered by the numerical model,
+but require a fresh in-world trial. This wider corridor permits braking displacement without relaxing the final
+0.2 m centering requirement.
+
 Limits include 30-degree tilt, 2 rad/s angular speed, 2 m/s horizontal speed, -0.5 m to climb+10 m vertical envelope,
 up to ten ticks between observations and a 120-second flight timeout. Paused physics, changed dimension/construction,
 invalid feedback or excessive drift abort and release the engine. An abort is not an automatic landing maneuver.
@@ -69,17 +75,18 @@ owns tilt steering. `HorizontalCommand.kt` maps pad error and pose motion to a t
 provides finite bounded command arithmetic. VM conformance compiles this same control directory.
 
 The wider orbital mission is tracked in [#795](https://github.com/CertifiedBadIdeas/Compukters/issues/795).
-Horizontal return is implemented for the local 2 m corridor; orbital insertion, revolution counting and deorbit guidance remain subsequent stages.
+Horizontal return is implemented for the local 6 m corridor; orbital insertion, revolution counting and deorbit guidance remain subsequent stages.
 
 ## Verification
 
 `testKotlinRocketLandingVmConformance` runs the shipped controller in the pinned VM. It checks descent braking,
 near-pad approach, immediate touchdown cutoff with solver/pose motion disagreement, saturation/anti-windup, attitude correction,
 invalid observations and a complete launch/hold/descent/contact cycle in an independent ideal vertical plant, including 10% hover-calibration error.
-It also checks horizontal guidance and descent/hold gates, then runs four 3D coupled flights with a small lateral
-velocity impulse, different headings and isotropic inertia/mass values of 6, 12, 24 and 48 m². Each off-centre
+It also checks horizontal guidance and descent/hold gates, then runs six 3D coupled flights with lateral
+velocity impulses, different headings and isotropic inertia/mass values of 6, 12, 24 and 48 m². Each off-centre
 nozzle force drives both translation and torque; the model integrates at 20 Hz and includes the pinned upstream
-20% nozzle tween and 0.001 snap. These models assume a 2 m lever arm and a flat inelastic ground plane, with no engine startup,
+20% nozzle tween and 0.001 snap. Two additional 40 m cycles apply 1 m/s lateral impulses during descent
+at 36 m and must return after drifting beyond 2 m without leaving the 6 m corridor. These models assume a 2 m lever arm and a flat inelastic ground plane, with no engine startup,
 aerodynamic drag, asymmetric inertia or detailed landing geometry.
 `:compiler-k2:compileRocketLandingExample` compiles the full program against actual Sable/Propulsion/Cosmonautics bundles.
 These checks do not model the actual engine startup/nozzle envelope or establish Minecraft landing stability.
