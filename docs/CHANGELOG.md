@@ -610,6 +610,9 @@ listed in [Kotlin support](developers/kotlin-support.md) and [standard library s
 - Kotlin lexical highlighting colors the `value` modifier, function calls, qualified/use-site annotations and Unicode
   escapes; numeric literals remain separate from range operators and member access while semantic colors take precedence.
   Named argument labels have a distinct semantic color, including incomplete calls.
+- Kotlin completion prioritizes argument values and callable results compatible with expected parameter types,
+  including nullable types, generics and overloads. Boolean/null literals and qualified enum values are offered in
+  matching argument contexts; other matching types remain available.
 - Kotlin completion offers named arguments from call candidates, with parameter types and exclusion of already
   supplied positional, named and trailing-lambda parameters. Accepting a name inserts `name = ` or reuses an existing `=`.
 - Argument hints allow automatic and manual completion while typing argument values. Completion takes

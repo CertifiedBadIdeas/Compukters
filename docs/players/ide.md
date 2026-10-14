@@ -129,6 +129,10 @@ Unknown references color the complete identifier. Errors and warnings underline 
 a mismatched property initializer marks its value. Hover a marked token to read the overlapping problems together.
 Clicking that token still places the caret normally. The Problems window and **F2**/**Shift+F2** retain problem navigation.
 
+While entering an argument, values and function results compatible with its parameter type appear higher
+in completion. Other matching values remain available. Boolean arguments offer `true`/`false`, nullable
+arguments offer `null`, and enum arguments offer qualified values such as `Mode.FIRST`.
+
 At the start of an argument, completion offers names such as `position = ` alongside matching values.
 Parameters already supplied in the call are omitted; accepting a name places the caret after `= `.
 

@@ -28,6 +28,7 @@ import org.jetbrains.kotlin.analysis.api.components.asSignature
 import org.jetbrains.kotlin.analysis.api.components.canBeCalledAsExtensionOn
 import org.jetbrains.kotlin.analysis.api.components.createExtensionCandidateChecker
 import org.jetbrains.kotlin.analysis.api.components.createUseSiteVisibilityChecker
+import org.jetbrains.kotlin.analysis.api.components.defaultType
 import org.jetbrains.kotlin.analysis.api.components.expressionType
 import org.jetbrains.kotlin.analysis.api.components.fullyExpandedType
 import org.jetbrains.kotlin.analysis.api.components.render
@@ -63,12 +64,13 @@ import org.jetbrains.kotlin.analysis.api.types.KaTypeNullability
 import org.jetbrains.kotlin.name.ClassId
 import org.jetbrains.kotlin.name.FqName
 import org.jetbrains.kotlin.name.Name
+import org.jetbrains.kotlin.name.render
 import org.jetbrains.kotlin.psi.KtBlockStringTemplateEntry
+import org.jetbrains.kotlin.psi.KtCallableDeclaration
 import org.jetbrains.kotlin.psi.KtCallableReferenceExpression
 import org.jetbrains.kotlin.psi.KtDotQualifiedExpression
 import org.jetbrains.kotlin.psi.KtImportDirective
 import org.jetbrains.kotlin.psi.KtNameReferenceExpression
-import org.jetbrains.kotlin.psi.KtNamedFunction
 import org.jetbrains.kotlin.psi.KtPackageDirective
 import org.jetbrains.kotlin.psi.KtSafeQualifiedExpression
 import org.jetbrains.kotlin.psi.KtSimpleNameExpression
@@ -88,6 +90,7 @@ import ru.lazyhat.compukters.ide.analysis.CompletionTrigger
 import ru.lazyhat.compukters.ide.analysis.DeclarationOrigin
 import ru.lazyhat.compukters.ide.analysis.k2.standalone.AdmittedK2Snapshot
 import ru.lazyhat.compukters.ide.analysis.protocol.AnalysisLimits
+import ru.lazyhat.compukters.ide.editor.EditorRange
 
 internal object CompletionQuery {
     @OptIn(KaExperimentalApi::class)
@@ -168,6 +171,90 @@ internal object CompletionQuery {
             return signature.substitute(substitutor)
         }
 
+        val expectedTypes = ExpectedTypeCompletion.run { types(context, file) }
+
+        fun typeQuality(type: KaType?): Int =
+            ExpectedTypeCompletion.run {
+                quality(
+                    if (context.receiver?.parent is KtSafeQualifiedExpression) type?.withNullability(true) else type,
+                    expectedTypes,
+                )
+            }
+
+        fun expressionRank(
+            name: String,
+            type: KaType?,
+            locality: Int,
+            detail: String,
+        ): CompletionRank {
+            val quality = typeQuality(type)
+            return CompletionRank(
+                applicability = if (quality > 0) 2 else 1,
+                prefixQuality = matcher.quality(name),
+                locality = locality,
+                nameUtf8 = name.encodeToByteArray(),
+                signatureUtf8 = detail.encodeToByteArray(),
+                expectedTypeQuality = quality,
+            )
+        }
+        val allowsValueItems = context.receiver == null && context.allowsCall()
+        if (allowsValueItems) {
+            ExpectedTypeCompletion.run { enumEntries(expectedTypes) }.forEach { entry ->
+                val id = entry.callableId ?: return@forEach
+                val classId = id.classId ?: return@forEach
+                val name = entry.name.asString()
+                val qualifier = classId.shortClassName.render() + "."
+                val label = qualifier + entry.name.render()
+                val entryMatch = matcher.quality(name)
+                val labelMatch = matcher.quality(label)
+                if (entryMatch == 0 && labelMatch == 0) return@forEach
+                val text = classId.asSingleFqName().pathSegments().joinToString(".") { it.render() } + "." + entry.name.render()
+                val ranges =
+                    if (entryMatch >= labelMatch) {
+                        matcher.ranges(name).map {
+                            EditorRange(
+                                it.startUtf16 + qualifier.length + if (entry.name.render().startsWith('`')) 1 else 0,
+                                it.endUtf16 + qualifier.length + if (entry.name.render().startsWith('`')) 1 else 0,
+                            )
+                        }
+                    } else {
+                        matcher.ranges(label)
+                    }
+                val origin =
+                    when (val mapped = DeclarationOriginMapper.run { map(entry, snapshot) }) {
+                        is MappedDeclaration.Location -> mapped.value.origin
+                        is MappedDeclaration.PlatformTarget -> DeclarationOrigin.Platform(mapped.identity)
+                        null -> null
+                    }
+                val item =
+                    CompletionItem(
+                        label,
+                        text,
+                        CompletionKind.EnumEntry,
+                        requiredBoundedUtf8(
+                            entry.returnType.render(KaTypeRendererForSource.WITH_SHORT_NAMES, Variance.INVARIANT),
+                            limits.detailTextBytes,
+                            "enum value type",
+                        ),
+                        origin,
+                        CompletionSymbol(id.asSingleFqName().asString(), null),
+                        matchedNameRanges = ranges,
+                    )
+                ranked.offer(
+                    RankedCompletion(
+                        item,
+                        "$id\u0000enum-value",
+                        expressionRank(
+                            if (entryMatch >= labelMatch) name else label,
+                            entry.returnType,
+                            Int.MAX_VALUE,
+                            text,
+                        ),
+                    ),
+                )
+            }
+        }
+
         NamedArgumentCompletion.run { candidates(context, file, limits) }.forEach { candidate ->
             ranked.offer(
                 RankedCompletion(
@@ -187,7 +274,8 @@ internal object CompletionQuery {
             )
         }
 
-        KeywordCompletion.candidates(context).forEach { keyword ->
+        val literals = if (allowsValueItems) ExpectedTypeCompletion.run { literals(expectedTypes) }.toMap() else emptyMap()
+        (KeywordCompletion.candidates(context) + literals.keys.filter { matcher.quality(it) > 0 }).distinct().forEach { keyword ->
             val item = CompletionItem(keyword, keyword, CompletionKind.Keyword, matchedNameRanges = matcher.ranges(keyword))
             ranked.offer(
                 RankedCompletion(
@@ -199,6 +287,7 @@ internal object CompletionQuery {
                         locality = Int.MAX_VALUE,
                         nameUtf8 = keyword.encodeToByteArray(),
                         signatureUtf8 = ByteArray(0),
+                        expectedTypeQuality = typeQuality(literals[keyword]),
                     ),
                 ),
             )
@@ -249,12 +338,19 @@ internal object CompletionQuery {
                 RankedCompletion(
                     item,
                     fqName?.let { "$it\u0000$detail" } ?: "scope\u0000$name\u0000$detail",
-                    CompletionRank(
-                        applicability = 1,
-                        prefixQuality = matcher.quality(name),
-                        locality = locality,
-                        nameUtf8 = name.encodeToByteArray(),
-                        signatureUtf8 = detail.encodeToByteArray(),
+                    expressionRank(
+                        name,
+                        when {
+                            expectedTypes.isEmpty() -> null
+                            symbol is KaFunctionSymbol && !context.allowsCall() -> null
+                            signature != null -> signature.returnType
+                            resolvedSignature != null -> resolvedSignature.returnType
+                            symbol is KaCallableSymbol -> symbol.returnType
+                            symbol is KaNamedClassSymbol && symbol.classKind == KaClassKind.OBJECT -> symbol.defaultType
+                            else -> null
+                        },
+                        locality,
+                        detail,
                     ),
                 ),
             )
@@ -283,8 +379,15 @@ internal object CompletionQuery {
                         declaration,
                         exactCandidates.filter { it.shortName == declaration.shortName },
                     )
-                val function = indexedFunction(declaration, snapshot)
-                val signature = function?.let(::functionSignature)
+                val callable =
+                    if (declaration.kind == CompletionKind.Property &&
+                        expectedTypes.isEmpty()
+                    ) {
+                        null
+                    } else {
+                        indexedCallable(declaration, snapshot)
+                    }
+                val signature = (callable as? KaFunctionSymbol)?.let(::functionSignature)
                 val provider =
                     declaration.kind in setOf(CompletionKind.Class, CompletionKind.Object) &&
                         isPeripheralValuePosition(context.position) &&
@@ -311,12 +414,37 @@ internal object CompletionQuery {
                     RankedCompletion(
                         item,
                         "${declaration.fqName}\u0000${declaration.signature}",
-                        CompletionRank(
-                            applicability = 1,
-                            prefixQuality = matcher.quality(declaration.shortName),
-                            locality = locality,
-                            nameUtf8 = declaration.shortName.encodeToByteArray(),
-                            signatureUtf8 = declaration.signature.encodeToByteArray(),
+                        expressionRank(
+                            declaration.shortName,
+                            when {
+                                expectedTypes.isEmpty() -> {
+                                    null
+                                }
+
+                                callable is KaFunctionSymbol && !context.allowsCall() -> {
+                                    null
+                                }
+
+                                signature != null -> {
+                                    signature.returnType
+                                }
+
+                                callable != null -> {
+                                    callable.returnType
+                                }
+
+                                declaration.kind == CompletionKind.Object -> {
+                                    findClass(
+                                        ClassId.topLevel(FqName(declaration.fqName)),
+                                    )?.defaultType
+                                }
+
+                                else -> {
+                                    null
+                                }
+                            },
+                            locality,
+                            declaration.signature,
                         ),
                     ),
                 )
@@ -367,30 +495,30 @@ internal object CompletionQuery {
     }
 
     @OptIn(KaExperimentalApi::class)
-    private fun KaSession.indexedFunction(
+    private fun KaSession.indexedCallable(
         declaration: GlobalCompletionDeclaration,
         snapshot: AdmittedK2Snapshot,
-    ): KaFunctionSymbol? {
+    ): KaCallableSymbol? {
         if (declaration.kind != CompletionKind.Function && declaration.kind != CompletionKind.ExtensionFunction &&
-            declaration.kind != CompletionKind.MemberFunction
+            declaration.kind != CompletionKind.MemberFunction && declaration.kind != CompletionKind.Property
         ) {
             return null
         }
         if (declaration.origin == DeclarationOrigin.Project) {
             val file = snapshot.files[declaration.sourcePath] ?: return null
             return generateSequence(file.findElementAt(declaration.sourceRange.startUtf16)) { it.parent }
-                .filterIsInstance<KtNamedFunction>()
+                .filterIsInstance<KtCallableDeclaration>()
                 .firstOrNull { it.textRange.startOffset == declaration.sourceRange.startUtf16 }
-                ?.symbol
+                ?.symbol as? KaCallableSymbol
         }
         val fqName = FqName(declaration.fqName)
         val candidates =
             findTopLevelCallables(
                 fqName.parent(),
                 Name.identifier(declaration.shortName),
-            ).filterIsInstance<KaFunctionSymbol>().toList()
+            ).filter { if (declaration.kind == CompletionKind.Property) it is KaPropertySymbol else it is KaFunctionSymbol }.toList()
         return candidates.singleOrNull()
-            ?: candidates.singleOrNull { canonicalPlatformSignature(it) == declaration.signature }
+            ?: candidates.singleOrNull { it is KaFunctionSymbol && canonicalPlatformSignature(it) == declaration.signature }
     }
 
     @OptIn(KaExperimentalApi::class)

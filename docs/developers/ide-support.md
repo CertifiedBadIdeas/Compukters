@@ -205,6 +205,26 @@ references, type positions and shorthand string interpolation still insert only 
 suppressed at function declaration names, including extension and local functions, without suppressing type or
 body completion or explicit requests. Variable, parameter and destructuring declaration names produce no
 completion candidates; type annotations, initializers and existing-variable references retain semantic completion.
+Within call arguments, completion ranks values and callable results by K2 assignability to the expected
+parameter types. Exact types rank before compatible subtypes; nullable results, safe-call results and generic
+type arguments retain Kotlin semantics. Best overload candidates supply the expected types, including named,
+positional and vararg arguments; spread and nested-expression contexts use K2's local expected type. Other
+matching values remain available, and contexts outside arguments retain ordinary ranking. Named-argument
+labels keep their existing priority. Matching Boolean and nullable contexts also offer `true`, `false` and `null`
+with an empty completion prefix, while expected enum values insert qualified names such as `Mode.FIRST`.
+Autoimported properties retain their import edits while participating in type ranking. Type analysis remains
+inside the K2 session; the unchanged worker protocol carries the resulting item order.
+
+**Evidence:** `ExpectedTypeCompletionTest`, tests `positional and named arguments rank compatible values without hiding other types`,
+`nullable and subtype compatibility preserve Kotlin assignability`, `generic inference and overloads rank values from applicable parameter types`,
+`Boolean and nullable argument values offer literals for an empty prefix`, `expected enum values use valid qualified insertion and retain prefix matching`,
+`call results and qualified properties use their substituted result types`, `vararg spread and safe call results respect argument value types`,
+`autoimported property types take priority while keeping their import edits`, `SDK aliases and generic type arguments use semantic compatibility`,
+`unrelated contexts and unresolved calls retain ordinary completion ordering`,
+`exact expected types rank before compatible subtypes and item caps preserve matches`,
+`enum suggestions insert qualified cross-package names and highlight escaped entries`,
+and `short string interpolation keeps name-only completion without value literals`.
+
 At the start of a call argument, completion also offers `parameter = ` names from K2 call candidates,
 including constructors and member/extension overloads. Already bound positional, named and trailing-lambda
 parameters are excluded. Candidates retain the substituted parameter type, reuse an existing `=`, and do not
