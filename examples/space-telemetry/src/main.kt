@@ -27,6 +27,14 @@ fun main() {
         val planet = Space.planet()
         println("Planet frame: " + planet.frame)
         println("Transition altitude (m): " + planet.transitionHeight)
+        val mapping = Space.planetMapping()
+        println("Surface dimension: " + mapping.dimension)
+        println("Planet shape: " + if (mapping.spherical) "sphere" else "cube")
+        println("Border: " + mapping.borderCenterX + ", " + mapping.borderCenterZ + "; size " + mapping.borderSize)
+        println("Planet influence radius (m): " + mapping.influenceRadius)
+        println("Mapping orbit tick: " + mapping.universeTick)
+        println("Rotation model epoch (s): " + mapping.rotation.epochSeconds)
+        println("Rotation rate (rad/s): " + mapping.rotation.rate.length)
         if (status.inDeepSpace) {
             val orbit = Space.orbit()
             println("Orbit frame: " + orbit.frame)
@@ -47,6 +55,15 @@ fun main() {
                 if (orbit.bound) println("Apoapsis above planet radius (m): " + (orbit.apoapsisRadius() - planet.radius))
             } else {
                 println("Planet frame changed between observations; planet-relative distances omitted.")
+            }
+            val region = Space.region()
+            if (region.instanceId == orbit.instanceId && region.frame == orbit.frame) {
+                println("Region side (m): " + region.sideLength + "; timescale " + region.timeScale)
+                println("Region offset (m): " + (region.constructionPosition - region.center).length)
+                println("Construction diagonal (m): " + region.constructionDiagonal)
+                println("Region constructions: " + region.loadedConstructions + " loaded; " + region.unloadedConstructions + " tracked unloaded")
+            } else {
+                println("Region changed between observations; region comparison omitted.")
             }
             println("Bound does not prove planet clearance. Distances use the planet radius, not its shape.")
         }

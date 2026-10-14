@@ -81,6 +81,12 @@ unchanged. `GuidanceSnapshot` adds dimension/tick/instance/frame identity and th
 from one observation. The bundle content identity changes and dependent Guest projects must resolve/recompile.
 No additional frame rotation is introduced: pinned upstream transfers world velocity components directly to the
 current orbital frame. Direction normalization rejects degenerate planes explicitly.
+Cosmonautics addon 1.1 appends `Space.planetMapping()` and `Space.region()` as operation IDs 4 and 5 in
+capability ABI 1. Operations 0..3 and their record schemas are unchanged. New value replies carry the upstream
+rotation model (canonical Quaterniond/Vector3d), configured surface mapping, and current construction/region
+geometry and clock identities. No SDK transport, VM/native ABI, checkpoint format or host target registry changes.
+The bundle identity changes; resolve/recompile Guest projects using the new declarations.
+
 
 ## Guest value records
 
