@@ -52,6 +52,14 @@ internal class IdeEditorInputRouter(
             if (command != null) return dispatch(command)
             dispatch(IdeCommand.DismissImportFixes)
         }
+        if (focus.area == IdeFocusArea.Editor && event.modifiers == IdeModifier.ALT &&
+            event.key in listOf(IdeKeyCode.UP, IdeKeyCode.DOWN)
+        ) {
+            if (focus.declarationChooserVisible) dispatch(IdeCommand.DismissSemanticInteraction)
+            if (focus.completionVisible) dispatch(IdeCommand.DismissCompletion)
+            val direction = if (event.key == IdeKeyCode.UP) IdeVerticalDirection.Up else IdeVerticalDirection.Down
+            return dispatch(IdeCommand.Edit(IdeEditorInput.MoveLines(direction)))
+        }
         if (focus.declarationChooserVisible) chooserKey(event)?.let { return dispatch(it) }
         if (focus.completionVisible) completionKey(event)?.let { return dispatch(it) }
         if (focus.parameterInfoVisible && event.modifiers == IdeModifier.CONTROL &&

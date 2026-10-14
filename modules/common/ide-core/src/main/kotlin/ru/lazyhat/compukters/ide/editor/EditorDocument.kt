@@ -440,6 +440,56 @@ class EditorDocument(
         )
     }
 
+    /** Move touched lines by one position, preserving selection direction and separator positions. */
+    fun moveLines(down: Boolean): EditorEditResult {
+        if (closed) return EditorEditResult.Rejected(EditorRejection.Closed)
+        val range = selectionRange
+        val first = lines.lineOfOffset(range?.startUtf16 ?: caretOffset)
+        var last = lines.lineOfOffset(range?.endUtf16 ?: caretOffset)
+        val endAtNextLine = range != null && last > first && range.endUtf16 == lines.line(last).startUtf16
+        if (endAtNextLine) last--
+        if ((!down && first == 0) || (down && last == lineCount - 1)) return EditorEditResult.NoChange
+        val adjacent = if (down) last + 1 else first - 1
+        val affectedFirst = minOf(first, adjacent)
+        val affectedLast = maxOf(last, adjacent)
+        val start = lines.line(affectedFirst).startUtf16
+        val end = lines.line(affectedLast).separatorEndUtf16
+        val replacement = StringBuilder(end - start)
+        val anchorLine = lines.lineOfOffset(selection.anchorUtf16)
+        val caretLine = lines.lineOfOffset(selection.caretUtf16)
+        var movedAnchor = selection.anchorUtf16
+        var movedCaret = selection.caretUtf16
+        var movedEnd = start
+        for (position in affectedFirst..affectedLast) {
+            val original =
+                when {
+                    down && position == affectedFirst -> adjacent
+                    down -> position - 1
+                    position == affectedLast -> adjacent
+                    else -> position + 1
+                }
+            val content = lines.line(original)
+            val targetStart = start + replacement.length
+            if (original == anchorLine) movedAnchor = targetStart + selection.anchorUtf16 - content.startUtf16
+            if (original == caretLine) movedCaret = targetStart + selection.caretUtf16 - content.startUtf16
+            replacement.append(buffer.copyRange(content.startUtf16, content.contentEndUtf16))
+            val separator = lines.line(position)
+            replacement.append(buffer.copyRange(separator.contentEndUtf16, separator.separatorEndUtf16))
+            if (original == last) movedEnd = start + replacement.length
+        }
+        if (endAtNextLine) {
+            if (selection.anchorUtf16 == range?.endUtf16) movedAnchor = movedEnd
+            if (selection.caretUtf16 == range?.endUtf16) movedCaret = movedEnd
+        }
+        return replace(
+            EditorRange(start, end),
+            replacement.toString(),
+            EditorHistoryKind.Atomic,
+            EditorChangeOrigin.User,
+            EditorSelection(movedAnchor, movedCaret),
+        )
+    }
+
     /** Toggle line comments as one edit, retaining selection direction and line endings. */
     fun toggleLineComments(prefix: String = "//"): EditorEditResult {
         require(prefix.isNotEmpty() && prefix.none { it.isWhitespace() }) { "comment prefix must be a token" }

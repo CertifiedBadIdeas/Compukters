@@ -49,6 +49,32 @@ import kotlin.test.assertTrue
 
 class IdeInputAdapterTest {
     @Test
+    fun `Alt arrows move source lines before completion and declaration choices but respect other focus`() {
+        val fixture = fixture()
+        assertTrue(fixture.adapter.keyPressed(key(IdeKeyCode.UP, IdeModifier.ALT), IdeFocusState.Editor))
+        assertTrue(fixture.adapter.keyPressed(key(IdeKeyCode.DOWN, IdeModifier.ALT), IdeFocusState.Editor.copy(completionVisible = true)))
+        assertTrue(
+            fixture.adapter.keyPressed(key(IdeKeyCode.UP, IdeModifier.ALT), IdeFocusState.Editor.copy(declarationChooserVisible = true)),
+        )
+        assertEquals(
+            listOf<IdeCommand>(
+                IdeCommand.Edit(IdeEditorInput.MoveLines(IdeVerticalDirection.Up)),
+                IdeCommand.DismissCompletion,
+                IdeCommand.Edit(IdeEditorInput.MoveLines(IdeVerticalDirection.Down)),
+                IdeCommand.DismissSemanticInteraction,
+                IdeCommand.Edit(IdeEditorInput.MoveLines(IdeVerticalDirection.Up)),
+            ),
+            fixture.commands,
+        )
+        val count = fixture.commands.size
+        assertFalse(fixture.adapter.keyPressed(key(IdeKeyCode.UP, IdeModifier.ALT), IdeFocusState(IdeFocusArea.Terminal)))
+        fixture.adapter.keyPressed(key(IdeKeyCode.UP, IdeModifier.ALT), IdeFocusState.Editor.copy(findVisible = true, findFocused = true))
+        fixture.adapter.keyPressed(key(IdeKeyCode.UP, IdeModifier.ALT), IdeFocusState.Editor.copy(gitVisible = true))
+        assertFalse(fixture.adapter.keyPressed(key(IdeKeyCode.UP, IdeModifier.ALT or IdeModifier.SHIFT), IdeFocusState.Editor))
+        assertTrue(fixture.commands.drop(count).none { it is IdeCommand.Edit })
+    }
+
+    @Test
     fun `Ctrl D duplicates only in source editor focus`() {
         val fixture = fixture(clipboard = "unchanged")
         assertTrue(fixture.adapter.keyPressed(key(IdeKeyCode.D, IdeModifier.CONTROL), IdeFocusState.Editor))

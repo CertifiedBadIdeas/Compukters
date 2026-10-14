@@ -99,6 +99,24 @@ import kotlin.test.assertTrue
 
 class IdeClientControllerTest {
     @Test
+    fun `move line command changes source with caret and undo tracking`() {
+        val fixture = ControllerFixture(preferences = preferences("demo", "src/main.kt"))
+        fixture.startAndTick()
+        fixture.controller.dispatch(IdeCommand.Edit(IdeEditorInput.SelectAll))
+        fixture.controller.dispatch(IdeCommand.Edit(IdeEditorInput.Type("first\nsecond\nthird")))
+        fixture.controller.dispatch(IdeCommand.Edit(IdeEditorInput.SetCaret(8, false)))
+        fixture.controller.dispatch(IdeCommand.Edit(IdeEditorInput.MoveLines(IdeVerticalDirection.Down)))
+        assertEquals("first\nthird\nsecond", fixture.textEditor().visibleLines.joinToString("\n"))
+        assertEquals(14, fixture.textEditor().caretUtf16)
+        fixture.controller.dispatch(IdeCommand.Edit(IdeEditorInput.Undo))
+        assertEquals("first\nsecond\nthird", fixture.textEditor().visibleLines.joinToString("\n"))
+        assertEquals(8, fixture.textEditor().caretUtf16)
+        fixture.controller.dispatch(IdeCommand.Edit(IdeEditorInput.Redo))
+        assertEquals("first\nthird\nsecond", fixture.textEditor().visibleLines.joinToString("\n"))
+        fixture.controller.close()
+    }
+
+    @Test
     fun `duplicate command edits lines and exact selection as undoable source changes`() {
         val fixture = ControllerFixture(preferences = preferences("demo", "src/main.kt"))
         fixture.startAndTick()
