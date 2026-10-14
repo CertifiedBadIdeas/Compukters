@@ -75,6 +75,7 @@ internal class NeoForgeIdeTargetResolver(
                         readableFileSystem = true,
                     ),
                 displayName = "Computer ${position.x}, ${position.y}, ${position.z}",
+                computerId = entity.computerId().let { java.util.UUID(it.highBits, it.lowBits) },
                 alive = {
                     !entity.isRemoved &&
                         serverPlayer.level().getBlockEntity(position) === entity &&

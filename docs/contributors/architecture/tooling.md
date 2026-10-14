@@ -44,6 +44,15 @@ Client IDE project
   -> optional canonical terminal submission to run the executable
 ```
 
+Client preferences retain a bounded map of durable computer identities to the last successfully opened project
+(64 most recently remembered computers), independently of per-project editor state and the global last project used
+when opening the IDE without a target. Initial target attachment and project catalog loading may finish in either
+order; target openings restore only after both complete and do not first open the global last project. Unknown
+computers, removed projects and failed initial attachments leave the project selector available. Attaching from an
+already open workspace preserves documents and uses the existing save-before-switch path. Renaming a project updates
+all associated computers; deleting or forgetting it removes their associations. Preference format 4 stores these
+associations and still admits formats 1–3. This is client-local state and does not change a computer's server filesystem.
+
 The physical client runtime owns a lazy compiler backend across IDE screen sessions. Each screen retains its own
 compilation service, cache handle and backend lease. Closing the screen cancels its project compilations and releases
 its lease. Source-free library preparation belongs to the client owner and can finish after the screen closes;

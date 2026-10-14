@@ -39,6 +39,19 @@ import kotlin.test.assertFailsWith
 
 internal class IdeTargetReplyPayloadTest {
     @Test
+    fun `attached reply rejects truncated durable computer identity`() {
+        val buffer = RegistryFriendlyByteBuf(Unpooled.buffer(), RegistryAccess.EMPTY)
+        try {
+            val reply = IdeTargetReplyPayload(1, IdeTargetReply.Attached(target().copy(computerId = java.util.UUID(1, 2))))
+            IdeTargetReplyPayload.STREAM_CODEC.encode(buffer, reply)
+            buffer.writerIndex(buffer.writerIndex() - 1)
+            assertFailsWith<IndexOutOfBoundsException> { IdeTargetReplyPayload.STREAM_CODEC.decode(buffer) }
+        } finally {
+            buffer.release()
+        }
+    }
+
+    @Test
     fun `peripheral payload rejects invalid registry IDs and oversized entry counts before allocation`() {
         assertFailsWith<IllegalArgumentException> { IdeNamedPeripheral("speed", "../../invalid") }
         assertFailsWith<IllegalArgumentException> { IdeNamedPeripheral("", "minecraft:stone") }
@@ -63,6 +76,7 @@ internal class IdeTargetReplyPayloadTest {
         val replies =
             listOf(
                 IdeTargetReply.Attached(target),
+                IdeTargetReply.Attached(target.copy(computerId = java.util.UUID(1, 2))),
                 IdeTargetReply.NamedPeripherals(listOf(IdeNamedPeripheral("speed", "create:speedometer", true)), true),
                 IdeTargetReply.NamedPeripherals(
                     listOf(

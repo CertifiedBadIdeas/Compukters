@@ -24,6 +24,25 @@ import kotlin.test.assertNull
 
 class IdePreferencesTest {
     @Test
+    fun `computer associations survive editor and author updates and follow rename and removal`() {
+        val first = java.util.UUID(0, 1)
+        val second = java.util.UUID(0, 2)
+        val base = IdePreferences.empty(240, 160, true).rememberComputer(first, "demo").rememberComputer(second, "other")
+        val updated =
+            base
+                .remember("demo", "src/main.kt", 1, 2, 3)
+                .rememberGitAuthor("Player", "p@example.invalid")
+                .replaceProjectDirectory("demo", "renamed")
+        assertEquals(mapOf(first to "renamed", second to "other"), updated.computerProjects)
+        assertEquals(mapOf(second to "other"), updated.replaceProjectDirectory("renamed", null).computerProjects)
+        assertEquals(updated.computerProjects, updated.rememberComputer(first, "../escape").computerProjects)
+        var bounded = base
+        repeat(IdePreferences.MAX_COMPUTER_PROJECTS + 1) { bounded = bounded.rememberComputer(java.util.UUID(1, it.toLong()), "demo") }
+        assertEquals(IdePreferences.MAX_COMPUTER_PROJECTS, bounded.computerProjects.size)
+        assertNull(bounded.computerProjects[first])
+    }
+
+    @Test
     fun `commit author survives project updates and invalid edits preserve remembered identity`() {
         val preferences = IdePreferences.empty(240, 160, true).rememberGitAuthor(" Player😀 ", " player@example.invalid ")
         val remembered = preferences.remember("demo", "src/main.kt", 1, 2, 3)

@@ -30,6 +30,73 @@ import kotlin.test.assertNull
 
 class IdeClientPreferencesTest {
     @Test
+    fun `computer associations survive byte budget pressure from old editor positions`() {
+        val root = createTempDirectory("compukters-ide-preferences-budget-").toAbsolutePath().normalize()
+        try {
+            val store = IdeClientPreferences(root.resolve("session.preferences"), RecordingIdeLayoutStore(IdeLayoutSettings.defaults()))
+            val id = java.util.UUID(0, 1)
+            val states = linkedMapOf("active" to IdeProjectEditorState.admit("src/main.kt", 0, 0, 0))
+            val longPath = List(8) { "x".repeat(255) }.joinToString("/")
+            repeat(63) { states["old$it"] = IdeProjectEditorState.admit(longPath, 1, 2, 3) }
+            store.save(IdePreferences.admit("active", states, 240, 160, true).rememberComputer(id, "active"))
+            val restored = store.load()!!
+            assertEquals(mapOf(id to "active"), restored.computerProjects)
+            assertEquals("src/main.kt", restored.lastFile?.value)
+            kotlin.test.assertTrue(restored.projectStates.size < states.size)
+        } finally {
+            root.toFile().deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `computer projects persist across reopening with legacy migration and malformed rejection`() {
+        val root = createTempDirectory("compukters-ide-computer-projects-").toAbsolutePath().normalize()
+        try {
+            val file = root.resolve("session.preferences")
+            val layout = RecordingIdeLayoutStore(IdeLayoutSettings.defaults())
+            val store = IdeClientPreferences(file, layout)
+            val first = java.util.UUID(0, 1)
+            val second = java.util.UUID(0, 2)
+            val original =
+                IdePreferences
+                    .admit("demo", "src/main.kt", 3, 4, 5, 240, 160, true)
+                    .rememberComputer(first, "demo")
+                    .rememberComputer(second, "проект")
+                    .rememberGitAuthor("Player", "p@example.invalid")
+            store.save(original)
+            val restored = IdeClientPreferences(file, layout).load()!!
+            assertEquals(original.computerProjects, restored.computerProjects)
+            assertEquals("src/main.kt", restored.lastFile?.value)
+            assertEquals("Player", restored.gitAuthorName)
+            val valid =
+                java.nio.file.Files
+                    .readString(file)
+            val computerLine = valid.lines().first { it.startsWith("computer=") }
+            for (invalid in listOf(
+                valid + "$computerLine\n",
+                valid.replace(first.toString(), "1-1-1-1-1"),
+                valid.replace(computerLine, "computer=$first|Li4vZXNjYXBl"),
+            )) {
+                file.writeText(invalid)
+                assertNull(store.load())
+            }
+            val legacy =
+                valid
+                    .replace("format=4", "format=3")
+                    .lines()
+                    .filterNot { it.startsWith("computer=") }
+                    .joinToString("\n")
+            file.writeText(legacy)
+            val migrated = store.load()!!
+            assertEquals(emptyMap(), migrated.computerProjects)
+            assertEquals("demo", migrated.lastProjectDirectory)
+            assertEquals("Player", migrated.gitAuthorName)
+        } finally {
+            root.toFile().deleteRecursively()
+        }
+    }
+
+    @Test
     fun `scale selection survives reopening and independent layout and session saves`() {
         val root = createTempDirectory("compukters-ide-scale-").toAbsolutePath().normalize()
         try {

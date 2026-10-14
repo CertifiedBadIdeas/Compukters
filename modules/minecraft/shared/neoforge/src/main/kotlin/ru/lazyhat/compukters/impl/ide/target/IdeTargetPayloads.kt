@@ -666,6 +666,8 @@ private fun RegistryFriendlyByteBuf.writeAttachedTarget(target: IdeAttachedTarge
     writeBoolean(target.capabilities.terminal)
     writeBoolean(target.capabilities.readableFileSystem)
     writeUtf(target.displayName, 128)
+    writeBoolean(target.computerId != null)
+    target.computerId?.let(::writeUUID)
 }
 
 private fun RegistryFriendlyByteBuf.readAttachedTarget(): IdeAttachedTarget {
@@ -676,6 +678,7 @@ private fun RegistryFriendlyByteBuf.readAttachedTarget(): IdeAttachedTarget {
         readProfile(),
         IdeTargetCapabilities(readBoolean(), readBoolean(), readBoolean(), readBoolean()),
         readUtf(128),
+        if (readBoolean()) readUUID() else null,
     )
 }
 

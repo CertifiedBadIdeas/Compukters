@@ -180,6 +180,7 @@ data class IdeAttachedTarget(
     val compileProfile: TargetCompileProfile,
     val capabilities: IdeTargetCapabilities,
     val displayName: String,
+    val computerId: java.util.UUID? = null,
 ) {
     init {
         requireBoundedText(displayName, 128, "target display name")
