@@ -167,9 +167,13 @@ class IdeScreenController(
                     presentation(geometry).model.hitTargets.asReversed().firstOrNull { target ->
                         target.bounds.contains(uiEvent.x(), uiEvent.y())
                     }
+                focusArea = IdeFocusArea.Peripherals
+                terminalOverlay.focusLost()
                 if (uiEvent.button() == 0 && hit?.enabled == true) {
                     if (hit.action == IdeHitAction.PeripheralChoice) {
+                        val sameDevice = it.selectedIndex == hit.choiceIndex
                         peripheralPicker = it.copy(selectedIndex = hit.choiceIndex, lookupIndex = 0, message = null)
+                        if (doubleClick && sameDevice) activateUiAction(IdeHitAction.PeripheralInsert)
                     } else {
                         activateUiAction(hit.action)
                     }
@@ -241,6 +245,8 @@ class IdeScreenController(
             focusArea =
                 when {
                     hitAction == IdeHitAction.StatusDetails -> focusArea
+
+                    hitAction == IdeHitAction.Peripherals && peripheralPicker != null -> IdeFocusArea.Peripherals
 
                     hitAction == IdeHitAction.Terminal && terminalOverlay.visible -> IdeFocusArea.Terminal
 
@@ -427,6 +433,14 @@ class IdeScreenController(
             closePeripherals()
             return true
         }
+        if (focusArea == IdeFocusArea.Peripherals && peripheralPicker != null && !projectSwitcherOpen && !terminalOverlay.visible) {
+            if (event.key == IdeKeyCode.C &&
+                event.modifiers and (IdeModifier.CONTROL or IdeModifier.SHIFT or IdeModifier.ALT) == IdeModifier.CONTROL
+            ) {
+                activateUiAction(IdeHitAction.PeripheralCopyName)
+            }
+            return true
+        }
         if (event.key == IdeKeyCode.ESCAPE && projectSwitcherOpen) {
             projectSwitcherOpen = false
             return true
@@ -460,6 +474,11 @@ class IdeScreenController(
         if (!viewport().supported) return true
         synchronizeQuickOpen()
         if (overlays.type(event.text)) return true
+        if (focusArea == IdeFocusArea.Peripherals && peripheralPicker != null && !projectSwitcherOpen &&
+            !terminalOverlay.visible
+        ) {
+            return true
+        }
         val inputEvent = IdeCharacterInput(event.text)
         if (focusArea == IdeFocusArea.Terminal && terminalOverlay.charTyped(inputEvent)) return true
         return input.charTyped(inputEvent, focusState())
@@ -644,6 +663,7 @@ class IdeScreenController(
     }
 
     private fun closePeripherals() {
+        if (focusArea == IdeFocusArea.Peripherals) focusArea = IdeFocusArea.Editor
         cancelPeripheralRename()
         peripheralPicker = null
         peripheralFuture?.cancel(false)
@@ -744,7 +764,12 @@ class IdeScreenController(
 
             IdeHitAction.PeripheralInsert -> {
                 val entry = peripheralPicker?.let(IdePeripheralPicker::selected) ?: return false
-                if (entry.duplicate || peripheralPicker?.loading == true) return false
+                val editor = (controller.viewState().page as? IdePageState.Workspace)?.value?.editor as? IdeEditorView.Text
+                if (entry.duplicate || peripheralPicker?.loading == true || editor == null || editor.readOnly ||
+                    editor.path?.value?.endsWith(".kt") != true
+                ) {
+                    return false
+                }
                 controller.dispatch(IdeCommand.InsertPeripheralConstant(entry.name))
             }
 

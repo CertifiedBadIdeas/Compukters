@@ -25,16 +25,17 @@ Names are normalized to lowercase. The server checks the exact device instance, 
 the whole network, including unavailable members. Replaced devices or stale names require **Refresh**. Renaming does not
 rewrite existing string constants or running programs.
 
-**Copy name** copies the exact name in the network as plain text, without quotes. This works without an open
-source file or lookup API, including devices with duplicate names.
+**Copy name** or **Ctrl+C** while Devices has focus copies the selected device's exact name in the network as plain text,
+without quotes. This works without an open source file or lookup API, including devices with duplicate names.
+Click back in the editor to use Ctrl+C for the selected code again.
 
 **Copy lookup** copies a call such as `compukter.display.TextDisplay.named("display_1")`. Click the API selector to switch
 between supported types, such as `TextDisplay` and `GraphicalDisplay`. The fully qualified type avoids requiring an import;
 the corresponding addon module still needs to be enabled in the project. Copying and renaming do not require an open
 writable source. Older addons without lookup metadata still support rename and constant insertion.
 
-Open a writable project Kotlin source, select a card and click **Insert constant**. The IDE inserts a string constant immediately beneath
-its imports, before the existing code. For example, inserting `drive_speed` adds:
+Open a writable project Kotlin source and double-click a device card, or select it and click **Insert constant**.
+The IDE inserts a string constant immediately beneath its imports, before the existing code. For example, inserting `drive_speed` adds:
 
 ```kotlin
 const val DRIVE_SPEED = "drive_speed"

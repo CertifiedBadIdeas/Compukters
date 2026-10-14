@@ -76,6 +76,9 @@ class IdeScreenControllerTest {
             fixture.click(IdeHitAction.Peripherals)
             fixture.ui.tick()
             fixture.click(IdeHitAction.PeripheralChoice, 1)
+            assertTrue(fixture.ui.keyPressed(IdeKeyInput(IdeKeyCode.C, IdeModifier.CONTROL)))
+            assertEquals("device_1", fixture.host.clipboard)
+            fixture.host.clipboard = "reset"
             fixture.click(IdeHitAction.PeripheralCopyName)
             assertEquals("device_1", fixture.host.clipboard)
             val frame = fixture.ui.frame(0, 0)
@@ -84,6 +87,124 @@ class IdeScreenControllerTest {
                     .single { it.action == IdeHitAction.PeripheralCopyLookup }
                     .enabled,
             )
+            assertTrue((fixture.controller.viewState().page as IdePageState.Workspace).value.editor is IdeEditorView.Empty)
+        }
+    }
+
+    @Test
+    fun `double click inserts selected device constant as one undoable edit`() {
+        val entry = IdeNamedPeripheral("display_1", "compukters:display")
+        Fixture({ CompletableFuture.completedFuture(IdeTargetReply.NamedPeripherals(listOf(entry))) }).use { fixture ->
+            fixture.controller.dispatch(IdeCommand.CreateProject("demo"))
+            fixture.awaitWorkspace()
+            fixture.awaitFile(
+                ru.lazyhat.compukters.ide.project.fs.ProjectPath
+                    .file("src/main.kt"),
+            )
+
+            fun text() = ((fixture.controller.viewState().page as IdePageState.Workspace).value.editor as IdeEditorView.Text).visibleLines
+            val before = text()
+            fixture.attach()
+            fixture.click(IdeHitAction.Peripherals)
+            fixture.ui.tick()
+            fixture.click(IdeHitAction.PeripheralChoice, 0)
+            assertEquals(before, text())
+            fixture.click(IdeHitAction.PeripheralChoice, 0, doubleClick = true)
+            assertEquals(1, text().count { it.contains("const val DISPLAY_1 = \"display_1\"") })
+            fixture.click(IdeHitAction.PeripheralChoice, 0, doubleClick = true)
+            assertEquals(1, text().count { it.contains("const val DISPLAY_1 = \"display_1\"") })
+            fixture.ui.keyPressed(IdeKeyInput(IdeKeyCode.ESCAPE))
+            fixture.ui.keyPressed(IdeKeyInput(IdeKeyCode.Z, IdeModifier.CONTROL))
+            assertEquals(before, text())
+        }
+    }
+
+    @Test
+    fun `Devices copy shortcut follows focus without editing or stealing editor copy`() {
+        val entry = IdeNamedPeripheral("screen", "compukters:display")
+        Fixture({ CompletableFuture.completedFuture(IdeTargetReply.NamedPeripherals(listOf(entry))) }).use { fixture ->
+            fixture.controller.dispatch(IdeCommand.CreateProject("demo"))
+            fixture.awaitWorkspace()
+            fixture.awaitFile(
+                ru.lazyhat.compukters.ide.project.fs.ProjectPath
+                    .file("src/main.kt"),
+            )
+
+            fun text() = ((fixture.controller.viewState().page as IdePageState.Workspace).value.editor as IdeEditorView.Text).visibleLines
+            val before = text()
+            fixture.attach()
+            fixture.click(IdeHitAction.Peripherals)
+            fixture.ui.tick()
+            fixture.host.clipboard = "unchanged"
+            fixture.ui.keyPressed(IdeKeyInput(IdeKeyCode.C, IdeModifier.CONTROL))
+            assertEquals("unchanged", fixture.host.clipboard)
+            fixture.click(IdeHitAction.PeripheralChoice, 0)
+            fixture.ui.keyPressed(IdeKeyInput(IdeKeyCode.C, IdeModifier.CONTROL))
+            assertEquals("screen", fixture.host.clipboard)
+            fixture.ui.charTyped(IdeCharacterInput("must not enter editor"))
+            assertEquals(before, text())
+            val frame = fixture.ui.frame(0, 0)
+            fixture.ui.mouseClicked(
+                IdePointerInput(
+                    frame.viewport.toMinecraftX(frame.geometry.editor.left + 70.0),
+                    frame.viewport.toMinecraftY(frame.geometry.editor.top + 10.0),
+                    0,
+                    0,
+                ),
+                false,
+            )
+            fixture.ui.keyPressed(IdeKeyInput(IdeKeyCode.A, IdeModifier.CONTROL))
+            fixture.ui.keyPressed(IdeKeyInput(IdeKeyCode.C, IdeModifier.CONTROL))
+            assertTrue(fixture.host.clipboard.contains("fun main"))
+            assertEquals(before, text())
+        }
+    }
+
+    @Test
+    fun `double click on another row only selects and duplicate devices cannot insert`() {
+        val entries =
+            listOf(
+                IdeNamedPeripheral("duplicate", "minecraft:dirt", duplicate = true),
+                IdeNamedPeripheral("second", "minecraft:stone"),
+            )
+        Fixture({ CompletableFuture.completedFuture(IdeTargetReply.NamedPeripherals(entries)) }).use { fixture ->
+            fixture.controller.dispatch(IdeCommand.CreateProject("demo"))
+            fixture.awaitWorkspace()
+            fixture.awaitFile(
+                ru.lazyhat.compukters.ide.project.fs.ProjectPath
+                    .file("src/main.kt"),
+            )
+
+            fun text() = ((fixture.controller.viewState().page as IdePageState.Workspace).value.editor as IdeEditorView.Text).visibleLines
+            val before = text()
+            fixture.attach()
+            fixture.click(IdeHitAction.Peripherals)
+            fixture.ui.tick()
+            fixture.click(IdeHitAction.PeripheralChoice, 0)
+            fixture.click(IdeHitAction.PeripheralChoice, 1, doubleClick = true)
+            assertEquals(before, text())
+            fixture.click(IdeHitAction.PeripheralChoice, 0)
+            fixture.click(IdeHitAction.PeripheralChoice, 0, doubleClick = true)
+            assertEquals(before, text())
+        }
+    }
+
+    @Test
+    fun `double click does not insert without an active Kotlin file`() {
+        val entry = IdeNamedPeripheral("screen", "compukters:display")
+        Fixture({ CompletableFuture.completedFuture(IdeTargetReply.NamedPeripherals(listOf(entry))) }).use { fixture ->
+            fixture.controller.dispatch(IdeCommand.CreateProject("demo"))
+            fixture.awaitWorkspace()
+            val main =
+                ru.lazyhat.compukters.ide.project.fs.ProjectPath
+                    .file("src/main.kt")
+            fixture.awaitFile(main)
+            fixture.controller.dispatch(IdeCommand.CloseFileTab(main))
+            fixture.attach()
+            fixture.click(IdeHitAction.Peripherals)
+            fixture.ui.tick()
+            fixture.click(IdeHitAction.PeripheralChoice, 0)
+            fixture.click(IdeHitAction.PeripheralChoice, 0, doubleClick = true)
             assertTrue((fixture.controller.viewState().page as IdePageState.Workspace).value.editor is IdeEditorView.Empty)
         }
     }
@@ -804,6 +925,7 @@ class IdeScreenControllerTest {
         fun click(
             action: IdeHitAction,
             index: Int? = null,
+            doubleClick: Boolean = false,
         ) {
             val hit =
                 ui
@@ -820,7 +942,7 @@ class IdeScreenControllerTest {
                         0,
                         0,
                     ),
-                    false,
+                    doubleClick,
                 ),
             )
         }

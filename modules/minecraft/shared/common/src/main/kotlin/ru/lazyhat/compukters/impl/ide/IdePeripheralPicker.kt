@@ -107,7 +107,7 @@ internal object IdePeripheralPicker {
                     IdeHitAction.PeripheralChoice,
                     row,
                     !view.loading,
-                    "Select ${entry.name}",
+                    "Select ${entry.name}; double-click to insert a name constant",
                     selected = view.selectedIndex == first + index,
                     z = controlZ,
                     choiceIndex = first + index,
@@ -194,7 +194,7 @@ internal object IdePeripheralPicker {
                 "Copy name",
                 IdeRect(left, copyTop, left + width, copyTop + 22),
                 entry != null,
-                "Copy the exact device name in the network",
+                "Copy the exact device name in the network (Ctrl+C)",
             )
             button(
                 IdeHitAction.PeripheralCopyLookup,
