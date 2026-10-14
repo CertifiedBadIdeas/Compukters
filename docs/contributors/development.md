@@ -105,6 +105,55 @@ checkout location. For a task created with an older helper, explicitly register 
 repeating its setup command with `--resume` before using `finish`. A new task always starts from the
 updated local base.
 
+## Reviewing textures and block models
+
+Keep visual candidates in their task worktree until the user approves their final in-client appearance.
+For standalone addon builds such as Create, initialize the addon with `worktree-task --submodule addons/create`,
+run doctor and stage the addon SDK if absent. Build/test the candidate before launching its client:
+
+```bash
+./gradlew-sandbox-dev-parallel-summary stageAddonDevelopmentDependencies
+./gradlew-sandbox-dev-parallel-summary -p addons/create test lintKotlin verifyProductionJar
+./visual-preview --addon create run --scenario 'Compare both rings, both flow states, pipe ends and item'
+```
+
+The helper supports addon projects with `runClient`, `src/main/resources` and `build/resources/main`.
+It refuses to launch from the main checkout. Its client uses `<task-checkout>/addons/create/run/client`;
+create a disposable creative flat world there, keeping normal user saves untouched. For later launches,
+add `--world 'Pump Preview'` to open an existing isolated world directly. Compare the candidate beside its
+original counterpart, horizontal/vertical orientations, both states, all visible sides, inventory item,
+daylight and a shaded placement. Base-mod previews use their owning version-specific client instead.
+
+For resource-only edits while the client remains open:
+
+```bash
+./visual-preview reload
+# Press F3+T in the preview client, inspect the result, then press F2.
+./visual-preview capture --label pipe-ends --scenario 'Both ends retain original recessed shading'
+./visual-preview status
+```
+
+`reload` copies resources to existing runtime outputs; it does not press keys or remove stale files.
+Stop the client and rebuild for deleted/renamed resources, Kotlin, registration or property changes.
+A running managed client holds the shared workspace Gradle slot, so another Gradle invocation waits.
+The capture command uses the latest F2 screenshot in this client's game directory, or a specific PNG
+via `--image <path>`. Verify that the screenshot actually shows the current resources: capture metadata
+cannot prove that F3+T completed or that the candidate looks correct.
+
+Captures under `build/agent-logs/visual-preview/<addon>/` include the scenario, revisions, resource
+fingerprint and screenshot hash. Show the candidate to the user before integration. After an explicit
+approval, record the user's actual reply against that capture:
+
+```bash
+./visual-preview approve --review <capture.json> --note '<explicit user approval>'
+```
+
+The helper rejects approval after resources, revisions or the screenshot change. An approval record is
+evidence of a conversation, not permission supplied by the script. If appearance changes, review it again.
+Exit through the game's menu before final focused checks and worktree cleanup; destroying the X11 window
+can leave GLFW shutdown hanging. After approved integration, `worktree-task finish` retains preview evidence
+and the disposable world. Verify the exact source candidate again before committing and integration.
+
 ## Minecraft development
 
 Run Gradle with JDK 25 selected through `JAVA_HOME` or a Gradle-discoverable

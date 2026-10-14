@@ -13,11 +13,14 @@ const val ENGINE_NAME = "ascent_engine"
 
 // 0 uses the engine's saved thrust: calibrate for hover before running.
 const val HOVER_KN = 0.0
-const val CLIMB_HEIGHT = 40.0
+const val CLIMB_HEIGHT = 200.0
 const val HOLD_SECONDS = 5.0
-const val MAX_FLIGHT_SECONDS = 120.0
+const val ASCENT_SPEED = 20.0
+const val DESCENT_SPEED = 15.0
 
 fun main() {
+    val profile = FlightProfile(ASCENT_SPEED, DESCENT_SPEED)
+    val timeout = flightTimeoutSeconds(CLIMB_HEIGHT, HOLD_SECONDS, profile)
     val engine = CreativeVectorThruster.named(ENGINE_NAME)
     try {
         val setup = prepareFlight(engine)
@@ -37,7 +40,7 @@ fun main() {
             require(!current.paused) { "Physics paused" }
             val elapsed = current.gameTick - previousTick
             require(elapsed >= 0L && elapsed <= 10L) { "Stale flight feedback" }
-            require(current.gameTick - first.gameTick <= (MAX_FLIGHT_SECONDS * 20.0).toLong()) { "Flight timeout" }
+            require(current.gameTick - first.gameTick <= (timeout * 20.0).toLong()) { "Flight timeout: $timeout s" }
             if (elapsed == 0L) continue
             val dt = elapsed.toDouble() / 20.0
             val positionVelocity = (current.position - previousPosition) / dt
@@ -61,6 +64,7 @@ fun main() {
                     maximum,
                     dt,
                     offset,
+                    profile,
                 )
             val changed = command.state.phase != state.phase
             state = command.state

@@ -17,7 +17,8 @@ headings so this page has one stable URL that can be shared outside the reposito
 
 - Added an experimental `rocket-landing` Guest project for a controlled vertical climb, height hold and soft
   descent onto a known launch pad, with bounded horizontal return within a 6 m corridor, final descent after
-  centering, and immediate near-pad stop detection using measured position changes, plus named phases and
+  centering, configurable faster ascent/descent with braking-distance planning and height-dependent timeouts,
+  and immediate near-pad stop detection using measured position changes, plus named phases and
   landing diagnostics. Preparation failures explain paused physics, inconsistent dimensions and a mismatched
   engine construction.
 
@@ -54,8 +55,8 @@ headings so this page has one stable URL that can be shared outside the reposito
   Flush, grey-framed rectangular indicators show its state on all four sides.
   The bars have grey end caps: green parallel to the shaft when engaged, or red across it when disengaged.
   It retains cutout rendering around its shaft openings. The pump has an unmarked copper tube and
-  compact flat displays at both ends on all four sides, each with three flow arrows and no protruding
-  controller or socket.
+  continuous dark display rings at both ends, with three subdued cyan flow arrows on each of their
+  four faces and no protruding controller or socket; the pipe ends retain Create's original recessed shading.
   Its casing and displays stay stationary when flow reverses; only the arrows change.
   Their Guest value classes use the shared typed and named peripheral discovery; addon blocks share the Compukters creative tab.
 

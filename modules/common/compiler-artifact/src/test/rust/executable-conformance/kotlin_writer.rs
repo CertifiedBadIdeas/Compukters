@@ -292,11 +292,14 @@ fn k2_require_exception_diagnostics_survive_cleanup() {
                 AdvanceOutcome::UncaughtException => {
                     let diagnostic = session.uncaught_exception_diagnostic(&artifact).expect("exception diagnostic");
                     let expected = if name == "rocket" {
-                        "kotlin.IllegalArgumentException: Invalid flight setup: climb 40.0 m; hold -4.0 s"
+                        "kotlin.IllegalArgumentException: Invalid flight setup: climb 40.0 m"
                     } else {
                         "kotlin.IllegalArgumentException: require detail"
                     };
                     assert!(diagnostic.contains(expected), "{name}: {diagnostic}");
+                    if name == "rocket" {
+                        assert!(diagnostic.contains("hold -4.0 s"), "{diagnostic}");
+                    }
                     if name == "cause" {
                         assert!(diagnostic.contains("kotlin.IllegalStateException: outer detail"), "{diagnostic}");
                     }

@@ -31,6 +31,9 @@ in the loader layer.
 For player-facing UI, also apply [compukters-ui-development](../compukters-ui-development/SKILL.md) before editing.
 It identifies the shared controls, theme, font metrics, drawing layers and visual evidence requirements.
 
+For texture and block-model iterations, use [compukters-visual-assets](../compukters-visual-assets/SKILL.md)
+for the isolated preview and explicit user review before integration.
+
 ## Select Evidence
 
 - Use ordinary module tests for pure adapters, codecs, geometry, input transforms, and lifecycle state machines.

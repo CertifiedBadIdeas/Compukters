@@ -6,7 +6,6 @@
 
 import kotlin.math.abs
 import kotlin.math.cos
-import kotlin.math.sqrt
 
 value class VerticalCommand(
     val targetSpeed: Double,
@@ -25,20 +24,20 @@ fun verticalCommand(
     tilt: Double,
     dt: Double,
     centered: Boolean,
+    profile: FlightProfile = FlightProfile(),
 ): VerticalCommand {
     val target =
         if (state.phase == FlightPhase.DESCENT) {
             if (centered) {
-                // Slow down over the last four metres, allowing the speed loop time to brake.
-                -flightBound(0.5 * height, 0.25, 2.0)
+                // Preserve the slow final approach while braking earlier from a faster cruise.
+                -flightBound(approachSpeed(height, profile.descentSpeed, profile), 0.25, if (abs(height) < 0.5) 0.25 else 0.5 * abs(height))
             } else {
-                // Approach and hold a two-metre clearance until horizontal return is settled.
-                flightBound(0.5 * (2.0 - height), -2.0, 1.0)
+                // Return over the pad before the final descent; do not dive through the clearance.
+                val limit = if (height < 2.0) 1.0 else profile.descentSpeed
+                approachSpeed(2.0 - height, limit, profile)
             }
         } else {
-            val difference = climbHeight - height
-            val magnitude = flightBound(sqrt(abs(difference)), 0.0, 4.0)
-            if (difference < 0.0) -magnitude else magnitude
+            approachSpeed(climbHeight - height, profile.ascentSpeed, profile)
         }
     val speedError = target - verticalSpeed
     val candidate = flightBound(state.integral + 0.4 * speedError * dt, -9.81, 9.81)
