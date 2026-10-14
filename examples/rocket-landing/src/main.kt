@@ -92,7 +92,7 @@ fun main() {
                 )
                 if (state.phase == FlightPhase.DESCENT) {
                     println(
-                        "Landing: pose speed ${positionVelocity.length} m/s; angular ${current.angularVelocity.length} rad/s; settled ${state.settledSeconds}/2.0 s",
+                        "Landing: pose speed ${positionVelocity.length} m/s; angular ${current.angularVelocity.length} rad/s",
                     )
                 }
                 lastReport = current.gameTick

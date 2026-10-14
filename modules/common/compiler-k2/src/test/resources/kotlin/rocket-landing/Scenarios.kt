@@ -23,15 +23,17 @@ fun command(
     height: Double,
     speed: Double,
     climb: Double = 40.0,
+    positionVelocity: Vector3d = Vector3d(0.0, speed, 0.0),
+    angularVelocity: Vector3d = Vector3d(0.0, 0.0, 0.0),
 ): FlightCommand =
     flightCommand(
         state,
         height,
         speed,
         0.0,
-        Vector3d(0.0, speed, 0.0),
+        positionVelocity,
         Rotation3d.identity(),
-        Vector3d(0.0, 0.0, 0.0),
+        angularVelocity,
         climb,
         5.0,
         10.0,
@@ -46,31 +48,33 @@ fun runScenarios() {
     check(command(descent, 10.0, 0.0).thrustKn < 10.0)
     check(command(descent, 0.01, -0.25).targetSpeed == -0.25)
     check(command(descent, 0.1, -2.0).thrustKn > 10.0)
-    check(command(descent, 0.0, 0.0).state.phase == FlightPhase.DESCENT)
+    check(command(descent, 0.0, 0.0).state.phase == FlightPhase.COMPLETE)
+    check(command(descent, 0.25, 0.05).state.phase == FlightPhase.COMPLETE)
+    check(command(descent, 0.251, 0.0).state.phase == FlightPhase.DESCENT)
+    check(command(descent, 0.17, 0.051).state.phase == FlightPhase.DESCENT)
+    check(command(descent, 0.17, 0.0, positionVelocity = Vector3d(0.051, 0.0, 0.0)).state.phase == FlightPhase.DESCENT)
+    check(command(descent, 0.17, 0.0, angularVelocity = Vector3d(0.0, 0.101, 0.0)).state.phase == FlightPhase.DESCENT)
     check(command(FlightState(FlightPhase.DESCENT, 1.99, 0.0), 0.0, 0.0).state.phase == FlightPhase.COMPLETE)
     check(command(FlightState(FlightPhase.DESCENT, 1.99, 0.0), 1.0, 0.0).state.settledSeconds == 0.0)
     check(command(FlightState(FlightPhase.DESCENT, 1.99, 0.0), 0.0, -0.2).state.settledSeconds == 0.0)
     // A near-pad pose barely moves while the instantaneous solver still reports the approach speed.
-    var settling = FlightState(FlightPhase.DESCENT, 0.0, 0.0)
-    for (sample in 0 until 41) {
-        val observed =
-            flightCommand(
-                settling,
-                0.17,
-                -0.25,
-                0.0,
-                Vector3d(0.0, 0.007, 0.0),
-                Rotation3d.identity(),
-                Vector3d(0.0, 0.0, 0.0),
-                40.0,
-                5.0,
-                10.0,
-                20.0,
-                0.05,
-            )
-        settling = observed.state
-    }
-    check(settling.phase == FlightPhase.COMPLETE)
+    val stopped =
+        flightCommand(
+            descent,
+            0.17,
+            -0.25,
+            0.0,
+            Vector3d(0.0, 0.007, 0.0),
+            Rotation3d.identity(),
+            Vector3d(0.0, 0.0, 0.0),
+            40.0,
+            5.0,
+            10.0,
+            20.0,
+            0.05,
+        )
+    check(stopped.state.phase == FlightPhase.COMPLETE)
+    check(stopped.thrustKn == 0.0 && stopped.vectorX == 0.0 && stopped.vectorY == 0.0)
     val moving =
         flightCommand(
             FlightState(FlightPhase.DESCENT, 1.99, 0.0),

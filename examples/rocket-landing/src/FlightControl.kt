@@ -74,17 +74,13 @@ fun flightCommand(
             settled = 0.0
         }
     } else if (phase == FlightPhase.DESCENT) {
-        // Use measured pose displacement for settling; solver velocity can differ near contact.
-        // Continue requesting descent until a sustained stop near the known pad reference.
-        settled =
-            if (abs(height) <= 0.25 && abs(positionVelocity.y) <= 0.05 &&
-                Vector3d(positionVelocity.x, 0.0, positionVelocity.z).length <= 0.05 && rate.length <= 0.1
-            ) {
-                settled + dt
-            } else {
-                0.0
-            }
-        if (settled >= 2.0) phase = FlightPhase.COMPLETE
+        // Solver velocity can differ near contact; cut thrust on the first near-stationary pose sample.
+        settled = 0.0
+        if (abs(height) <= 0.25 && abs(positionVelocity.y) <= 0.05 &&
+            Vector3d(positionVelocity.x, 0.0, positionVelocity.z).length <= 0.05 && rate.length <= 0.1
+        ) {
+            phase = FlightPhase.COMPLETE
+        }
     }
     if (phase == FlightPhase.COMPLETE) return FlightCommand(FlightState(phase, settled, 0.0), 0.0, 0.0, 0.0, 0.0)
     val target =
