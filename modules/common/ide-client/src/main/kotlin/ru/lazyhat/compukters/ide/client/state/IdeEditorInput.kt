@@ -23,6 +23,10 @@ sealed interface IdeEditorInput {
         val text: String,
     ) : IdeEditorInput
 
+    data class Paste(
+        val text: String,
+    ) : IdeEditorInput
+
     data class SetCaret(
         val offsetUtf16: Int,
         val extendSelection: Boolean,

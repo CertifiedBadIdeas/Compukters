@@ -71,7 +71,10 @@ internal class IdeEditorInputRouter(
             return dispatch(IdeCommand.DismissParameterInfo)
         }
         if (focus.area != IdeFocusArea.Editor) return false
-        if (event.paste) return dispatchType(boundedClipboard(clipboard.text()))
+        if (event.paste) {
+            val text = boundedClipboard(clipboard.text())
+            return if (text.isEmpty()) true else dispatch(IdeCommand.Edit(IdeEditorInput.Paste(text)))
+        }
         val control = event.modifiers and IdeModifier.CONTROL != 0
         val alt = event.modifiers and IdeModifier.ALT != 0
         val shift = event.modifiers and IdeModifier.SHIFT != 0
