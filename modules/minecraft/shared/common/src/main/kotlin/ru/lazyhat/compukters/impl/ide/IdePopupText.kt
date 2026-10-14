@@ -21,6 +21,32 @@ package ru.lazyhat.compukters.impl.ide
 import ru.lazyhat.compukters.ide.editor.EditorRange
 
 internal object IdePopupText {
+    fun singleLine(value: String): String = displayText(value, multiline = false)
+
+    fun lines(
+        value: String,
+        columns: Int,
+        maximumRows: Int,
+    ): List<String> {
+        val text = displayText(value, multiline = true)
+        return wrap(text, columns, maximumRows).map { text.substring(it.startUtf16, it.endUtf16).trimEnd() }
+    }
+
+    private fun displayText(
+        value: String,
+        multiline: Boolean,
+    ): String =
+        buildString {
+            for (character in value.replace("\r\n", "\n").replace('\r', '\n')) {
+                when {
+                    character == '\t' -> append("    ")
+                    character == '\n' && multiline -> append(character)
+                    character.isISOControl() -> append(' ')
+                    else -> append(character)
+                }
+            }
+        }
+
     fun wrap(
         value: String,
         columns: Int,

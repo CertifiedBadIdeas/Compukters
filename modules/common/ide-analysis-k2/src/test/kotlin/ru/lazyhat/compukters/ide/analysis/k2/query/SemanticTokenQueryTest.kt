@@ -29,6 +29,30 @@ import kotlin.test.assertTrue
 
 class SemanticTokenQueryTest {
     @Test
+    fun `named argument labels retain distinct highlighting in incomplete overloaded calls`() {
+        val source =
+            """
+            fun pixel(x: Int, y: Int, color: Int) = Unit
+            fun pixel(position: String, color: Int) = Unit
+            fun main() {
+                pixel(position = "point", color = 1)
+                pixel(position = "point")
+            }
+            """.trimIndent()
+        K2QueryFixture.source("main.kt" to source).use { fixture ->
+            val result = fixture.execute(fixture.presentation()) as AnalysisResult.Presentation
+            val active = result.value.accept(fixture.identity) as SnapshotPresentationAcceptance.Active
+            val labels = Regex("(position|color) =").findAll(source).map { it.range.first }.toList()
+            for (start in labels) {
+                assertTrue(
+                    active.semanticTokens.any { it.range.startUtf16 == start && it.category == SemanticCategory.NamedArgument },
+                    "Missing named argument token at $start: ${active.semanticTokens}",
+                )
+            }
+        }
+    }
+
+    @Test
     fun `peripheral provider expressions retain a distinct role from device type references`() {
         val source =
             """
