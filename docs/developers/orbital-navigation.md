@@ -98,19 +98,55 @@ alone is not the individual rocket's final surface position.
 
 The current Guest APIs suffice for read-only orbital radius, speeds, elements and directions. They do not expose the
 planet rotation at observation time, border scale/center, shape, region center/bounds, or the upstream return projection.
-These gaps need an addon-owned navigation contract before targeting the original pad:
+These gaps need additional read-only telemetry before targeting the original pad:
 
 - retain pad dimension, reference pose and planet/frame identity;
 - obtain the target pad in the same dated central-body frame as the orbital observation;
 - observe region center/bounds and construction displacement for burn authority and transfer placement;
-- project the current instance and construction displacement through the **actual upstream** return helper;
+- expose the data needed to reproduce the **actual upstream** return mapping, including construction displacement;
 - report unavailable/ambiguous frames or face ties explicitly instead of manufacturing a target;
 - verify the mapping for nonzero border centers, all faces, rotating planets, region offsets and frame changes.
 
-Prefer calling the upstream conversion in the host adapter to duplicating its face/rotation policy in Guest programs.
+Keep trajectory prediction, surface-coordinate conversion, manoeuvre selection and mission state in Guest Kotlin.
+The addon exposes upstream observations and configuration; it does not select a target or propagate candidate orbits
+for the program. Validate Guest conversion against the pinned upstream helper as a test oracle, including its face
+ties and transfer placement policy.
 A safe orbit needs a shape-aware clearance envelope, not just `bound == true`. Navigation tests should distinguish
 mathematical adapter behavior from a real surface-to-space-to-surface experiment. Orbital insertion, revolution
 counting and deorbit remain unimplemented; the successful 200 m local flight does not verify these stages.
+
+## Guest-owned planning: telemetry audit
+
+The first complete mission uses the existing SDK and individual engine calls. Structured request arguments,
+host-side predictors and atomic engine command groups are not prerequisites. The program acquires its engines,
+releases any already acquired handles if preflight fails, and sends bounded commands through the existing methods.
+These calls do not promise an atomic multi-engine update; the controller must tolerate command and startup skew.
+
+| Task | Available observations | Missing data or validation |
+| --- | --- | --- |
+| Compute orbital energy, angular momentum, apsides and circular speed | `OrbitSnapshot.position`, `velocity`, `gravitationalParameter`, elements and frame | None for instantaneous central-body calculations |
+| Predict a coast or candidate burn in Guest | Orbital PV, mu and local universe ticks | Establish the tick-to-seconds contract and supported central-frame horizon; reject unsupported frame changes |
+| Confirm a safe full orbit | Radius, transition height, transfer permissions and orbital elements | Configured sphere/cube shape; the surface `radius` alone does not define the clearance envelope |
+| Count completed turns | Orbital position, instance/frame identity and universe ticks | Guest phase unwrapping with bounded sample gaps; no new host operation needed |
+| Locate the retained pad at a future orbital time | Surface Sable pose and linked planet frame | Linked dimension, world-border center/size, dated planet rotation and the rotation evolution needed for future times |
+| Predict surface return and final pad miss | Orbital PV and local construction pose | Return-mapping configuration, region center/bounds and rotated construction offset; handle strict face selection and ties |
+| Turn thrust into an observed orbital change | Engine state, local Sable velocity and orbital velocity | Region boundary and instance sharing; propulsion acts on the local construction before upstream orbital coupling |
+| Control attitude with multiple engines | Sable orientation/angular velocity, mass/inertia and vector-engine mounts | Mount/COM coordinate-origin reconciliation; ordinary creative thrusters currently have no mount observation |
+
+The missing observations fall into two narrow families: planet mapping/time configuration and current region context.
+Existing result records can carry these observations without changing SDK argument support. Keep retained pad
+coordinates and the navigation model in Guest state, rather than adding a host-owned mission or target registry.
+Do not change existing record layouts merely to append fields: review additive operations against the addon lock
+before implementing new telemetry.
+
+Sequential requests may straddle server ticks or a transfer. Guest code must check dimension, instance, frame and
+sample times, and discard observations that cannot describe the same context. Add a combined read-only observation
+only if the required consistency cannot be obtained with those checks; do not assume separate calls are atomic.
+
+Implement the first predictor as bounded central-body mathematics in Guest, tested against the pinned upstream
+numerical implementation for circular, eccentric and near-radial cases. That numerical comparison does not establish
+correct transfer targeting: separately compare the Guest surface mapping against the upstream helper, then measure
+a real surface-to-space-to-surface round trip before autonomous deorbit.
 
 For a passive measurement before/after a short manual burn, use
 [space-telemetry](../../examples/space-telemetry/README.md). Record instance/frame/ticks and radial/transverse speed;
