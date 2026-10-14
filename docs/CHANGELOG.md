@@ -13,6 +13,9 @@ headings so this page has one stable URL that can be shared outside the reposito
 
 ## 0.6.0 — In development
 
+- Added an experimental `rocket-landing` Guest project for a controlled vertical climb, height hold and soft
+  descent onto a known launch pad, with bounded feedback and sustained near-pad stop detection.
+
 - IDE supports Ctrl+D to duplicate the current line below or the exact selection with one-step undo.
 
 - IDE remembers the last opened project separately for each computer and restores it on reopening,
