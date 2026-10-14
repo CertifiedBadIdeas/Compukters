@@ -22,18 +22,17 @@ fun flightCommand(
     maxKn: Double,
     dt: Double,
     padOffset: Vector3d = Vector3d(0.0, 0.0, 0.0),
+    profile: FlightProfile = FlightProfile(),
 ): FlightCommand {
     require(height >= -0.5 && height <= climbHeight + 10.0) { "Outside vertical flight envelope" }
-    require(climbHeight >= 5.0 && climbHeight <= 100.0 && holdSeconds >= 1.0 && holdSeconds <= 30.0) {
-        "Invalid flight setup: climb $climbHeight m; hold $holdSeconds s"
-    }
-    require(verticalSpeed >= -20.0 && verticalSpeed <= 20.0) {
-        "Vertical solver speed outside +/-20 m/s: $verticalSpeed m/s"
+    validateFlightProfile(profile, climbHeight, holdSeconds)
+    require(verticalSpeed >= -40.0 && verticalSpeed <= 40.0) {
+        "Vertical solver speed outside +/-40 m/s: $verticalSpeed m/s"
     }
     require(horizontalSpeed >= 0.0 && horizontalSpeed <= 2.0) {
         "Horizontal solver speed exceeds 2 m/s: $horizontalSpeed m/s"
     }
-    require(positionVelocity.length <= 20.0) { "Invalid observed position motion" }
+    require(positionVelocity.length <= 45.0) { "Invalid observed position motion" }
     require(hoverKn > 0.0 && hoverKn <= maxKn && maxKn <= Double.MAX_VALUE) {
         "Invalid thrust limits: hover $hoverKn kN; maximum $maxKn kN"
     }
@@ -57,7 +56,8 @@ fun flightCommand(
     if (next.phase == FlightPhase.COMPLETE) {
         return FlightCommand(FlightState(next.phase, next.settledSeconds, 0.0), 0.0, 0.0, 0.0, 0.0)
     }
-    val vertical = verticalCommand(next, height, verticalSpeed, climbHeight, hoverKn, maxKn, attitude.tilt, dt, horizontal.centered)
+    val vertical =
+        verticalCommand(next, height, verticalSpeed, climbHeight, hoverKn, maxKn, attitude.tilt, dt, horizontal.centered, profile)
     return FlightCommand(
         FlightState(next.phase, next.settledSeconds, vertical.integral),
         vertical.targetSpeed,

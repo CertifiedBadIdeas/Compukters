@@ -84,7 +84,14 @@ fun runHorizontalScenarios() {
                 PI / 3.0
             }
         val strongImpulse = scenario >= 4
-        val climb = if (strongImpulse) 40.0 else 5.0
+        val climb =
+            if (scenario == 5) {
+                200.0
+            } else if (strongImpulse) {
+                40.0
+            } else {
+                5.0
+            }
         var orientation = Rotation3d.rotationY(yaw)
         var localRate = origin
         var position = origin
@@ -99,9 +106,11 @@ fun runHorizontalScenarios() {
         var complete = false
         var maximumDrift = 0.0
         var contactSpeed = 0.0
-        for (step in 0 until 2400) {
+        var elapsedSeconds = 0.0
+        for (step in 0 until 4000) {
+            elapsedSeconds = step * 0.05
             if (!disturbed &&
-                ((strongImpulse && state.phase == FlightPhase.DESCENT && position.y < 36.0) || (!strongImpulse && position.y > 3.0))
+                ((strongImpulse && state.phase == FlightPhase.DESCENT && position.y < climb - 4.0) || (!strongImpulse && position.y > 3.0))
             ) {
                 val shift =
                     if (scenario ==
@@ -174,6 +183,7 @@ fun runHorizontalScenarios() {
                 position.z,
             ).length}"
         }
+        check(elapsedSeconds < flightTimeoutSeconds(climb, 5.0, FlightProfile()))
         if (strongImpulse) check(maximumDrift > 2.0)
         check(maximumDrift >= 0.2 && Vector3d(position.x, 0.0, position.z).length <= 0.2)
         check(abs(contactSpeed) <= 0.5 && position.y <= 0.25 && velocity.length <= 0.08 && localRate.length <= 0.1)
