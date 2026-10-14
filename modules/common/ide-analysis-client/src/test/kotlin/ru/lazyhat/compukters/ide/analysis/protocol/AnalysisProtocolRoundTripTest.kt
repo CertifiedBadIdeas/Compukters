@@ -482,6 +482,7 @@ class AnalysisProtocolRoundTripTest {
                     listOf(
                         SemanticToken(path(), EditorRange(4, 10), SemanticCategory.Property, isMutable = true),
                         SemanticToken(path(), EditorRange(0, 3), SemanticCategory.PeripheralProvider),
+                        SemanticToken(path(), EditorRange(3, 4), SemanticCategory.NamedArgument),
                     ),
                 locations = listOf(SourceLocation(path(), EditorRange(4, 10))),
                 limits = EditorPresentationLimits(),
@@ -502,6 +503,7 @@ class AnalysisProtocolRoundTripTest {
             listOf(
                 SemanticToken(path(), EditorRange(4, 10), SemanticCategory.Property, isMutable = true),
                 SemanticToken(path(), EditorRange(0, 3), SemanticCategory.PeripheralProvider),
+                SemanticToken(path(), EditorRange(3, 4), SemanticCategory.NamedArgument),
             ),
             active.semanticTokens,
         )

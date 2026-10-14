@@ -1321,7 +1321,7 @@ object IdeRenderer {
                 if (first + index == selected) fills += IdeFillDraw(IdeFillKind.Selection, rowBounds, IdeColors.SELECTION, Z_SELECTION)
                 centeredUi(
                     IdeTextKind.Diagnostic,
-                    "$location${diagnostic.message}$stale",
+                    "$location${IdePopupText.singleLine(diagnostic.message)}$stale",
                     rowBounds.left + 6,
                     rowBounds,
                     IdeSourceStyles.diagnosticColor(diagnostic.severity),

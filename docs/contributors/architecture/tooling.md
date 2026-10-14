@@ -313,7 +313,10 @@ shared gutter, row, caret, source anchor and pointer mapping. Its code bounds ex
 selection, carets and underlines stay inside those bounds when horizontally scrolled. Styled fragments expand tabs from the line's actual
 column. `IdeEditorRenderer` owns source, selection, highlights and gutter indicators; `IdeFindRenderer` owns search
 controls; `IdeEditorPopups` owns hover, declaration chooser, completion and parameter information.
-`IdePopupText` wraps source slices without changing UTF-16 offsets; `IdeDiagnosticRenderer` clips source-evidenced
+`IdePopupText` wraps source slices without changing UTF-16 offsets; its diagnostic display helpers
+normalize CR/LF, expand tabs and keep control characters out of Problems rows and tooltip glyphs.
+Named argument labels have a distinct semantic color, including calls still missing arguments;
+ordinary parameter and argument-expression colors remain unchanged. `IdeDiagnosticRenderer` clips source-evidenced
 diagnostic spans and `IdeDiagnosticTooltip` groups their messages. Disabled token tooltip targets preserve normal
 source clicks. These components
 emit directly into the existing frame collector and use the same source geometry for anchors.
