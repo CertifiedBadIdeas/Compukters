@@ -11,6 +11,18 @@ permalink: /ARCHITECTURE/abi/
 
 This reference groups versioned representation boundaries by the version that introduced them. Those versions are minimum feature requirements, not a claim that older Runtime distributions implement today’s platform. The source owners below define the active contract. Before changing a wire format, inspect each producer, consumer and verifier. Runtime release pins in `build-scripts/src/main/kotlin/RuntimeBundleSupport.kt` describe published bundles separately from the local VM checkout.
 
+## Live named peripheral diagnostics
+
+Analysis protocol **19** appends bounded `PeripheralLookup` facts to presentation replies: source path,
+UTF-16 argument range, resolved device type, constant name (256 UTF-8 bytes) and optional-lookup flag.
+Facts use the negotiated declaration-location budget and are correlated to the queried source.
+`None` diagnostic highlight carries informational observations without an underline. Older analysis
+workers fail the existing handshake check. Guest/runtime/artifact contracts remain unchanged.
+
+IDE target payload registration **3** adds the opt-in unavailable-member inspection flag and a bounded
+availability enum to named discovery replies. Both Minecraft adapters use the same shared codec;
+client/server payload versions must match. Server membership and reachability remain authoritative.
+
 ## Addon SDK actuator lifecycle and creative content
 
 SDK 0.6.0 adds `CompuktersLeasedPeripheralEndpoint` and lazy shared-tab item registration. These are additive host
@@ -349,7 +361,7 @@ Protocol 17 workers are rejected at handshake; compiler, platform, artifact and 
 | Base platform | Bundle format 9, standalone module format 5, platform ABI 3 | `PlatformBundleCodec` in `modules/common/platform-bundle` |
 | Kotlin metadata carrier | Private format 6 | `platform-k2` |
 | Compiler worker | Protocol 5; explicit source-free library preparation | `compiler-client` and `compiler-k2` |
-| IDE analysis | Protocol 18 | `ide-analysis-client` and `ide-analysis-k2` |
+| IDE analysis | Protocol 19 | `ide-analysis-client` and `ide-analysis-k2` |
 
 ## Reference-array loop surface
 

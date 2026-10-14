@@ -50,6 +50,7 @@ internal class IdeTargetRequestPayloadTest {
                 IdeTargetRequest.Heartbeat(target),
                 IdeTargetRequest.Detach(target),
                 IdeTargetRequest.NamedPeripherals(target),
+                IdeTargetRequest.NamedPeripherals(target, includeUnavailable = true),
                 IdeTargetRequest.RenamePeripheral(
                     target,
                     IdePeripheralReference(java.util.UUID.randomUUID(), "compukters-display", "text"),

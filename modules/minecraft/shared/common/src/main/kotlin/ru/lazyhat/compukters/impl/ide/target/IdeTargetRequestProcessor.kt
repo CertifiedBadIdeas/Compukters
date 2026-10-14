@@ -50,7 +50,7 @@ class IdeTargetRequestProcessor(
             is IdeTargetRequest.NamedPeripherals -> {
                 withTarget(player, request.target, tick) { target ->
                     val resolved = leases.access(player, target, tick)
-                    resolved?.namedPeripherals?.invoke() ?: IdeTargetReply.Failed(
+                    resolved?.namedPeripherals?.invoke(request.includeUnavailable) ?: IdeTargetReply.Failed(
                         IdeTargetFailure(IdeTargetFailureKind.Other, "Peripheral discovery is unavailable"),
                         false,
                     )

@@ -67,6 +67,15 @@ internal class IdeTargetReplyPayloadTest {
                 IdeTargetReply.NamedPeripherals(
                     listOf(
                         IdeNamedPeripheral(
+                            "distant",
+                            "minecraft:air",
+                            availability = ru.lazyhat.compukters.ide.analysis.PeripheralAvailability.OutOfRange,
+                        ),
+                    ),
+                ),
+                IdeTargetReply.NamedPeripherals(
+                    listOf(
+                        IdeNamedPeripheral(
                             "panel",
                             "compukters:display",
                             reference = IdePeripheralReference(java.util.UUID.randomUUID(), "compukters-display", "text"),

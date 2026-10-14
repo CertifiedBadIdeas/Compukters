@@ -2165,7 +2165,7 @@ internal fun preferences(
 
 private fun revision(seed: Int) = FileRevision.Present(Hash256.of(ByteArray(32) { seed.toByte() }))
 
-private class ControllerRecordingAnalysisRequests : AnalysisRequestCoordinator {
+internal class ControllerRecordingAnalysisRequests : AnalysisRequestCoordinator {
     lateinit var sink: AnalysisResultSink
     val snapshots = mutableListOf<AdmittedAnalysisSnapshot>()
     private val navigation = ArrayDeque<CompletableFuture<AnalysisClientResult>>()
@@ -2255,7 +2255,10 @@ private class ControllerRecordingAnalysisRequests : AnalysisRequestCoordinator {
 
     override fun close() = Unit
 
-    fun publishFreshPresentation(diagnostics: List<ru.lazyhat.compukters.ide.analysis.EditorDiagnostic> = emptyList()) {
+    fun publishFreshPresentation(
+        diagnostics: List<ru.lazyhat.compukters.ide.analysis.EditorDiagnostic> = emptyList(),
+        peripheralLookups: List<ru.lazyhat.compukters.ide.analysis.PeripheralLookup> = emptyList(),
+    ) {
         val snapshot = snapshots.last()
         val lengths =
             snapshot.sources.sources.associate {
@@ -2269,7 +2272,12 @@ private class ControllerRecordingAnalysisRequests : AnalysisRequestCoordinator {
             AnalysisClientResult.Success(
                 AnalysisResult.Presentation(
                     snapshot.identity,
-                    SnapshotPresentation.create(snapshot.identity, lengths, diagnostics = diagnostics),
+                    SnapshotPresentation.create(
+                        snapshot.identity,
+                        lengths,
+                        diagnostics = diagnostics,
+                        peripheralLookups = peripheralLookups,
+                    ),
                 ),
             ),
         )
@@ -2342,7 +2350,7 @@ private class ControllerRecordingVisibleLatencyTrace : IdeVisibleLatencyTrace {
     }
 }
 
-private fun latencyAnalysisSnapshot(
+internal fun latencyAnalysisSnapshot(
     original: ProjectSnapshot,
     path: VirtualSourcePath,
     text: String,

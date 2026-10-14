@@ -66,7 +66,7 @@ internal class IdeDiagnosticRenderer(
             val bounds = source.clipCode(IdeRect(x, rowTop, right, rowTop + geometry.font.cellHeight)) ?: continue
             val color = IdeSourceStyles.diagnosticColor(row.diagnostic.severity)
             var left = bounds.left
-            while (left < bounds.right) {
+            while (row.diagnostic.highlight != ru.lazyhat.compukters.ide.analysis.EditorDiagnosticHighlight.None && left < bounds.right) {
                 val top = bounds.bottom - 2 + ((left - x) / 2 and 1)
                 output.fill(
                     IdeFillDraw(

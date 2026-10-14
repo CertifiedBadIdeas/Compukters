@@ -29,6 +29,21 @@ physical paths are bounded`.
 
 ## IDE and tooling
 
+### Live named peripheral availability
+
+**Status:** Implemented; in-client observation pending for [#787](https://github.com/CertifiedBadIdeas/Compukters/issues/787).
+
+For an attached computer, resolved `named` lookups with string literals or compile-time constants receive warnings
+when the current network cannot supply the device. `namedOrNull` receives informational hover/Problems entries
+without warning underlines. The explanation can identify absence, incompatible types, duplicate reachable matches,
+access radius, dimension, unloaded chunk or removed/replaced devices. The observation refreshes independently of
+Devices and clears on detach, request failure or expiry. Dynamic names and first/side/predicate searches are not
+checked. Incomplete observations do not imply absence; these diagnostics do not fail compilation.
+
+**Evidence:** `PeripheralLookupQueryTest`, `PeripheralDiagnosticsTest`, `AnalysisProtocolRoundTripTest`,
+`IdePeripheralObserverTest`, `IdeTargetFlowTest`, `IdeRendererStateTest`, `IdeTargetRequestPayloadTest`,
+`IdeTargetReplyPayloadTest` and the network inspection assertions in `PeripheralCableGameTestScenario`.
+
 ### Canonical platform source admission
 
 Navigation source loading uses the same canonical platform budget as the analysis protocol and worker:

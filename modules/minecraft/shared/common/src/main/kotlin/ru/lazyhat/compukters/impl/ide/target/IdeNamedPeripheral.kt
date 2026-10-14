@@ -18,6 +18,8 @@
 
 package ru.lazyhat.compukters.impl.ide.target
 
+import ru.lazyhat.compukters.ide.analysis.PeripheralAvailability
+
 /** Immutable bounded discovery snapshot; item IDs are resolved only by the physical client. */
 data class IdeNamedPeripheral(
     val name: String,
@@ -25,6 +27,7 @@ data class IdeNamedPeripheral(
     val duplicate: Boolean = false,
     val reference: IdePeripheralReference? = null,
     val lookupTypes: List<String> = emptyList(),
+    val availability: PeripheralAvailability = PeripheralAvailability.Available,
 ) {
     init {
         require(name.isNotBlank() && name.length <= 64 && name.none(Char::isISOControl))
