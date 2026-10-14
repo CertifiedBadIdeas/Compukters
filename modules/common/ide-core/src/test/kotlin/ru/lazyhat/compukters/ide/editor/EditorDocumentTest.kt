@@ -28,6 +28,76 @@ import kotlin.test.assertTrue
 
 class EditorDocumentTest {
     @Test
+    fun `duplicate line moves caret to copy and is a single undoable edit with original line endings`() {
+        for ((source, caret, result) in listOf(
+            Triple("one\ntwo", 1, "one\none\ntwo" to 5),
+            Triple("one\r\ntwo", 1, "one\r\none\r\ntwo" to 6),
+            Triple("one\r\ntwo", 7, "one\r\ntwo\r\ntwo" to 12),
+            Triple("😀", 2, "😀\n😀" to 5),
+            Triple("", 0, "\n" to 1),
+            Triple("one\n", 4, "one\n\n" to 5),
+        )) {
+            val (expected, copiedCaret) = result
+            val editor = EditorDocument(source)
+            editor.setCaret(caret)
+            assertIs<EditorEditResult.Applied>(editor.duplicate())
+            assertEquals(expected, editor.materialize())
+            assertEquals(copiedCaret, editor.caretOffset)
+            assertEquals(1, editor.undoEntryCount)
+            assertIs<EditorEditResult.Applied>(editor.undo())
+            assertEquals(source, editor.materialize())
+            assertEquals(caret, editor.caretOffset)
+            assertIs<EditorEditResult.Applied>(editor.redo())
+            assertEquals(expected, editor.materialize())
+            assertEquals(copiedCaret, editor.caretOffset)
+        }
+    }
+
+    @Test
+    fun `duplicate exact selections preserves direction unicode and repeated copying`() {
+        for ((source, start, end) in listOf(Triple("prefix 😀 suffix", 7, 9), Triple("ab\r\ncd\r\nef", 1, 6), Triple("a\nb\n", 0, 2))) {
+            for (backward in listOf(false, true)) {
+                val editor = EditorDocument(source)
+                val anchor = if (backward) end else start
+                val caret = if (backward) start else end
+                editor.setCaret(anchor)
+                editor.setCaret(caret, true)
+                val copied = source.substring(start, end)
+                assertIs<EditorEditResult.Applied>(editor.duplicate())
+                val expected = source.substring(0, end) + copied + source.substring(end)
+                assertEquals(expected, editor.materialize())
+                assertEquals(EditorRange(end, end + copied.length), editor.selectionRange)
+                assertEquals(copied, editor.copySelection())
+                assertEquals(caret + copied.length, editor.caretOffset)
+                editor.duplicate()
+                assertEquals(source.substring(0, end) + copied + copied + source.substring(end), editor.materialize())
+                editor.undo()
+                assertEquals(expected, editor.materialize())
+                editor.undo()
+                assertEquals(source, editor.materialize())
+                assertEquals(caret, editor.caretOffset)
+                assertEquals(EditorRange(start, end), editor.selectionRange)
+            }
+        }
+    }
+
+    @Test
+    fun `duplicate rejection leaves source caret selection and undo history untouched`() {
+        val editor = EditorDocument("abc", EditorLimits(maxCodeUnits = 3))
+        editor.setCaret(1)
+        assertEquals(EditorEditResult.Rejected(EditorRejection.CodeUnitLimit), editor.duplicate())
+        assertEquals("abc", editor.materialize())
+        assertEquals(1, editor.caretOffset)
+        assertEquals(0, editor.undoEntryCount)
+        editor.setCaret(3, true)
+        assertEquals(EditorEditResult.Rejected(EditorRejection.CodeUnitLimit), editor.duplicate())
+        assertEquals(EditorRange(1, 3), editor.selectionRange)
+        assertEquals(0, editor.undoEntryCount)
+        editor.close()
+        assertEquals(EditorEditResult.Rejected(EditorRejection.Closed), editor.duplicate())
+    }
+
+    @Test
     fun `insertion preserves both selection directions across atomic history`() {
         for (backwards in listOf(false, true)) {
             val source = "fun main() { greet(2) }"

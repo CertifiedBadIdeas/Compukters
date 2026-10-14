@@ -412,6 +412,34 @@ class EditorDocument(
 
     fun outdent(): EditorEditResult = transformLinePrefixes(indent = false)
 
+    /** Duplicate the exact selection, or the current line below, as one undoable edit. */
+    fun duplicate(): EditorEditResult {
+        if (closed) return EditorEditResult.Rejected(EditorRejection.Closed)
+        val range = selectionRange
+        if (range != null) {
+            return replace(
+                EditorRange(range.endUtf16, range.endUtf16),
+                copyRange(range),
+                EditorHistoryKind.Atomic,
+                EditorChangeOrigin.User,
+                EditorSelection(selection.anchorUtf16 + range.length, selection.caretUtf16 + range.length),
+            )
+        }
+        val last = lines.line(lines.lineOfOffset(caretOffset))
+        val start = last.startUtf16
+        val end = last.separatorEndUtf16
+        val separator = if (end == last.contentEndUtf16) preferredLineSeparator else ""
+        val text = separator + buffer.copyRange(start, end).concatToString()
+        val shift = end - start + separator.length
+        return replace(
+            EditorRange(end, end),
+            text,
+            EditorHistoryKind.Atomic,
+            EditorChangeOrigin.User,
+            EditorSelection(selection.anchorUtf16 + shift, selection.caretUtf16 + shift),
+        )
+    }
+
     /** Toggle line comments as one edit, retaining selection direction and line endings. */
     fun toggleLineComments(prefix: String = "//"): EditorEditResult {
         require(prefix.isNotEmpty() && prefix.none { it.isWhitespace() }) { "comment prefix must be a token" }

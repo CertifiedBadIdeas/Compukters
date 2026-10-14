@@ -49,6 +49,23 @@ import kotlin.test.assertTrue
 
 class IdeInputAdapterTest {
     @Test
+    fun `Ctrl D duplicates only in source editor focus`() {
+        val fixture = fixture(clipboard = "unchanged")
+        assertTrue(fixture.adapter.keyPressed(key(IdeKeyCode.D, IdeModifier.CONTROL), IdeFocusState.Editor))
+        assertEquals(listOf<IdeCommand>(IdeCommand.Edit(IdeEditorInput.Duplicate)), fixture.commands)
+        for (modifiers in listOf(0, IdeModifier.CONTROL or IdeModifier.SHIFT, IdeModifier.CONTROL or IdeModifier.ALT)) {
+            assertFalse(fixture.adapter.keyPressed(key(IdeKeyCode.D, modifiers), IdeFocusState.Editor))
+        }
+        assertFalse(fixture.adapter.keyPressed(key(IdeKeyCode.D, IdeModifier.CONTROL), IdeFocusState(IdeFocusArea.Terminal)))
+        fixture.adapter.keyPressed(
+            key(IdeKeyCode.D, IdeModifier.CONTROL),
+            IdeFocusState.Editor.copy(findVisible = true, findFocused = true),
+        )
+        fixture.adapter.keyPressed(key(IdeKeyCode.D, IdeModifier.CONTROL), IdeFocusState.Editor.copy(gitVisible = true))
+        assertEquals(listOf<IdeCommand>(IdeCommand.Edit(IdeEditorInput.Duplicate)), fixture.commands)
+    }
+
+    @Test
     fun `import candidate click chooses the explicit row`() {
         val fixture = fixture()
         val geometry = IdeRenderGeometry.compute(960, 540, 180, 120, true, true, IdeCodeFontProfile.DEFAULT)

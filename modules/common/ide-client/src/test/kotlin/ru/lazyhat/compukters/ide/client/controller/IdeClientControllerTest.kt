@@ -99,6 +99,29 @@ import kotlin.test.assertTrue
 
 class IdeClientControllerTest {
     @Test
+    fun `duplicate command edits lines and exact selection as undoable source changes`() {
+        val fixture = ControllerFixture(preferences = preferences("demo", "src/main.kt"))
+        fixture.startAndTick()
+        fixture.controller.dispatch(IdeCommand.Edit(IdeEditorInput.SelectAll))
+        fixture.controller.dispatch(IdeCommand.Edit(IdeEditorInput.Type("val a = 1\nval b = 2")))
+        fixture.controller.dispatch(IdeCommand.Edit(IdeEditorInput.SetCaret(4, false)))
+        fixture.controller.dispatch(IdeCommand.Edit(IdeEditorInput.Duplicate))
+        assertEquals("val a = 1\nval a = 1\nval b = 2", fixture.textEditor().visibleLines.joinToString("\n"))
+        assertEquals(14, fixture.textEditor().caretUtf16)
+        fixture.controller.dispatch(IdeCommand.Edit(IdeEditorInput.Undo))
+        assertEquals("val a = 1\nval b = 2", fixture.textEditor().visibleLines.joinToString("\n"))
+        fixture.controller.dispatch(IdeCommand.Edit(IdeEditorInput.SetCaret(5, true)))
+        fixture.controller.dispatch(IdeCommand.Edit(IdeEditorInput.Duplicate))
+        assertEquals("val aa = 1\nval b = 2", fixture.textEditor().visibleLines.joinToString("\n"))
+        assertEquals("a", fixture.controller.selectedText())
+        fixture.controller.dispatch(IdeCommand.Edit(IdeEditorInput.Undo))
+        assertEquals("val a = 1\nval b = 2", fixture.textEditor().visibleLines.joinToString("\n"))
+        fixture.controller.dispatch(IdeCommand.Edit(IdeEditorInput.Redo))
+        assertEquals("val aa = 1\nval b = 2", fixture.textEditor().visibleLines.joinToString("\n"))
+        fixture.controller.close()
+    }
+
+    @Test
     fun `peripheral selection inserts an undoable dirty constant into active source`() {
         val fixture = ControllerFixture(preferences = preferences("demo", "src/main.kt"))
         fixture.startAndTick()
@@ -1716,6 +1739,8 @@ class IdeClientControllerTest {
         assertEquals(6, preview.caretUtf16)
         assertTrue(preview.title.contains("std.core"))
         fixture.controller.dispatch(IdeCommand.Edit(IdeEditorInput.Type("ignored")))
+        fixture.controller.dispatch(IdeCommand.Edit(IdeEditorInput.SelectAll))
+        fixture.controller.dispatch(IdeCommand.Edit(IdeEditorInput.Duplicate))
         assertEquals(text, fixture.textEditor().visibleLines.single())
         assertTrue(requireNotNull(fixture.workspaceView().status).message.contains("read-only"))
     }
