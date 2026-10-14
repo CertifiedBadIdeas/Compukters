@@ -272,6 +272,22 @@ private fun IrType.classInstance(classes: Map<IrClassSymbol, IrClass>): GuestCla
     return GuestClassInstance(declaration, arguments)
 }
 
+@OptIn(UnsafeDuringIrConstructionAPI::class)
+private fun GuestClassInstance.declaringOwner(owner: IrClass): GuestClassInstance? {
+    val visited = mutableSetOf<GuestClassInstance>()
+
+    fun find(instance: GuestClassInstance): GuestClassInstance? {
+        if (!visited.add(instance)) return null
+        if (instance.declaration == owner) return instance
+        return instance.declaration.superTypes.firstNotNullOfOrNull { parent ->
+            val type = instance.substitute(parent) as? IrSimpleType ?: return@firstNotNullOfOrNull null
+            val declaration = (type.classifier as? IrClassSymbol)?.owner ?: return@firstNotNullOfOrNull null
+            type.classInstance(mapOf(declaration.symbol to declaration))?.let(::find)
+        }
+    }
+    return find(this)
+}
+
 private const val MAXIMUM_GUEST_CLASS_VARIANTS = 256
 private const val MAXIMUM_PLATFORM_CLASS_VARIANTS = 1024
 
@@ -515,6 +531,7 @@ private fun collectGuestFunctionShapes(
         }
     }
 
+@OptIn(UnsafeDuringIrConstructionAPI::class)
 private fun collectGuestFunctionInstances(
     functions: List<IrSimpleFunction>,
     initializationRoots: List<IrElement>,
@@ -592,8 +609,9 @@ private fun collectGuestFunctionInstances(
                     function: IrSimpleFunction?,
                     expression: IrElement,
                 ) {
-                    if (function?.symbol in projectSymbols && function?.parent is IrClass &&
-                        function.typeParameters.isNotEmpty() && !function.isGuestLocalFunction()
+                    val target = function?.resolveFakeOverrideMaybeAbstract() ?: function
+                    if (target?.symbol in projectSymbols && target?.parent is IrClass &&
+                        target.typeParameters.isNotEmpty() && !target.isGuestLocalFunction()
                     ) {
                         throw UnsupportedKotlinIr(expression, "generic method references are not supported")
                     }
@@ -610,7 +628,7 @@ private fun collectGuestFunctionInstances(
                 }
 
                 override fun visitCall(expression: IrCall) {
-                    val target = expression.symbol.owner
+                    val target = expression.symbol.owner.resolveFakeOverrideMaybeAbstract() ?: expression.symbol.owner
                     if (target.symbol in projectSymbols && target.typeParameters.isNotEmpty()) {
                         val arguments =
                             expression.typeArguments.map { argument ->
@@ -626,9 +644,9 @@ private fun collectGuestFunctionInstances(
                         val receiver = expression.dispatchReceiver?.type?.let { owner?.substitute(it) ?: it } as? IrSimpleType
                         val ownerInstance =
                             classOwner?.let { declaration ->
-                                if (receiver?.classifier != declaration.symbol) {
-                                    throw UnsupportedKotlinIr(expression, "generic method requires its concrete declaring receiver")
-                                }
+                                val receiverClass =
+                                    (receiver?.classifier as? IrClassSymbol)?.owner
+                                        ?: throw UnsupportedKotlinIr(expression, "generic method requires a concrete class receiver")
                                 val types =
                                     receiver.arguments.map {
                                         (it as? IrTypeProjection)?.type
@@ -640,7 +658,8 @@ private fun collectGuestFunctionInstances(
                                 if (types.any { it.containsTypeParameter() }) {
                                     throw UnsupportedKotlinIr(expression, "generic method receiver has unresolved type arguments")
                                 }
-                                GuestClassInstance(declaration, types)
+                                GuestClassInstance(receiverClass, types).declaringOwner(declaration)
+                                    ?: throw UnsupportedKotlinIr(expression, "generic method declaring owner is unavailable")
                             }
                         add(GuestFunctionInstance(target, arguments, ownerInstance))
                     }
@@ -4512,14 +4531,7 @@ internal object KotlinProjectLowering {
                     declaration.typeParameters.isNotEmpty() &&
                         (
                             declaration.kind !in setOf(ClassKind.CLASS, ClassKind.INTERFACE) ||
-                                declaration.isData ||
-                                (
-                                    declaration.kind == ClassKind.CLASS &&
-                                        declaration.superTypes.any { superType ->
-                                            val parent = (superType as? IrSimpleType)?.classifier as? IrClassSymbol
-                                            parent != pluginContext.irBuiltIns.anyClass && parent?.owner?.kind != ClassKind.INTERFACE
-                                        }
-                                )
+                                declaration.isData
                         )
                 )
             ) {
@@ -7254,7 +7266,10 @@ private class FunctionCompiler(
             return allocate(type.copy(nullable = false)).also { emit(Instruction.CheckedCast(it, value, type.type)) }
         }
         val propertyReceiver = call.dispatchReceiver
-        val receiverClassInstance = resolveClassInstance(propertyReceiver?.type)
+        val receiverClassInstance =
+            resolveClassInstance(propertyReceiver?.type)?.let { receiver ->
+                (target.parent as? IrClass)?.let { resolveMemberOwner(receiver, it) } ?: receiver
+            }
         (
             resolveFieldAccessor(target.symbol, fieldsBySetter)
                 ?: receiverClassInstance?.let { genericFieldsBySetter[target.symbol to it] }
@@ -9824,22 +9839,7 @@ private class FunctionCompiler(
     private fun resolveMemberOwner(
         receiver: GuestClassInstance,
         owner: IrClass,
-    ): GuestClassInstance? {
-        val classes =
-            classInstanceTypeIds.keys.associate { it.declaration.symbol to it.declaration } +
-                guestTypes.valueClassBoxes.values.associate { it.symbol to it.symbol.owner } +
-                platformImports.classTypes.keys.associateWith { it.owner }
-        val visited = mutableSetOf<GuestClassInstance>()
-
-        fun find(instance: GuestClassInstance): GuestClassInstance? {
-            if (!visited.add(instance)) return null
-            if (instance.declaration == owner) return instance
-            return instance.declaration.superTypes.firstNotNullOfOrNull { superType ->
-                instance.substitute(superType).classInstance(classes)?.let(::find)
-            }
-        }
-        return find(receiver)
-    }
+    ): GuestClassInstance? = receiver.declaringOwner(owner)
 
     private fun projectFunctionId(
         call: IrCall,

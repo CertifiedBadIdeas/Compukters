@@ -281,8 +281,8 @@ IDE test `lazy sequences resolve with source and metadata inputs` checks both pl
 ### Direct generic methods
 
 Ordinary Guest classes and objects may declare final, non-suspending methods with their own non-reified
-type parameters. Direct calls specialize inferred or explicit concrete method arguments together with the
-concrete receiver's class arguments. Primitive parameters and results remain unboxed; nullable, reference,
+type parameters. Direct and inherited calls specialize inferred or explicit concrete method arguments together with the
+concrete declaring class's arguments. Primitive parameters and results remain unboxed; nullable, reference,
 callable and MFVC values retain their existing representations.
 
 ```kotlin
@@ -298,7 +298,13 @@ mutable cells. Receiver and explicit arguments evaluate before omitted defaults;
 later field writes. Recursion with the same types reuses its variant; type-growing calls retain the existing
 256 function-variant bound and report `UNSUPPORTED_IR` when it is exceeded.
 
-Generic virtual/interface methods, overrides, inherited generic methods, generic method references,
+Inherited final methods keep the original declaration and its instantiated owner. Ordinary generic
+subclasses may reorder, fix or nest superclass arguments; superclass constructors, inherited properties
+and initialization captures use those concrete layouts. Base-typed aliases and different subclasses
+share a method specialization when its declaring-owner and method arguments match. Inherited defaults,
+recursive calls, live receiver captures and explicit `super` calls follow the same direct-call rules.
+
+Generic virtual/interface methods, overrides, generic method references,
 member extensions and reified/suspending forms remain outside this stage. Binary generic method templates
 are unavailable; the executable body must be admitted source. Methods on value-class receivers with their
 own type parameters remain outside this support claim.
@@ -306,8 +312,16 @@ own type parameters remain outside this support claim.
 **Evidence:** `generic methods preserve concrete owner and method captures` and
 `generic methods keep direct primitive calls unboxed`, executed by `testKotlinGenericMethodsVmConformance`
 (including 64 KiB heap collection), plus `generic methods reject virtual references and expanding specialization`.
+The VM fixture also covers multilevel generic inheritance, reordered/nested superclass arguments,
+inherited primitive/nullable fields and accessors, constructor captures, defaults, live receivers,
+ordinary virtual overrides and direct `super` calls. `inherited generic methods reuse declaring owner
+specializations without boxing` protects canonical owner reuse and scalar signatures.
 IDE test `generic methods resolve with source and metadata inputs` checks both declaration-input modes.
+`source library generic functions and classes specialize in consumer`, executed by
+`testKotlinGenericLibraryVmConformance`, also covers a consumer generic subclass over a source-library
+generic hierarchy, inherited field access and method defaults through a base alias.
 **Related work:** [#774](https://github.com/CertifiedBadIdeas/Compukters/issues/774).
+Inherited calls and generic class inheritance: [#794](https://github.com/CertifiedBadIdeas/Compukters/issues/794).
 
 ### Generic value classes and limits
 
