@@ -37,7 +37,8 @@ headings so this page has one stable URL that can be shared outside the reposito
   programmable clutches that release their load when the controlling program or peripheral connection ends.
   The clutch has a blue casing band and Compukters controller panel with a cable socket and flat contact
   indicator, retaining cutout rendering around its shaft openings. The pump has an unmarked copper tube and
-  two compact flat displays at its ends, with centered flow arrows and no protruding controller or socket.
+  compact flat displays at both ends on all four sides, each with three flow arrows and no protruding
+  controller or socket.
   Its casing and displays stay stationary when flow reverses; only the arrows change.
   Their Guest value classes use the shared typed and named peripheral discovery; addon blocks share the Compukters creative tab.
 
