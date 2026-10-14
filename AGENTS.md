@@ -36,6 +36,19 @@ submodules, unpublished submodule branch/tag commits and modules with additional
 `--force` for clean submodule-containing worktrees is used only after these checks; dirty checkouts are never
 force-removed. For older helper checkouts, register them explicitly with setup `--resume` while clean first.
 
+## Visual asset review before integration
+
+For texture, block model and other subjective visual changes, keep the candidate in its task worktree
+until the user has reviewed the final appearance and explicitly approved integration. Automated checks do
+not replace this review. Before requesting approval, build the candidate, launch the owning development
+client when available, and provide the exact worktree, launch command and a bounded comparison scenario.
+Use an isolated preview world; do not modify the user's normal worlds. Record the reviewed commit and
+observations or screenshots. Resource-only iterations may copy edited assets into the owning resource output and use F3+T;
+model variants must be compared in both states and relevant orientations. Managed clients occupy the
+workspace Gradle slot, so stop the client before running another Gradle build. Stop the
+preview client before rebuilding code or removing the worktree. Merge and remove the task checkout only
+after approval and proportional integrated verification. Explicit user instructions can waive this gate.
+
 ## Project Structure & Module Organization
 
 Compukters is a Gradle multi-module Kotlin project with native Rust VM components. Minecraft-independent Kotlin modules
