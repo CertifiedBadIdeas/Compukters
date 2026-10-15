@@ -221,8 +221,9 @@ class ControllerScenarios {
                         Channel.BATTERY to if (previous.power == PowerSource.BATTERY) 15 else 0,
                         Channel.BATTERY_CLUTCH to if (previous.power != PowerSource.NONE) 15 else 0,
                         Channel.STEAM_CLUTCH to if (previous.power == PowerSource.STEAM) 15 else 0,
-                        Channel.FUEL_FEED_CLUTCH to if (previous.fuel == FuelMode.FEED) 15 else 0,
-                        Channel.FUEL_DRAIN_CLUTCH to if (previous.fuel == FuelMode.DRAIN) 15 else 0,
+                        Channel.FUEL_CLUTCH to if (previous.fuel != FuelMode.OFF) 15 else 0,
+                        // Pump direction can persist reversed while idle after another program.
+                        Channel.FUEL_REVERSED to if (previous.fuel != FuelMode.FEED) 1 else 0,
                     )
                 var loadSettled = false
                 var pumpsSettled = false
@@ -230,29 +231,35 @@ class ControllerScenarios {
                     if (step.channel == Channel.WAIT) {
                         assertTrue(step.value >= 2)
                         if (signals[Channel.LOAD_CLUTCH] == 0) loadSettled = true
-                        if (signals[Channel.FUEL_FEED_CLUTCH] == 0 && signals[Channel.FUEL_DRAIN_CLUTCH] == 0) {
+                        if (signals[Channel.FUEL_CLUTCH] == 0) {
                             pumpsSettled = true
                         }
                         continue
                     }
-                    if ((step.channel == Channel.FUEL_FEED_CLUTCH || step.channel == Channel.FUEL_DRAIN_CLUTCH) && step.value == 15) {
-                        assertEquals(0, signals[Channel.FUEL_FEED_CLUTCH])
-                        assertEquals(0, signals[Channel.FUEL_DRAIN_CLUTCH])
+                    if (step.channel == Channel.FUEL_REVERSED) {
+                        assertEquals(0, signals[Channel.FUEL_CLUTCH])
                         assertTrue(pumpsSettled)
                         pumpsSettled = false
+                    }
+                    if (step.channel == Channel.FUEL_CLUTCH && step.value == 15) {
+                        assertTrue(pumpsSettled)
+                        assertEquals(if (next.fuel == FuelMode.DRAIN) 1 else 0, signals[Channel.FUEL_REVERSED])
                     }
                     if (step.channel != Channel.LOAD_CLUTCH && (previous.power != next.power || previous.fuel != next.fuel)) {
                         assertEquals(0, signals[Channel.LOAD_CLUTCH])
                         assertTrue(loadSettled)
                     }
+                    if (step.channel == Channel.BATTERY || step.channel == Channel.BATTERY_CLUTCH || step.channel == Channel.STEAM_CLUTCH) {
+                        assertEquals(0, signals[Channel.FUEL_CLUTCH])
+                        assertTrue(pumpsSettled)
+                    }
                     signals[step.channel] = step.value
                     if (signals[Channel.LOAD_CLUTCH] == 15) {
                         assertEquals(0, signals[Channel.BATTERY])
                         assertEquals(15, signals[Channel.STEAM_CLUTCH])
-                        assertEquals(15, signals[Channel.FUEL_FEED_CLUTCH])
-                        assertEquals(0, signals[Channel.FUEL_DRAIN_CLUTCH])
+                        assertEquals(15, signals[Channel.FUEL_CLUTCH])
+                        assertEquals(0, signals[Channel.FUEL_REVERSED])
                     }
-                    assertFalse(signals[Channel.FUEL_FEED_CLUTCH] == 15 && signals[Channel.FUEL_DRAIN_CLUTCH] == 15)
                     assertFalse(
                         signals[Channel.BATTERY] == 15 && signals[Channel.BATTERY_CLUTCH] == 15 && signals[Channel.STEAM_CLUTCH] == 15,
                     )
@@ -261,8 +268,10 @@ class ControllerScenarios {
                 assertEquals(if (next.power == PowerSource.BATTERY) 15 else 0, signals[Channel.BATTERY])
                 assertEquals(if (next.power != PowerSource.NONE) 15 else 0, signals[Channel.BATTERY_CLUTCH])
                 assertEquals(if (next.power == PowerSource.STEAM) 15 else 0, signals[Channel.STEAM_CLUTCH])
-                assertEquals(if (next.fuel == FuelMode.FEED) 15 else 0, signals[Channel.FUEL_FEED_CLUTCH])
-                assertEquals(if (next.fuel == FuelMode.DRAIN) 15 else 0, signals[Channel.FUEL_DRAIN_CLUTCH])
+                assertEquals(if (next.fuel != FuelMode.OFF) 15 else 0, signals[Channel.FUEL_CLUTCH])
+                if (previous != next && (previous.power != next.power || previous.fuel != next.fuel)) {
+                    assertEquals(if (next.fuel == FuelMode.DRAIN) 1 else 0, signals[Channel.FUEL_REVERSED])
+                }
             }
         }
     }

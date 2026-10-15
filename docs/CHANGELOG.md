@@ -103,9 +103,9 @@ headings so this page has one stable URL that can be shared outside the reposito
 
 - The Crafts & Additions integration exposes named liquid Blaze Burners with atomic fuel quantity, capacity,
   heat and remaining burn-time readings. The separate `boiler-scada` project starts water/fuel pumps from a
-  kinetic battery, switches to steam self-power with battery charging, and selects a separate drain pump on STOP until
-  every configured burner is empty. Feed and drain pumps have separate, mutually interlocked clutch outputs;
-  all six actuator channels use individual named Redstone Ports placed beside their consumers.
+  kinetic battery, switches to steam self-power with battery charging, and reverses one programmable fuel pump on STOP
+  until every configured burner is empty. Programmable clutches isolate the battery, steam, fuel pump and load branches;
+  flow direction changes only while the fuel clutch is disconnected. Only battery discharge uses a named Redstone Port.
   A separate load clutch protects the pump and battery-charge circuit: sustained rotation loss or overload triggers
   delayed battery-assisted recovery, verifies isolated steam power, then reconnects the load automatically.
   A Stressometer after the load clutch supplies the panel's stress/capacity readings; failed recovery drains fuel.
