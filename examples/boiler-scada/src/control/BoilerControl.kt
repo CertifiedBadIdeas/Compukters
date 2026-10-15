@@ -187,7 +187,7 @@ class BoilerControl(
     }
 }
 
-enum class Channel { BATTERY, BATTERY_CLUTCH, STEAM_CLUTCH, FUEL_FEED_CLUTCH, FUEL_DRAIN_CLUTCH, LOAD_CLUTCH, WAIT }
+enum class Channel { BATTERY, BATTERY_CLUTCH, STEAM_CLUTCH, FUEL_CLUTCH, FUEL_REVERSED, LOAD_CLUTCH, WAIT }
 
 value class OutputStep(
     val channel: Channel,
@@ -195,8 +195,8 @@ value class OutputStep(
 )
 
 /**
- * Clutch signals are enables: a redstone torch inverts each signal at the physical clutch.
- * Feed and drain use separate fixed-direction pumps, isolated before switching either pump or power source.
+ * Programmable clutches use direct enables. One fuel pump reverses while its clutch is disconnected.
+ * Isolate the load and fuel pump before changing flow direction or power source.
  */
 fun outputSteps(
     previous: Outputs,
@@ -211,8 +211,7 @@ fun outputSteps(
     }
     steps.add(OutputStep(Channel.LOAD_CLUTCH, 0))
     steps.add(OutputStep(Channel.WAIT, 2))
-    steps.add(OutputStep(Channel.FUEL_FEED_CLUTCH, 0))
-    steps.add(OutputStep(Channel.FUEL_DRAIN_CLUTCH, 0))
+    steps.add(OutputStep(Channel.FUEL_CLUTCH, 0))
     steps.add(OutputStep(Channel.WAIT, 2))
     if (previous.power != next.power) {
         steps.add(OutputStep(Channel.BATTERY_CLUTCH, 0))
@@ -238,17 +237,9 @@ fun outputSteps(
         }
         steps.add(OutputStep(Channel.WAIT, 2))
     }
-    when (next.fuel) {
-        FuelMode.FEED -> {
-            steps.add(OutputStep(Channel.FUEL_FEED_CLUTCH, 15))
-        }
-
-        FuelMode.DRAIN -> {
-            steps.add(OutputStep(Channel.FUEL_DRAIN_CLUTCH, 15))
-        }
-
-        else -> {}
-    }
+    steps.add(OutputStep(Channel.FUEL_REVERSED, if (next.fuel == FuelMode.DRAIN) 1 else 0))
+    steps.add(OutputStep(Channel.WAIT, 2))
+    if (next.fuel != FuelMode.OFF) steps.add(OutputStep(Channel.FUEL_CLUTCH, 15))
     if (next.load) {
         steps.add(OutputStep(Channel.WAIT, 2))
         steps.add(OutputStep(Channel.LOAD_CLUTCH, 15))
