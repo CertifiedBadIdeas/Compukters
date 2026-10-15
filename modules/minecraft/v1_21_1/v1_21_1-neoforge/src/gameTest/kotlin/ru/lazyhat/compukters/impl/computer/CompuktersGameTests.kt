@@ -30,26 +30,26 @@ import ru.lazyhat.compukters.impl.benchmark.VmBenchmarkGameTestScenario
 @PrefixGameTestTemplate(false)
 object CompuktersGameTests {
     @JvmStatic
-    @GameTest(batch = "redstone_port", template = EMPTY_TEMPLATE, templateNamespace = "minecraft", timeoutTicks = TIMEOUT_TICKS)
+    @GameTest(batch = "redstone_port", template = EMPTY_TEMPLATE, templateNamespace = "compukters", timeoutTicks = TIMEOUT_TICKS)
     fun redstonePort(helper: GameTestHelper) = RedstonePortGameTestScenario.run(helper)
 
     @JvmStatic
-    @GameTest(batch = "peripheral_transfer", template = EMPTY_TEMPLATE, templateNamespace = "minecraft", timeoutTicks = TIMEOUT_TICKS)
+    @GameTest(batch = "peripheral_transfer", template = EMPTY_TEMPLATE, templateNamespace = "compukters", timeoutTicks = TIMEOUT_TICKS)
     fun peripheralTransfer(helper: GameTestHelper) = PeripheralTransferGameTestScenario.run(helper)
 
     @JvmStatic
-    @GameTest(batch = "computer_network", template = EMPTY_TEMPLATE, templateNamespace = "minecraft", timeoutTicks = TIMEOUT_TICKS)
+    @GameTest(batch = "computer_network", template = EMPTY_TEMPLATE, templateNamespace = "compukters", timeoutTicks = TIMEOUT_TICKS)
     fun computerNetwork(helper: GameTestHelper) = ComputerNetworkGameTestScenario.run(helper)
 
     @JvmStatic
-    @GameTest(batch = "computer_cable", template = EMPTY_TEMPLATE, templateNamespace = "minecraft", timeoutTicks = TIMEOUT_TICKS)
+    @GameTest(batch = "computer_cable", template = EMPTY_TEMPLATE, templateNamespace = "compukters", timeoutTicks = TIMEOUT_TICKS)
     fun computerCable(helper: GameTestHelper) = ComputerCableGameTestScenario.run(helper)
 
     @JvmStatic
     @GameTest(
         batch = "lifecycle",
         template = EMPTY_TEMPLATE,
-        templateNamespace = "minecraft",
+        templateNamespace = "compukters",
         timeoutTicks = TIMEOUT_TICKS,
     )
     fun computerLifecycle(helper: GameTestHelper) = ComputerLifecycleGameTestScenario.run(helper)
@@ -58,7 +58,7 @@ object CompuktersGameTests {
     @GameTest(
         batch = "hibernation",
         template = EMPTY_TEMPLATE,
-        templateNamespace = "minecraft",
+        templateNamespace = "compukters",
         timeoutTicks = TIMEOUT_TICKS,
     )
     fun computerHibernation(helper: GameTestHelper) = ComputerHibernationGameTestScenario.run(helper)
@@ -67,7 +67,7 @@ object CompuktersGameTests {
     @GameTest(
         batch = "redstone",
         template = EMPTY_TEMPLATE,
-        templateNamespace = "minecraft",
+        templateNamespace = "compukters",
         timeoutTicks = TIMEOUT_TICKS,
     )
     fun computerRedstone(helper: GameTestHelper) = ComputerRedstoneGameTestScenario.run(helper)
@@ -76,7 +76,7 @@ object CompuktersGameTests {
     @GameTest(
         batch = "sound",
         template = EMPTY_TEMPLATE,
-        templateNamespace = "minecraft",
+        templateNamespace = "compukters",
         timeoutTicks = TIMEOUT_TICKS,
     )
     fun computerSound(helper: GameTestHelper) = ComputerSoundGameTestScenario.run(helper)
@@ -85,20 +85,20 @@ object CompuktersGameTests {
     @GameTest(
         batch = "text_display",
         template = EMPTY_TEMPLATE,
-        templateNamespace = "minecraft",
+        templateNamespace = "compukters",
         timeoutTicks = TIMEOUT_TICKS,
     )
     fun textDisplay(helper: GameTestHelper) = TextDisplayGameTestScenario.run(helper)
 
     @JvmStatic
-    @GameTest(batch = "graphical_display", template = EMPTY_TEMPLATE, templateNamespace = "minecraft", timeoutTicks = TIMEOUT_TICKS)
+    @GameTest(batch = "graphical_display", template = EMPTY_TEMPLATE, templateNamespace = "compukters", timeoutTicks = TIMEOUT_TICKS)
     fun graphicalDisplay(helper: GameTestHelper) = GraphicalDisplayGameTestScenario.run(helper)
 
     @JvmStatic
     @GameTest(
         batch = "graphical_display_hibernation",
         template = EMPTY_TEMPLATE,
-        templateNamespace = "minecraft",
+        templateNamespace = "compukters",
         timeoutTicks = TIMEOUT_TICKS,
     )
     fun graphicalDisplayHibernation(helper: GameTestHelper) = GraphicalDisplayHibernationGameTestScenario.run(helper)
@@ -107,7 +107,7 @@ object CompuktersGameTests {
     @GameTest(
         batch = "peripheral_cable",
         template = EMPTY_TEMPLATE,
-        templateNamespace = "minecraft",
+        templateNamespace = "compukters",
         timeoutTicks = TIMEOUT_TICKS,
     )
     fun peripheralCable(helper: GameTestHelper) = PeripheralCableGameTestScenario.run(helper)
@@ -116,7 +116,7 @@ object CompuktersGameTests {
     @GameTest(
         batch = "actor_service",
         template = EMPTY_TEMPLATE,
-        templateNamespace = "minecraft",
+        templateNamespace = "compukters",
         timeoutTicks = TIMEOUT_TICKS,
     )
     fun vmActorService(helper: GameTestHelper) = VmActorServiceGameTestScenario.run(helper)
@@ -125,12 +125,12 @@ object CompuktersGameTests {
     @GameTest(
         batch = "benchmark",
         template = EMPTY_TEMPLATE,
-        templateNamespace = "minecraft",
+        templateNamespace = "compukters",
         timeoutTicks = TIMEOUT_TICKS,
     )
     fun vmBenchmark(helper: GameTestHelper) = VmBenchmarkGameTestScenario.run(helper)
 
-    private const val EMPTY_TEMPLATE = "bastion/mobs/empty"
+    private const val EMPTY_TEMPLATE = "empty"
     private const val TIMEOUT_TICKS = 100_000
 }
 
