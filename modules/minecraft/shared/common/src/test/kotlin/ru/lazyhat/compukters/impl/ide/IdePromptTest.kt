@@ -16,11 +16,43 @@ import ru.lazyhat.compukters.ide.client.state.IdeCommand
 import ru.lazyhat.compukters.ide.project.fs.ProjectPath
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class IdePromptTest {
+    @Test
+    fun `token check stays in the prompt and editing or cancelling discards late results`() {
+        val prompt = IdePromptController()
+        prompt.open(IdePromptKind.GitToken("player"), "  github_pat_example\n")
+        val pending = java.util.concurrent.CompletableFuture<ru.lazyhat.compukters.ide.git.GitCredentialCheck>()
+        prompt.checkToken { credentials, _ ->
+            assertEquals("github_pat_example", credentials.token().concatToString())
+            pending
+        }
+        kotlin.test.assertTrue(prompt.state!!.checkingToken)
+        pending.complete(
+            ru.lazyhat.compukters.ide.git
+                .GitCredentialCheck(true, "Token is valid"),
+        )
+        prompt.pollTokenCheck()
+        kotlin.test.assertTrue(prompt.state!!.tokenCheck!!.valid)
+        kotlin.test.assertFalse(prompt.state!!.checkingToken)
+        prompt.type("x")
+        assertNull(prompt.state!!.tokenCheck)
+        val stale = java.util.concurrent.CompletableFuture<ru.lazyhat.compukters.ide.git.GitCredentialCheck>()
+        prompt.checkToken { _, _ -> stale }
+        prompt.cancel()
+        prompt.open(IdePromptKind.GitToken("other"))
+        stale.complete(
+            ru.lazyhat.compukters.ide.git
+                .GitCredentialCheck(true, "Token is valid"),
+        )
+        prompt.pollTokenCheck()
+        assertNull(prompt.state!!.tokenCheck)
+    }
+
     @Test
     fun `project folder rename accepts a single name and preserves the catalog identity`() {
         val prompt = IdePromptController()
@@ -60,17 +92,51 @@ class IdePromptTest {
     }
 
     @Test
-    fun `authentication masks token and preserves spaces without retaining prompt`() {
+    fun `authentication masks token and trims clipboard whitespace without retaining prompt`() {
         val prompt = IdePromptController()
-        prompt.open(IdePromptKind.GitUsername, "player")
+        prompt.open(IdePromptKind.GitUsername(), "player")
         assertNull(prompt.confirm())
         prompt.type(" token value ")
         kotlin.test.assertFalse(prompt.state.toString().contains("token value"))
         kotlin.test.assertFalse(prompt.state!!.displayValue.contains("token value"))
         val command = prompt.confirm() as IdeCommand.SetGitCredentials
         assertNull(prompt.state)
-        assertEquals(" token value ", command.credentials!!.token().concatToString())
+        assertEquals("token value", command.credentials!!.token().concatToString())
         command.credentials!!.close()
+    }
+
+    @Test
+    fun `authentication server scope survives username validation and save without appearing as a token`() {
+        val prompt = IdePromptController()
+        prompt.open(IdePromptKind.GitServer, "https://Git.Example.org:8443/repo")
+        assertNull(prompt.confirm())
+        prompt.type("player")
+        assertNull(prompt.confirm())
+        assertTrue(prompt.state!!.title.contains("git.example.org:8443"))
+        prompt.type("test-secret")
+        var checkedServer: String? = null
+        prompt.checkToken { credentials, _ ->
+            checkedServer = credentials.scope.authority
+            java.util.concurrent.CompletableFuture.completedFuture(
+                ru.lazyhat.compukters.ide.git
+                    .GitCredentialCheck(false, "Check unavailable", canSave = true),
+            )
+        }
+        prompt.pollTokenCheck()
+        assertEquals("git.example.org:8443", checkedServer)
+        assertFalse(prompt.state.toString().contains("test-secret"))
+        assertFalse(
+            prompt.state!!
+                .field
+                .toString()
+                .contains("test-secret"),
+        )
+        val command = prompt.confirm() as IdeCommand.SetGitCredentials
+        assertEquals(checkedServer, command.credentials!!.scope.authority)
+        assertTrue(command.credentials!!.scope.matches("https://git.example.org:8443/other/repo"))
+        assertFalse(command.credentials!!.scope.matches("https://git.example.org/other/repo"))
+        command.credentials!!.close()
+        assertNull(prompt.state)
     }
 
     @Test

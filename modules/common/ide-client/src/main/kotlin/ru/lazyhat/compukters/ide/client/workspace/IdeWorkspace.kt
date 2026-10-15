@@ -59,6 +59,15 @@ interface IdeWorkspace : AutoCloseable {
         cancellation: GitCancellation,
     ): CompletableFuture<ProjectDescriptor> = CompletableFuture.failedFuture(UnsupportedOperationException("Git clone is unavailable"))
 
+    fun validateGitCredentials(
+        credentials: GitCredentials,
+        cancellation: GitCancellation,
+    ): CompletableFuture<ru.lazyhat.compukters.ide.git.GitCredentialCheck> =
+        CompletableFuture.completedFuture(
+            ru.lazyhat.compukters.ide.git
+                .GitCredentialCheck(false, "Token validation unavailable"),
+        )
+
     fun git(
         project: ProjectHandle,
         operation: GitOperation,
@@ -71,6 +80,7 @@ interface IdeWorkspace : AutoCloseable {
         project: ProjectHandle,
         source: GitOperation.SourceChanges?,
         cancellation: GitCancellation,
+        includeHistory: Boolean = false,
     ): CompletableFuture<GitResult?> = CompletableFuture.completedFuture(null)
 
     fun tree(project: ProjectHandle): CompletableFuture<ProjectTree>

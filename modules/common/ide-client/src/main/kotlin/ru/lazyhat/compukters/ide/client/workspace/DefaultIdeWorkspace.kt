@@ -115,6 +115,13 @@ class DefaultIdeWorkspace internal constructor(
         ) { destination -> backend.clone(remote, destination, credentials, cancellation) }
     }
 
+    override fun validateGitCredentials(
+        credentials: GitCredentials,
+        cancellation: GitCancellation,
+    ) = submit("validateGitCredentials") {
+        checkNotNull(gitBackend) { "Git is unavailable" }.validateCredentials(credentials, cancellation)
+    }
+
     override fun git(
         project: ProjectHandle,
         operation: GitOperation,
@@ -126,7 +133,16 @@ class DefaultIdeWorkspace internal constructor(
         project: ProjectHandle,
         source: GitOperation.SourceChanges?,
         cancellation: GitCancellation,
-    ) = submit("inspectGit") { gitBackend?.execute(project, source ?: GitOperation.Status, null, cancellation) }
+        includeHistory: Boolean,
+    ) = submit("inspectGit") {
+        val backend = gitBackend ?: return@submit null
+        val result = backend.execute(project, source ?: GitOperation.Status, null, cancellation)
+        if (includeHistory && result.status.available) {
+            result.copy(history = backend.execute(project, GitOperation.History, null, cancellation).history)
+        } else {
+            result
+        }
+    }
 
     override fun tree(project: ProjectHandle) = submit("tree") { ProjectTreeStore(project, projectLimits).scan() }
 

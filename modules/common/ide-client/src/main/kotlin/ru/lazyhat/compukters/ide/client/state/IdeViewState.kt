@@ -141,7 +141,7 @@ data class IdeBottomPanelView(
     val scroll: Int = 0,
 )
 
-enum class IdeGitMenu { Branches, Repository }
+enum class IdeGitMenu { Branches, Settings }
 
 enum class IdeGitScrollArea { Content, Preview }
 
@@ -151,6 +151,7 @@ data class IdeGitView(
     val scroll: Int = 0,
     val previewScroll: Int = 0,
     val authenticated: Boolean = false,
+    val credentialServer: String? = null,
     val tab: IdeGitTab = IdeGitTab.Changes,
     val checkedPaths: Set<ProjectPath> = emptySet(),
     val previewPath: ProjectPath? = null,

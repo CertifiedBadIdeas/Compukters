@@ -369,9 +369,6 @@ class IdeClientController(
             is IdeCommand.BottomTab -> {
                 gitDraft.focus(null)
                 bottomPanel = bottomPanel.copy(tab = command.tab, scroll = 0)
-                if (command.tab == ru.lazyhat.compukters.ide.client.state.IdeBottomTab.GitLog) {
-                    gitView = gitView.copy(visible = false, menu = null)
-                }
                 publishWorkspace()
                 if (command.tab == ru.lazyhat.compukters.ide.client.state.IdeBottomTab.GitLog && state.busy.isEmpty()) {
                     requestGit(GitOperation.History)
@@ -480,7 +477,8 @@ class IdeClientController(
             is IdeCommand.SetGitCredentials -> {
                 gitCredentials?.close()
                 gitCredentials = command.credentials
-                gitView = gitView.copy(authenticated = command.credentials != null)
+                gitView =
+                    gitView.copy(authenticated = command.credentials != null, credentialServer = command.credentials?.scope?.authority)
                 publishWorkspace()
                 publishStatus(
                     if (command.credentials ==
@@ -540,7 +538,7 @@ class IdeClientController(
                     pendingFile = null
                     pendingProjectNavigation = null
                     pendingAttachedNavigation = null
-                    gitView = gitView.copy(visible = false, menu = null)
+                    gitView = gitView.copy(tab = ru.lazyhat.compukters.ide.client.state.IdeGitTab.Changes, menu = null)
                     openFile(command.path)
                 }
             }
@@ -1009,7 +1007,7 @@ class IdeClientController(
         pendingGit = null
         gitCancellation?.cancel()
         gitView =
-            IdeGitView(authenticated = gitCredentials != null)
+            IdeGitView(authenticated = gitCredentials != null, credentialServer = gitCredentials?.scope?.authority)
         val selected = catalog.singleOrNull { it.directoryName == directoryName }
         if (selected == null) {
             publishProblem("Project '$directoryName' is unavailable")
@@ -1839,6 +1837,19 @@ class IdeClientController(
             }
     }
 
+    fun gitCredentialScope(): ru.lazyhat.compukters.ide.git.GitCredentialScope =
+        (gitView.status?.remote ?: gitView.result?.status?.remote)?.let {
+            runCatching {
+                ru.lazyhat.compukters.ide.git.GitCredentialScope
+                    .fromRemote(it)
+            }.getOrNull()
+        } ?: ru.lazyhat.compukters.ide.git.GitCredentialScope.GITHUB
+
+    fun validateGitCredentials(
+        credentials: GitCredentials,
+        cancellation: GitCancellation,
+    ) = workspace.validateGitCredentials(credentials, cancellation)
+
     private fun requestGit(operation: GitOperation) {
         if (project == null || state.busy.isNotEmpty() || pendingGit != null) {
             publishStatus("Finish the current operation before using Git", IdeProblemSeverity.Warning)
@@ -1951,9 +1962,16 @@ class IdeClientController(
         val revision = current?.document?.revision
         val capturedGeneration = generation
         val foreground = latestGitOperation
-        workspace.inspectGit(selected.handle, source, cancellation).whenComplete { result, _ ->
-            enqueue(IdeEvent.GitInspected(capturedGeneration, operationId, foreground, source?.path, revision, result))
-        }
+        workspace
+            .inspectGit(
+                selected.handle,
+                source,
+                cancellation,
+                includeHistory =
+                    bottomPanel.tab == ru.lazyhat.compukters.ide.client.state.IdeBottomTab.GitLog,
+            ).whenComplete { result, _ ->
+                enqueue(IdeEvent.GitInspected(capturedGeneration, operationId, foreground, source?.path, revision, result))
+            }
     }
 
     private fun requestPoll() {
@@ -2198,6 +2216,22 @@ class IdeClientController(
                                     ),
                             )
                     }
+                }
+                event.result?.let { result ->
+                    val projectedStatus = gitView.status ?: result.status
+                    val available = projectedStatus.changes.mapTo(linkedSetOf()) { it.path }
+                    gitView =
+                        gitView.copy(
+                            result = gitView.result?.copy(status = projectedStatus) ?: result.copy(status = projectedStatus),
+                            checkedPaths = java.util.Collections.unmodifiableSet(gitView.checkedPaths.intersect(available)),
+                            previewPath = gitView.previewPath?.takeIf { it in available },
+                            history =
+                                if (bottomPanel.tab == ru.lazyhat.compukters.ide.client.state.IdeBottomTab.GitLog) {
+                                    java.util.Collections.unmodifiableList(result.history.toList())
+                                } else {
+                                    gitView.history
+                                },
+                        )
                 }
                 publishWorkspace()
             }
@@ -2566,7 +2600,7 @@ class IdeClientController(
         inspectedPath = null
         inspectedRevision = null
         gitLineChanges = emptyList()
-        gitView = IdeGitView(authenticated = gitCredentials != null)
+        gitView = IdeGitView(authenticated = gitCredentials != null, credentialServer = gitCredentials?.scope?.authority)
         bottomPanel =
             ru.lazyhat.compukters.ide.client.state.IdeBottomPanelView(
                 tab = if (preferencesSnapshot.diagnosticsExpanded) ru.lazyhat.compukters.ide.client.state.IdeBottomTab.Problems else null,

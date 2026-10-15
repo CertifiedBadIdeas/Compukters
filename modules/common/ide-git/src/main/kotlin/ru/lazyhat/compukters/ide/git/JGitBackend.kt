@@ -20,6 +20,7 @@ package ru.lazyhat.compukters.ide.git
 
 import org.eclipse.jgit.api.Git
 import org.eclipse.jgit.api.MergeCommand
+import org.eclipse.jgit.api.TransportConfigCallback
 import org.eclipse.jgit.diff.HistogramDiff
 import org.eclipse.jgit.diff.RawText
 import org.eclipse.jgit.diff.RawTextComparator
@@ -31,7 +32,7 @@ import org.eclipse.jgit.revwalk.RevWalk
 import org.eclipse.jgit.transport.RefSpec
 import org.eclipse.jgit.transport.RemoteConfig
 import org.eclipse.jgit.transport.RemoteRefUpdate
-import org.eclipse.jgit.transport.UsernamePasswordCredentialsProvider
+import org.eclipse.jgit.transport.TransportHttp
 import org.eclipse.jgit.treewalk.CanonicalTreeParser
 import org.eclipse.jgit.treewalk.EmptyTreeIterator
 import org.eclipse.jgit.treewalk.FileTreeIterator
@@ -52,6 +53,11 @@ class JGitBackend internal constructor(
 ) : GitBackend {
     constructor(limits: GitLimits = GitLimits()) : this(limits, GitRemote::requireHttps)
 
+    override fun validateCredentials(
+        credentials: GitCredentials,
+        cancellation: GitCancellation,
+    ): GitCredentialCheck = GitHubCredentialValidator().validate(credentials, cancellation)
+
     override fun clone(
         remote: String,
         destination: Path,
@@ -65,19 +71,22 @@ class JGitBackend internal constructor(
         }
         val auth = provider(credentials)
         try {
-            Git
-                .cloneRepository()
-                .setURI(remote)
-                .setDirectory(destination.toFile())
-                .setCloneAllBranches(false)
-                .setTimeout(limits.timeoutSeconds)
-                .setCredentialsProvider(auth)
-                .setProgressMonitor(monitor(cancellation))
-                .call()
-                .use { checkStorage(it.repository, cancellation) }
+            gitNetworkOperation {
+                Git
+                    .cloneRepository()
+                    .setURI(remote)
+                    .setDirectory(destination.toFile())
+                    .setCloneAllBranches(false)
+                    .setTimeout(limits.timeoutSeconds)
+                    .setCredentialsProvider(auth)
+                    .setTransportConfigCallback(secureTransport(auth))
+                    .setProgressMonitor(monitor(cancellation))
+                    .call()
+                    .use { checkStorage(it.repository, cancellation) }
+            }
             cancellation.check()
         } finally {
-            auth?.clear()
+            auth?.close()
         }
     }
 
@@ -87,18 +96,25 @@ class JGitBackend internal constructor(
         credentials: GitCredentials?,
         cancellation: GitCancellation,
     ): GitResult {
-        val auth = provider(credentials)
+        val auth =
+            if (operation == GitOperation.Fetch || operation == GitOperation.Pull ||
+                operation == GitOperation.Push
+            ) {
+                provider(credentials)
+            } else {
+                null
+            }
         try {
             return execute(project, operation, auth, cancellation)
         } finally {
-            auth?.clear()
+            auth?.close()
         }
     }
 
     private fun execute(
         project: ProjectHandle,
         operation: GitOperation,
-        auth: UsernamePasswordCredentialsProvider?,
+        auth: ScopedGitCredentialsProvider?,
         cancellation: GitCancellation,
     ): GitResult {
         cancellation.check()
@@ -268,28 +284,34 @@ class JGitBackend internal constructor(
 
                 GitOperation.Fetch -> {
                     val remote = remote(git.repository, push = false)
-                    git
-                        .fetch()
-                        .setRemote(remote)
-                        .setTimeout(limits.timeoutSeconds)
-                        .setCredentialsProvider(auth)
-                        .setProgressMonitor(monitor(cancellation))
-                        .call()
+                    gitNetworkOperation {
+                        git
+                            .fetch()
+                            .setRemote(remote)
+                            .setTimeout(limits.timeoutSeconds)
+                            .setCredentialsProvider(auth)
+                            .setTransportConfigCallback(secureTransport(auth))
+                            .setProgressMonitor(monitor(cancellation))
+                            .call()
+                    }
                 }
 
                 GitOperation.Pull -> {
                     requireClean(git)
                     val remote = remote(git.repository, push = false)
                     val result =
-                        git
-                            .pull()
-                            .setRemote(remote)
-                            .setRebase(false)
-                            .setFastForward(MergeCommand.FastForwardMode.FF_ONLY)
-                            .setTimeout(limits.timeoutSeconds)
-                            .setCredentialsProvider(auth)
-                            .setProgressMonitor(monitor(cancellation))
-                            .call()
+                        gitNetworkOperation {
+                            git
+                                .pull()
+                                .setRemote(remote)
+                                .setRebase(false)
+                                .setFastForward(MergeCommand.FastForwardMode.FF_ONLY)
+                                .setTimeout(limits.timeoutSeconds)
+                                .setCredentialsProvider(auth)
+                                .setTransportConfigCallback(secureTransport(auth))
+                                .setProgressMonitor(monitor(cancellation))
+                                .call()
+                        }
                     check(
                         result.isSuccessful,
                     ) { "Pull requires fast-forward; branches diverged or checkout was rejected. Local commits were preserved." }
@@ -302,14 +324,17 @@ class JGitBackend internal constructor(
                     val target = git.repository.config.getString("branch", git.repository.branch, "merge") ?: source
                     val results =
                         withoutHooks(git) {
-                            git
-                                .push()
-                                .setRefSpecs(RefSpec("$source:$target"))
-                                .setRemote(remote)
-                                .setTimeout(limits.timeoutSeconds)
-                                .setCredentialsProvider(auth)
-                                .setProgressMonitor(monitor(cancellation))
-                                .call()
+                            gitNetworkOperation {
+                                git
+                                    .push()
+                                    .setRefSpecs(RefSpec("$source:$target"))
+                                    .setRemote(remote)
+                                    .setTimeout(limits.timeoutSeconds)
+                                    .setCredentialsProvider(auth)
+                                    .setTransportConfigCallback(secureTransport(auth))
+                                    .setProgressMonitor(monitor(cancellation))
+                                    .call()
+                            }
                         }
                     val updates = results.flatMap { it.remoteUpdates }
                     check(updates.isNotEmpty()) { "No branch was selected for push" }
@@ -425,6 +450,7 @@ class JGitBackend internal constructor(
             Collections.unmodifiableList(branches),
             Collections.unmodifiableList(changes),
             git.repository.repositoryState.name,
+            remote = git.repository.config.getString("remote", "origin", "url"),
         )
     }
 
@@ -542,8 +568,23 @@ class JGitBackend internal constructor(
         return output.toString(Charsets.UTF_8)
     }
 
-    private fun provider(credentials: GitCredentials?): UsernamePasswordCredentialsProvider? =
-        credentials?.let { UsernamePasswordCredentialsProvider(it.username, it.token()) }
+    private fun provider(credentials: GitCredentials?) = credentials?.let(::ScopedGitCredentialsProvider)
+
+    private fun secureTransport(auth: ScopedGitCredentialsProvider?) =
+        TransportConfigCallback { transport ->
+            val remote = transport.uri.toString()
+            admitRemote(remote)
+            if (auth != null && !auth.scope.matches(remote)) {
+                throw GitTransportSecurityException("Token is for ${auth.scope.authority} · authenticate separately for this Git server")
+            }
+            if (transport is TransportHttp) {
+                transport.httpConnectionFactory =
+                    ScopedGitHttpConnectionFactory(
+                        GitCredentialScope.fromRemote(remote),
+                        transport.httpConnectionFactory,
+                    )
+            }
+        }
 
     private fun monitor(cancellation: GitCancellation): ProgressMonitor {
         val deadline = System.nanoTime() + limits.timeoutSeconds.toLong() * 1_000_000_000
