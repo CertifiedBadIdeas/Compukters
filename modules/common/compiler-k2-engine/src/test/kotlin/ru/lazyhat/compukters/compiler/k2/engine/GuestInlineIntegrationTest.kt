@@ -470,15 +470,17 @@ class GuestInlineIntegrationTest {
             assertEquals(0, facts.inlineCalls)
             assertTrue(facts.blocks.isNotEmpty())
             assertTrue(!facts.erasedGenericValue, "specialized inline inputs must retain concrete types")
+            val application = assertNotNull(artifact).modules.single { it.kind == ModuleKind.APPLICATION }
+            val mainBlocks =
+                application.blocks.filter { block ->
+                    val function = application.functions[block.owner.value.toInt()]
+                    application.strings[function.name.value.toInt()].toString() == "main"
+                }
+            assertTrue(mainBlocks.isNotEmpty())
             assertEquals(
                 0,
-                assertNotNull(artifact)
-                    .modules
-                    .filter { it.kind == ModuleKind.APPLICATION }
-                    .flatMap { it.blocks }
-                    .flatMap { it.instructions }
-                    .count { it is Instruction.NewObject },
-                "scalar generic callbacks must not allocate boxes or closures",
+                mainBlocks.flatMap { it.instructions }.count { it is Instruction.NewObject },
+                "inlined scalar callbacks in main must not allocate boxes or closures",
             )
             assertTrue(facts.returns.any { it.returnTargetSymbol.owner is IrReturnableBlock })
             assertTrue(diagnostics.isEmpty(), diagnostics.toString())

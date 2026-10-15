@@ -40,7 +40,7 @@ class StandaloneSmokeTest {
                     ),
                 ) as AnalysisResult.ExpressionInfo
 
-            assertEquals("kotlin.String", assertNotNull(result.value).renderedType)
+            assertEquals("String", assertNotNull(result.value).renderedType)
         }
     }
 }

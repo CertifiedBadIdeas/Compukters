@@ -165,6 +165,10 @@ class NativePlaygroundExecutor(
                                     return PlaygroundExecution.PlatformFailure("terminal input returned a Char")
                                 }
 
+                                is HostResponse.ByteArraySuccess -> {
+                                    return PlaygroundExecution.PlatformFailure("terminal input returned a ByteArray")
+                                }
+
                                 is HostResponse.RecordSuccess -> {
                                     return PlaygroundExecution.PlatformFailure("terminal input returned a record")
                                 }
@@ -252,6 +256,7 @@ class NativePlaygroundExecutor(
             is HostResponse.LongSuccess -> PlaygroundExecution.PlatformFailure("terminal output returned a Long")
             is HostResponse.DoubleSuccess -> PlaygroundExecution.PlatformFailure("terminal output returned a Double")
             is HostResponse.CharSuccess -> PlaygroundExecution.PlatformFailure("terminal output returned a Char")
+            is HostResponse.ByteArraySuccess -> PlaygroundExecution.PlatformFailure("terminal output returned a ByteArray")
             is HostResponse.RecordSuccess -> PlaygroundExecution.PlatformFailure("terminal output returned a record")
             is HostResponse.BoolSuccess -> PlaygroundExecution.PlatformFailure("terminal output returned a Boolean")
             is HostResponse.StringSuccess -> PlaygroundExecution.PlatformFailure("terminal output returned an input line")
