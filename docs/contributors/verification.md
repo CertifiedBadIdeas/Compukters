@@ -151,6 +151,9 @@ a multi-stage plan, or a change spanning multiple modules or repositories does n
 `verifyLocalFull` on the exact release candidate before declaring release preparation complete; fix failures and
 repeat the affected checks before re-running the release gate.
 
+The long rocket-landing conformance simulation uses Rust dev-profile optimization level 2. It retains
+debug assertions and overflow checks; only host execution is optimized, with the same Guest artifact and assertions.
+
 Use the [in-world VM benchmark]({{ '/VM-BENCHMARK/' | relative_url }}) for repeatable manual
 profiles of aggregate runnable-computer cost. Its results are environment-specific performance evidence, not a
 replacement for deterministic runtime and conformance checks.

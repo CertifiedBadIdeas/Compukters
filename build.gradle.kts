@@ -265,6 +265,7 @@ fun registerKotlinVmConformance(
     artifactEnvironmentVariable: String,
     conformanceScenario: String,
     additionalArtifacts: Map<String, Provider<RegularFile>> = emptyMap(),
+    optimizeHost: Boolean = false,
 ) {
     val harness = compilerArtifactVmConformanceHarness
     val conformanceTask =
@@ -303,6 +304,10 @@ fun registerKotlinVmConformance(
                 "--",
                 conformanceScenario,
             )
+            if (optimizeHost) {
+                // Keep dev-profile assertions and overflow checks for the long flight simulation.
+                environment("CARGO_PROFILE_DEV_OPT_LEVEL", "2")
+            }
             environment("CARGO_TARGET_DIR", rootProject.file(cargoTargetDirectory).absolutePath)
             environment(artifactEnvironmentVariable, artifact.get().asFile.absolutePath)
             additionalArtifacts.forEach { (name, path) -> environment(name, path.get().asFile.absolutePath) }
@@ -380,6 +385,7 @@ registerKotlinVmConformance(
     cargoTargetDirectory = ".toolchain/build/cargo/compiler-k2-math-conformance",
     artifactEnvironmentVariable = "COMPUKTER_KOTLIN_ROCKET_LANDING_ARTIFACT",
     conformanceScenario = "rocket-landing",
+    optimizeHost = true,
 )
 
 registerKotlinVmConformance(
