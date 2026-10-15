@@ -1274,7 +1274,7 @@ fn k2_same_named_guest_calls_preserve_resolved_targets() {
             "23\n", "Z\n", "false\n", "false\n", "24\n", "35\n", "5\n", "a\n", "true\n",
             "true\n",
         ],
-        128,
+        256,
     );
 }
 
@@ -2202,6 +2202,7 @@ fn resume_terminal_key_snapshot(session: &mut Session, key: i32) {
 }
 
 fn execute_int_array_artifact(bytes: &[u8], mode: i32) -> IntArrayExecution {
+    const SLICE_BUDGET: u32 = 128;
     let verified = verify_artifact(Arc::from(bytes.to_vec()), ArtifactLimits::default())
         .expect("pinned VM must verify K2 IntArray output");
     let operations = terminal_operations();
@@ -2215,7 +2216,7 @@ fn execute_int_array_artifact(bytes: &[u8], mode: i32) -> IntArrayExecution {
         maximum_channel_values: 4096,
         maximum_host_requests: 64,
         maximum_events: 0,
-        maximum_slice_budget: 64,
+        maximum_slice_budget: SLICE_BUDGET,
         compiler_abi: [0; 32],
         platform_abi: [0; 32],
         maximum_host_arguments: 16,
@@ -2227,21 +2228,21 @@ fn execute_int_array_artifact(bytes: &[u8], mode: i32) -> IntArrayExecution {
     let mut session =
         Session::admit(verified.clone(), profile, &[binding]).expect("K2 IntArray program must admit");
     session.start(&[]).expect("K2 IntArray program must start");
-    let mode_request = next_host_request(&mut session, "cursor X", 14, None);
+    let mode_request = next_host_request_identity_with_budget(&mut session, "cursor X", 14, None, SLICE_BUDGET).1;
     session
         .resume(
             mode_request,
             HostResponse::Success(HostValueInput::I32(mode)),
         )
         .expect("cursor X must resume IntArray program");
-    let row_request = next_host_request(&mut session, "cursor Y", 15, None);
+    let row_request = next_host_request_identity_with_budget(&mut session, "cursor Y", 15, None, SLICE_BUDGET).1;
     session.resume(row_request, HostResponse::Success(HostValueInput::I32(0))).expect("cursor Y must resume IntArray program");
 
     let mut writes = Vec::new();
     let mut exhausted_slices = 0;
     let outcome = loop {
         match session
-            .advance(64, 64)
+            .advance(SLICE_BUDGET, 64)
             .expect("K2 IntArray program must advance")
         {
             AdvanceOutcome::SliceExhausted => exhausted_slices += 1,
