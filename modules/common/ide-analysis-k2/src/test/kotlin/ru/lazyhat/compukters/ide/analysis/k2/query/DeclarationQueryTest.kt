@@ -212,8 +212,8 @@ class DeclarationQueryTest {
                         ),
                         VirtualSourcePath.kotlin(sourcePath),
                         EditorRange(
-                            guestSource.indexOf("write(payload"),
-                            guestSource.indexOf("write(payload") + "write".length,
+                            guestSource.indexOf("write(text"),
+                            guestSource.indexOf("write(text") + "write".length,
                         ),
                     ),
                 ),

@@ -258,7 +258,7 @@ class SnapshotAdmissionTest {
                             ),
                         ).get(90, TimeUnit.SECONDS),
                 ).result as AnalysisResult.ExpressionInfo
-            assertEquals("kotlin.String", expression.value?.renderedType)
+            assertEquals("String", expression.value?.renderedType)
         }
     }
 

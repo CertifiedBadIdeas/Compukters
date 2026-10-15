@@ -10767,9 +10767,9 @@ class MinimalScriptLoweringTest {
                 }
             assertTrue("compukter.process.ProcessResult" in imports.getValue(SymbolKind.TYPE))
             assertTrue("compukter.process.ProcessResult.Exited" in imports.getValue(SymbolKind.TYPE))
-            assertTrue("compukter.process.ProcessResult.Exited.code" in imports.getValue(SymbolKind.FIELD))
-            assertTrue("compukter.process.ProcessResult.Failed.reason" in imports.getValue(SymbolKind.FIELD))
-            assertTrue("compukter.process.ProcessResult.Failed.diagnostic" in imports.getValue(SymbolKind.FIELD))
+            assertTrue("compukter.process.ProcessResult.Exited.<boxed-value>" in imports.getValue(SymbolKind.FIELD))
+            assertTrue("compukter.process.ProcessResult.Failed.<boxed-value>" in imports.getValue(SymbolKind.FIELD))
+            assertTrue("compukter.process.ProcessResult.Failed.<boxed-value-1>" in imports.getValue(SymbolKind.FIELD))
             assertTrue("compukter.process.ProcessFailureReason.NOT_FOUND" in imports.getValue(SymbolKind.FIELD))
 
             listOf(
