@@ -13,6 +13,9 @@ headings so this page has one stable URL that can be shared outside the reposito
 
 ## 0.6.0 — In development
 
+- Addon development builds support Gradle task discovery during IntelliJ composite-build synchronization
+  with Loom 1.17 and Gradle 9.8.
+
 - Cosmonautics exposes read-only planet shape, surface border, dated rotation model and Deep Space region geometry,
   clocks and construction sharing to Guest Kotlin; `space-telemetry` reports these navigation observations.
 

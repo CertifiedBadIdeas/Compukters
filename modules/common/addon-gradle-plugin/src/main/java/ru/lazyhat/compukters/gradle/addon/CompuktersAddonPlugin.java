@@ -35,6 +35,17 @@ public final class CompuktersAddonPlugin implements Plugin<Project> {
 
     @Override
     public void apply(Project project) {
+        project.getPluginManager().withPlugin("dev.architectury.loom", ignored -> {
+            // Loom 1.17 resolves copied mod configurations in GenerateSourcesTask's constructor.
+            // Realize these tasks while this project's configuration lock is still held, rather
+            // than letting composite-build task discovery instantiate them without that lock.
+            // The second callback runs after Loom's own afterEvaluate task registration.
+            project.afterEvaluate(evaluated -> project.afterEvaluate(configured -> {
+                project.getTasks().getNames().stream()
+                        .filter(name -> name.startsWith("genSourcesWith"))
+                        .forEach(name -> project.getTasks().named(name).get());
+            }));
+        });
         String implementationVersion = getClass().getPackage().getImplementationVersion();
         String sdkVersion = implementationVersion != null ? implementationVersion : project.getRootProject().getVersion().toString();
         CompuktersAddonExtension extension =
