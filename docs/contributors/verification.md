@@ -32,8 +32,10 @@ and file collections. The media inventory retains a dynamic file tree, so newly 
 cache replay. Generated guest bundles, host contracts and built-in programs remain declared task outputs.
 
 Cache compatibility does not imply a passing build: ordinary compilation, runtime and GameTest failures still fail
-the command. [Issue #744](https://github.com/CertifiedBadIdeas/Compukters/issues/744) tracks the global rollout and
-remaining functional verification blockers. Strict serialization also covers workspace cleanup, dependency staging
+the command. [Issue #744](https://github.com/CertifiedBadIdeas/Compukters/issues/744) covers the global rollout and
+functional verification. Confirm that both GameTest servers actually report their required tests as passed;
+the 1.21.1 server can exit successfully when a namespace filter selects no tests.
+Strict serialization also covers workspace cleanup, dependency staging
 and both targets' development client/server graphs. Development settings preserve manual options and existing
 client server lists on replay. Tagged release graphs still require their separate gate and a compatible published
 Runtime descriptor.
@@ -51,6 +53,10 @@ Initial creation of `versions.properties` or generated Minecraft metadata can re
 reuse stabilizes. Build-version selection tracks Git tags on `HEAD`, so adding or moving a release tag invalidates
 the cached configuration when its output changes. Do not suppress Configuration Cache errors for an unverified
 graph, or treat successful cache storage as successful functional verification.
+
+For CPU-heavy Rust conformance scenarios, `CARGO_PROFILE_TEST_OPT_LEVEL=1` optimizes test binaries while
+retaining test-profile debug assertions and overflow checks. Set it before the first Configuration Cache
+storage and use the same environment for replay; report the selected profile with verification evidence.
 
 ## Agent build limits
 
