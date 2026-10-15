@@ -25,7 +25,7 @@ jobs:
       - name: Checkout release sources
         uses: actions/checkout@v4
         with:
-          ref: v0.5.1
+          ref: v0.6.0
           path: build/docs-release-checkout
       - name: Checkout pinned addon API sources
         run: |
@@ -61,12 +61,12 @@ jobs:
       - name: Prepare versioned Jekyll sources
         run: |
           python3 docs/_tools/build_versioned_docs.py prepare --checkout . --version nightly --output build/docs-sources/nightly
-          python3 docs/_tools/build_versioned_docs.py prepare --checkout build/docs-release-checkout --version 0.5.1 --output build/docs-sources/0.5.1
+          python3 docs/_tools/build_versioned_docs.py prepare --checkout build/docs-release-checkout --version 0.6.0 --output build/docs-sources/0.6.0
       - name: Build release documentation
         uses: actions/jekyll-build-pages@v1
         with:
-          source: ./build/docs-sources/0.5.1
-          destination: ./build/docs-sites/0.5.1
+          source: ./build/docs-sources/0.6.0
+          destination: ./build/docs-sites/0.6.0
           build_revision: ${{ steps.revisions.outputs.release }}
       - name: Build nightly documentation
         uses: actions/jekyll-build-pages@v1
@@ -77,7 +77,7 @@ jobs:
       - name: Compose documentation versions
         run: >-
           python3 docs/_tools/build_versioned_docs.py compose
-          --release-source build/docs-sources/0.5.1 --release-site build/docs-sites/0.5.1
+          --release-source build/docs-sources/0.6.0 --release-site build/docs-sites/0.6.0
           --nightly-source build/docs-sources/nightly --nightly-site build/docs-sites/nightly
           --output _site
       - name: Upload Pages artifact
