@@ -129,11 +129,11 @@ class TransferTest(unittest.TestCase):
         manifest, client, journal = self.prepared()
         curseforge.publish(self.output, client, journal)
         expected = {
-            'create': [('compukters', '1528063'), ('create', '328085')],
-            'createaddition': [('compukters', '1528063'), ('create', '328085'), ('createaddition', '439890')],
-            'sable': [('compukters', '1528063'), ('sable', '1312371')],
-            'propulsion': [('compukters', '1528063'), ('create', '328085'),
-                           ('create-propulsion-simulated', '1522736')],
+            'create': [('compukters', 1528063), ('create', 328085)],
+            'createaddition': [('compukters', 1528063), ('create', 328085), ('createaddition', 439890)],
+            'sable': [('compukters', 1528063), ('sable', 1312371)],
+            'propulsion': [('compukters', 1528063), ('create', 328085),
+                           ('create-propulsion-simulated', 1522736)],
         }
         for (metadata, _, _), artifact in zip(client.files[2:], manifest['addons']):
             relations = metadata['relations']['projects']
@@ -163,6 +163,34 @@ class TransferTest(unittest.TestCase):
         curseforge.reconcile(self.output, journal, manifest['addons'][-1]['filename'], file_id=999)
         curseforge.publish(self.output, client, journal)
         self.assertEqual(client.projects, [1528063, 1528063, 1746054, 1746058, 1746063])
+
+    def test_string_relation_ids_require_confirmed_absence_before_numeric_retry(self):
+        manifest, client, journal = self.prepared()
+        _, plans = curseforge.planned(self.output, journal)
+        artifact, metadata, payload, _, _ = plans[2]
+        old_metadata = copy.deepcopy(metadata)
+        for relation in old_metadata['relations']['projects']:
+            relation['projectID'] = str(relation['projectID'])
+        old_payload = dict(payload, metadata_sha256=curseforge.json_hash(old_metadata))
+        entry = journal.begin(manifest, old_payload)
+        # Neither an unresolved attempt nor an accepted one permits metadata changes.
+        for status in [None, ('success', curseforge.ACCEPTED + '123')]:
+            if status:
+                journal.record(entry, *status)
+            with self.assertRaisesRegex(ValueError, 'conflicting'):
+                curseforge.publish(self.output, client, journal)
+            self.assertEqual(client.files, [])
+        journal.record(entry, 'failure', curseforge.ABSENT)
+        curseforge.publish(self.output, client, journal)
+        relations = client.files[2][0]['relations']['projects']
+        self.assertTrue(all(type(r['projectID']) is int for r in relations))
+        self.assertEqual(len(client.files), 6)
+        curseforge.publish(self.output, client, journal)
+        self.assertEqual(len(client.files), 6)
+        # Confirmed absence never permits changing the JAR identity.
+        entry['payload']['sha256'] = '0' * 64
+        with self.assertRaisesRegex(ValueError, 'conflicting'):
+            curseforge.planned(self.output, journal)
 
     def test_ambiguous_addon_upload_resumes_remaining_addons_only(self):
         manifest, client, journal = self.prepared()

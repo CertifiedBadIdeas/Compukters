@@ -73,6 +73,7 @@ markdown notes, release type `release` and exact `gameVersionNames` for its Mine
 target plus NeoForge, Client and Server. The API names are preflighted before any intent.
 Addon destinations are Create `1746054`, CreateAddition `1746058`, Sable `1746063` and Propulsion `1746068`.
 Each addon requires Compukters and its upstream mod through CurseForge `requiredDependency` relations;
+relation `projectID` values are JSON integers, as required by the upload API validator.
 CreateAddition and Propulsion also require Create. Propulsion targets Create Propulsion: Simulated (`1522736`),
 not the separate 1.20.1 original. No SDK or development JAR is submitted to CurseForge.
 Credentials stay in headers, redirects are refused, responses are bounded and HTTP/
@@ -87,6 +88,11 @@ project, candidate revision, inventory, artifact bytes and metadata. All known
 conflicts and ambiguous outcomes are checked before any target is uploaded. A
 successful upload is skipped on retry, including files awaiting moderation; acceptance
 is not a visibility or approval claim. The journal is separate from immutable release assets.
+
+An older addon intent using string relation IDs may be retried with numeric IDs only
+after its outcome is recorded as confirmed absent. Only that exact metadata correction
+is admitted; all artifact and inventory identities must still match. Pending and accepted
+intents retain strict metadata matching.
 
 For an unresolved intent, inspect the CurseForge author portal first, including
 pending files. With no other publisher running, `curseforge.py reconcile --directory
