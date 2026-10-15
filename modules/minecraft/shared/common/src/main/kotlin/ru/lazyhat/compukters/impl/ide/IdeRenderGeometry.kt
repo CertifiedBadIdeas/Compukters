@@ -232,12 +232,12 @@ class IdeRenderGeometry private constructor(
                 }
             val diagnostics =
                 if (candidate.diagnostics) {
-                    IdeRect(editorArea.left, editorArea.bottom - diagnosticsHeight, editorArea.right, editorArea.bottom)
+                    IdeRect(content.left, editorArea.bottom - diagnosticsHeight, content.right, editorArea.bottom)
                 } else {
                     null
                 }
             val diagnosticsSplitter =
-                diagnostics?.let { IdeRect(editorArea.left, it.top - SPLITTER_SIZE, editorArea.right, it.top) }
+                diagnostics?.let { IdeRect(content.left, it.top - SPLITTER_SIZE, content.right, it.top) }
             val editorBottom = diagnosticsSplitter?.top ?: editorArea.bottom
             val fileTabs =
                 if (tabsVisible) {
@@ -271,8 +271,8 @@ class IdeRenderGeometry private constructor(
                 toolbar,
                 content,
                 status,
-                tree,
-                treeSplitter,
+                tree?.copy(bottom = editorBottom),
+                treeSplitter?.copy(bottom = editorBottom),
                 editor,
                 diagnosticsSplitter,
                 diagnostics,

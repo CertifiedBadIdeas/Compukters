@@ -69,7 +69,7 @@ class IdeInputAdapterTest {
         val count = fixture.commands.size
         assertFalse(fixture.adapter.keyPressed(key(IdeKeyCode.UP, IdeModifier.ALT), IdeFocusState(IdeFocusArea.Terminal)))
         fixture.adapter.keyPressed(key(IdeKeyCode.UP, IdeModifier.ALT), IdeFocusState.Editor.copy(findVisible = true, findFocused = true))
-        fixture.adapter.keyPressed(key(IdeKeyCode.UP, IdeModifier.ALT), IdeFocusState.Editor.copy(gitVisible = true))
+        fixture.adapter.keyPressed(key(IdeKeyCode.UP, IdeModifier.ALT), IdeFocusState(IdeFocusArea.Git).copy(gitVisible = true))
         assertFalse(fixture.adapter.keyPressed(key(IdeKeyCode.UP, IdeModifier.ALT or IdeModifier.SHIFT), IdeFocusState.Editor))
         assertTrue(fixture.commands.drop(count).none { it is IdeCommand.Edit })
     }
@@ -87,7 +87,7 @@ class IdeInputAdapterTest {
             key(IdeKeyCode.D, IdeModifier.CONTROL),
             IdeFocusState.Editor.copy(findVisible = true, findFocused = true),
         )
-        fixture.adapter.keyPressed(key(IdeKeyCode.D, IdeModifier.CONTROL), IdeFocusState.Editor.copy(gitVisible = true))
+        fixture.adapter.keyPressed(key(IdeKeyCode.D, IdeModifier.CONTROL), IdeFocusState(IdeFocusArea.Git).copy(gitVisible = true))
         assertEquals(listOf<IdeCommand>(IdeCommand.Edit(IdeEditorInput.Duplicate)), fixture.commands)
     }
 
@@ -277,6 +277,34 @@ class IdeInputAdapterTest {
     }
 
     @Test
+    fun `displayed diff consumes source edits and scrolls its own preview`() {
+        val fixture = fixture()
+        val focus = IdeFocusState.Editor.copy(gitVisible = true, gitDiffVisible = true, gitPreviewScrollMaximum = 10)
+        fixture.adapter.charTyped(IdeCharacterInput("must not edit source"), focus)
+        fixture.adapter.keyPressed(key(IdeKeyCode.D, IdeModifier.CONTROL), focus)
+        fixture.adapter.keyPressed(key(IdeKeyCode.DOWN), focus)
+        assertEquals(
+            listOf<IdeCommand>(IdeCommand.ScrollGit(1, 10, ru.lazyhat.compukters.ide.client.state.IdeGitScrollArea.Preview)),
+            fixture.commands,
+        )
+    }
+
+    @Test
+    fun `source input stays editable alongside Commit while Git focus edits only the draft`() {
+        val fixture = fixture()
+        val draft =
+            ru.lazyhat.compukters.ide.client.git
+                .IdeGitDraftView(focused = ru.lazyhat.compukters.ide.client.git.IdeGitField.Message)
+        val source = IdeFocusState.Editor.copy(gitVisible = true, gitDraft = draft)
+        fixture.adapter.charTyped(IdeCharacterInput("source"), source)
+        fixture.adapter.charTyped(IdeCharacterInput("draft"), source.copy(area = IdeFocusArea.Git))
+        assertEquals(
+            listOf(IdeCommand.Edit(IdeEditorInput.Type("source")), IdeCommand.EditGitDraft(IdeEditorInput.Type("draft"))),
+            fixture.commands,
+        )
+    }
+
+    @Test
     fun `Git draft routes typing editing clipboard cursor clicks and commit shortcuts separately from source`() {
         val fixture = fixture()
         val message = ru.lazyhat.compukters.ide.client.git.IdeGitField.Message
@@ -287,7 +315,7 @@ class IdeInputAdapterTest {
                         .IdeGitFieldView("a😀b", 4),
                 focused = message,
             )
-        val focus = IdeFocusState.Editor.copy(gitVisible = true, gitDraft = draft)
+        val focus = IdeFocusState(IdeFocusArea.Git).copy(gitVisible = true, gitDraft = draft)
         fixture.adapter.charTyped(IdeCharacterInput("message"), focus)
         fixture.adapter.keyPressed(key(IdeKeyCode.LEFT), focus)
         fixture.adapter.keyPressed(key(IdeKeyCode.A, IdeModifier.CONTROL), focus)
@@ -332,7 +360,7 @@ class IdeInputAdapterTest {
     @Test
     fun `Git view consumes typing and routes scroll keys and operation buttons`() {
         val fixture = fixture()
-        val focus = IdeFocusState.Editor.copy(gitVisible = true)
+        val focus = IdeFocusState(IdeFocusArea.Git).copy(gitVisible = true)
         assertTrue(fixture.adapter.charTyped(IdeCharacterInput("x"), focus))
         fixture.adapter.keyPressed(key(IdeKeyCode.DOWN), focus)
         assertEquals(listOf<IdeCommand>(IdeCommand.ScrollGit(1)), fixture.commands)

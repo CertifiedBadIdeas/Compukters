@@ -13,10 +13,13 @@
 package ru.lazyhat.compukters.impl.ide
 
 import ru.lazyhat.compukters.ide.client.state.IdeCommand
+import ru.lazyhat.compukters.ide.git.GitCancellation
+import ru.lazyhat.compukters.ide.git.GitCredentialCheck
 import ru.lazyhat.compukters.ide.git.GitCredentials
 import ru.lazyhat.compukters.ide.git.GitOperation
 import ru.lazyhat.compukters.ide.git.GitRemote
 import ru.lazyhat.compukters.ide.project.fs.ProjectPath
+import java.util.concurrent.CompletableFuture
 
 sealed interface IdePromptKind {
     data object CreateProject : IdePromptKind
@@ -73,6 +76,8 @@ data class IdePromptState(
     val kind: IdePromptKind,
     val value: String,
     val error: String? = null,
+    val checkingToken: Boolean = false,
+    val tokenCheck: GitCredentialCheck? = null,
     val field: IdeTextFieldView = IdeTextFieldView(value, masked = kind is IdePromptKind.GitToken),
 ) {
     val title: String get() =
@@ -123,6 +128,46 @@ class IdePromptController {
         private set
 
     private var field: IdeTextField? = null
+    private var tokenFuture: CompletableFuture<GitCredentialCheck>? = null
+    private var tokenCancellation: GitCancellation? = null
+
+    fun checkToken(check: (GitCredentials, GitCancellation) -> CompletableFuture<GitCredentialCheck>) {
+        val current = state ?: return
+        val kind = current.kind as? IdePromptKind.GitToken ?: return
+        if (current.checkingToken) return
+        val token = current.value.trim().toCharArray()
+        if (token.isEmpty()) {
+            error("Enter a token")
+            return
+        }
+        val credentials = GitCredentials(kind.username, token)
+        token.fill('\u0000')
+        val cancellation = GitCancellation()
+        tokenCancellation = cancellation
+        state = current.copy(checkingToken = true, tokenCheck = null, error = null)
+        tokenFuture =
+            try {
+                check(credentials, cancellation).whenComplete { _, _ -> credentials.close() }
+            } catch (_: Exception) {
+                credentials.close()
+                CompletableFuture.completedFuture(GitCredentialCheck(false, "Token check failed · retry"))
+            }
+    }
+
+    fun pollTokenCheck() {
+        val pending = tokenFuture ?: return
+        if (!pending.isDone) return
+        tokenFuture = null
+        tokenCancellation = null
+        val result = runCatching { pending.join() }.getOrElse { GitCredentialCheck(false, "Token check failed · retry") }
+        state = state?.copy(checkingToken = false, tokenCheck = result)
+    }
+
+    private fun cancelTokenCheck() {
+        tokenCancellation?.cancel()
+        tokenCancellation = null
+        tokenFuture = null
+    }
 
     private var authorName = ""
     private var authorEmail = ""
@@ -131,6 +176,7 @@ class IdePromptController {
         kind: IdePromptKind,
         initial: String = "",
     ) {
+        cancelTokenCheck()
         field?.close()
         val editor = IdeTextField(initial, maximum(kind), kind is IdePromptKind.GitToken)
         field = editor
@@ -141,7 +187,16 @@ class IdePromptController {
     private fun synchronize(clearError: Boolean = false) {
         val current = state ?: return
         val view = field?.view() ?: return
-        state = current.copy(value = view.text, field = view, error = if (clearError) null else current.error)
+        val changed = current.value != view.text
+        if (changed) cancelTokenCheck()
+        state =
+            current.copy(
+                value = view.text,
+                field = view,
+                error = if (clearError) null else current.error,
+                checkingToken = current.checkingToken && !changed,
+                tokenCheck = current.tokenCheck.takeUnless { changed },
+            )
     }
 
     fun type(text: String): Boolean {
@@ -206,6 +261,7 @@ class IdePromptController {
 
     fun cancel(): Boolean {
         if (state == null) return false
+        cancelTokenCheck()
         field?.close()
         field = null
         state = null
@@ -218,7 +274,7 @@ class IdePromptController {
 
     fun confirm(): IdeCommand? {
         val current = state ?: return null
-        val value = if (current.kind is IdePromptKind.GitToken) current.value else current.value.trim()
+        val value = current.value.trim()
         if (value.isEmpty()) {
             state = current.copy(error = "Value must not be blank")
             return null

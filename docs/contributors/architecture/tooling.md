@@ -277,9 +277,16 @@ Draft editing reuses `EditorDocument`, and controller ownership/save barriers/ge
 
 The left tool stripe uses shared vector icons for Project, Commit, Terminal and Problems, with Git Log anchored at
 its bottom. `IdeBottomPanelView` owns the active Problems/GitLog tab (or a hidden window) and bounded history scroll.
-History is cached separately from the Commit result/preview and resets per project. Opening Git Log returns to the
-editor without clearing its commit draft; history replies cannot replace the saved-working-file preview. The bottom
-window reuses the diagnostics splitter/height and shows Problems/Find Usages or commit history in its content area.
+History is cached separately from the Commit result/preview and resets per project. Opening Git Log preserves both
+the editor and Commit sidebar; history replies cannot replace the saved-working-file preview. The bottom window
+reuses the diagnostics splitter/height across the full content width beneath the left tool window and editor.
+Commit replaces Project in the left tool window; selected diffs use the editor area and Source returns to editing.
+Explicit Git focus separates draft and source input, while a displayed diff consumes editing input. Git settings use
+shared modal surfaces and contain origin, author and session credential actions. The masked token prompt checks
+GitHub token validity asynchronously on the workspace executor through `/user`, never repository permissions; edits,
+cancellation and closure invalidate pending results. Redirects are disabled and requests have bounded timeouts.
+Read-only inspection refreshes Commit status and, while Git Log is open, bounded local history without clearing
+drafts, selections for still-changed paths, diff or history scroll. It never fetches remote refs.
 Both target screens derive bottom visibility from controller state; the splitter owns height only. Geometry fallback
 may collapse this window when there is insufficient room for the source editor.
 

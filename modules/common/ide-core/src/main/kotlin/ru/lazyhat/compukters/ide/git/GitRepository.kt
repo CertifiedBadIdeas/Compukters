@@ -26,6 +26,12 @@ import java.util.concurrent.atomic.AtomicBoolean
 
 /** Git operates on client-local roots; this contract is independent of its implementation. */
 interface GitBackend {
+    fun validateCredentials(
+        remote: String?,
+        credentials: GitCredentials,
+        cancellation: GitCancellation,
+    ): GitCredentialCheck = GitCredentialCheck(false, "Token validation is unavailable for this host", canSave = true)
+
     fun clone(
         remote: String,
         destination: Path,
@@ -40,6 +46,12 @@ interface GitBackend {
         cancellation: GitCancellation,
     ): GitResult
 }
+
+data class GitCredentialCheck(
+    val valid: Boolean,
+    val message: String,
+    val canSave: Boolean = valid,
+)
 
 class GitCredentials(
     val username: String,
@@ -163,6 +175,7 @@ data class GitStatus(
     val branches: List<String> = emptyList(),
     val changes: List<GitChange> = emptyList(),
     val state: String? = null,
+    val remote: String? = null,
 )
 
 enum class GitLineChangeKind { Added, Modified, Deleted }

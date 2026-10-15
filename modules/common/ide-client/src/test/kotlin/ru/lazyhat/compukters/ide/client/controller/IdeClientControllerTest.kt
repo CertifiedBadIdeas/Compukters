@@ -286,6 +286,59 @@ class IdeClientControllerTest {
     }
 
     @Test
+    fun `background inspection refreshes local history and commit changes without replacing the draft or diff`() {
+        val fixture = ControllerFixture(preferences = preferences("demo", "src/main.kt"))
+        fixture.startAndTick()
+        val path = ProjectPath.file("src/main.kt")
+        val initial =
+            GitStatus(
+                true,
+                branch = "main",
+                changes =
+                    listOf(
+                        ru.lazyhat.compukters.ide.git
+                            .GitChange(path, null, "modified"),
+                    ),
+            )
+        fixture.controller.dispatch(IdeCommand.GitVisible(true))
+        fixture.workspace.completeGit(GitResult(initial, diff = "keep preview"))
+        fixture.controller.tick()
+        fixture.controller.dispatch(IdeCommand.GitCheck(path))
+        fixture.controller.dispatch(IdeCommand.GitFocusField(ru.lazyhat.compukters.ide.client.git.IdeGitField.Message))
+        fixture.controller.dispatch(IdeCommand.EditGitDraft(IdeEditorInput.Type("Keep draft")))
+        fixture.controller.dispatch(IdeCommand.BottomTab(ru.lazyhat.compukters.ide.client.state.IdeBottomTab.GitLog))
+        fixture.workspace.completeGit(GitResult(initial))
+        fixture.controller.tick()
+        fixture.workspace.inspectEnabled = true
+        fixture.clock.now = 1000
+        fixture.controller.tick()
+        val commits =
+            listOf(
+                ru.lazyhat.compukters.ide.git
+                    .GitCommit("abcdef", "New local commit", "Player", 1),
+            )
+        fixture.workspace.inspections
+            .last()
+            .complete(GitResult(initial.copy(changes = emptyList()), history = commits))
+        fixture.controller.tick()
+        val view = fixture.workspaceView().git
+        assertTrue(view.visible)
+        assertEquals(commits, view.history)
+        assertEquals(emptyList(), view.result!!.status.changes)
+        assertEquals(emptySet(), view.checkedPaths)
+        assertEquals("Keep draft", view.draft.message.text)
+        assertEquals("keep preview", view.result.diff)
+        assertTrue(
+            fixture.controller
+                .viewState()
+                .busy
+                .isEmpty(),
+        )
+        assertTrue(fixture.workspace.gitRequests.none { it.second == GitOperation.Fetch || it.second == GitOperation.Push })
+        fixture.controller.close()
+    }
+
+    @Test
     fun `bottom history preserves commit preview and draft and resets on project change`() {
         val fixture = ControllerFixture(preferences = preferences("demo", "src/main.kt"), additionalProject = true)
         fixture.startAndTick()
@@ -1999,6 +2052,7 @@ internal class ControlledWorkspace(
         project: ProjectHandle,
         source: GitOperation.SourceChanges?,
         cancellation: ru.lazyhat.compukters.ide.git.GitCancellation,
+        includeHistory: Boolean,
     ): CompletableFuture<GitResult?> =
         if (inspectEnabled) CompletableFuture<GitResult?>().also(inspections::add) else CompletableFuture.completedFuture(null)
 

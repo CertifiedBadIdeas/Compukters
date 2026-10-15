@@ -52,6 +52,12 @@ class JGitBackend internal constructor(
 ) : GitBackend {
     constructor(limits: GitLimits = GitLimits()) : this(limits, GitRemote::requireHttps)
 
+    override fun validateCredentials(
+        remote: String?,
+        credentials: GitCredentials,
+        cancellation: GitCancellation,
+    ): GitCredentialCheck = GitHubCredentialValidator().validate(remote, credentials, cancellation)
+
     override fun clone(
         remote: String,
         destination: Path,
@@ -425,6 +431,7 @@ class JGitBackend internal constructor(
             Collections.unmodifiableList(branches),
             Collections.unmodifiableList(changes),
             git.repository.repositoryState.name,
+            remote = git.repository.config.getString("remote", "origin", "url"),
         )
     }
 

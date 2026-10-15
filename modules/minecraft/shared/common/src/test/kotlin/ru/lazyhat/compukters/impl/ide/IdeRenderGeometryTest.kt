@@ -26,6 +26,17 @@ import kotlin.test.assertTrue
 
 class IdeRenderGeometryTest {
     @Test
+    fun `bottom window spans tree and editor and keeps both above the shared splitter`() {
+        val bounds = geometry()
+        assertEquals(bounds.content.left, bounds.diagnostics!!.left)
+        assertEquals(bounds.content.right, bounds.diagnostics.right)
+        assertEquals(bounds.tree!!.bottom, bounds.editor.bottom)
+        assertEquals(bounds.tree.bottom, bounds.diagnosticsSplitter!!.top)
+        assertEquals(bounds.content.left, bounds.diagnosticsSplitter.left)
+        assertEquals(bounds.treeSplitter!!.bottom, bounds.editor.bottom)
+    }
+
+    @Test
     fun `tabs and find reserve independent rows while preserving editor minimum and origin`() {
         val original = geometry()
         val tabs = IdeRenderGeometry.compute(960, 540, 180, 120, true, true, IdeCodeFontProfile.DEFAULT, tabsVisible = true)
@@ -83,11 +94,11 @@ class IdeRenderGeometryTest {
         assertEquals(IdeRect(20, 0, 960, 24), geometry.header)
         assertEquals(IdeRect(20, 24, 960, 46), geometry.toolbar)
         assertEquals(IdeRect(20, 522, 960, 540), geometry.status)
-        assertEquals(IdeRect(20, 46, 200, 522), geometry.tree)
-        assertEquals(IdeRect(200, 46, 205, 522), geometry.treeSplitter)
+        assertEquals(IdeRect(20, 46, 200, 397), geometry.tree)
+        assertEquals(IdeRect(200, 46, 205, 397), geometry.treeSplitter)
         assertEquals(IdeRect(205, 46, 960, 397), geometry.editor)
-        assertEquals(IdeRect(205, 397, 960, 402), geometry.diagnosticsSplitter)
-        assertEquals(IdeRect(205, 402, 960, 522), geometry.diagnostics)
+        assertEquals(IdeRect(20, 397, 960, 402), geometry.diagnosticsSplitter)
+        assertEquals(IdeRect(20, 402, 960, 522), geometry.diagnostics)
         assertEquals(124, geometry.codeColumns)
         assertEquals(28, geometry.codeRows)
         assertEquals(0, geometry.panel.left % 2, "1920 physical pixels at GUI scale 2 maps deterministically to 960 GUI pixels")
