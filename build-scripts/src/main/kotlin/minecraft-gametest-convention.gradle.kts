@@ -83,10 +83,7 @@ loom.runs.register("gameTestServer") {
     environment("gametestserver")
     forgeTemplate("gameTestServer")
     runDir("run/gameTestServer")
-    property(
-        "neoforge.enabledGameTestNamespaces",
-        if (buildContext.versionKey == "v1211") "minecraft" else "compukters",
-    )
+    property("neoforge.enabledGameTestNamespaces", "compukters")
     ideConfigGenerated(true)
     if (buildContext.versionKey == "v261") {
         vmArgs("--enable-native-access=ALL-UNNAMED", "--illegal-native-access=deny")

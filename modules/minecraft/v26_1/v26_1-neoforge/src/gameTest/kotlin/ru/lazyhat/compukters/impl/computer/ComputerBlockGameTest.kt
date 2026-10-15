@@ -40,7 +40,7 @@ object ComputerBlockGameTest {
                     Identifier.fromNamespaceAndPath(MOD_ID, name),
                     TestEnvironmentDefinition.AllOf(),
                 ),
-                Identifier.withDefaultNamespace("bastion/mobs/empty"),
+                Identifier.fromNamespaceAndPath(MOD_ID, "empty"),
                 // GameTestServer runs ticks without pacing; allow real filesystem/compiler workers to finish.
                 100_000,
                 0,
