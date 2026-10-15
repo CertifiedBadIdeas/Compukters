@@ -151,6 +151,9 @@ a multi-stage plan, or a change spanning multiple modules or repositories does n
 `verifyLocalFull` on the exact release candidate before declaring release preparation complete; fix failures and
 repeat the affected checks before re-running the release gate.
 
+The long rocket-landing conformance simulation uses Rust dev-profile optimization level 2. It retains
+debug assertions and overflow checks; only host execution is optimized, with the same Guest artifact and assertions.
+
 The strict IDE visible-latency SLO test runs as `:v1_21_1-neoforge:visibleIdeLatencyPerformanceTest`
 after `verifyLocalFunctional` completes in `verifyLocalFull`. It retains its median/p95, worker reuse,
 incremental-update and memory assertions, but does not compete with parallel compilation, archive transformation
