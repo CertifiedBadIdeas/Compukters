@@ -33,7 +33,7 @@ class GitHubCredentialValidatorTest {
                 GitHubCredentialValidator.Reply(200)
             }
         GitCredentials("player", "github_pat_example".toCharArray()).use { credentials ->
-            val result = validator.validate("https://github.com/org/repo", credentials, GitCancellation())
+            val result = validator.validate(credentials, GitCancellation())
             assertTrue(result.valid)
             assertTrue(result.canSave)
             assertEquals("Token is valid", result.message)
@@ -47,7 +47,7 @@ class GitHubCredentialValidatorTest {
             for (status in listOf(401, 403, 429, 500, 302)) {
                 val result =
                     GitHubCredentialValidator { _, _, _ -> GitHubCredentialValidator.Reply(status) }
-                        .validate(null, credentials, GitCancellation())
+                        .validate(credentials, GitCancellation())
                 assertFalse(result.valid)
                 assertFalse(result.canSave)
                 assertFalse(result.message.contains("example"))
@@ -59,10 +59,13 @@ class GitHubCredentialValidatorTest {
     fun `other hosts do not receive GitHub checks and network failures do not imply invalid tokens`() {
         val validator = GitHubCredentialValidator { _, _, _ -> throw java.io.IOException("secret server text") }
         GitCredentials("player", "example".toCharArray()).use { credentials ->
-            val unsupported = validator.validate("https://git.example.org/org/repo", credentials, GitCancellation())
+            val unsupported =
+                GitCredentials("player", "example".toCharArray(), GitCredentialScope.fromRemote("https://git.example.org")).use {
+                    validator.validate(it, GitCancellation())
+                }
             assertFalse(unsupported.valid)
             assertTrue(unsupported.canSave)
-            val offline = validator.validate(null, credentials, GitCancellation())
+            val offline = validator.validate(credentials, GitCancellation())
             assertFalse(offline.valid)
             assertFalse(offline.canSave)
             assertFalse(offline.message.contains("secret"))

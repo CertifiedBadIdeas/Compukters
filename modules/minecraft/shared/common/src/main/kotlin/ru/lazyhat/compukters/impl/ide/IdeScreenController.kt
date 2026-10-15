@@ -937,7 +937,7 @@ class IdeScreenController(
 
             IdeHitAction.GitAuthenticate -> {
                 projectSwitcherOpen = false
-                prompt.open(IdePromptKind.GitUsername)
+                prompt.open(IdePromptKind.GitServer, "https://${controller.gitCredentialScope().authority}")
             }
 
             IdeHitAction.CreateText -> {

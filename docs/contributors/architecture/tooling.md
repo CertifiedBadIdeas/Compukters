@@ -249,7 +249,7 @@ parent folders, active-file title and Commit rows; gutter markers do not replace
 
 Remote operations admit HTTPS URLs without embedded credentials, query or fragment. Tokens live in masked client
 session input and an explicitly closeable credential object; no credential data enters preferences, project files,
-worker snapshots or server payloads. JGit copies are cleared after each operation. Commit author identity is explicit.
+worker snapshots or server payloads. JGit operation copies are cleared after each operation. `GitCredentialScope` binds credentials to an exact normalized HTTPS host and effective port. The scoped provider checks each challenge URI; transport callbacks check the actual URI after Git URL rewrites, and a per-transport HTTP connection factory guards every connection before cached authorization headers can be attached, including redirects. HTTPS certificate verification cannot be disabled. Network exception messages and causes are replaced with bounded safe diagnostics; only known transport-policy errors retain their own messages. JVM/HTTP string copies cannot be reliably erased. Commit author identity is explicit.
 The UI commits selected saved working files, preserving unrelated staged content. The backend never force-pushes and
 disables commit/push hooks without saving its temporary hook-path override. Linked worktrees, submodule/LFS integration,
 SSH and merge UI are deferred.

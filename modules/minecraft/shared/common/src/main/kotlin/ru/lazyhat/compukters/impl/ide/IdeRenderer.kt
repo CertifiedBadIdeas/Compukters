@@ -730,7 +730,11 @@ object IdeRenderer {
                     action = IdeHitAction.GitAuthenticate,
                 )
                 if (view.authenticated) item("Forget HTTPS token", bodyTop + 220, action = IdeHitAction.GitForgetCredentials)
-                label("Token is kept for this IDE session only", bodyTop + 258, IdeColors.MUTED)
+                label(
+                    view.credentialServer?.let { "Token: $it · this IDE session only" } ?: "No token saved · this IDE session only",
+                    bodyTop + 258,
+                    IdeColors.MUTED,
+                )
                 gitScrollMaximum = maximum
             } else {
                 item("New branch…", top + 36, action = IdeHitAction.GitBranch)
@@ -1465,7 +1469,7 @@ object IdeRenderer {
                 ) {
                     "Save token"
                 } else {
-                    "Check token"
+                    "Check"
                 }
             ui(
                 IdeTextKind.Dialog,
