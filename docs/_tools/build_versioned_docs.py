@@ -13,7 +13,7 @@ import shutil
 import subprocess
 from urllib.parse import urlsplit, urlunsplit
 
-VERSIONS = ('0.5.1', 'nightly')
+RELEASE_VERSION = re.compile(r'[0-9]+\.[0-9]+\.[0-9]+')
 ASSETS = Path(__file__).parent
 ATTRIBUTE = re.compile(r'''(\b(?:href|src|action)\s*=\s*)(["'])(.*?)(\2)''', re.I)
 
@@ -70,7 +70,7 @@ def rewrite_url(value: str, metadata: dict) -> str:
     if parsed.path != baseurl and not parsed.path.startswith(baseurl + '/'):
         return value
     suffix = parsed.path[len(baseurl):]
-    if any(suffix == '/' + version or suffix.startswith('/' + version + '/') for version in VERSIONS):
+    if re.match(r'^/(?:nightly|[0-9]+\.[0-9]+\.[0-9]+)(?:/|$)', suffix):
         return value
     path = baseurl + '/' + metadata['id'] + (suffix or '/')
     return urlunsplit(('', '', path, parsed.query, parsed.fragment))
@@ -78,17 +78,17 @@ def rewrite_url(value: str, metadata: dict) -> str:
 
 def switcher(current: str, path: Path, inventories: dict, metadata: dict) -> str:
     links = []
-    for version in VERSIONS:
+    for version in inventories:
         equivalent = path in inventories[version]
         target = metadata['baseurl'] + '/' + version + (page_url(path) if equivalent else '/')
-        label = '0.5.1 · Released' if version == '0.5.1' else 'Nightly · Development'
+        label = f'{version} · Released' if version != 'nightly' else 'Nightly · Development'
         attr = ' aria-current="true"' if version == current else ''
         attr += ' data-equivalent-page' if equivalent else ''
         links.append(f'<li><a href="{html.escape(target, quote=True)}"{attr}>{label}</a></li>')
-    label = '0.5.1' if current == '0.5.1' else 'Nightly'
+    label = current if current != 'nightly' else 'Nightly'
     revision = metadata['revision']
     source = f'<a class="docs-revision" href="https://github.com/CertifiedBadIdeas/Compukters/commit/{revision}">{revision[:8]}</a>'
-    status = 'Released' if current == '0.5.1' else 'Development'
+    status = 'Released' if current != 'nightly' else 'Development'
     return (f'<nav class="docs-version-bar" aria-label="Documentation version">'
             f'<details class="docs-version-menu"><summary>Docs: {label}</summary><ul>{"".join(links)}</ul></details>'
             f'<span class="docs-version-status">{status} · {source}</span></nav>')
@@ -117,15 +117,21 @@ def redirect(target: str) -> str:
 
 
 def compose(sources: dict[str, Path], sites: dict[str, Path], output: Path) -> None:
-    metadata = {version: json.loads((sources[version] / '.documentation-version.json').read_text()) for version in VERSIONS}
-    if any(metadata[version]['id'] != version for version in VERSIONS):
+    releases = set(sources) - {'nightly'}
+    if len(releases) != 1 or 'nightly' not in sources or set(sites) != set(sources):
+        raise ValueError('Expected one release and one nightly site')
+    release = releases.pop()
+    version_id(release)
+    versions = (release, 'nightly')
+    metadata = {version: json.loads((sources[version] / '.documentation-version.json').read_text()) for version in versions}
+    if any(metadata[version]['id'] != version for version in versions):
         raise ValueError('Version metadata does not match the site')
     if len({item['baseurl'] for item in metadata.values()}) != 1:
         raise ValueError('Versions must share the same site baseurl')
     # Dokka also ships HTML navigation fragments consumed by JavaScript; these are not standalone pages.
     inventories = {version: {path.relative_to(sites[version]) for path in sites[version].rglob('*.html')
-                             if re.search(r'<body\b', path.read_text(), re.I)} for version in VERSIONS}
-    for version in VERSIONS:
+                             if re.search(r'<body\b', path.read_text(), re.I)} for version in versions}
+    for version in inventories:
         for required in ('index.html', 'guest-api/index.html', 'guest-api/guest/index.html', 'guest-api/create/index.html',
                          'guest-api/sable/index.html', 'guest-api/propulsion/index.html'):
             if Path(required) not in inventories[version]:
@@ -133,7 +139,7 @@ def compose(sources: dict[str, Path], sites: dict[str, Path], output: Path) -> N
     if output.exists():
         raise ValueError(f'Composition destination already exists: {output}')
     output.mkdir(parents=True)
-    for version in VERSIONS:
+    for version in inventories:
         destination = output / version
         shutil.copytree(sites[version], destination)
         for target in destination.rglob('*.html'):
@@ -146,9 +152,9 @@ def compose(sources: dict[str, Path], sites: dict[str, Path], output: Path) -> N
                     rewrite_url(match[3], metadata[version]), quote=True) + match[4], content)
             target.write_text(content)
         (destination / 'version.json').write_text(json.dumps(metadata[version], indent=2) + '\n')
-    baseurl = metadata['0.5.1']['baseurl']
-    for path in inventories['0.5.1'] | inventories['nightly']:
-        version = '0.5.1' if path in inventories['0.5.1'] else 'nightly'
+    baseurl = metadata[release]['baseurl']
+    for path in inventories[release] | inventories['nightly']:
+        version = release if path in inventories[release] else 'nightly'
         target = output / path
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text(redirect(baseurl + '/' + version + page_url(path)))
@@ -157,7 +163,13 @@ def compose(sources: dict[str, Path], sites: dict[str, Path], output: Path) -> N
         destination.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(ASSETS / name, destination)
     (output / '.nojekyll').touch()
-    print(f'Composed {len(inventories["0.5.1"])} release and {len(inventories["nightly"])} nightly HTML pages')
+    print(f'Composed {len(inventories[release])} release and {len(inventories["nightly"])} nightly HTML pages')
+
+
+def version_id(value: str) -> str:
+    if value != 'nightly' and not RELEASE_VERSION.fullmatch(value):
+        raise ValueError('Expected a release version X.Y.Z or nightly')
+    return value
 
 
 def main() -> None:
@@ -166,7 +178,7 @@ def main() -> None:
     stage = commands.add_parser('prepare')
     stage.add_argument('--checkout', type=Path, required=True)
     stage.add_argument('--output', type=Path, required=True)
-    stage.add_argument('--version', choices=VERSIONS, required=True)
+    stage.add_argument('--version', type=version_id, required=True)
     stage.add_argument('--baseurl', default='/Compukters')
     build = commands.add_parser('compose')
     for version in ('release', 'nightly'):
@@ -177,8 +189,11 @@ def main() -> None:
     if args.command == 'prepare':
         prepare(args.checkout.resolve(), args.output.resolve(), args.version, args.baseurl.rstrip('/'))
     else:
-        compose({'0.5.1': args.release_source, 'nightly': args.nightly_source},
-                {'0.5.1': args.release_site, 'nightly': args.nightly_site}, args.output)
+        release = json.loads((args.release_source / '.documentation-version.json').read_text())['id']
+        if release == 'nightly':
+            raise ValueError('Release source must identify a release version')
+        compose({release: args.release_source, 'nightly': args.nightly_source},
+                {release: args.release_site, 'nightly': args.nightly_site}, args.output)
 
 
 if __name__ == '__main__':
