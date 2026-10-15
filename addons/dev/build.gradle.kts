@@ -258,7 +258,9 @@ listOf(false, true).forEach { release ->
                 if (release) ":stageReleaseDistributionModJars" else ":stageDistributionModJars",
             ))
         from(mods)
-        listOf("create", "createaddition", "sable", "propulsion", "cosmonautics").forEach { addon ->
+        val distributionAddons = listOf("create", "createaddition", "sable", "propulsion") +
+            if (release) emptyList() else listOf("cosmonautics")
+        distributionAddons.forEach { addon ->
             val archives = files(layout.projectDirectory.dir("../$addon/build/distribution"))
                 .builtBy(gradle.includedBuild("compukters-$addon").task(":stageDistributionJar"))
             from(archives) { into("1.21.1") }

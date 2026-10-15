@@ -2,7 +2,7 @@
 # The Compukters Developers
 # Copyright 2026 Vsevolod Petrov (lazyhat)
 # SPDX-License-Identifier: Apache-2.0
-"""Submit verified base-mod JARs to CurseForge, with a durable upload journal."""
+"""Submit verified mod and addon JARs to CurseForge, with a durable upload journal."""
 import argparse
 import hashlib
 import json
@@ -18,6 +18,13 @@ import zipfile
 import release
 
 PROJECT = 1528063
+# Fixed reviewed destinations; inventories cannot redirect publication.
+ADDONS = {
+    'create': (1746054, 'Create', [('create', 328085)]),
+    'createaddition': (1746058, 'CreateAddition', [('create', 328085), ('createaddition', 439890)]),
+    'sable': (1746063, 'Sable', [('sable', 1312371)]),
+    'propulsion': (1746068, 'Propulsion', [('create', 328085), ('create-propulsion-simulated', 1522736)]),
+}
 BASE = 'https://minecraft.curseforge.com'
 TASK = 'curseforge-upload'
 ENVIRONMENT = 'curseforge-upload'
@@ -68,13 +75,15 @@ class CurseForge:
                         'invalid CurseForge game versions response')
         return {row.get('name') for row in result if isinstance(row.get('name'), str)}
 
-    def upload(self, metadata, path):
+    def upload(self, project, metadata, path):
+        release.require(project in {PROJECT} | {row[0] for row in ADDONS.values()},
+                        'unreviewed CurseForge destination')
         boundary = 'compukters-' + uuid.uuid4().hex
         prefix = (f'--{boundary}\r\nContent-Disposition: form-data; name="metadata"\r\n'
                   'Content-Type: application/json\r\n\r\n').encode() + json.dumps(metadata).encode()
         file_header = (f'\r\n--{boundary}\r\nContent-Disposition: form-data; name="file"; '
                        f'filename="{path.name}"\r\nContent-Type: application/java-archive\r\n\r\n').encode()
-        result = self.request(f'/api/projects/{PROJECT}/upload-file',
+        result = self.request(f'/api/projects/{project}/upload-file',
                               prefix + file_header + path.read_bytes() + f'\r\n--{boundary}--\r\n'.encode(),
                               'multipart/form-data; boundary=' + boundary)
         release.require(isinstance(result, dict) and positive_id(result.get('id')),
@@ -117,10 +126,22 @@ class Journal(release.GitHub):
                  {'state': state, 'description': description, 'auto_inactive': False})
 
 
+def project_for(artifact):
+    return ADDONS[artifact['addon']][0] if 'addon' in artifact else PROJECT
+
+
 def metadata_for(manifest, artifact, notes):
-    return {'displayName': f'Compukters {manifest["version"]} / {artifact["minecraft"]} NeoForge',
-            'changelog': notes, 'changelogType': 'markdown', 'releaseType': 'release',
-            'gameVersionNames': [artifact['minecraft'], 'NeoForge', 'Client', 'Server']}
+    metadata = {'displayName': f'Compukters {manifest["version"]} / {artifact["minecraft"]} NeoForge',
+                'changelog': notes, 'changelogType': 'markdown', 'releaseType': 'release',
+                'gameVersionNames': [artifact['minecraft'], 'NeoForge', 'Client', 'Server']}
+    if 'addon' in artifact:
+        _, title, dependencies = ADDONS[artifact['addon']]
+        metadata['displayName'] = (f'Compukters: {title} {artifact["version"]} / '
+                                   f'{artifact["minecraft"]} NeoForge / Compukters {artifact["compukters_line"]}')
+        metadata['relations'] = {'projects': [
+            {'slug': slug, 'projectID': str(project), 'type': 'requiredDependency'}
+            for slug, project in [('compukters', PROJECT)] + dependencies]}
+    return metadata
 
 
 def planned(directory, journal):
@@ -130,14 +151,17 @@ def planned(directory, journal):
     notes = (directory / 'release-notes.md').read_text()
     entries = journal.entries(manifest)
     plans = []
-    for artifact in manifest['artifacts']:
+    # Legacy inventories retain their original base-only publication contract.
+    artifacts = manifest['artifacts'] + (manifest['addons'] if manifest['schema'] >= 5 else [])
+    for artifact in artifacts:
+        project = project_for(artifact)
         metadata = metadata_for(manifest, artifact, notes)
-        payload = {'schema': 1, 'project': PROJECT, 'filename': artifact['filename'],
+        payload = {'schema': 1, 'project': project, 'filename': artifact['filename'],
                    'sha256': artifact['hashes']['sha256'], 'bytes': artifact['bytes'],
                    'inventory_sha256': hashlib.sha256((directory / 'release.json').read_bytes()).hexdigest(),
                    'metadata_sha256': json_hash(metadata)}
         matches = [entry for entry in entries if isinstance(entry.get('payload'), dict)
-                   and entry['payload'].get('project') == PROJECT
+                   and entry['payload'].get('project') == project
                    and entry['payload'].get('filename') == artifact['filename']]
         # All attempts must agree, including attempts explicitly reconciled as absent.
         for entry in matches:
@@ -161,10 +185,10 @@ def planned(directory, journal):
 def publish(directory, client, journal):
     manifest, plans = planned(directory, journal)
     # Reject every ambiguous attempt before uploading any target, even an earlier missing one.
-    for artifact, _, _, entry, accepted in plans:
+    for artifact, _, payload, entry, accepted in plans:
         release.require(entry is None or accepted,
                         'Unresolved CurseForge upload for ' + artifact['filename']
-                        + '; inspect project 1528063 and use reconcile before retry')
+                        + f'; inspect project {payload["project"]} and use reconcile before retry')
     missing = [plan for plan in plans if not plan[4]]
     if missing:
         names = client.versions()
@@ -176,7 +200,7 @@ def publish(directory, client, journal):
             continue
         entry = journal.begin(manifest, payload)
         # Any failure from this point intentionally leaves an unresolved durable intent.
-        file_id = client.upload(metadata, directory / artifact['filename'])
+        file_id = client.upload(payload['project'], metadata, directory / artifact['filename'])
         journal.record(entry, 'success', ACCEPTED + str(file_id))
         print(f'Submitted to CurseForge: {artifact["filename"]} (file {file_id}; approval is separate)')
 
@@ -186,7 +210,7 @@ def reconcile(directory, journal, filename, file_id=None, not_uploaded=False):
                     'choose a positive file ID or --not-uploaded')
     _, plans = planned(directory, journal)
     matches = [plan for plan in plans if plan[0]['filename'] == filename]
-    release.require(len(matches) == 1, 'artifact is not a base-mod JAR in this inventory')
+    release.require(len(matches) == 1, 'artifact is not a publishable JAR in this inventory')
     _, _, _, entry, accepted = matches[0]
     release.require(entry is not None and not accepted, 'no unresolved upload intent for this artifact')
     journal.record(entry, 'failure' if not_uploaded else 'success',

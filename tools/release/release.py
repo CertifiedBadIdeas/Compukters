@@ -21,7 +21,8 @@ import zipfile
 PROJECT = 'xriOD3eh'
 REPOSITORY = 'CertifiedBadIdeas/Compukters'
 TARGETS = [('1.21.1', 'v1_21_1', 'jni'), ('26.1.2', 'v26_1', 'ffi')]
-ADDONS = ['create', 'sable', 'propulsion']
+LEGACY_ADDONS = ['create', 'sable', 'propulsion']
+ADDONS = ['create', 'createaddition', 'sable', 'propulsion']
 TOOLING = 'tooling/workers/k2-tooling-workers'
 MAX_ARTIFACT = 256 * 1024 * 1024
 
@@ -143,7 +144,7 @@ def prepare(root, output, tag):
     output.mkdir(parents=True)
     for artifact in artifacts + addons + development:
         shutil.copyfile(artifact.pop('source'), output / artifact['filename'])
-    manifest = {'schema': 4, 'repository': REPOSITORY, 'modrinth_project': PROJECT,
+    manifest = {'schema': 5, 'repository': REPOSITORY, 'modrinth_project': PROJECT,
                 'tag': tag, 'version': version, 'revision': git(root, 'rev-parse', 'HEAD'),
                 'vm_revision': git(root / 'host/compukter-vm', 'rev-parse', 'HEAD'),
                 'components': {'tooling': tooling, 'runtime': runtime}, 'artifacts': artifacts,
@@ -209,7 +210,7 @@ def inspect_sdk(path, mod_version):
 
 def load_release(directory):
     manifest = json.loads((directory / 'release.json').read_text())
-    require(manifest['schema'] in (1, 2, 3, 4) and manifest['repository'] == REPOSITORY,
+    require(manifest['schema'] in (1, 2, 3, 4, 5) and manifest['repository'] == REPOSITORY,
             'unsupported release manifest')
     require(manifest['modrinth_project'] == PROJECT, 'unexpected destination project')
     require(re.fullmatch(r'(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)', manifest['version']),
@@ -229,7 +230,8 @@ def load_release(directory):
             require(inspect_runtime(path) == manifest['components']['runtime'], 'Runtime composition differs from inventory')
     addons = manifest['addons'] if manifest['schema'] >= 2 else []
     require(manifest['schema'] >= 2 or 'addons' not in manifest, 'schema 1 cannot declare addons')
-    require([a['addon'] for a in addons] == (ADDONS if manifest['schema'] >= 2 else []),
+    expected_addons = ADDONS if manifest['schema'] >= 5 else LEGACY_ADDONS if manifest['schema'] >= 2 else []
+    require([a['addon'] for a in addons] == expected_addons,
             'missing or extra release addons')
     line = '.'.join(manifest['version'].split('.')[:2])
     for artifact in addons:

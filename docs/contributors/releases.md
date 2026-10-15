@@ -9,15 +9,26 @@ permalink: /RELEASES/
 
 The `Mod release` workflow runs only for pushed `v*` tags and builds the autonomous NeoForge JARs for
 Minecraft 1.21.1 and 26.1.2. Each contains its tooling carrier and both Linux and
-Windows natives. The workflow collects these and the Create, Sable and Propulsion
+Windows natives. The workflow collects these and the Create, CreateAddition, Sable and Propulsion
 addon JARs into `dist/`, grouped by Minecraft version, and preserves that layout
-as an Actions artifact. GitHub Releases receives all five JARs, release notes, a versioned
+as an Actions artifact. GitHub Releases receives all six JARs, release notes, a versioned
 composition inventory, SHA-256 checksums, and `compukters-addon-development-X.Y.Z.zip`.
 The SDK archive supplies development dependencies for standalone addon builds without a separate hosted Maven repository. Modrinth receives one version per
 Minecraft target in the existing [Compukters project](https://modrinth.com/mod/compukters),
 ID `xriOD3eh`. CurseForge receives the same two base-mod JARs in project `1528063`,
 with separate Minecraft 1.21.1 and 26.1.2 releases marked for NeoForge, Client and Server.
-Addon JARs and the SDK remain GitHub-only.
+CurseForge also receives the four addon JARs for Minecraft 1.21.1:
+
+| Addon | Project ID |
+| --- | --- |
+| Create | `1746054` |
+| CreateAddition | `1746058` |
+| Sable | `1746063` |
+| Propulsion | `1746068` |
+
+Addon files declare Compukters and the corresponding upstream mods as required dependencies.
+Propulsion depends on Create Propulsion: Simulated, not the original 1.20.1 project.
+The SDK remains GitHub-only. Cosmonautics is excluded from this release; local development collections retain it.
 
 ## Configure publication
 
@@ -25,7 +36,7 @@ Create the GitHub environment `mod-release`. Add `MODRINTH_TOKEN` as an environm
 secret or repository secret, using a Modrinth token allowed to create versions in
 the Compukters project. Add `CURSEFORGE_TOKEN` in the same environment or as a
 repository secret, using an author upload token with access to CurseForge project
-`1528063`. Generate it through the [CurseForge author API token settings](https://support.curseforge.com/support/solutions/articles/9000197321-curseforge-api).
+`1528063` and all four addon projects listed above. Generate it through the [CurseForge author API token settings](https://support.curseforge.com/support/solutions/articles/9000197321-curseforge-api).
 Never put either token in source, workflow inputs or command-line arguments. For example,
 use GitHub's environment settings or `gh secret set CURSEFORGE_TOKEN --env mod-release
 --repo CertifiedBadIdeas/Compukters` and enter the value through its secure prompt.
@@ -40,19 +51,19 @@ only after a pushed release tag passes archive and inventory verification.
 
 Publish the matching native Runtime first. The mod's Runtime contract in
 `config/runtime-release.properties` selects the published Runtime version and its
-release commit. The current JNI and FFM transports require native C ABI 23; a compatible selected
+release commit. The current JNI and FFM transports require native C ABI 24; a compatible selected
 release need not match the development VM submodule commit. To select another
 compatible revision, provide its descriptor with `-PcompukterRuntimeReleaseFile=/path/to/runtime-release.properties`.
 The selected identity must match the published Linux/Windows assets and their manifests. A source-built
 native that implements newer artifact reader features does not establish that an
 older published bundle supports those features. Keep these contracts aligned when
 preparing the candidate; missing or mismatched Runtime assets stop the release.
-The checked-in descriptor currently selects Runtime 0.22.0, while this checkout requires ABI 23. Before tagged
-packaging, select a compatible published Runtime 0.23.x descriptor; the old default does not establish release
-readiness. Check the selected version and commit against `config/runtime-release.properties` when preparing a candidate.
+The checked-in descriptor selects the Runtime 0.24.0 candidate. Its Linux/Windows bundles must be published
+at that exact commit before tagged packaging; selecting a candidate alone does not establish release readiness.
+Check the selected version and commit against `config/runtime-release.properties` when preparing a candidate.
 Both mod JARs record the selected native release at `META-INF/compukters/runtime.properties`.
-Inventory schema 4 records that actual component separately from the source submodule revision;
-the transfer tool retains readers for inventories 1, 2 and 3 when resuming their publication.
+Inventory schema 5 records that actual component separately from the source submodule revision;
+the transfer tool retains readers for inventories 1, 2, 3 and 4 when resuming their publication.
 
 ## Prepare and validate a candidate
 
@@ -70,14 +81,14 @@ run `bumpAfterRelease` to start the next development minor; for example, `0.5.0`
 3. Run `./gradlew-sandbox-dev-parallel-summary -p addons/dev collectReleaseDistributionJars :Compukters:packageAddonDevelopmentDependencies`
    on the clean exact tag. It downloads and admits the pinned published Runtime bundles,
    runs both `buildReleaseUniversalJar` gates, verifies the addon archives and collects
-   the five JARs into `dist/`. For local Rust builds use `collectDistributionJars` instead.
+   the six JARs into `dist/`. For local Rust builds use `collectDistributionJars` instead.
 4. Push the candidate branch and its `vX.Y.Z` tag. Only the tag starts the release workflow;
    ordinary branch pushes and pull requests do not start mod CI.
 
 Local non-interactive commands use `./gradlew-sandbox-dev-parallel-summary` with
 JDK 25 selected. GitHub Actions uses standard `./gradlew` with live output and
 `--no-daemon --parallel --max-workers=2`. The runner installs JDK 21/25, downloads the exact Linux/Windows Runtime bundles, stages the addon SDK using those
-published natives, and then builds the five stable JARs and the addon SDK archive.
+published natives, and then builds the six stable JARs and the addon SDK archive.
 This path neither installs a Rust toolchain nor fetches Cargo dependencies: the native Runtime is already published.
 
 CI tests are temporarily disabled. It does not run `verifyLocalFull`, JVM/Rust tests, GameTests,
@@ -87,7 +98,7 @@ native bundle identity and release inventory checks remain enabled. This build e
 and publication evidence; it does not establish full test coverage or native execution evidence.
 Local full verification and the complete tagged gates above remain available for release preparation.
 
-The build uploads five JARs, the SDK ZIP, release notes, inventory and checksums as one Actions artifact retained
+The build uploads six JARs, the SDK ZIP, release notes, inventory and checksums as one Actions artifact retained
 for seven days. Runs for the same tag are queued without cancellation. There is no branch verification
 artifact to reuse in this temporary tag-only workflow.
 
@@ -122,7 +133,8 @@ version. Never change the release contents, move the tag, or overwrite assets to
 make a retry pass. A changed release requires a new version.
 
 CurseForge submissions use the [author upload API](https://support.curseforge.com/support/solutions/articles/9000197321-curseforge-api)
-and the same verified inventory and markdown notes. The tool checks the available
+and the same verified inventory and markdown notes. Schema 5 submits all six release JARs; legacy inventories retain their original two-base-JAR delivery contract.
+The tool checks the available
 Minecraft/NeoForge/environment names before uploading. A returned file ID means
 **accepted for processing**, not approved or visible; check the project's author
 portal for moderation results. No Modrinth visibility setting is changed.
@@ -139,7 +151,7 @@ alter the immutable GitHub release assets or release inventory schema.
 
 If a runner stops after recording an intent, or CurseForge accepts a file but its
 response/status recording is lost, **do not just upload again**. With no publication
-job running, inspect project `1528063` in the author portal, including pending and
+job running, inspect the destination project listed above in the author portal, including pending and
 rejected files. Restore the original successful build artifact and use the tooling
 from its tagged revision with a GitHub credential permitted to read repository
 contents and write deployments:

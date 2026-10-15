@@ -29,6 +29,24 @@ def init_repository(root):
     command(root, 'config', 'user.email', 'release-test@example.invalid')
 
 
+def legacy_inventory(directory, schema):
+    manifest = json.loads((directory / 'release.json').read_text())
+    removed = [a for a in manifest['addons'] if schema == 1 or a['addon'] == 'createaddition']
+    manifest['addons'] = [a for a in manifest['addons'] if a not in removed]
+    if schema == 1:
+        del manifest['addons']
+    if schema < 4:
+        removed += manifest.pop('development', [])
+    for artifact in removed:
+        (directory / artifact['filename']).unlink()
+    manifest['schema'] = schema
+    (directory / 'release.json').write_text(json.dumps(manifest) + '\n')
+    files = sorted(p for p in directory.iterdir() if p.name != 'checksums.sha256')
+    (directory / 'checksums.sha256').write_text(''.join(
+        f'{hashlib.sha256(p.read_bytes()).hexdigest()}  {p.name}\n' for p in files))
+    return manifest
+
+
 class PublicationFixture:
     def __init__(self, manifest, notes):
         self.existing = []
@@ -169,11 +187,11 @@ class ReleaseTest(unittest.TestCase):
         self.assertEqual(manifest['components']['tooling']['delivery'], 'bundled')
         self.assertEqual((self.output / 'release-notes.md').read_text(), 'New capability.\n')
         self.assertEqual([a['addon'] for a in manifest['addons']], release.ADDONS)
-        self.assertEqual(manifest['schema'], 4)
+        self.assertEqual(manifest['schema'], 5)
         self.assertEqual(manifest['components']['runtime']['version'], '0.21.2')
         self.assertEqual(manifest['components']['runtime']['abi'], 21)
         self.assertNotEqual(manifest['components']['runtime']['revision'], manifest['vm_revision'])
-        self.assertEqual(len((self.output / 'checksums.sha256').read_text().splitlines()), 8)
+        self.assertEqual(len((self.output / 'checksums.sha256').read_text().splitlines()), 9)
         self.assertEqual(manifest['development'][0]['sdk_version'], '0.5.0')
 
     def test_modified_sdk_prevents_publication(self):
@@ -185,18 +203,26 @@ class ReleaseTest(unittest.TestCase):
         self.assertIsNone(client.existing)
 
     def test_schema_three_can_resume_without_sdk(self):
-        manifest, _ = self.prepared()
-        for asset in manifest.pop('development'):
-            (self.output / asset['filename']).unlink()
-        manifest['schema'] = 3
-        (self.output / 'release.json').write_text(json.dumps(manifest) + '\n')
-        files = sorted(p for p in self.output.iterdir() if p.name != 'checksums.sha256')
-        (self.output / 'checksums.sha256').write_text(''.join(
-            f'{hashlib.sha256(p.read_bytes()).hexdigest()}  {p.name}\n' for p in files))
+        self.prepared()
+        manifest = legacy_inventory(self.output, 3)
         self.assertEqual(release.load_release(self.output), manifest)
         client = GitHubFixture(manifest, self.output)
         release.publish_github(self.output, client)
         self.assertEqual(len(client.uploads), 8)
+
+    def test_schema_four_retains_three_addons_and_sdk(self):
+        self.prepared()
+        manifest = legacy_inventory(self.output, 4)
+        self.assertEqual(release.load_release(self.output), manifest)
+        self.assertEqual([a['addon'] for a in manifest['addons']], ['create', 'sable', 'propulsion'])
+        client = GitHubFixture(manifest, self.output)
+        release.publish_github(self.output, client)
+        self.assertEqual(len(client.uploads), 9)
+
+    def test_schema_two_retains_original_addons(self):
+        self.prepared()
+        manifest = legacy_inventory(self.output, 2)
+        self.assertEqual(release.load_release(self.output), manifest)
 
     def test_sdk_rejects_snapshot_and_missing_dependency_before_staging(self):
         sdk = self.root / 'build/distribution/compukters-addon-development-0.5.0.zip'
@@ -275,14 +301,8 @@ class ReleaseTest(unittest.TestCase):
         self.assertIsNone(client.existing)
 
     def test_schema_one_can_resume_without_addons(self):
-        manifest, _ = self.prepared()
-        for artifact in manifest.pop('addons') + manifest.pop('development'):
-            (self.output / artifact['filename']).unlink()
-        manifest['schema'] = 1
-        (self.output / 'release.json').write_text(json.dumps(manifest))
-        files = sorted(p for p in self.output.iterdir() if p.name != 'checksums.sha256')
-        (self.output / 'checksums.sha256').write_text(''.join(
-            f'{hashlib.sha256(p.read_bytes()).hexdigest()}  {p.name}\n' for p in files))
+        self.prepared()
+        manifest = legacy_inventory(self.output, 1)
         self.assertEqual(release.load_release(self.output), manifest)
         client = GitHubFixture(manifest, self.output)
         release.publish_github(self.output, client)
@@ -391,7 +411,7 @@ class ReleaseTest(unittest.TestCase):
         client = GitHubFixture(manifest, self.output)
         release.publish_github(self.output, client)
         release.publish_github(self.output, client)
-        self.assertEqual(len(client.uploads), 9)
+        self.assertEqual(len(client.uploads), 10)
         self.assertTrue({artifact['filename'] for artifact in manifest['addons']}.issubset(client.uploads))
         self.assertEqual(client.finished, 1)
         self.assertFalse(client.existing['draft'])
@@ -406,7 +426,7 @@ class ReleaseTest(unittest.TestCase):
         self.assertEqual(client.finished, 0)
         client.fail_after = None
         release.publish_github(self.output, client)
-        self.assertEqual(len(client.uploads), 9)
+        self.assertEqual(len(client.uploads), 10)
         self.assertEqual(client.finished, 1)
 
     def test_github_conflicting_asset_prevents_missing_uploads(self):
