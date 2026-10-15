@@ -153,7 +153,7 @@ def metadata_for(manifest, artifact, notes):
         metadata['displayName'] = (f'Compukters: {title} {artifact["version"]} / '
                                    f'{artifact["minecraft"]} NeoForge / Compukters {artifact["compukters_line"]}')
         metadata['relations'] = {'projects': [
-            {'slug': slug, 'projectID': str(project), 'type': 'requiredDependency'}
+            {'slug': slug, 'projectID': project, 'type': 'requiredDependency'}
             for slug, project in [('compukters', PROJECT)] + dependencies]}
     return metadata
 
@@ -177,15 +177,24 @@ def planned(directory, journal):
         matches = [entry for entry in entries if isinstance(entry.get('payload'), dict)
                    and entry['payload'].get('project') == project
                    and entry['payload'].get('filename') == artifact['filename']]
-        # All attempts must agree, including attempts explicitly reconciled as absent.
-        for entry in matches:
-            release.require(entry.get('sha') == manifest['revision'] and entry['payload'] == payload,
-                            'conflicting CurseForge upload intent: ' + artifact['filename'])
+        # An absent attempt may carry the old, rejected string projectID encoding.
+        # Admit only that exact correction, preserving all other identity checks.
+        legacy_payload = None
+        if 'addon' in artifact:
+            legacy_metadata = json.loads(json.dumps(metadata))
+            for relation in legacy_metadata['relations']['projects']:
+                relation['projectID'] = str(relation['projectID'])
+            legacy_payload = dict(payload, metadata_sha256=json_hash(legacy_metadata))
         active = []
         for entry in matches:
             statuses = journal.statuses(entry)
             last = statuses[0] if statuses else {}
-            if last.get('state') == 'failure' and last.get('description') == ABSENT:
+            absent = last.get('state') == 'failure' and last.get('description') == ABSENT
+            release.require(entry.get('sha') == manifest['revision']
+                            and (entry['payload'] == payload
+                                 or (absent and entry['payload'] == legacy_payload)),
+                            'conflicting CurseForge upload intent: ' + artifact['filename'])
+            if absent:
                 continue
             active.append((entry, last))
         release.require(len(active) <= 1, 'multiple unresolved CurseForge attempts: ' + artifact['filename'])
