@@ -35,13 +35,12 @@ import ru.lazyhat.compukters.ide.analysis.k2.standalone.IncrementalK2Workspace
 import ru.lazyhat.compukters.ide.analysis.k2.standalone.K2SourceUpdater
 import ru.lazyhat.compukters.ide.analysis.k2.standalone.SnapshotAdmission
 import ru.lazyhat.compukters.ide.analysis.k2.testAdmittedPlatform
+import ru.lazyhat.compukters.ide.analysis.k2.testPlatform
 import ru.lazyhat.compukters.ide.analysis.protocol.AdmittedAnalysisPlatform
 import ru.lazyhat.compukters.ide.analysis.protocol.AdmittedAnalysisProfile
 import ru.lazyhat.compukters.ide.analysis.protocol.AnalysisLimits
 import ru.lazyhat.compukters.ide.analysis.protocol.OpenSnapshotRequest
 import ru.lazyhat.compukters.ide.analysis.protocol.UpdateSnapshotRequest
-import ru.lazyhat.compukters.platform.bundle.PlatformBundleCodec
-import java.nio.file.Files
 import java.nio.file.Path
 import kotlin.io.path.createTempDirectory
 
@@ -149,10 +148,7 @@ internal class K2QueryFixture private constructor(
                     AdmittedAnalysisProfile(profile, platform),
                     limits,
                 )
-            val platform =
-                PlatformBundleCodec.decode(
-                    Files.readAllBytes(Path.of(requireNotNull(System.getProperty("compukters.test.platformBundle")))),
-                )
+            val platform = testPlatform()
             val admission =
                 if (sourceUpdater == null) {
                     SnapshotAdmission(root.resolve("snapshots"), platform)

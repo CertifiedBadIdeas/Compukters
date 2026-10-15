@@ -30,10 +30,15 @@ import ru.lazyhat.compukters.platform.bundle.PlatformBundleCodec
 import java.nio.file.Files
 import java.nio.file.Path
 
-internal fun testPlatform(): PlatformBundle =
+// Gradle fixes these immutable bundle inputs for the lifetime of each test worker.
+// Reuse their decoded model while keeping every K2 environment and snapshot independent.
+private val canonicalTestPlatform: PlatformBundle by lazy {
     PlatformBundleCodec.decode(
         Files.readAllBytes(Path.of(requireNotNull(System.getProperty("compukters.test.platformBundle")))),
     )
+}
+
+internal fun testPlatform(): PlatformBundle = canonicalTestPlatform
 
 internal fun testPlatformAbi(): Hash256 = Hash256.of(testPlatform().identity.contentHash.toByteArray())
 
@@ -85,5 +90,5 @@ internal fun testAdmittedPlatform(
         } else {
             emptyList()
         }
-    return AdmittedAnalysisPlatform(testPlatformAbi(), modules, sourceRoot, addonBundles)
+    return AdmittedAnalysisPlatform(Hash256.of(platform.identity.contentHash.toByteArray()), modules, sourceRoot, addonBundles)
 }
