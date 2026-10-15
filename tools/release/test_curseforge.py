@@ -167,7 +167,7 @@ class TransferTest(unittest.TestCase):
     def test_ambiguous_addon_upload_resumes_remaining_addons_only(self):
         manifest, client, journal = self.prepared()
         client.fail_at = 4
-        with self.assertRaisesRegex(ValueError, 'ambiguous'):
+        with self.assertRaisesRegex(ValueError, r'compukters-createaddition-.*\(project 1746058\): .*ambiguous'):
             curseforge.publish(self.output, client, journal)
         with self.assertRaisesRegex(ValueError, 'project 1746058'):
             curseforge.publish(self.output, client, journal)
@@ -285,6 +285,31 @@ class ApiTest(unittest.TestCase):
     def test_redirects_are_rejected(self):
         with self.assertRaises(ValueError):
             curseforge.NoRedirect().redirect_request(None, None, 302, '', {}, 'https://other.invalid')
+
+    def test_api_validation_message_is_bounded_and_redacts_credentials(self):
+        client = curseforge.CurseForge('secret-fixture')
+        body = json.dumps({'errorMessage': 'Invalid relation\nsecret-fixture ' + 'x' * 1000,
+                           'debug': 'private-response-data'}).encode()
+        error = urllib.error.HTTPError(curseforge.BASE, 400, 'ignored', {}, io.BytesIO(body))
+        with patch.object(client.opener, 'open', side_effect=error) as opened:
+            with self.assertRaises(ValueError) as caught:
+                client.versions()
+        message = str(caught.exception)
+        self.assertIn('HTTP 400: Invalid relation [REDACTED]', message)
+        self.assertNotIn('secret-fixture', message)
+        self.assertNotIn('private-response-data', message)
+        self.assertNotIn('\n', message)
+        self.assertLess(len(message), 600)
+        self.assertEqual(opened.call_count, 1)
+
+    def test_unstructured_and_oversized_error_bodies_are_not_logged(self):
+        client = curseforge.CurseForge('secret-fixture')
+        for body in [b'<html>private-response-data</html>', b'[]',
+                     json.dumps({'message': 'private-response-data' * 1000}).encode()]:
+            error = urllib.error.HTTPError(curseforge.BASE, 400, 'ignored', {}, io.BytesIO(body))
+            with patch.object(client.opener, 'open', side_effect=error):
+                with self.assertRaisesRegex(ValueError, '^CurseForge request failed: HTTP 400$'):
+                    client.versions()
 
     def test_invalid_upload_id_is_not_success(self):
         client = curseforge.CurseForge('fixture')

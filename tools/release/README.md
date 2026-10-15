@@ -76,7 +76,10 @@ Each addon requires Compukters and its upstream mod through CurseForge `required
 CreateAddition and Propulsion also require Create. Propulsion targets Create Propulsion: Simulated (`1522736`),
 not the separate 1.20.1 original. No SDK or development JAR is submitted to CurseForge.
 Credentials stay in headers, redirects are refused, responses are bounded and HTTP/
-transport errors are redacted. No upload POST is automatically retried.
+transport errors are redacted. Upload errors identify the filename and destination project.
+For bounded JSON error responses, only the API's `errorMessage` or `message` is shown,
+with the token redacted and whitespace collapsed; raw response bodies are never printed.
+No upload POST is automatically retried.
 
 GitHub Deployments with task/environment `curseforge-upload` form a durable journal:
 intent precedes upload, success records the accepted file ID. The payload binds the

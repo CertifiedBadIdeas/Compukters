@@ -64,7 +64,21 @@ class CurseForge:
                 release.require(len(body) <= 2 * 1024 * 1024, 'response exceeds limit')
                 return json.loads(body)
         except urllib.error.HTTPError as error:
-            raise ValueError(f'CurseForge request failed: HTTP {error.code}') from None
+            detail = ''
+            try:
+                body = error.read(16385)
+                document = json.loads(body) if len(body) <= 16384 else None
+                if isinstance(document, dict):
+                    message = document.get('errorMessage') or document.get('message')
+                    if isinstance(message, str):
+                        # Only admit the API's message, never raw bodies, headers or URLs.
+                        message = message.replace(self.token, '[REDACTED]')
+                        detail = ': ' + ' '.join(message.split())[:512]
+            except (OSError, ValueError):
+                pass
+            finally:
+                error.close()
+            raise ValueError(f'CurseForge request failed: HTTP {error.code}{detail}') from None
         except (OSError, ValueError):
             # Neither response bodies nor transport exception text may expose credentials.
             raise ValueError('CurseForge request failed or returned an invalid response') from None
@@ -200,7 +214,10 @@ def publish(directory, client, journal):
             continue
         entry = journal.begin(manifest, payload)
         # Any failure from this point intentionally leaves an unresolved durable intent.
-        file_id = client.upload(payload['project'], metadata, directory / artifact['filename'])
+        try:
+            file_id = client.upload(payload['project'], metadata, directory / artifact['filename'])
+        except ValueError as error:
+            raise ValueError(f'{artifact["filename"]} (project {payload["project"]}): {error}') from None
         journal.record(entry, 'success', ACCEPTED + str(file_id))
         print(f'Submitted to CurseForge: {artifact["filename"]} (file {file_id}; approval is separate)')
 
