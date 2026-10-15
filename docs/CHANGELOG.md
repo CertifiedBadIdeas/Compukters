@@ -43,8 +43,9 @@ headings so this page has one stable URL that can be shared outside the reposito
   including primitive-to-nullable and Any views. Widening preserves object identity and scalar
   storage, boxing only widened reads; nested results and precompiled library owners share the same model.
 
-- Tagged releases can submit both supported NeoForge base-mod JARs to CurseForge alongside Modrinth,
-  with independent publication jobs, recorded upload outcomes and explicit recovery after interrupted submissions.
+- Tagged releases can submit both supported NeoForge base-mod JARs and the separate Create, CreateAddition,
+  Sable and Propulsion addons to CurseForge with required dependency relations, recorded upload outcomes
+  and explicit recovery after interrupted submissions. Modrinth base-mod publication remains independent.
 
 - IDE checks constant named peripheral lookups against the attached computer’s current network, with warnings
   for mandatory searches and informational hover/Problems entries for optional searches. Network observations

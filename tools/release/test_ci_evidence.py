@@ -40,7 +40,7 @@ class EvidenceTest(unittest.TestCase):
     def test_snapshot_evidence_can_be_reused_after_tag_on_same_commit(self):
         manifest = ci.stage(self.root, self.output)
         self.assertEqual('0.5.0-SNAPSHOT', manifest['effective_version'])
-        self.assertEqual(5, len(manifest['artifacts']))
+        self.assertEqual(6, len(manifest['artifacts']))
         fixtures.command(self.root, 'tag', 'v0.5.0')
         ci.validate_tag(self.root, 'v0.5.0')
         self.assertEqual(manifest, ci.verify(self.root, self.output))
