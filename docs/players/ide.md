@@ -55,7 +55,7 @@ copy your files. Opening the same directory again reuses its catalog entry.
 so it can be repaired in the editor. The IDE clones into a temporary directory and publishes the
 project only after validation succeeds; a failed or cancelled clone does not appear in the project list.
 
-For a private clone, use **HTTPS token** first. Enter your Git hosting username, then the token in the masked field.
+For a private clone, use **HTTPS token** first. Confirm the HTTPS server address, enter your Git hosting username, then enter the token in the masked field.
 Credentials remain in this IDE session and are forgotten on close. They are not written into preferences, manifests,
 locks or remote URLs, and are not sent to the Minecraft server. Use an HTTPS URL without an embedded username/password,
 query or fragment. SSH transport is deferred.
@@ -221,7 +221,7 @@ cursor visible, and the mouse wheel scrolls the field horizontally. Pasted line 
 ## Git changes and commits
 
 Open **Commit** using its icon on the left-hand tool stripe. For a project without a repository, use **Create Git repository**.
-The **Changes** tab lists modified, new and deleted files with checkboxes. Click the checkbox beside a file to include
+The **Changes** list shows modified, new and deleted files with checkboxes. Click the checkbox beside a file to include
 its current saved content in the next commit; the heading selects or clears all changed files.
 
 File names in the project tree, active-file title and Changes use Git colors: blue for modified files,
@@ -233,27 +233,29 @@ These markers compare the current buffer, including unsaved edits, with **HEAD**
 at most once per second without saving or pausing typing. Ignored files have no new-file markers; binary files
 and comparisons exceeding the configured limits omit markers.
 
-Click a file name to preview its difference from **HEAD**. Added lines are green and deleted lines are red. On a wide
-window, the preview appears beside the list; on a narrow window, it opens the **Diff** tab. The list and the wide
-preview scroll independently.
+**Commit** occupies the left Project area and leaves the source editor available on the right. Click a changed
+file to preview its difference from **HEAD** in the editor area. Added lines are green and deleted lines are red.
+**Source** returns to the source file. The changes list and diff scroll independently.
 
 The left-hand stripe contains **Project**, **Commit**, **Terminal** and **Problems** icons; hover for their labels.
-**Git Log** is the bottom icon. It opens recent commits in the lower tool window while returning to the editor;
-the commit draft is retained. Switch between **Problems** and **Git Log** using the lower window's tabs.
-The log shows commit hashes, messages and authors, with its own scrolling and **Refresh** action.
+**Git Log** is the bottom icon. It opens recent commits in the lower tool window beneath both Project/Commit and
+the editor; the commit draft is retained. Switch between **Problems** and **Git Log** using the lower window's tabs.
+The log shows commit hashes, messages and authors, with its own scrolling. Local changes and visible history refresh
+automatically; remote refs update only when you choose **Fetch**. **Update** and **Push** are also in the log toolbar.
 Use the close button or the selected tool icon to hide the lower window. The Project icon hides or reveals the tree.
 All IDE text, including menus, dialogs and tooltips, uses the bundled JetBrains Mono font.
 
-Enter the commit message, author name and email directly in the labeled fields below Changes. The message supports
-multiple lines, cursor movement, selection, paste and undo/redo. Tab and Shift+Tab move between fields. **Commit**
+Enter the commit message below Changes. Configure author name and email in **Settings · Git**, opened from the
+left stripe or Commit's **Settings** button. The message supports multiple lines, cursor movement, selection,
+paste and undo/redo. Tab and Shift+Tab move between the fields in the active window. **Commit**
 includes only checked files; **Commit & Push** pushes after the commit succeeds. Ctrl+Enter commits and
 Ctrl+Shift+Enter commits and pushes. There are no separate Stage/Unstage steps. Unrelated staged changes from an
 external Git client remain in its index and are not included automatically.
 
 A failed commit keeps its draft and checked paths which are still changed. A successful commit clears the message
 and its file selection while retaining the author fields for the IDE session. Changing projects clears the message
-and file selection. **Editor** returns to the source editor; Escape closes an open menu, leaves a focused commit
-field, then returns to the editor.
+and file selection. **Source** returns from diff to the source editor; Escape closes an open menu, leaves a focused
+commit field, then hides Commit.
 
 Before a foreground Git operation, the IDE saves modified open buffers. It pauses editing while the operation runs and refreshes
 files, tree and analysis after operations which change the working tree. Save conflicts must be resolved first.
@@ -264,15 +266,21 @@ At a short viewport, scroll the panel to reach the commit fields and actions.
 
 Click the branch name to open its menu. **New branch** creates and switches to a local branch; choose another branch
 to switch to it. These actions require a clean working tree; preserve your changes in a commit first.
-**Repository** groups origin and account settings; **Set origin URL** changes the origin remote.
+**Settings · Git** groups origin, commit author and account settings; **Set origin URL** changes the origin remote.
 
 **Fetch** downloads remote refs. **Update** accepts only a fast-forward update and requires a clean working tree. If
 local and remote histories have diverged, it reports an error and preserves local HEAD, index and working files. Merge
 and conflict resolution are deferred; use an external Git client for those operations, then refresh the IDE.
 
 **Push** sends the current branch to its configured upstream, or establishes its first origin upstream. A rejected push
-does not force-update the remote. **HTTPS account**, **Replace HTTPS token** and **Forget HTTPS token** in the
-Repository menu manage session authentication;
+does not force-update the remote. **HTTPS account and token**, **Replace HTTPS token** and **Forget HTTPS token** in
+**Settings · Git** manage session authentication. The server step defaults to the current origin server (GitHub when no origin is configured). Credentials are bound to that exact HTTPS host and effective port, and settings show which server has a saved token. In the masked token window, **Check** validates a GitHub token
+with GitHub itself and shows **Token is valid** or a check error before **Save token**. This checks token validity,
+not repository permissions. Clipboard whitespace at the edges is removed. Other HTTPS hosts explicitly offer saving
+without this GitHub check. Tokens remain session-only. A different host or port, including a separate push URL or a rewritten URL, requires separate authentication; a redirected request cannot carry the saved token to another server. HTTPS certificate verification must remain enabled.
+
+The main token buffer is overwritten when credentials are replaced, forgotten or the IDE session closes. Temporary operation buffers are cleared afterward. JVM strings and the HTTP implementation can retain transient copies, so this does not guarantee erasure from heap dumps or protection from other code running in the same client process.
+
 **Cancel** requests cancellation of a running Git operation. Cancellation does not undo an operation already completed,
 and a network failure during push may require Fetch/Status to inspect the remote result.
 

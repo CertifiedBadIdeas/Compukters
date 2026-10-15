@@ -26,6 +26,11 @@ import java.util.concurrent.atomic.AtomicBoolean
 
 /** Git operates on client-local roots; this contract is independent of its implementation. */
 interface GitBackend {
+    fun validateCredentials(
+        credentials: GitCredentials,
+        cancellation: GitCancellation,
+    ): GitCredentialCheck = GitCredentialCheck(false, "Token validation is unavailable for this host", canSave = true)
+
     fun clone(
         remote: String,
         destination: Path,
@@ -41,14 +46,54 @@ interface GitBackend {
     ): GitResult
 }
 
+data class GitCredentialCheck(
+    val valid: Boolean,
+    val message: String,
+    val canSave: Boolean = valid,
+)
+
+/** The HTTPS origin allowed to receive a session credential; paths never broaden its scope. */
+class GitCredentialScope private constructor(
+    val host: String,
+    val port: Int,
+) {
+    val authority: String get() = if (port == 443) host else "$host:$port"
+
+    fun matches(remote: String): Boolean =
+        runCatching { fromRemote(remote) }.getOrNull()?.let {
+            host == it.host && port == it.port
+        } == true
+
+    override fun equals(other: Any?): Boolean = other is GitCredentialScope && host == other.host && port == other.port
+
+    override fun hashCode(): Int = 31 * host.hashCode() + port
+
+    override fun toString(): String = authority
+
+    companion object {
+        val GITHUB = fromRemote("https://github.com")
+
+        fun fromRemote(remote: String): GitCredentialScope {
+            GitRemote.requireHttps(remote)
+            val uri = URI(remote)
+            val port = if (uri.port == -1) 443 else uri.port
+            require(port in 1..65535) { "Invalid HTTPS port" }
+            return GitCredentialScope(uri.host.lowercase(java.util.Locale.ROOT), port)
+        }
+    }
+}
+
 class GitCredentials(
     val username: String,
     token: CharArray,
+    val scope: GitCredentialScope = GitCredentialScope.GITHUB,
 ) : AutoCloseable {
     private val password = token.copyOf()
 
+    @Synchronized
     fun token(): CharArray = password.copyOf()
 
+    @Synchronized
     override fun close() {
         password.fill('\u0000')
     }
@@ -163,6 +208,7 @@ data class GitStatus(
     val branches: List<String> = emptyList(),
     val changes: List<GitChange> = emptyList(),
     val state: String? = null,
+    val remote: String? = null,
 )
 
 enum class GitLineChangeKind { Added, Modified, Deleted }
