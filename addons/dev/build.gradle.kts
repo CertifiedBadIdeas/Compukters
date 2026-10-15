@@ -137,6 +137,13 @@ loom {
         }
     }
 }
+// Loom 1.17 resolves mod configurations when constructing decompiler tasks. Create them
+// under this project's configuration lock before composite-build IDE task discovery.
+afterEvaluate {
+    afterEvaluate {
+        tasks.names.filter { it.startsWith("genSourcesWith") }.forEach { tasks.named(it).get() }
+    }
+}
 // Connector compares Fabric mixins against the unpatched Mojang-mapped Minecraft jar.
 // Resolve the path during configuration, after Loom has prepared its providers.
 afterEvaluate {
