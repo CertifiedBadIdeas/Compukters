@@ -116,11 +116,10 @@ class DefaultIdeWorkspace internal constructor(
     }
 
     override fun validateGitCredentials(
-        remote: String?,
         credentials: GitCredentials,
         cancellation: GitCancellation,
     ) = submit("validateGitCredentials") {
-        checkNotNull(gitBackend) { "Git is unavailable" }.validateCredentials(remote, credentials, cancellation)
+        checkNotNull(gitBackend) { "Git is unavailable" }.validateCredentials(credentials, cancellation)
     }
 
     override fun git(

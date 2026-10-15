@@ -60,7 +60,6 @@ interface IdeWorkspace : AutoCloseable {
     ): CompletableFuture<ProjectDescriptor> = CompletableFuture.failedFuture(UnsupportedOperationException("Git clone is unavailable"))
 
     fun validateGitCredentials(
-        remote: String?,
         credentials: GitCredentials,
         cancellation: GitCancellation,
     ): CompletableFuture<ru.lazyhat.compukters.ide.git.GitCredentialCheck> =

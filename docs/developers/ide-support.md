@@ -90,11 +90,11 @@ fast-forward-only pull and push. A left icon stripe groups tool windows; all IDE
 Git colors cover the tree, active title and Changes rows, including parent folders.
 Read-only background inspection supplies bounded HEAD-to-buffer gutter changes, including unsaved text,
 without a save barrier; project, operation and document-revision checks reject stale results. Private repository credentials are
-masked and session-only. Save barriers and generation checks protect open
+masked and session-only, bound to the explicitly selected HTTPS host and effective port. Transport checks cover rewritten URLs and cross-origin redirects before headers are attached. Network errors do not expose remote exception text; JVM/HTTP string copies remain outside the buffer-erasure guarantee. Save barriers and generation checks protect open
 buffers; tree/analysis refresh follows working-tree updates. File/folder rename rebases open descendant paths.
 `.git` is excluded from project content and compiler snapshots. SSH, merge, submodules, LFS and linked worktrees are deferred.
 
-**Evidence:** `JGitBackendTest`, `GitWorkspaceIntegrationTest`, `ProjectCatalogTest`, `ProjectSnapshotTest`,
+**Evidence:** `JGitBackendTest`, `GitCredentialSecurityTest`, `GitWorkspaceIntegrationTest`, `ProjectCatalogTest`, `ProjectSnapshotTest`,
 `IdeClientControllerTest`, `IdePromptTest`, `IdeInputAdapterTest`, `IdeRendererStateTest`, and both production archive
 gates for relocated Git classes/resources. Automated Git transport tests use controlled local remotes; real HTTPS
 hosting/authentication and visible interaction remain part of the manual scenario. See the

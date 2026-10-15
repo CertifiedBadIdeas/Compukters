@@ -15,6 +15,7 @@ package ru.lazyhat.compukters.impl.ide
 import ru.lazyhat.compukters.ide.client.state.IdeCommand
 import ru.lazyhat.compukters.ide.git.GitCancellation
 import ru.lazyhat.compukters.ide.git.GitCredentialCheck
+import ru.lazyhat.compukters.ide.git.GitCredentialScope
 import ru.lazyhat.compukters.ide.git.GitCredentials
 import ru.lazyhat.compukters.ide.git.GitOperation
 import ru.lazyhat.compukters.ide.git.GitRemote
@@ -47,10 +48,15 @@ sealed interface IdePromptKind {
         val name: String,
     ) : IdePromptKind
 
-    data object GitUsername : IdePromptKind
+    data object GitServer : IdePromptKind
+
+    data class GitUsername(
+        val scope: GitCredentialScope = GitCredentialScope.GITHUB,
+    ) : IdePromptKind
 
     data class GitToken(
         val username: String,
+        val scope: GitCredentialScope = GitCredentialScope.GITHUB,
     ) : IdePromptKind
 
     data object CreateText : IdePromptKind
@@ -91,8 +97,9 @@ data class IdePromptState(
             IdePromptKind.GitCommitMessage -> "Commit staged changes · message"
             is IdePromptKind.GitCommitName -> "Commit author · name"
             is IdePromptKind.GitCommitEmail -> "Commit author · email"
-            IdePromptKind.GitUsername -> "HTTPS authentication · username"
-            is IdePromptKind.GitToken -> "HTTPS token · this IDE session only"
+            IdePromptKind.GitServer -> "HTTPS authentication · server"
+            is IdePromptKind.GitUsername -> "HTTPS authentication · ${kind.scope.authority}"
+            is IdePromptKind.GitToken -> "HTTPS token · ${kind.scope.authority}"
             IdePromptKind.CreateText -> "Create text file"
             IdePromptKind.CreateDirectory -> "Create directory"
             is IdePromptKind.Rename -> "Rename ${kind.source.value} · destination path"
@@ -109,7 +116,8 @@ data class IdePromptState(
             IdePromptKind.GitCommitMessage -> "Commit message"
             is IdePromptKind.GitCommitName -> "Author name"
             is IdePromptKind.GitCommitEmail -> "Author email"
-            IdePromptKind.GitUsername -> "Username"
+            IdePromptKind.GitServer -> "HTTPS server URL"
+            is IdePromptKind.GitUsername -> "Username"
             is IdePromptKind.GitToken -> "Token"
             IdePromptKind.CreateText -> "File path"
             IdePromptKind.CreateDirectory -> "Directory path"
@@ -140,7 +148,7 @@ class IdePromptController {
             error("Enter a token")
             return
         }
-        val credentials = GitCredentials(kind.username, token)
+        val credentials = GitCredentials(kind.username, token, kind.scope)
         token.fill('\u0000')
         val cancellation = GitCancellation()
         tokenCancellation = cancellation
@@ -326,15 +334,20 @@ class IdePromptController {
                         IdeCommand.Git(GitOperation.Commit(kind.message, kind.name, value))
                     }
 
-                    IdePromptKind.GitUsername -> {
-                        open(IdePromptKind.GitToken(value))
+                    IdePromptKind.GitServer -> {
+                        open(IdePromptKind.GitUsername(GitCredentialScope.fromRemote(value)))
+                        return null
+                    }
+
+                    is IdePromptKind.GitUsername -> {
+                        open(IdePromptKind.GitToken(value, kind.scope))
                         return null
                     }
 
                     is IdePromptKind.GitToken -> {
                         val token = value.toCharArray()
                         try {
-                            IdeCommand.SetGitCredentials(GitCredentials(kind.username, token))
+                            IdeCommand.SetGitCredentials(GitCredentials(kind.username, token, kind.scope))
                         } finally {
                             token.fill('\u0000')
                         }

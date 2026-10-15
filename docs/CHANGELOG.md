@@ -609,7 +609,7 @@ listed in [Kotlin support](developers/kotlin-support.md) and [standard library s
   HEAD-to-working preview beside the list or on its own tab. Branches and repository/account actions use menus. A left icon stripe opens tool windows, with
   Git Log at the bottom; history spans beneath the left tool window and editor and switches with Problems. Commit
   occupies the Project area, with selected diffs in the editor. Git settings group origin, author and session credentials;
-  the token window validates GitHub tokens before saving. Local changes/history refresh automatically, while remote
+  the token window validates GitHub tokens before saving. Session credentials are bound to the selected HTTPS server and port, with foreign destinations and cross-origin redirects blocked before credentials are sent. Local changes/history refresh automatically, while remote
   refs update through Fetch. All IDE text uses JetBrains Mono. Unrelated staged
   changes remain preserved. Commit & Push pushes only after a successful commit, and failed commits keep their drafts.
   Git status colors cover file names and folders; source gutters mark added, modified and deleted lines against

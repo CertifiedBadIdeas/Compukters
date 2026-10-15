@@ -477,7 +477,8 @@ class IdeClientController(
             is IdeCommand.SetGitCredentials -> {
                 gitCredentials?.close()
                 gitCredentials = command.credentials
-                gitView = gitView.copy(authenticated = command.credentials != null)
+                gitView =
+                    gitView.copy(authenticated = command.credentials != null, credentialServer = command.credentials?.scope?.authority)
                 publishWorkspace()
                 publishStatus(
                     if (command.credentials ==
@@ -1006,7 +1007,7 @@ class IdeClientController(
         pendingGit = null
         gitCancellation?.cancel()
         gitView =
-            IdeGitView(authenticated = gitCredentials != null)
+            IdeGitView(authenticated = gitCredentials != null, credentialServer = gitCredentials?.scope?.authority)
         val selected = catalog.singleOrNull { it.directoryName == directoryName }
         if (selected == null) {
             publishProblem("Project '$directoryName' is unavailable")
@@ -1836,10 +1837,18 @@ class IdeClientController(
             }
     }
 
+    fun gitCredentialScope(): ru.lazyhat.compukters.ide.git.GitCredentialScope =
+        (gitView.status?.remote ?: gitView.result?.status?.remote)?.let {
+            runCatching {
+                ru.lazyhat.compukters.ide.git.GitCredentialScope
+                    .fromRemote(it)
+            }.getOrNull()
+        } ?: ru.lazyhat.compukters.ide.git.GitCredentialScope.GITHUB
+
     fun validateGitCredentials(
         credentials: GitCredentials,
         cancellation: GitCancellation,
-    ) = workspace.validateGitCredentials(gitView.status?.remote ?: gitView.result?.status?.remote, credentials, cancellation)
+    ) = workspace.validateGitCredentials(credentials, cancellation)
 
     private fun requestGit(operation: GitOperation) {
         if (project == null || state.busy.isNotEmpty() || pendingGit != null) {
@@ -2591,7 +2600,7 @@ class IdeClientController(
         inspectedPath = null
         inspectedRevision = null
         gitLineChanges = emptyList()
-        gitView = IdeGitView(authenticated = gitCredentials != null)
+        gitView = IdeGitView(authenticated = gitCredentials != null, credentialServer = gitCredentials?.scope?.authority)
         bottomPanel =
             ru.lazyhat.compukters.ide.client.state.IdeBottomPanelView(
                 tab = if (preferencesSnapshot.diagnosticsExpanded) ru.lazyhat.compukters.ide.client.state.IdeBottomTab.Problems else null,

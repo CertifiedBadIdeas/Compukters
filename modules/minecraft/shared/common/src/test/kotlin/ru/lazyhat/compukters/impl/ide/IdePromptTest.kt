@@ -16,6 +16,7 @@ import ru.lazyhat.compukters.ide.client.state.IdeCommand
 import ru.lazyhat.compukters.ide.project.fs.ProjectPath
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -93,7 +94,7 @@ class IdePromptTest {
     @Test
     fun `authentication masks token and trims clipboard whitespace without retaining prompt`() {
         val prompt = IdePromptController()
-        prompt.open(IdePromptKind.GitUsername, "player")
+        prompt.open(IdePromptKind.GitUsername(), "player")
         assertNull(prompt.confirm())
         prompt.type(" token value ")
         kotlin.test.assertFalse(prompt.state.toString().contains("token value"))
@@ -102,6 +103,40 @@ class IdePromptTest {
         assertNull(prompt.state)
         assertEquals("token value", command.credentials!!.token().concatToString())
         command.credentials!!.close()
+    }
+
+    @Test
+    fun `authentication server scope survives username validation and save without appearing as a token`() {
+        val prompt = IdePromptController()
+        prompt.open(IdePromptKind.GitServer, "https://Git.Example.org:8443/repo")
+        assertNull(prompt.confirm())
+        prompt.type("player")
+        assertNull(prompt.confirm())
+        assertTrue(prompt.state!!.title.contains("git.example.org:8443"))
+        prompt.type("test-secret")
+        var checkedServer: String? = null
+        prompt.checkToken { credentials, _ ->
+            checkedServer = credentials.scope.authority
+            java.util.concurrent.CompletableFuture.completedFuture(
+                ru.lazyhat.compukters.ide.git
+                    .GitCredentialCheck(false, "Check unavailable", canSave = true),
+            )
+        }
+        prompt.pollTokenCheck()
+        assertEquals("git.example.org:8443", checkedServer)
+        assertFalse(prompt.state.toString().contains("test-secret"))
+        assertFalse(
+            prompt.state!!
+                .field
+                .toString()
+                .contains("test-secret"),
+        )
+        val command = prompt.confirm() as IdeCommand.SetGitCredentials
+        assertEquals(checkedServer, command.credentials!!.scope.authority)
+        assertTrue(command.credentials!!.scope.matches("https://git.example.org:8443/other/repo"))
+        assertFalse(command.credentials!!.scope.matches("https://git.example.org/other/repo"))
+        command.credentials!!.close()
+        assertNull(prompt.state)
     }
 
     @Test

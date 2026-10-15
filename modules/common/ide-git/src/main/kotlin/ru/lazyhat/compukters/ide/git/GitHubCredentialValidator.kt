@@ -30,24 +30,19 @@ internal class GitHubCredentialValidator(
     )
 
     fun validate(
-        remote: String?,
         credentials: GitCredentials,
         cancellation: GitCancellation,
     ): GitCredentialCheck {
         val token = credentials.token()
         try {
-            val githubToken = String(token)
-            if (remote != null) {
-                GitRemote.requireHttps(remote)
-                if (!URI(remote).host.equals("github.com", ignoreCase = true)) {
-                    return GitCredentialCheck(false, "Token check unavailable for this host · save without check", canSave = true)
-                }
-            }
             if (token.isEmpty() || token.any { it.isWhitespace() || it.isISOControl() }) {
                 return GitCredentialCheck(false, "Token must not contain whitespace")
             }
+            if (!credentials.scope.matches("https://github.com")) {
+                return GitCredentialCheck(false, "Token check unavailable for this server · save without check", canSave = true)
+            }
             cancellation.check()
-            val identity = request("https://api.github.com/user", "Bearer $githubToken", cancellation)
+            val identity = request("https://api.github.com/user", "Bearer ${String(token)}", cancellation)
             when (identity.status) {
                 401 -> return GitCredentialCheck(false, "Invalid or expired GitHub token")
                 403, 429 -> return GitCredentialCheck(false, "GitHub refused the check · policy or rate limit")
@@ -71,6 +66,8 @@ internal class GitHubCredentialValidator(
             val connection = URI(url).toURL().openConnection() as HttpURLConnection
             try {
                 connection.instanceFollowRedirects = false
+                connection.useCaches = false
+                connection.setRequestProperty("Cache-Control", "no-store")
                 connection.connectTimeout = 10_000
                 connection.readTimeout = 10_000
                 connection.setRequestProperty("Authorization", authorization)

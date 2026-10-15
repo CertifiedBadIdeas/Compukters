@@ -55,7 +55,7 @@ copy your files. Opening the same directory again reuses its catalog entry.
 so it can be repaired in the editor. The IDE clones into a temporary directory and publishes the
 project only after validation succeeds; a failed or cancelled clone does not appear in the project list.
 
-For a private clone, use **HTTPS token** first. Enter your Git hosting username, then the token in the masked field.
+For a private clone, use **HTTPS token** first. Confirm the HTTPS server address, enter your Git hosting username, then enter the token in the masked field.
 Credentials remain in this IDE session and are forgotten on close. They are not written into preferences, manifests,
 locks or remote URLs, and are not sent to the Minecraft server. Use an HTTPS URL without an embedded username/password,
 query or fragment. SSH transport is deferred.
@@ -274,10 +274,12 @@ and conflict resolution are deferred; use an external Git client for those opera
 
 **Push** sends the current branch to its configured upstream, or establishes its first origin upstream. A rejected push
 does not force-update the remote. **HTTPS account and token**, **Replace HTTPS token** and **Forget HTTPS token** in
-**Settings · Git** manage session authentication. In the masked token window, **Check token** validates a GitHub token
+**Settings · Git** manage session authentication. The server step defaults to the current origin server (GitHub when no origin is configured). Credentials are bound to that exact HTTPS host and effective port, and settings show which server has a saved token. In the masked token window, **Check** validates a GitHub token
 with GitHub itself and shows **Token is valid** or a check error before **Save token**. This checks token validity,
 not repository permissions. Clipboard whitespace at the edges is removed. Other HTTPS hosts explicitly offer saving
-without this GitHub check. Tokens remain session-only.
+without this GitHub check. Tokens remain session-only. A different host or port, including a separate push URL or a rewritten URL, requires separate authentication; a redirected request cannot carry the saved token to another server. HTTPS certificate verification must remain enabled.
+
+The main token buffer is overwritten when credentials are replaced, forgotten or the IDE session closes. Temporary operation buffers are cleared afterward. JVM strings and the HTTP implementation can retain transient copies, so this does not guarantee erasure from heap dumps or protection from other code running in the same client process.
 
 **Cancel** requests cancellation of a running Git operation. Cancellation does not undo an operation already completed,
 and a network failure during push may require Fetch/Status to inspect the remote result.
