@@ -11,7 +11,12 @@ section: players
 This page records user-visible Compukters changes. The newest version is first; releases remain as permanent section
 headings so this page has one stable URL that can be shared outside the repository.
 
-## 0.6.0 — In development
+## 0.7.0 — In development
+
+## 0.6.0 — 2026-10-15
+
+- Release downloads include the base mod and Create, CreateAddition, Sable and Propulsion addons.
+  Cosmonautics remains development-only and is not published with this release.
 
 - Addon development builds support Gradle task discovery during IntelliJ composite-build synchronization
   with Loom 1.17 and Gradle 9.8.

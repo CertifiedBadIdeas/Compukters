@@ -58,8 +58,9 @@ The selected identity must match the published Linux/Windows assets and their ma
 native that implements newer artifact reader features does not establish that an
 older published bundle supports those features. Keep these contracts aligned when
 preparing the candidate; missing or mismatched Runtime assets stop the release.
-The checked-in descriptor selects the Runtime 0.24.0 candidate. Its Linux/Windows bundles must be published
-at that exact commit before tagged packaging; selecting a candidate alone does not establish release readiness.
+The checked-in descriptor selects published Runtime 0.24.0 from `c102c9d59858cee3e9cd474e1dd16be4b0607bf3`.
+Its Linux/Windows bundles contain both JNI and FFM transports with ABI 24. Tagged packaging validates their
+identity and contents; Runtime publication alone does not establish mod release readiness.
 Check the selected version and commit against `config/runtime-release.properties` when preparing a candidate.
 Both mod JARs record the selected native release at `META-INF/compukters/runtime.properties`.
 Inventory schema 5 records that actual component separately from the source submodule revision;
