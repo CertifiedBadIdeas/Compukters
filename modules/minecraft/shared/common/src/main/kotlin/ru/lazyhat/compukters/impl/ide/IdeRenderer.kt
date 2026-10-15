@@ -128,6 +128,7 @@ object IdeRenderer {
         }
         output.terminalTool(state.target)
         output.scaleControls(uiScale, enabled = statusDetails == null && quickOpen == null && prompt == null && state.dialog == null)
+        (state.page as? IdePageState.Workspace)?.let { output.gitMenu(it.value, state.busy) }
         val dialog = state.dialog
         if (statusDetails != null && dialog == null && prompt == null) {
             IdeStatusDetailsRenderer.draw(output, geometry.panel, statusDetails)
@@ -306,10 +307,10 @@ object IdeRenderer {
                 workspace.activeFile != null || selectedTreePath != null,
             )
             toolWindows(workspace)
-            tree(workspace)
+            if (workspace.git.visible) gitPanel(workspace, busy) else tree(workspace)
             fileTabs(workspace, busy)
-            if (workspace.git.visible) {
-                gitPanel(workspace, busy)
+            if (workspace.git.visible && workspace.git.tab == IdeGitTab.Diff && workspace.git.previewPath != null) {
+                gitDiff(workspace)
             } else {
                 when (val editor = workspace.editor) {
                     IdeEditorView.Empty -> {
@@ -331,7 +332,7 @@ object IdeRenderer {
                     }
                 }
             }
-            diagnostics(workspace)
+            diagnostics(workspace, busy)
             IdeStatusBar.draw(this, geometry, workspace, targetState, toolingState, busy)
             if (projectSwitcherOpen) projectSwitcher(workspace, projectControl)
         }
@@ -482,343 +483,269 @@ object IdeRenderer {
             workspace: IdeWorkspaceView,
             busy: Set<IdeBusyOperation>,
         ) {
-            val bounds = geometry.editor
+            val bounds = geometry.tree ?: return
             val view = workspace.git
-            val status = view.result?.status
-            val available = status?.available == true
+            val status = view.status ?: view.result?.status
             val idle = busy.isEmpty()
-            val wide = bounds.width >= 560
-            val compact = bounds.height < 290
-            var x = bounds.left + 6
-            var y = bounds.top + 6 - if (compact) view.scroll * 20 else 0
+            val left = bounds.left + 6
+            val right = bounds.right - 6
+            val compact = bounds.height < 260
+            val originTop = bounds.top - if (compact) view.scroll * 20 else 0
+            gitScrollMaximum = 0
 
             fun button(
                 label: String,
-                action: IdeHitAction = IdeHitAction.GitOperation,
-                command: IdeCommand? = null,
-                operation: GitOperation? = null,
+                top: Int,
+                command: IdeCommand,
                 enabled: Boolean = idle,
-                selected: Boolean = false,
             ) {
-                val width = (label.length * 6 + 14).coerceAtMost(bounds.width - 12)
-                if (x + width > bounds.right - 6) {
-                    x = bounds.left + 6
-                    y += 24
-                }
-                val rect = IdeRect(x, y, x + width, y + 20)
-                if (bounds.contains(rect)) {
-                    target(action, rect, enabled, label, selected = selected, gitOperation = operation, gitCommand = command)
-                    ui(
-                        IdeTextKind.Toolbar,
-                        label,
-                        rect.left + 6,
-                        font.centeredCellTop(rect),
-                        if (enabled) IdeColors.TEXT else IdeColors.DISABLED,
-                        rect,
-                    )
-                }
-                x += width + 4
+                val rect = IdeRect(left, top, right, top + 20)
+                if (!bounds.contains(rect)) return
+                target(IdeHitAction.GitOperation, rect, enabled, label, gitCommand = command)
+                centeredUi(IdeTextKind.Toolbar, label, rect.left + 6, rect, if (enabled) IdeColors.TEXT else IdeColors.DISABLED)
             }
-            button("Changes", command = IdeCommand.GitTab(IdeGitTab.Changes), selected = view.tab == IdeGitTab.Changes)
-            if (!wide) button("Diff", command = IdeCommand.GitTab(IdeGitTab.Diff), selected = view.tab == IdeGitTab.Diff)
-            button("Editor", action = IdeHitAction.GitClose, enabled = true)
-            x = bounds.left + 6
-            y += 24
-            button(
-                (status?.branch ?: "No repository").take(18) + " ▾",
-                command = IdeCommand.GitMenu(IdeGitMenu.Branches),
-                enabled =
-                    idle && available,
-            )
-            button("Update", operation = GitOperation.Pull, enabled = idle && available)
-            button("Push", operation = GitOperation.Push, enabled = idle && available)
-            button("Repository ▾", command = IdeCommand.GitMenu(IdeGitMenu.Repository))
-            button("Refresh", operation = GitOperation.Status)
-            if (!idle) button("Cancel", action = IdeHitAction.GitCancel, enabled = IdeBusyOperation.Git in busy)
-            val bodyTop = y + 28
-            val leftRight = if (wide) bounds.left + (bounds.width * 2 / 5).coerceAtLeast(240) else bounds.right
-            val listLeft = bounds.left + 6
-            val listRight = leftRight - 6
-            val contentTop = maxOf(bounds.top + 6, bodyTop)
-            var maximum = 0
-
-            fun line(
-                label: String,
-                rowTop: Int,
-                left: Int = listLeft,
-                right: Int = listRight,
-                color: Int = IdeColors.TEXT,
-                monospace: Boolean = false,
-            ) {
-                val rect = IdeRect(left, rowTop, right, rowTop + 20)
-                if (bounds.contains(rect)) {
-                    if (monospace) {
-                        code(IdeTextKind.Source, label, left + 4, rowTop + 4 + font.glyphDrawOffsetY, color, rect)
-                    } else {
-                        ui(IdeTextKind.Source, label, left + 4, rowTop + 5, color, rect)
-                    }
-                }
-            }
-            if (!available) {
-                line("This project has no Git repository", bodyTop)
-                x = listLeft
-                y = bodyTop + 24
-                button("Create Git repository", operation = GitOperation.Init)
-                line("Open Repository for HTTPS account settings", y + 28, color = IdeColors.MUTED)
-            } else if (view.tab == IdeGitTab.Diff) {
-                val rows =
-                    view.result
-                        ?.diff
-                        ?.lineSequence()
-                        ?.toList()
-                        .orEmpty()
-                line(
-                    "HEAD → Working tree · ${view.previewPath?.value ?: "Select a file in Changes"}",
-                    bodyTop,
-                    right = bounds.right - 6,
-                    color = IdeColors.MUTED,
-                )
-                val offset = if (compact) 0 else view.scroll
-                rows.drop(offset).forEachIndexed { index, text ->
-                    line(text, bodyTop + 24 + index * 20, right = bounds.right - 6, color = gitDiffColor(text), monospace = true)
-                }
-                if (rows.isEmpty()) {
-                    line(
-                        "Choose a changed file to preview",
-                        bodyTop + 24,
-                        right = bounds.right - 6,
-                        color = IdeColors.MUTED,
-                    )
-                }
-                maximum =
-                    if (compact) {
-                        ((bodyTop + view.scroll * 20 + 24 + rows.size * 20 - bounds.bottom + 19).coerceAtLeast(0) / 20)
-                    } else {
-                        (
-                            (
-                                rows.size *
-                                    20 -
-                                    (bounds.bottom - contentTop - 24)
-                            ) +
-                                19
-                        ).coerceAtLeast(0) /
-                            20
-                    }
+            ui(IdeTextKind.ToolWindow, "Commit", left, originTop + 7, clip = bounds)
+            if (IdeBusyOperation.Git in busy) {
+                button("Cancel", originTop + 24, IdeCommand.CancelGit, enabled = true)
             } else {
-                val changes = status.changes
-                val formTop = if (compact) bodyTop + 24 + maxOf(1, changes.size) * 20 + 12 else bounds.bottom - 154
-                val listBottom = if (compact) bounds.bottom - 6 else formTop - 8
-                val heading = IdeRect(listLeft, bodyTop, listRight, bodyTop + 20)
-                if (bounds.contains(heading)) {
-                    target(IdeHitAction.GitOperation, heading, idle, "Select or clear all files", gitCommand = IdeCommand.GitCheck(null))
-                    checkbox(
-                        IdeRect(heading.left, heading.top, heading.left + 22, heading.bottom),
-                        changes.isNotEmpty() && view.checkedPaths.size == changes.size,
-                        idle,
-                    )
-                    ui(
-                        IdeTextKind.Source,
-                        "Changes (${view.checkedPaths.size}/${changes.size})",
-                        heading.left + 26,
-                        font.centeredCellTop(heading),
-                        clip = heading,
-                    )
+                button("Settings…", originTop + 24, IdeCommand.GitMenu(IdeGitMenu.Settings))
+            }
+            button(
+                (status?.branch ?: "No repository").take(24) + " ▾",
+                originTop + 48,
+                IdeCommand.GitMenu(IdeGitMenu.Branches),
+                idle && status?.available == true,
+            )
+            if (status?.available != true) {
+                button("Create Git repository", originTop + 76, IdeCommand.Git(GitOperation.Init))
+                return
+            }
+            val formTop = if (compact) originTop + 112 + maxOf(1, status.changes.size) * 20 else bounds.bottom - 124
+            val heading = IdeRect(left, originTop + 76, right, originTop + 96)
+            if (bounds.contains(heading)) {
+                target(IdeHitAction.GitOperation, heading, idle, "Select or clear all files", gitCommand = IdeCommand.GitCheck(null))
+                checkbox(
+                    IdeRect(left, heading.top, left + 22, heading.bottom),
+                    status.changes.isNotEmpty() && view.checkedPaths.size == status.changes.size,
+                    idle,
+                )
+                ui(
+                    IdeTextKind.Source,
+                    "Changes (${view.checkedPaths.size}/${status.changes.size})",
+                    left + 24,
+                    font.centeredCellTop(heading),
+                    clip = heading,
+                )
+            }
+            val rowsTop = heading.bottom + 4
+            val count = if (compact) status.changes.size else ((formTop - rowsTop - 6) / 20).coerceAtLeast(0)
+            gitScrollMaximum =
+                if (compact) {
+                    ((112 + maxOf(1, status.changes.size) * 20 + 124 - bounds.height + 19).coerceAtLeast(0) / 20)
+                } else {
+                    (
+                        status.changes.size -
+                            count
+                    ).coerceAtLeast(0)
                 }
-                val rowsTop = bodyTop + 24
-                val offset = if (compact) 0 else view.scroll
-                if (changes.isEmpty()) line("No changes", rowsTop, color = IdeColors.MUTED)
-                changes.drop(offset).forEachIndexed { index, change ->
-                    val top = rowsTop + index * 20
-                    val row = IdeRect(listLeft, top, listRight, top + 20)
-                    if (top >= bounds.top && row.bottom <= listBottom && bounds.contains(row)) {
-                        val check = IdeRect(row.left, row.top, row.left + 22, row.bottom)
-                        target(
-                            IdeHitAction.GitOperation,
-                            row,
-                            idle,
-                            "Preview ${change.path.value}",
-                            selected =
-                                view.previewPath == change.path,
-                            gitCommand = IdeCommand.GitPreview(change.path, showDiff = !wide),
-                        )
-                        target(
-                            IdeHitAction.GitOperation,
-                            check,
-                            idle,
-                            "Include ${change.path.value} in commit",
-                            gitCommand = IdeCommand.GitCheck(change.path),
-                        )
-                        checkbox(check, change.path in view.checkedPaths, idle)
-                        val color = IdeGitFileColors.color(change)
-                        ui(IdeTextKind.Source, change.path.value, row.left + 26, font.centeredCellTop(row), color, row)
-                    }
-                }
-                val messageField = IdeRect(listLeft, formTop + 18, listRight, formTop + 66)
-                for (field in IdeGitField.entries) {
-                    val offset = if (field == IdeGitField.Message) 18 else 90
-                    gitFieldFocusScroll[field] =
-                        if (compact) ((formTop + view.scroll * 20 + offset - bounds.top - 6) / 20).coerceAtLeast(0) else 0
-                }
-                line("Commit message", formTop, color = IdeColors.MUTED)
-                gitField(messageField, IdeGitField.Message, view.draft.message, view.draft.focused, idle)
-                val half = (listLeft + listRight) / 2
-                line("Author", formTop + 72, right = half - 3, color = IdeColors.MUTED)
-                line("Email", formTop + 72, left = half + 3, color = IdeColors.MUTED)
+            status.changes.drop(if (compact) 0 else view.scroll.coerceAtMost(gitScrollMaximum ?: 0)).take(count).forEachIndexed {
+                index,
+                change,
+                ->
+                val row = IdeRect(left, rowsTop + index * 20, right, rowsTop + (index + 1) * 20)
+                if (!bounds.contains(row)) return@forEachIndexed
+                val check = IdeRect(left, row.top, left + 22, row.bottom)
+                target(
+                    IdeHitAction.GitOperation,
+                    row,
+                    idle,
+                    "Preview ${change.path.value}",
+                    selected = view.previewPath == change.path,
+                    gitCommand = IdeCommand.GitPreview(change.path, showDiff = true),
+                )
+                target(
+                    IdeHitAction.GitOperation,
+                    check,
+                    idle,
+                    "Include ${change.path.value} in commit",
+                    gitCommand = IdeCommand.GitCheck(change.path),
+                )
+                checkbox(check, change.path in view.checkedPaths, idle)
+                ui(IdeTextKind.Source, change.path.value, left + 24, font.centeredCellTop(row), IdeGitFileColors.color(change), row)
+            }
+            if (status.changes.isEmpty() && count > 0) ui(IdeTextKind.Source, "No changes", left + 4, rowsTop + 5, IdeColors.MUTED, bounds)
+            if (compact || formTop + 118 <= bounds.bottom) {
+                ui(IdeTextKind.Source, "Commit message", left, formTop, IdeColors.MUTED, bounds)
                 gitField(
-                    IdeRect(listLeft, formTop + 90, half - 3, formTop + 112),
+                    IdeRect(left, formTop + 18, right, formTop + 66),
+                    IdeGitField.Message,
+                    view.draft.message,
+                    view.draft.focused,
+                    idle,
+                    bounds,
+                )
+                gitFieldFocusScroll[IdeGitField.Message] =
+                    if (compact) ((formTop + view.scroll * 20 + 18 - bounds.top - 6) / 20).coerceIn(0, gitScrollMaximum ?: 0) else 0
+                val canCommit = idle && view.checkedPaths.isNotEmpty() && view.draft.canCommit
+                button("Commit", formTop + 72, IdeCommand.GitCommitDraft(), canCommit)
+                button("Commit & Push", formTop + 96, IdeCommand.GitCommitDraft(push = true), canCommit)
+            }
+        }
+
+        private fun gitDiff(workspace: IdeWorkspaceView) {
+            val bounds = geometry.editor
+            val view = workspace.git
+            val close = IdeRect(bounds.right - 66, bounds.top + 3, bounds.right - 4, bounds.top + 23)
+            target(IdeHitAction.GitOperation, close, true, "Return to source", gitCommand = IdeCommand.GitTab(IdeGitTab.Changes))
+            centeredUi(IdeTextKind.Toolbar, "Source", close.left + 6, close)
+            val heading = IdeRect(bounds.left + 6, bounds.top + 4, close.left - 4, bounds.top + 24)
+            ui(
+                IdeTextKind.Source,
+                fitUi("HEAD → Working tree · ${view.previewPath?.value}", heading.width),
+                heading.left,
+                font.centeredCellTop(heading),
+                IdeColors.MUTED,
+                heading,
+            )
+            val body = IdeRect(bounds.left + 6, bounds.top + 28, bounds.right - 6, bounds.bottom - 4)
+            panel(IdePanelKind.Editor, bounds, IdeColors.EDITOR)
+            val lines =
+                view.result
+                    ?.diff
+                    ?.lineSequence()
+                    ?.toList()
+                    .orEmpty()
+            val count = (body.height / font.cellHeight).coerceAtLeast(0)
+            gitPreviewBounds = body
+            gitPreviewScrollMaximum = (lines.size - count).coerceAtLeast(0)
+            lines.drop(view.previewScroll.coerceAtMost(gitPreviewScrollMaximum ?: 0)).take(count).forEachIndexed { index, line ->
+                code(
+                    IdeTextKind.Source,
+                    line,
+                    body.left,
+                    body.top + index * font.cellHeight + font.glyphDrawOffsetY,
+                    gitDiffColor(line),
+                    body,
+                )
+            }
+        }
+
+        fun gitMenu(
+            workspace: IdeWorkspaceView,
+            busy: Set<IdeBusyOperation>,
+        ) {
+            val view = workspace.git
+            val menu = view.menu ?: return
+            val idle = busy.isEmpty()
+            val status = view.status ?: view.result?.status
+            for (index in hitTargets.indices) hitTargets[index] = hitTargets[index].copy(enabled = false)
+            val width = minOf(480, geometry.panel.width - 24)
+            val height = minOf(if (menu == IdeGitMenu.Settings) 292 else 320, geometry.panel.height - 24)
+            val left = geometry.panel.left + (geometry.panel.width - width) / 2
+            val top = geometry.panel.top + (geometry.panel.height - height) / 2
+            val popup = IdeRect(left, top, left + width, top + height)
+            fills += IdeFillDraw(IdeFillKind.DialogScrim, geometry.panel, IdeColors.DIM, IdeDrawLayers.Z_TOOL_WINDOW_SCRIM)
+            panel(IdePanelKind.Dialog, popup, IdeColors.PANEL_ALT, IdeDrawLayers.Z_TOOL_WINDOW)
+
+            val bodyBounds = IdeRect(popup.left, popup.top + 32, popup.right, popup.bottom - 6)
+
+            fun label(
+                text: String,
+                y: Int,
+                color: Int = IdeColors.TEXT,
+                header: Boolean = false,
+            ) {
+                ui(
+                    IdeTextKind.Dialog,
+                    fitUi(text, popup.width - 24),
+                    popup.left + 12,
+                    y,
+                    color,
+                    if (header) popup else bodyBounds,
+                    IdeDrawLayers.Z_TOOL_WINDOW_TEXT,
+                )
+            }
+
+            fun item(
+                label: String,
+                y: Int,
+                command: IdeCommand? = null,
+                action: IdeHitAction = IdeHitAction.GitOperation,
+                enabled: Boolean = idle,
+            ) {
+                val rect = IdeRect(popup.left + 12, y, popup.right - 12, y + 22)
+                if (!bodyBounds.contains(rect)) return
+                target(action, rect, enabled, label, z = IdeDrawLayers.Z_TOOL_WINDOW_TARGET, gitCommand = command)
+                centeredUi(
+                    IdeTextKind.Dialog,
+                    label,
+                    rect.left + 6,
+                    rect,
+                    if (enabled) IdeColors.TEXT else IdeColors.DISABLED,
+                    z = IdeDrawLayers.Z_TOOL_WINDOW_TEXT,
+                )
+            }
+            label(if (menu == IdeGitMenu.Settings) "Settings · Git" else "Branches", top + 10, header = true)
+            val close = IdeRect(popup.right - 30, top + 4, popup.right - 6, top + 26)
+            target(
+                IdeHitAction.GitOperation,
+                close,
+                true,
+                "Close settings",
+                z = IdeDrawLayers.Z_TOOL_WINDOW_TARGET,
+                gitCommand = IdeCommand.GitMenu(null),
+            )
+            centeredUi(IdeTextKind.Dialog, "×", close.left + 7, close, z = IdeDrawLayers.Z_TOOL_WINDOW_TEXT)
+            if (menu == IdeGitMenu.Settings) {
+                val maximum = ((284 - popup.height + 23).coerceAtLeast(0) / 24)
+                val bodyTop = top - view.scroll.coerceAtMost(maximum) * 24
+                label("Origin: ${status?.remote ?: "Not configured"}", bodyTop + 38, IdeColors.MUTED)
+                item("Set origin URL…", bodyTop + 56, action = IdeHitAction.GitRemote, enabled = idle && status?.available == true)
+                label("Commit author", bodyTop + 88, IdeColors.MUTED)
+                gitField(
+                    IdeRect(left + 12, bodyTop + 106, popup.right - 12, bodyTop + 128),
                     IdeGitField.AuthorName,
                     view.draft.authorName,
                     view.draft.focused,
                     idle,
+                    bodyBounds,
+                    IdeDrawLayers.Z_TOOL_WINDOW,
                 )
+                label("Email", bodyTop + 138, IdeColors.MUTED)
                 gitField(
-                    IdeRect(half + 3, formTop + 90, listRight, formTop + 112),
+                    IdeRect(left + 12, bodyTop + 156, popup.right - 12, bodyTop + 178),
                     IdeGitField.AuthorEmail,
                     view.draft.authorEmail,
                     view.draft.focused,
                     idle,
+                    bodyBounds,
+                    IdeDrawLayers.Z_TOOL_WINDOW,
                 )
-                val canCommit = idle && view.checkedPaths.isNotEmpty() && view.draft.canCommit
-                val commit = IdeRect(listLeft, formTop + 122, listLeft + 66, formTop + 144)
-                val push = IdeRect(commit.right + 5, commit.top, minOf(listRight, commit.right + 111), commit.bottom)
-                if (bounds.contains(commit)) {
-                    target(
-                        IdeHitAction.GitCommit,
-                        commit,
-                        canCommit,
-                        "Commit selected files (Ctrl+Enter)",
-                        gitCommand = IdeCommand.GitCommitDraft(),
-                    )
-                    ui(
-                        IdeTextKind.Toolbar,
-                        "Commit",
-                        commit.left + 8,
-                        commit.top + 7,
-                        if (canCommit) IdeColors.TEXT else IdeColors.DISABLED,
-                        commit,
-                    )
-                }
-                if (bounds.contains(push)) {
-                    target(
-                        IdeHitAction.GitCommit,
-                        push,
-                        canCommit,
-                        "Commit selected files, then push",
-                        gitCommand = IdeCommand.GitCommitDraft(push = true),
-                    )
-                    ui(
-                        IdeTextKind.Toolbar,
-                        "Commit & Push",
-                        push.left + 5,
-                        push.top + 7,
-                        if (canCommit) IdeColors.TEXT else IdeColors.DISABLED,
-                        push,
-                    )
-                }
-                maximum =
-                    if (compact) {
-                        ((formTop + view.scroll * 20 + 154 - bounds.bottom + 19).coerceAtLeast(0) / 20)
-                    } else {
-                        (
-                            (
-                                changes.size * 20 -
-                                    (listBottom - rowsTop)
-                            ) +
-                                19
-                        ).coerceAtLeast(0) /
-                            20
-                    }
-                if (wide) {
-                    val diffBounds =
-                        IdeRect(
-                            leftRight + 6,
-                            maxOf(bounds.top + 6, bodyTop).coerceAtMost(bounds.bottom - 6),
-                            bounds.right - 6,
-                            bounds.bottom - 6,
-                        )
-                    panel(IdePanelKind.Editor, diffBounds, IdeColors.EDITOR)
-                    line(
-                        "HEAD → Working tree · ${view.previewPath?.value ?: "Select a file"}",
-                        bodyTop,
-                        diffBounds.left,
-                        diffBounds.right,
-                        IdeColors.MUTED,
-                    )
-                    val diffLines =
-                        view.result
-                            ?.diff
-                            ?.lineSequence()
-                            ?.toList()
-                            .orEmpty()
-                    val scroll = view.previewScroll
-                    diffLines.drop(scroll).forEachIndexed {
-                        index,
-                        text,
-                        ->
-                        line(text, bodyTop + 24 + index * 20, diffBounds.left, diffBounds.right, gitDiffColor(text), monospace = true)
-                    }
-                    gitPreviewBounds = diffBounds
-                    gitPreviewScrollMaximum = ((diffLines.size * 20 - (bounds.bottom - contentTop - 24)) + 19).coerceAtLeast(0) / 20
-                }
-            }
-            gitScrollMaximum = maximum
-            gitFieldFocusScroll.replaceAll { _, scroll -> minOf(scroll, maximum) }
-            view.menu?.let { menu ->
-                for (index in hitTargets.indices) hitTargets[index] = hitTargets[index].copy(enabled = false)
-                val popup = IdeRect(bounds.left + 6, bounds.top + 6, minOf(bounds.right - 6, bounds.left + 310), bounds.bottom - 6)
-                panel(IdePanelKind.Dialog, popup, IdeColors.PANEL_ALT, Z_POPUP)
-                var row = 0
-
-                fun item(
-                    label: String,
-                    action: IdeHitAction = IdeHitAction.GitOperation,
-                    command: IdeCommand? = null,
-                    operation: GitOperation? = null,
-                    enabled: Boolean = idle,
-                ) {
-                    val top = popup.top + 6 + (row++ - view.scroll) * 24
-                    val rect = IdeRect(popup.left + 6, top, popup.right - 6, top + 22)
-                    if (!popup.contains(rect)) return
-                    target(action, rect, enabled, label, z = Z_POPUP_TARGET, gitOperation = operation, gitCommand = command)
-                    ui(
-                        IdeTextKind.Dialog,
-                        label,
-                        rect.left + 6,
-                        font.centeredCellTop(rect),
-                        if (enabled) IdeColors.TEXT else IdeColors.DISABLED,
-                        rect,
-                        Z_POPUP_TEXT,
-                    )
-                }
-                item("Close", command = IdeCommand.GitMenu(null), enabled = true)
-                if (menu == IdeGitMenu.Branches) {
-                    item("New branch…", IdeHitAction.GitBranch)
-                    status?.branches?.forEach { branch ->
-                        item(
-                            if (branch ==
-                                status.branch
-                            ) {
-                                "● $branch"
-                            } else {
-                                branch
-                            },
-                            operation = GitOperation.SwitchBranch(branch),
-                            enabled =
-                                idle && branch != status.branch,
-                        )
-                    }
-                } else {
-                    item("Set origin URL…", IdeHitAction.GitRemote, enabled = idle && available)
-                    item("Fetch", operation = GitOperation.Fetch, enabled = idle && available)
-                    item("Update · fast-forward only", operation = GitOperation.Pull, enabled = idle && available)
-                    item("Push", operation = GitOperation.Push, enabled = idle && available)
-                    item(if (view.authenticated) "Replace HTTPS token…" else "HTTPS account…", IdeHitAction.GitAuthenticate)
-                    if (view.authenticated) item("Forget HTTPS token", IdeHitAction.GitForgetCredentials)
-                }
-                gitPreviewBounds = null
-                gitPreviewScrollMaximum = null
                 gitFieldFocusScroll.clear()
-                gitScrollMaximum = ((row * 24 - (popup.height - 12)) + 23).coerceAtLeast(0) / 24
+                gitFieldFocusScroll[IdeGitField.AuthorName] = ((128 - popup.height + 23).coerceAtLeast(0) / 24)
+                gitFieldFocusScroll[IdeGitField.AuthorEmail] = ((178 - popup.height + 23).coerceAtLeast(0) / 24)
+                item(
+                    if (view.authenticated) "Replace HTTPS token…" else "HTTPS account and token…",
+                    bodyTop + 194,
+                    action = IdeHitAction.GitAuthenticate,
+                )
+                if (view.authenticated) item("Forget HTTPS token", bodyTop + 220, action = IdeHitAction.GitForgetCredentials)
+                label("Token is kept for this IDE session only", bodyTop + 258, IdeColors.MUTED)
+                gitScrollMaximum = maximum
+            } else {
+                item("New branch…", top + 36, action = IdeHitAction.GitBranch)
+                val count = ((popup.height - 72) / 24).coerceAtLeast(0)
+                val branches = status?.branches.orEmpty()
+                branches.drop(view.scroll).take(count).forEachIndexed { index, branch ->
+                    item(
+                        (if (branch == status?.branch) "● " else "") + branch,
+                        top + 66 + index * 24,
+                        IdeCommand.Git(GitOperation.SwitchBranch(branch)),
+                        enabled = idle && branch != status?.branch,
+                    )
+                }
+                gitScrollMaximum = (branches.size - count).coerceAtLeast(0)
+                gitFieldFocusScroll.clear()
             }
         }
 
@@ -837,11 +764,14 @@ object IdeRenderer {
             value: IdeGitFieldView,
             focused: IdeGitField?,
             enabled: Boolean,
+            container: IdeRect = geometry.editor,
+            layer: Int = Z_CONTENT,
         ) {
-            if (!geometry.editor.contains(bounds)) return
-            fills += IdeFillDraw(IdeFillKind.Border, bounds, if (field == focused) IdeColors.ACCENT else IdeColors.DISABLED, Z_CONTENT + 1)
+            if (!container.contains(bounds)) return
+            val offset = layer - Z_CONTENT
+            fills += IdeFillDraw(IdeFillKind.Border, bounds, if (field == focused) IdeColors.ACCENT else IdeColors.DISABLED, layer + 1)
             val inside = IdeRect(bounds.left + 1, bounds.top + 1, bounds.right - 1, bounds.bottom - 1)
-            fills += IdeFillDraw(IdeFillKind.Background, inside, IdeColors.EDITOR, Z_CONTENT + 2)
+            fills += IdeFillDraw(IdeFillKind.Background, inside, IdeColors.EDITOR, layer + 2)
             val command = IdeCommand.GitFocusField(field)
             hitTargets +=
                 IdeHitTarget(
@@ -850,7 +780,7 @@ object IdeRenderer {
                     enabled,
                     "Edit ${field.name}",
                     IdeFocusGroup.Page,
-                    Z_TARGET,
+                    Z_TARGET + offset,
                     gitCommand = command,
                 )
             val lines = value.text.split('\n')
@@ -877,7 +807,7 @@ object IdeRenderer {
                             enabled,
                             "Edit ${field.name}",
                             IdeFocusGroup.Page,
-                            Z_TARGET + 1,
+                            Z_TARGET + offset + 1,
                             gitCommand = command,
                             gitTextRange = range,
                         )
@@ -893,7 +823,7 @@ object IdeRenderer {
                                         IdeFillKind.Selection,
                                         IdeRect(left, rowTop, right, rowTop + font.cellHeight),
                                         IdeColors.SELECTION,
-                                        Z_SELECTION,
+                                        Z_SELECTION + offset,
                                     )
                             }
                         }
@@ -904,7 +834,7 @@ object IdeRenderer {
                                     IdeFillKind.Caret,
                                     IdeRect(left, rowTop, left + 1, rowTop + font.cellHeight),
                                     IdeColors.CARET,
-                                    Z_CARET,
+                                    Z_CARET + offset,
                                 )
                         }
                     }
@@ -916,6 +846,7 @@ object IdeRenderer {
                         IdeColors.TEXT,
                         inside,
                         sourceRange = range,
+                        z = Z_TEXT + offset,
                     )
                 }
                 start += raw.length + 1
@@ -926,11 +857,10 @@ object IdeRenderer {
             pointerX: Int,
             pointerY: Int,
         ) {
-            val target =
-                hitTargets
-                    .asReversed()
-                    .firstOrNull { it.tooltip != null && it.bounds.contains(pointerX, pointerY) } ?: return
-            val diagnosticTargets = hitTargets.filter { it.diagnostic != null && it.bounds.contains(pointerX, pointerY) }
+            val minimumLayer = if (panels.any { it.zIndex == IdeDrawLayers.Z_TOOL_WINDOW }) IdeDrawLayers.Z_TOOL_WINDOW else 0
+            val hovered = hitTargets.filter { it.zIndex >= minimumLayer && it.bounds.contains(pointerX, pointerY) }
+            val target = hovered.filter { it.tooltip != null }.maxByOrNull { it.zIndex } ?: return
+            val diagnosticTargets = hovered.filter { it.diagnostic != null }
             if (diagnosticTargets.isNotEmpty()) {
                 IdeDiagnosticTooltip.draw(this, geometry, diagnosticTargets)
                 return
@@ -1082,7 +1012,7 @@ object IdeRenderer {
             toolIcon(bounds, ToolIcon.Terminal, if (enabled) IdeColors.TEXT else IdeColors.DISABLED)
         }
 
-        private enum class ToolIcon { Project, Commit, Terminal, Problems, GitLog }
+        private enum class ToolIcon { Project, Commit, Terminal, Problems, GitLog, Settings }
 
         private fun stripeButton(index: Int): IdeRect =
             IdeRect(
@@ -1094,13 +1024,13 @@ object IdeRenderer {
 
         private fun toolWindows(workspace: ru.lazyhat.compukters.ide.client.state.IdeWorkspaceView) {
             val project = stripeButton(0)
-            target(IdeHitAction.ProjectTool, project, true, "Project", selected = geometry.treeVisible)
+            target(IdeHitAction.ProjectTool, project, true, "Project", selected = geometry.treeVisible && !workspace.git.visible)
             toolIcon(project, ToolIcon.Project)
             val commit = stripeButton(1)
             target(IdeHitAction.GitToggle, commit, true, "Commit", selected = workspace.git.visible)
             toolIcon(commit, ToolIcon.Commit)
             val problems = stripeButton(3)
-            if (geometry.toolStripe.contains(problems)) {
+            if (geometry.toolStripe.contains(problems) && problems.bottom + 2 <= geometry.status.top - 48) {
                 target(
                     IdeHitAction.GitOperation,
                     problems,
@@ -1121,6 +1051,9 @@ object IdeRenderer {
                 gitCommand = IdeCommand.BottomTab(if (workspace.bottom.tab == IdeBottomTab.GitLog) null else IdeBottomTab.GitLog),
             )
             toolIcon(log, ToolIcon.GitLog)
+            val settings = IdeRect(log.left, log.top - 24, log.right, log.top - 2)
+            target(IdeHitAction.GitOperation, settings, true, "Settings", gitCommand = IdeCommand.GitMenu(IdeGitMenu.Settings))
+            toolIcon(settings, ToolIcon.Settings)
         }
 
         /** Small vector icons stay crisp at the same UI scale as the existing controls. */
@@ -1180,6 +1113,13 @@ object IdeRenderer {
                     line(6, 10, 8, 12)
                 }
 
+                ToolIcon.Settings -> {
+                    for (row in 0..2) {
+                        line(1, 2 + row * 4, 13, 3 + row * 4)
+                        line(3 + row * 3, 1 + row * 4, 5 + row * 3, 5 + row * 4)
+                    }
+                }
+
                 ToolIcon.GitLog -> {
                     line(3, 2, 4, 12)
                     box(1, 1, 6, 5)
@@ -1190,7 +1130,10 @@ object IdeRenderer {
             }
         }
 
-        private fun diagnostics(workspace: ru.lazyhat.compukters.ide.client.state.IdeWorkspaceView) {
+        private fun diagnostics(
+            workspace: ru.lazyhat.compukters.ide.client.state.IdeWorkspaceView,
+            busy: Set<IdeBusyOperation>,
+        ) {
             val panelBounds = geometry.diagnostics ?: return
             val header = IdeRect(panelBounds.left, panelBounds.top, panelBounds.right, panelBounds.top + 22)
 
@@ -1219,9 +1162,33 @@ object IdeRenderer {
             val bounds = IdeRect(panelBounds.left, header.bottom, panelBounds.right, panelBounds.bottom)
             scissors += IdeScissorDraw(IdeScissorKind.Diagnostics, bounds, Z_CLIP)
             if (workspace.bottom.tab == IdeBottomTab.GitLog) {
-                val refresh = IdeRect(header.left + 146, header.top, header.left + 210, header.bottom)
-                target(IdeHitAction.GitOperation, refresh, true, "Refresh Git Log", gitCommand = IdeCommand.BottomTab(IdeBottomTab.GitLog))
-                ui(IdeTextKind.ToolWindow, "Refresh", refresh.left + 4, font.centeredCellTop(refresh), clip = refresh)
+                if (IdeBusyOperation.Git in busy) {
+                    val cancel = IdeRect(header.left + 146, header.top, header.left + 206, header.bottom)
+                    if (cancel.right + 4 <= close.left) {
+                        target(IdeHitAction.GitCancel, cancel, true, "Cancel Git operation")
+                        ui(IdeTextKind.ToolWindow, "Cancel", cancel.left + 4, font.centeredCellTop(cancel), clip = cancel)
+                    }
+                } else {
+                    var actionLeft = header.left + 146
+                    for ((label, operation) in listOf(
+                        "Fetch" to GitOperation.Fetch,
+                        "Push" to GitOperation.Push,
+                        "Update" to GitOperation.Pull,
+                    )) {
+                        val actionBounds = IdeRect(actionLeft, header.top, actionLeft + uiWidth(label) + 12, header.bottom)
+                        if (actionBounds.right + 4 <= close.left) {
+                            target(IdeHitAction.GitOperation, actionBounds, busy.isEmpty(), label, gitOperation = operation)
+                            ui(
+                                IdeTextKind.ToolWindow,
+                                label,
+                                actionBounds.left + 4,
+                                font.centeredCellTop(actionBounds),
+                                clip = actionBounds,
+                            )
+                            actionLeft = actionBounds.right + 4
+                        }
+                    }
+                }
                 val commits = workspace.git.history
                 val count = ((bounds.height - UI_LINE_HEIGHT) / UI_LINE_HEIGHT).coerceAtLeast(0)
                 bottomScrollMaximum = (commits.size - count).coerceAtLeast(0)
@@ -1474,11 +1441,39 @@ object IdeRenderer {
             fills += field.fills
             text += field.text
             prompt.error?.let { ui(IdeTextKind.Dialog, it, bounds.left + 10, bounds.top + 76, IdeColors.ERROR, bounds, Z_DIALOG_TEXT) }
+            val tokenStatus = if (prompt.checkingToken) "Checking token…" else prompt.tokenCheck?.message
+            tokenStatus?.let {
+                ui(
+                    IdeTextKind.Dialog,
+                    fitUi(it, bounds.width - 20),
+                    bounds.left + 10,
+                    bounds.top + 76,
+                    if (prompt.tokenCheck?.valid == true) IdeColors.INFO else IdeColors.MUTED,
+                    bounds,
+                    Z_DIALOG_TEXT,
+                )
+            }
             val dismiss = IdeRect(bounds.right - 78, bounds.bottom - 26, bounds.right - 10, bounds.bottom - 8)
             val confirm = IdeRect(dismiss.left - 76, dismiss.top, dismiss.left - 8, dismiss.bottom)
-            target(IdeHitAction.Confirm, confirm, true, focusGroup = IdeFocusGroup.Dialog, z = Z_DIALOG_TARGET)
+            target(IdeHitAction.Confirm, confirm, !prompt.checkingToken, focusGroup = IdeFocusGroup.Dialog, z = Z_DIALOG_TARGET)
             target(IdeHitAction.Dismiss, dismiss, true, focusGroup = IdeFocusGroup.Dialog, z = Z_DIALOG_TARGET)
-            ui(IdeTextKind.Dialog, "Confirm", confirm.left + 9, font.centeredCellTop(confirm), z = Z_DIALOG_TEXT)
+            val confirmLabel =
+                if (prompt.kind !is IdePromptKind.GitToken) {
+                    "Confirm"
+                } else if (prompt.tokenCheck?.canSave ==
+                    true
+                ) {
+                    "Save token"
+                } else {
+                    "Check token"
+                }
+            ui(
+                IdeTextKind.Dialog,
+                fitUi(confirmLabel, confirm.width - 8),
+                confirm.left + 4,
+                font.centeredCellTop(confirm),
+                z = Z_DIALOG_TEXT,
+            )
             ui(IdeTextKind.Dialog, "Cancel", dismiss.left + 12, font.centeredCellTop(dismiss), z = Z_DIALOG_TEXT)
         }
 

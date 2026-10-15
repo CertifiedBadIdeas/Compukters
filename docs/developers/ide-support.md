@@ -82,8 +82,10 @@ test `larger packaged source budget preserves smaller addon limits across additi
 **Status:** Implemented; in-client visual observation pending for [#703](https://github.com/CertifiedBadIdeas/Compukters/issues/703).
 
 Create, clone HTTPS repositories, open existing project directories in place and switch projects. The Git panel
-provides status, colored HEAD-to-working preview, checkbox-selected commits and editable commit/author fields,
-Changes/Diff tabs, a bottom Git Log window switching with Problems, branch/repository menus, fetch,
+provides status, colored HEAD-to-working preview, checkbox-selected commits and an editable commit draft in the left
+Project area. Git settings contain origin, author and session credentials; GitHub token validity is checked in the
+masked token window, independently of repository permissions. The full-width bottom Git Log switches with Problems,
+refreshes local history automatically and offers explicit fetch,
 fast-forward-only pull and push. A left icon stripe groups tool windows; all IDE text uses bundled JetBrains Mono.
 Git colors cover the tree, active title and Changes rows, including parent folders.
 Read-only background inspection supplies bounded HEAD-to-buffer gutter changes, including unsaved text,

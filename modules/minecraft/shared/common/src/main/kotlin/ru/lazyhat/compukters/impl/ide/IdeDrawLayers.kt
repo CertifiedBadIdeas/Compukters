@@ -36,11 +36,15 @@ internal object IdeDrawLayers {
     const val Z_PROJECT_SWITCHER_SELECTION = 72
     const val Z_PROJECT_SWITCHER_TEXT = 75
     const val Z_PROJECT_SWITCHER_TARGET = Z_PROJECT_SWITCHER + CONTROL_BACKGROUND_OFFSET + 1
-    const val Z_TOOLTIP = 82
-    const val Z_TOOLTIP_TEXT = 85
+    const val Z_TOOLTIP = 122
+    const val Z_TOOLTIP_TEXT = 125
     const val Z_POPUP_TEXT = 55
-    const val Z_DIALOG_SCRIM = 90
-    const val Z_DIALOG = 100
-    const val Z_DIALOG_TEXT = 110
-    const val Z_DIALOG_TARGET = 120
+    const val Z_TOOL_WINDOW_SCRIM = 90
+    const val Z_TOOL_WINDOW = 100
+    const val Z_TOOL_WINDOW_TEXT = 110
+    const val Z_TOOL_WINDOW_TARGET = 120
+    const val Z_DIALOG_SCRIM = 130
+    const val Z_DIALOG = 140
+    const val Z_DIALOG_TEXT = 150
+    const val Z_DIALOG_TARGET = 160
 }

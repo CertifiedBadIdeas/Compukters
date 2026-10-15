@@ -22,6 +22,37 @@ import kotlin.test.assertTrue
 
 class IdePromptTest {
     @Test
+    fun `token check stays in the prompt and editing or cancelling discards late results`() {
+        val prompt = IdePromptController()
+        prompt.open(IdePromptKind.GitToken("player"), "  github_pat_example\n")
+        val pending = java.util.concurrent.CompletableFuture<ru.lazyhat.compukters.ide.git.GitCredentialCheck>()
+        prompt.checkToken { credentials, _ ->
+            assertEquals("github_pat_example", credentials.token().concatToString())
+            pending
+        }
+        kotlin.test.assertTrue(prompt.state!!.checkingToken)
+        pending.complete(
+            ru.lazyhat.compukters.ide.git
+                .GitCredentialCheck(true, "Token is valid"),
+        )
+        prompt.pollTokenCheck()
+        kotlin.test.assertTrue(prompt.state!!.tokenCheck!!.valid)
+        kotlin.test.assertFalse(prompt.state!!.checkingToken)
+        prompt.type("x")
+        assertNull(prompt.state!!.tokenCheck)
+        val stale = java.util.concurrent.CompletableFuture<ru.lazyhat.compukters.ide.git.GitCredentialCheck>()
+        prompt.checkToken { _, _ -> stale }
+        prompt.cancel()
+        prompt.open(IdePromptKind.GitToken("other"))
+        stale.complete(
+            ru.lazyhat.compukters.ide.git
+                .GitCredentialCheck(true, "Token is valid"),
+        )
+        prompt.pollTokenCheck()
+        assertNull(prompt.state!!.tokenCheck)
+    }
+
+    @Test
     fun `project folder rename accepts a single name and preserves the catalog identity`() {
         val prompt = IdePromptController()
         prompt.open(IdePromptKind.RenameProject("old"), "new")
@@ -60,7 +91,7 @@ class IdePromptTest {
     }
 
     @Test
-    fun `authentication masks token and preserves spaces without retaining prompt`() {
+    fun `authentication masks token and trims clipboard whitespace without retaining prompt`() {
         val prompt = IdePromptController()
         prompt.open(IdePromptKind.GitUsername, "player")
         assertNull(prompt.confirm())
@@ -69,7 +100,7 @@ class IdePromptTest {
         kotlin.test.assertFalse(prompt.state!!.displayValue.contains("token value"))
         val command = prompt.confirm() as IdeCommand.SetGitCredentials
         assertNull(prompt.state)
-        assertEquals(" token value ", command.credentials!!.token().concatToString())
+        assertEquals("token value", command.credentials!!.token().concatToString())
         command.credentials!!.close()
     }
 

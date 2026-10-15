@@ -49,8 +49,13 @@ internal class IdePresentationSnapshot(
             is IdePageState.Workspace -> {
                 IdePointerContext(
                     geometry,
-                    editor = (page.value.editor as? IdeEditorView.Text).takeUnless { page.value.git.visible },
+                    editor =
+                        (page.value.editor as? IdeEditorView.Text).takeUnless {
+                            page.value.git.visible &&
+                                page.value.git.tab == ru.lazyhat.compukters.ide.client.state.IdeGitTab.Diff
+                        },
                     gitVisible = page.value.git.visible,
+                    gitMenu = page.value.git.menu,
                     gitScrollMaximum = model.gitScrollMaximum ?: 0,
                     gitDraft = page.value.git.draft,
                     gitPreviewScrollMaximum = model.gitPreviewScrollMaximum ?: 0,
@@ -64,8 +69,8 @@ internal class IdePresentationSnapshot(
                                 ru.lazyhat.compukters.ide.client.state.IdeBottomTab.Problems
                         },
                     projects = page.value.projects,
-                    tree = page.value.tree.flatten(),
-                    explorer = page.value.explorerRows(),
+                    tree = if (page.value.git.visible) emptyList() else page.value.tree.flatten(),
+                    explorer = if (page.value.git.visible) emptyList() else page.value.explorerRows(),
                     treeFirstRow = treeFirstRow,
                     hitTargets = model.hitTargets,
                     dialog = state.dialog,
@@ -81,13 +86,21 @@ internal class IdePresentationSnapshot(
         val chooser =
             (analysis?.interaction as? IdeSemanticInteraction.Chooser) != null
         return IdeFocusState(
-            if ((state.page as? IdePageState.Workspace)?.value?.git?.visible == true) IdeFocusArea.Editor else area,
+            area,
             completion,
             chooser,
             state.dialog,
             geometry.codeRows.coerceAtLeast(1),
             analysis?.parameterInfo != null,
             gitVisible = (state.page as? IdePageState.Workspace)?.value?.git?.visible == true,
+            gitDiffVisible =
+                (state.page as? IdePageState.Workspace)?.value?.git?.let {
+                    it.visible &&
+                        it.tab == ru.lazyhat.compukters.ide.client.state.IdeGitTab.Diff &&
+                        it.previewPath != null
+                } ==
+                    true,
+            gitPreviewScrollMaximum = pointer.gitPreviewScrollMaximum,
             gitScrollMaximum = pointer.gitScrollMaximum,
             gitFieldFocusScroll = pointer.gitFieldFocusScroll,
             gitDraft = (state.page as? IdePageState.Workspace)?.value?.git?.draft,

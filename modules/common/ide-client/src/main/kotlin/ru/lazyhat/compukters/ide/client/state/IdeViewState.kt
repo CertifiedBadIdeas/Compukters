@@ -141,7 +141,7 @@ data class IdeBottomPanelView(
     val scroll: Int = 0,
 )
 
-enum class IdeGitMenu { Branches, Repository }
+enum class IdeGitMenu { Branches, Settings }
 
 enum class IdeGitScrollArea { Content, Preview }
 

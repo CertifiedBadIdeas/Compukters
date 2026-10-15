@@ -161,6 +161,19 @@ class IdeScreenController(
             host.clearFocus()
             return true
         }
+        if ((state.page as? IdePageState.Workspace)?.value?.git?.menu != null) {
+            input.pointerClicked(uiEvent.x(), uiEvent.y(), uiEvent.modifiers(), pointerContext(geometry), doubleClick)
+            focusArea =
+                if ((controller.viewState().page as? IdePageState.Workspace)?.value?.git?.menu !=
+                    null
+                ) {
+                    IdeFocusArea.Git
+                } else {
+                    IdeFocusArea.Editor
+                }
+            host.clearFocus()
+            return true
+        }
         peripheralPicker?.takeIf { !projectSwitcherOpen && !terminalOverlay.visible }?.let {
             if (IdePeripheralPicker.bounds(geometry.content).contains(uiEvent.x(), uiEvent.y())) {
                 val hit =
@@ -244,11 +257,17 @@ class IdeScreenController(
             if (hitAction == IdeHitAction.ProjectChoice) projectSwitcherOpen = false
             focusArea =
                 when {
-                    hitAction == IdeHitAction.StatusDetails -> focusArea
+                    hitAction == IdeHitAction.StatusDetails -> {
+                        focusArea
+                    }
 
-                    hitAction == IdeHitAction.Peripherals && peripheralPicker != null -> IdeFocusArea.Peripherals
+                    hitAction == IdeHitAction.Peripherals && peripheralPicker != null -> {
+                        IdeFocusArea.Peripherals
+                    }
 
-                    hitAction == IdeHitAction.Terminal && terminalOverlay.visible -> IdeFocusArea.Terminal
+                    hitAction == IdeHitAction.Terminal && terminalOverlay.visible -> {
+                        IdeFocusArea.Terminal
+                    }
 
                     hitAction in
                         setOf(
@@ -262,13 +281,21 @@ class IdeScreenController(
                             IdeHitAction.PreviousFileTabs,
                             IdeHitAction.NextFileTabs,
                         )
-                    -> IdeFocusArea.Editor
+                    -> {
+                        IdeFocusArea.Editor
+                    }
 
-                    geometry.editor.contains(uiEvent.x(), uiEvent.y()) -> IdeFocusArea.Editor
+                    geometry.editor.contains(uiEvent.x(), uiEvent.y()) -> {
+                        IdeFocusArea.Editor
+                    }
 
-                    geometry.tree?.contains(uiEvent.x(), uiEvent.y()) == true -> IdeFocusArea.Tree
+                    geometry.tree?.contains(uiEvent.x(), uiEvent.y()) == true -> {
+                        if (pointerContext.gitVisible) IdeFocusArea.Git else IdeFocusArea.Tree
+                    }
 
-                    else -> IdeFocusArea.Panel
+                    else -> {
+                        IdeFocusArea.Panel
+                    }
                 }
             host.clearFocus()
             if (focusArea == IdeFocusArea.Terminal) terminalOverlay.focus() else terminalOverlay.focusLost()
@@ -366,6 +393,9 @@ class IdeScreenController(
         synchronizeQuickOpen()
         if (overlays.scroll(uiMouseX, uiMouseY, scrollX, scrollY, geometry.panel)) return true
         if (controller.viewState().dialog != null) return true
+        if ((controller.viewState().page as? IdePageState.Workspace)?.value?.git?.menu != null) {
+            return input.scroll(uiMouseX, uiMouseY, scrollX, scrollY, pointerContext(geometry))
+        }
         peripheralPicker?.takeIf { !projectSwitcherOpen && !terminalOverlay.visible }?.let { view ->
             if (IdePeripheralPicker.bounds(geometry.content).contains(uiMouseX, uiMouseY)) {
                 val maximum = (view.entries.size - IdePeripheralPicker.visibleRows(geometry.content)).coerceAtLeast(0)
@@ -423,6 +453,11 @@ class IdeScreenController(
         synchronizeQuickOpen()
         if (overlays.key(event, geometry().panel)) return true
         if (controller.viewState().dialog != null) return input.keyPressed(event, focusState())
+        if ((controller.viewState().page as? IdePageState.Workspace)?.value?.git?.menu != null) {
+            val handled = input.keyPressed(event, focusState())
+            if ((controller.viewState().page as? IdePageState.Workspace)?.value?.git?.menu == null) focusArea = IdeFocusArea.Editor
+            return handled
+        }
         if (event.key == IdeKeyCode.N &&
             event.modifiers and (IdeModifier.CONTROL or IdeModifier.SHIFT) == (IdeModifier.CONTROL or IdeModifier.SHIFT) &&
             event.modifiers and IdeModifier.ALT == 0 && focusArea != IdeFocusArea.Terminal
@@ -499,6 +534,7 @@ class IdeScreenController(
     fun tick() {
         if (sessionClosed || controller.isClosed()) return
         controller.tick()
+        prompt.pollTokenCheck()
         peripheralObserver.tick(controller.viewState().target.attachedTarget())
         pollPeripherals()
         terminalOverlay.setTarget(
@@ -555,7 +591,7 @@ class IdeScreenController(
             layout.treeWidth,
             layout.diagnosticsHeight,
             workspace?.bottom?.tab != null,
-            treeVisible = workspace != null && projectTreeVisible,
+            treeVisible = workspace != null && (projectTreeVisible || workspace.git.visible),
             IdeCodeFontProfile.DEFAULT,
             findVisible =
                 (workspace?.editor as? IdeEditorView.Text)?.find != null,
@@ -862,19 +898,32 @@ class IdeScreenController(
             }
 
             IdeHitAction.ProjectTool -> {
-                projectTreeVisible = !projectTreeVisible
+                val workspace = (controller.viewState().page as? IdePageState.Workspace)?.value
+                if (workspace?.git?.visible == true) {
+                    controller.dispatch(IdeCommand.GitVisible(false))
+                    projectTreeVisible = true
+                } else {
+                    projectTreeVisible = !projectTreeVisible
+                }
                 focusArea = if (projectTreeVisible) IdeFocusArea.Tree else IdeFocusArea.Editor
             }
 
             IdeHitAction.GitToggle -> {
                 val page = controller.viewState().page as? IdePageState.Workspace ?: return false
                 controller.dispatch(IdeCommand.GitVisible(!page.value.git.visible))
-                focusArea = IdeFocusArea.Editor
+                focusArea = IdeFocusArea.Git
             }
 
             IdeHitAction.GitRemote -> {
-                controller.dispatch(IdeCommand.GitMenu(null))
-                prompt.open(IdePromptKind.GitRemoteUrl)
+                val workspace = (controller.viewState().page as? IdePageState.Workspace)?.value
+                prompt.open(
+                    IdePromptKind.GitRemoteUrl,
+                    workspace
+                        ?.git
+                        ?.status
+                        ?.remote
+                        .orEmpty(),
+                )
             }
 
             IdeHitAction.GitBranch -> {
@@ -887,7 +936,6 @@ class IdeScreenController(
             }
 
             IdeHitAction.GitAuthenticate -> {
-                controller.dispatch(IdeCommand.GitMenu(null))
                 projectSwitcherOpen = false
                 prompt.open(IdePromptKind.GitUsername)
             }
@@ -1008,6 +1056,10 @@ class IdeScreenController(
 
     private fun confirmPrompt(): Boolean {
         if (prompt.state?.kind is IdePromptKind.RenamePeripheral) return confirmPeripheralRename()
+        if (prompt.state?.kind is IdePromptKind.GitToken && prompt.state?.tokenCheck?.canSave != true) {
+            prompt.checkToken(controller::validateGitCredentials)
+            return true
+        }
         val command = prompt.confirm() ?: return true
         controller.dispatch(command)
         return true
@@ -1101,6 +1153,7 @@ class IdeScreenController(
         val treeBounds = geometry.tree ?: return
         if (!treeBounds.contains(x, y)) return
         val workspace = (controller.viewState().page as? IdePageState.Workspace)?.value ?: return
+        if (workspace.git.visible) return
         val row = input.treeFirstRow + ((y - treeBounds.top - TREE_ROWS_TOP).toInt() / UI_LINE_HEIGHT)
         selectedTreePath = (workspace.explorerRows().getOrNull(row) as? IdeExplorerRow.ProjectEntry)?.entry?.path
     }
