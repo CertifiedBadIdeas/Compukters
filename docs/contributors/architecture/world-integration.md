@@ -75,7 +75,9 @@ and exact-instance validation for edits. Explicit configurator joins assign unna
 repeated joins; ordinary binding used by migration, screen assembly and split does not generate names. Composite
 display names remain authoritative in DisplayStorage, so configurator joins synchronize the generated name there.
 Numbered names use stable technical kinds rather than translated labels, and reuse vacated suffixes without a new
-persisted counter or schema. Chunk-load callbacks refresh address hints without forcing chunk loads.
+persisted counter or schema. Chunk-load callbacks queue address-hint refresh without forcing chunk loads.
+They never read the overworld directory inline during level construction: force-loaded Sable plots
+can report loaded block entities before the overworld is registered on the server.
 
 Membership does not imply reachability. A computer resolves only loaded, same-dimension members within the configured
 Euclidean radius (64 blocks by default), then deduplicates them with direct contacts. Discovery sorts canonical
