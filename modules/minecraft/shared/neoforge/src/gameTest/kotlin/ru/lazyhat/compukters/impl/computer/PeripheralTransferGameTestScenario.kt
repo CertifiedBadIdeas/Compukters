@@ -11,6 +11,7 @@ import net.minecraft.core.Direction
 import net.minecraft.gametest.framework.GameTestHelper
 import net.minecraft.world.level.block.entity.BlockEntity
 import ru.lazyhat.compukters.impl.registry.CompuktersRegistry
+import ru.lazyhat.compukters.minecraft.computer.ComputerBlockEntity
 import ru.lazyhat.compukters.minecraft.computer.ComputerPeripheralIdentity
 import ru.lazyhat.compukters.minecraft.display.DisplayBlockEntity
 import ru.lazyhat.compukters.minecraft.peripheral.ComputerPeripheralLookup
@@ -87,7 +88,39 @@ internal object PeripheralTransferGameTestScenario {
         }
         helper.assertTrue(found().identity?.anchor == to, "transfer lost name or member address")
         helper.assertTrue((level.getBlockEntity(to) as DisplayBlockEntity).screenIdentity() == canvas, "transfer changed canvas UUID")
-        level.removeBlock(to, false)
+        val recovered = to.south(4)
+        val rollback = PeripheralBlockTransfers.recover(level, level, mapOf(to to recovered), false)
+        val saved = requireNotNull(level.getBlockEntity(to)).saveWithFullMetadata(level.registryAccess())
+        val state = level.getBlockState(to)
+
+        fun copy(target: BlockPos) {
+            level.setBlockAndUpdate(target, state)
+            level.setBlockEntity(requireNotNull(BlockEntity.loadStatic(target, state, saved, level.registryAccess())))
+        }
+        copy(recovered)
+        helper.assertTrue(
+            (level.getBlockEntity(recovered) as DisplayBlockEntity).screenIdentity() == null && found().identity?.anchor != recovered,
+            "Staged recovery copy became an available device",
+        )
+        level.removeBlock(recovered, false)
+        rollback.resolve()
+        rollback.close()
+        helper.assertTrue(found().identity?.anchor == to, "Rollback lost source membership")
+        PeripheralBlockTransfers.recover(level, level, mapOf(to to recovered), true).use { recovery ->
+            copy(recovered)
+            level.removeBlock(to, false)
+            recovery.resolve()
+        }
+        helper.assertTrue(found().identity?.anchor == recovered, "Committed recovery lost saved display identity")
+        helper.assertTrue((level.getBlockEntity(recovered) as DisplayBlockEntity).screenIdentity() == canvas, "Recovery changed canvas")
+        // Closing a recovery scope is cancellation, never an implicit authority decision.
+        PeripheralBlockTransfers.recover(level, level, mapOf(recovered to to), true).close()
+        helper.assertTrue(found().identity?.anchor == recovered, "Closed recovery changed authority")
+        val computerEntity = level.getBlockEntity(helper.absolutePos(computer)) as ComputerBlockEntity
+        PeripheralBlockTransfers.guard(level, listOf(computerEntity.blockPos)).use {
+            helper.assertTrue(computerEntity.prepareTerminalAsync().getNow(null) == null, "Guard admitted a second computer runtime")
+        }
+        level.removeBlock(recovered, false)
         helper.assertTrue(found().status == ComputerPeripheralLookupStatus.MISSING, "ordinary removal remained guarded")
         val inspection =
             PeripheralConfiguratorServer.inspect(

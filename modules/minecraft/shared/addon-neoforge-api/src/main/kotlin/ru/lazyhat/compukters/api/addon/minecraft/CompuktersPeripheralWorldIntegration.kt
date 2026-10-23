@@ -30,14 +30,48 @@ object CompuktersPeripheralWorldIntegration {
         source: ServerLevel,
         positions: Iterable<BlockPos>,
     ) {
-        check(source.server.isSameThread)
-        positions.forEach { position ->
-            if (source.hasChunkAt(position)) {
-                (source.getBlockEntity(position) as? ru.lazyhat.compukters.minecraft.computer.ComputerBlockEntity)
-                    ?.prepareBlockTransfer()
-            }
-        }
+        prepareTransferAsync(source, positions)
     }
+
+    /** Await without blocking the server thread, before serializing or changing source ownership. */
+    @JvmStatic
+    fun prepareTransferAsync(
+        source: ServerLevel,
+        positions: Iterable<BlockPos>,
+    ): java.util.concurrent.CompletableFuture<Void> {
+        check(source.server.isSameThread)
+        val completions =
+            positions.mapNotNull { position ->
+                if (!source.hasChunkAt(position)) return@mapNotNull null
+                (source.getBlockEntity(position) as? ru.lazyhat.compukters.minecraft.computer.ComputerBlockEntity)
+                    ?.prepareBlockTransferAsync()
+            }
+        return java.util.concurrent.CompletableFuture
+            .allOf(*completions.toTypedArray())
+    }
+
+    /** Prevent copied blocks from attaching computers or changing membership during reconciliation. */
+    @JvmStatic
+    fun guardTransfer(
+        level: ServerLevel,
+        positions: Iterable<BlockPos>,
+    ): AutoCloseable = PeripheralBlockTransfers.guard(level, positions)
+
+    /** Keep computer admission suspended after metadata resolution, until the durable transaction completes. */
+    @JvmStatic
+    fun guardComputers(
+        level: ServerLevel,
+        positions: Iterable<BlockPos>,
+    ): AutoCloseable = PeripheralBlockTransfers.guard(level, positions, metadata = false)
+
+    /** Both saved copies must be guarded until journal authority has been resolved. */
+    @JvmStatic
+    fun recoverTransfer(
+        source: ServerLevel,
+        destination: ServerLevel,
+        positions: Map<BlockPos, BlockPos>,
+        committed: Boolean,
+    ): PeripheralBlockTransfers.Recovery = PeripheralBlockTransfers.recover(source, destination, positions, committed)
 
     /** Close in finally after the complete batch, including source destruction, on the server thread. */
     @JvmStatic
