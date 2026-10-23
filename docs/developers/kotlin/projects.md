@@ -49,6 +49,15 @@ produce no artifact.
 tests `entry policy rejects duplicate and invalid main functions` and `entry policy rejects a project without
 main`.
 
+## Malformed source is rejected
+
+**Status:** Supported.
+
+PSI syntax errors, including a truncated function or nested block that FIR could recover, produce
+syntax diagnostics with virtual paths and UTF-16 offsets. No IR or executable artifact is published.
+
+**Evidence:** `K2CompilerAdapterTest`, test `syntax and type diagnostics use virtual paths and UTF-16 offsets`.
+
 ## Multi-file projects
 
 **Status:** Partial.

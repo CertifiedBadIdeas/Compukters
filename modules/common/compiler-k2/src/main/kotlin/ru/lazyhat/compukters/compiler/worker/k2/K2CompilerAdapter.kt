@@ -20,8 +20,11 @@
 
 package ru.lazyhat.compukters.compiler.worker.k2
 
+import com.intellij.psi.PsiErrorElement
+import org.jetbrains.kotlin.KtPsiSourceElement
 import org.jetbrains.kotlin.cli.common.ExitCode
 import org.jetbrains.kotlin.diagnostics.Severity
+import org.jetbrains.kotlin.psi.psiUtil.collectDescendantsOfType
 import ru.lazyhat.compukters.addon.api.AddonGuestApiBundle
 import ru.lazyhat.compukters.addon.api.AddonGuestApiBundleCodec
 import ru.lazyhat.compukters.compiler.artifact.link.LibraryModuleLinker
@@ -194,6 +197,23 @@ class K2CompilerAdapter(
                         sourceOutputs,
                     )
                 val compiledOutputs = sourceOutputs + output
+                // FIR can recover a missing closing brace without reporting a semantic error.
+                // Such recovered PSI must never become an executable application.
+                output.frontendOutput.fir.forEach { file ->
+                    val psi = (file.source as? KtPsiSourceElement)?.psi ?: return@forEach
+                    psi.collectDescendantsOfType<PsiErrorElement>().forEach { error ->
+                        diagnostics +=
+                            WorkerDiagnostic(
+                                DiagnosticSeverity.ERROR,
+                                DiagnosticCategory.SYNTAX,
+                                "SYNTAX_ERROR",
+                                error.errorDescription,
+                                sourcePaths[psi.containingFile.name],
+                                error.textRange.startOffset.toUInt(),
+                                error.textRange.endOffset.toUInt(),
+                            )
+                    }
+                }
                 compiledOutputs.flatMap { it.diagnostics.diagnosticsByFile.entries }.forEach { (file, fileDiagnostics) ->
                     val path = file?.name?.let(sourcePaths::get)
                     fileDiagnostics.forEach { diagnostic ->
@@ -220,7 +240,7 @@ class K2CompilerAdapter(
                             )
                     }
                 }
-                if (compiledOutputs.none { it.diagnostics.hasErrors }) {
+                if (compiledOutputs.none { it.diagnostics.hasErrors } && diagnostics.none { it.severity == DiagnosticSeverity.ERROR }) {
                     val session =
                         CompilationSession(
                             irSink = { _, _ -> reachedIr = true },

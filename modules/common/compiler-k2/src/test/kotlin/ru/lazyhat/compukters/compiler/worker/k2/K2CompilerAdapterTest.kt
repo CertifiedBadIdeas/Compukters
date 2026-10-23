@@ -539,6 +539,15 @@ class K2CompilerAdapterTest {
             assertTrue(syntaxError.startUtf16 != null)
             assertNull(syntax.artifact)
 
+            for (source in listOf("fun main() { println(1)", "fun main() { while (true) { println(1) // truncated")) {
+                val truncated = adapter.compile(request(source))
+                assertNull(truncated.artifact, truncated.diagnostics.toString())
+                assertFalse(truncated.reachedIr)
+                assertTrue(
+                    truncated.diagnostics.any { it.severity == DiagnosticSeverity.ERROR && it.category == DiagnosticCategory.SYNTAX },
+                )
+            }
+
             val type = adapter.compile(request("val answer: MissingType = 42"))
             assertTrue(type.diagnostics.any { it.category == DiagnosticCategory.TYPE && it.severity == DiagnosticSeverity.ERROR })
             assertNull(type.artifact)

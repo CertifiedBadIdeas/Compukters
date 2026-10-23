@@ -52,7 +52,7 @@ fun main(args: Array<String>) {
                 Stderr.write("edit: is a directory: $path\n")
                 return
             }
-            if (info == null) "" else FileSystem.readText(file, 16384)
+            if (info == null) "" else FileSystem.readText(file, 65536)
         } catch (failure: FileSystemException) {
             Stderr.write("edit: ${failure.message ?: "filesystem error"}\n")
             return
@@ -61,10 +61,10 @@ fun main(args: Array<String>) {
             return
         }
 
-    val buffer = CharArray(4096)
+    val buffer = CharArray(16384)
     val initialState = editInsertDocument(buffer, editEmpty(buffer), source)
     if (initialState == null) {
-        Stderr.write("edit: file exceeds 4096 UTF-16 units\n")
+        Stderr.write("edit: file exceeds 16384 UTF-16 units\n")
         return
     }
     var state: EditState = initialState

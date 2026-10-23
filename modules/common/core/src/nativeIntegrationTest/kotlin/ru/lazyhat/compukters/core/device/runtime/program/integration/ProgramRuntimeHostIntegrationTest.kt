@@ -183,16 +183,16 @@ class ProgramRuntimeHostIntegrationTest {
 
     @Test
     fun `builtin editor rejects expanded paste atomically at buffer capacity`() {
-        for ((length, paste) in listOf(4088 to "\tZ", 4088 to "\nZ", 4088 to "😀\t", 4080 to "\n \nZ")) {
+        for ((length, paste) in listOf(16376 to "\tZ", 16376 to "\nZ", 16376 to "😀\t", 16368 to "\n \nZ")) {
             withEditor { host ->
-                submit(host, "\t" + "x".repeat(length))
+                ("\t" + "x".repeat(length)).chunked(1000).forEach { submit(host, it) }
                 val cursor = requireNotNull(host.terminalFullState()).cursor
                 submit(host, paste)
                 val screen = requireNotNull(host.terminalFullState())
                 assertEquals(cursor, screen.cursor, paste)
                 assertTrue(terminalText(screen).contains("Buffer full"), paste)
                 // Rejection must leave all remaining code units available.
-                submit(host, "x".repeat(4088 - length) + "ABCD")
+                submit(host, "x".repeat(16376 - length) + "ABCD")
                 assertTrue(terminalText(requireNotNull(host.terminalFullState())).contains("ABCD"))
             }
         }
@@ -200,9 +200,9 @@ class ProgramRuntimeHostIntegrationTest {
 
     @Test
     fun `builtin editor accepts expanded paste exactly filling the buffer`() {
-        for ((length, paste) in listOf(4087 to "\tZ", 4087 to "\n", 4079 to "\n \nZ")) {
+        for ((length, paste) in listOf(16375 to "\tZ", 16375 to "\n", 16367 to "\n \nZ")) {
             withEditor { host ->
-                submit(host, "\t" + "x".repeat(length))
+                ("\t" + "x".repeat(length)).chunked(1000).forEach { submit(host, it) }
                 submit(host, paste)
                 val screen = requireNotNull(host.terminalFullState())
                 assertTrue(!terminalText(screen).contains("Buffer full"))
@@ -226,9 +226,9 @@ class ProgramRuntimeHostIntegrationTest {
     @Test
     fun `builtin editor saves its full Unicode buffer without moving the cursor`() {
         withEditor { host ->
-            val content = "x".repeat(2047) + "😀" + "漢".repeat(2047)
-            assertEquals(4096, content.length)
-            submit(host, content)
+            val content = "x".repeat(8191) + "😀" + "漢".repeat(8191)
+            assertEquals(16384, content.length)
+            content.chunked(1000).forEach { submit(host, it) }
             press(host, TerminalKey.LEFT)
             val cursor = requireNotNull(host.terminalFullState()).cursor
             press(host, TerminalKey.S, setOf(TerminalModifier.CONTROL))
