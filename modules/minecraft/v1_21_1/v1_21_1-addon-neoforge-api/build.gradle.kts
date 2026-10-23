@@ -67,6 +67,8 @@ val verifyAddonNeoForgeApiJar =
                     "ru/lazyhat/compukters/api/addon/minecraft/CompuktersAddonHostFactory.class",
                     "ru/lazyhat/compukters/api/addon/minecraft/CompuktersAddonRegistry.class",
                     "ru/lazyhat/compukters/api/addon/minecraft/CompuktersPeripheralWorldIntegration.class",
+                    "ru/lazyhat/compukters/api/addon/minecraft/CompuktersPeripheralWorldIntegration\$Recovery.class",
+                    "ru/lazyhat/compukters/api/addon/minecraft/CompuktersPeripheralWorldIntegration\$recoverTransfer\$1.class",
                     "ru/lazyhat/compukters/api/addon/minecraft/CompuktersComputerContext.class",
                     "ru/lazyhat/compukters/api/addon/minecraft/CompuktersPeripheralContact.class",
                     "ru/lazyhat/compukters/api/addon/minecraft/CompuktersPeripheralDevice.class",
