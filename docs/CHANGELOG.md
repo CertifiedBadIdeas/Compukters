@@ -13,6 +13,8 @@ headings so this page has one stable URL that can be shared outside the reposito
 
 ## 0.7.0 — In development
 
+- Guest tasks sleeping on a server-tick timer keep waking while another task waits for terminal input.
+
 - The terminal editor holds up to 16,384 UTF-16 units. Compilation rejects incomplete source,
   including missing closing braces, before publishing an executable.
 
