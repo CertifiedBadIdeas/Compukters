@@ -113,44 +113,47 @@ class ProgramRuntimeHostTest {
 
     @Test
     fun `restoration parks execution until durable consumption and preserves timer remaining time`() {
-        val request = VmHostRequest(51, CapabilityIdentity("compukter", "timer", 1, 0), 0, listOf(VmValue.I32(20)))
-        val saved =
-            ProgramHostCheckpoint(
-                false,
-                GrantedResourceBudgetSnapshot(701, 81, false),
-                0,
-                listOf(0),
-                listOf(ProgramTimerCheckpoint(request.identity, 0, 20, 9)),
-                byteArrayOf(1, 2),
-            ).encode()
-        val restored = ScriptedSession(listOf(VmOutcome.WaitingForHostQuota), defaultOutcome = VmOutcome.WaitingForHostQuota)
-        var discarded = false
-        val host =
-            ProgramRuntimeHost(
-                object : ProgramVmSessionFactory {
-                    override fun open(artifact: ByteArray): ProgramVmSession = error("cold boot must not run")
+        // Include checkpoints written before terminal waits kept pending timers runnable.
+        for (waitingForInput in listOf(false, true)) {
+            val request = VmHostRequest(51, CapabilityIdentity("compukter", "timer", 1, 0), 0, listOf(VmValue.I32(20)))
+            val saved =
+                ProgramHostCheckpoint(
+                    waitingForInput,
+                    GrantedResourceBudgetSnapshot(701, 81, false),
+                    0,
+                    listOf(0),
+                    listOf(ProgramTimerCheckpoint(request.identity, 0, 20, 9)),
+                    byteArrayOf(1, 2),
+                ).encode()
+            val restored = ScriptedSession(listOf(VmOutcome.WaitingForHostQuota), defaultOutcome = VmOutcome.WaitingForHostQuota)
+            var discarded = false
+            val host =
+                ProgramRuntimeHost(
+                    object : ProgramVmSessionFactory {
+                        override fun open(artifact: ByteArray): ProgramVmSession = error("cold boot must not run")
 
-                    override fun restoreBoot() = ProgramVmRestoration(restored, saved)
+                        override fun restoreBoot() = ProgramVmRestoration(restored, saved)
 
-                    override fun discardCheckpoint() {
-                        discarded = true
-                    }
-                },
-            )
-        val checkpoint = requireNotNull(host.prepareRestoreBoot(1000))
-        assertEquals(listOf(0L), checkpoint.programScopes)
-        assertEquals(ProgramRuntimeState.Idle, host.serverTick(1000))
-        assertTrue(restored.advances.isEmpty())
-        assertFalse(discarded)
-        host.completeRestoration(1005)
-        assertTrue(discarded)
-        val resources =
-            assertIs<ru.lazyhat.compukters.core.device.runtime.program.ProgramResourceSnapshot.Available>(host.resourceSnapshot())
-        assertEquals(701L, resources.grantedGuestUnits)
-        host.serverTick(1013)
-        assertTrue(restored.responses.isEmpty())
-        host.serverTick(1014)
-        assertEquals(listOf(response(request.taskId, request.id, HostResponse.UnitSuccess)), restored.responses)
+                        override fun discardCheckpoint() {
+                            discarded = true
+                        }
+                    },
+                )
+            val checkpoint = requireNotNull(host.prepareRestoreBoot(1000))
+            assertEquals(listOf(0L), checkpoint.programScopes)
+            assertEquals(ProgramRuntimeState.Idle, host.serverTick(1000))
+            assertTrue(restored.advances.isEmpty())
+            assertFalse(discarded)
+            host.completeRestoration(1005)
+            assertTrue(discarded)
+            val resources =
+                assertIs<ru.lazyhat.compukters.core.device.runtime.program.ProgramResourceSnapshot.Available>(host.resourceSnapshot())
+            assertEquals(701L, resources.grantedGuestUnits)
+            host.serverTick(1013)
+            assertTrue(restored.responses.isEmpty())
+            host.serverTick(1014)
+            assertEquals(listOf(response(request.taskId, request.id, HostResponse.UnitSuccess)), restored.responses)
+        }
     }
 
     @Test
@@ -549,6 +552,27 @@ class ProgramRuntimeHostTest {
             ),
             session.responses,
         )
+    }
+
+    @Test
+    fun `terminal waiter does not prevent another task timer from waking`() {
+        val request = timer(1, 3, 2)
+        val session =
+            ScriptedSession(
+                outcomes = listOf(VmOutcome.HostRequestBatch(listOf(request))),
+                defaultOutcome = VmOutcome.WaitingForTerminalEvent,
+            )
+        val host = ProgramRuntimeHost(sessionFactory = ProgramVmSessionFactory { session })
+        host.start(byteArrayOf(1))
+
+        assertEquals(ProgramRuntimeState.Running, host.serverTick(10))
+        assertEquals(ProgramRuntimeState.Running, host.serverTick(12))
+        assertEquals(emptyList(), session.responses)
+        assertEquals(ProgramRuntimeState.WaitingForInput, host.serverTick(13))
+        assertEquals(listOf(response(2, 1, HostResponse.UnitSuccess)), session.responses)
+        val advances = session.advances.size
+        host.serverTick(14)
+        assertEquals(advances, session.advances.size)
     }
 
     @Test

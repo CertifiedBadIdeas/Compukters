@@ -255,7 +255,14 @@ class ProgramRuntimeHost internal constructor(
         }
         lastObservedTick = worldTick - 1
         preparedRestoration = null
-        state = if (checkpoint.waitingForInput) ProgramRuntimeState.WaitingForInput else ProgramRuntimeState.Running
+        state =
+            if (checkpoint.waitingForInput &&
+                pendingTimerRequests.isEmpty()
+            ) {
+                ProgramRuntimeState.WaitingForInput
+            } else {
+                ProgramRuntimeState.Running
+            }
     }
 
     private fun startSession(open: () -> ProgramVmSession): ProgramStartResult {
@@ -405,7 +412,9 @@ class ProgramRuntimeHost internal constructor(
                 }
 
                 VmOutcome.WaitingForTerminalEvent -> {
-                    state = ProgramRuntimeState.WaitingForInput
+                    // Terminal input suspends one Guest task. Other tasks may still own timers,
+                    // whose deadlines must keep receiving server ticks without a key press.
+                    state = if (pendingTimerRequests.isEmpty()) ProgramRuntimeState.WaitingForInput else ProgramRuntimeState.Running
                     return
                 }
 

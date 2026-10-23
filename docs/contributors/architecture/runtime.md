@@ -97,6 +97,8 @@ and cancels its remaining task work.
 The built-in `compukter:timer` capability at ABI 1.0 backs `Tasks.sleepTicks`: the loader-independent runtime retains
 the bounded request and resumes its owning task at the requested server-tick boundary. It does not introduce a VM
 clock, background timer, wall-clock dependency, or work while the computer is not receiving tick permits.
+A terminal waiter does not mark the whole computer idle while another task owns a pending timer;
+server-tick permits continue until that timer wakes, even without terminal input.
 Guest Kotlin exposes this as transparent stackful blocking through ordinary functions: `suspend` declarations are
 outside the supported source subset, while legacy suspend-call artifact instructions remain decodable and executable.
 
