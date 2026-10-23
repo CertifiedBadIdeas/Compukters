@@ -21,15 +21,19 @@ package ru.lazyhat.compukters.impl.peripheral
 import net.minecraft.server.level.ServerLevel
 import net.minecraft.world.level.chunk.LevelChunk
 import net.neoforged.neoforge.event.level.ChunkEvent
+import ru.lazyhat.compukters.impl.compat.enqueueCompuktersTask
 import ru.lazyhat.compukters.minecraft.peripheral.PeripheralNetworkAccess
 
 object PeripheralNetworkLifecycle {
     fun onChunkLoad(event: ChunkEvent.Load) {
         val level = event.level as? ServerLevel ?: return
         val chunk = event.chunk as? LevelChunk ?: return
-        level.server.execute {
+        // execute() runs inline on the server thread, including while Sable restores plots
+        // inside the ServerLevel constructor. Queue until the level is registered instead.
+        level.server.enqueueCompuktersTask {
             chunk.blockEntities.values
                 .toList()
+                .filterNot { it.isRemoved }
                 .forEach(PeripheralNetworkAccess::refresh)
         }
     }

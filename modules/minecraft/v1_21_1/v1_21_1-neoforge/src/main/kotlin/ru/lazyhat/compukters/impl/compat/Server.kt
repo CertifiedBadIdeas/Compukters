@@ -19,6 +19,10 @@
 package ru.lazyhat.compukters.impl.compat
 
 import net.minecraft.server.MinecraftServer
+import net.minecraft.server.TickTask
 import net.minecraft.server.level.ServerPlayer
 
 fun ServerPlayer.compuktersServer(): MinecraftServer = requireNotNull(level().server) { "server player is not attached to a server" }
+
+/** Always queues, even when called from the server thread during level construction. */
+fun MinecraftServer.enqueueCompuktersTask(action: Runnable) = tell(TickTask(tickCount, action))
