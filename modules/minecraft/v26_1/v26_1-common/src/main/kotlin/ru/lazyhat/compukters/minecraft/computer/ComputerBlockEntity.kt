@@ -91,6 +91,7 @@ open class ComputerBlockEntity internal constructor(
     internal fun peripheralResourcesAvailable(): Boolean = runtimeState.isPoweredOn() || carrier?.restoring == true
 
     private var filesystemLease: ComputerFileSystemLease? = null
+    private var carrierClosed = CompletableFuture.completedFuture<Void>(null)
     private var committedRedstoneOutput = 0
     private var sampledRedstoneInputs = IntArray(RedstoneWire.SIDE_COUNT)
     private var dirtyRedstoneInputs = RedstoneWire.ALL_SIDES_MASK
@@ -231,8 +232,13 @@ open class ComputerBlockEntity internal constructor(
 
     /** Capture world-owned resources before a construction copies or removes any source block. */
     fun prepareBlockTransfer() {
+        prepareBlockTransferAsync()
+    }
+
+    /** Completion includes the final VM checkpoint and release of its filesystem identity. */
+    fun prepareBlockTransferAsync(): CompletableFuture<Void> {
         check((level as? ServerLevel)?.server?.isSameThread != false)
-        closeCarrier()
+        return closeCarrier()
     }
 
     override fun setRemoved() {
@@ -331,6 +337,14 @@ open class ComputerBlockEntity internal constructor(
     }
 
     private fun attachCarrier(): ComputerCarrier? {
+        if (!carrierClosed.isDone || carrierClosed.isCompletedExceptionally ||
+            (level as? ServerLevel)?.let {
+                ru.lazyhat.compukters.minecraft.peripheral.PeripheralBlockTransfers
+                    .blocksComputer(it, blockPos)
+            } == true
+        ) {
+            return null
+        }
         if (!filesystemAvailable()) {
             scheduleCarrierRetry()
             return null
@@ -394,14 +408,16 @@ open class ComputerBlockEntity internal constructor(
         return SoundCommitResult.Completed(admissions)
     }
 
-    private fun closeCarrier(hibernate: Boolean = true) {
+    private fun closeCarrier(hibernate: Boolean = true): CompletableFuture<Void> {
+        if (carrier == null && filesystemLease == null) return carrierClosed
         val closed = closeRuntime(carrier, hibernate)
         carrier = null
         carrierRetryTicks = 0
         level?.let { ComputerCableMessages.changed(it, blockPos, false) }
         terminalMachineId = null
-        filesystemLease?.release(closed)?.whenComplete { _, _ -> }
+        carrierClosed = filesystemLease?.release(closed) ?: closed.thenAccept { }
         filesystemLease = null
+        return carrierClosed
     }
 
     private fun drainCarrier(): CompletableFuture<Long?> {

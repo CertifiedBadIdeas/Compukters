@@ -96,6 +96,19 @@ The scope is cleared even when the move throws. Complete displays retain canvas 
 relocation retires location-bound handles and private frames. Moving part of a display splits it into panels, retaining
 the network, each published tile and the name on the first panel. Ordinary removal outside a transfer remains destructive.
 
+Serialized construction adapters can hold a loaded-address `guardTransfer` while calling
+`prepareTransferAsync`. Its future includes final VM hibernation and filesystem attachment release;
+poll completion without blocking the server thread. Keep source ticks and computer admission gated
+until the coordinator opens `beginTransfer` for the exact source/destination block map. Close the move
+scope after source removal (or destination discard on rollback), before publishing the world checkpoint.
+The existing void preparation entrypoint remains available to synchronous block-move adapters.
+
+For journal recovery, `recoverTransfer` guards both recorded address sets without manufacturing device
+identities. After removing obsolete copies, call `resolve` with the selected survivor already loaded;
+this relocates matching membership and complete display canvases. Plain `close` only releases guards,
+so cancelling or shutting down a coordinator cannot accidentally commit destination authority.
+A copied, missing or replaced endpoint still cannot satisfy an exact-instance descriptor.
+
 ## Displays
 
 `compukters:display` capability 1.2 preserves graphical operations 4–16 and the original operations 0–3,

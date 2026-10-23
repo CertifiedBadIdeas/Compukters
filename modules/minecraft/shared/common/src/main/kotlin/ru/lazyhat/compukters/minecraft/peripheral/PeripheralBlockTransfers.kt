@@ -18,6 +18,116 @@ import ru.lazyhat.compukters.minecraft.display.DisplayWorldAccess
 object PeripheralBlockTransfers {
     private val active = ThreadLocal.withInitial { mutableListOf<Transfer>() }
 
+    private data class Guard(
+        val level: ServerLevel,
+        val positions: Set<BlockPos>,
+        val metadata: Boolean,
+    )
+
+    private val guards = ThreadLocal.withInitial { mutableListOf<Guard>() }
+
+    fun guard(
+        level: ServerLevel,
+        positions: Iterable<BlockPos>,
+        metadata: Boolean = true,
+    ): AutoCloseable {
+        check(level.server.isSameThread)
+        val guard = Guard(level, positions.map { it.immutable() }.toSet(), metadata)
+        guards.get().add(guard)
+        var closed = false
+        return AutoCloseable {
+            check(level.server.isSameThread)
+            if (!closed) {
+                closed = true
+                guards.get().remove(guard)
+                if (guards.get().isEmpty()) guards.remove()
+            }
+        }
+    }
+
+    private fun guarded(
+        level: ServerLevel,
+        position: BlockPos,
+    ): Boolean = guards.get().any { it.metadata && it.level === level && position in it.positions }
+
+    fun blocksComputer(
+        level: ServerLevel,
+        position: BlockPos,
+    ): Boolean =
+        guards.get().any { it.level === level && position in it.positions } ||
+            active.get().any {
+                (it.source === level && it.blocks.any { block -> block.from == position }) ||
+                    (it.destination === level && it.blocks.any { block -> block.to == position })
+            }
+
+    interface Recovery : AutoCloseable {
+        /** Call only after obsolete copies have been removed and the winner is loaded. */
+        fun resolve()
+    }
+
+    /** Metadata is kept while the coordinator discards obsolete copies; never invent new stamps. */
+    fun recover(
+        source: ServerLevel,
+        destination: ServerLevel,
+        positions: Map<BlockPos, BlockPos>,
+        committed: Boolean,
+    ): Recovery {
+        check(source.server.isSameThread && destination.server === source.server)
+        val sourceGuard = guard(source, positions.keys)
+        val destinationGuard = guard(destination, positions.values)
+        var closed = false
+        return object : Recovery {
+            override fun close() {
+                check(source.server.isSameThread)
+                if (closed) return
+                closed = true
+                destinationGuard.close()
+                sourceGuard.close()
+            }
+
+            override fun resolve() {
+                check(!closed) { "Transfer recovery is already closed" }
+                close()
+                val winner = if (committed) destination else source
+                val targets = if (committed) positions.values else positions.keys
+                require(targets.all(winner::hasChunkAt)) { "Authoritative transfer chunks are not loaded" }
+                for ((from, to) in positions) {
+                    val a = if (source.hasChunkAt(from)) source.getBlockEntity(from) else null
+                    val b = if (destination.hasChunkAt(to)) destination.getBlockEntity(to) else null
+                    if (a != null && b != null) {
+                        val stamp = if (a is DisplayBlockEntity) a.checkpointIdentity else PeripheralNetworkAccess.instance(a)?.toString()
+                        val next = if (b is DisplayBlockEntity) b.checkpointIdentity else PeripheralNetworkAccess.instance(b)?.toString()
+                        require(stamp == null || stamp != next) { "Both copies of a recovered device are still present" }
+                    }
+                }
+                val entities = targets.mapNotNull { if (winner.hasChunkAt(it)) winner.getBlockEntity(it) else null }
+                val panels = entities.filterIsInstance<DisplayBlockEntity>().associateBy { it.checkpointIdentity }
+                for (originWorld in listOf(source, destination).distinct()) {
+                    val screens = DisplayStorage.get(originWorld).directory.snapshot()
+                    for (screen in screens) {
+                        val moves = screen.panels.mapNotNull { panel -> panels[panel.instance.toString()] }
+                        if (moves.size != screen.panels.size) continue
+                        val first = screen.panels.first()
+                        val moved = requireNotNull(panels[first.instance.toString()])
+                        val facing = moved.blockState.getValue(DisplayBlock.FACING)
+                        val origin = moved.blockPos.relative(facing.counterClockWise, -first.column).above(first.row)
+                        require(
+                            screen.panels.all { panel ->
+                                val entity = requireNotNull(panels[panel.instance.toString()])
+                                entity.blockPos == origin.relative(facing.counterClockWise, panel.column).below(panel.row) &&
+                                    entity.blockState.getValue(DisplayBlock.FACING) == facing
+                            },
+                        ) { "Recovered display geometry differs from its saved identity" }
+                        DisplayWorldAccess.relocate(originWorld, winner, screen.id, origin, facing)
+                    }
+                }
+                entities.filter { it !is DisplayBlockEntity }.forEach(PeripheralNetworkAccess::refresh)
+                PeripheralCableTopologyCache.invalidate(source)
+                PeripheralCableTopologyCache.invalidate(destination)
+            }
+        }
+    }
+
     @JvmStatic
     fun begin(
         source: ServerLevel,
@@ -74,20 +184,22 @@ object PeripheralBlockTransfers {
         level: ServerLevel,
         position: BlockPos,
     ): Boolean =
-        active.get().any {
-            it.source === level &&
-                it.blocks.any { block ->
-                    block.from == position && (
-                        level.getBlockEntity(position) === block.entity ||
-                            (level.getBlockEntity(position) == null && block.entity.isRemoved)
-                    )
-                }
-        }
+        guarded(level, position) ||
+            active.get().any {
+                it.source === level &&
+                    it.blocks.any { block ->
+                        block.from == position && (
+                            level.getBlockEntity(position) === block.entity ||
+                                (level.getBlockEntity(position) == null && block.entity.isRemoved)
+                        )
+                    }
+            }
 
     internal fun receiving(
         level: ServerLevel,
         position: BlockPos,
-    ): Boolean = active.get().any { it.destination === level && it.blocks.any { block -> block.to == position } }
+    ): Boolean =
+        guarded(level, position) || active.get().any { it.destination === level && it.blocks.any { block -> block.to == position } }
 
     internal data class MovedBlock(
         val entity: BlockEntity,

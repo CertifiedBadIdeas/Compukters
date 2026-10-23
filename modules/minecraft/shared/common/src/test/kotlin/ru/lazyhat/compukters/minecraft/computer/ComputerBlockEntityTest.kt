@@ -50,6 +50,41 @@ import kotlin.test.assertTrue
 
 class ComputerBlockEntityTest {
     @Test
+    fun `transfer preparation waits for checkpoint and repeated close preserves its barrier`() {
+        val original = fixture()
+        original.entity.serverTick()
+        val carrier = original.carriers.single()
+        val checkpoint = CompletableFuture<Long?>()
+        carrier.hibernateCompletion = checkpoint
+        val prepared = original.entity.prepareBlockTransferAsync()
+        assertFalse(prepared.isDone)
+        assertTrue(original.entity.peripheralCheckpointPending)
+        original.entity.serverTick()
+        original.entity.setRemoved()
+        assertEquals(1, original.carriers.size)
+        assertFalse(original.entity.prepareBlockTransferAsync().isDone)
+        checkpoint.complete(7L)
+        assertTrue(prepared.isDone)
+        assertFalse(prepared.isCompletedExceptionally)
+        assertFalse(original.entity.peripheralCheckpointPending)
+        original.entity.serverTick()
+        assertEquals(listOf(true), original.carriers.last().restoreRequirements)
+    }
+
+    @Test
+    fun `failed transfer checkpoint rejects readiness and prevents fresh execution`() {
+        val original = fixture()
+        original.entity.serverTick()
+        val checkpoint = CompletableFuture<Long?>()
+        original.carriers.single().hibernateCompletion = checkpoint
+        val prepared = original.entity.prepareBlockTransferAsync()
+        checkpoint.completeExceptionally(IllegalStateException("checkpoint failed"))
+        assertTrue(prepared.isCompletedExceptionally)
+        original.entity.serverTick()
+        assertEquals(1, original.carriers.size)
+    }
+
+    @Test
     fun `loaded running computer requires its checkpoint instead of silently cold booting`() {
         val original = fixture()
         original.entity.serverTick()
@@ -433,6 +468,14 @@ class ComputerBlockEntityTest {
         var serverTickCalls = 0
         var shutdownCalls = 0
         var closeCalls = 0
+        var hibernateCompletion: CompletableFuture<Long?>? = null
+
+        override fun hibernateAsync(worldTick: Long): CompletableFuture<Long?> {
+            val completion = hibernateCompletion ?: return closeAsync()
+            close()
+            return completion
+        }
+
         var terminal: TerminalState = terminalState("", 0)
         var update: TerminalUpdate = TerminalUpdate.Unchanged(0)
         val texts = mutableListOf<String>()
