@@ -42,3 +42,8 @@ public annotation class RequiresOptIn(val message: String = "", val level: Level
 )
 @kotlin.annotation.Retention(kotlin.annotation.AnnotationRetention.SOURCE)
 public annotation class OptIn(vararg val markerClass: kotlin.reflect.KClass<out Annotation>)
+
+/** Allows K2 to select an overload from an inline selector's inferred return type. */
+@kotlin.annotation.Target(kotlin.annotation.AnnotationTarget.FUNCTION)
+@kotlin.annotation.Retention(kotlin.annotation.AnnotationRetention.BINARY)
+public annotation class OverloadResolutionByLambdaReturnType

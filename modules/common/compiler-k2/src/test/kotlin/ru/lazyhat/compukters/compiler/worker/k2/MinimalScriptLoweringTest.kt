@@ -6365,6 +6365,73 @@ class MinimalScriptLoweringTest {
         }
 
     @Test
+    fun `numeric iterable sums preserve types order overflow and selector exits`() =
+        withAdapter { adapter ->
+            val source =
+                """
+                import kotlin.collections.*
+                class Fuel(val amount: Int, val thrust: Double)
+                class Values(val values: List<Int>) : Iterable<Int> {
+                    override fun iterator(): Iterator<Int> = values.iterator()
+                }
+                fun early(values: Iterable<Int>): Int {
+                    values.sumOf { if (it == 2) return 19; it }
+                    return -1
+                }
+                fun forward(values: Iterable<Fuel>, selector: (Fuel) -> Double): Double = values.sumOf(selector)
+                fun main() {
+                    val ints: Iterable<Int> = Values(listOf(1, 2, 3))
+                    val i: Int = ints.sum()
+                    val l: Long = listOf(1L, 2L).sum()
+                    val f: Float = listOf(1.25f, 2.5f).sum()
+                    val d: Double = listOf(1.25, 2.5).sum()
+                    require(i == 6 && l == 3L && f == 3.75f && d == 3.75)
+                    require(listOf(1.toByte(), 2.toByte()).sum() == 3)
+                    require(listOf(1.toShort(), 2.toShort()).sum() == 3)
+                    require(listOf(1u, 2u).sum() == 3u)
+                    require(listOf(1uL, 2uL).sum() == 3uL)
+                    require(listOf(1.toUByte(), 2.toUByte()).sum() == 3u)
+                    require(listOf(1.toUShort(), 2.toUShort()).sum() == 3u)
+                    require(emptyList<Int>().sum() == 0 && emptyList<Long>().sum() == 0L)
+                    require(emptyList<Float>().sum() == 0.0f && emptyList<Double>().sum() == 0.0)
+                    require(emptyList<UInt>().sum() == 0u && emptyList<ULong>().sum() == 0uL)
+                    require(listOf(Int.MAX_VALUE, 1).sum() == Int.MIN_VALUE)
+                    require(listOf(Long.MAX_VALUE, 1L).sum() == Long.MIN_VALUE)
+                    require(listOf(UInt.MAX_VALUE, 1u).sum() == 0u)
+                    require(listOf(ULong.MAX_VALUE, 1uL).sum() == 0uL)
+                    val nan = listOf(Double.NaN, 1.0).sum()
+                    require(nan != nan)
+                    require(1.0 / emptyList<Double>().sum() == Double.POSITIVE_INFINITY)
+                    val fuel = listOf(Fuel(3, 1.25), Fuel(4, 2.5))
+                    val amount: Int = fuel.sumOf { it.amount }
+                    val thrust: Double = fuel.sumOf { it.thrust }
+                    val wide: Long = fuel.sumOf { it.amount.toLong() }
+                    val unsigned: UInt = fuel.sumOf { it.amount.toUInt() }
+                    val unsignedWide: ULong = fuel.sumOf { it.amount.toULong() }
+                    require(amount == 7 && thrust == 3.75 && wide == 7L && unsigned == 7u && unsignedWide == 7uL)
+                    require(forward(fuel) { it.thrust } == 3.75)
+                    var order = 0
+                    var calls = 0
+                    require(ints.sumOf { order = order * 10 + it; calls += 1; it } == 6)
+                    require(order == 123 && calls == 3)
+                    require(emptyList<Int>().sumOf { calls += 1; it } == 0 && calls == 3)
+                    require(early(ints) == 19)
+                    var interrupted = false
+                    calls = 0
+                    try { ints.sumOf { calls += 1; if (it == 2) throw IllegalStateException("stop"); it } }
+                    catch (failure: IllegalStateException) { interrupted = true }
+                    require(interrupted && calls == 2)
+                    println("sums ok")
+                }
+                """.trimIndent()
+            val result = adapter.compile(request(source))
+            val bytes = assertNotNull(result.artifact, result.diagnostics.joinToString()).toByteArray()
+            System.getProperty("compukter.vm.sumsArtifact")?.let { output ->
+                Path.of(output).also { it.parent.createDirectories() }.writeBytes(bytes)
+            }
+        }
+
+    @Test
     fun `Iterable fold specializes independent element and accumulator types`() =
         withAdapter { adapter ->
             val source =

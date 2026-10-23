@@ -13,6 +13,10 @@ headings so this page has one stable URL that can be shared outside the reposito
 
 ## 0.7.0 — In development
 
+- Guest collections support numeric `Iterable.sum()` and inline `sumOf` selectors, including
+  unsigned totals, ordinary overflow/NaN semantics, empty inputs and selector-return-type overload
+  inference. Lists, sets and custom iterables use the same implementation; no Runtime ABI changes.
+
 - Propulsion addon 3.1 exposes independent standard liquid thrusters to Guest Kotlin: native fractional
   throttle, mount/force-axis observations, timestamped fuel and thrust state, exact zero input and safe
   program cleanup/hibernation. Fuel consumption and forces remain native; Creative operation IDs are
