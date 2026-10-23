@@ -16,6 +16,11 @@ import ru.lazyhat.compukters.minecraft.peripheral.PeripheralWorldPositions
 
 /** Optional construction adapter. Implementations must query loaded state without forcing chunks. */
 object CompuktersPeripheralWorldIntegration {
+    interface Recovery : AutoCloseable {
+        /** Reconcile only after the coordinator has removed obsolete copies. */
+        fun resolve()
+    }
+
     @JvmStatic
     fun install(
         project: (Level, Vec3) -> Vec3?,
@@ -71,7 +76,14 @@ object CompuktersPeripheralWorldIntegration {
         destination: ServerLevel,
         positions: Map<BlockPos, BlockPos>,
         committed: Boolean,
-    ): PeripheralBlockTransfers.Recovery = PeripheralBlockTransfers.recover(source, destination, positions, committed)
+    ): Recovery {
+        val delegate = PeripheralBlockTransfers.recover(source, destination, positions, committed)
+        return object : Recovery {
+            override fun resolve() = delegate.resolve()
+
+            override fun close() = delegate.close()
+        }
+    }
 
     /** Close in finally after the complete batch, including source destruction, on the server thread. */
     @JvmStatic
