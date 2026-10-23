@@ -158,6 +158,7 @@ fn main() {
         "scope" => k2_scope_functions_preserve_receiver_and_result_semantics(),
         "map-not-null" => k2_map_not_null_preserves_order_types_and_identity(),
         "destination" => k2_destination_operations_append_and_preserve_identity(),
+        "sums" => k2_expected_prints_with_budget("COMPUKTER_KOTLIN_SUMS_ARTIFACT", ["sums ok\n"], 256),
         "fold" => k2_fold_specializes_element_and_accumulator_types(),
         "sequences" => {
             k2_expected_prints_with_budget("COMPUKTER_KOTLIN_SEQUENCES_ARTIFACT", ["sequences ok\n"], 256);

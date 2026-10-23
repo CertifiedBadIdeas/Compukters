@@ -96,6 +96,26 @@ inline and support non-local returns from direct lambdas.
 **Evidence:** `MinimalScriptLoweringTest`, test `Iterable fold specializes independent element and accumulator
 types`, executed by `testKotlinFoldVmConformance` with bounded slices.
 
+### Numeric sums
+
+**Status:** Supported for `Iterable` in `stdlib:core` 1.27.0.
+
+`sum()` accepts `Byte`, `Short`, `Int`, `Long`, `Float`, `Double`, `UByte`, `UShort`, `UInt` and
+`ULong` elements. Narrow signed values accumulate into `Int`; narrow unsigned values into `UInt`.
+Other element types retain their numeric result type. Empty iterables return zero (positive zero
+for floating results). Integer overflow wraps; floating addition follows traversal order with normal
+rounding, infinity and NaN semantics.
+
+`sumOf(selector)` supports `Int`, `Long`, `Double`, `UInt` and `ULong` selector results. K2 selects the
+overload from the selector return type, including record properties and forwarded typed selectors.
+Selectors run exactly once per visited element, in iteration order, without an intermediate list.
+Empty inputs invoke no selector. Iterator/selector exceptions propagate, and direct inline lambdas
+support non-local returns. The receiver is evaluated once. Arrays and sequences do not acquire
+these iterable extensions automatically; this entry describes `Iterable` APIs.
+
+**Evidence:** `MinimalScriptLoweringTest`, test `numeric iterable sums preserve types order overflow
+and selector exits`, executed by `testKotlinSumsVmConformance` with the pinned Rust VM and bounded slices.
+
 ### Read-only `Collection<T>` and `List<T>`
 
 **Status:** Partial.

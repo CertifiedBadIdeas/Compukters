@@ -1706,3 +1706,13 @@ registerKotlinVmConformance(
     artifactEnvironmentVariable = "COMPUKTER_KOTLIN_CONTRACTS_ARTIFACT",
     conformanceScenario = "contracts",
 )
+
+registerKotlinVmConformance(
+    taskName = "testKotlinSumsVmConformance",
+    taskDescription = "Executes numeric iterable sums and selector semantics with the pinned VM.",
+    artifactTask = ":compiler-k2:generateSumsConformanceArtifact",
+    artifact = project(":compiler-k2").layout.buildDirectory.file("generated/conformance/kotlin-sums.cpkt"),
+    cargoTargetDirectory = ".toolchain/build/cargo/compiler-k2-sums-conformance",
+    artifactEnvironmentVariable = "COMPUKTER_KOTLIN_SUMS_ARTIFACT",
+    conformanceScenario = "sums",
+)

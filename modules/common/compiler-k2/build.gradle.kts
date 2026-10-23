@@ -2320,3 +2320,18 @@ tasks.register<Test>("generateRocketLandingConformanceArtifact") {
     systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
     systemProperty("compukter.vm.rocketLandingArtifact", rocketLandingArtifact.get().asFile.absolutePath)
 }
+
+val sumsConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-sums.cpkt")
+tasks.register<Test>("generateSumsConformanceArtifact") {
+    description = "Compiles numeric iterable sums for pinned VM conformance."
+    group = "verification"
+    dependsOn(tasks.jar)
+    useJUnitPlatform()
+    testClassesDirs = sourceSets.test.get().output.classesDirs
+    classpath = sourceSets.test.get().runtimeClasspath
+    filter.includeTestsMatching("*numeric iterable sums preserve types order overflow and selector exits*")
+    inputs.file(workerJar)
+    outputs.file(sumsConformanceArtifact)
+    systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
+    systemProperty("compukter.vm.sumsArtifact", sumsConformanceArtifact.get().asFile.absolutePath)
+}
