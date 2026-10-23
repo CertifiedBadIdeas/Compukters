@@ -13,6 +13,11 @@ headings so this page has one stable URL that can be shared outside the reposito
 
 ## 0.7.0 — In development
 
+- Propulsion addon 3.1 exposes independent standard liquid thrusters to Guest Kotlin: native fractional
+  throttle, mount/force-axis observations, timestamped fuel and thrust state, exact zero input and safe
+  program cleanup/hibernation. Fuel consumption and forces remain native; Creative operation IDs are
+  preserved. Liquid vector, ion, solid and multiblock engines are outside this API.
+
 ## 0.6.0 — 2026-10-15
 
 - Release downloads include the base mod and Create, CreateAddition, Sable and Propulsion addons.

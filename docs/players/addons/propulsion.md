@@ -1,14 +1,14 @@
 ---
 layout: default
 title: Propulsion addon
-description: Control Creative Thrusters and Creative Vector Thrusters from Guest Kotlin.
+description: Control liquid, Creative and Creative Vector Thrusters from Guest Kotlin.
 section: players
 permalink: /PROPULSION/
 ---
 
 # Propulsion addon
 
-Control Creative Thrusters and Creative Vector Thrusters from Kotlin. Use normalized throttle, steer vector nozzles,
+Control standard liquid, Creative and Creative Vector Thrusters from Kotlin. Use normalized throttle, steer vector nozzles,
 and read typed engine state. Install [Compukters: Sable]({{ '/SABLE/' | relative_url }}) separately if your program also
 needs construction pose and velocity.
 
@@ -41,6 +41,38 @@ addon 2.0 for the Compukters 0.5 line. Loader metadata enforces the exact minimu
 Select `addons = ["propulsion"]` in `compukter.toml` (format 3). Place the engine against any face of the computer or
 connect them with peripheral cables, and name the engine with the Peripheral Configurator. Ordinary Creative Thruster
 multiblock contacts resolve to their controller.
+
+For an independent standard **Liquid Thruster** (`createpropulsion:thruster`, addon API 3.1):
+
+```kotlin
+import propulsion.thrusters.LiquidThruster
+
+fun main() {
+    val engine = LiquidThruster.named("main-engine")
+    val state = engine.state()
+    check(state.usableFuel)
+    println("Fuel: ${state.fuelAmountMb} / ${state.fuelCapacityMb} mB")
+    println("Nominal thrust: ${state.nominalThrustKn} kN")
+    println("Up axis: ${engine.mount().forceY}")
+    engine.setThrottle(0.375)
+    readln()
+    engine.setThrottle(0.0)
+    engine.close()
+}
+```
+
+`state()` samples `gameTick`, native throttle/effective throttle, `nominalThrustKn`, `currentThrustKn`,
+fuel registry ID, remaining/capacity mB, `usableFuel`, startup progress, activity and unobstructed blocks.
+Nominal thrust includes native fuel/atmosphere factors but excludes startup, throttle and obstruction;
+current native thrust is authoritative. Reads do not advance an engine or consume fuel. A dry engine
+reports zero usable nominal thrust. The Guest controller must monitor depletion and choose a response.
+`mount()` returns the same computer-relative, construction-axis geometry as Creative Vector engines.
+
+`setThrottle(0.0..1.0)` uses exclusive program control and native engine cadence. Exact zero clears
+commands inside upstream's deadband. Close, cancellation and invalidation restore native redstone;
+powered redstone can therefore restart the engine. Native payload copies preserve fuel and discard
+unowned digital commands. Checkpoints preserve program control through normal identity checks.
+This contract excludes solid, ion, liquid vector and multiblock engines, and offers no thrust override.
 
 For **Creative Vector Thruster** (`createpropulsion:creative_vector_thruster`):
 
@@ -104,14 +136,14 @@ stores Float precision and ignores input changes no greater than 1e-4. The adapt
 fade, atmosphere and obstruction behavior; requests do not advance physics or add VM turns.
 
 A modifying command claims exclusive program ownership. Acquisition and `state()` are read-only and do not claim it.
-Another program can observe the engine but its modifying commands throw IllegalStateException while occupied.
+The shared peripheral registry may reject another program already at lookup while the endpoint is owned.
 An attached ComputerCraft peripheral prevents a new Compukters writer. Concurrent takeover by other mods is outside
 the exclusive Compukters lease contract; cleanup does not overwrite an attached ComputerCraft controller.
 
 Program completion/stop, computer removal, and observed cable loss release the digital input and restore normal
 redstone. Cable validation runs on server ticks only for owned engines, including while the program waits for input.
 Release also clears the program's stored shutdown envelope before restoring engine settings and immediately
-recalculates physical thrust. Unpowered redstone produces no residual program thrust or handoff spike.
+recalculates Creative thrust. Liquid release only invalidates the native thrust cache, without advancing fuel consumption. Unpowered redstone produces no residual program thrust or handoff spike.
 Powered redstone may immediately request thrust. `close()` releases control early and invalidates the handle.
 Stale/disconnected/replaced/unloaded handles throw IllegalStateException; reacquire by name after reconnecting.
 Aliases acquired by the same program for the same engine share one handle, so closing one closes all its aliases.
