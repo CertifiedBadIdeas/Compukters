@@ -144,7 +144,7 @@ The computer also carries a compact terminal editor and compiler. At the shell p
 kotlinc hello.kt
 ```
 
-The terminal editor holds up to 4096 UTF-16 code units. Saving preserves the cursor position. Pasted tabs expand
+The terminal editor holds up to 16384 UTF-16 code units. Saving preserves the cursor position. Pasted tabs expand
 to four spaces and newlines inherit the current indentation; if the expanded paste does not fit, the editor
 shows `Buffer full` and leaves the document unchanged.
 Saving transfers UTF-8 bytes in bounded chunks and replaces the file atomically, including a completely full

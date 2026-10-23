@@ -13,6 +13,9 @@ headings so this page has one stable URL that can be shared outside the reposito
 
 ## 0.7.0 — In development
 
+- The terminal editor holds up to 16,384 UTF-16 units. Compilation rejects incomplete source,
+  including missing closing braces, before publishing an executable.
+
 - Guest collections support numeric `Iterable.sum()` and inline `sumOf` selectors, including
   unsigned totals, ordinary overflow/NaN semantics, empty inputs and selector-return-type overload
   inference. Lists, sets and custom iterables use the same implementation; no Runtime ABI changes.
