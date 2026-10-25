@@ -17,3 +17,6 @@
 [submodule "addons/createaddition"]
 	path = addons/createaddition
 	url = https://github.com/CertifiedBadIdeas/Compukters-createaddition.git
+[submodule "addons/orbitalis"]
+	path = addons/orbitalis
+	url = https://github.com/CertifiedBadIdeas/Compukters-orbitalis.git

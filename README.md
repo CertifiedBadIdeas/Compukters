@@ -6,6 +6,9 @@
 
 Write Kotlin projects, compile and deploy programs, automate redstone, and display output in the world. Optional
 Create, Sable and Propulsion addons connect computers to machinery and construction physics on Minecraft 1.21.1.
+[Compukters: Orbitalis](https://github.com/CertifiedBadIdeas/Compukters-orbitalis), pinned at
+`addons/orbitalis`, provides celestial observations and ship-transfer integration for Orbitalis.
+It is optional and builds separately; the base mod does not depend on Orbitalis.
 The base mod supports Minecraft **1.21.1 / Java 21** and **26.1.2 / JDK 25** with NeoForge.
 
 ## Documentation

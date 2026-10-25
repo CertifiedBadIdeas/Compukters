@@ -15,7 +15,9 @@ headings so this page has one stable URL that can be shared outside the reposito
 
 - Construction integrations can await VM checkpoint publication and filesystem release before copying a
   computer, guard staged copies, and reconcile exact device identities after journal recovery. The
-  Orbitalis development adapter uses these lifecycle boundaries without adding host flight control.
+  optional [Compukters: Orbitalis](https://github.com/CertifiedBadIdeas/Compukters-orbitalis) addon,
+  pinned under `addons/orbitalis`, uses these boundaries and exposes celestial observations and
+  engines-off forecasts without adding host flight control.
 
 - Guest tasks sleeping on a server-tick timer keep waking while another task waits for terminal input.
 
