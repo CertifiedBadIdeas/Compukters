@@ -203,7 +203,7 @@ internal object PeripheralNetworkBinding {
             return false
         }
         if (context.instance == null || resolveMember(level, context.position, context.face)?.instance != context.instance) return false
-        if (PeripheralNetworkAccess.network(level, context.position)?.id != selected) return false
+        if (PeripheralNetworkAccess.network(level, context.position, context.face)?.id != selected) return false
         if (directory.networkOf(member)?.id != selected) return false
         if (!directory.remove(member)) return false
         PeripheralNetworkStorage.get(level).setDirty()

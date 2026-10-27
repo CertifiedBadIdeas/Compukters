@@ -156,7 +156,10 @@ open class PeripheralConfiguratorItem(
             )
             return InteractionResult.SUCCESS
         }
-        if (level.getBlockEntity(context.clickedPos) is ComputerBlockEntity) {
+        if (level.getBlockEntity(context.clickedPos) is ComputerBlockEntity &&
+            ru.lazyhat.compukters.minecraft.display.AttachedDisplaySurfaces
+                .at(level, context.clickedPos, context.clickedFace) == null
+        ) {
             if (!PeripheralConfiguratorServer.openComputer(player, context.hand, context.clickedPos, context.clickedFace)) {
                 player.sendSystemMessage(Component.translatable("item.compukters.peripheral_configurator.no_network"))
             }

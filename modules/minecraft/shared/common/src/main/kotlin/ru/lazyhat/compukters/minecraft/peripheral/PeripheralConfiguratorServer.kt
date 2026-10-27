@@ -118,11 +118,11 @@ object PeripheralConfiguratorServer {
         face: Direction,
     ): Boolean {
         val level = player.level() as? ServerLevel ?: return false
-        val network = PeripheralNetworkAccess.network(level, position) ?: return false
+        val network = PeripheralNetworkAccess.network(level, position, face) ?: return false
         val stack = player.getItemInHand(hand)
         val item = stack.item as? PeripheralConfiguratorItem ?: return false
         item.selectNetwork(stack, network.id)
-        val member = PeripheralNetworkBinding.resolveMember(level, position, face) ?: return false
+        val member = PeripheralNetworkBinding.resolveMember(level, position, face)?.takeIf { it.isComputer } ?: return false
         return open(
             player,
             hand,
@@ -159,11 +159,12 @@ object PeripheralConfiguratorServer {
         if (stack.item !is PeripheralConfiguratorItem) return PeripheralConfiguratorSaveResult.INVALID_TARGET
         val position = context.position
         val face = context.face
-        if (context.instance == null || PeripheralNetworkBinding.resolveMember(level, position, face)?.instance != context.instance) {
+        val resolvedMember = PeripheralNetworkBinding.resolveMember(level, position, face)
+        if (context.instance == null || resolvedMember?.instance != context.instance) {
             return PeripheralConfiguratorSaveResult.INVALID_TARGET
         }
-        if (level.getBlockEntity(position) is ru.lazyhat.compukters.minecraft.computer.ComputerBlockEntity) {
-            val network = PeripheralNetworkAccess.network(level, position) ?: return PeripheralConfiguratorSaveResult.INVALID_TARGET
+        if (resolvedMember.isComputer) {
+            val network = PeripheralNetworkAccess.network(level, position, face) ?: return PeripheralConfiguratorSaveResult.INVALID_TARGET
             val storage = PeripheralNetworkStorage.get(level)
             storage.directory.rename(network.id, normalized)
             storage.setDirty()
@@ -178,7 +179,7 @@ object PeripheralConfiguratorServer {
         if (screen != null) {
             val connected =
                 PeripheralNetworkAccess
-                    .network(level, target.anchor)
+                    .network(level, position, face)
                     ?.members
                     ?.map { it.identity }
                     ?.toSet()
@@ -199,7 +200,7 @@ object PeripheralConfiguratorServer {
         }
         val member = PeripheralNetworkAccess.member(level, target)
         if (member != null) {
-            val network = PeripheralNetworkAccess.network(level, target.anchor) ?: return PeripheralConfiguratorSaveResult.INVALID_TARGET
+            val network = PeripheralNetworkAccess.network(level, position, face) ?: return PeripheralConfiguratorSaveResult.INVALID_TARGET
             if (network.members.any {
                     (it.instance != member.instance || it.identity != member.identity) && it.name == normalized
                 }
@@ -247,7 +248,7 @@ object PeripheralConfiguratorServer {
             } else {
                 null
             }
-        val network = PeripheralNetworkAccess.network(level, target?.anchor ?: context.position)
+        val network = PeripheralNetworkAccess.network(level, context.position, context.face)
         if (network != null) {
             val names = PeripheralNetworkAccess.names(level, network.members.map { it.identity }.toSet())
             val counts =
