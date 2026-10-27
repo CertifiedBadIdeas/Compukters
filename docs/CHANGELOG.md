@@ -13,6 +13,12 @@ headings so this page has one stable URL that can be shared outside the reposito
 
 ## 0.7.0 — In development
 
+- The configurator selects its mode through a hold-RMB radial menu. Short clicks retain block actions;
+  releasing in the center or pressing Escape cancels selection.
+- Guest programs can request a set of keys through `compukter.input.Keyboard`. Players explicitly activate
+  control by clicking that computer in the configurator's Keyboard mode, without opening a terminal.
+  Mouse look remains available; Escape, GUI/focus loss and expired input clear held keys.
+
 - Construction integrations can await VM checkpoint publication and filesystem release before copying a
   computer, guard staged copies, and reconcile exact device identities after journal recovery. The
   optional [Compukters: Orbitalis](https://github.com/CertifiedBadIdeas/Compukters-orbitalis) addon,

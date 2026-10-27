@@ -16,6 +16,9 @@ internal object ConfiguratorOverlayBootstrap {
 
     fun register() {
         NeoForge.EVENT_BUS.addListener(ConfiguratorOverlayClient::tick)
+        NeoForge.EVENT_BUS.addListener(ConfiguratorRadialClient::tick)
+        NeoForge.EVENT_BUS.addListener(ru.lazyhat.compukters.impl.input.KeyboardInputClient::tick)
+        NeoForge.EVENT_BUS.addListener(ConfiguratorRadialClient::mouse)
         NeoForge.EVENT_BUS.addListener(::hud)
         NeoForge.EVENT_BUS.addListener(::render)
     }
@@ -48,6 +51,19 @@ internal object ConfiguratorOverlayBootstrap {
         val minecraft = Minecraft.getInstance()
         if (minecraft.screen != null || minecraft.options.hideGui) return
         val graphics = event.guiGraphics
+        ru.lazyhat.compukters.impl.input.KeyboardInputClient.caption()?.let { caption ->
+            val textWidth = minecraft.font.width(caption)
+            val left = (graphics.guiWidth() - textWidth) / 2
+            val top = 12
+            graphics.fill(
+                left - 8,
+                top - 4,
+                left + textWidth + 8,
+                top + minecraft.font.lineHeight + 4,
+                ru.lazyhat.compukters.impl.ide.IdeColors.PANEL,
+            )
+            graphics.drawString(minecraft.font, caption, left, top, ru.lazyhat.compukters.impl.ide.IdeColors.ACCENT)
+        }
         val lines = ConfiguratorOverlayClient.labels().flatMap { minecraft.font.split(it, minOf(320, graphics.guiWidth() - 24)) }
         if (lines.isEmpty()) return
         val width = lines.maxOf(minecraft.font::width)

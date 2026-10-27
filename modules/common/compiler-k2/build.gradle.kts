@@ -874,6 +874,21 @@ val generateRedstonePortConformanceArtifact = tasks.register<Test>("generateReds
     systemProperty("compukter.vm.redstonePortArtifact", redstonePortArtifact.get().asFile.absolutePath)
 }
 
+val generateKeyboardConformanceArtifact = tasks.register<Test>("generateKeyboardConformanceArtifact") {
+    description = "Compiles the keyboard capture program for native GameTest verification."
+    group = "verification"
+    dependsOn(tasks.jar)
+    useJUnitPlatform()
+    testClassesDirs = sourceSets.test.get().output.classesDirs
+    classpath = sourceSets.test.get().runtimeClasspath
+    filter.includeTestsMatching("*keyboard capture lowers selected keys and snapshot readers for GameTest*")
+    inputs.file(workerJar)
+    val artifact = layout.buildDirectory.file("generated/conformance/keyboard.cpkt")
+    outputs.file(artifact)
+    systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
+    systemProperty("compukter.vm.keyboardArtifact", artifact.get().asFile.absolutePath)
+}
+
 val generateSoundConformanceArtifact = tasks.register<Test>("generateSoundConformanceArtifact") {
     description = "Compiles the deterministic sound program for GameTest conformance."
     group = "verification"

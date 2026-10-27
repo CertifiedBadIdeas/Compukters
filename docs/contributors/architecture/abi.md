@@ -11,6 +11,22 @@ permalink: /ARCHITECTURE/abi/
 
 This reference groups versioned representation boundaries by the version that introduced them. Those versions are minimum feature requirements, not a claim that older Runtime distributions implement today’s platform. The source owners below define the active contract. Before changing a wire format, inspect each producer, consumer and verifier. Runtime release pins in `build-scripts/src/main/kotlin/RuntimeBundleSupport.kt` describe published bundles separately from the local VM checkout.
 
+## In-world keyboard input
+
+`compukter:core` 9.3.0 adds the independent host capability `compukters:keyboard` ABI 1.0:
+operation 0 is blocking `open(I64 mask):I32 handle`, operation 1 is blocking
+`snapshot(I32 handle):ByteArray`, and operation 2 is blocking `close(I32 handle):Unit`.
+The 64 mask bits follow the published Guest `Key` enum order and the matching core `KeyboardKeys`
+physical-code table. Snapshot wire version 1 has exactly 34 bytes: U8 version=1, U8 connected=0/1,
+then little-endian I64 server tick, held mask, accumulated pressed mask and accumulated released mask.
+Edges clear only when that program reads a snapshot. A timed-out or released session has no held keys.
+
+The existing generic host capability transport admits these operations; Rust/native ABI and artifact
+encoding remain unchanged. Keyboard resource checkpoint version 1 stores only handle cursor, active
+handle and requested mask. Player identity/consent, nonce, sequence, heartbeat and physical key state
+are transient world/client resources and never restored from a program checkpoint. Schema/ABI producer,
+server host and Guest decoding are covered by focused core and compiler/GameTest fixtures.
+
 ## Named argument semantic highlighting
 
 Analysis protocol **20** adds the `NamedArgument` semantic category for argument labels,

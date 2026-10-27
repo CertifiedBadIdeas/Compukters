@@ -2690,6 +2690,56 @@ class MinimalScriptLoweringTest {
         }
 
     @Test
+    fun `keyboard capture lowers selected keys and snapshot readers for GameTest`() =
+        withAdapter { adapter ->
+            val source =
+                """
+                import compukter.input.Keyboard
+                import compukter.input.Key
+                import compukter.concurrent.Tasks
+
+                fun main() {
+                    val input = Keyboard.open(setOf(Key.W, Key.SPACE, Key.PAGE_DOWN))
+                    println("KEYBOARD-READY")
+                    try {
+                        var connected = false
+                        for (i in 0 until 200) {
+                            val state = input.snapshot()
+                            if (state.connected) { connected = true; break }
+                            Tasks.sleepTicks(1)
+                        }
+                        require(connected)
+                        println("KEYBOARD-CONNECTED")
+                        var down = false
+                        for (i in 0 until 200) {
+                            val state = input.snapshot()
+                            if (state.isDown(Key.W) && state.wasPressed(Key.W) && state.isDown(Key.PAGE_DOWN)) { down = true; break }
+                            Tasks.sleepTicks(1)
+                        }
+                        require(down)
+                        println("KEYBOARD-DOWN")
+                        var released = false
+                        for (i in 0 until 200) {
+                            val state = input.snapshot()
+                            if (!state.isDown(Key.W) && state.wasReleased(Key.W)) { released = true; break }
+                            Tasks.sleepTicks(1)
+                        }
+                        require(released)
+                        println("KEYBOARD-RELEASED")
+                    } finally { input.close() }
+                    println("KEYBOARD-CLOSED")
+                }
+                """.trimIndent()
+            val first = adapter.compile(request(source))
+            val artifact = assertNotNull(first.artifact, first.diagnostics.joinToString()).toByteArray()
+            assertTrue(first.diagnostics.none { it.severity.name == "ERROR" }, first.diagnostics.toString())
+            assertContentEquals(artifact, assertNotNull(adapter.compile(request(source)).artifact).toByteArray())
+            System.getProperty("compukter.vm.keyboardArtifact")?.let { output ->
+                Path.of(output).also { it.parent.createDirectories() }.writeBytes(artifact)
+            }
+        }
+
+    @Test
     fun `sound beep lowers deterministically to a blocking Boolean capability operation`() =
         withAdapter { adapter ->
             val source =
