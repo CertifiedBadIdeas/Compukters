@@ -28,7 +28,9 @@ import ru.lazyhat.compukters.minecraft.peripheral.ComputerPeripheralNames
 import ru.lazyhat.compukters.minecraft.peripheral.ConfiguratorOverlayServer
 import ru.lazyhat.compukters.minecraft.peripheral.PeripheralBindingResult
 import ru.lazyhat.compukters.minecraft.peripheral.PeripheralBlockTransfers
+import ru.lazyhat.compukters.minecraft.peripheral.PeripheralConfiguratorContext
 import ru.lazyhat.compukters.minecraft.peripheral.PeripheralConfiguratorItem
+import ru.lazyhat.compukters.minecraft.peripheral.PeripheralConfiguratorSaveResult
 import ru.lazyhat.compukters.minecraft.peripheral.PeripheralConfiguratorServer
 import java.util.concurrent.CompletableFuture
 
@@ -73,6 +75,27 @@ internal object AttachedDisplayGameTestScenario {
             )
         }
         ComputerPeripheralNames.setName(helper.level, ComputerPeripheralIdentity("compukters-display", first, "text"), "panel")
+        val computerWorld = helper.absolutePos(computerPos)
+        val mainNetwork = requireNotNull(item.selectedNetwork(stack))
+        val overlay = AttachedDisplaySurfaces.create(helper.level, computerWorld, computerWorld, Direction.SOUTH)
+        item.selectNetwork(stack, null)
+        player.setPos(computerWorld.center.x, computerWorld.center.y, computerWorld.center.z + 2)
+        helper.assertTrue(
+            PeripheralConfiguratorServer.bind(player, InteractionHand.MAIN_HAND, computerWorld, Direction.SOUTH) ==
+                PeripheralBindingResult.CREATED,
+            "computer face attachment could not join a separate network",
+        )
+        helper.assertTrue(
+            PeripheralConfiguratorServer.save(
+                player,
+                InteractionHand.MAIN_HAND,
+                PeripheralConfiguratorContext(computerWorld, Direction.SOUTH, overlay),
+                "computer-face-panel",
+            ) == PeripheralConfiguratorSaveResult.NAMED_DEVICE,
+            "naming a face attachment renamed the backing computer's network",
+        )
+        item.selectNetwork(stack, mainNetwork)
+        // The Guest below must still discover the original wall panel through the computer's own network.
         val computer = helper.compuktersComputerBlockEntity(computerPos)
         computer.prepareTerminalAsync()
         var setup: CompletableFuture<Void>? = null

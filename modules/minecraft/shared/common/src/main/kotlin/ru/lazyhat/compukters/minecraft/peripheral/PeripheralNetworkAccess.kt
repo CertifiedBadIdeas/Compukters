@@ -19,6 +19,7 @@
 package ru.lazyhat.compukters.minecraft.peripheral
 
 import net.minecraft.core.BlockPos
+import net.minecraft.core.Direction
 import net.minecraft.server.level.ServerLevel
 import net.minecraft.world.level.block.entity.BlockEntity
 import java.util.UUID
@@ -50,8 +51,10 @@ object PeripheralNetworkAccess {
         computer: BlockPos,
     ): PeripheralNetwork? {
         if (!level.hasChunkAt(computer)) return null
-        ru.lazyhat.compukters.minecraft.display.AttachedDisplaySurfaces.at(level, computer)?.let { screen ->
-            return PeripheralNetworkStorage.get(level).directory.networkOf(screen.id)
+        if (level.getBlockEntity(computer) !is ru.lazyhat.compukters.minecraft.computer.ComputerBlockEntity) {
+            ru.lazyhat.compukters.minecraft.display.AttachedDisplaySurfaces.at(level, computer)?.let { screen ->
+                return PeripheralNetworkStorage.get(level).directory.networkOf(screen.id)
+            }
         }
         val contacted = level.getBlockEntity(computer) ?: return null
         val anchor =
@@ -79,6 +82,16 @@ object PeripheralNetworkAccess {
         val id = instance(entity) ?: return null
         return PeripheralNetworkStorage.get(level).directory.networkOf(id)
     }
+
+    /** Player interactions select the contacted face; a computer's own discovery uses its block identity. */
+    internal fun network(
+        level: ServerLevel,
+        position: BlockPos,
+        face: Direction,
+    ): PeripheralNetwork? =
+        PeripheralNetworkBinding.resolveMember(level, position, face)?.let {
+            PeripheralNetworkStorage.get(level).directory.networkOf(it.instance)
+        }
 
     /** Refresh saved address hints when a stamped member loads at another location. */
     @JvmStatic
