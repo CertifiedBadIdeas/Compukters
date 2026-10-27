@@ -110,6 +110,9 @@ internal object PeripheralNetworkBinding {
         create: Boolean = false,
     ): PeripheralNetworkMember? {
         if (!level.hasChunkAt(position)) return null
+        ru.lazyhat.compukters.minecraft.display.AttachedDisplaySurfaces.at(level, position, face)?.let { screen ->
+            return DisplayNetworkAccess.member(level, screen)
+        }
         val contacted = level.getBlockEntity(position) ?: return null
         val identity =
             if (contacted is ComputerBlockEntity) {

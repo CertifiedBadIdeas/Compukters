@@ -3089,6 +3089,7 @@ class MinimalScriptLoweringTest {
 
                 fun main() {
                     val screen = GraphicalDisplay.named("panel")
+                    screen.setOpacity(0.5)
                     screen.setMode(DisplayMode.HIGH)
                     require(screen.width > 0)
                     val dimensions: Any = screen.size

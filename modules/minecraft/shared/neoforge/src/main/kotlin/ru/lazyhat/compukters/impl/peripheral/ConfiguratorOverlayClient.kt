@@ -87,7 +87,13 @@ internal object ConfiguratorOverlayClient {
             if (first != null && hover != null && clientLevel.hasChunkAt(first) && clientLevel.hasChunkAt(hover)) {
                 val a = clientLevel.getBlockState(first)
                 val b = clientLevel.getBlockState(hover)
-                if (a.block is DisplayBlock && b.block is DisplayBlock) {
+                val attachedFace = item.selectedFace(stack)
+                if (attachedFace != null) {
+                    val hit = minecraft.hitResult as? BlockHitResult
+                    val preview = hit?.let { ConfiguratorOverlayGeometry.preview(first, attachedFace, hover, it.direction) }
+                    result +=
+                        preview ?: ConfiguratorOutline(AABB(hover).inflate(0.012), ConfiguratorOverlayGeometry.UNJOINED_COLOR, true, true)
+                } else if (a.block is DisplayBlock && b.block is DisplayBlock) {
                     val preview =
                         ConfiguratorOverlayGeometry
                             .preview(
@@ -149,8 +155,18 @@ internal object ConfiguratorOverlayClient {
 
                     2 -> {
                         when {
-                            hover == null || level?.getBlockState(hover)?.block !is DisplayBlock -> {
-                                "display_only"
+                            hover == null -> {
+                                "first_corner"
+                            }
+
+                            level?.getBlockState(hover)?.block !is DisplayBlock -> {
+                                if (selectedCorner !=
+                                    null
+                                ) {
+                                    "second_corner"
+                                } else {
+                                    "attached_corners"
+                                }
                             }
 
                             selectedCorner != null -> {
@@ -196,6 +212,7 @@ internal object ConfiguratorOverlayClient {
                 }
             }
         }
+        if (device == null && mode == 2) result += Component.translatable("overlay.compukters.configurator.action.attached_corners")
         if (snapshot.truncated) result += Component.translatable("overlay.compukters.configurator.truncated")
         result += Component.translatable("overlay.compukters.configurator.controls")
         return result

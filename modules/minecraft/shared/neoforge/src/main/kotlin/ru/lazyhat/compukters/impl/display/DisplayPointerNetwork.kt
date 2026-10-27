@@ -95,8 +95,7 @@ object DisplayPointerNetwork {
         val hit = player.pick(player.blockInteractionRange(), 1f, false) as? BlockHitResult ?: return null
         if (hit.type != HitResult.Type.BLOCK) return null
         val level = player.level() as? ServerLevel ?: return null
-        val entity = level.getBlockEntity(hit.blockPos) as? DisplayBlockEntity ?: return null
-        val aim = displayPointerTarget(level, entity, hit) ?: return null
+        val aim = displayPointerTarget(level, hit) ?: return null
         return aim
     }
 

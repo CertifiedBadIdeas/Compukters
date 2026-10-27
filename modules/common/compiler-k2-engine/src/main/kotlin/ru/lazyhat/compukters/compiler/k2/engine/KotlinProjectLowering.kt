@@ -11141,7 +11141,7 @@ private fun capabilityShape(
         ?: PlatformCapabilityShape(
             when (capability.namespace to capability.name) {
                 "compukter" to "terminal" -> 3
-                "compukters" to "display" -> 4
+                "compukters" to "display" -> 5
                 else -> 0
             },
             when (capability.namespace to capability.name) {
@@ -11154,7 +11154,7 @@ private fun capabilityShape(
                 "compukters" to "peripheral" -> 6u
                 "compukters" to "redstone-port" -> 6u
                 "compukter" to "sound" -> 1u
-                "compukters" to "display" -> 22u
+                "compukters" to "display" -> 23u
                 "compukters" to "network" -> 3u
                 "compukters" to "keyboard" -> 3u
                 "compukter" to "timer" -> 1u

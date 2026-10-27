@@ -85,6 +85,9 @@ internal object PeripheralDeviceNames {
     ): List<PeripheralDeviceIdentity> {
         check(level.server.isSameThread) { "peripheral names must be changed on the server thread" }
         val dimension = level.dimension().toString()
+        ru.lazyhat.compukters.minecraft.display.AttachedDisplaySurfaces.at(level, position, contactedFace)?.let {
+            return listOf(PeripheralDeviceIdentity("compukters-display", dimension, position.immutable(), "text"))
+        }
         return ComputerAddonHosts.resolvePeripheralContact(level, position, contactedFace).map { device ->
             PeripheralDeviceIdentity(device.providerId, dimension, device.anchor.immutable(), device.deviceKey)
         }

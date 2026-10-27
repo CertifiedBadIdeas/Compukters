@@ -34,9 +34,36 @@ fun main() {
 }
 ```
 
+## Panels on existing blocks
+
+Hold RMB with the Peripheral Configurator and select **Display assembly** from the radial menu. Short-click two
+opposite corners on the same face of an existing wall or hull. The rectangle can span up to 8×8 blocks; every tile
+needs a loaded, non-air backing block. It can face north, south, east, west, up or down. The backing blocks and their
+contents stay in place. Each backing block supports one attached panel face.
+
+Bind the panel to the computer's network and name it in the same way as a display block. Both `GraphicalDisplay`
+and `TextDisplay` use the existing whole-screen coordinates and writer lease. Empty-hand front-face use supplies
+click and pointer input; Shift-use passes through to the backing block. Shift-click with the configurator in
+Display assembly mode removes the attached screen.
+
+An attached screen keeps its published image, name, resolution and opacity when the world is saved or its backing
+blocks move through a supported explicit block transfer. Replacing a backing block removes that tile's attachment;
+putting an identical block back does not restore it. Other tiles and their image remain until the last tile is removed.
+
+`GraphicalDisplay.setOpacity(value)` changes the opacity of the **entire** screen, including text and background:
+
+```kotlin
+val screen = GraphicalDisplay.named("panel")
+screen.setOpacity(0.5) // half opacity; 0.0 invisible, 1.0 fully opaque
+```
+
+The value must be finite and between 0.0 and 1.0; it is rounded to 256 opacity levels. It persists independently of
+pixel colors and private frame drafts. Existing screens default to fully opaque. Opacity changes appearance only;
+front-face input remains available. Per-pixel alpha is not part of this API.
+
 ## Composite screens
 
-Cycle the Peripheral Configurator to **Display assembly** by using it in the air. Click two display blocks to select
+Hold RMB with the Peripheral Configurator, point at **Display assembly**, then release RMB to select it. Click two display blocks to select
 opposite corners of a rectangle, at most 8 by 8 blocks. All panels must face the same direction and occupy one plane.
 The whole rectangle must be loaded while assembling. Empty positions inside it are valid holes, including at creation.
 Assembly creates a new blank canvas from standalone panels; an existing composite screen must not overlap the selection.

@@ -21,6 +21,7 @@ object DisplayAssembly {
         position: BlockPos,
         read: (String) -> String,
         write: (String, String?) -> Unit,
+        face: net.minecraft.core.Direction = net.minecraft.core.Direction.NORTH,
     ) {
         val level = player.level() as? ServerLevel ?: return
         if (!player.mayBuild() || !level.mayInteract(player, position) ||
@@ -31,7 +32,7 @@ object DisplayAssembly {
         }
         val entity =
             level.getBlockEntity(position) as? DisplayBlockEntity ?: run {
-                player.sendSystemMessage(Component.translatable("item.compukters.peripheral_configurator.display.missing"))
+                attachedClick(player, position, face, read, write)
                 return
             }
         runCatching {
@@ -79,7 +80,55 @@ object DisplayAssembly {
         })
     }
 
-    val SELECTION_KEYS: List<String> = listOf(SCREEN_KEY, CORNER_KEY, DIMENSION_KEY, INSTANCE_KEY)
+    private fun attachedClick(
+        player: ServerPlayer,
+        position: BlockPos,
+        face: net.minecraft.core.Direction,
+        read: (String) -> String,
+        write: (String, String?) -> Unit,
+    ) {
+        val level = player.level() as? ServerLevel ?: return
+        runCatching {
+            require(level.hasChunkAt(position) && !level.getBlockState(position).isAir)
+            val surface = AttachedDisplaySurfaces.at(level, position, face)
+            if (player.isShiftKeyDown) {
+                requireNotNull(surface) { "No attached display on this face" }
+                AttachedDisplaySurfaces.remove(level, surface.id)
+                SELECTION_KEYS.forEach { write(it, null) }
+                "removed"
+            } else {
+                val first = read(CORNER_KEY).takeIf(String::isNotEmpty)?.toLong()?.let(BlockPos::of)
+                if (first == null || read(FACE_KEY).isEmpty()) {
+                    SELECTION_KEYS.forEach { write(it, null) }
+                    write(CORNER_KEY, position.asLong().toString())
+                    write(DIMENSION_KEY, level.dimension().toString())
+                    write(FACE_KEY, face.name)
+                    "corner"
+                } else {
+                    require(
+                        read(DIMENSION_KEY) == level.dimension().toString() && read(FACE_KEY) == face.name,
+                    ) { "Select the same face in the same world" }
+                    val id =
+                        AttachedDisplaySurfaces.create(level, first, position, face) {
+                            player.mayBuild() &&
+                                level.mayInteract(player, it)
+                        }
+                    SELECTION_KEYS.forEach { write(it, null) }
+                    write(SCREEN_KEY, id.toString())
+                    write(DIMENSION_KEY, level.dimension().toString())
+                    "created"
+                }
+            }
+        }.fold({ player.sendSystemMessage(Component.translatable("item.compukters.peripheral_configurator.display.$it")) }, { error ->
+            player.sendSystemMessage(
+                Component.translatable("item.compukters.peripheral_configurator.display.failed", error.message.orEmpty()),
+            )
+        })
+    }
+
+    const val FACE_KEY = "compukters_screen_corner_face"
+
+    val SELECTION_KEYS: List<String> = listOf(SCREEN_KEY, CORNER_KEY, DIMENSION_KEY, INSTANCE_KEY, FACE_KEY)
     private const val SCREEN_KEY = "compukters_selected_screen"
     private const val CORNER_KEY = "compukters_screen_corner"
     private const val DIMENSION_KEY = "compukters_screen_dimension"

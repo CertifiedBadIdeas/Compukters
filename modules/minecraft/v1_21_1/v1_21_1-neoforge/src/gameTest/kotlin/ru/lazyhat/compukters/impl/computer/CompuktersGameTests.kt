@@ -134,6 +134,10 @@ object CompuktersGameTests {
     @GameTest(batch = "keyboard", template = EMPTY_TEMPLATE, templateNamespace = "compukters", timeoutTicks = 5000)
     fun computerKeyboard(helper: GameTestHelper) = ComputerKeyboardGameTestScenario.run(helper)
 
+    @JvmStatic
+    @GameTest(batch = "attached_display", template = EMPTY_TEMPLATE, templateNamespace = "compukters", timeoutTicks = 5000)
+    fun attachedDisplay(helper: GameTestHelper) = AttachedDisplayGameTestScenario.run(helper)
+
     private const val EMPTY_TEMPLATE = "empty"
     private const val TIMEOUT_TICKS = 100_000
 }

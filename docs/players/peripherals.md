@@ -19,12 +19,12 @@ front face: `front`, `back`, `left`, `right`, `top` and `bottom`.
 
 For a remote connection, use the Peripheral Configurator:
 
-1. Use it in the air to switch from naming mode to network mode.
+1. Hold RMB, point at **Network binding** in the radial menu, then release RMB. A short click performs the selected action; Escape or the center of the menu cancels mode selection.
 2. Click an unbound computer or device to create a network. Clicking an already bound member selects its network.
 3. Click other computers and devices to join them to the selected network. The selected configurator glows.
    Unnamed devices receive a name such as `display_1` or `speedometer_1`. The first free number is selected within
    this network; existing names are preserved. Names use the technical device kind and are independent of game language.
-4. Use it in the air again to return to naming mode. Click a peripheral to give it a name, or click a computer to
+4. Hold RMB and select **Naming** to return to naming mode. Click a peripheral to give it a name, or click a computer to
    rename the network and inspect its members. The inspector shows unavailable devices and lets you remove members.
 
 Shift-use in the air clears the selected network. In network mode, Shift-click a member to unbind it;

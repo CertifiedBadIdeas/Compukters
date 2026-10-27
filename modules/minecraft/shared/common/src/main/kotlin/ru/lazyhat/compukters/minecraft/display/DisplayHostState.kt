@@ -61,10 +61,11 @@ internal class DisplayHostState(
         frameTasks.keys.removeIf { !it.owns(owner) }
         val response =
             if (request.capability.namespace != SCHEMA.identity.namespace || request.capability.name != SCHEMA.identity.name ||
-                request.capability.abiMajor != 1 || request.capability.abiMinor !in 0..4 ||
+                request.capability.abiMajor != 1 || request.capability.abiMinor !in 0..5 ||
                 (request.operation == 17 && request.capability.abiMinor < 2) ||
                 (request.operation >= 18 && request.capability.abiMinor < 3) ||
-                (request.operation >= 21 && request.capability.abiMinor < 4)
+                (request.operation >= 21 && request.capability.abiMinor < 4) ||
+                (request.operation >= 22 && request.capability.abiMinor < 5)
             ) {
                 failure(HostFailureKind.OTHER, "Unexpected display capability")
             } else {
@@ -390,6 +391,10 @@ internal class DisplayHostState(
                             chooseMode(canvas, int(0))
                         }
 
+                        22 -> {
+                            canvas.setOpacity(owner, int(0))
+                        }
+
                         8 -> {
                             canvas.fill(owner, 0, 0, canvas.activeWidth(owner), canvas.activeHeight(owner), int(0))
                         }
@@ -486,7 +491,7 @@ internal class DisplayHostState(
 
         val SCHEMA =
             HostCapabilitySchema(
-                CapabilityIdentity("compukters", "display", 1, 4),
+                CapabilityIdentity("compukters", "display", 1, 5),
                 listOf(
                     HostOperationSchema(listOf(HostValueType.I32), HostValueType.I32, true),
                     HostOperationSchema(listOf(HostValueType.STRING), HostValueType.I32, true),
@@ -536,6 +541,7 @@ internal class DisplayHostState(
                             true,
                         ),
                         HostOperationSchema(listOf(HostValueType.I32, HostValueType.BYTE_ARRAY), HostValueType.UNIT, true),
+                        operation(2),
                     ),
             )
 

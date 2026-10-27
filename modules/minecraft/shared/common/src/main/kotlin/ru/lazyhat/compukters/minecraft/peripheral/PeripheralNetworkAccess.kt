@@ -50,6 +50,9 @@ object PeripheralNetworkAccess {
         computer: BlockPos,
     ): PeripheralNetwork? {
         if (!level.hasChunkAt(computer)) return null
+        ru.lazyhat.compukters.minecraft.display.AttachedDisplaySurfaces.at(level, computer)?.let { screen ->
+            return PeripheralNetworkStorage.get(level).directory.networkOf(screen.id)
+        }
         val contacted = level.getBlockEntity(computer) ?: return null
         val anchor =
             if (contacted is ru.lazyhat.compukters.minecraft.computer.ComputerBlockEntity ||
@@ -114,6 +117,16 @@ object PeripheralNetworkAccess {
         identity: PeripheralDeviceIdentity,
     ): PeripheralNetworkMember? {
         if (!level.hasChunkAt(identity.anchor)) return null
+        if (identity.providerId == "compukters-display") {
+            ru.lazyhat.compukters.minecraft.display.AttachedDisplaySurfaces.at(level, identity.anchor)?.let { screen ->
+                return PeripheralNetworkStorage
+                    .get(level)
+                    .directory
+                    .networkOf(screen.id)
+                    ?.members
+                    ?.firstOrNull { it.instance == screen.id }
+            }
+        }
         val entity = level.getBlockEntity(identity.anchor) ?: return null
         if (entity is ru.lazyhat.compukters.minecraft.display.DisplayBlockEntity) {
             val screen =

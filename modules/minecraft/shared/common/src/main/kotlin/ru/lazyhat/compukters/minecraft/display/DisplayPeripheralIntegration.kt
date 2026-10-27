@@ -95,7 +95,9 @@ object DisplayPeripheralIntegration {
             contracts = listOf(contract, graphicalContract),
             peripheralProvider =
                 ComputerPeripheralProvider { level, position, _ ->
-                    if (!level.hasChunkAt(position) || level.getBlockEntity(position) !is DisplayBlockEntity) {
+                    if (!level.hasChunkAt(position) ||
+                        (level.getBlockEntity(position) !is DisplayBlockEntity && AttachedDisplaySurfaces.at(level, position) == null)
+                    ) {
                         null
                     } else {
                         ComputerPeripheralIdentity(PROVIDER_ID, position.immutable(), DEVICE_KEY)
@@ -124,6 +126,7 @@ object DisplayPeripheralIntegration {
                 }
             }
         surface ?: return null
+        DisplayWorldAccess.prepare(level, surface)
         val machineEpoch = computer.terminalMachineId ?: return null
         return WorldDisplayEndpoint(level, computer, machineEpoch, surface)
     }
@@ -176,9 +179,7 @@ object DisplayPeripheralIntegration {
             return surface.panels.any { panel ->
                 val position = DisplayWorldAccess.position(surface, panel.column, panel.row)
                 if (!level.hasChunkAt(position)) return@any false
-                val entity = level.getBlockEntity(position) as? DisplayBlockEntity ?: return@any false
-                entity.checkpointIdentity == panel.instance.toString() && !entity.isRemoved &&
-                    entity.blockState.getValue(DisplayBlock.FACING) == DisplayWorldAccess.facing(surface) &&
+                DisplayWorldAccess.matches(level, surface, panel.instance, position) &&
                     ComputerPeripheralLookup.isReachable(
                         level,
                         computerPosition,

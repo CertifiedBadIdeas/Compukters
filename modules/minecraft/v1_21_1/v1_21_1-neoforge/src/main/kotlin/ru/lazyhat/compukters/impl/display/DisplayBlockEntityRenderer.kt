@@ -42,7 +42,7 @@ class DisplayBlockEntityRenderer(
         ) {
             vertices
                 .addVertex(saved, x, y, 0f)
-                .setColor(-1)
+                .setColor((entity.displayOpacity() shl 24) or 0xFFFFFF)
                 .setUv(u, v)
                 .setOverlay(OverlayTexture.NO_OVERLAY)
                 .setLight(0xF000F0)

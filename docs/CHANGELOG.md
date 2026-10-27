@@ -13,6 +13,9 @@ headings so this page has one stable URL that can be shared outside the reposito
 
 ## 0.7.0 — In development
 
+- Added flat display panels across existing block faces, including floor and ceiling surfaces, with the existing Guest display API, saved image and construction projection.
+- Added `GraphicalDisplay.setOpacity(0.0..1.0)` for persistent whole-screen transparency of both text and background.
+
 - The configurator selects its mode through a hold-RMB radial menu. Short clicks retain block actions;
   releasing in the center or pressing Escape cancels selection.
 - Guest programs can request a set of keys through `compukter.input.Keyboard`. Players explicitly activate
