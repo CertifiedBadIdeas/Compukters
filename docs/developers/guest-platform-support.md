@@ -598,3 +598,32 @@ limits/coalescing, independent players, release/re-entry, expiry and clipping. `
 capability revisions, little-endian input and clipped drawing. The graphical display GameTest exercises
 DSL drawing and the Guest Down/Drag/Up host bridge. The [cube example](https://github.com/CertifiedBadIdeas/Compukters/tree/dev/examples/rotating-cube)
 uses a clipped canvas and rotation slider; the SCADA example uses explicitly updated widgets and click-only dispatch.
+
+## In-world keyboard capture
+
+`compukter.input.Keyboard.open(setOf(Key.W, Key.SPACE))` requests those keys for the calling computer.
+The returned `KeyboardCapture` owns that program's exclusive input request. A player must explicitly
+choose Keyboard in the configurator's hold-RMB menu and short-click that computer to activate capture.
+The player can put the configurator away and keep looking around. Escape always returns to normal
+controls. Other selected keys are withheld from vanilla keyboard handling while capture is active.
+
+Read `capture.snapshot()` once per control step. `KeyboardState` includes server `gameTick`, `connected`,
+`isDown`, `wasPressed` and `wasReleased`. Edges coalesce between snapshots: a press and release between
+reads can set both flags while `isDown` is false. Multiple repeated transitions of one key are not an
+unbounded event history. Both Shift keys share one logical key, as do Control and Alt. Requested keys
+use the fixed 64-entry `Key` order; Escape is deliberately absent.
+
+One program can request input for a computer, and one explicitly consenting player can drive it at a
+time. A program cannot activate capture by itself. Close/reset/termination removes its request and
+returns the player to normal controls. Disconnection, death, context/range loss, opening a GUI, loss of
+window focus or more than five missing heartbeat ticks disconnect the player and clear held keys.
+A lost player is reported as `connected == false`; flight policy belongs to the Guest program. Call
+`close()` in `finally`. Hibernation keeps the program's key request/handle but never consent, physical
+keys or pending edges: after restore a player must activate control again.
+
+This is an additive `compukter:core` 9.3.0 API backed by generic host capability `compukters:keyboard` 1.0.
+It has its own input state and does not reuse the terminal's text/key queues. See
+`examples/keyboard-input` for a minimal observer. Core input-state/host tests cover edge retention,
+heartbeat expiry, signed high-bit keys, ownership, stale handles and checkpoint reconnection. A compiler
+fixture compiles the public consumer against the actual packaged platform; native client input and HUD
+appearance additionally require the bounded in-world scenario.

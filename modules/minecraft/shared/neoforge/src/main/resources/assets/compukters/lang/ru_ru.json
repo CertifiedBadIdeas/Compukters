@@ -57,5 +57,17 @@
   "message.compukters.cable.too_many_computers": "Кабельная линия может соединить только два компьютера.",
   "message.compukters.cable.limit_reached": "Кабельная линия слишком длинная.",
   "message.compukters.cable.unloaded": "Перед продолжением линии загрузите соседние чанки.",
-  "block.compukters.redstone_port": "Редстоун-порт"
+  "block.compukters.redstone_port": "Редстоун-порт",
+  "screen.compukters.configurator.radial": "Режим конфигуратора",
+  "screen.compukters.configurator.radial.hint": "Отпустите ПКМ для выбора · Esc — отмена",
+  "screen.compukters.configurator.radial.name": "Имена",
+  "screen.compukters.configurator.radial.network": "Сеть",
+  "screen.compukters.configurator.radial.display": "Экран",
+  "screen.compukters.configurator.radial.keyboard": "Клавиши",
+  "item.compukters.peripheral_configurator.mode.keyboard": "Режим: управление клавишами",
+  "overlay.compukters.configurator.mode.keyboard": "Управление клавишами",
+  "input.compukters.keyboard.active": "Управление через Compukters · Esc — выйти",
+  "input.compukters.keyboard.toggled": "Режим управления переключён",
+  "input.compukters.keyboard.unavailable": "Компьютер не ожидает клавиатуру или уже управляется другим игроком",
+  "overlay.compukters.configurator.action.keyboard": "Короткий клик по компьютеру — включить или выключить управление клавишами"
 }

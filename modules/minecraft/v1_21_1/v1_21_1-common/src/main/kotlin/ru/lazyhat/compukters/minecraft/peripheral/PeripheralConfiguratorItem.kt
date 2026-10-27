@@ -40,13 +40,25 @@ open class PeripheralConfiguratorItem(
     fun configuratorMode(stack: ItemStack): Int {
         val data = stack.get(DataComponents.CUSTOM_DATA)?.copyTag() ?: return 0
         val stored = if (data.contains(ASSEMBLY_MODE_KEY)) data.getInt(ASSEMBLY_MODE_KEY) else -1
-        return if (stored in 0..2) {
+        return if (stored in 0..3) {
             stored
         } else if (data.getBoolean(MODE_KEY)) {
             1
         } else {
             0
         }
+    }
+
+    fun selectMode(
+        stack: ItemStack,
+        mode: Int,
+    ) {
+        require(mode in 0..3)
+        val data = stack.get(DataComponents.CUSTOM_DATA)?.copyTag() ?: CompoundTag()
+        data.putInt(ASSEMBLY_MODE_KEY, mode)
+        ru.lazyhat.compukters.minecraft.display.DisplayAssembly.SELECTION_KEYS
+            .forEach(data::remove)
+        stack.set(DataComponents.CUSTOM_DATA, CustomData.of(data))
     }
 
     fun selectionDimension(stack: ItemStack): String =
@@ -96,14 +108,6 @@ open class PeripheralConfiguratorItem(
                     .forEach(data::remove)
                 stack.set(DataComponents.CUSTOM_DATA, CustomData.of(data))
                 player.sendSystemMessage(Component.translatable("item.compukters.peripheral_configurator.selection_cleared"))
-            } else {
-                val data = stack.get(DataComponents.CUSTOM_DATA)?.copyTag() ?: CompoundTag()
-                val next = (configuratorMode(stack) + 1) % 3
-                data.putInt(ASSEMBLY_MODE_KEY, next)
-                stack.set(DataComponents.CUSTOM_DATA, CustomData.of(data))
-                player.sendSystemMessage(
-                    Component.translatable("item.compukters.peripheral_configurator.mode." + listOf("name", "network", "display")[next]),
-                )
             }
         }
         return InteractionResultHolder.sidedSuccess(stack, level.isClientSide)
@@ -113,6 +117,15 @@ open class PeripheralConfiguratorItem(
         if (context.level.isClientSide) return InteractionResult.SUCCESS
         val level = context.level as? ServerLevel ?: return InteractionResult.PASS
         val player = context.player as? ServerPlayer ?: return InteractionResult.PASS
+        if (configuratorMode(context.itemInHand) == 3) {
+            val okay =
+                ru.lazyhat.compukters.minecraft.input.ComputerKeyboard
+                    .toggle(player, context.clickedPos)
+            player.sendSystemMessage(
+                Component.translatable(if (okay) "input.compukters.keyboard.toggled" else "input.compukters.keyboard.unavailable"),
+            )
+            return InteractionResult.SUCCESS
+        }
         if (configuratorMode(context.itemInHand) == 2) {
             val stack = context.itemInHand
             val data = stack.get(DataComponents.CUSTOM_DATA)?.copyTag() ?: CompoundTag()

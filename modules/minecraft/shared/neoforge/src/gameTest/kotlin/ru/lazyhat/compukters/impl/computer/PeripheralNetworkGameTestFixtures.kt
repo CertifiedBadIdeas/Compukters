@@ -41,7 +41,7 @@ internal object PeripheralNetworkGameTestFixtures {
         val stack = ItemStack(CompuktersRegistry.PERIPHERAL_CONFIGURATOR_ITEM.get())
         val item = stack.item as PeripheralConfiguratorItem
         player.setItemInHand(InteractionHand.MAIN_HAND, stack)
-        item.use(helper.level, player, InteractionHand.MAIN_HAND)
+        item.selectMode(stack, 1)
         for (relative in listOf(computer) + devices) {
             val absolute = helper.absolutePos(relative)
             player.setPos(absolute.x + 0.5, absolute.y + 0.5, absolute.z + 0.5)
@@ -68,7 +68,7 @@ internal object PeripheralNetworkGameTestFixtures {
         val stack = ItemStack(CompuktersRegistry.PERIPHERAL_CONFIGURATOR_ITEM.get())
         val item = stack.item as PeripheralConfiguratorItem
         player.setItemInHand(InteractionHand.MAIN_HAND, stack)
-        item.use(helper.level, player, InteractionHand.MAIN_HAND)
+        item.selectMode(stack, 1)
         player.setShiftKeyDown(true)
         val absolute = helper.absolutePos(relative)
         player.setPos(absolute.x + 0.5, absolute.y + 0.5, absolute.z + 0.5)

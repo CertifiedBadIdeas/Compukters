@@ -130,6 +130,10 @@ object CompuktersGameTests {
     )
     fun vmBenchmark(helper: GameTestHelper) = VmBenchmarkGameTestScenario.run(helper)
 
+    @JvmStatic
+    @GameTest(batch = "keyboard", template = EMPTY_TEMPLATE, templateNamespace = "compukters", timeoutTicks = 5000)
+    fun computerKeyboard(helper: GameTestHelper) = ComputerKeyboardGameTestScenario.run(helper)
+
     private const val EMPTY_TEMPLATE = "empty"
     private const val TIMEOUT_TICKS = 100_000
 }

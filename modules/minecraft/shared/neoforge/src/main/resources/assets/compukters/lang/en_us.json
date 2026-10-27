@@ -80,5 +80,17 @@
   "message.compukters.cable.too_many_computers": "A cable line can connect only two computers.",
   "message.compukters.cable.limit_reached": "This cable line is too large.",
   "message.compukters.cable.unloaded": "Load the neighboring chunks before extending this cable line.",
-  "block.compukters.redstone_port": "Redstone Port"
+  "block.compukters.redstone_port": "Redstone Port",
+  "screen.compukters.configurator.radial": "Configurator mode",
+  "screen.compukters.configurator.radial.hint": "Release RMB to select · Esc to cancel",
+  "screen.compukters.configurator.radial.name": "Names",
+  "screen.compukters.configurator.radial.network": "Network",
+  "screen.compukters.configurator.radial.display": "Display",
+  "screen.compukters.configurator.radial.keyboard": "Keyboard",
+  "item.compukters.peripheral_configurator.mode.keyboard": "Mode: keyboard control",
+  "overlay.compukters.configurator.mode.keyboard": "Keyboard control",
+  "input.compukters.keyboard.active": "Compukters controls · Esc to release",
+  "input.compukters.keyboard.toggled": "Keyboard control toggled",
+  "input.compukters.keyboard.unavailable": "Computer is not requesting keys or already has another pilot",
+  "overlay.compukters.configurator.action.keyboard": "Short click a computer to enable or leave keyboard control"
 }

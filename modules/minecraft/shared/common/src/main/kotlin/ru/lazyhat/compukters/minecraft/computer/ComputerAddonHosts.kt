@@ -193,6 +193,11 @@ object ComputerAddonHosts {
             val hosts =
                 mutableListOf<ProgramAddonHost>(
                     PeripheralProgramHost(peripherals.session),
+                    ru.lazyhat.compukters.core.input.KeyboardProgramHost(
+                        ru.lazyhat.compukters.minecraft.input.ComputerKeyboard.endpoint(
+                            level.getBlockEntity(position) as ComputerBlockEntity,
+                        ),
+                    ),
                     ComputerNetworkProgramHost(ComputerCableMessages.endpoint(level, position)),
                 )
             try {

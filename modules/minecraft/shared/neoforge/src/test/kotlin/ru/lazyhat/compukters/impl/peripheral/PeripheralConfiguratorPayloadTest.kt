@@ -29,6 +29,19 @@ import kotlin.test.assertFailsWith
 
 class PeripheralConfiguratorPayloadTest {
     @Test
+    fun `radial actions round trip and reject unknown modes`() {
+        for (mode in -1..3) {
+            val value = ConfiguratorActionPayload(InteractionHand.OFF_HAND, mode, BlockPos(2, 64, -3), Direction.UP)
+            assertEquals(value, roundTrip(ConfiguratorActionPayload.CODEC, value))
+        }
+        for (mode in listOf(-2, 4)) {
+            assertFailsWith<IllegalArgumentException> {
+                roundTrip(ConfiguratorActionPayload.CODEC, ConfiguratorActionPayload(InteractionHand.MAIN_HAND, mode))
+            }
+        }
+    }
+
+    @Test
     fun `open save and reply payloads round trip bounded context`() {
         val context =
             ConfiguratorContextPayload(

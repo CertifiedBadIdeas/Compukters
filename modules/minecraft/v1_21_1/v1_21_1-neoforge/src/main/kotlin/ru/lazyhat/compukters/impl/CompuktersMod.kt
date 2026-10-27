@@ -68,6 +68,10 @@ class CompuktersMod(
         eventBus.addListener(ru.lazyhat.compukters.impl.display.DisplayPointerNetwork::register)
         eventBus.addListener(ru.lazyhat.compukters.impl.display.DisplaySnapshotNetwork::register)
         eventBus.addListener(PeripheralConfiguratorNetwork::register)
+        eventBus.addListener(ru.lazyhat.compukters.impl.input.KeyboardControlNetwork::register)
+        NeoForge.EVENT_BUS.addListener(ru.lazyhat.compukters.impl.input.KeyboardControlLifecycle::tick)
+        NeoForge.EVENT_BUS.addListener(ru.lazyhat.compukters.impl.input.KeyboardControlLifecycle::logout)
+        NeoForge.EVENT_BUS.addListener(ru.lazyhat.compukters.impl.input.KeyboardControlLifecycle::stop)
         if (FMLEnvironment.dist == Dist.CLIENT) {
             IdeClientBootstrap.register(eventBus)
             DisplayClientBootstrap.register(eventBus)

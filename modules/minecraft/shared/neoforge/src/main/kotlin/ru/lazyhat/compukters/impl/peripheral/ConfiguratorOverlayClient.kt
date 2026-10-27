@@ -115,7 +115,7 @@ internal object ConfiguratorOverlayClient {
         val selectedCorner = item.selectedCorner(stack).takeIf { matchingDimension }
         val result =
             mutableListOf<Component>(
-                Component.translatable("overlay.compukters.configurator.mode." + listOf("name", "network", "display")[mode]),
+                Component.translatable("overlay.compukters.configurator.mode." + listOf("name", "network", "display", "keyboard")[mode]),
             )
         val hover = (minecraft.hitResult as? BlockHitResult)?.blockPos
         val device = snapshot.devices.firstOrNull { it.contains(hover) }
@@ -141,6 +141,10 @@ internal object ConfiguratorOverlayClient {
                 when (mode) {
                     1 -> {
                         "binding"
+                    }
+
+                    3 -> {
+                        "keyboard"
                     }
 
                     2 -> {

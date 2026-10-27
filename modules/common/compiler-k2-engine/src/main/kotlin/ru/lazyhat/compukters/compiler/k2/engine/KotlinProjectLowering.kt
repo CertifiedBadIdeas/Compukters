@@ -11156,6 +11156,7 @@ private fun capabilityShape(
                 "compukter" to "sound" -> 1u
                 "compukters" to "display" -> 22u
                 "compukters" to "network" -> 3u
+                "compukters" to "keyboard" -> 3u
                 "compukter" to "timer" -> 1u
                 else -> error("unknown Compukters capability ${capability.namespace}:${capability.name}")
             },
