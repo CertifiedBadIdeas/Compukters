@@ -96,6 +96,10 @@ The scope is cleared even when the move throws. Complete displays retain canvas 
 relocation retires location-bound handles and private frames. Moving part of a display splits it into panels, retaining
 the network, each published tile and the name on the first panel. Ordinary removal outside a transfer remains destructive.
 
+Bulk construction storage deletion must call `CompuktersPeripheralWorldIntegration.removeBlocks` before
+discarding its loaded blocks. Its ownership predicate retires only those display tiles and respects active
+transfer guards. Sable invokes this for permanent `REMOVED` plots; `UNLOADED` preserves saved displays.
+
 Serialized construction adapters can hold a loaded-address `guardTransfer` while calling
 `prepareTransferAsync`. Its future includes final VM hibernation and filesystem attachment release;
 poll completion without blocking the server thread. Keep source ticks and computer admission gated

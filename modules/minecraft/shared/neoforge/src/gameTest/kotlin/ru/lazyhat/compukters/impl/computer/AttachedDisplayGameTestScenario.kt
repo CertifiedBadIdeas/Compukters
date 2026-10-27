@@ -236,6 +236,17 @@ internal object AttachedDisplayGameTestScenario {
                     moved.pixelAt(0, 0) == 0x112233 && retained.pixelAt(0, 0) == 0x445566 && moved.opacity == 63 && retained.opacity == 63,
                     "partial transfer lost independent tiles or opacity",
                 )
+                PeripheralBlockTransfers.guard(helper.level, listOf(b)).use {
+                    PeripheralBlockTransfers.removeBlocks(helper.level) { it == b }
+                }
+                helper.assertTrue(displayPointerTarget(helper.level, aim(b))?.canvas === retained, "bulk removal bypassed transfer guards")
+                PeripheralBlockTransfers.removeBlocks(helper.level) { it == b }
+                helper.assertTrue(displayPointerTarget(helper.level, aim(b)) == null, "bulk construction deletion retained its surface")
+                helper.assertTrue(
+                    helper.level.getBlockState(b).`is`(Blocks.OAK_PLANKS) &&
+                        displayPointerTarget(helper.level, aim(move.getValue(a)))?.canvas === moved,
+                    "bulk display retirement changed backing blocks or another construction",
+                )
             }.thenSucceed()
     }
 }
