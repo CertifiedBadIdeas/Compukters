@@ -56,37 +56,15 @@ internal class ConfiguratorRadialScreen : Screen(Component.translatable("screen.
         mouseY: Int,
         partialTick: Float,
     ) {
-        val cx = width / 2
-        val cy = height / 2
-        val selected = ConfiguratorRadialGeometry.select((mouseX - cx).toDouble(), (mouseY - cy).toDouble())
-        ConfiguratorRadialGeometry.spans.forEach { span ->
-            val color = if (selected == span.sector) IdeColors.SELECTION else IdeColors.PANEL_ALT
-            graphics.fill(cx + span.x, cy + span.y, cx + span.x + span.width, cy + span.y + 1, color)
-        }
-
-        fun label(
-            text: Component,
-            x: Int,
-            y: Int,
-            color: Int,
-        ) {
-            graphics.drawString(font, text, x - font.width(text) / 2, y - font.lineHeight / 2, color, false)
-        }
-        ConfiguratorRadialGeometry.modes.forEachIndexed { index, mode ->
-            label(
-                Component.translatable("screen.compukters.configurator.radial.$mode"),
-                cx + ConfiguratorRadialGeometry.labelX(index),
-                cy + ConfiguratorRadialGeometry.labelY(index),
-                if (index == selected) IdeColors.ACCENT else IdeColors.TEXT,
-            )
-        }
-        label(Component.translatable("gui.cancel"), cx, cy, IdeColors.MUTED)
-        label(title, cx, cy - ConfiguratorRadialGeometry.OUTER - 20, IdeColors.TEXT)
-        label(
-            Component.translatable("screen.compukters.configurator.radial.hint"),
-            cx,
-            cy + ConfiguratorRadialGeometry.OUTER + 20,
-            IdeColors.MUTED,
+        ConfiguratorRadialPresentation.draw(
+            width,
+            height,
+            mouseX,
+            mouseY,
+            font::width,
+            font.lineHeight,
+            { left, top, right, bottom, color -> graphics.fill(left, top, right, bottom, color) },
+            { text, x, y, color -> graphics.drawString(font, text, x, y, color, false) },
         )
     }
 }
