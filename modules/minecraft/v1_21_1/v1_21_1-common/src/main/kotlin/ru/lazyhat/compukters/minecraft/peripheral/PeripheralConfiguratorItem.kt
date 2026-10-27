@@ -32,6 +32,7 @@ import net.minecraft.world.item.component.CustomData
 import net.minecraft.world.item.context.UseOnContext
 import net.minecraft.world.level.Level
 import ru.lazyhat.compukters.minecraft.computer.ComputerBlockEntity
+import ru.lazyhat.compukters.minecraft.display.DisplayAssembly
 import java.util.UUID
 
 open class PeripheralConfiguratorItem(
@@ -74,6 +75,14 @@ open class PeripheralConfiguratorItem(
     fun selectedCorner(stack: ItemStack): net.minecraft.core.BlockPos? {
         val data = stack.get(DataComponents.CUSTOM_DATA)?.copyTag() ?: return null
         return data.getString("compukters_screen_corner").toLongOrNull()?.let(net.minecraft.core.BlockPos::of)
+    }
+
+    fun selectedFace(stack: ItemStack): net.minecraft.core.Direction? {
+        val data = stack.get(DataComponents.CUSTOM_DATA)?.copyTag() ?: return null
+        return runCatching {
+            net.minecraft.core.Direction
+                .valueOf(data.getString(DisplayAssembly.FACE_KEY))
+        }.getOrNull()
     }
 
     fun networkMode(stack: ItemStack): Boolean = configuratorMode(stack) == 1
@@ -133,6 +142,7 @@ open class PeripheralConfiguratorItem(
                 player,
                 stack,
                 context.clickedPos,
+                face = context.clickedFace,
                 read = { key -> data.getString(key) },
                 write = { key, value -> if (value == null) data.remove(key) else data.putString(key, value) },
             )

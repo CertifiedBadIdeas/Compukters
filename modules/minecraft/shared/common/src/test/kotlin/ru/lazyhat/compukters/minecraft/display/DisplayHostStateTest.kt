@@ -20,6 +20,34 @@ import kotlin.test.assertTrue
 
 class DisplayHostStateTest {
     @Test
+    fun `whole-screen opacity validates ownership bounds and capability minor without changing pixels`() {
+        val endpoint = FakeDisplayEndpoint()
+        val host = DisplayHostState({ endpoint }, { DisplayResolution.Found(endpoint) })
+        val handle = assertIs<HostResponse.IntSuccess>(host.call(0, VmValue.I32(0))).value
+        host.call(8, VmValue.I32(handle), VmValue.I32(0x123456))
+        for (opacity in listOf(0, 128, 255)) {
+            assertEquals(HostResponse.UnitSuccess, host.call(22, VmValue.I32(handle), VmValue.I32(opacity)))
+            assertEquals(opacity, endpoint.canvas.opacity)
+            assertEquals(0x123456, endpoint.canvas.pixelAt(0, 0))
+        }
+        for (opacity in listOf(-1, 256)) assertIs<HostResponse.Failure>(host.call(22, VmValue.I32(handle), VmValue.I32(opacity)))
+        assertEquals(255, endpoint.canvas.opacity)
+        val old =
+            ProgramAddonRequest(
+                VmHostRequestIdentity(1, 1),
+                ru.lazyhat.compukters.lang.runtime.vm
+                    .CapabilityIdentity("compukters", "display", 1, 4),
+                22,
+                listOf(VmValue.I32(handle), VmValue.I32(0)),
+            )
+        assertIs<HostResponse.Failure>(assertIs<ProgramAddonDispatch.Completed>(host.dispatch(old)).response)
+        assertEquals(255, endpoint.canvas.opacity)
+        endpoint.present = false
+        assertIs<HostResponse.Failure>(host.call(22, VmValue.I32(handle), VmValue.I32(0)))
+        assertEquals(255, endpoint.canvas.opacity)
+    }
+
+    @Test
     fun `pointer polling uses bounded little endian fields and requires capability minor three`() {
         val endpoint = FakeDisplayEndpoint()
         val host = DisplayHostState({ endpoint }, { DisplayResolution.Found(endpoint) })

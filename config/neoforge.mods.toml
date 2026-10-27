@@ -27,3 +27,6 @@ side="BOTH"
 
 [[mixins]]
 config="compukters-input.mixins.json"
+
+[[mixins]]
+config="compukters-surface.mixins.json"

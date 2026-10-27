@@ -127,7 +127,7 @@ transport as the IDE terminal, and its viewer state is discarded when the server
 ## Display canvases
 
 A dimension's `DisplayStorage` is the sole authority for published display pixels, density, geometry, membership and
-name. Directory format 1 stores packed RGB bytes with strict dimension, allocation, member and payload checks.
+name and whole-screen opacity. Directory format 2 stores packed RGB bytes with strict dimension, allocation, member and payload checks, plus an attachment flag, six-face geometry and an opacity byte. Format 1 remains readable as ordinary horizontal block displays with opacity 255. Attached tile UUIDs live in this directory; backing blocks receive no display block entity or copied image.
 A directory allows at most 128 screens and 1024 logical block positions, including holes. The final panel's destruction
 deletes its screen; unloading panels leaves the record intact. Panel NBT retains only instance UUIDs.
 

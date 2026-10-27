@@ -31,6 +31,8 @@ open class DisplayBlockEntity(
     private var publishedRevision = -1L
     private var publishedSurface: java.util.UUID? = null
     private var publishedMode = -1
+    private var publishedOpacity = 255
+    private var clientOpacity = 255
     private val clientImage = DisplayClientImage()
     private var sentRgb = ByteArray(64 * 64 * 3)
     private var sentUpdate = DisplayTileUpdate.full(sentRgb, 64)
@@ -49,6 +51,8 @@ open class DisplayBlockEntity(
     fun displayDensity(): Int = clientImage.density
 
     fun displayPixels(): ByteArray = clientImage.rgb
+
+    fun displayOpacity(): Int = clientOpacity
 
     fun displayRevision(): Long = clientImage.revision
 
@@ -89,7 +93,11 @@ open class DisplayBlockEntity(
         val surface = DisplayWorldAccess.surface(serverLevel, this) ?: return
         surface.canvas.expire()
         val publication = DisplayWorldAccess.publication(serverLevel, surface)
-        if (publication.revision == publishedRevision && publication.id == publishedSurface) return
+        if (publication.revision == publishedRevision && publication.id == publishedSurface &&
+            surface.canvas.opacity == publishedOpacity
+        ) {
+            return
+        }
         val instance = java.util.UUID.fromString(checkpointIdentity)
         val pixels = publication.tiles[instance] ?: return
         val update = publication.updates[instance] ?: return
@@ -97,6 +105,7 @@ open class DisplayBlockEntity(
         publishedRevision = publication.revision
         publishedSurface = publication.id
         publishedMode = publication.mode
+        publishedOpacity = surface.canvas.opacity
         sentRgb = pixels
         sentUpdate = update
         sentPanels = publication.panels
@@ -121,6 +130,7 @@ open class DisplayBlockEntity(
         CompoundTag().apply {
             putInt("display_wire", 1)
             putInt("display_mode", publishedMode)
+            putInt("display_opacity", publishedOpacity)
             putString("display_surface", publishedSurface?.toString() ?: "")
             putLong("display_revision", publishedRevision)
             putString("display_panels", sentPanels)
@@ -149,6 +159,7 @@ open class DisplayBlockEntity(
             val bytes = publication?.tiles?.get(java.util.UUID.fromString(checkpointIdentity)) ?: sentRgb
             putInt("display_wire", 1)
             putInt("display_mode", publication?.mode ?: publishedMode.coerceAtLeast(0))
+            putInt("display_opacity", surface?.canvas?.opacity ?: publishedOpacity)
             putByteArray("display_rgb", bytes)
             if (publication != null) {
                 putString("display_surface", publication.id.toString())
@@ -162,6 +173,7 @@ open class DisplayBlockEntity(
         registries: HolderLookup.Provider,
     ) {
         super.loadAdditional(tag, registries)
+        clientOpacity = if (tag.contains("display_opacity")) tag.getInt("display_opacity").coerceIn(0, 255) else 255
         runCatching {
             java.util.UUID
                 .fromString(tag.getString(IDENTITY_KEY))

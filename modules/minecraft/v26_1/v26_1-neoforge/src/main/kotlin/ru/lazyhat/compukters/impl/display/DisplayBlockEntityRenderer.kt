@@ -36,6 +36,7 @@ class DisplayBlockEntityRenderer(
         super.extractRenderState(entity, state, partialTick, cameraPosition, crumblingOverlay)
         state.facing = entity.blockState.getValue(DisplayBlock.FACING)
         state.texture = DisplayTextureCache.texture(entity)
+        state.opacity = entity.displayOpacity()
     }
 
     override fun submit(
@@ -58,7 +59,7 @@ class DisplayBlockEntityRenderer(
             ) {
                 vertices
                     .addVertex(saved, x, y, 0f)
-                    .setColor(-1)
+                    .setColor((state.opacity shl 24) or 0xFFFFFF)
                     .setUv(u, v)
                     .setOverlay(OverlayTexture.NO_OVERLAY)
                     .setLight(0xF000F0)
@@ -74,6 +75,7 @@ class DisplayBlockEntityRenderer(
 }
 
 class DisplayRenderState : BlockEntityRenderState() {
+    var opacity: Int = 255
     var facing: Direction = Direction.NORTH
     var texture: Identifier? = null
 }

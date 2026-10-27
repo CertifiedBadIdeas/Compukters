@@ -83,7 +83,7 @@ data class ConfiguratorOverlayScreen(
     val panels: List<BlockPos>,
 ) {
     init {
-        require(columns in 1..8 && rows in 1..8 && facing.axis.isHorizontal)
+        require(columns in 1..8 && rows in 1..8)
         require(panels.size in 1..columns * rows && panels.distinct().size == panels.size)
         require(panels.all { it in cells() })
     }
@@ -91,7 +91,16 @@ data class ConfiguratorOverlayScreen(
     fun position(
         column: Int,
         row: Int,
-    ): BlockPos = origin.relative(facing.counterClockWise, column).below(row)
+    ): BlockPos =
+        ru.lazyhat.compukters.core.display.DisplayFace
+            .offset(
+                ru.lazyhat.compukters.minecraft.display.AttachedDisplaySurfaces.facings
+                    .indexOf(facing),
+                column,
+                row,
+            ).let {
+                origin.offset(it.x, it.y, it.z)
+            }
 
     fun cells(): List<BlockPos> = (0 until rows).flatMap { row -> (0 until columns).map { position(it, row) } }
 }
@@ -201,6 +210,29 @@ object ConfiguratorOverlayServer {
             val bounds = geometry.firstNotNullOfOrNull { ConfiguratorDeviceBounds.from(it.bounds, position, entity.blockPos) }
             devices +=
                 ConfiguratorOverlayDevice(position.immutable(), title, network?.id, network?.name.orEmpty(), screen?.id, bounds)
+        }
+        for (surface in directory.snapshot().filter { it.attached }) {
+            val network = networks.networkOf(surface.id)
+            for (panel in surface.panels) {
+                val pos = DisplayWorldAccess.position(surface, panel.column, panel.row)
+                if (devices.size >= ConfiguratorOverlaySnapshot.MAX_DEVICES) {
+                    truncated = true
+                    break
+                }
+                if (devices.any { it.position == pos } || !level.hasChunkAt(pos) ||
+                    !PeripheralWorldPositions.within(level, pos.center, center.center, radius.toDouble())
+                ) {
+                    continue
+                }
+                devices +=
+                    ConfiguratorOverlayDevice(
+                        pos,
+                        surface.name ?: "block.compukters.display",
+                        network?.id,
+                        network?.name.orEmpty(),
+                        surface.id,
+                    )
+            }
         }
         val screens =
             directory

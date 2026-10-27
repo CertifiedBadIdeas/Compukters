@@ -24,6 +24,27 @@ class DisplayCanvas(
     val height: Int get() = rows * density
     var revision: Long = 0
         private set
+
+    /** Whole-surface opacity, independent of pixel colors and private frame drafts. */
+    var opacity: Int = 255
+        private set
+
+    fun setOpacity(
+        owner: Any,
+        value: Int,
+    ) {
+        requireOwner(owner)
+        restoreOpacity(value)
+    }
+
+    fun restoreOpacity(value: Int) {
+        require(value in 0..255) { "Opacity must be between 0 and 255" }
+        if (opacity != value) {
+            opacity = value
+            changed()
+        }
+    }
+
     private var pixels: IntArray
     private var writer: Any? = null
     private var connected: () -> Boolean = { false }

@@ -54,7 +54,7 @@ internal object DisplayWorldAccess {
         previous?.remaining?.removeIf { instance ->
             val pos = members[instance]
             pos == null || !level.hasChunkAt(pos) ||
-                (level.getBlockEntity(pos) as? DisplayBlockEntity)?.checkpointIdentity != instance.toString()
+                !matches(level, surface, instance, pos)
         }
         if (previous != null && previous.panels == positions && previous.tiles.keys == members.keys &&
             (previous.remaining.isNotEmpty() || previous.sourceRevision == surface.canvas.revision)
@@ -130,7 +130,7 @@ internal object DisplayWorldAccess {
         return true
     }
 
-    private fun attachBudget(
+    internal fun prepare(
         level: ServerLevel,
         surface: DisplaySurface,
     ): DisplaySurface {
@@ -142,7 +142,7 @@ internal object DisplayWorldAccess {
         return surface
     }
 
-    private val facings = listOf(Direction.NORTH, Direction.SOUTH, Direction.WEST, Direction.EAST)
+    private val facings = AttachedDisplaySurfaces.facings
 
     fun click(
         level: ServerLevel,
@@ -197,13 +197,13 @@ internal object DisplayWorldAccess {
                         facing(it) == entity.blockState.getValue(DisplayBlock.FACING)
                 }?.let {
                     DisplayNetworkAccess.migrate(level, it)
-                    attachBudget(level, it)
+                    prepare(level, it)
                 }
         }
         if (!create) return null
         val holes =
             directory.snapshot().filter { screen ->
-                if (facing(screen) != entity.blockState.getValue(DisplayBlock.FACING)) return@filter false
+                if (screen.attached || facing(screen) != entity.blockState.getValue(DisplayBlock.FACING)) return@filter false
                 val delta = entity.blockPos.subtract(BlockPos(screen.originX, screen.originY, screen.originZ))
                 val right = facing(screen).counterClockWise
                 val column = delta.x * right.stepX + delta.z * right.stepZ
@@ -213,7 +213,7 @@ internal object DisplayWorldAccess {
                     screen.panels.none { it.column == column && it.row == row }
             }
         if (holes.size == 1 && runCatching { join(level, holes.single().id, entity) }.isSuccess) {
-            return directory.byPanel(id)?.let { attachBudget(level, it) }
+            return directory.byPanel(id)?.let { prepare(level, it) }
         }
         // Placing a block beyond world limits leaves an unavailable black panel, never crashes its tick.
         val screens = directory.snapshot()
@@ -258,14 +258,38 @@ internal object DisplayWorldAccess {
                 .clearName(identity)
         }
         DisplayNetworkAccess.migrate(level, created)
-        return attachBudget(level, created)
+        return prepare(level, created)
     }
 
     fun position(
         surface: DisplaySurface,
         column: Int,
         row: Int,
-    ): BlockPos = BlockPos(surface.originX, surface.originY, surface.originZ).relative(facing(surface).counterClockWise, column).below(row)
+    ): BlockPos =
+        ru.lazyhat.compukters.core.display.DisplayFace
+            .position(surface, column, row)
+            .let { BlockPos(it.x, it.y, it.z) }
+
+    fun matches(
+        level: ServerLevel,
+        surface: DisplaySurface,
+        instance: UUID,
+        pos: BlockPos,
+    ): Boolean {
+        if (!level.hasChunkAt(pos) ||
+            ru.lazyhat.compukters.minecraft.peripheral.PeripheralBlockTransfers
+                .receiving(level, pos)
+        ) {
+            return false
+        }
+        if (surface.attached) {
+            return !level.getBlockState(pos).isAir &&
+                DisplayStorage.get(level).directory.attachedAt(pos.x, pos.y, pos.z) === surface
+        }
+        val entity = level.getBlockEntity(pos) as? DisplayBlockEntity ?: return false
+        return !entity.isRemoved && entity.checkpointIdentity == instance.toString() &&
+            entity.blockState.getValue(DisplayBlock.FACING) == facing(surface)
+    }
 
     fun facing(surface: DisplaySurface): Direction = facings[surface.facing]
 
@@ -377,14 +401,7 @@ internal object DisplayWorldAccess {
         screen.panels.forEach { panel ->
             val position = position(screen, panel.column, panel.row)
             require(level.hasChunkAt(position)) { "Load all screen panels before splitting" }
-            val entity = level.getBlockEntity(position) as? DisplayBlockEntity
-            require(
-                entity?.checkpointIdentity == panel.instance.toString() && entity.blockState.getValue(
-                    DisplayBlock.FACING,
-                ) == facing(screen),
-            ) {
-                "Screen panel was replaced"
-            }
+            require(matches(level, screen, panel.instance, position)) { "Screen panel was replaced" }
         }
         DisplayNetworkAccess.checkSplit(level, screen)
         val screens = directory.split(id)
@@ -402,6 +419,7 @@ internal object DisplayWorldAccess {
         check(level.server.isSameThread)
         val directory = DisplayStorage.get(level).directory
         val screen = requireNotNull(directory.byId(id)) { "Selected screen was deleted" }
+        require(!screen.attached) { "Select two corners to create an attached screen" }
         require(entity.blockState.getValue(DisplayBlock.FACING) == facing(screen)) { "Display orientations differ" }
         val delta = entity.blockPos.subtract(BlockPos(screen.originX, screen.originY, screen.originZ))
         val right = facing(screen).counterClockWise

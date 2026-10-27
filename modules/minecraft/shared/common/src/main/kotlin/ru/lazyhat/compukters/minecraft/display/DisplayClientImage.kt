@@ -10,7 +10,7 @@ import ru.lazyhat.compukters.core.display.DisplayCanvas
 import java.util.UUID
 
 /** Keeps the previous image visible until every loaded panel has received the same publication. */
-internal class DisplayClientImage {
+class DisplayClientImage {
     private data class Tile(
         val surface: UUID,
         val publication: Long,

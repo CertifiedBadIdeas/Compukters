@@ -92,5 +92,7 @@
   "input.compukters.keyboard.active": "Compukters controls · Esc to release",
   "input.compukters.keyboard.toggled": "Keyboard control toggled",
   "input.compukters.keyboard.unavailable": "Computer is not requesting keys or already has another pilot",
-  "overlay.compukters.configurator.action.keyboard": "Short click a computer to enable or leave keyboard control"
+  "overlay.compukters.configurator.action.keyboard": "Short click a computer to enable or leave keyboard control",
+  "overlay.compukters.configurator.action.attached_corners": "Select two corners on the same face; Shift-click removes an attached screen",
+  "item.compukters.peripheral_configurator.display.removed": "Attached screen removed"
 }

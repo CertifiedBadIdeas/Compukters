@@ -139,8 +139,7 @@ internal object DisplayNetworkAccess {
             ) {
                 return@firstNotNullOfOrNull null
             }
-            val entity = level.getBlockEntity(pos) as? DisplayBlockEntity ?: return@firstNotNullOfOrNull null
-            identity.takeIf { matches(screen, panel.instance, entity) }
+            identity.takeIf { DisplayWorldAccess.matches(level, screen, panel.instance, pos) }
         }
 
     fun availability(

@@ -69,5 +69,7 @@
   "input.compukters.keyboard.active": "Управление через Compukters · Esc — выйти",
   "input.compukters.keyboard.toggled": "Режим управления переключён",
   "input.compukters.keyboard.unavailable": "Компьютер не ожидает клавиатуру или уже управляется другим игроком",
-  "overlay.compukters.configurator.action.keyboard": "Короткий клик по компьютеру — включить или выключить управление клавишами"
+  "overlay.compukters.configurator.action.keyboard": "Короткий клик по компьютеру — включить или выключить управление клавишами",
+  "overlay.compukters.configurator.action.attached_corners": "Выберите два угла одной грани; Shift-клик снимает панель",
+  "item.compukters.peripheral_configurator.display.removed": "Натянутая панель снята"
 }

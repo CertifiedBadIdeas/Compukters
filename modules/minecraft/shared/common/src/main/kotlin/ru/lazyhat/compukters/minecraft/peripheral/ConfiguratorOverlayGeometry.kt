@@ -80,16 +80,14 @@ object ConfiguratorOverlayGeometry {
         second: BlockPos,
         secondFacing: Direction,
     ): ConfiguratorOutline? {
-        val delta = second.subtract(first)
-        if (firstFacing != secondFacing || !firstFacing.axis.isHorizontal ||
-            delta.x * firstFacing.stepX + delta.z * firstFacing.stepZ != 0
+        if (firstFacing != secondFacing ||
+            runCatching {
+                ru.lazyhat.compukters.minecraft.display.AttachedDisplaySurfaces
+                    .rectangle(first, second, firstFacing)
+            }.isFailure
         ) {
             return null
         }
-        val right = firstFacing.counterClockWise
-        val columns = kotlin.math.abs(delta.x * right.stepX + delta.z * right.stepZ) + 1
-        val rows = kotlin.math.abs(delta.y) + 1
-        if (columns > 8 || rows > 8) return null
         return ConfiguratorOutline(front(AABB(first).minmax(AABB(second)), firstFacing).inflate(0.015), 0xA8E878, true)
     }
 
@@ -102,6 +100,7 @@ object ConfiguratorOverlayGeometry {
             Direction.SOUTH -> AABB(box.minX, box.minY, box.maxZ + 0.011, box.maxX, box.maxY, box.maxZ + 0.012)
             Direction.WEST -> AABB(box.minX - 0.012, box.minY, box.minZ, box.minX - 0.011, box.maxY, box.maxZ)
             Direction.EAST -> AABB(box.maxX + 0.011, box.minY, box.minZ, box.maxX + 0.012, box.maxY, box.maxZ)
-            else -> error("Display must face horizontally")
+            Direction.UP -> AABB(box.minX, box.maxY + 0.011, box.minZ, box.maxX, box.maxY + 0.012, box.maxZ)
+            Direction.DOWN -> AABB(box.minX, box.minY - 0.012, box.minZ, box.maxX, box.minY - 0.011, box.maxZ)
         }
 }

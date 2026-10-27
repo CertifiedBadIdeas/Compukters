@@ -13,7 +13,7 @@ data class DisplayClick(
     val y: Int,
 )
 
-/** Facing follows DisplaySurface: north, south, west, east. Coordinates are local to a block. */
+/** Facing follows DisplaySurface: north, south, west, east, up, down. Coordinates are local to a block. */
 fun displayClickAt(
     facing: Int,
     column: Int,
@@ -23,7 +23,7 @@ fun displayClickAt(
     y: Double,
     z: Double,
 ): DisplayClick? {
-    if (facing !in 0..3 || column !in 0 until DisplayCanvas.MAXIMUM_BLOCK_SIDE || row !in 0 until DisplayCanvas.MAXIMUM_BLOCK_SIDE ||
+    if (facing !in 0..5 || column !in 0 until DisplayCanvas.MAXIMUM_BLOCK_SIDE || row !in 0 until DisplayCanvas.MAXIMUM_BLOCK_SIDE ||
         density !in DisplayCanvas.DENSITIES
     ) {
         return null
@@ -34,9 +34,16 @@ fun displayClickAt(
             0 -> 1.0 - x
             1 -> x
             2 -> z
-            else -> 1.0 - z
+            3 -> 1.0 - z
+            else -> x
         }
     val px = floor(u * density).toInt().coerceIn(0, density - 1)
-    val py = floor((1.0 - y) * density).toInt().coerceIn(0, density - 1)
+    val v =
+        when (facing) {
+            4 -> z
+            5 -> 1.0 - z
+            else -> 1.0 - y
+        }
+    val py = floor(v * density).toInt().coerceIn(0, density - 1)
     return DisplayClick(column * density + px, row * density + py)
 }

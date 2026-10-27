@@ -18,6 +18,7 @@ object DisplayClientBootstrap {
                     .ServerboundCustomPayloadPacket(DisplaySnapshotRequest(entity.blockPos.asLong())),
             )
         }
+        AttachedDisplayRenderer.register()
         eventBus.addListener(::registerRenderers)
         net.neoforged.neoforge.common.NeoForge.EVENT_BUS
             .addListener(::onTick)
@@ -28,6 +29,7 @@ object DisplayClientBootstrap {
     private fun onTick(
         @Suppress("UNUSED_PARAMETER") event: net.neoforged.neoforge.client.event.ClientTickEvent.Post,
     ) {
+        AttachedDisplayClient.tick()
         DisplayTextureCache.cleanup()
         DisplayPointerClient.tick()
     }

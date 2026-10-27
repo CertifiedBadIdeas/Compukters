@@ -1130,3 +1130,19 @@ The typed contracts are `create:pump` and `create:clutch`. Guest wrappers are `c
 block state. Clutch command ownership is a transient SDK lease and never survives a world reload or peripheral
 checkpoint. These endpoints provide no persistent-instance identity; old handles restore as stale. This extends
 only the locked addon schema; native ABI, artifact encoding and capability wire format remain unchanged.
+
+
+### Surface attachments and whole-screen opacity
+
+`compukter:core` 9.4.0 adds `GraphicalDisplay.setOpacity(Double)`. The ordinary Guest wrapper validates 0.0–1.0
+and rounds to 0–255, then invokes new `compukters:display` ABI 1.5 operation 22 `(I32,I32) -> Unit` (handle, opacity).
+The capability now has 23 operations. Older display minors remain admitted with their existing operation gates.
+This is a generic host capability addition; native C ABI, CPKT and VM checkpoint formats are unchanged. Opacity is
+world-owned display metadata and is not duplicated in program resource checkpoints or private frame RGB bytes.
+
+Attached display payload version 1 carries a bounded manifest (surface UUID, publication, mode, six-face facing,
+opacity byte and at most 64 position/instance pairs), or one existing RGB full/delta tile (at most 49,152 bytes),
+or a removed surface UUID. Viewer state is transient and server-thread owned; only negotiated clients receive it.
+Clients use the existing image barrier and texture cache. Recovery requests name one already visible surface and
+are limited to one/player/tick. Pixel work and tile sync share the existing world budgets. Rendering projects
+storage coordinates through the installed construction projection before camera subtraction.

@@ -31,6 +31,7 @@ internal object DisplayNames {
     ): ru.lazyhat.compukters.core.display.DisplaySurface? {
         if (identity.providerId != "compukters-display") return null
         if (level.hasChunkAt(identity.anchor)) {
+            AttachedDisplaySurfaces.at(level, identity.anchor)?.let { return it }
             val entity = level.getBlockEntity(identity.anchor) as? DisplayBlockEntity ?: return null
             return DisplayWorldAccess.surface(level, entity)
         }

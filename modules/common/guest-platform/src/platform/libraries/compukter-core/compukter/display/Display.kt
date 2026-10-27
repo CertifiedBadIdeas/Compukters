@@ -62,6 +62,7 @@ private object DisplayBindings {
     external fun lineClipped(handle: Int, x0: Int, y0: Int, x1: Int, y1: Int, color: Int, clipX: Int, clipY: Int, clipWidth: Int, clipHeight: Int)
     external fun textClipped(handle: Int, x: Int, y: Int, text: String, color: Int, scale: Int, clipX: Int, clipY: Int, clipWidth: Int, clipHeight: Int)
     external fun rasterBatch(handle: Int, bytes: ByteArray)
+    external fun setOpacity(handle: Int, opacity: Int)
     external fun abortFrame(handle: Int)
 }
 
@@ -142,6 +143,12 @@ public value class GraphicalDisplay internal constructor(private val handle: Int
             DisplayMode.HIGH -> 3
         }
         DisplayBindings.setMode(handle, value)
+    }
+
+    /** Whole-panel opacity: 0.0 is invisible, 1.0 is opaque. Persists with the display; applies to text and background alike. */
+    public fun setOpacity(opacity: Double) {
+        if (opacity != opacity || opacity < 0.0 || opacity > 1.0) throw IllegalArgumentException("Opacity must be between 0.0 and 1.0")
+        DisplayBindings.setOpacity(handle, (opacity * 255.0 + 0.5).toInt())
     }
 
     /** Takes the oldest click, or null. Claims this program's exclusive display lease. */

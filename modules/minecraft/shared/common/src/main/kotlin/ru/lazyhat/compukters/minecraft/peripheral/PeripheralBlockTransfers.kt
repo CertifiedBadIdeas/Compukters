@@ -177,7 +177,12 @@ object PeripheralBlockTransfers {
                 }
             }
         }
-        return Transfer(source, destination, captured).also { active.get().add(it) }
+        val surfaces =
+            ru.lazyhat.compukters.minecraft.display.AttachedDisplayTransfers
+                .begin(source, destination, positions)
+        val sourceGuard = guard(source, surfaces.sourcePositions)
+        val destinationGuard = guard(destination, surfaces.destinationPositions)
+        return Transfer(source, destination, captured, surfaces, listOf(sourceGuard, destinationGuard)).also { active.get().add(it) }
     }
 
     internal fun removing(
@@ -212,6 +217,8 @@ object PeripheralBlockTransfers {
         internal val source: ServerLevel,
         internal val destination: ServerLevel,
         internal val blocks: List<MovedBlock>,
+        private val surfaces: ru.lazyhat.compukters.minecraft.display.AttachedDisplayTransfers,
+        private val surfaceGuards: List<AutoCloseable>,
     ) : AutoCloseable {
         private var closed = false
 
@@ -224,6 +231,8 @@ object PeripheralBlockTransfers {
             } finally {
                 active.get().remove(this)
                 if (active.get().isEmpty()) active.remove()
+                surfaceGuards.asReversed().forEach(AutoCloseable::close)
+                surfaces.finish()
             }
         }
 

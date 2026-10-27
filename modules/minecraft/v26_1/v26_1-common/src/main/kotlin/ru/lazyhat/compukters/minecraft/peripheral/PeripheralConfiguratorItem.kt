@@ -31,6 +31,7 @@ import net.minecraft.world.item.component.CustomData
 import net.minecraft.world.item.context.UseOnContext
 import net.minecraft.world.level.Level
 import ru.lazyhat.compukters.minecraft.computer.ComputerBlockEntity
+import ru.lazyhat.compukters.minecraft.display.DisplayAssembly
 import java.util.UUID
 
 open class PeripheralConfiguratorItem(
@@ -48,11 +49,15 @@ open class PeripheralConfiguratorItem(
         }
     }
 
-    fun selectMode(stack: ItemStack, mode: Int) {
+    fun selectMode(
+        stack: ItemStack,
+        mode: Int,
+    ) {
         require(mode in 0..3)
         val data = stack.get(DataComponents.CUSTOM_DATA)?.copyTag() ?: CompoundTag()
         data.putInt(ASSEMBLY_MODE_KEY, mode)
-        ru.lazyhat.compukters.minecraft.display.DisplayAssembly.SELECTION_KEYS.forEach(data::remove)
+        ru.lazyhat.compukters.minecraft.display.DisplayAssembly.SELECTION_KEYS
+            .forEach(data::remove)
         stack.set(DataComponents.CUSTOM_DATA, CustomData.of(data))
     }
 
@@ -81,6 +86,14 @@ open class PeripheralConfiguratorItem(
             .orElse("")
             .toLongOrNull()
             ?.let(net.minecraft.core.BlockPos::of)
+    }
+
+    fun selectedFace(stack: ItemStack): net.minecraft.core.Direction? {
+        val data = stack.get(DataComponents.CUSTOM_DATA)?.copyTag() ?: return null
+        return runCatching {
+            net.minecraft.core.Direction
+                .valueOf(data.getString(DisplayAssembly.FACE_KEY).orElse(""))
+        }.getOrNull()
     }
 
     fun networkMode(stack: ItemStack): Boolean = configuratorMode(stack) == 1
@@ -120,7 +133,6 @@ open class PeripheralConfiguratorItem(
                     .forEach(data::remove)
                 stack.set(DataComponents.CUSTOM_DATA, CustomData.of(data))
                 player.sendSystemMessage(Component.translatable("item.compukters.peripheral_configurator.selection_cleared"))
-
             }
         }
         return InteractionResult.SUCCESS
@@ -131,8 +143,12 @@ open class PeripheralConfiguratorItem(
         val level = context.level as? ServerLevel ?: return InteractionResult.PASS
         val player = context.player as? ServerPlayer ?: return InteractionResult.PASS
         if (configuratorMode(context.itemInHand) == 3) {
-            val okay = ru.lazyhat.compukters.minecraft.input.ComputerKeyboard.toggle(player, context.clickedPos)
-            player.sendSystemMessage(Component.translatable(if (okay) "input.compukters.keyboard.toggled" else "input.compukters.keyboard.unavailable"))
+            val okay =
+                ru.lazyhat.compukters.minecraft.input.ComputerKeyboard
+                    .toggle(player, context.clickedPos)
+            player.sendSystemMessage(
+                Component.translatable(if (okay) "input.compukters.keyboard.toggled" else "input.compukters.keyboard.unavailable"),
+            )
             return InteractionResult.SUCCESS
         }
         if (configuratorMode(context.itemInHand) == 2) {
@@ -142,6 +158,7 @@ open class PeripheralConfiguratorItem(
                 player,
                 stack,
                 context.clickedPos,
+                face = context.clickedFace,
                 read = { key -> data.getString(key).orElse("") },
                 write = { key, value -> if (value == null) data.remove(key) else data.putString(key, value) },
             )
