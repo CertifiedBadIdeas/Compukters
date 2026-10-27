@@ -20,3 +20,6 @@
 [submodule "addons/orbitalis"]
 	path = addons/orbitalis
 	url = https://github.com/CertifiedBadIdeas/Compukters-orbitalis.git
+[submodule "addons/aeronautics"]
+	path = addons/aeronautics
+	url = https://github.com/CertifiedBadIdeas/Compukters-aeronautics.git
