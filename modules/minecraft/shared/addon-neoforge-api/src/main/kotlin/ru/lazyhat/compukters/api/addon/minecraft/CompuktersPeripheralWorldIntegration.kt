@@ -92,4 +92,15 @@ object CompuktersPeripheralWorldIntegration {
         destination: ServerLevel,
         positions: Map<BlockPos, BlockPos>,
     ): AutoCloseable = PeripheralBlockTransfers.begin(source, destination, positions)
+
+    /**
+     * Before permanently deleting bulk block storage, retire displays on those backing blocks.
+     * The predicate must inspect loaded ownership only. Do not call for chunk/construction unload.
+     * Active transfer guards retain their authority over source removal.
+     */
+    @JvmStatic
+    fun removeBlocks(
+        level: ServerLevel,
+        removed: (BlockPos) -> Boolean,
+    ) = PeripheralBlockTransfers.removeBlocks(level, removed)
 }

@@ -18,6 +18,23 @@ import ru.lazyhat.compukters.minecraft.display.DisplayWorldAccess
 object PeripheralBlockTransfers {
     private val active = ThreadLocal.withInitial { mutableListOf<Transfer>() }
 
+    /** Bulk storage deletion bypasses individual block callbacks; unload must not use this path. */
+    fun removeBlocks(
+        level: ServerLevel,
+        removed: (BlockPos) -> Boolean,
+    ) {
+        check(level.server.isSameThread)
+        val positions =
+            DisplayStorage
+                .get(level)
+                .directory
+                .snapshot()
+                .flatMap { surface ->
+                    surface.panels.map { DisplayWorldAccess.position(surface, it.column, it.row) }
+                }.filter(removed)
+        positions.forEach { DisplayWorldAccess.remove(level, it) }
+    }
+
     private data class Guard(
         val level: ServerLevel,
         val positions: Set<BlockPos>,
