@@ -134,8 +134,6 @@ internal class NeoForgeCompilerService private constructor(
             val launch =
                 WorkerLaunch(
                     javaExecutable = javaExecutable(),
-                    maximumHeapMiB = 256,
-                    maximumMetaspaceMiB = 256,
                     temporaryDirectory = paths.temporaryRoot,
                     expectedIdentity = packaged.manifest.identity,
                     maximumFrameBytes = limits.frameBytes,

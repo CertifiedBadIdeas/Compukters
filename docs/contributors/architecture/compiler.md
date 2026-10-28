@@ -224,6 +224,13 @@ Ordinary computer creation and target-profile requests require an already prepar
 worker resources on the server tick. Worker compilation remains asynchronous; this changes the preparation phase,
 not the compilation scheduler or wire formats.
 
+Compiler worker launch defaults live in `compiler-client`'s compiler-specific `WorkerLaunch`:
+512 MiB maximum heap and 256 MiB metaspace. Both NeoForge server and IDE callers use these defaults;
+the separate analysis worker keeps its own bounds. The 30-second compilation deadline is unchanged.
+A ship project using six addon APIs retained roughly 290 MiB after collection and compiled in
+2–4 seconds at 512 MiB; the same project exhausted a 256 MiB heap. This is a host compiler
+resource bound, with no Guest memory, language, artifact or runtime ABI change.
+
 Each pinned compiler adapter retains prepared library artifacts, symbol links and resolved source-library FIR for
 its most recent validated module selection, keyed by module names and content hashes. A different selection disposes
 that one entry; failed preparation is not retained. Module closure and addon payload identities are still checked on
