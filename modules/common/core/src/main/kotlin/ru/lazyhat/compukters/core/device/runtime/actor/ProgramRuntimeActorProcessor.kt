@@ -291,7 +291,10 @@ internal class ProgramRuntimeActorProcessor(
 
             is ProgramRuntimeActorEffect.CompleteAddons -> {
                 effect.completions.forEach { completion ->
-                    check(host.completeAddon(completion)) { "addon completion was rejected" }
+                    // A prior queued turn may retire this request's program before its
+                    // already admitted completion reaches the worker. The host matches exact
+                    // identities and discards retired replies; bridge errors still fail its state.
+                    host.completeAddon(completion)
                 }
             }
         }

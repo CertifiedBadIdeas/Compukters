@@ -1302,6 +1302,45 @@ class ProgramRuntimeActorProcessorTest {
     }
 
     @Test
+    fun `queued addon completion after child exit leaves parent actor usable`() {
+        val session = RecordingSession()
+        val addons = ActorAddonRequestPort()
+        val host =
+            ProgramRuntimeHost(
+                ProgramVmSessionFactory { session },
+                addonCapabilitySchemas = listOf(TEST_ADDON_SCHEMA),
+                addonRequestPort = addons,
+                addonLifecyclePort = addons,
+            )
+        val parent = VmHostRequest(31, TEST_ADDON_CAPABILITY, 0, listOf(VmValue.I32(7)), taskId = 2)
+        val child = VmHostRequest(32, TEST_ADDON_CAPABILITY, 0, listOf(VmValue.I32(8)), taskId = 3)
+        ProgramRuntimeActorProcessor(host, addonPort = addons).use { processor ->
+            processor.process(ProgramRuntimeActorCommand.Start(request(1), byteArrayOf(1)))
+            session.nextOutcome = VmOutcome.HostRequestBatch(listOf(parent))
+            processor.advance(ProgramRuntimeTickPermit(request(2), 1))
+            session.nextOutcome = VmOutcome.ProcessEntered(1)
+            processor.advance(ProgramRuntimeTickPermit(request(3), 2))
+            session.nextOutcome = VmOutcome.HostRequestBatch(listOf(child))
+            processor.advance(ProgramRuntimeTickPermit(request(4), 3))
+            session.nextOutcome = VmOutcome.ProcessExited(1)
+            processor.advance(ProgramRuntimeTickPermit(request(5), 4))
+            // Already accepted mailbox effects can follow a turn that retires the child.
+            processor.process(
+                ProgramRuntimeActorEffect.CompleteAddons(
+                    listOf(
+                        ProgramAddonCompletion(child.identity, HostResponse.FloatSuccess(8f)),
+                        ProgramAddonCompletion(parent.identity, HostResponse.FloatSuccess(7f)),
+                    ),
+                ),
+            )
+            assertEquals(listOf<HostResponse>(HostResponse.FloatSuccess(7f)), session.responses)
+            assertIs<ProgramRuntimeActorValue.TerminalStateValue>(
+                processor.process(ProgramRuntimeActorCommand.TerminalFullState(request(6))).value,
+            )
+        }
+    }
+
+    @Test
     fun `prepared deployments keep independent tokens until discarded`() {
         val session = RecordingSession()
         val host = ProgramRuntimeHost(ProgramVmSessionFactory { session })
