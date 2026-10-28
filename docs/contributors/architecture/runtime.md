@@ -160,3 +160,10 @@ invalidates the hint; insertions retain the larger candidate. The existing budge
 free blocks and coalesced insertions, restoring an exact largest-block candidate before an allocation retry.
 Consequently, size-class rounding cannot cause a post-collection OOM when a contiguous block fits, without
 adding an unbudgeted free-list or arena scan to allocation.
+
+## Player keyboard capability
+
+The loader-independent `core/input` package owns the program's keyboard handle, requested key mask and
+bounded input frame. Its `KeyboardEndpoint` delegates player consent and physical key state to the
+Minecraft adapter. This is the active keyboard capability, separate from the removed terminal/UI input
+implementation; it contains no client widgets or platform event handling.

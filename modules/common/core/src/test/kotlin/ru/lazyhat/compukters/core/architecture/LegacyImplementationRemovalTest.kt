@@ -45,7 +45,6 @@ class LegacyImplementationRemovalTest {
                 "modules/common/core/src/main/kotlin/ru/lazyhat/compukters/core/device/runtime/ports",
                 "modules/common/core/src/main/kotlin/ru/lazyhat/compukters/core/device/vm",
                 "modules/common/core/src/main/kotlin/ru/lazyhat/compukters/core/gui",
-                "modules/common/core/src/main/kotlin/ru/lazyhat/compukters/core/input",
                 "modules/common/core/src/main/kotlin/ru/lazyhat/compukters/core/platform",
                 "modules/common/core/src/main/kotlin/ru/lazyhat/compukters/core/ui",
                 "modules/common/core/src/main/kotlin/ru/lazyhat/compukters/core/utils",
