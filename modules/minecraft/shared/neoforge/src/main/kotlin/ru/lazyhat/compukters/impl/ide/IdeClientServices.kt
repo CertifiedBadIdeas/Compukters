@@ -410,8 +410,6 @@ internal object ProductionIdeApplicationFactory {
     ): CompilerWorkerLaunch =
         CompilerWorkerLaunch(
             javaExecutable = prepared.java,
-            maximumHeapMiB = COMPILER_HEAP_MIB,
-            maximumMetaspaceMiB = COMPILER_METASPACE_MIB,
             temporaryDirectory = paths.compilerTemporary,
             expectedIdentity = prepared.compilerPayload.manifest.identity,
             maximumFrameBytes = prepared.workerLimits.frameBytes,
@@ -724,8 +722,6 @@ internal object ProductionIdeApplicationFactory {
 
     private const val TOOLING_WORKER_RESOURCE = "/tooling/workers/k2-tooling-workers.zip.xz"
     private const val TOOLING_WORKER_MANIFEST_RESOURCE = "/tooling/workers/k2-tooling-workers.bundle"
-    private const val COMPILER_HEAP_MIB = 256
-    private const val COMPILER_METASPACE_MIB = 256
     private const val ANALYSIS_HEAP_MIB = 384
     private const val ANALYSIS_METASPACE_MIB = 384
     private const val ANALYSIS_STDERR_BYTES = 64 * 1024

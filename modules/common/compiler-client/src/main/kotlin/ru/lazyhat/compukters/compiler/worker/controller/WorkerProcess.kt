@@ -28,8 +28,10 @@ typealias JdkWorkerProcessFactory = ru.lazyhat.compukters.worker.process.JdkWork
 
 data class WorkerLaunch(
     val javaExecutable: Path,
-    val maximumHeapMiB: Int,
-    val maximumMetaspaceMiB: Int,
+    // Prepared platform/addon IR plus a real project can retain over 256 MiB.
+    // Both IDE and server use these bounded compiler defaults.
+    val maximumHeapMiB: Int = 512,
+    val maximumMetaspaceMiB: Int = 256,
     val temporaryDirectory: Path,
     val expectedIdentity: WorkerIdentity,
     val maximumFrameBytes: Int = 20 * 1024 * 1024,
