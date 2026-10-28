@@ -120,7 +120,13 @@ internal fun notifyRedstonePortNeighbors(
     LocalRedstoneSide.entries.forEach { side ->
         if (mask and (1 shl side.ordinal) != 0) {
             val direction = worldDirection(state.getValue(RedstonePortBlock.FACING), side)
-            level.neighborChanged(position.relative(direction), state.block, position)
+            val neighbor = position.relative(direction)
+            level.neighborChanged(neighbor, state.block, position)
+            // Strong output powers the conductor itself. Devices attached to its other
+            // faces must also observe changes, including strong-to-weak and release.
+            if (level.getBlockState(neighbor).isRedstoneConductor(level, neighbor)) {
+                level.updateNeighborsAt(neighbor, state.block)
+            }
         }
     }
 }
