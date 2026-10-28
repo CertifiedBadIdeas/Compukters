@@ -13,9 +13,11 @@ integrations target **Minecraft 1.21.1**; install matching addon and upstream mo
 
 | Addon | Use it for | Guide |
 | --- | --- | --- |
-| Compukters: Create | Kinetic devices, Stock Ticker logistics and steam boilers | [Create]({{ '/CREATE/' | relative_url }}) |
+| Compukters: Create | Kinetic devices, fluid tanks, Stock Ticker logistics and steam boilers | [Create]({{ '/CREATE/' | relative_url }}) |
+| Compukters: Connected | Native kinetic battery charge and program-owned discharge control | [Connected]({{ '/CONNECTED/' | relative_url }}) |
 | Compukters: Sable | Construction position, orientation, linear and angular velocity | [Sable]({{ '/SABLE/' | relative_url }}) |
-| Compukters: Propulsion | Creative Thruster and Creative Vector Thruster control | [Propulsion]({{ '/PROPULSION/' | relative_url }}) |
+| Compukters: Propulsion | Finite liquid thrusters, burner buffers and creative thruster control | [Propulsion]({{ '/PROPULSION/' | relative_url }}) |
+| Compukters: Aeronautics | Physical bearing servos and native docking observations | [Aeronautics]({{ '/AERONAUTICS/' | relative_url }}) |
 
 ## Check compatibility
 

@@ -177,3 +177,11 @@ Snapshots retain their values after later engine changes.
 Other thruster types are not exposed by this addon. See the [Propulsion API reference]({{ '/guest-api/propulsion/' | relative_url }})
 for exact signatures. Build commands, serialization behavior and test coverage live in
 [Maintain first-party addons]({{ '/ADDON-CONTRIBUTING/' | relative_url }}#propulsion).
+
+## Auxiliary liquid burners
+
+Addon3.2 adds read-only `propulsion.heat.LiquidBurner`. `state()` returns native tick, fuel ID,
+finite buffer amount/capacity in mB and burning status. Include these buffers when calculating
+a whole ship's stock. Native burners and Stirling engines own heat, consumption and mechanical
+startup; this API does not supply fuel or override heat. Bind devices and handle stale observations
+through the same exact-device peripheral contract as thrusters.

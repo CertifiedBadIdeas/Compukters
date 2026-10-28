@@ -25,6 +25,7 @@ files. Its Kotlin types link to the [Compukters Core API reference]({{ '/guest-a
 | --- | --- | --- |
 | [Kinetics]({{ '/CREATE-KINETICS/' | relative_url }}) | Speedometer, Stressometer, Rotation Speed Controller, programmable Pump and Clutch | Read speed, stress, and capacity; wait for changes; set a target speed, reverse pump flow or connect a load. |
 | [Logistics]({{ '/CREATE-LOGISTICS/' | relative_url }}) | Stock Ticker | Find stock by item ID, inspect exact variants and counts, and request packaging to an address. |
+| [Tanks]({{ '/CREATE-TANKS/' | relative_url }}) | Ordinary Create fluid tanks and compatible subclasses | Read native fluid, amount, capacity and multiblock size through any segment. |
 | [Boilers]({{ '/CREATE-BOILERS/' | relative_url }}) | Active steam boiler through any Fluid Tank segment | Read incoming water supply, water and heat gauge levels, effective boiler level, and passive heating. |
 
 <figure class="showcase">

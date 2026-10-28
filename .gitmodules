@@ -23,3 +23,6 @@
 [submodule "addons/aeronautics"]
 	path = addons/aeronautics
 	url = https://github.com/CertifiedBadIdeas/Compukters-aeronautics.git
+[submodule "addons/connected"]
+	path = addons/connected
+	url = https://github.com/CertifiedBadIdeas/Compukters-createconnected.git
