@@ -14,6 +14,7 @@ import net.minecraft.world.InteractionHand
 import net.minecraft.world.phys.AABB
 import net.minecraft.world.phys.BlockHitResult
 import net.neoforged.neoforge.client.event.ClientTickEvent
+import ru.lazyhat.compukters.impl.input.KeyboardInputClient
 import ru.lazyhat.compukters.minecraft.display.DisplayBlock
 import ru.lazyhat.compukters.minecraft.peripheral.ConfiguratorOutline
 import ru.lazyhat.compukters.minecraft.peripheral.ConfiguratorOverlayGeometry
@@ -111,7 +112,7 @@ internal object ConfiguratorOverlayClient {
     }
 
     fun labels(): List<Component> {
-        if (!active()) return emptyList()
+        if (!active() || KeyboardInputClient.caption() != null) return emptyList()
         val minecraft = Minecraft.getInstance()
         val stack = minecraft.player?.getItemInHand(hand!!) ?: return emptyList()
         val item = stack.item as? PeripheralConfiguratorItem ?: return emptyList()

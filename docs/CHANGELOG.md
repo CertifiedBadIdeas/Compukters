@@ -23,6 +23,7 @@ headings so this page has one stable URL that can be shared outside the reposito
   releasing in the center or pressing Escape cancels selection.
 - Guest programs can request a set of keys through `compukter.input.Keyboard`. Players explicitly activate
   control by clicking that computer in the configurator's Keyboard mode, without opening a terminal.
+  Active control keeps only the small top caption and hides the configurator's central help panel.
   Mouse look remains available; Escape, GUI/focus loss and expired input clear held keys.
 
 - Construction integrations can await VM checkpoint publication and filesystem release before copying a
