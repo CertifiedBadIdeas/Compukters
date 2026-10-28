@@ -13,6 +13,17 @@ headings so this page has one stable URL that can be shared outside the reposito
 
 ## 0.7.0 — In development
 
+- Concurrent instruments and control tasks continue within the existing bounded VM scheduling allowance.
+  Accepted sensor and keyboard replies keep advancing, and terminal or filesystem work proceeds while unrelated
+  timers and addon requests wait for their owners.
+
+- Server and IDE compiler workers share a bounded 512 MiB heap, allowing larger programs with
+  multiple addon APIs to compile without exhausting the previous 256 MiB heap.
+
+- Optional Create 2.2 and Propulsion 3.2 APIs report actual tank and auxiliary burner fuel stock.
+  Aeronautics 1.2 reports native connector extension, locking, release and retained fluid buffers. The independent
+  Connected 1.0 addon reads finite kinetic battery charge and provides program-owned discharge control.
+
 - Redstone Port direct output updates devices attached to a powered solid block when output changes or ownership ends.
 
 - Added flat display panels across existing block faces, including floor and ceiling surfaces, with the existing Guest display API, saved image and construction projection.

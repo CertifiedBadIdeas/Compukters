@@ -153,3 +153,10 @@ the payload address itself to be eight-byte aligned. During roots/mark, the pred
 holds the intrusive gray link while Guest execution and allocation are paused. The bounded forward sweep restores
 predecessor sizes before coalescing. No per-object side table or extra heap scan is required.
 Arena backing and admitted heap budgets retain their existing 16-byte granularity.
+
+## Player keyboard capability
+
+The loader-independent `core/input` package owns the program's keyboard handle, requested key mask and
+bounded input frame. Its `KeyboardEndpoint` delegates player consent and physical key state to the
+Minecraft adapter. This is the active keyboard capability, separate from the removed terminal/UI input
+implementation; it contains no client widgets or platform event handling.
