@@ -28,7 +28,7 @@
   "item.compukters.peripheral_configurator.display.split": "Экран разобран на отдельные дисплеи. Изображения, разрешение и сеть сохранены; общее имя убрано.",
   "item.compukters.peripheral_configurator.display.joined": "Панель присоединена к экрану.",
   "item.compukters.peripheral_configurator.display.corner": "Первый угол выбран. Нажмите на противоположный угол, чтобы собрать экран.",
-  "item.compukters.peripheral_configurator.display.created": "Экран собран. Дырки допустимы. Shift-нажатие выбирает экран; Shift-использование в воздухе сбрасывает выбор.",
+  "item.compukters.peripheral_configurator.display.created": "Экран собран. Зажмите ПКМ для выбора режима; Shift-клик снимает натянутую панель.",
   "item.compukters.peripheral_configurator.display.failed": "Не удалось собрать экран: %s",
   "overlay.compukters.configurator.mode.name": "Конфигуратор · Имена",
   "overlay.compukters.configurator.mode.network": "Конфигуратор · Привязка сети",
