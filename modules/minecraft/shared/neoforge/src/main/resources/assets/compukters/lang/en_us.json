@@ -52,7 +52,7 @@
   "item.compukters.peripheral_configurator.display.split": "Screen split into separate displays. Images, resolution and network kept; shared name removed.",
   "item.compukters.peripheral_configurator.display.joined": "Panel joined to the selected screen.",
   "item.compukters.peripheral_configurator.display.corner": "First corner selected. Click the opposite corner to assemble the screen.",
-  "item.compukters.peripheral_configurator.display.created": "Screen assembled. Holes are allowed. Shift-click a screen to select it; Shift-use in air clears the selection.",
+  "item.compukters.peripheral_configurator.display.created": "Screen assembled. Hold RMB to choose a mode; Shift-click removes an attached screen.",
   "item.compukters.peripheral_configurator.display.failed": "Cannot assemble display: %s",
   "overlay.compukters.configurator.mode.name": "Configurator · Names",
   "overlay.compukters.configurator.mode.network": "Configurator · Network binding",
