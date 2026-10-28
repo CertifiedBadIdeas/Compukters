@@ -13,6 +13,9 @@ headings so this page has one stable URL that can be shared outside the reposito
 
 ## 0.7.0 — In development
 
+- World filesystem storage accepts canonical Windows paths supplied by Java while retaining exclusive
+  ownership and rejecting symbolic links and unresolved parent traversal.
+
 - Redstone Port direct output updates devices attached to a powered solid block when output changes or ownership ends.
 
 - Added flat display panels across existing block faces, including floor and ceiling surfaces, with the existing Guest display API, saved image and construction projection.
