@@ -10,6 +10,7 @@ import net.minecraft.core.BlockPos
 import net.minecraft.core.Direction
 import net.minecraft.gametest.framework.GameTestHelper
 import net.minecraft.world.level.block.Blocks
+import net.minecraft.world.level.block.state.properties.BlockStateProperties
 import ru.lazyhat.compukters.api.addon.ProgramAddonDispatch
 import ru.lazyhat.compukters.api.addon.ProgramAddonHost
 import ru.lazyhat.compukters.api.addon.ProgramAddonRequest
@@ -57,6 +58,11 @@ internal object RedstonePortGameTestScenario {
         other.prepareTerminalAsync()
         var setup: CompletableFuture<Void>? = null
         var sequence = 0L
+        val conductorLease = Any()
+
+        fun currentPort() = level.getBlockEntity(absolutePort) as RedstonePortBlockEntity
+
+        fun torchLit() = level.getBlockState(absolutePort.above(2)).getValue(BlockStateProperties.LIT)
 
         fun request(
             host: ProgramAddonHost,
@@ -262,6 +268,29 @@ internal object RedstonePortGameTestScenario {
                     ) as RedstonePortBlockEntity
                 level.setBlockEntity(restored)
                 helper.assertTrue((0..5).all { restored.signals.output(it) == 0 }, "reloaded port restored output levels")
+            }.thenExecute {
+                helper.setBlock(portPosition.above(), Blocks.IRON_BLOCK)
+                helper.setBlock(portPosition.above(2), Blocks.REDSTONE_TORCH)
+                currentPort().signals.acquire(conductorLease) { true }
+            }.thenIdle(4)
+            .thenExecute {
+                helper.assertTrue(torchLit(), "unpowered conductor torch is not lit")
+                currentPort().signals.set(conductorLease, 4, 31)
+            }.thenIdle(4)
+            .thenExecute {
+                helper.assertTrue(!torchLit(), "direct port output did not notify the torch through its solid support")
+                currentPort().signals.set(conductorLease, 4, 15)
+            }.thenIdle(4)
+            .thenExecute {
+                helper.assertTrue(torchLit(), "switching to weak output retained conductor power")
+                currentPort().signals.set(conductorLease, 4, 31)
+            }.thenIdle(4)
+            .thenExecute {
+                helper.assertTrue(!torchLit(), "repeated direct output did not power the conductor")
+                currentPort().signals.release(conductorLease)
+            }.thenIdle(4)
+            .thenExecute {
+                helper.assertTrue(torchLit(), "releasing port ownership left the conductor torch powered")
             }.thenSucceed()
     }
 }
