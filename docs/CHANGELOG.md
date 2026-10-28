@@ -24,6 +24,9 @@ headings so this page has one stable URL that can be shared outside the reposito
   Aeronautics 1.2 reports native connector extension, locking, release and retained fluid buffers. The independent
   Connected 1.0 addon reads finite kinetic battery charge and provides program-owned discharge control.
 
+- World filesystem storage accepts canonical Windows paths supplied by Java while retaining exclusive
+  ownership and rejecting symbolic links and unresolved parent traversal.
+
 - Redstone Port direct output updates devices attached to a powered solid block when output changes or ownership ends.
 
 - Added flat display panels across existing block faces, including floor and ceiling surfaces, with the existing Guest display API, saved image and construction projection.
