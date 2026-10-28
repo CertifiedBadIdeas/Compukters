@@ -189,6 +189,22 @@ No instruction, CPKT/CAGB encoding, platform encoding, Runtime/native C ABI or c
 `testKotlinEnumEntriesVmConformance` exercises immutable operations and cross-library identity; the
 [collection inventory](../../developers/stdlib/collections.md#immutable-enum-entries) owns source semantics.
 
+## Ship fuel and kinetic observations
+
+Create addon 2.2 appends `create:create` ABI 1.0 selectors 34–36 for native fluid tank acquisition
+and state. Its new value record carries tick, fluid ID, amount/capacity in mB and block count;
+selectors 0–33 retain their schemas. Active boilers remain separate canonical peripherals.
+Aeronautics addon 1.2 appends selectors 6–7 for native connector tick, connected/locked/extended/retracted
+state and its own finite fluid buffer, retaining all servo selectors and records. Propulsion addon 3.2 appends selector 18 for native
+liquid-burner buffer state, retaining all thruster operations.
+
+The independent Connected addon 1.0 introduces `connected:connected` ABI 1.0 with selectors 0–2:
+battery close, state and discharge selection. Its value record reads finite native charge/capacity,
+RPM, consumed stress and mode/ownership. An exact-instance transient lease selects the native power
+mode and releases back to redstone. No observation manufactures stock; Guest owns startup and flight.
+These additions use existing value-record responses and Runtime ABI 1.20. No artifact, VM instruction,
+native transport, checkpoint encoding or base platform API version changes are required.
+
 ## Value-class host responses — Runtime ABI 1.20
 
 Asynchronous structured replies admit nominal inline destinations and flattened value boxes, including nested
