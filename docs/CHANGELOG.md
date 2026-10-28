@@ -15,7 +15,8 @@ headings so this page has one stable URL that can be shared outside the reposito
 
 - Concurrent instruments and control tasks continue within the existing bounded VM scheduling allowance.
   Accepted sensor and keyboard replies keep advancing, and terminal or filesystem work proceeds while unrelated
-  timers and addon requests wait for their owners.
+  timers and addon requests wait for their owners. Replies already queued for a completed child program
+  are discarded without closing its parent computer runtime.
 
 - Server and IDE compiler workers share a bounded 512 MiB heap, allowing larger programs with
   multiple addon APIs to compile without exhausting the previous 256 MiB heap.
