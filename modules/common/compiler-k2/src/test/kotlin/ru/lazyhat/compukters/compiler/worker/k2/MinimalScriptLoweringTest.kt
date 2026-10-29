@@ -902,7 +902,7 @@ class MinimalScriptLoweringTest {
         withAdapter { adapter ->
             val sources =
                 listOf(
-                    "fun main() { inline fun <T> read(value: T): T = value; read(1) }",
+                    "fun main() { inline fun <T> read(value: T): T = value\nread(1) }",
                     "fun main() { suspend fun read(): Int = 1 }",
                 )
             for (source in sources) {
