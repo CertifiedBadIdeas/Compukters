@@ -873,7 +873,7 @@ class MinimalScriptLoweringTest {
     @Test
     fun `direct immutable local captures require no managed environment`() =
         withAdapter { adapter ->
-            val result = adapter.compile(request("fun main() { val base = 7; fun add(value: Int): Int = base + value; add(5) }"))
+            val result = adapter.compile(request("fun main() { val base = 7; fun add(value: Int): Int = base + value\nadd(5) }"))
             val artifact = ArtifactReader.read(assertNotNull(result.artifact, result.diagnostics.toString()).toByteArray())
             assertTrue(
                 artifact.modules

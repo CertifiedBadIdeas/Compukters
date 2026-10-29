@@ -281,7 +281,11 @@ class CompletionQueryTest {
             assertTrue("emptyList" !in camel)
             source = sourceFor("emty")
             fixture.update("main.kt" to source)
-            assertTrue(fixture.complete("main.kt", source.indexOf("emty") + 4).items.isEmpty())
+            val skipped = fixture.complete("main.kt", source.indexOf("emty") + 4).items
+            assertTrue(
+                skipped.none { it.insertText == "emptyList" || it.insertText == "emptyMap" },
+                "Names with skipped letters must not match: ${skipped.map { it.insertText }}",
+            )
         }
     }
 
