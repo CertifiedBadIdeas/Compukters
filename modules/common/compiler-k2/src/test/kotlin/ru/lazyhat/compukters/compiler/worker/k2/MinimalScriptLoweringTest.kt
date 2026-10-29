@@ -888,8 +888,8 @@ class MinimalScriptLoweringTest {
         withAdapter { adapter ->
             val sources =
                 listOf(
-                    "fun main() { val seed = 7; fun read(): Int = seed; val call: () -> Int = ::read; call() }",
-                    "fun main() { val seed = 7; fun read(value: Int = seed): Int = value; val call: () -> Int = ::read; call() }",
+                    "fun main() { val seed = 7; fun read(): Int = seed\nval call: () -> Int = ::read; call() }",
+                    "fun main() { val seed = 7; fun read(value: Int = seed): Int = value\nval call: () -> Int = ::read; call() }",
                 )
             for (source in sources) {
                 val result = adapter.compile(request(source))
