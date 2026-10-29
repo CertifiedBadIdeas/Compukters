@@ -20,7 +20,7 @@ pub(super) fn execute() {
         OperationSchema::synchronous(&[HostValueType::String], HostValueType::Unit),
     ];
     // Only raster operations used by this fixture are admitted; unexpected operations fail schema validation.
-    let mut display_operations = vec![OperationSchema::asynchronous(&[], HostValueType::Unit); 22];
+    let mut display_operations = vec![OperationSchema::asynchronous(&[], HostValueType::Unit); 23];
     for index in [14, 15, 16] {
         display_operations[index] = OperationSchema::asynchronous(&[HostValueType::I32], HostValueType::Unit);
     }
@@ -46,6 +46,7 @@ pub(super) fn execute() {
         HostValueType::Unit,
     );
     display_operations[21] = OperationSchema::asynchronous(&[HostValueType::I32, HostValueType::ByteArray], HostValueType::Unit);
+    display_operations[22] = OperationSchema::asynchronous(&[HostValueType::I32; 2], HostValueType::Unit);
     let mut peripheral_operations = vec![OperationSchema::asynchronous(&[], HostValueType::I32); 6];
     peripheral_operations[5] = OperationSchema::asynchronous(
         &[HostValueType::String, HostValueType::String],
@@ -53,7 +54,7 @@ pub(super) fn execute() {
     );
     let bindings = [
         CapabilityBinding::new("compukter", "stdio", 1, 0, &stdio_operations),
-        CapabilityBinding::new("compukters", "display", 1, 4, &display_operations),
+        CapabilityBinding::new("compukters", "display", 1, 5, &display_operations),
         CapabilityBinding::new("compukters", "peripheral", 1, 0, &peripheral_operations),
     ];
     let mut session = Session::admit(verified.clone(), profile, &bindings).unwrap();

@@ -42,7 +42,10 @@ fun absent(): () -> String? {
     update()
     return result
 }
-fun identity(value: Id): () -> Id { fun read(): Id = value; return ::read }
+fun identity(value: Id): () -> Id {
+    fun read(): Id = value
+    return ::read
+}
 fun defaults(): Int {
     var count = 2
     fun mark(): Int { count += 1; return count }
@@ -50,7 +53,10 @@ fun defaults(): Int {
     return calculate()
 }
 class Member(val seed: Int) {
-    fun reference(): () -> Int { fun read(): Int = seed; return ::read }
+    fun reference(): () -> Int {
+        fun read(): Int = seed
+        return ::read
+    }
 }
 fun failure(): Int {
     var state = 0
