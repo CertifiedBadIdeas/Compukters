@@ -42,6 +42,10 @@ jobs:
           java-version: |
             21
             25
+      - name: Prepare locked Runtime dependencies
+        shell: pwsh
+        working-directory: host/compukter-vm
+        run: cargo fetch --locked
       - name: Verify protected project operations and opening failures
         shell: pwsh
         run: >-
