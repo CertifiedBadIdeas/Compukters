@@ -71,5 +71,7 @@
   "input.compukters.keyboard.unavailable": "Компьютер не ожидает клавиатуру или уже управляется другим игроком",
   "overlay.compukters.configurator.action.keyboard": "Короткий клик по компьютеру — включить или выключить управление клавишами",
   "overlay.compukters.configurator.action.attached_corners": "Выберите два угла одной грани; Shift-клик снимает панель",
-  "item.compukters.peripheral_configurator.display.removed": "Натянутая панель снята"
+  "item.compukters.peripheral_configurator.display.removed": "Натянутая панель снята",
+  "ide.compukters.open_failed.title": "Не удалось открыть IDE Compukters",
+  "ide.compukters.open_failed.detail": "Не удалось открыть файлы проектов. Проверьте права доступа и поддержку файловой системы; подробности — в журнале игры."
 }

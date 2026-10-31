@@ -29,6 +29,18 @@ internal interface ChildScreenParent {
 }
 
 internal object IdeOpeningHandoff {
+    fun attempt(
+        reportFailure: (Exception) -> Unit,
+        open: () -> Unit,
+    ): Boolean =
+        try {
+            open()
+            true
+        } catch (failure: Exception) {
+            reportFailure(failure)
+            false
+        }
+
     fun <S, P> open(
         createSession: () -> S,
         attachTarget: (S) -> Unit,

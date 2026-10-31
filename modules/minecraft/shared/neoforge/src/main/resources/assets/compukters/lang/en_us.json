@@ -94,5 +94,7 @@
   "input.compukters.keyboard.unavailable": "Computer is not requesting keys or already has another pilot",
   "overlay.compukters.configurator.action.keyboard": "Short click a computer to enable or leave keyboard control",
   "overlay.compukters.configurator.action.attached_corners": "Select two corners on the same face; Shift-click removes an attached screen",
-  "item.compukters.peripheral_configurator.display.removed": "Attached screen removed"
+  "item.compukters.peripheral_configurator.display.removed": "Attached screen removed",
+  "ide.compukters.open_failed.title": "Could not open Compukters IDE",
+  "ide.compukters.open_failed.detail": "Project files could not be opened. Check directory permissions and filesystem support; details are in the game log."
 }
