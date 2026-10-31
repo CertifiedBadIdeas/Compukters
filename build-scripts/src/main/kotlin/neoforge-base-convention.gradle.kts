@@ -60,6 +60,7 @@ dependencies {
         ":compiler-client",
         ":compiler-runtime",
         ":worker-client",
+        ":project-files",
         ":ide-core",
         ":ide-analysis-client",
         ":ide-client",

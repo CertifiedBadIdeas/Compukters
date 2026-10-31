@@ -131,6 +131,11 @@ val prepareCompilerWorkerPayload = tasks.register<Sync>("prepareCompilerWorkerPa
     from(rootProject.layout.projectDirectory.file("licenses/rust/generic-array-0.14.7-LICENSE.txt")) {
         into("META-INF/licenses/rust")
     }
+    listOf("jna-5.14.0-PROVENANCE.txt", "jna-5.14.0-libffi-MIT.txt").forEach { filename ->
+        from(rootProject.layout.projectDirectory.file("licenses/jvm/$filename")) {
+            into("META-INF/licenses/jvm")
+        }
+    }
     from(rootProject.layout.projectDirectory.file("licenses/distribution-components.tsv")) {
         into("META-INF/licenses")
     }
@@ -266,6 +271,7 @@ val verifyCompilerWorkerLicenses =
                     "guest-platform-",
                     "platform-bundle-",
                     "platform-k2-",
+                    "project-files-",
                     "worker-client-",
                 )
             val actualExternal =

@@ -83,6 +83,8 @@ val allowedIdeClientRuntimeModules =
         ":compiler-runtime",
         ":compiler-client",
         ":worker-client",
+        ":project-files",
+        "net.java.dev.jna:jna",
         ":platform-bundle",
         "org.jetbrains.kotlin:kotlin-stdlib",
         "org.jetbrains:annotations",
