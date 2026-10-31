@@ -137,20 +137,18 @@ class WindowsSecureDirectoriesTest {
                 assertFailsWith<java.nio.file.FileSystemException> {
                     directory.newByteChannel(Path.of("secret.kt"), mutableSetOf(StandardOpenOption.READ)).close()
                 }
-                assertFalse(directory.any { it.fileName.toString() == "secret.kt" })
-                directory.newByteChannel(Path.of("bounded.kt"), mutableSetOf(StandardOpenOption.WRITE, StandardOpenOption.CREATE_NEW)).use {
-                    it.write(ByteBuffer.wrap("inside".toByteArray()))
+                assertFailsWith<java.nio.file.FileSystemException> {
+                    directory.any { it.fileName.toString() == "secret.kt" }
+                }
+                assertFailsWith<java.nio.file.FileSystemException> {
+                    directory
+                        .newByteChannel(
+                            Path.of("bounded.kt"),
+                            mutableSetOf(StandardOpenOption.WRITE, StandardOpenOption.CREATE_NEW),
+                        ).close()
                 }
                 assertFalse(Files.exists(outside.resolve("bounded.kt")))
-                directory.deleteFile(Path.of("bounded.kt"))
-                assertFailsWith<java.nio.file.NoSuchFileException> {
-                    directory
-                        .getFileAttributeView(
-                            Path.of("bounded.kt"),
-                            java.nio.file.attribute.BasicFileAttributeView::class.java,
-                        )!!
-                        .readAttributes()
-                }
+                assertEquals("outside", Files.readString(outside.resolve("secret.kt")))
             } finally {
                 editor.CloseHandle(handle)
             }
