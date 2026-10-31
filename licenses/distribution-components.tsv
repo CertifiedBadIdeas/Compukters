@@ -13,6 +13,7 @@ jvm-analysis-worker	analysis-api-impl-base-for-ide	2.4.10	Apache-2.0
 jvm-analysis-worker	analysis-api-k2-for-ide	2.4.10	Apache-2.0
 jvm-analysis-worker	analysis-api-platform-interface-for-ide	2.4.10	Apache-2.0
 jvm-analysis-worker	analysis-api-standalone-for-ide	2.4.10	Apache-2.0
+jvm-analysis-worker	jna	5.14.0	Apache-2.0 AND MIT
 jvm-analysis-worker	caffeine	3.3.0	Apache-2.0
 jvm-analysis-worker	util-diff	251.27812.49	Apache-2.0
 jvm-analysis-worker	kotlin-compiler	2.4.10	Apache-2.0
@@ -32,6 +33,7 @@ jvm-analysis-formatter	ktlint-rule-engine-core	1.8.0	MIT
 jvm-analysis-formatter	ktlint-ruleset-standard	1.8.0	MIT
 jvm-analysis-formatter	poko-annotations-jvm	0.20.1	Apache-2.0
 jvm-analysis-formatter	slf4j-api	2.0.20	MIT
+jvm-worker	jna	5.14.0	Apache-2.0 AND MIT
 jvm-worker	kotlin-compiler	2.4.10	Apache-2.0
 jvm-worker	kotlin-stdlib	2.4.10	Apache-2.0
 jvm-worker	kotlin-stdlib-jdk7	2.4.10	Apache-2.0

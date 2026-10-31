@@ -79,6 +79,8 @@ tasks.processResources {
     }
     listOf(
         "antlr4-runtime-4.13.2-BSD-3-Clause.txt",
+        "jna-5.14.0-PROVENANCE.txt",
+        "jna-5.14.0-libffi-MIT.txt",
         "xz-java-$pinnedXzVersion-0BSD.txt",
         "jgit-$pinnedJGitVersion-EDL-1.0.html",
         "javaewah-$pinnedJavaEwahVersion-Apache-2.0.txt",

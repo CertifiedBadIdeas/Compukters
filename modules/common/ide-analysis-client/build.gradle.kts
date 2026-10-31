@@ -64,6 +64,8 @@ val allowedAnalysisClientRuntimeModules =
         ":ide-core",
         ":platform-bundle",
         ":worker-client",
+        ":project-files",
+        "net.java.dev.jna:jna",
         "org.jetbrains.kotlin:kotlin-stdlib",
         "org.jetbrains:annotations",
         "org.tomlj:tomlj",

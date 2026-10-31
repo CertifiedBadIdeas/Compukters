@@ -31,6 +31,7 @@ import java.nio.file.OpenOption
 import java.nio.file.Path
 import java.nio.file.SecureDirectoryStream
 import java.nio.file.StandardOpenOption
+import java.nio.file.attribute.BasicFileAttributeView
 import java.util.UUID
 
 class ProjectCatalogException(
@@ -82,9 +83,10 @@ class ProjectCatalog private constructor(
         if (attributes.isSymbolicLink || !attributes.isDirectory) {
             throw ProjectCatalogException("project catalog contains an unsafe entry: $directoryName")
         }
-        return root.newDirectoryStream(name, LinkOption.NOFOLLOW_LINKS).use {
+        return root.newDirectoryStream(name, LinkOption.NOFOLLOW_LINKS).use { opened ->
             val fileKey =
-                attributes.fileKey() ?: throw ProjectCatalogException("filesystem does not expose stable project identity")
+                opened.getFileAttributeView(BasicFileAttributeView::class.java)?.readAttributes()?.fileKey()
+                    ?: throw ProjectCatalogException("filesystem does not expose stable project identity")
             val identity =
                 ProjectRootIdentity(
                     rootIdentity.canonicalPath.resolve(directoryName).toRealPath(LinkOption.NOFOLLOW_LINKS),

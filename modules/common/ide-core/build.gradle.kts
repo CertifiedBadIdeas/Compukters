@@ -52,6 +52,7 @@ plugins {
 }
 
 dependencies {
+    implementation(projects.projectFiles)
     implementation(projects.addonGuestApi)
     implementation(projects.compilerClient)
     implementation(projects.platformBundle)
@@ -66,6 +67,8 @@ val allowedIdeCoreRuntimeModules =
         ":addon-guest-api",
         ":platform-bundle",
         ":worker-client",
+        ":project-files",
+        "net.java.dev.jna:jna",
         "org.jetbrains.kotlin:kotlin-stdlib",
         "org.jetbrains:annotations",
         "org.tomlj:tomlj",

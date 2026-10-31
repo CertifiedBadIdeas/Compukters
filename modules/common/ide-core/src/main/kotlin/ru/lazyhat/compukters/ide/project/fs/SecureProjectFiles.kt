@@ -19,6 +19,7 @@
 package ru.lazyhat.compukters.ide.project.fs
 
 import ru.lazyhat.compukters.compiler.worker.protocol.Hash256
+import ru.lazyhat.compukters.files.SecureDirectories
 import ru.lazyhat.compukters.ide.project.TomlSupport
 import ru.lazyhat.compukters.ide.project.document.FileRevision
 import ru.lazyhat.compukters.ide.project.document.ProjectWriteStep
@@ -30,7 +31,6 @@ import java.nio.ByteBuffer
 import java.nio.channels.FileChannel
 import java.nio.channels.SeekableByteChannel
 import java.nio.file.AtomicMoveNotSupportedException
-import java.nio.file.DirectoryStream
 import java.nio.file.Files
 import java.nio.file.LinkOption
 import java.nio.file.NoSuchFileException
@@ -435,9 +435,11 @@ internal object SecureProjectFiles {
         val filesystemRoot = absolute.root ?: throw SecureProjectFileException("directory has no filesystem root")
         val opened = mutableListOf<SecureDirectoryStream<Path>>()
         try {
-            var current = requireSecure(Files.newDirectoryStream(filesystemRoot))
+            var current = SecureDirectories.openRoot(filesystemRoot)
             opened += current
-            var currentAttributes = Files.readAttributes(filesystemRoot, BasicFileAttributes::class.java, LinkOption.NOFOLLOW_LINKS)
+            var currentAttributes =
+                current.getFileAttributeView(BasicFileAttributeView::class.java)?.readAttributes()
+                    ?: throw SecureProjectFileException("filesystem cannot read root identity")
             filesystemRoot.relativize(absolute).forEach { component ->
                 validateFilename(component)
                 currentAttributes = attributes(current, component)
@@ -446,6 +448,9 @@ internal object SecureProjectFiles {
                 }
                 current = current.newDirectoryStream(component, LinkOption.NOFOLLOW_LINKS)
                 opened += current
+                // Bind identity to the directory actually opened, not a name inspected earlier.
+                currentAttributes = current.getFileAttributeView(BasicFileAttributeView::class.java)?.readAttributes()
+                    ?: throw SecureProjectFileException("filesystem cannot read opened directory identity")
             }
             return action(current, currentAttributes)
         } finally {
@@ -667,12 +672,6 @@ internal object SecureProjectFiles {
     ) {
         val buffer = ByteBuffer.wrap(content)
         while (buffer.hasRemaining()) channel.write(buffer)
-    }
-
-    private fun requireSecure(directory: DirectoryStream<Path>): SecureDirectoryStream<Path> {
-        if (directory is SecureDirectoryStream<Path>) return directory
-        directory.close()
-        throw SecureProjectFileException("filesystem does not support secure project traversal")
     }
 
     private val READ_OPTIONS: Set<OpenOption> = setOf(StandardOpenOption.READ, LinkOption.NOFOLLOW_LINKS)

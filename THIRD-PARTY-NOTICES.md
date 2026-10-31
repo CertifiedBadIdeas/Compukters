@@ -36,6 +36,17 @@ additional logging API nested in the outer archive.
 
 These files are packaged beneath `META-INF/licenses/jvm/`.
 
+## Protected Windows project access
+
+The outer mod uses Minecraft's JNA library. Independent compiler and analysis
+workers include unmodified Java Native Access 5.14.0 under the Apache-2.0
+license option, together with the MIT-licensed libffi in its native dispatch
+library. Attribution and original notices are preserved in
+`licenses/jvm/jna-5.14.0-PROVENANCE.txt` and
+`licenses/jvm/jna-5.14.0-libffi-MIT.txt`, packaged beneath
+`META-INF/licenses/jvm/` in the outer archive and worker payloads.
+Upstream: <https://github.com/java-native-access/jna/tree/5.14.0>.
+
 ## XZ decompression
 
 The outer mod archive contains XZ for Java 1.12 for deterministic compression

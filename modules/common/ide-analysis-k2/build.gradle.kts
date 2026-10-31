@@ -48,6 +48,8 @@ dependencies {
     implementation(projects.addonGuestApi) { isTransitive = false }
     implementation(projects.ideAnalysisClient) { isTransitive = false }
     implementation(projects.ideCore) { isTransitive = false }
+    implementation(projects.projectFiles) { isTransitive = false }
+    implementation(libs.jna)
     implementation(projects.platformBundle) { isTransitive = false }
     implementation(projects.platformK2) { isTransitive = false }
     implementation(projects.compilerClient) { isTransitive = false }
@@ -168,6 +170,11 @@ val prepareAnalysisWorkerPayload = tasks.register<Sync>("prepareAnalysisWorkerPa
     from(rootProject.layout.projectDirectory.file("licenses/jvm/slf4j-${libs.versions.slf4j.get()}-MIT.txt")) {
         into("META-INF/licenses/jvm")
     }
+    listOf("jna-5.14.0-PROVENANCE.txt", "jna-5.14.0-libffi-MIT.txt").forEach { filename ->
+        from(rootProject.layout.projectDirectory.file("licenses/jvm/$filename")) {
+            into("META-INF/licenses/jvm")
+        }
+    }
     from(rootProject.layout.projectDirectory.file("licenses/distribution-components.tsv")) {
         into("META-INF/licenses")
     }
@@ -282,6 +289,7 @@ val verifyAnalysisWorkerLicenses = tasks.register("verifyAnalysisWorkerLicenses"
                         "ide-analysis-k2-",
                         "ide-analysis-client-",
                         "ide-core-",
+                        "project-files-",
                         "platform-bundle-",
                         "platform-k2-",
                         "compiler-client-",
