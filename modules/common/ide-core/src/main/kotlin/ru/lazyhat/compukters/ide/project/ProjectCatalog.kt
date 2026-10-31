@@ -31,6 +31,7 @@ import java.nio.file.OpenOption
 import java.nio.file.Path
 import java.nio.file.SecureDirectoryStream
 import java.nio.file.StandardOpenOption
+import java.nio.file.attribute.BasicFileAttributeView
 import java.util.UUID
 
 class ProjectCatalogException(
@@ -82,9 +83,10 @@ class ProjectCatalog private constructor(
         if (attributes.isSymbolicLink || !attributes.isDirectory) {
             throw ProjectCatalogException("project catalog contains an unsafe entry: $directoryName")
         }
-        return root.newDirectoryStream(name, LinkOption.NOFOLLOW_LINKS).use {
+        return root.newDirectoryStream(name, LinkOption.NOFOLLOW_LINKS).use { opened ->
             val fileKey =
-                attributes.fileKey() ?: throw ProjectCatalogException("filesystem does not expose stable project identity")
+                opened.getFileAttributeView(BasicFileAttributeView::class.java)?.readAttributes()?.fileKey()
+                    ?: throw ProjectCatalogException("filesystem does not expose stable project identity")
             val identity =
                 ProjectRootIdentity(
                     rootIdentity.canonicalPath.resolve(directoryName).toRealPath(LinkOption.NOFOLLOW_LINKS),
@@ -190,7 +192,7 @@ class ProjectCatalog private constructor(
         val stagingPath = rootIdentity.canonicalPath.resolve(stagingName)
         catalogOperation("admit import") { root ->
             if (SecureProjectFiles.attributesOrNull(root, Path.of(name)) != null) throw FileAlreadyExistsException(name)
-            Files.createDirectory(stagingPath)
+            SecureProjectFiles.createDirectory(root, Path.of(stagingName), stagingPath)
         }
         try {
             materialize(stagingPath)
@@ -264,12 +266,12 @@ class ProjectCatalog private constructor(
         try {
             catalogOperation("create project") { root ->
                 if (SecureProjectFiles.attributesOrNull(root, Path.of(name)) != null) throw FileAlreadyExistsException(name)
-                Files.createDirectory(stagingPath)
+                SecureProjectFiles.createDirectory(root, Path.of(stagingName), stagingPath)
                 creationHook(ProjectCreationStep.STAGING_CREATED)
                 root.newDirectoryStream(Path.of(stagingName), LinkOption.NOFOLLOW_LINKS).use { staging ->
                     writeNew(staging, MANIFEST_FILENAME, ProjectManifestCodec.encode(manifest).encodeToByteArray())
                     creationHook(ProjectCreationStep.MANIFEST_WRITTEN)
-                    Files.createDirectory(stagingPath.resolve(SOURCE_DIRECTORY))
+                    SecureProjectFiles.createDirectory(staging, Path.of(SOURCE_DIRECTORY), stagingPath.resolve(SOURCE_DIRECTORY))
                     staging.newDirectoryStream(Path.of(SOURCE_DIRECTORY), LinkOption.NOFOLLOW_LINKS).use { source ->
                         writeNew(source, MAIN_FILENAME, DEFAULT_MAIN.encodeToByteArray())
                     }

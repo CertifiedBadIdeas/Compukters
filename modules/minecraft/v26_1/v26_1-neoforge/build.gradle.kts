@@ -312,6 +312,7 @@ val verifyPackagedCompukterFfi =
                     "ide-core-",
                     "platform-bundle-",
                     "platform-k2-",
+                    "project-files-",
                     "worker-client-",
                 )
             val actualToolingLibraries =

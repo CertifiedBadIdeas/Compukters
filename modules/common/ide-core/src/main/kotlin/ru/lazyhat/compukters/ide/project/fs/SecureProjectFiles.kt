@@ -19,6 +19,8 @@
 package ru.lazyhat.compukters.ide.project.fs
 
 import ru.lazyhat.compukters.compiler.worker.protocol.Hash256
+import ru.lazyhat.compukters.files.ProjectDirectoryStream
+import ru.lazyhat.compukters.files.SecureDirectories
 import ru.lazyhat.compukters.ide.project.TomlSupport
 import ru.lazyhat.compukters.ide.project.document.FileRevision
 import ru.lazyhat.compukters.ide.project.document.ProjectWriteStep
@@ -30,7 +32,6 @@ import java.nio.ByteBuffer
 import java.nio.channels.FileChannel
 import java.nio.channels.SeekableByteChannel
 import java.nio.file.AtomicMoveNotSupportedException
-import java.nio.file.DirectoryStream
 import java.nio.file.Files
 import java.nio.file.LinkOption
 import java.nio.file.NoSuchFileException
@@ -118,11 +119,12 @@ internal object SecureProjectFiles {
 
                             is FileRevision.Present -> {
                                 try {
-                                    Files.move(
+                                    atomicReplace(
+                                        parent,
+                                        temporary,
+                                        target,
                                         identity.canonicalPath.resolve(path.value).resolveSibling(temporary.toString()),
                                         identity.canonicalPath.resolve(path.value),
-                                        StandardCopyOption.ATOMIC_MOVE,
-                                        StandardCopyOption.REPLACE_EXISTING,
                                     )
                                 } catch (exception: AtomicMoveNotSupportedException) {
                                     throw SecureProjectFileException("filesystem does not support atomic source replacement", exception)
@@ -260,7 +262,7 @@ internal object SecureProjectFiles {
                 withParentDirectory(root, path) { parent, target ->
                     if (attributesOrNull(parent, target) != null) return@withParentDirectory false
                     val absolute = identity.canonicalPath.resolve(path.value)
-                    Files.createDirectory(absolute)
+                    createDirectory(parent, target, absolute)
                     val created = attributes(parent, target)
                     if (created.isSymbolicLink || !created.isDirectory) {
                         throw SecureProjectFileException("created project entry is not a real directory")
@@ -366,7 +368,7 @@ internal object SecureProjectFiles {
                     var backedUp = false
                     var published = false
                     try {
-                        materializeImport(temporaryAbsolute, import.entries)
+                        materializeImport(parent, temporary, temporaryAbsolute, import.entries)
                         val staged = attributes(parent, temporary)
                         if (staged.isSymbolicLink || (!staged.isDirectory && !staged.isRegularFile)) {
                             throw SecureProjectFileException("staged project import is not a real file or directory")
@@ -435,9 +437,11 @@ internal object SecureProjectFiles {
         val filesystemRoot = absolute.root ?: throw SecureProjectFileException("directory has no filesystem root")
         val opened = mutableListOf<SecureDirectoryStream<Path>>()
         try {
-            var current = requireSecure(Files.newDirectoryStream(filesystemRoot))
+            var current = SecureDirectories.openRoot(filesystemRoot)
             opened += current
-            var currentAttributes = Files.readAttributes(filesystemRoot, BasicFileAttributes::class.java, LinkOption.NOFOLLOW_LINKS)
+            var currentAttributes =
+                current.getFileAttributeView(BasicFileAttributeView::class.java)?.readAttributes()
+                    ?: throw SecureProjectFileException("filesystem cannot read root identity")
             filesystemRoot.relativize(absolute).forEach { component ->
                 validateFilename(component)
                 currentAttributes = attributes(current, component)
@@ -446,6 +450,9 @@ internal object SecureProjectFiles {
                 }
                 current = current.newDirectoryStream(component, LinkOption.NOFOLLOW_LINKS)
                 opened += current
+                // Bind identity to the directory actually opened, not a name inspected earlier.
+                currentAttributes = current.getFileAttributeView(BasicFileAttributeView::class.java)?.readAttributes()
+                    ?: throw SecureProjectFileException("filesystem cannot read opened directory identity")
             }
             return action(current, currentAttributes)
         } finally {
@@ -551,11 +558,12 @@ internal object SecureProjectFiles {
                     if (!isValid(identity)) throw SecureProjectFileException("project root was invalidated")
                     if (replace) {
                         try {
-                            Files.move(
+                            atomicReplace(
+                                directory,
+                                temporary,
+                                target,
                                 identity.canonicalPath.resolve(temporary.toString()),
                                 identity.canonicalPath.resolve(target.toString()),
-                                StandardCopyOption.ATOMIC_MOVE,
-                                StandardCopyOption.REPLACE_EXISTING,
                             )
                         } catch (exception: AtomicMoveNotSupportedException) {
                             throw SecureProjectFileException("filesystem does not support atomic lock replacement", exception)
@@ -570,36 +578,69 @@ internal object SecureProjectFiles {
         }
     }
 
-    private fun materializeImport(
-        temporary: Path,
-        entries: List<ProjectImportEntry>,
+    internal fun createDirectory(
+        parent: SecureDirectoryStream<Path>,
+        name: Path,
+        absolute: Path,
     ) {
-        val root = entries.first()
-        when (root) {
-            is ProjectImportEntry.Directory -> Files.createDirectory(temporary)
-            is ProjectImportEntry.File -> writeNewAbsolute(temporary, root.ownedBytes())
-        }
-        entries.drop(1).forEach { entry ->
-            val relative = ProjectPath.file(entry.relativePath).components.drop(1)
-            val target = relative.fold(temporary) { current, component -> current.resolve(component) }
-            when (entry) {
-                is ProjectImportEntry.Directory -> Files.createDirectory(target)
-                is ProjectImportEntry.File -> writeNewAbsolute(target, entry.ownedBytes())
-            }
-            val attributes = Files.readAttributes(target, BasicFileAttributes::class.java, LinkOption.NOFOLLOW_LINKS)
-            if (attributes.isSymbolicLink || (!attributes.isDirectory && !attributes.isRegularFile)) {
-                throw SecureProjectFileException("staged project import contains a special entry")
-            }
+        if (parent is ProjectDirectoryStream) parent.createDirectory(name) else Files.createDirectory(absolute)
+    }
+
+    private fun atomicReplace(
+        parent: SecureDirectoryStream<Path>,
+        source: Path,
+        target: Path,
+        absoluteSource: Path,
+        absoluteTarget: Path,
+    ) {
+        if (parent is ProjectDirectoryStream) {
+            parent.atomicReplace(source, target)
+        } else {
+            Files.move(absoluteSource, absoluteTarget, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING)
         }
     }
 
-    private fun writeNewAbsolute(
-        path: Path,
-        content: ByteArray,
+    private fun materializeImport(
+        parent: SecureDirectoryStream<Path>,
+        temporary: Path,
+        absolute: Path,
+        entries: List<ProjectImportEntry>,
     ) {
-        Files.newByteChannel(path, WRITE_NEW_OPTIONS).use { channel ->
-            writeFully(channel, content)
-            (channel as? FileChannel)?.force(true)
+        fun writeNew(
+            directory: SecureDirectoryStream<Path>,
+            name: Path,
+            bytes: ByteArray,
+        ) {
+            directory.newByteChannel(name, WRITE_NEW_OPTIONS).use { channel ->
+                writeFully(channel, bytes)
+                (channel as? FileChannel)?.force(true)
+            }
+        }
+        when (val root = entries.first()) {
+            is ProjectImportEntry.File -> {
+                writeNew(parent, temporary, root.ownedBytes())
+            }
+
+            is ProjectImportEntry.Directory -> {
+                createDirectory(parent, temporary, absolute)
+                parent.newDirectoryStream(temporary, LinkOption.NOFOLLOW_LINKS).use { staging ->
+                    entries.drop(1).forEach { entry ->
+                        val components = ProjectPath.file(entry.relativePath).components.drop(1)
+                        val relative = ProjectPath.file(components.joinToString("/"))
+                        withParentDirectory(staging, relative) { directory, name ->
+                            val target = components.fold(absolute) { current, component -> current.resolve(component) }
+                            when (entry) {
+                                is ProjectImportEntry.Directory -> createDirectory(directory, name, target)
+                                is ProjectImportEntry.File -> writeNew(directory, name, entry.ownedBytes())
+                            }
+                            val attrs = attributes(directory, name)
+                            if (attrs.isSymbolicLink || (!attrs.isDirectory && !attrs.isRegularFile)) {
+                                throw SecureProjectFileException("staged project import contains a special entry")
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
 
@@ -667,12 +708,6 @@ internal object SecureProjectFiles {
     ) {
         val buffer = ByteBuffer.wrap(content)
         while (buffer.hasRemaining()) channel.write(buffer)
-    }
-
-    private fun requireSecure(directory: DirectoryStream<Path>): SecureDirectoryStream<Path> {
-        if (directory is SecureDirectoryStream<Path>) return directory
-        directory.close()
-        throw SecureProjectFileException("filesystem does not support secure project traversal")
     }
 
     private val READ_OPTIONS: Set<OpenOption> = setOf(StandardOpenOption.READ, LinkOption.NOFOLLOW_LINKS)

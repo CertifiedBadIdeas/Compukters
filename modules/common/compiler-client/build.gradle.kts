@@ -49,6 +49,7 @@ plugins {
 }
 
 dependencies {
+    implementation(projects.projectFiles)
     api(projects.workerClient)
     implementation(libs.kotlin.stdlib)
     testImplementation(kotlin("test"))
@@ -57,6 +58,8 @@ dependencies {
 val allowedClientRuntimeModules =
     setOf(
         ":worker-client",
+        ":project-files",
+        "net.java.dev.jna:jna",
         "org.jetbrains.kotlin:kotlin-stdlib",
         "org.jetbrains:annotations",
     )

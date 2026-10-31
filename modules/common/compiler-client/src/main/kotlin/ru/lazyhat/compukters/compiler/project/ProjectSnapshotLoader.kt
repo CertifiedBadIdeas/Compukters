@@ -21,6 +21,7 @@ package ru.lazyhat.compukters.compiler.project
 import ru.lazyhat.compukters.compiler.worker.protocol.BinaryValue
 import ru.lazyhat.compukters.compiler.worker.protocol.VirtualSourcePath
 import ru.lazyhat.compukters.compiler.worker.protocol.WorkerLimits
+import ru.lazyhat.compukters.files.SecureDirectories
 import java.io.ByteArrayOutputStream
 import java.nio.ByteBuffer
 import java.nio.CharBuffer
@@ -179,7 +180,7 @@ object ProjectSnapshotLoader {
         val root = absolute.root ?: throw ProjectSnapshotException("project root has no filesystem root")
         val opened = mutableListOf<SecureDirectoryStream<Path>>()
         try {
-            var current = requireSecure(Files.newDirectoryStream(root))
+            var current = SecureDirectories.openRoot(root)
             opened += current
             root.relativize(absolute).forEach { component ->
                 val attrs = attributes(current, component)

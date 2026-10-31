@@ -15,8 +15,10 @@ package ru.lazyhat.compukters.impl.ide
 import com.mojang.blaze3d.platform.InputConstants
 import net.minecraft.client.KeyMapping
 import net.minecraft.client.Minecraft
+import net.minecraft.client.gui.components.toasts.SystemToast
 import net.minecraft.client.gui.screens.Screen
 import net.minecraft.client.input.KeyEvent
+import net.minecraft.network.chat.Component
 import net.minecraft.resources.Identifier
 import net.minecraft.world.phys.BlockHitResult
 import net.minecraft.world.phys.HitResult
@@ -31,6 +33,7 @@ import net.neoforged.neoforge.client.settings.KeyModifier
 import net.neoforged.neoforge.common.NeoForge
 import net.neoforged.neoforge.event.GameShuttingDownEvent
 import org.lwjgl.glfw.GLFW
+import ru.lazyhat.compukters.core.LOGGER
 import ru.lazyhat.compukters.core.MOD_ID
 import ru.lazyhat.compukters.ide.client.target.IdeTargetClaim
 import ru.lazyhat.compukters.impl.config.CompuktersClientConfig
@@ -50,6 +53,7 @@ internal object IdeClientBootstrap {
             GLFW.GLFW_KEY_I,
             category,
         )
+    private val openingFailureToast by lazy { SystemToast.SystemToastId() }
     private var services: IdeClientServices<IdeClientApplication>? = null
 
     fun register(eventBus: IEventBus) {
@@ -108,14 +112,28 @@ internal object IdeClientBootstrap {
         val original = minecraft.screen
         val targetClaim = targetClaim(minecraft, original)
         val childParent = original as? ChildScreenParent
-        IdeOpeningHandoff.open(
-            createSession = services()::open,
-            attachTarget = { session -> targetClaim?.let(session.application.controller::attachTarget) },
-            suspendParent = { childParent?.suspendForChild() ?: original },
-            installScreen = { session, parent -> minecraft.setScreen(IdeScreen(session, parent)) },
-            closeSession = IdeClientSession<IdeClientApplication>::close,
-            resumeParent = { childParent?.resumeFromChild() },
-        )
+        IdeOpeningHandoff.attempt(
+            reportFailure = { failure ->
+                LOGGER.warn(failure) { "Could not open the IDE project workspace" }
+                minecraft.toastManager.addToast(
+                    SystemToast.multiline(
+                        minecraft,
+                        openingFailureToast,
+                        Component.translatable("ide.compukters.open_failed.title"),
+                        Component.translatable("ide.compukters.open_failed.detail"),
+                    ),
+                )
+            },
+        ) {
+            IdeOpeningHandoff.open(
+                createSession = services()::open,
+                attachTarget = { session -> targetClaim?.let(session.application.controller::attachTarget) },
+                suspendParent = { childParent?.suspendForChild() ?: original },
+                installScreen = { session, parent -> minecraft.setScreen(IdeScreen(session, parent)) },
+                closeSession = IdeClientSession<IdeClientApplication>::close,
+                resumeParent = { childParent?.resumeFromChild() },
+            )
+        }
         return true
     }
 

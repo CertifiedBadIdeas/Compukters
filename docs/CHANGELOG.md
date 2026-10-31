@@ -13,6 +13,11 @@ headings so this page has one stable URL that can be shared outside the reposito
 
 ## 0.7.0 — In development
 
+- IDE local projects and compiler snapshots support protected Windows filesystem traversal, including
+  Unicode paths, revision-checked saves and atomic replacement. Native directory handles prevent
+  path substitution; junctions, reparse-point traversal and ambiguous device/stream names are rejected.
+  If the project workspace cannot open, the IDE reports the failure and leaves the terminal available.
+
 - Concurrent instruments and control tasks continue within the existing bounded VM scheduling allowance.
   Accepted sensor and keyboard replies keep advancing, and terminal or filesystem work proceeds while unrelated
   timers and addon requests wait for their owners. Replies already queued for a completed child program
