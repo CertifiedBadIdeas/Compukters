@@ -81,6 +81,9 @@ internal class PinnedDirectoryStream private constructor(
             chain.retain()
         }
         try {
+            // A reparse tag can be installed without renaming the pinned directory.
+            // Reject that invalidation; handle-relative lookup still binds races to this object.
+            if (!WindowsEntryPinning.attributes(chain.pin).isDirectory) throw NotDirectoryException(path.toString())
             return action()
         } finally {
             chain.release()

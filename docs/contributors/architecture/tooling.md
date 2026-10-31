@@ -233,7 +233,8 @@ and retain their ancestor chain until the last dependent child/operation closes.
 metadata, byte channels, creation, deletion, rename and atomic replacement operate relative to those handles,
 so no operation reconstructs a pathname that could follow a concurrently installed reparse point. Write
 sharing remains enabled: Windows needs it to rename directory entries. Native channels preserve byte
-positions, truncation and force(true). Only direct, unambiguous Unicode entry names, no-follow reads and
+positions, truncation and force(true). An in-place reparse mutation invalidates the opened directory;
+subsequent operations reject it. Only direct, unambiguous Unicode entry names, no-follow reads and
 exclusive new-file writes are admitted. Reparse entries are classified as special
 for scanning; cleanup removes their entries without traversing them. Revision conflicts and atomic source/lock
 publication remain owned by the existing document and lock services. Other unsupported providers fail closed.
