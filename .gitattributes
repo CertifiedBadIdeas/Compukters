@@ -6,4 +6,6 @@ src/generated/**/*.json text eol=lf
 # Platform bundles preserve exact source bytes and PSI declaration offsets.
 # Keep the canonical Kotlin inputs identical in Windows and Unix checkouts.
 modules/common/guest-platform/src/platform/**/*.kt text eol=lf
+# Bundled Guest programs are also compiled from their exact checked-in bytes.
+system/programs/**/*.kt text eol=lf
 tools/fonts/dina/v2.92/Dina_r400-6.bdf binary
