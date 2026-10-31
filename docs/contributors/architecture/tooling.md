@@ -226,6 +226,33 @@ the standalone observation without reopening the screen and receives a fresh aut
 
 ## Client-local projects and Git
 
+`project-files` owns protected filesystem-root opening shared by the project catalog and compiler snapshots.
+Supporting providers retain their native `SecureDirectoryStream`. The default Windows provider uses native
+no-follow entry handles through Minecraft's existing JNA library; directory pins deny write/delete sharing
+and retain their ancestor chain until the last dependent child/operation closes. This prevents rename,
+replacement and reparse-point installation during an operation. Only direct, unambiguous entry names,
+no-follow reads and exclusive new-file writes are admitted. Reparse entries are classified as special
+for scanning; cleanup removes their entries without traversing them. Revision conflicts and atomic source/lock
+publication remain owned by the existing document and lock services. Other unsupported providers fail closed.
+The Windows backend reads the volume and 128-bit file ID from the pinned handle; project identity is
+bound to the opened directory, including after a rename. It is loaded lazily and does not change the
+native VM ABI or project formats.
+IDE initialization failures are contained at the opening boundary, preserving the parent terminal and
+reporting a localized notification with technical details in the log.
+
+The `Windows project filesystem` workflow runs native Windows acceptance for Unicode paths,
+read/create/rename/replace/delete, ancestor pinning, junction rejection and the complete catalog/document/
+snapshot/lock/tree cycle. It requires non-skipped Windows test reports and builds a Minecraft 1.21.1
+production-format candidate with the Runtime compiled from its pinned source. Its artifact is a Windows
+test candidate, not a tagged universal release. For a local Windows run, use JDK 25 with JDK 21 available
+to Gradle, initialize `host/compukter-vm` at its recorded revision, then run:
+
+```powershell
+.\gradlew.bat :project-files:check :ide-core:test --tests '*ProjectFilesystemPlatformTest'
+```
+
+Linux skips of `WindowsSecureDirectoriesTest` and Wine runs do not replace native Windows acceptance.
+
 `ide-core` owns backend-independent Git contracts and the project catalog. Owned projects live beneath the client
 catalog root; external roots are registered in place through bounded catalog records and retain their filesystem
 identity checks. `.git` components are reserved and excluded before tree/content budget accounting, including in
