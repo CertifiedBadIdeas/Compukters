@@ -20,9 +20,7 @@ package ru.lazyhat.compukters.files
 
 import java.nio.channels.SeekableByteChannel
 import java.nio.file.ClosedDirectoryStreamException
-import java.nio.file.DirectoryStream
 import java.nio.file.FileSystemException
-import java.nio.file.Files
 import java.nio.file.LinkOption
 import java.nio.file.NotDirectoryException
 import java.nio.file.OpenOption
@@ -36,32 +34,20 @@ import java.nio.file.attribute.FileAttribute
 import java.nio.file.attribute.FileAttributeView
 import java.nio.file.attribute.FileTime
 
-internal interface EntryPin : AutoCloseable {
-    val directory: Boolean
-    val reparse: Boolean get() = false
-    val identity: Any? get() = null
-}
-
-internal fun interface EntryPinning {
-    /** Opens the entry itself without following reparse points; denies write/delete until close. */
-    fun open(path: Path): EntryPin
-}
-
 /**
- * Windows direct-entry stream. Every operation retains the complete pinned ancestor chain.
+ * Windows handle-relative stream. Every operation retains the complete pinned ancestor chain.
  * It deliberately supports only no-follow reads and exclusive new-file writes used by projects.
- * There is no path-check-then-open fallback when native pinning fails.
+ * Directory handles deny deletion but admit writes: all entry lookup, I/O, enumeration and mutation use the open handle.
  */
 internal class PinnedDirectoryStream private constructor(
     private val path: Path,
-    private val pinning: EntryPinning,
     private val chain: PinChain,
-) : SecureDirectoryStream<Path> {
+) : ProjectDirectoryStream {
     private var closed = false
-    private var listing: DirectoryStream<Path>? = null
+    private var iterated = false
 
     private class PinChain(
-        private val pin: EntryPin,
+        val pin: WindowsEntryPinning.Handle,
         private val parent: PinChain?,
     ) {
         private var references = 1
@@ -103,14 +89,7 @@ internal class PinnedDirectoryStream private constructor(
 
     private fun entry(name: Path): Path {
         if (name.fileSystem != path.fileSystem) throw ProviderMismatchException()
-        val text = name.toString()
-        require(!name.isAbsolute && name.nameCount == 1 && text != "." && text != ".." && text.isNotEmpty()) {
-            "expected a direct project entry"
-        }
-        require(text.none { it.code < 32 || it in "<>:\"/\\|?*" } && !text.endsWith('.') && !text.endsWith(' ')) {
-            "ambiguous Windows project entry"
-        }
-        require(!DEVICE_NAME.matches(text.substringBefore('.').trimEnd(' '))) { "Windows device names are not project entries" }
+        validateName(name)
         return path.resolve(name)
     }
 
@@ -121,12 +100,14 @@ internal class PinnedDirectoryStream private constructor(
         pinned {
             require(options.all { it == LinkOption.NOFOLLOW_LINKS })
             val childPath = entry(name)
-            val child = pinning.open(childPath)
-            if (!child.directory || child.reparse) {
+            val child = WindowsEntryPinning.child(chain.pin, name, directory = true)
+            try {
+                if (!WindowsEntryPinning.attributes(child).isDirectory) throw NotDirectoryException(childPath.toString())
+                PinnedDirectoryStream(childPath, PinChain(child, chain.retain()))
+            } catch (failure: Throwable) {
                 child.close()
-                throw NotDirectoryException(childPath.toString())
+                throw failure
             }
-            PinnedDirectoryStream(childPath, pinning, PinChain(child, chain.retain()))
         }
 
     override fun newByteChannel(
@@ -137,48 +118,90 @@ internal class PinnedDirectoryStream private constructor(
         pinned {
             val target = entry(name)
             val access = options - LinkOption.NOFOLLOW_LINKS
-            when (access) {
-                setOf(StandardOpenOption.READ), emptySet<OpenOption>() -> {
-                    pinning.open(target).use { pin ->
-                        if (pin.directory || pin.reparse) throw FileSystemException(target.toString(), null, "expected a regular file")
-                        Files.newByteChannel(target, setOf(StandardOpenOption.READ, LinkOption.NOFOLLOW_LINKS), *attrs)
-                    }
+            require(attrs.isEmpty()) { "custom file creation attributes are unsupported" }
+            val writing =
+                when (access) {
+                    setOf(StandardOpenOption.READ), emptySet<OpenOption>() -> false
+                    setOf(StandardOpenOption.WRITE, StandardOpenOption.CREATE_NEW) -> true
+                    else -> throw UnsupportedOperationException("project channels support read or exclusive creation only")
                 }
-
-                setOf(StandardOpenOption.WRITE, StandardOpenOption.CREATE_NEW) -> {
-                    Files.newByteChannel(target, options + LinkOption.NOFOLLOW_LINKS, *attrs)
+            val handle = WindowsEntryPinning.child(chain.pin, name, directory = false, create = writing, writing = writing)
+            try {
+                if (!WindowsEntryPinning
+                        .attributes(
+                            handle,
+                        ).isRegularFile
+                ) {
+                    throw FileSystemException(target.toString(), null, "expected a regular file")
                 }
-
-                else -> {
-                    throw UnsupportedOperationException("project channels support read or exclusive creation only")
-                }
+                WindowsProjectFileChannel(handle, writing)
+            } catch (failure: Throwable) {
+                handle.close()
+                throw failure
             }
+        }
+
+    override fun createDirectory(name: Path) =
+        pinned {
+            entry(name)
+            WindowsEntryPinning.child(chain.pin, name, directory = true, create = true).close()
         }
 
     override fun deleteFile(name: Path) =
         pinned {
-            val target = entry(name)
-            pinning.open(target).use { pin ->
-                if (pin.directory && !pin.reparse) throw FileSystemException(target.toString(), null, "expected a file")
+            entry(name)
+            WindowsEntryPinning.child(chain.pin, name, deleting = true).use { handle ->
+                if (WindowsEntryPinning
+                        .attributes(
+                            handle,
+                        ).isDirectory
+                ) {
+                    throw FileSystemException(path.resolve(name).toString(), null, "expected a file")
+                }
+                WindowsEntryPinning.delete(handle)
             }
-            // Delete the directory entry itself; never follow it, even if it changes after inspection.
-            Files.delete(target)
         }
 
     override fun deleteDirectory(name: Path) =
         pinned {
-            val target = entry(name)
-            pinning.open(target).use { pin -> if (!pin.directory) throw NotDirectoryException(target.toString()) }
-            Files.delete(target)
+            entry(name)
+            WindowsEntryPinning.child(chain.pin, name, deleting = true).use { handle ->
+                val attributes = WindowsEntryPinning.attributes(handle)
+                if (!attributes.isDirectory && !attributes.isOther) throw NotDirectoryException(path.resolve(name).toString())
+                WindowsEntryPinning.delete(handle)
+            }
         }
 
     override fun move(
         source: Path,
         targetDirectory: SecureDirectoryStream<Path>,
         target: Path,
+    ) = move(source, targetDirectory, target, false)
+
+    override fun atomicReplace(
+        source: Path,
+        target: Path,
+    ) = move(source, this, target, true)
+
+    private fun move(
+        source: Path,
+        targetDirectory: SecureDirectoryStream<Path>,
+        target: Path,
+        replace: Boolean,
     ) {
         val destination = targetDirectory as? PinnedDirectoryStream ?: throw ProviderMismatchException()
-        pinned { destination.pinned { Files.move(entry(source), destination.entry(target)) } }
+        pinned {
+            destination.pinned {
+                entry(source)
+                destination.entry(target)
+                WindowsEntryPinning
+                    .child(
+                        chain.pin,
+                        source,
+                        deleting = true,
+                    ).use { WindowsEntryPinning.move(it, destination.chain.pin, target, replace) }
+            }
+        }
     }
 
     override fun <V : FileAttributeView?> getFileAttributeView(type: Class<V>): V? = view(type, null)
@@ -203,21 +226,11 @@ internal class PinnedDirectoryStream private constructor(
 
                 override fun readAttributes(): BasicFileAttributes =
                     pinned {
-                        val target = if (name == null) path else entry(name)
-                        pinning.open(target).use { pin ->
-                            val attributes = Files.readAttributes(target, BasicFileAttributes::class.java, LinkOption.NOFOLLOW_LINKS)
-                            object : BasicFileAttributes by attributes {
-                                // Windows junctions are reparse directories, not Java symlinks.
-                                // Expose them as special entries: scans reject them, while
-                                // cleanup can delete the link itself without entering it.
-                                override fun isDirectory(): Boolean = attributes.isDirectory && !pin.reparse
-
-                                override fun isRegularFile(): Boolean = attributes.isRegularFile && !pin.reparse
-
-                                override fun isOther(): Boolean = attributes.isOther || pin.reparse
-
-                                override fun fileKey(): Any? = pin.identity ?: attributes.fileKey()
-                            }
+                        if (name == null) {
+                            WindowsEntryPinning.attributes(chain.pin)
+                        } else {
+                            entry(name)
+                            WindowsEntryPinning.child(chain.pin, name).use(WindowsEntryPinning::attributes)
                         }
                     }
 
@@ -233,36 +246,64 @@ internal class PinnedDirectoryStream private constructor(
     @Synchronized
     override fun iterator(): MutableIterator<Path> {
         if (closed) throw ClosedDirectoryStreamException()
-        check(listing == null) { "directory iterator already obtained" }
-        val directory = Files.newDirectoryStream(path)
-        listing = directory
-        return directory.iterator()
+        check(!iterated) { "directory iterator already obtained" }
+        iterated = true
+        return object : MutableIterator<Path> {
+            private var batch: Iterator<String> = emptyList<String>().iterator()
+            private var started = false
+            private var ended = false
+
+            override fun hasNext(): Boolean =
+                pinned {
+                    while (!batch.hasNext() && !ended) {
+                        val names = WindowsEntryPinning.names(chain.pin, !started)
+                        started = true
+                        ended = names == null
+                        batch = names.orEmpty().iterator()
+                    }
+                    batch.hasNext()
+                }
+
+            override fun next(): Path {
+                if (!hasNext()) throw NoSuchElementException()
+                return path.resolve(batch.next())
+            }
+
+            override fun remove(): Unit = throw UnsupportedOperationException()
+        }
     }
 
     @Synchronized
     override fun close() {
         if (closed) return
         closed = true
-        try {
-            listing?.close()
-        } finally {
-            chain.release()
-        }
+        chain.release()
     }
 
     companion object {
+        fun validateName(name: Path) {
+            val text = name.toString()
+            require(Charsets.UTF_8.newEncoder().canEncode(text)) { "malformed Unicode project entry" }
+            require(!name.isAbsolute && name.nameCount == 1 && text != "." && text != ".." && text.isNotEmpty()) {
+                "expected a direct project entry"
+            }
+            require(text.none { it.code < 32 || it in "<>:\"/\\|?*" } && !text.endsWith('.') && !text.endsWith(' ')) {
+                "ambiguous Windows project entry"
+            }
+            require(!DEVICE_NAME.matches(text.substringBefore('.').trimEnd(' '))) { "Windows device names are not project entries" }
+        }
+
         private val DEVICE_NAME = Regex("(?iu)(CON|PRN|AUX|NUL|CONIN\\$|CONOUT\\$|COM[0-9¹²³]|LPT[0-9¹²³])")
 
-        fun open(
-            path: Path,
-            pinning: EntryPinning,
-        ): PinnedDirectoryStream {
-            val pin = pinning.open(path)
-            if (!pin.directory || pin.reparse) {
+        fun open(path: Path): PinnedDirectoryStream {
+            val pin = WindowsEntryPinning.openRoot(path)
+            try {
+                if (!WindowsEntryPinning.attributes(pin).isDirectory) throw NotDirectoryException(path.toString())
+                return PinnedDirectoryStream(path, PinChain(pin, null))
+            } catch (failure: Throwable) {
                 pin.close()
-                throw NotDirectoryException(path.toString())
+                throw failure
             }
-            return PinnedDirectoryStream(path, pinning, PinChain(pin, null))
         }
     }
 }

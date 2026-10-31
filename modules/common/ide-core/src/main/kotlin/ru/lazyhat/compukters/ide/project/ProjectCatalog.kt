@@ -192,7 +192,7 @@ class ProjectCatalog private constructor(
         val stagingPath = rootIdentity.canonicalPath.resolve(stagingName)
         catalogOperation("admit import") { root ->
             if (SecureProjectFiles.attributesOrNull(root, Path.of(name)) != null) throw FileAlreadyExistsException(name)
-            Files.createDirectory(stagingPath)
+            SecureProjectFiles.createDirectory(root, Path.of(stagingName), stagingPath)
         }
         try {
             materialize(stagingPath)
@@ -266,12 +266,12 @@ class ProjectCatalog private constructor(
         try {
             catalogOperation("create project") { root ->
                 if (SecureProjectFiles.attributesOrNull(root, Path.of(name)) != null) throw FileAlreadyExistsException(name)
-                Files.createDirectory(stagingPath)
+                SecureProjectFiles.createDirectory(root, Path.of(stagingName), stagingPath)
                 creationHook(ProjectCreationStep.STAGING_CREATED)
                 root.newDirectoryStream(Path.of(stagingName), LinkOption.NOFOLLOW_LINKS).use { staging ->
                     writeNew(staging, MANIFEST_FILENAME, ProjectManifestCodec.encode(manifest).encodeToByteArray())
                     creationHook(ProjectCreationStep.MANIFEST_WRITTEN)
-                    Files.createDirectory(stagingPath.resolve(SOURCE_DIRECTORY))
+                    SecureProjectFiles.createDirectory(staging, Path.of(SOURCE_DIRECTORY), stagingPath.resolve(SOURCE_DIRECTORY))
                     staging.newDirectoryStream(Path.of(SOURCE_DIRECTORY), LinkOption.NOFOLLOW_LINKS).use { source ->
                         writeNew(source, MAIN_FILENAME, DEFAULT_MAIN.encodeToByteArray())
                     }
