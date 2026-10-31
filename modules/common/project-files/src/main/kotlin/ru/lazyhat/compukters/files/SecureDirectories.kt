@@ -29,7 +29,7 @@ object SecureDirectories {
         require(root.isAbsolute && root.normalize() == root.root) { "expected a filesystem root" }
         if (root.fileSystem == FileSystems.getDefault() && root.fileSystem.separator == "\\") {
             return try {
-                PinnedDirectoryStream.open(root, WindowsEntryPinning)
+                PinnedDirectoryStream.open(root)
             } catch (failure: LinkageError) {
                 throw java.nio.file.FileSystemException(root.toString(), null, "native protected project access is unavailable").also {
                     it.initCause(failure)
