@@ -91,5 +91,7 @@ jobs:
             modules/minecraft/v1_21_1/v1_21_1-neoforge/build/libs/compukters-1.21.1-neoforge-0.7.0-SNAPSHOT.jar.sha256
             modules/common/project-files/build/test-results/test/*.xml
             modules/common/ide-core/build/test-results/test/*.xml
+            modules/common/compiler-k2/build/test-results/**/*.xml
+            modules/minecraft/v1_21_1/v1_21_1-neoforge/build/test-results/**/*.xml
           if-no-files-found: error
           retention-days: 7
