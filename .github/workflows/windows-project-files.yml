@@ -1,0 +1,89 @@
+name: Windows project filesystem
+
+on:
+  push:
+    paths:
+      - 'modules/common/project-files/**'
+      - 'modules/common/ide-core/**'
+      - 'modules/common/compiler-client/**'
+      - '.github/workflows/windows-project-files.yml'
+  pull_request:
+    paths:
+      - 'modules/common/project-files/**'
+      - 'modules/common/ide-core/**'
+      - 'modules/common/compiler-client/**'
+      - '.github/workflows/windows-project-files.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: windows-project-files-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: Native Windows project operations and Minecraft 1.21.1 artifact
+    runs-on: windows-latest
+    timeout-minutes: 45
+    env:
+      CARGO_BUILD_JOBS: '2'
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Initialize pinned Runtime sources
+        shell: pwsh
+        run: git -c 'url.https://github.com/.insteadOf=git@github.com:' submodule update --init host/compukter-vm
+      - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4
+        with:
+          distribution: temurin
+          java-version: |
+            21
+            25
+      - name: Verify protected project operations and opening failures
+        shell: pwsh
+        run: >-
+          .\gradlew.bat --no-daemon --max-workers=2
+          :project-files:check
+          :ide-core:test --tests '*ProjectFilesystemPlatformTest'
+          :compiler-k2:forkedWorkerTest --tests '*ForkedCompilerWorkerTest'
+          :compiler-k2:verifyCompilerWorkerLicenses
+          :ide-analysis-k2:verifyAnalysisWorkerLicenses
+          :tooling-runtime:verifyToolingRuntimeLicenses
+          :v1_21_1-neoforge:test --tests '*IdeOpeningHandoffFailureTest'
+      - name: Require executed Windows acceptance cases
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $reports = @(
+            'modules/common/project-files/build/test-results/test/TEST-ru.lazyhat.compukters.files.WindowsSecureDirectoriesTest.xml',
+            'modules/common/ide-core/build/test-results/test/TEST-ru.lazyhat.compukters.ide.project.ProjectFilesystemPlatformTest.xml'
+          )
+          foreach ($path in $reports) {
+            [xml]$report = Get-Content -Raw $path
+            $suite = $report.testsuite
+            if ([int]$suite.tests -lt 1 -or [int]$suite.skipped -ne 0 -or [int]$suite.failures -ne 0 -or [int]$suite.errors -ne 0) {
+              throw "Windows acceptance did not execute successfully: $path"
+            }
+          }
+      - name: Build Windows production-format candidate
+        shell: pwsh
+        run: .\gradlew.bat --no-daemon --max-workers=2 :v1_21_1-neoforge:buildProductionUniversalJar
+      - name: Record candidate digest
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $path = 'modules/minecraft/v1_21_1/v1_21_1-neoforge/build/libs/compukters-1.21.1-neoforge-0.7.0-SNAPSHOT.jar'
+          $digest = Get-FileHash $path -Algorithm SHA256
+          "$($digest.Hash.ToLower())  $([IO.Path]::GetFileName($path))" | Set-Content -Encoding ascii "$path.sha256"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: always()
+        with:
+          name: windows-project-files-${{ github.sha }}
+          path: |
+            modules/minecraft/v1_21_1/v1_21_1-neoforge/build/libs/compukters-1.21.1-neoforge-0.7.0-SNAPSHOT.jar
+            modules/minecraft/v1_21_1/v1_21_1-neoforge/build/libs/compukters-1.21.1-neoforge-0.7.0-SNAPSHOT.jar.sha256
+            modules/common/project-files/build/test-results/test/*.xml
+            modules/common/ide-core/build/test-results/test/*.xml
+          if-no-files-found: error
+          retention-days: 7
