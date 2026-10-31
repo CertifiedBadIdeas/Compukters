@@ -257,6 +257,8 @@ to Gradle, initialize `host/compukter-vm` at its recorded revision, then run:
 ```
 
 Linux skips of `WindowsSecureDirectoriesTest` and Wine runs do not replace native Windows acceptance.
+Canonical platform Kotlin inputs are checked out with LF on every host. Bundles preserve their exact
+source bytes and declaration offsets; Windows Git autocrlf must not rewrite these build inputs.
 
 `ide-core` owns backend-independent Git contracts and the project catalog. Owned projects live beneath the client
 catalog root; external roots are registered in place through bounded catalog records and retain their filesystem

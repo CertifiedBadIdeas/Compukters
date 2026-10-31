@@ -3,12 +3,14 @@ name: Windows project filesystem
 on:
   push:
     paths:
+      - '.gitattributes'
       - 'modules/common/project-files/**'
       - 'modules/common/ide-core/**'
       - 'modules/common/compiler-client/**'
       - '.github/workflows/windows-project-files.yml'
   pull_request:
     paths:
+      - '.gitattributes'
       - 'modules/common/project-files/**'
       - 'modules/common/ide-core/**'
       - 'modules/common/compiler-client/**'
