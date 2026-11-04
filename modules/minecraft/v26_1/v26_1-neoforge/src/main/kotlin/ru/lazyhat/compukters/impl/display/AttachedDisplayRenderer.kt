@@ -23,7 +23,7 @@ internal object AttachedDisplayRenderer {
     }
 
     private fun extract(event: ExtractLevelRenderStateEvent) {
-        event.renderState.setRenderData(key, AttachedDisplayClient.frame())
+        event.renderState.setRenderData(key, AttachedDisplayClient.frame(event.deltaTracker.getGameTimeDeltaPartialTick(true)))
     }
 
     private fun submit(event: SubmitCustomGeometryEvent) {

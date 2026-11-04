@@ -29,6 +29,8 @@ internal object ConfiguratorOverlayBootstrap {
         val outlines = ConfiguratorOverlayClient.outlines()
         if (outlines.isEmpty()) return
         val minecraft = Minecraft.getInstance()
+        val level = minecraft.level ?: return
+        val partialTick = event.partialTick.getGameTimeDeltaPartialTick(true)
         val camera = event.camera.position
         val pose = event.poseStack
         pose.pushPose()
@@ -39,9 +41,10 @@ internal object ConfiguratorOverlayBootstrap {
         ConfiguratorOutlineMesh.draw(
             pose.last(),
             buffers.getBuffer(type),
-            outlines,
-            event.renderTick + event.partialTick.getGameTimeDeltaPartialTick(false).toDouble(),
-            camera,
+            ConfiguratorOutlineMesh.frame(outlines, event.renderTick + partialTick.toDouble(), camera) {
+                ru.lazyhat.compukters.minecraft.peripheral.PeripheralWorldPositions
+                    .projectForRender(level, it, partialTick)
+            },
         )
         pose.popPose()
         buffers.endBatch(type)

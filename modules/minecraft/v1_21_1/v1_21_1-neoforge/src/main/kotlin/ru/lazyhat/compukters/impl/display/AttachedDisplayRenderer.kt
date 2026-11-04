@@ -17,7 +17,7 @@ internal object AttachedDisplayRenderer {
 
     private fun render(event: RenderLevelStageEvent) {
         if (event.stage != RenderLevelStageEvent.Stage.AFTER_PARTICLES) return
-        val frame = AttachedDisplayClient.frame()
+        val frame = AttachedDisplayClient.frame(event.partialTick.getGameTimeDeltaPartialTick(true))
         val buffers = Minecraft.getInstance().renderBuffers().bufferSource()
         frame.groupBy { it.texture }.forEach { (texture, quads) ->
             val type =

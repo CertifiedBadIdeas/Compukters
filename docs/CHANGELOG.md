@@ -37,6 +37,7 @@ headings so this page has one stable URL that can be shared outside the reposito
 
 - Added flat display panels across existing block faces, including floor and ceiling surfaces, with the existing Guest display API, saved image and construction projection.
   Panels survive construction unload and retire when their backing blocks or construction are destroyed.
+  On Sable ships, attached panels and configurator outlines follow the interpolated construction pose each frame.
 - Added `GraphicalDisplay.setOpacity(0.0..1.0)` for persistent whole-screen transparency of both text and background.
 
 - The configurator selects its mode through a hold-RMB radial menu. Short clicks retain block actions;

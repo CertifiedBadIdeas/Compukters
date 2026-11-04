@@ -8,23 +8,49 @@ package ru.lazyhat.compukters.impl.peripheral
 
 import com.mojang.blaze3d.vertex.PoseStack
 import com.mojang.blaze3d.vertex.VertexConsumer
-import net.minecraft.client.Minecraft
 import net.minecraft.client.renderer.texture.OverlayTexture
 import net.minecraft.world.phys.AABB
 import net.minecraft.world.phys.Vec3
 import ru.lazyhat.compukters.minecraft.peripheral.ConfiguratorOutline
-import ru.lazyhat.compukters.minecraft.peripheral.PeripheralWorldPositions
 import kotlin.math.sin
 
 /** Solid thin edge ribbons rather than hardware lines: stable width and normal depth testing. */
 internal object ConfiguratorOutlineMesh {
+    data class Vertex(
+        val point: Vec3,
+        val color: Int,
+        val u: Float,
+        val v: Float,
+        val nx: Float,
+        val ny: Float,
+        val nz: Float,
+    )
+
     fun draw(
         pose: PoseStack.Pose,
         vertices: VertexConsumer,
+        frame: List<Vertex>,
+    ) {
+        frame.forEach { vertex ->
+            val point = vertex.point
+            vertices
+                .addVertex(pose, point.x.toFloat(), point.y.toFloat(), point.z.toFloat())
+                .setColor(vertex.color)
+                .setUv(vertex.u, vertex.v)
+                .setOverlay(OverlayTexture.NO_OVERLAY)
+                .setLight(0xF000F0)
+                .setNormal(pose, vertex.nx, vertex.ny, vertex.nz)
+        }
+    }
+
+    /** Resolve construction poses during frame extraction, before deferred geometry submission. */
+    fun frame(
         outlines: List<ConfiguratorOutline>,
         time: Double,
         camera: Vec3,
-    ) {
+        project: (Vec3) -> Vec3?,
+    ): List<Vertex> {
+        val result = mutableListOf<Vertex>()
         outlines.forEach { outline ->
             val pulse = (sin(time * 0.11) + 1.0) * 0.5
             val alpha = if (outline.strong) (190 + pulse * 55).toInt() else (85 + pulse * 25).toInt()
@@ -50,7 +76,7 @@ internal object ConfiguratorOutlineMesh {
                             1 -> AABB(a - width, from, c - width, a + width, to, c + width)
                             else -> AABB(a - width, c - width, from, a + width, c + width, to)
                         }
-                    cuboid(pose, vertices, box, color, camera)
+                    cuboid(result, box, color, camera, project)
                 }
             }
 
@@ -62,6 +88,7 @@ internal object ConfiguratorOutlineMesh {
             for (x in sides(b.minX, b.maxX)) for (z in sides(b.minZ, b.maxZ)) edge(1, b.minY, b.maxY, x, z)
             for (x in sides(b.minX, b.maxX)) for (y in sides(b.minY, b.maxY)) edge(2, b.minZ, b.maxZ, x, y)
         }
+        return result.toList()
     }
 
     /** Project absolute storage coordinates before camera subtraction, while still using Doubles. */
@@ -72,11 +99,11 @@ internal object ConfiguratorOutlineMesh {
     ): Vec3? = project(point)?.subtract(camera)
 
     private fun cuboid(
-        pose: PoseStack.Pose,
-        vertices: VertexConsumer,
+        result: MutableList<Vertex>,
         b: AABB,
         color: Int,
         camera: Vec3,
+        project: (Vec3) -> Vec3?,
     ) {
         fun vertex(
             x: Double,
@@ -88,15 +115,8 @@ internal object ConfiguratorOutlineMesh {
             ny: Float,
             nz: Float,
         ) {
-            val level = Minecraft.getInstance().level ?: return
-            val point = cameraRelative(Vec3(x, y, z), camera) { PeripheralWorldPositions.project(level, it) } ?: return
-            vertices
-                .addVertex(pose, point.x.toFloat(), point.y.toFloat(), point.z.toFloat())
-                .setColor(color)
-                .setUv(u, v)
-                .setOverlay(OverlayTexture.NO_OVERLAY)
-                .setLight(0xF000F0)
-                .setNormal(pose, nx, ny, nz)
+            val point = cameraRelative(Vec3(x, y, z), camera, project) ?: return
+            result += Vertex(point, color, u, v, nx, ny, nz)
         }
 
         fun face(

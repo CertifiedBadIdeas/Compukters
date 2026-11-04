@@ -86,8 +86,12 @@ identities and rejects ambiguous reachable names. Networks are bounded to 1,024 
 Cable blocks no longer contribute discovery. Guest signatures and permanently stale handles remain unchanged.
 The optional `CompuktersPeripheralWorldIntegration` SDK adapter projects storage coordinates to live world positions
 and supplies already-loaded nearby block entities for configurator overlays. Ordinary worlds use the identity
-projection. The Sable addon uses logical poses on client and server; unloaded/removed plot locations return unavailable.
-Range checks and configurator proximity project both endpoints, while exact block identities still use storage addresses.
+projection. Range checks and configurator proximity use logical poses on client and server and project both endpoints,
+while exact block identities still use storage addresses. The independent physical-client `installRenderProjection`
+adapter receives the current frame's partial tick; Sable projects attached displays and configurator outlines through
+the same interpolated render pose as its blocks. Without that adapter, rendering retains the logical projection.
+Unloaded/removed plot locations return unavailable without falling back to storage coordinates. Outline vertices and
+display quads are resolved during frame extraction, so deferred submission never rereads mutable construction poses.
 
 Explicit batch transfers capture exact source identities before copying blocks and guard source removal and destination
 display creation until the whole batch completes. Closing the scope relocates only matching destinations whose source

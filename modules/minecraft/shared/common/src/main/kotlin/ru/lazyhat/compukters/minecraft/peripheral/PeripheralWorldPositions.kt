@@ -15,6 +15,7 @@ import net.minecraft.world.phys.Vec3
 /** Addons project storage coordinates into the current world without loading chunks. */
 object PeripheralWorldPositions {
     private var projection: (Level, Vec3) -> Vec3? = { _, point -> point }
+    private var renderProjection: ((Level, Vec3, Float) -> Vec3?)? = null
     private var candidates: (ServerLevel, Vec3, Double) -> Sequence<BlockEntity> = { _, _, _ -> emptySequence() }
 
     private var installed = false
@@ -37,6 +38,26 @@ object PeripheralWorldPositions {
         level: Level,
         point: Vec3,
     ): Vec3? = projection(level, point)?.takeIf { it.x.isFinite() && it.y.isFinite() && it.z.isFinite() }
+
+    /** Client-only projection, installed independently of logical reachability checks. */
+    @JvmStatic
+    @Synchronized
+    fun installRenderProjection(project: (Level, Vec3, Float) -> Vec3?) {
+        check(renderProjection == null) { "Peripheral render projection is already installed" }
+        renderProjection = project
+    }
+
+    /** Use the frame's interpolation time; unavailable constructions must never fall back to plot coordinates. */
+    @JvmStatic
+    fun projectForRender(
+        level: Level,
+        point: Vec3,
+        partialTick: Float,
+    ): Vec3? {
+        val render = renderProjection
+        return (if (render == null) project(level, point) else render(level, point, partialTick))
+            ?.takeIf { it.x.isFinite() && it.y.isFinite() && it.z.isFinite() }
+    }
 
     @JvmStatic
     fun within(

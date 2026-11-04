@@ -112,7 +112,7 @@ internal object AttachedDisplayClient {
         }
     }
 
-    fun frame(): List<AttachedDisplayQuad> {
+    fun frame(partialTick: Float): List<AttachedDisplayQuad> {
         val current = context() ?: return emptyList()
         return surfaces.values.flatMap { surface ->
             val peers = surface.tiles.values.associateBy { it.member.position.asLong() }
@@ -135,7 +135,7 @@ internal object AttachedDisplayClient {
                         .subtract(d.scale(0.5))
                 val points =
                     listOf(corner, corner.add(d), corner.add(d).add(r), corner.add(r)).map {
-                        PeripheralWorldPositions.project(current, it)
+                        PeripheralWorldPositions.projectForRender(current, it, partialTick)
                             ?: return@mapNotNull null
                     }
                 val normal =

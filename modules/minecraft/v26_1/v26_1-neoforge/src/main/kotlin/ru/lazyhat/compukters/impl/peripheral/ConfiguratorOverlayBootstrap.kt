@@ -24,29 +24,28 @@ internal object ConfiguratorOverlayBootstrap {
         NeoForge.EVENT_BUS.addListener(::submit)
     }
 
-    private data class Frame(
-        val outlines: List<ru.lazyhat.compukters.minecraft.peripheral.ConfiguratorOutline>,
-        val time: Double,
-    )
-
     private val key =
         net.minecraft.util.context
-            .ContextKey<Frame>(Identifier.fromNamespaceAndPath("compukters", "configurator_overlay"))
+            .ContextKey<List<ConfiguratorOutlineMesh.Vertex>>(Identifier.fromNamespaceAndPath("compukters", "configurator_overlay"))
 
     private fun extract(event: net.neoforged.neoforge.client.event.ExtractLevelRenderStateEvent) {
+        val partialTick = event.deltaTracker.getGameTimeDeltaPartialTick(true)
         event.renderState.setRenderData(
             key,
-            Frame(
+            ConfiguratorOutlineMesh.frame(
                 ConfiguratorOverlayClient.outlines(),
-                event.renderTick + event.deltaTracker.getGameTimeDeltaPartialTick(false).toDouble(),
-            ),
+                event.renderTick + partialTick.toDouble(),
+                event.renderState.cameraRenderState.pos,
+            ) {
+                ru.lazyhat.compukters.minecraft.peripheral.PeripheralWorldPositions
+                    .projectForRender(event.level, it, partialTick)
+            },
         )
     }
 
     private fun submit(event: net.neoforged.neoforge.client.event.SubmitCustomGeometryEvent) {
         val frame = event.levelRenderState.getRenderData(key) ?: return
-        if (frame.outlines.isEmpty()) return
-        val camera = event.levelRenderState.cameraRenderState.pos
+        if (frame.isEmpty()) return
         val pose = event.poseStack
         pose.pushPose()
         event.submitNodeCollector.submitCustomGeometry(
@@ -54,7 +53,7 @@ internal object ConfiguratorOverlayBootstrap {
             net.minecraft.client.renderer.rendertype.RenderTypes
                 .entityTranslucentEmissive(texture),
         ) { saved, vertices ->
-            ConfiguratorOutlineMesh.draw(saved, vertices, frame.outlines, frame.time, camera)
+            ConfiguratorOutlineMesh.draw(saved, vertices, frame)
         }
         pose.popPose()
     }

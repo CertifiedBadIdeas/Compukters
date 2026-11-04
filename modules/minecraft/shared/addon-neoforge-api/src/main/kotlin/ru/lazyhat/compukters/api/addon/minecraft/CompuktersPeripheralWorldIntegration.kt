@@ -29,6 +29,12 @@ object CompuktersPeripheralWorldIntegration {
         PeripheralWorldPositions.install(project, nearby)
     }
 
+    /** Install from physical-client setup. Logical range checks keep using [install]'s projection. */
+    @JvmStatic
+    fun installRenderProjection(project: (Level, Vec3, Float) -> Vec3?) {
+        PeripheralWorldPositions.installRenderProjection(project)
+    }
+
     /** Call before serializing source blocks. Checkpoint publication stays asynchronous. */
     @JvmStatic
     fun prepareTransfer(
