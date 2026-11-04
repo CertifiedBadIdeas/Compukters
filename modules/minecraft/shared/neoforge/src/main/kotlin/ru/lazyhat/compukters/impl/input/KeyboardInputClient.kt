@@ -75,7 +75,7 @@ object KeyboardInputClient {
         }
         KeyboardPerformanceTrace.begin("keyboard.send")?.apply {
             capture = current.toString()
-            this.sequence = sequence
+            this.sequence = KeyboardInputClient.sequence
             keys = held
             commit()
         }
@@ -100,7 +100,7 @@ object KeyboardInputClient {
         ) {
             KeyboardPerformanceTrace.begin("keyboard.send")?.apply {
                 capture = current.toString()
-                this.sequence = sequence
+                this.sequence = KeyboardInputClient.sequence
                 release = true
                 commit()
             }
