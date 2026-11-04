@@ -12,6 +12,7 @@ import net.minecraft.network.protocol.common.ServerboundCustomPayloadPacket
 import net.neoforged.neoforge.client.event.ClientTickEvent
 import org.lwjgl.glfw.GLFW
 import ru.lazyhat.compukters.core.input.KeyboardKeys
+import ru.lazyhat.compukters.core.input.KeyboardPerformanceTrace
 import java.util.UUID
 
 /** Only a server-confirmed, explicitly activated capture can intercept world keys. Mouse look stays native. */
@@ -36,7 +37,7 @@ object KeyboardInputClient {
     @JvmStatic
     fun consumeKey(
         key: Int,
-        @Suppress("UNUSED_PARAMETER") action: Int,
+        action: Int,
     ): Boolean {
         if (token == null) return false
         val client = Minecraft.getInstance()
@@ -45,7 +46,16 @@ object KeyboardInputClient {
             return false
         }
         val index = KeyboardKeys.index(key)
-        return index >= 0 && mask and (1L shl index) != 0L
+        val captured = index >= 0 && mask and (1L shl index) != 0L
+        if (captured) {
+            KeyboardPerformanceTrace.begin("keyboard.raw")?.apply {
+                capture = token.toString()
+                this.key = key
+                this.action = action
+                commit()
+            }
+        }
+        return captured
     }
 
     fun tick(
@@ -62,6 +72,12 @@ object KeyboardInputClient {
         var held = 0L
         KeyboardKeys.codes.forEachIndexed { index, code ->
             if (mask and (1L shl index) != 0L && down(code)) held = held or (1L shl index)
+        }
+        KeyboardPerformanceTrace.begin("keyboard.send")?.apply {
+            capture = current.toString()
+            this.sequence = sequence
+            keys = held
+            commit()
         }
         client.connection?.send(ServerboundCustomPayloadPacket(KeyboardHeldPayload(current, sequence++, held, false)))
     }
@@ -82,6 +98,12 @@ object KeyboardInputClient {
         if (client.connection ===
             connection
         ) {
+            KeyboardPerformanceTrace.begin("keyboard.send")?.apply {
+                capture = current.toString()
+                this.sequence = sequence
+                release = true
+                commit()
+            }
             client.connection?.send(ServerboundCustomPayloadPacket(KeyboardHeldPayload(current, sequence++, 0L, true)))
         }
         net.minecraft.client.KeyMapping

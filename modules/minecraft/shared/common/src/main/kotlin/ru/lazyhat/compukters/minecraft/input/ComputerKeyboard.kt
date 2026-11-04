@@ -13,6 +13,7 @@ import net.minecraft.server.level.ServerPlayer
 import ru.lazyhat.compukters.core.input.KeyboardEndpoint
 import ru.lazyhat.compukters.core.input.KeyboardFrame
 import ru.lazyhat.compukters.core.input.KeyboardInputState
+import ru.lazyhat.compukters.core.input.KeyboardPerformanceTrace
 import ru.lazyhat.compukters.core.input.KeyboardUnavailable
 import ru.lazyhat.compukters.minecraft.computer.ComputerBlockEntity
 import ru.lazyhat.compukters.minecraft.peripheral.PeripheralWorldPositions
@@ -28,6 +29,7 @@ object ComputerKeyboard {
         var epoch: Long? = computer.terminalMachineId
         var player: UUID? = null
         var token: UUID? = null
+        var sequence: Long = -1
     }
 
     private class Store {
@@ -69,7 +71,18 @@ object ComputerKeyboard {
                 val entry =
                     store().computers[computer]?.takeIf { it.owner === owner && valid(it) }
                         ?: throw KeyboardUnavailable("Keyboard computer is unavailable or changed")
-                return entry.input.poll(level.server.overworld().gameTime)
+                return entry.input.poll(level.server.overworld().gameTime).also { frame ->
+                    KeyboardPerformanceTrace.begin("keyboard.snapshot")?.apply {
+                        capture = entry.token?.toString() ?: ""
+                        sequence = entry.sequence
+                        keys = frame.held
+                        pressed = frame.pressed
+                        released = frame.released
+                        tick = frame.tick
+                        connected = frame.connected
+                        commit()
+                    }
+                }
             }
 
             override fun release(owner: Any) {
@@ -105,6 +118,7 @@ object ComputerKeyboard {
         store.players[player.uuid]?.let { stop(level.server, store, it) }
         entry.player = player.uuid
         entry.token = UUID.randomUUID()
+        entry.sequence = -1
         entry.input.connect(level.server.overworld().gameTime)
         store.players[player.uuid] = entry
         sendStatus(player, entry.token, entry.input.mask)
@@ -130,7 +144,16 @@ object ComputerKeyboard {
             stop(level.server, store, entry)
             return
         }
-        entry.input.update(sequence, keys, level.server.overworld().gameTime)
+        val tick = level.server.overworld().gameTime
+        val accepted = entry.input.update(sequence, keys, tick)
+        if (accepted) entry.sequence = sequence
+        KeyboardPerformanceTrace.begin(if (accepted) "keyboard.accepted" else "keyboard.rejected")?.apply {
+            capture = token.toString()
+            this.sequence = sequence
+            this.keys = keys
+            this.tick = tick
+            commit()
+        }
     }
 
     fun tick(server: MinecraftServer) {

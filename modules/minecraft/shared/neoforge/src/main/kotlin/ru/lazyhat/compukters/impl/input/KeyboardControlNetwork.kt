@@ -14,6 +14,7 @@ import net.minecraft.network.protocol.common.custom.CustomPacketPayload
 import net.minecraft.server.level.ServerPlayer
 import net.neoforged.neoforge.network.PacketDistributor
 import net.neoforged.neoforge.network.event.RegisterPayloadHandlersEvent
+import ru.lazyhat.compukters.core.input.KeyboardPerformanceTrace
 import ru.lazyhat.compukters.impl.compat.Identifier
 import ru.lazyhat.compukters.minecraft.input.ComputerKeyboard
 import java.util.UUID
@@ -27,8 +28,25 @@ object KeyboardControlNetwork {
             val player = context.player() as? ServerPlayer ?: return@playToServer
             val level = player.level() as? net.minecraft.server.level.ServerLevel ?: return@playToServer
             val now = level.server.overworld().gameTime
+            KeyboardPerformanceTrace.begin("keyboard.receive")?.apply {
+                capture = payload.token.toString()
+                sequence = payload.sequence
+                keys = payload.keys
+                tick = now
+                release = payload.release
+                commit()
+            }
             // Release is always admissible, including after an earlier held packet in the same tick.
-            if (!payload.release && lastTick[player] == now) return@playToServer
+            if (!payload.release && lastTick[player] == now) {
+                KeyboardPerformanceTrace.begin("keyboard.rate_limited")?.apply {
+                    capture = payload.token.toString()
+                    sequence = payload.sequence
+                    keys = payload.keys
+                    tick = now
+                    commit()
+                }
+                return@playToServer
+            }
             lastTick[player] = now
             ComputerKeyboard.heartbeat(player, payload.token, payload.sequence, payload.keys, payload.release)
         }
