@@ -13,6 +13,11 @@ headings so this page has one stable URL that can be shared outside the reposito
 
 ## 0.7.0 — In development
 
+- Preserve attached display identity, canvas and network membership when a guarded transfer creates
+  a new native plot or permanently removes bulk source storage. Journal recovery reconciles attached
+  surfaces against the coordinator's chosen copy, including rollback. Simple unload is not removal.
+
+
 - Guest command lists capture device calls without sending them. `batch(commands)` applies immediate
   Unit commands in one ordered server-tick delivery and returns an independent result for every
   position. Generated addon hosts explicitly opt in; limits and per-tick quotas apply to the whole group.

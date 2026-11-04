@@ -349,3 +349,10 @@ per-block memberships only when their current exact-instance stamps and provider
 match the structure. One source network is inherited; conflicting networks leave the resulting device
 unbound before the requested binding action. An unambiguous name is retained. Holding the configurator
 only observes structures and never creates stamps or consolidates memberships.
+
+Attached display transfer guards can open before the destination native plot exists. Publication
+requires loaded destination backing blocks matching the captured source. Permanent bulk removal
+notifies active transfer scopes before retiring metadata, proving source vacancy after plot deletion;
+chunk or construction unload must never send that signal. Journal recovery uses the coordinator's
+existing address map and selected authority to relocate saved attached surfaces, without a second
+persisted manifest or a Sable dependency in the host.

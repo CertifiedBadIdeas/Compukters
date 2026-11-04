@@ -247,6 +247,36 @@ internal object AttachedDisplayGameTestScenario {
                         displayPointerTarget(helper.level, aim(move.getValue(a)))?.canvas === moved,
                     "bulk display retirement changed backing blocks or another construction",
                 )
+            }.thenExecute {
+                val from = helper.absolutePos(BlockPos(3, 6, 6))
+                val to = from.east(6)
+                helper.level.setBlockAndUpdate(from, Blocks.QUARTZ_BLOCK.defaultBlockState())
+                val id = AttachedDisplaySurfaces.create(helper.level, from, from, Direction.UP)
+                val mapping = mapOf(from to to)
+                // Recovery starts before either native copy would load. Retain identity through
+                // committed selection, then select the original address during rollback.
+                PeripheralBlockTransfers.recover(helper.level, helper.level, mapping, true).use { recovery ->
+                    helper.level.setBlockAndUpdate(to, Blocks.QUARTZ_BLOCK.defaultBlockState())
+                    helper.level.setBlockAndUpdate(from, Blocks.AIR.defaultBlockState())
+                    recovery.resolve()
+                }
+                helper.assertTrue(
+                    ConfiguratorOverlayServer.collect(helper.level, to).screens.any {
+                        it.id == id && to in it.panels
+                    },
+                    "committed recovery lost attached surface",
+                )
+                PeripheralBlockTransfers.recover(helper.level, helper.level, mapping, false).use { recovery ->
+                    helper.level.setBlockAndUpdate(from, Blocks.QUARTZ_BLOCK.defaultBlockState())
+                    helper.level.setBlockAndUpdate(to, Blocks.AIR.defaultBlockState())
+                    recovery.resolve()
+                }
+                helper.assertTrue(
+                    ConfiguratorOverlayServer.collect(helper.level, from).screens.any {
+                        it.id == id && from in it.panels
+                    },
+                    "rollback recovery lost attached surface",
+                )
             }.thenSucceed()
     }
 }

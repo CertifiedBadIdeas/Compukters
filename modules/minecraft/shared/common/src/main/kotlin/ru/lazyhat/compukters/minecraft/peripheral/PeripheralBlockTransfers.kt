@@ -24,6 +24,7 @@ object PeripheralBlockTransfers {
         removed: (BlockPos) -> Boolean,
     ) {
         check(level.server.isSameThread)
+        active.get().filter { it.source === level }.forEach { it.removing(removed) }
         val positions =
             DisplayStorage
                 .get(level)
@@ -138,6 +139,8 @@ object PeripheralBlockTransfers {
                         DisplayWorldAccess.relocate(originWorld, winner, screen.id, origin, facing)
                     }
                 }
+                ru.lazyhat.compukters.minecraft.display.AttachedDisplayTransfers
+                    .recover(source, destination, positions, committed)
                 entities.filter { it !is DisplayBlockEntity }.forEach(PeripheralNetworkAccess::refresh)
                 PeripheralCableTopologyCache.invalidate(source)
                 PeripheralCableTopologyCache.invalidate(destination)
@@ -238,6 +241,8 @@ object PeripheralBlockTransfers {
         private val surfaceGuards: List<AutoCloseable>,
     ) : AutoCloseable {
         private var closed = false
+
+        internal fun removing(removed: (BlockPos) -> Boolean) = surfaces.removing(removed)
 
         override fun close() {
             check(source.server.isSameThread)

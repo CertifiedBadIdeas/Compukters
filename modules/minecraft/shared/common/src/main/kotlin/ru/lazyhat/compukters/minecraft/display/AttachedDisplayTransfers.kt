@@ -23,6 +23,16 @@ internal class AttachedDisplayTransfers private constructor(
     val sourcePositions: Set<BlockPos> get() = blocks.keys
     val destinationPositions: List<BlockPos> get() = blocks.keys.map { positions.getValue(it) }
 
+    private val removedBacking = mutableSetOf<BlockPos>()
+
+    /** Explicit permanent bulk deletion proves vacancy even after the native plot stops existing. */
+    fun removing(removed: (BlockPos) -> Boolean) {
+        removedBacking.addAll(blocks.keys.filter(removed))
+    }
+
+    private fun vacated(position: BlockPos): Boolean =
+        if (source.hasChunkAt(position)) source.getBlockState(position).isAir else position in removedBacking
+
     fun finish() {
         val directory = DisplayStorage.get(source).directory
         for (captured in screens) {
@@ -31,8 +41,7 @@ internal class AttachedDisplayTransfers private constructor(
                 screen.panels.filter { panel ->
                     val from = DisplayWorldAccess.position(screen, panel.column, panel.row)
                     val to = positions[from] ?: return@filter false
-                    source.hasChunkAt(from) && destination.hasChunkAt(to) &&
-                        source.getBlockState(from).isAir && destination.getBlockState(to).block === blocks[from]
+                    vacated(from) && destination.hasChunkAt(to) && destination.getBlockState(to).block === blocks[from]
                 }
             if (successful.isEmpty()) {
                 for (panel in screen.panels) {
@@ -67,8 +76,8 @@ internal class AttachedDisplayTransfers private constructor(
                 if (piece.panels.all { p ->
                         val old = DisplayWorldAccess.position(piece, p.column, p.row)
                         val next = positions[old]
-                        next == old.offset(translation) && source.hasChunkAt(old) && destination.hasChunkAt(next!!) &&
-                            source.getBlockState(old).isAir && destination.getBlockState(next).block === blocks[old]
+                        next == old.offset(translation) && vacated(old) && destination.hasChunkAt(next!!) &&
+                            destination.getBlockState(next).block === blocks[old]
                     }
                 ) {
                     DisplayWorldAccess.relocate(
@@ -93,6 +102,58 @@ internal class AttachedDisplayTransfers private constructor(
     }
 
     companion object {
+        /** Journal authority is supplied by the coordinator, after obsolete copies are removed. */
+        fun recover(
+            source: ServerLevel,
+            destination: ServerLevel,
+            positions: Map<BlockPos, BlockPos>,
+            committed: Boolean,
+        ) {
+            val winner = if (committed) destination else source
+            for (originWorld in listOf(source, destination).distinct()) {
+                val mappings =
+                    buildList {
+                        if (originWorld === source) add(if (committed) positions else positions.keys.associateWith { it })
+                        if (originWorld ===
+                            destination
+                        ) {
+                            add(
+                                if (committed) {
+                                    positions.values.associateWith { it }
+                                } else {
+                                    positions.entries.associate {
+                                        it.value to
+                                            it.key
+                                    }
+                                },
+                            )
+                        }
+                    }
+                for (screen in DisplayStorage
+                    .get(originWorld)
+                    .directory
+                    .snapshot()
+                    .filter { it.attached }) {
+                    val panels = screen.panels.map { DisplayWorldAccess.position(screen, it.column, it.row) }
+                    val mapping = mappings.firstOrNull { map -> panels.all { it in map } } ?: continue
+                    val translation = mapping.getValue(panels.first()).subtract(panels.first())
+                    require(
+                        panels.all { from ->
+                            val to = mapping.getValue(from)
+                            to == from.offset(translation) && winner.hasChunkAt(to) && !winner.getBlockState(to).isAir
+                        },
+                    ) { "Recovered attached display has missing backing or inconsistent translation" }
+                    DisplayWorldAccess.relocate(
+                        originWorld,
+                        winner,
+                        screen.id,
+                        BlockPos(screen.originX, screen.originY, screen.originZ).offset(translation),
+                        DisplayWorldAccess.facing(screen),
+                    )
+                }
+            }
+        }
+
         fun begin(
             source: ServerLevel,
             destination: ServerLevel,
@@ -109,7 +170,8 @@ internal class AttachedDisplayTransfers private constructor(
                 for (panel in screen.panels) {
                     val from = DisplayWorldAccess.position(screen, panel.column, panel.row)
                     val to = positions[from] ?: continue
-                    require(destination.hasChunkAt(to)) { "Load display destinations before transfer" }
+                    // The coordinator may materialize a new native plot only after guards open.
+                    // finish still requires loaded, matching destination backing blocks.
                     require(targetDirectory.attachedAt(to.x, to.y, to.z) == null) { "Transfer destination already carries a display" }
                 }
             }
