@@ -63,8 +63,9 @@ program ownership descriptors, using persistent engine UUIDs through the shared 
 rebinding restores power, steering and thrust overrides before Guest execution continues; missing/replaced engines
 remain stale, and ownership conflicts abort restoration and release partially acquired leases. Engine startup,
 nozzle interpolation and construction physics remain upstream-owned. Thrust may lapse while the computer is unloaded
-or restoring; physics is not paused. An unused Create host opts in with empty state, while active unsupported Create
-resources still reject capture and select cold boot.
+or restoring; physics is not paused. Unused Create, Connected and Aeronautics hosts opt in with empty state;
+active unsupported Create resources, Connected battery sessions and Aeronautics servo sessions still reject
+capture and select cold boot.
 
 ## Close barriers and persistence work
 

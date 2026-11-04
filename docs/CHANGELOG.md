@@ -29,6 +29,9 @@ headings so this page has one stable URL that can be shared outside the reposito
 - Optional Create 2.2 and Propulsion 3.2 APIs report actual tank and auxiliary burner fuel stock.
   Aeronautics 1.2 reports native connector extension, locking, release and retained fluid buffers. The independent
   Connected 1.0 addon reads finite kinetic battery charge and provides program-owned discharge control.
+  Installing Connected or Aeronautics preserves unrelated running programs across unload and ship transfer
+  when their battery/servo hosts are unused. Active battery and servo control sessions still do not support
+  saved execution.
 
 - World filesystem storage accepts canonical Windows paths supplied by Java while retaining exclusive
   ownership and rejecting symbolic links and unresolved parent traversal.
