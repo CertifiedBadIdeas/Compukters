@@ -32,6 +32,7 @@ import ru.lazyhat.compukters.api.addon.ProgramAddonHost
 import ru.lazyhat.compukters.core.device.runtime.peripheral.PeripheralProgramHost
 import ru.lazyhat.compukters.core.device.runtime.program.programAddonHostOf
 import ru.lazyhat.compukters.core.device.runtime.program.programScopedAddonHostOf
+import ru.lazyhat.compukters.core.device.runtime.program.withCommandBatches
 import ru.lazyhat.compukters.core.network.ComputerNetworkProgramHost
 import ru.lazyhat.compukters.lang.runtime.capability.HostCapabilitySchema
 import ru.lazyhat.compukters.lang.runtime.capability.HostRecordField
@@ -207,7 +208,7 @@ object ComputerAddonHosts {
                         requireAddonCapabilitySchemas(registration.guestApiBundles, host.capabilitySchemas)
                     }
                 }
-                programAddonHostOf(hosts)
+                withCommandBatches(programAddonHostOf(hosts))
             } catch (failure: Throwable) {
                 hosts.asReversed().forEach { host -> runCatching(host::close).onFailure(failure::addSuppressed) }
                 throw failure

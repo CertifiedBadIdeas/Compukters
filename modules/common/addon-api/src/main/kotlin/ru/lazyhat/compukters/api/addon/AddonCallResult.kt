@@ -57,6 +57,9 @@ sealed interface AddonCallResult<out T> {
 }
 
 interface AddonHostHandler : AutoCloseable {
+    /** Canonical external Unit method names that complete immediately and may run in a command batch. */
+    val batchCommands: Set<String> get() = emptySet()
+
     fun checkpoint(): ByteArray = throw UnsupportedOperationException("Addon handler does not support hibernation")
 
     fun restoreCheckpoint(state: ByteArray) {

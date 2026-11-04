@@ -1727,6 +1727,44 @@ class MinimalScriptLoweringTest {
         }
 
     @Test
+    fun `command descriptions capture values and batch results remain positional`() =
+        withAdapter { adapter ->
+            val source =
+                """
+                import compukter.commands.*
+                fun main() {
+                    check(batch(emptyList()).isEmpty())
+                    val bytes = byteArrayOf(1, 2)
+                    val first = Command.unit("fixture.Binding.write", listOf(CommandArgument.int(7), CommandArgument.double(0.4), CommandArgument.bytes(bytes)))
+                    bytes[0] = 99
+                    val second = Command.unit("fixture.Binding.missing", emptyList())
+                    val commands = listOf(first, second)
+                    val results = batch(commands)
+                    check(results.size == 2 && results[0].isSuccess && results[1].isFailure)
+                    results[0].getOrThrow()
+                    val failure = results[1].exceptionOrNull()
+                    check(failure != null && failure.kind == CommandFailureKind.UNAVAILABLE)
+                    repeat(2) {
+                        try { results[1].getOrThrow(); error("failure lost") }
+                        catch (caught: CommandException) { check(caught === failure) }
+                    }
+                    val repeated = batch(commands)
+                    check(repeated[0].isSuccess && repeated[1].exceptionOrNull() !== failure)
+                    val tooMany = ArrayList<Command<Unit>>()
+                    repeat(33) { tooMany.add(first) }
+                    try { batch(tooMany); error("oversize list was submitted") }
+                    catch (expected: IllegalArgumentException) {}
+                    println("commands ok")
+                }
+                """.trimIndent()
+            val result = adapter.compile(request(source))
+            val bytes = assertNotNull(result.artifact, result.diagnostics.joinToString()).toByteArray()
+            System.getProperty("compukter.vm.commandsArtifact")?.let { output ->
+                Path.of(output).also { it.parent.createDirectories() }.writeBytes(bytes)
+            }
+        }
+
+    @Test
     fun `task tick sleep lowers to one asynchronous timer request`() =
         withAdapter { adapter ->
             val source =

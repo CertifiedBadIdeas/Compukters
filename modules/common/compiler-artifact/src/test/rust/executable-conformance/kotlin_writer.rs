@@ -260,6 +260,7 @@ fn main() {
             let mut session = k2_stdio_session_with_heap("COMPUKTER_KOTLIN_ASYNC_ARTIFACT", 64, 256 * 1024);
             k2_assert_prints(&mut session, ["async ok\n"], 64);
         },
+        "commands" => k2_command_batches_capture_and_return_positional_results(),
         "tasks" => k2_tasks_keep_independent_host_requests_in_flight(),
         "timer" => k2_timer_sleep_publishes_one_bounded_request(),
         "when" => k2_bounded_when_selects_matched_and_fallback_branches(),
@@ -2825,4 +2826,77 @@ fn execute_primitive_program_with_profile(path: impl AsRef<std::path::Path>, pro
         }
     }
     panic!("primitive program failed to finish within bounded slices");
+}
+
+fn k2_command_batches_capture_and_return_positional_results() {
+    let path = std::env::var("COMPUKTER_KOTLIN_COMMANDS_ARTIFACT").unwrap();
+    let verified = verify_artifact(Arc::from(fs::read(path).unwrap()), ArtifactLimits::default()).unwrap();
+    let stdio_arguments = [HostValueType::String];
+    let stdio_operations = [
+        OperationSchema::asynchronous(&[], HostValueType::String),
+        OperationSchema::synchronous(&stdio_arguments, HostValueType::Unit),
+        OperationSchema::synchronous(&stdio_arguments, HostValueType::Unit),
+    ];
+    let bytes_arguments = [HostValueType::ByteArray];
+    let command_operations = [OperationSchema::asynchronous(&bytes_arguments, HostValueType::ByteArray)];
+    let capabilities = [
+        CapabilityBinding::new("compukter", "stdio", 1, 0, &stdio_operations),
+        CapabilityBinding::new("compukters", "commands", 1, 0, &command_operations),
+    ];
+    let profile = ExecutionProfile {
+        heap_bytes: 256 * 1024, frame_storage_bytes: 1024 * 1024,
+        maximum_call_depth: 64, maximum_coroutines: 64, maximum_channels: 0, maximum_channel_values: 0,
+        maximum_host_requests: 64, maximum_events: 0, maximum_slice_budget: u32::MAX,
+        compiler_abi: [0; 32], platform_abi: [0; 32], maximum_host_arguments: 16,
+        maximum_outbound_utf16_code_units: 4096, maximum_inbound_utf16_code_units: 4096,
+        maximum_accepted_responses: 64, entry_argument_limits: entry_argument_limits(),
+    };
+    let mut session = Session::admit(verified, profile, &capabilities).unwrap();
+    session.start(&[]).unwrap();
+    fn text(output: &mut Vec<u8>, value: &str) {
+        let units: Vec<_> = value.encode_utf16().collect();
+        output.extend_from_slice(&(units.len() as u16).to_le_bytes());
+        for unit in units { output.extend_from_slice(&unit.to_le_bytes()); }
+    }
+    let mut expected = vec![1, 2];
+    text(&mut expected, "fixture.Binding.write");
+    expected.extend_from_slice(&[3, 1]); text(&mut expected, "7");
+    expected.push(4); text(&mut expected, "0.4");
+    expected.extend_from_slice(&[8, 2, 0, 1, 2]);
+    text(&mut expected, "fixture.Binding.missing"); expected.push(0);
+    let mut response = vec![1, 2, 0, 2]; text(&mut response, "stale");
+    let mut submissions = 0;
+    let mut printed = false;
+    for _ in 0..100_000 {
+        let mut replies = Vec::new();
+        match session.advance(128, 64).unwrap() {
+            AdvanceOutcome::SliceExhausted => {},
+            AdvanceOutcome::HostRequestBatch(batch) => {
+                assert_eq!(batch.len(), 1, "a logical batch remains one capability request");
+                let request = batch.get(0).unwrap();
+                if request.namespace() == "compukters" {
+                    assert_eq!(request.name(), "commands");
+                    assert_eq!(request.operation(), 0);
+                    assert_eq!(request.arguments().get(0), Some(HostValueView::ByteArray(&expected)));
+                    submissions += 1;
+                    replies.push((request.task_id(), request.id(), true));
+                } else {
+                    assert_eq!(request.namespace(), "compukter");
+                    assert_eq!(request.name(), "stdio");
+                    assert_eq!(request.operation(), 1);
+                    assert_eq!(request.arguments().get(0), Some(HostValueView::String(&utf16("commands ok\n"))));
+                    assert_eq!(submissions, 2);
+                    printed = true;
+                    replies.push((request.task_id(), request.id(), false));
+                }
+            },
+            AdvanceOutcome::Halted(None) => { assert!(printed && submissions == 2); return; },
+            other => panic!("unexpected command batch outcome: {other:?}"),
+        }
+        for (task, id, command) in replies {
+            let value = if command { HostValueInput::ByteArray(&response) } else { HostValueInput::Unit };
+            session.resume_for(task, id, HostResponse::Success(value)).unwrap();
+        }
+    }
+    panic!("command batch program did not finish");
 }

@@ -23,6 +23,7 @@ import ru.lazyhat.compukters.api.addon.ProgramAddonCompletion
 import ru.lazyhat.compukters.api.addon.ProgramAddonDispatch
 import ru.lazyhat.compukters.api.addon.ProgramAddonHost
 import ru.lazyhat.compukters.api.addon.ProgramAddonRequest
+import ru.lazyhat.compukters.api.commands.ProgramCommandProvider
 import ru.lazyhat.compukters.lang.runtime.capability.HostCapabilitySchema
 
 internal object EmptyProgramAddonHost : ProgramAddonHost {
@@ -48,8 +49,10 @@ fun programAddonHostOf(hosts: List<ProgramAddonHost>): ProgramAddonHost =
 
 private class CompositeProgramAddonHost(
     hosts: List<ProgramAddonHost>,
-) : ProgramAddonHost {
+) : ProgramAddonHost,
+    ProgramCommandProvider {
     private val hosts = hosts.toList()
+    override val commandBindings = this.hosts.filterIsInstance<ProgramCommandProvider>().flatMap { it.commandBindings }
     override val capabilitySchemas: List<HostCapabilitySchema> = this.hosts.flatMap(ProgramAddonHost::capabilitySchemas)
     private val routes =
         buildMap {

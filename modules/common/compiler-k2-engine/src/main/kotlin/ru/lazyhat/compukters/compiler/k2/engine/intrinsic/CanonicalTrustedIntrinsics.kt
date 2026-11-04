@@ -37,10 +37,26 @@ object CanonicalTrustedIntrinsics {
     val peripheral = PlatformCapabilityId("compukters", "peripheral", 1)
     val keyboard = PlatformCapabilityId("compukters", "keyboard", 1)
     val network = PlatformCapabilityId("compukters", "network", 1)
+    val commands = PlatformCapabilityId("compukters", "commands", 1)
     val timer = PlatformCapabilityId("compukter", "timer", 1)
 
     val executableCapabilities: Set<PlatformCapabilityId> =
-        setOf(terminal, stdio, process, filesystem, compiler, redstone, redstonePort, sound, display, peripheral, network, keyboard, timer)
+        setOf(
+            terminal,
+            stdio,
+            process,
+            filesystem,
+            compiler,
+            redstone,
+            redstonePort,
+            sound,
+            display,
+            peripheral,
+            network,
+            keyboard,
+            timer,
+            commands,
+        )
 
     val registry: TrustedIntrinsicRegistry = TrustedIntrinsicRegistry.create(registrations())
 
@@ -374,6 +390,8 @@ object CanonicalTrustedIntrinsics {
                     true,
                 )
             }
+
+            capability("compukter", "core", "compukter.commands", "CommandBindings.submit", "fun(ByteArray):ByteArray", commands, 0u, true)
 
             listOf(
                 Triple("open", "fun(Long):Int", 0u),

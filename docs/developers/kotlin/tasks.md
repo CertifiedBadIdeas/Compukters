@@ -86,6 +86,41 @@ returning from main still ends the process and its remaining tasks.
 **Evidence:** `MinimalScriptLoweringTest`, test `async results preserve typed values captures and repeated
 task failures`, and `testKotlinAsyncVmConformance` execute the actual Guest library through the pinned VM.
 
+## Device command lists
+
+**Status:** Supported for explicitly opted-in immediate Unit commands.
+
+`compukter.commands.Command<Unit>` describes a call without submitting it. Addon device members such
+as `engine.setThrottleCommand(0.4)` snapshot their handle and arguments immediately. They are ordinary
+members in completion, inside and outside tasks. `batch(commands)` submits the whole list as one
+request, applies commands in list order in one server-thread delivery, and returns positional
+`CommandResult<Unit>` values. A failed command does not cancel later commands or undo earlier effects.
+Use `getOrThrow()` to throw that position's stored `CommandException`, or inspect `isFailure` and
+`exceptionOrNull()`. A failed submission itself throws from `batch`.
+
+```kotlin
+import compukter.commands.batch
+import compukter.concurrent.async
+
+val commands = listOf(left.setThrottleCommand(0.4), right.setThrottleCommand(0.4))
+val pending = async { batch(commands) }
+val results = pending.await()
+for (result in results) result.getOrThrow()
+```
+
+Each submission has at most 32 commands and 4096 encoded request/response bytes. The configured
+per-tick host-request allowance also counts every nested command (16 by default). A group larger than
+that full allowance fails without execution. If only the remainder of the current tick is insufficient,
+the whole group waits for the next tick. Synchronous world callbacks may observe intermediate effects;
+the group provides neither rollback nor isolation. An empty list performs no host work, duplicate
+positions execute separately, and reusing the list executes it again. Closing or losing a device after
+description creation is reported when that command executes. Waiting operations and non-Unit methods
+are unavailable as batch commands.
+
+**Evidence:** `testKotlinCommandsVmConformance` executes the actual Guest encoder/decoder through the
+pinned VM; `CommandBatchProgramHostTest`, `ProgramRuntimeHostTest` and
+`GeneratedCommandContractTest` cover ordered failures, validation, quotas and generated SDK dispatch.
+
 ## Bounded integer channels
 
 **Status:** Unsupported.

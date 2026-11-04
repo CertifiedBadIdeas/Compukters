@@ -13,6 +13,10 @@ headings so this page has one stable URL that can be shared outside the reposito
 
 ## 0.7.0 — In development
 
+- Guest command lists capture device calls without sending them. `batch(commands)` applies immediate
+  Unit commands in one ordered server-tick delivery and returns an independent result for every
+  position. Generated addon hosts explicitly opt in; limits and per-tick quotas apply to the whole group.
+
 - Guest Kotlin adds top-level `async`, typed `Deferred.await()` and ordered `awaitAll` over cooperative
   tasks. Repeated awaits preserve values and original task exceptions; ordinary direct vararg calls
   use typed arrays, including empty argument lists.

@@ -773,6 +773,15 @@ registerKotlinVmConformance(
     conformanceScenario = "async",
 )
 registerKotlinVmConformance(
+    taskName = "testKotlinCommandsVmConformance",
+    taskDescription = "Executes immutable Guest command batches through the bounded native capability transport.",
+    artifactTask = ":compiler-k2:generateCommandsConformanceArtifact",
+    artifact = project(":compiler-k2").layout.buildDirectory.file("generated/conformance/commands.cpkt"),
+    cargoTargetDirectory = ".toolchain/build/cargo/compiler-k2-commands-conformance",
+    artifactEnvironmentVariable = "COMPUKTER_KOTLIN_COMMANDS_ARTIFACT",
+    conformanceScenario = "commands",
+)
+registerKotlinVmConformance(
     taskName = "testKotlinTimerVmConformance",
     taskDescription = "Executes a K2-produced server-tick Guest task delay request.",
     artifactTask = ":compiler-k2:generateTimerConformanceArtifact",

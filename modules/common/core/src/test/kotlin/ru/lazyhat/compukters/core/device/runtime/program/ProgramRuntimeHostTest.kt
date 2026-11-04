@@ -225,6 +225,78 @@ class ProgramRuntimeHostTest {
     }
 
     @Test
+    fun `weighted command group waits intact for next tick credit and is dispatched once`() {
+        val ordinary = VmHostRequest(1, TEST_ADDON_CAPABILITY, 1, listOf(VmValue.I32(3)))
+        val group = commandGroup(2, 3)
+        val session =
+            ScriptedSession(
+                listOf(
+                    VmOutcome.HostRequestBatch(listOf(ordinary)),
+                    VmOutcome.HostRequestBatch(listOf(group)),
+                    VmOutcome.HostRequestBatch(listOf(group)),
+                    VmOutcome.HostRequestBatch(listOf(group)),
+                    VmOutcome.WaitingForHostQuota,
+                ),
+                defaultOutcome = VmOutcome.WaitingForHostQuota,
+            )
+        var tick = 10L
+        val dispatched = ArrayList<Pair<Long, Long>>()
+        val host =
+            ProgramRuntimeHost(
+                sessionFactory = ProgramVmSessionFactory { session },
+                tickBudget = ProgramTickBudget(maximumAdvancesPerTick = 8, hostRequestsPerTick = 3),
+                addonCapabilitySchemas = listOf(TEST_ADDON_SCHEMA, CommandBatchProgramHost.SCHEMA),
+                addonRequestPort = {
+                    dispatched += tick to it.identity.requestId
+                    true
+                },
+            )
+        host.start(byteArrayOf(1))
+        host.serverTick(tick)
+        assertEquals(listOf(10L to 1L), dispatched)
+        tick = 11
+        host.serverTick(tick)
+        assertEquals(listOf(10L to 1L, 11L to 2L), dispatched)
+        host.serverTick(tick)
+        assertEquals(2, dispatched.size)
+    }
+
+    @Test
+    fun `command group larger than an entire tick grant fails without submission`() {
+        val group = commandGroup(1, 4)
+        val session = ScriptedSession(listOf(VmOutcome.HostRequestBatch(listOf(group)), VmOutcome.WaitingForHostQuota))
+        var submitted = false
+        val host =
+            ProgramRuntimeHost(
+                sessionFactory = ProgramVmSessionFactory { session },
+                tickBudget = ProgramTickBudget(hostRequestsPerTick = 3),
+                addonCapabilitySchemas = listOf(CommandBatchProgramHost.SCHEMA),
+                addonRequestPort = {
+                    submitted = true
+                    true
+                },
+            )
+        host.start(byteArrayOf(1))
+        host.serverTick(10)
+        assertFalse(submitted)
+        assertIs<HostResponse.Failure>(session.responses.single().second)
+    }
+
+    private fun commandGroup(
+        id: Long,
+        count: Int,
+    ): VmHostRequest {
+        val bytes =
+            ru.lazyhat.compukters.api.commands.CommandBatchCodec.encode(
+                List(count) {
+                    ru.lazyhat.compukters.api.commands.CommandBatchCodec
+                        .Command("fixture.Binding.write", listOf(VmValue.I32(it)))
+                },
+            )
+        return VmHostRequest(id, CommandBatchProgramHost.SCHEMA.identity, 0, listOf(VmValue.ByteArrayValue(bytes)))
+    }
+
+    @Test
     fun `same tick continuations share advance and host quotas`() {
         val request = VmHostRequest(1, TEST_ADDON_CAPABILITY, 1, listOf(VmValue.I32(3)))
         val session =

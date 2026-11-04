@@ -68,6 +68,8 @@ fun renderAddonHostContract(
         appendLine("import ru.lazyhat.compukters.api.addon.ProgramAddonDispatch")
         appendLine("import ru.lazyhat.compukters.api.addon.ProgramAddonHost")
         appendLine("import ru.lazyhat.compukters.api.addon.ProgramAddonRequest")
+        appendLine("import ru.lazyhat.compukters.api.commands.ProgramCommandBinding")
+        appendLine("import ru.lazyhat.compukters.api.commands.ProgramCommandProvider")
         appendLine("import ru.lazyhat.compukters.lang.runtime.capability.HostCapabilitySchema")
         appendLine("import ru.lazyhat.compukters.lang.runtime.capability.HostOperationSchema")
         appendLine("import ru.lazyhat.compukters.lang.runtime.capability.HostResponse")
@@ -126,9 +128,57 @@ fun renderAddonHostContract(
         handlers.forEach { (capability, handlerName) ->
             appendLine("    private val ${capability.name}Handler: $handlerName,")
         }
-        appendLine(") : ProgramAddonHost {")
+        appendLine(") : ProgramAddonHost, ProgramCommandProvider {")
         appendLine("    private val pending = linkedMapOf<VmHostRequestIdentity, () -> HostResponse?>()")
         appendLine("    override val capabilitySchemas: List<HostCapabilitySchema> = SCHEMAS")
+        appendLine()
+        appendLine("    override val commandBindings: List<ProgramCommandBinding> = buildList {")
+        capabilities.forEach { capability ->
+            bindings.getValue(capability).sortedBy(AddonGuestApiBinding::operation).forEach { binding ->
+                val operation = schemas.getValue(binding.capability).operations[binding.operation]
+                if (operation.result != AddonCapabilityValueType.UNIT) return@forEach
+                val types = operation.arguments.joinToString { "HostValueType.${it.name}" }
+                appendLine("        if (${capability.name}Handler.batchCommands.contains(\"${binding.callableName}\")) {")
+                appendLine(
+                    "            add(ProgramCommandBinding(\"${binding.symbol}\", ${capability.identityConstant()}, ${binding.operation}, listOf($types), command@ { arguments ->",
+                )
+                appendLine("                if (arguments.size != ${operation.arguments.size}) return@command invalidCommand()")
+                operation.arguments.forEachIndexed { index, type ->
+                    val decode = type.decodeExpression(index).replace("request.arguments", "arguments")
+                    appendLine("                val argument$index = $decode ?: return@command invalidCommand()")
+                }
+                val arguments = operation.arguments.indices.joinToString { "argument$it" }
+                appendLine("                acceptCommand(${capability.name}Handler.${binding.callableName}($arguments))")
+                appendLine("            }))")
+                appendLine("        }")
+            }
+        }
+        appendLine("    }")
+        appendLine()
+        appendLine("    init {")
+        capabilities.forEach { capability ->
+            val names =
+                bindings
+                    .getValue(capability)
+                    .filter { schemas.getValue(it.capability).operations[it.operation].result == AddonCapabilityValueType.UNIT }
+                    .joinToString { "\"${it.callableName}\"" }
+            appendLine(
+                "        require(${capability.name}Handler.batchCommands.all { it in setOf<String>($names) }) { \"Batch commands must name immediate Unit methods\" }",
+            )
+        }
+        appendLine("    }")
+        appendLine()
+        appendLine(
+            "    private fun invalidCommand(): HostResponse = HostResponse.Failure(HostFailureKind.OTHER, \"Malformed command arguments\")",
+        )
+        appendLine()
+        appendLine("    private fun acceptCommand(result: AddonCallResult<Unit>): HostResponse = when (result) {")
+        appendLine("        is AddonCallResult.Completed -> HostResponse.UnitSuccess")
+        appendLine("        is AddonCallResult.Failed -> HostResponse.Failure(result.kind, result.detail)")
+        appendLine(
+            "        is AddonCallResult.Pending -> HostResponse.Failure(HostFailureKind.OTHER, \"Command handler attempted to wait\")",
+        )
+        appendLine("    }")
         appendLine()
         appendLine("    override fun dispatch(request: ProgramAddonRequest): ProgramAddonDispatch =")
         appendLine("        when (request.capability) {")

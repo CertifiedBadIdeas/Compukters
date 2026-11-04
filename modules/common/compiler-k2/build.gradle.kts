@@ -759,6 +759,21 @@ val generateAsyncConformanceArtifact = tasks.register<Test>("generateAsyncConfor
     systemProperty("compukter.vm.asyncArtifact", output.get().asFile.absolutePath)
 }
 
+val generateCommandsConformanceArtifact = tasks.register<Test>("generateCommandsConformanceArtifact") {
+    description = "Compiles immutable command descriptions and positional batch results."
+    group = "verification"
+    dependsOn(tasks.jar)
+    useJUnitPlatform()
+    testClassesDirs = sourceSets.test.get().output.classesDirs
+    classpath = sourceSets.test.get().runtimeClasspath
+    filter.includeTestsMatching("*command descriptions capture values and batch results remain positional*")
+    inputs.file(workerJar)
+    val output = layout.buildDirectory.file("generated/conformance/commands.cpkt")
+    outputs.file(output)
+    systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
+    systemProperty("compukter.vm.commandsArtifact", output.get().asFile.absolutePath)
+}
+
 val generateTimerConformanceArtifact = tasks.register<Test>("generateTimerConformanceArtifact") {
     description = "Compiles a server-tick Guest task delay for pinned VM conformance."
     group = "verification"

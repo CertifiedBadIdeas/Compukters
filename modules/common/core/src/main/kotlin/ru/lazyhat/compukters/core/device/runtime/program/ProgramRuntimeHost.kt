@@ -21,6 +21,7 @@ package ru.lazyhat.compukters.core.device.runtime.program
 import ru.lazyhat.compukters.api.addon.ProgramAddonAction
 import ru.lazyhat.compukters.api.addon.ProgramAddonCompletion
 import ru.lazyhat.compukters.api.addon.ProgramAddonRequest
+import ru.lazyhat.compukters.api.commands.CommandBatchCodec
 import ru.lazyhat.compukters.compiler.runtime.CompilerSubmissionResult
 import ru.lazyhat.compukters.core.device.runtime.compiler.CompilerCompletionRouter
 import ru.lazyhat.compukters.core.device.runtime.compiler.ComputerCompilationAddress
@@ -468,23 +469,57 @@ class ProgramRuntimeHost internal constructor(
 
                 is VmOutcome.HostRequestBatch -> {
                     check(outcome.requests.size <= requestAllowance) { "native VM exceeded supplied host request batch allowance" }
-                    val charges = outcome.requests.map { HostCharge(activeVmEpoch, programId, it.identity) }.toSet()
-                    val fresh =
-                        charges.count {
-                            it !in chargedHostRequests &&
-                                (
-                                    pendingAddonRequests[it.identity]?.programId != programId &&
-                                        pendingTimerRequests[it.identity]?.programId != programId
-                                )
+                    val newlyReported =
+                        outcome.requests.count { request ->
+                            HostCharge(activeVmEpoch, programId, request.identity) !in chargedHostRequests &&
+                                pendingAddonRequests[request.identity]?.programId != programId &&
+                                pendingTimerRequests[request.identity]?.programId != programId
                         }
-                    check(fresh <= remainingHostRequests) { "native VM exceeded supplied new host request budget" }
-                    remainingHostRequests -= fresh
-                    chargedHostRequests.addAll(charges)
-                    val redstone = outcome.requests.filter(::isRedstoneOutputRequest)
-                    val sound = outcome.requests.filter(::isSoundRequest)
-                    val timers = outcome.requests.filter(::isTimerRequest)
-                    val addon = outcome.requests.filter(::isAddonRequest)
-                    outcome.requests
+                    check(newlyReported <= remainingHostRequests) { "native VM exceeded supplied new host request budget" }
+                    val deliverable = ArrayList<VmHostRequest>()
+                    var fresh = 0
+                    var deferredGroup = false
+                    for (request in outcome.requests) {
+                        val charge = HostCharge(activeVmEpoch, programId, request.identity)
+                        val uncharged =
+                            charge !in chargedHostRequests &&
+                                pendingAddonRequests[request.identity]?.programId != programId &&
+                                pendingTimerRequests[request.identity]?.programId != programId
+                        if (!uncharged) {
+                            deliverable += request
+                            continue
+                        }
+                        val cost = commandRequestCost(request)
+                        if (cost > tickBudget.hostRequestsPerTick) {
+                            if (remainingHostRequests == 0) {
+                                deferredGroup = true
+                                continue
+                            }
+                            remainingHostRequests--
+                            fresh++
+                            chargedHostRequests += charge
+                            if (!resume(
+                                    request,
+                                    HostResponse.Failure(HostFailureKind.OTHER, "Command group exceeds per-tick host budget"),
+                                )
+                            ) {
+                                return
+                            }
+                        } else if (cost > remainingHostRequests) {
+                            // Keep the whole native request parked; a later tick admits it without splitting.
+                            deferredGroup = true
+                        } else {
+                            remainingHostRequests -= cost
+                            fresh++
+                            chargedHostRequests += charge
+                            deliverable += request
+                        }
+                    }
+                    val redstone = deliverable.filter(::isRedstoneOutputRequest)
+                    val sound = deliverable.filter(::isSoundRequest)
+                    val timers = deliverable.filter(::isTimerRequest)
+                    val addon = deliverable.filter(::isAddonRequest)
+                    deliverable
                         .asSequence()
                         .filterNot(::isRedstoneOutputRequest)
                         .filterNot(::isSoundRequest)
@@ -526,6 +561,7 @@ class ProgramRuntimeHost internal constructor(
                         return
                     }
                     // Re-reporting a parked request with no retired work cannot make progress until its owner replies.
+                    if (deferredGroup) return
                     if (fresh == 0 && retirementAllowance != Int.MAX_VALUE && retiredInstructionsLastTick == retiredBeforeAdvance) return
                 }
 
@@ -534,6 +570,16 @@ class ProgramRuntimeHost internal constructor(
                     return
                 }
             }
+        }
+    }
+
+    private fun commandRequestCost(request: VmHostRequest): Int {
+        if (request.capability != CommandBatchProgramHost.SCHEMA.identity || request.operation != 0) return 1
+        val bytes = (request.arguments.singleOrNull() as? VmValue.ByteArrayValue)?.value ?: return 1
+        return try {
+            CommandBatchCodec.decode(bytes).size
+        } catch (_: IllegalArgumentException) {
+            1 // The server rejects malformed input without dispatching a command.
         }
     }
 

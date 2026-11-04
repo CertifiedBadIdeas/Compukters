@@ -11,6 +11,31 @@ permalink: /ARCHITECTURE/abi/
 
 This reference groups versioned representation boundaries by the version that introduced them. Those versions are minimum feature requirements, not a claim that older Runtime distributions implement today’s platform. The source owners below define the active contract. Before changing a wire format, inspect each producer, consumer and verifier. Runtime release pins in `build-scripts/src/main/kotlin/RuntimeBundleSupport.kt` describe published bundles separately from the local VM checkout.
 
+## Device command groups
+
+`compukter:core` 9.5.0 adds `compukters:commands` ABI 1.0, asynchronous operation 0
+`submit(ByteArray):ByteArray`, over the existing capability transport. Artifact, CAGB and native VM
+encodings are unchanged. SDK 0.7.0 adds `AddonHostHandler.batchCommands`: an explicit set of immediate
+Unit callable names. Generated `ProgramCommandProvider` entries derive binding symbols, capability
+identities, selectors and argument types from the existing canonical addon contract. They invoke the
+same program-scoped handler; a pending result becomes a per-command failure and is never polled.
+
+`CommandBatchCodec` owns wire version 1. Both packets are bounded to 4096 bytes, with 1..32 commands.
+The request starts with U8 version=1 and U8 count, followed by command entries: UTF-16 symbol,
+U8 argument count (0..32), then tagged arguments. UTF-16 fields use U16 little-endian code-unit count
+and U16 little-endian units. Symbols are 1..256 units from letters, digits, `_`, `.` and `$`.
+Tags 1..7 encode I32, I64, F32, F64, Boolean, Char and String as UTF-16 text; tag 8 is U16 little-endian
+byte length followed by bytes. Numeric text uses Kotlin scalar conversion, including signed zero;
+NaN payload bits are not retained. Boolean text must be `true` or `false`, Char has exactly one unit.
+All entries and the exact packet end are validated before execution.
+
+Responses start with the same U8 version/count, followed by one U8 status per command: 0=Unit success,
+1=EOF, 2=Unavailable, 3=I/O, 4=Cancelled, 5=Other. Failures append a UTF-16 message bounded to 48 units;
+truncation does not split a surrogate pair. Unknown symbols/type mismatches fail only that position.
+Each group runs synchronously in one program-scoped server-thread callback, with no rollback or
+isolation from world callbacks. Nested commands consume host-request quota individually; a group
+is deferred intact if the current tick lacks credits, or rejected if it exceeds the full tick allowance.
+
 ## In-world keyboard input
 
 `compukter:core` 9.3.0 adds the independent host capability `compukters:keyboard` ABI 1.0:

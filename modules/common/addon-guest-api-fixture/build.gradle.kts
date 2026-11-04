@@ -22,4 +22,13 @@ plugins {
 
 dependencies {
     implementation(projects.addonApi)
+    testImplementation(kotlin("test"))
+}
+
+tasks.processResources {
+    dependsOn("assembleAddonGuestApiBundle")
+    from(layout.buildDirectory.file("addon-guest-api/${project.name}.cagb")) {
+        into("META-INF/compukters/addons")
+        rename { "fixture.cagb" }
+    }
 }
