@@ -256,6 +256,10 @@ fn main() {
         "inline-blocks" => k2_inline_blocks_preserve_returns_results_and_effects(),
         "function-values" => k2_function_values_preserve_distinct_captures_and_dispatch(),
         "transparent-call" => k2_ordinary_project_call_resumes_across_async_capability(),
+        "async" => {
+            let mut session = k2_stdio_session_with_heap("COMPUKTER_KOTLIN_ASYNC_ARTIFACT", 64, 256 * 1024);
+            k2_assert_prints(&mut session, ["async ok\n"], 64);
+        },
         "tasks" => k2_tasks_keep_independent_host_requests_in_flight(),
         "timer" => k2_timer_sleep_publishes_one_bounded_request(),
         "when" => k2_bounded_when_selects_matched_and_fallback_branches(),

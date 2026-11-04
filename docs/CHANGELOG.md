@@ -13,6 +13,10 @@ headings so this page has one stable URL that can be shared outside the reposito
 
 ## 0.7.0 — In development
 
+- Guest Kotlin adds top-level `async`, typed `Deferred.await()` and ordered `awaitAll` over cooperative
+  tasks. Repeated awaits preserve values and original task exceptions; ordinary direct vararg calls
+  use typed arrays, including empty argument lists.
+
 - IDE local projects and compiler snapshots support protected Windows filesystem traversal, including
   Unicode paths, revision-checked saves and atomic replacement. Native directory handles prevent
   path substitution; junctions, reparse-point traversal and ambiguous device/stream names are rejected.

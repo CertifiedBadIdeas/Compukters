@@ -194,8 +194,13 @@ paired with `testKotlinNamedCallsVmConformance`.
 
 **Status:** Partial.
 
-Ordinary K2 argument binding works only when the resulting direct call stays in the admitted signature subset;
-direct `arrayOf` and `listOf` varargs are specially lowered, while spread arrays are rejected.
+Ordinary K2 argument binding works when the resulting direct call stays in the admitted signature subset.
+Direct vararg arguments, including an empty vararg, are packed into the same typed arrays used by ordinary
+Guest array operations. Generic library calls such as `awaitAll(first, second)` retain concrete element
+types and evaluate supplied elements once in source order. Spread arrays remain rejected.
+
+**Evidence:** `MinimalScriptLoweringTest`, test `async results preserve typed values captures and repeated
+task failures`, and `testKotlinAsyncVmConformance` cover library, generic project and primitive/empty calls.
 
 **Related work:** not scheduled
 

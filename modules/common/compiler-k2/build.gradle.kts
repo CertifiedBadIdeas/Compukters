@@ -744,6 +744,21 @@ val generateTasksConformanceArtifact = tasks.register<Test>("generateTasksConfor
     systemProperty("compukter.vm.tasksArtifact", tasksConformanceArtifact.get().asFile.absolutePath)
 }
 
+val generateAsyncConformanceArtifact = tasks.register<Test>("generateAsyncConformanceArtifact") {
+    description = "Compiles typed cooperative async results for pinned VM conformance."
+    group = "verification"
+    dependsOn(tasks.jar)
+    useJUnitPlatform()
+    testClassesDirs = sourceSets.test.get().output.classesDirs
+    classpath = sourceSets.test.get().runtimeClasspath
+    filter.includeTestsMatching("*async results preserve typed values captures and repeated task failures*")
+    inputs.file(workerJar)
+    val output = layout.buildDirectory.file("generated/conformance/async.cpkt")
+    outputs.file(output)
+    systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
+    systemProperty("compukter.vm.asyncArtifact", output.get().asFile.absolutePath)
+}
+
 val generateTimerConformanceArtifact = tasks.register<Test>("generateTimerConformanceArtifact") {
     description = "Compiles a server-tick Guest task delay for pinned VM conformance."
     group = "verification"

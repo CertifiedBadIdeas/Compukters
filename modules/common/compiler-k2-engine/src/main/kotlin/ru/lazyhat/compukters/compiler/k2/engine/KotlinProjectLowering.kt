@@ -68,6 +68,7 @@ import org.jetbrains.kotlin.ir.expressions.IrTypeOperatorCall
 import org.jetbrains.kotlin.ir.expressions.IrVararg
 import org.jetbrains.kotlin.ir.expressions.IrWhen
 import org.jetbrains.kotlin.ir.expressions.IrWhileLoop
+import org.jetbrains.kotlin.ir.expressions.impl.IrVarargImpl
 import org.jetbrains.kotlin.ir.symbols.IrClassSymbol
 import org.jetbrains.kotlin.ir.symbols.IrConstructorSymbol
 import org.jetbrains.kotlin.ir.symbols.IrEnumEntrySymbol
@@ -6171,6 +6172,18 @@ private class FunctionCompiler(
                 }
             }
 
+            is IrVararg -> {
+                val array =
+                    valueType(expectedType ?: expression.type, expression) as? ValueType.Ref
+                        ?: throw UnsupportedKotlinIr(expression, "vararg requires an array type")
+                val elements =
+                    expression.elements.map {
+                        it as? IrExpression ?: throw UnsupportedKotlinIr(expression, "spread arguments are outside the project subset")
+                    }
+                val elementType = guestTypes.arrayElement(resolvedType(expectedType ?: expression.type))
+                compileArrayElements(expression, array, elements) { compileGuestArrayElement(it, elementType) }
+            }
+
             is IrCall -> {
                 compileCall(expression)
                     ?: throw UnsupportedKotlinIr(expression, "Unit call used as a value")
@@ -7873,6 +7886,9 @@ private class FunctionCompiler(
         return loweredParameters(target, session).mapIndexed { loweredIndex, parameter ->
             val index = target.parameters.indexOf(parameter)
             call.arguments.getOrNull(index)?.let(ResolvedCallArgument::Expression)
+                ?: parameter.varargElementType?.let { elementType ->
+                    ResolvedCallArgument.Expression(IrVarargImpl(call.startOffset, call.endOffset, parameter.type, elementType))
+                }
                 ?: platformDefaults.getOrNull(loweredIndex)?.let(ResolvedCallArgument::PlatformDefault)
                 ?: defaultOwner(target, index)
                     ?.parameters
@@ -8162,7 +8178,7 @@ private class FunctionCompiler(
     }
 
     private fun compileArrayElements(
-        call: IrCall,
+        call: IrElement,
         arrayType: ValueType.Ref,
         elements: List<IrExpression>,
         compileElement: (IrExpression) -> RegisterId,
@@ -10879,6 +10895,11 @@ private class LiteralCollector(
             values.addAll(listOf(0, 1))
         }
         super.visitCall(expression)
+    }
+
+    override fun visitVararg(expression: IrVararg) {
+        values.addAll(0..expression.elements.size)
+        super.visitVararg(expression)
     }
 
     override fun visitStringConcatenation(expression: IrStringConcatenation) {

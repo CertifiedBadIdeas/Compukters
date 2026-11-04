@@ -72,6 +72,20 @@ deterministic server tick boundaries`.
 
 **Related work:** [#624](https://github.com/CertifiedBadIdeas/Compukters/issues/624)
 
+## Typed async results
+
+**Status:** Supported.
+
+Top-level `compukter.concurrent.async { ... }` starts cooperative work and returns `Deferred<T>`.
+`await()` joins that task, preserving nullable, scalar, Unit and reference results. Repeated awaits return
+that same result or rethrow the original task exception. `awaitAll(first, second)` and `awaitAll(list)`
+await in argument/list order and return values in the same order. A failed await throws without
+cancelling the remaining tasks. These functions use the existing task limits and process lifetime;
+returning from main still ends the process and its remaining tasks.
+
+**Evidence:** `MinimalScriptLoweringTest`, test `async results preserve typed values captures and repeated
+task failures`, and `testKotlinAsyncVmConformance` execute the actual Guest library through the pinned VM.
+
 ## Bounded integer channels
 
 **Status:** Unsupported.

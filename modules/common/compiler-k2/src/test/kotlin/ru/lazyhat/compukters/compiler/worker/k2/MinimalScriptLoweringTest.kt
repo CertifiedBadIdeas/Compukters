@@ -1673,6 +1673,60 @@ class MinimalScriptLoweringTest {
         }
 
     @Test
+    fun `async results preserve typed values captures and repeated task failures`() =
+        withAdapter { adapter ->
+            val source =
+                """
+                import compukter.concurrent.async
+                import compukter.concurrent.awaitAll
+
+                class Box(val value: Int)
+                fun sum(vararg values: Int): Int {
+                    var total = 0
+                    for (value in values) total += value
+                    return total
+                }
+                fun <T> last(vararg values: T): T = values[values.size - 1]
+                fun main() {
+                    check(sum() == 0 && sum(1, 2, 3) == 6)
+                    check(last("first", "last") == "last")
+                    var count = 0
+                    val first = async { count++; 21 }
+                    val second = async { count++; 34 }
+                    check(awaitAll(first, second) == listOf(21, 34))
+                    check(count == 2 && first.await() == 21 && count == 2)
+                    val missing = async<String?> { null }
+                    check(missing.await() == null && missing.await() == null)
+                    val unit = async<Unit> { count++ }
+                    unit.await()
+                    check(count == 3)
+                    val original = Box(7)
+                    val boxed = async { original }
+                    check(boxed.await() === original && boxed.await() === original)
+                    check(awaitAll(listOf(async { 4 }, async { 5 })) == listOf(4, 5))
+                    check(awaitAll<Int>() == emptyList<Int>())
+                    val failure = IllegalStateException("retained")
+                    val failed = async<Int> { throw failure }
+                    val healthy = async { 99 }
+                    repeat(2) {
+                        try { failed.await(); error("failure was lost") }
+                        catch (caught: IllegalStateException) { check(caught === failure) }
+                    }
+                    try { awaitAll(failed, healthy); error("failure was lost") }
+                    catch (caught: IllegalStateException) { check(caught === failure) }
+                    check(healthy.await() == 99)
+                    println("async ok")
+                }
+                """.trimIndent()
+            val result = adapter.compile(request(source))
+            val bytes = assertNotNull(result.artifact, result.diagnostics.joinToString()).toByteArray()
+            assertTrue(result.diagnostics.none { it.severity == DiagnosticSeverity.ERROR }, result.diagnostics.toString())
+            System.getProperty("compukter.vm.asyncArtifact")?.let { output ->
+                Path.of(output).also { it.parent.createDirectories() }.writeBytes(bytes)
+            }
+        }
+
+    @Test
     fun `task tick sleep lowers to one asynchronous timer request`() =
         withAdapter { adapter ->
             val source =

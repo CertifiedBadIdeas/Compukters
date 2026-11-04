@@ -764,6 +764,15 @@ registerKotlinVmConformance(
     conformanceScenario = "tasks",
 )
 registerKotlinVmConformance(
+    taskName = "testKotlinAsyncVmConformance",
+    taskDescription = "Executes typed cooperative async results and retained failures.",
+    artifactTask = ":compiler-k2:generateAsyncConformanceArtifact",
+    artifact = project(":compiler-k2").layout.buildDirectory.file("generated/conformance/async.cpkt"),
+    cargoTargetDirectory = ".toolchain/build/cargo/compiler-k2-async-conformance",
+    artifactEnvironmentVariable = "COMPUKTER_KOTLIN_ASYNC_ARTIFACT",
+    conformanceScenario = "async",
+)
+registerKotlinVmConformance(
     taskName = "testKotlinTimerVmConformance",
     taskDescription = "Executes a K2-produced server-tick Guest task delay request.",
     artifactTask = ":compiler-k2:generateTimerConformanceArtifact",
