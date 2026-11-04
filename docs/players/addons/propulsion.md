@@ -38,6 +38,41 @@ addon 2.0 for the Compukters 0.5 line. Loader metadata enforces the exact minimu
 
 ## Guest API
 
+### Command lists (addon API 3.3, Compukters 0.7.0)
+
+Each engine has `setThrottleCommand(throttle)` alongside the immediate `setThrottle` call.
+Creative engines also have `setThrustPercentCommand`; creative vector engines have
+`setVectorCommand`, `setThrustKnCommand` and `clearThrustOverrideCommand`. These methods return
+`compukter.commands.Command<Unit>` and appear in ordinary member completion. Creating a description
+validates and captures arguments without sending a request or claiming control.
+
+```kotlin
+import compukter.commands.batch
+import compukter.concurrent.async
+import propulsion.thrusters.LiquidThruster
+
+fun main() {
+    val left = LiquidThruster.named("left")
+    val right = LiquidThruster.named("right")
+    val commands = listOf(left.setThrottleCommand(0.4), right.setThrottleCommand(0.4))
+    val pending = async { batch(commands) }
+    for (result in pending.await()) result.getOrThrow()
+    readln()
+    for (result in batch(listOf(left.setThrottleCommand(0.0), right.setThrottleCommand(0.0)))) {
+        result.getOrThrow()
+    }
+}
+```
+
+One batch applies all positions in order in one server-thread delivery. A disconnected, closed or
+unavailable engine produces a failed result at its position while the remaining commands still run.
+Earlier effects are not rolled back. Descriptions can be reused; each submission executes them again.
+The protocol allows up to 32 commands/4096 encoded bytes, also bounded by the full per-tick host-request
+allowance (16 by default). See [device command lists]({{ '/KOTLIN-SUPPORT/tasks/#device-command-lists' | relative_url }})
+for results, quotas and task lifetime.
+
+### Immediate calls and observations
+
 Select `addons = ["propulsion"]` in `compukter.toml` (format 3). Place the engine against any face of the computer or
 connect them with peripheral cables, and name the engine with the Peripheral Configurator. Ordinary Creative Thruster
 multiblock contacts resolve to their controller.
