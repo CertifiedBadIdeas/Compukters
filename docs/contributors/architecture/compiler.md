@@ -444,8 +444,11 @@ with request-local bitsets, and materializes register sets only for the final bo
 is killed only on its exceptional edge; normal continuations and other handlers retain their own live inputs.
 Only identical semantic types and physical shapes share a register; parameters, caught-exception destinations
 and operands in unreachable code retain dedicated slots. Inputs and destinations remain distinct through an instruction,
-including allocation and suspended calls. Instruction order, debug boundaries and metered costs are unchanged. Root maps,
-linked module hashes and frame storage requirements are rebuilt after allocation. The artifact encoding and runtime
+including allocation and suspended calls. A `Move` whose source dies at that instruction may share its destination
+when no other boundary makes the pair interfere. A coalesced self-copy is removed; an instruction anchoring an inline
+debug parent remains present. Collapsed debug boundaries retain the last source entry and relocate dense inline-parent
+IDs. Other instructions retain their order. Root maps, metered block costs, linked module hashes and frame storage
+requirements are rebuilt through the existing allocation, linking and writing stages. The artifact encoding and runtime
 layout/verifier contract are unchanged; already compiled artifacts retain their original frame storage.
 
 `ServerCompilerService` performs bounded asynchronous preparation, persistent-cache lookup, and single-flight
