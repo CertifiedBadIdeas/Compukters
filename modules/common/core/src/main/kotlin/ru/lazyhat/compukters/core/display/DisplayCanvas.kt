@@ -364,6 +364,9 @@ class DisplayCanvas(
         if (left < right && top < bottom) edited()
     }
 
+    /** Captured by the canvas owner; workers see only an owned copy of committed pixels. */
+    fun publicationSnapshot(): DisplayPixelSnapshot = DisplayPixelSnapshot(columns, rows, mode, revision, pixels.copyOf())
+
     fun tile(
         column: Int,
         row: Int,
