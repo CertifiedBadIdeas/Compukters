@@ -13,6 +13,9 @@ headings so this page has one stable URL that can be shared outside the reposito
 
 ## 0.7.0 — In development
 
+- Guest Kotlin compilation removes proven redundant register copies and can use smaller stack frames.
+  Existing compiled programs receive these improvements after recompilation.
+
 - Display RGB encoding and delta calculation run in a bounded background worker pool. Ordinary display blocks
   send pixels through dedicated packets and prepare client images off the render thread, retaining coherent
   multi-panel frames and bounded full-image recovery. The existing Minecraft connection and traffic budget remain.

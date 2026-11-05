@@ -18,6 +18,7 @@
 
 package ru.lazyhat.compukters.compiler.artifact.analysis
 
+import ru.lazyhat.compukters.compiler.artifact.model.DebugEntryId
 import ru.lazyhat.compukters.compiler.artifact.model.Destination
 import ru.lazyhat.compukters.compiler.artifact.model.FunctionFlag
 import ru.lazyhat.compukters.compiler.artifact.model.FunctionValue
@@ -25,11 +26,19 @@ import ru.lazyhat.compukters.compiler.artifact.model.Instruction
 import ru.lazyhat.compukters.compiler.artifact.model.Module
 import ru.lazyhat.compukters.compiler.artifact.model.RegisterId
 
-/** Reuses exact-type temporary registers; the runtime's ordinary layout remains authoritative. */
+/** Reuses exact-type temporaries and removes coalesced copies; the runtime's ordinary layout remains authoritative. */
 object TemporaryRegisters {
     fun compact(module: Module): Module {
         val blocks = module.blocks.toMutableList()
         val exceptions = module.exceptions.toMutableList()
+        val instructionBoundaries = mutableMapOf<Int, IntArray>()
+        // Inline parents must retain a distinct instruction position in the canonical debug table.
+        val debugAnchors =
+            module.debug
+                .mapNotNull { it.inlineParent }
+                .map { parent ->
+                    module.debug[parent.value.toInt()].let { it.block.value.toInt() to it.instruction.toInt() }
+                }.toSet()
         val functions =
             module.functions.map { function ->
                 if (FunctionFlag.ABSTRACT in function.flags || function.values.isEmpty()) return@map function
@@ -55,9 +64,10 @@ object TemporaryRegisters {
                 }
                 boundaries.forEach { boundary ->
                     val instruction = module.blocks[boundary.block.value.toInt()].instructions[boundary.instruction.toInt()]
-                    // Keep inputs and results distinct even when inputs die at this instruction: calls, GC and
-                    // suspension may retain the pre-instruction root map while materializing the destination.
+                    // Except for a dying MOVE source, keep inputs and results distinct: calls, GC and suspension
+                    // may retain the pre-instruction root map while materializing the destination.
                     val simultaneous = boundary.before + boundary.after + instruction.writtenRegisters()
+                    val dyingCopy = (instruction as? Instruction.Move)?.takeIf { it.source !in boundary.after }
                     simultaneous
                         .filter { it.value.toInt() !in pinned }
                         .groupBy { function.values[it.value.toInt()] }
@@ -65,6 +75,16 @@ object TemporaryRegisters {
                         .forEach { group ->
                             group.forEachIndexed { index, left ->
                                 for (right in group.drop(index + 1)) {
+                                    // MOVE only copies existing bits and cannot allocate, throw or suspend. Its
+                                    // dying source may share the destination unless another boundary conflicts.
+                                    if (dyingCopy != null &&
+                                        (
+                                            (left == dyingCopy.source && right == dyingCopy.destination) ||
+                                                (right == dyingCopy.source && left == dyingCopy.destination)
+                                        )
+                                    ) {
+                                        continue
+                                    }
                                     interference[left.value.toInt()] += right.value.toInt()
                                     interference[right.value.toInt()] += left.value.toInt()
                                 }
@@ -96,15 +116,50 @@ object TemporaryRegisters {
                 }
                 val remap: (RegisterId) -> RegisterId = { RegisterId.of(mapping[it.value.toInt()].toUInt()) }
                 blockRange.forEach { block ->
+                    val original = module.blocks[block].instructions
+                    val positions = IntArray(original.size + 1)
+                    val instructions = mutableListOf<Instruction>()
+                    original.forEachIndexed { index, instruction ->
+                        positions[index] = instructions.size
+                        val mapped = instruction.remapRegisters(remap)
+                        if (mapped !is Instruction.Move || mapped.source != mapped.destination || block to index in debugAnchors) {
+                            instructions += mapped
+                        }
+                    }
+                    positions[original.size] = instructions.size
+                    instructionBoundaries[block] = positions
                     blocks[block] =
-                        module.blocks[block].copy(instructions = module.blocks[block].instructions.map { it.remapRegisters(remap) })
+                        module.blocks[block].copy(instructions = instructions)
                 }
                 exceptionRange.forEach { index ->
                     exceptions[index] = module.exceptions[index].copy(exceptionRegister = remap(module.exceptions[index].exceptionRegister))
                 }
                 function.copy(values = values, safepointRoots = emptyList())
             }
-        return ReferenceLiveness.derive(module.copy(functions = functions, blocks = blocks, exceptions = exceptions))
+        val relocatedDebug =
+            module.debug.map { entry ->
+                instructionBoundaries[entry.block.value.toInt()]?.let { boundaries ->
+                    entry.copy(instruction = boundaries[entry.instruction.toInt()].toUInt())
+                } ?: entry
+            }
+        // A removed instruction's source position applies until the next entry; the last entry at a
+        // collapsed boundary wins. Keep record IDs dense and relocate the surviving inline parents.
+        val retainedDebug =
+            relocatedDebug.indices.filter { index ->
+                val next = relocatedDebug.getOrNull(index + 1)
+                val entry = relocatedDebug[index]
+                next == null || entry.function != next.function || entry.block != next.block || entry.instruction != next.instruction
+            }
+        val debugIds = IntArray(relocatedDebug.size) { -1 }
+        retainedDebug.forEachIndexed { new, old -> debugIds[old] = new }
+        val debug =
+            retainedDebug.map { index ->
+                val entry = relocatedDebug[index]
+                entry.copy(
+                    inlineParent = entry.inlineParent?.let { parent -> DebugEntryId.of(debugIds[parent.value.toInt()].toUInt()) },
+                )
+            }
+        return ReferenceLiveness.derive(module.copy(functions = functions, blocks = blocks, exceptions = exceptions, debug = debug))
     }
 }
 

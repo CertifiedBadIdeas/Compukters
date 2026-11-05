@@ -21,6 +21,8 @@ package ru.lazyhat.compukters.compiler.artifact.analysis
 import ru.lazyhat.compukters.compiler.artifact.model.Block
 import ru.lazyhat.compukters.compiler.artifact.model.BlockId
 import ru.lazyhat.compukters.compiler.artifact.model.ConstantId
+import ru.lazyhat.compukters.compiler.artifact.model.DebugEntry
+import ru.lazyhat.compukters.compiler.artifact.model.DebugEntryId
 import ru.lazyhat.compukters.compiler.artifact.model.Destination
 import ru.lazyhat.compukters.compiler.artifact.model.ExceptionEntry
 import ru.lazyhat.compukters.compiler.artifact.model.Function
@@ -43,10 +45,11 @@ import ru.lazyhat.compukters.compiler.artifact.model.ValueType
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotEquals
+import kotlin.test.assertTrue
 
 class TemporaryRegistersTest {
     @Test
-    fun `reuses sequential temporaries without aliasing an instruction input and result`() {
+    fun `eliminates a dying source copy while keeping arithmetic inputs and result distinct`() {
         val source =
             module(
                 List(4) { scalar() },
@@ -68,12 +71,163 @@ class TemporaryRegistersTest {
                 .single()
                 .values.size,
         )
-        assertEquals((instructions[0] as Instruction.Const).destination, (instructions[2] as Instruction.Const).destination)
-        val add = instructions[3] as Instruction.Add
+        assertEquals(4, instructions.size)
+        val add = instructions[2] as Instruction.Add
+        assertEquals((instructions[0] as Instruction.Const).destination, add.left)
+        assertEquals((instructions[1] as Instruction.Const).destination, add.right)
         assertNotEquals(add.left, add.right)
         assertNotEquals(add.destination, add.left)
         assertNotEquals(add.destination, add.right)
         assertEquals(compact, TemporaryRegisters.compact(compact))
+    }
+
+    @Test
+    fun `retains a copy when its source is overwritten before the copied value is read`() {
+        val source =
+            module(
+                List(3) { scalar() },
+                listOf(
+                    listOf(
+                        Instruction.Const(reg(0), ConstantId.of(0u)),
+                        Instruction.Move(reg(1), reg(0)),
+                        Instruction.Const(reg(0), ConstantId.of(1u)),
+                        Instruction.Add(reg(2), reg(0), reg(1)),
+                        Instruction.Return(Destination.Register(reg(2))),
+                    ),
+                ),
+            )
+        val compact = TemporaryRegisters.compact(source)
+        val move = compact.blocks.single().instructions[1] as Instruction.Move
+        val add = compact.blocks.single().instructions[3] as Instruction.Add
+        assertNotEquals(move.source, move.destination)
+        assertNotEquals(add.left, add.right)
+    }
+
+    @Test
+    fun `relocates debug boundaries and preserves inline parents when copies disappear`() {
+        val base =
+            module(
+                List(2) { scalar() },
+                listOf(
+                    listOf(
+                        Instruction.Const(reg(0), ConstantId.of(0u)),
+                        Instruction.Move(reg(1), reg(0)),
+                        Instruction.Call(Destination.Unit, FunctionRef.Local(FunctionId.of(0u)), listOf(reg(1))),
+                        Instruction.Return(Destination.Register(reg(1))),
+                    ),
+                ),
+            )
+        val source =
+            base.copy(
+                debug =
+                    (0u..3u).map { index ->
+                        DebugEntry(
+                            FunctionId.of(0u),
+                            block(0),
+                            index,
+                            index,
+                            index + 1u,
+                            when (index) {
+                                0u -> null
+                                3u -> DebugEntryId.of(2u)
+                                else -> DebugEntryId.of(0u)
+                            },
+                            MetadataText.of("test.kt"),
+                            index + 1u,
+                            1u,
+                        )
+                    },
+            )
+        val compact = TemporaryRegisters.compact(source)
+        assertEquals(listOf(0u, 1u, 2u), compact.debug.map { it.instruction })
+        assertEquals(listOf(null, DebugEntryId.of(0u), DebugEntryId.of(1u)), compact.debug.map { it.inlineParent })
+        assertEquals(listOf(1u, 3u, 4u), compact.debug.map { it.sourceLine })
+        assertEquals(compact, TemporaryRegisters.compact(compact))
+
+        val anchored =
+            source.copy(
+                debug =
+                    source.debug.mapIndexed { index, entry ->
+                        when (index) {
+                            3 -> entry.copy(inlineParent = DebugEntryId.of(1u))
+                            else -> entry
+                        }
+                    },
+            )
+        val anchoredCompact = TemporaryRegisters.compact(anchored)
+        assertEquals(
+            4,
+            anchoredCompact.blocks
+                .single()
+                .instructions.size,
+        )
+        assertEquals(anchored.debug, anchoredCompact.debug)
+    }
+
+    @Test
+    fun `coalesces multi component copies and rebuilds reference roots across suspension`() {
+        val inline =
+            FunctionValue(ValueType.Inline(TypeRef.Local(TypeId.of(0u))), PhysicalShape(listOf(PhysicalAtom.I32, PhysicalAtom.REF32)))
+        val source =
+            module(
+                listOf(inline, inline, scalar()),
+                listOf(
+                    listOf(
+                        Instruction.Const(reg(0), ConstantId.of(0u)),
+                        Instruction.Move(reg(1), reg(0)),
+                        Instruction.CallSuspend(
+                            Destination.Register(reg(2)),
+                            FunctionRef.Local(FunctionId.of(0u)),
+                            listOf(reg(1)),
+                            block(1),
+                        ),
+                    ),
+                    listOf(Instruction.Return(Destination.Register(reg(1)))),
+                ),
+            )
+        val compact = TemporaryRegisters.compact(source)
+        assertTrue(compact.blocks.flatMap { it.instructions }.none { it is Instruction.Move })
+        val value = (compact.blocks[1].instructions.single() as Instruction.Return).value as Destination.Register
+        val call = compact.blocks[0].instructions.last() as Instruction.CallSuspend
+        assertEquals(listOf(value.id), call.arguments)
+        assertEquals(
+            listOf(ValueComponent(value.id, 1u)),
+            compact.functions
+                .single()
+                .safepointRoots
+                .single { it.block == block(0) && it.instructionBoundary == 1u }
+                .references,
+        )
+        assertEquals(compact, TemporaryRegisters.compact(compact))
+    }
+
+    @Test
+    fun `retains a source needed only by an exception handler after a copy`() {
+        val base =
+            module(
+                List(3) { scalar() },
+                listOf(
+                    listOf(
+                        Instruction.Const(reg(0), ConstantId.of(0u)),
+                        Instruction.Move(reg(1), reg(0)),
+                        Instruction.Call(Destination.Unit, FunctionRef.Local(FunctionId.of(0u)), emptyList()),
+                        Instruction.Return(Destination.Register(reg(1))),
+                    ),
+                    listOf(Instruction.Return(Destination.Register(reg(0)))),
+                ),
+            )
+        val source =
+            base.copy(
+                functions = base.functions.map { it.copy(exceptionCount = 1u) },
+                exceptions = listOf(ExceptionEntry(FunctionId.of(0u), block(0), 1u, null, block(1), reg(2))),
+            )
+        val compact = TemporaryRegisters.compact(source)
+        val move = compact.blocks[0].instructions[1] as Instruction.Move
+        assertNotEquals(move.source, move.destination)
+        assertEquals(
+            move.source,
+            (compact.blocks[1].instructions.single() as Instruction.Return).value.let { (it as Destination.Register).id },
+        )
     }
 
     @Test
