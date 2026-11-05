@@ -207,4 +207,55 @@ class DisplayClientImageTest {
         image.receive(0, rgb, id, 3, "1")
         assertFalse(image.needsSnapshot)
     }
+
+    @Test
+    fun `an overlapping partial frame cannot hide the latest complete frame`() {
+        val first = DisplayClientImage()
+        val second = DisplayClientImage()
+        val peers = mapOf(1L to first, 2L to second)
+        val id = UUID.randomUUID().toString()
+        val one = ByteArray(16 * 16 * 3) { 1 }
+        val two = ByteArray(one.size) { 2 }
+        val three = ByteArray(one.size) { 3 }
+        for (image in peers.values) image.receive(0, one, id, 1, "1,2")
+        first.publish(peers::get)
+        // All tiles of frame 2 arrive, followed by the start of frame 3, before the next render.
+        for (image in peers.values) image.receive(0, two, id, 2, "1,2")
+        first.receive(0, three, id, 3, "1,2")
+        first.publish(peers::get)
+        assertEquals(2L, first.publication)
+        assertEquals(2L, second.publication)
+        assertContentEquals(two, first.rgb)
+        second.receive(0, three, id, 3, "1,2")
+        second.publish(peers::get)
+        assertEquals(3L, first.publication)
+        assertEquals(3L, second.publication)
+        assertContentEquals(three, first.rgb)
+    }
+
+    @Test
+    fun `worker delivery between rendered panels waits until the next render frame`() {
+        val first = DisplayClientImage()
+        val second = DisplayClientImage()
+        val peers = mapOf(1L to first, 2L to second)
+        val id = UUID.randomUUID().toString()
+        val one = ByteArray(16 * 16 * 3) { 1 }
+        val two = ByteArray(one.size) { 2 }
+        for (image in peers.values) image.receive(0, one, id, 1, "1,2")
+        first.publish(peers::get)
+        DisplayClientImage.beginRenderFrame()
+        first.publishFrame(peers::get)
+        val drawn = first.rgb.copyOf()
+        // The decoder finishes a complete publication after the first panel has already drawn.
+        for (image in peers.values) image.receive(0, two, id, 2, "1,2")
+        second.publishFrame(peers::get)
+        assertContentEquals(drawn, second.rgb)
+        assertEquals(1L, second.publication)
+        DisplayClientImage.beginRenderFrame()
+        second.publishFrame(peers::get)
+        assertContentEquals(two, first.rgb)
+        assertContentEquals(two, second.rgb)
+        assertEquals(2L, first.publication)
+        assertEquals(2L, second.publication)
+    }
 }

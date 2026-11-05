@@ -11,6 +11,17 @@ import java.util.UUID
 
 /** Keeps the previous image visible until every loaded panel has received the same publication. */
 class DisplayClientImage {
+    companion object {
+        private var renderFrame: Long = 0
+
+        /** Called once per render frame on the render thread. */
+        fun beginRenderFrame() {
+            renderFrame++
+        }
+    }
+
+    private var lastRenderedFrame: Long = Long.MIN_VALUE
+
     private data class Tile(
         val surface: UUID,
         val publication: Long,
@@ -25,11 +36,13 @@ class DisplayClientImage {
         private set
     var revision: Long = 0
         private set
-    private var pending: Tile? = null
+
+    // Ordered delivery needs the latest complete frame plus the next partial frame, never an unbounded history.
+    private val pending = ArrayDeque<Tile>(2)
     private var committed: Tile? = null
     private var missingPublication: Long = -1
     val needsSnapshot: Boolean @Synchronized get() = missingPublication >= 0
-    val needsInitialSnapshot: Boolean @Synchronized get() = pending == null && committed == null
+    val needsInitialSnapshot: Boolean @Synchronized get() = pending.isEmpty() && committed == null
 
     @Synchronized
     fun requireSnapshot(publication: Long) {
@@ -65,7 +78,7 @@ class DisplayClientImage {
         val id = runCatching { UUID.fromString(surface) }.getOrNull() ?: return
         val panels = runCatching { members.split(',').map(String::toLong) }.getOrNull() ?: return
         if (panels.size !in 1..64 || panels.distinct().size != panels.size) return
-        val newest = pending ?: committed
+        val newest = pending.lastOrNull() ?: committed
         if (newest != null && publication <= newest.publication) return
         val image =
             if (base == -1L) {
@@ -93,7 +106,8 @@ class DisplayClientImage {
                 }
             }
         if (publication >= missingPublication) missingPublication = -1
-        pending = Tile(id, publication, density, image, panels)
+        pending.addLast(Tile(id, publication, density, image, panels))
+        if (pending.size > 2) pending.removeFirst()
         ru.lazyhat.compukters.core.display.DisplayPerformanceTrace.begin("client.receive")?.apply {
             this.surface = id.toString()
             this.publication = publication
@@ -104,7 +118,9 @@ class DisplayClientImage {
     }
 
     @Synchronized
-    private fun candidate(): Tile? = pending ?: committed
+    private fun candidate(tile: Tile): Tile? =
+        pending.firstOrNull { it.surface == tile.surface && it.publication == tile.publication }
+            ?: committed?.takeIf { it.surface == tile.surface && it.publication == tile.publication }
 
     @Synchronized
     private fun commit(tile: Tile) {
@@ -113,35 +129,51 @@ class DisplayClientImage {
         rgb = tile.bytes
         committed = tile
         // A worker may already have prepared a later tile. Keep it for the next barrier.
-        if (pending === tile) pending = null
+        pending.removeAll { it.publication <= tile.publication }
     }
 
-    fun publish(peer: (Long) -> DisplayClientImage?) {
-        val tile = synchronized(this) { pending } ?: return
-        val trace =
-            ru.lazyhat.compukters.core.display.DisplayPerformanceTrace.begin("client.barrier")?.apply {
-                surface = tile.surface.toString()
-                publication = tile.publication
-            }
-        val ready = ArrayList<Pair<DisplayClientImage, Tile>>()
-        for (position in tile.panels) {
-            val image = peer(position) ?: continue
-            val candidate = image.candidate()
-            if (candidate?.surface != tile.surface || candidate.publication != tile.publication) {
-                trace?.apply {
-                    panels = ready.size + 1
-                    commit()
+    fun publish(peer: (Long) -> DisplayClientImage?) = publish(null, peer)
+
+    fun publishFrame(peer: (Long) -> DisplayClientImage?) = publish(renderFrame, peer)
+
+    private fun publish(
+        frame: Long?,
+        peer: (Long) -> DisplayClientImage?,
+    ) {
+        if (frame != null) {
+            if (lastRenderedFrame == frame) return
+            lastRenderedFrame = frame
+        }
+        val candidates = synchronized(this) { pending.reversed() }
+        for (tile in candidates) {
+            val trace =
+                ru.lazyhat.compukters.core.display.DisplayPerformanceTrace.begin("client.barrier")?.apply {
+                    surface = tile.surface.toString()
+                    publication = tile.publication
                 }
+            val ready = ArrayList<Pair<DisplayClientImage, Tile>>()
+            var complete = true
+            for (position in tile.panels) {
+                val image = peer(position) ?: continue
+                // A visible peer has already drawn this frame; keep the whole surface on that publication.
+                if (frame != null && image !== this && image.lastRenderedFrame == frame) return
+                val candidate = image.candidate(tile)
+                if (candidate == null) {
+                    complete = false
+                    break
+                }
+                ready.add(image to candidate)
+            }
+            trace?.apply {
+                if (complete) phase = "client.ready"
+                panels = ready.size
+                commit()
+            }
+            if (complete) {
+                // Commit exact checked candidates; retain newer partial data for the next render.
+                ready.forEach { (image, candidate) -> image.commit(candidate) }
                 return
             }
-            ready.add(image to candidate)
         }
-        trace?.apply {
-            phase = "client.ready"
-            panels = ready.size
-            commit()
-        }
-        // Commit the exact candidates checked above, even if receive() has advanced a pending tile.
-        ready.forEach { (image, candidate) -> image.commit(candidate) }
     }
 }

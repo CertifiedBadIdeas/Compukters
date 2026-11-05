@@ -166,9 +166,11 @@ Requests never load chunks and require the player to be tracking the requested c
 its owner thread, then prepares images in one ordered worker lane with at most 64 queued tile jobs. Switching levels
 shuts down that lane. Workers touch captured images only, so retired block objects cannot update replacements.
 
-Clients keep the previous frame until all loaded members have the same publication. The render-thread barrier
-commits the exact immutable candidates it checked, preserving any newer pending worker result. Unloaded members and
-holes do not block it. Texture upload stays on the render thread; dynamic emissive textures change only on committed
+Clients retain at most two pending immutable tiles per panel: the latest complete publication and the next
+partial publication. The render-thread barrier chooses the newest complete set across loaded members and commits
+the exact candidates it checked, preserving newer partial data. A following partial frame cannot hide an already
+complete frame before rendering. Publication is frozen after the first visible panel of each render frame;
+worker delivery between panel draws waits for the next render frame. Unloaded members and holes do not block it. Texture upload stays on the render thread; dynamic emissive textures change only on committed
 revisions and are released when panels unload. Deterministic clipping and a 4M pixel-work/tick budget bound server
 drawing. Saved canvas schema, Guest calls and terminal transport are unchanged.
 

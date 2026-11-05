@@ -18,12 +18,21 @@ object DisplayClientBootstrap {
                     .ServerboundCustomPayloadPacket(DisplaySnapshotRequest(entity.blockPos.asLong())),
             )
         }
+        net.neoforged.neoforge.common.NeoForge.EVENT_BUS
+            .addListener(::onFrame)
         AttachedDisplayRenderer.register()
         eventBus.addListener(::registerRenderers)
         net.neoforged.neoforge.common.NeoForge.EVENT_BUS
             .addListener(::onTick)
         net.neoforged.neoforge.common.NeoForge.EVENT_BUS
             .addListener(DisplayPointerClient::onMouse)
+    }
+
+    private fun onFrame(
+        @Suppress("UNUSED_PARAMETER") event: net.neoforged.neoforge.client.event.RenderFrameEvent.Pre,
+    ) {
+        ru.lazyhat.compukters.minecraft.display.DisplayClientImage
+            .beginRenderFrame()
     }
 
     private fun onTick(

@@ -64,7 +64,7 @@ open class DisplayBlockEntity(
         val clientLevel = level ?: return
         if (!clientLevel.isClientSide) return
         requestMissingSnapshot()
-        clientImage.publish { position ->
+        clientImage.publishFrame { position ->
             if (clientLevel.hasChunkAt(BlockPos.of(position))) {
                 (clientLevel.getBlockEntity(BlockPos.of(position)) as? DisplayBlockEntity)
                     ?.also {

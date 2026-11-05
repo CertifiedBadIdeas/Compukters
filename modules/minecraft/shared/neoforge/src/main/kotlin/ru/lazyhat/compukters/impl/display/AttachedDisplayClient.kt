@@ -116,7 +116,7 @@ internal object AttachedDisplayClient {
         val current = context() ?: return emptyList()
         return surfaces.values.flatMap { surface ->
             val peers = surface.tiles.values.associateBy { it.member.position.asLong() }
-            surface.tiles.values.forEach { tile -> tile.image.publish { pos -> peers[pos]?.image } }
+            surface.tiles.values.forEach { tile -> tile.image.publishFrame { pos -> peers[pos]?.image } }
             surface.tiles.values.mapNotNull { tile ->
                 val image = tile.image
                 if (!current.hasChunkAt(tile.member.position)) return@mapNotNull null
