@@ -28,11 +28,18 @@ class DisplayClientImage {
     private var pending: Tile? = null
     private var committed: Tile? = null
     private var missingPublication: Long = -1
-    val needsSnapshot: Boolean get() = missingPublication >= 0
+    val needsSnapshot: Boolean @Synchronized get() = missingPublication >= 0
+    val needsInitialSnapshot: Boolean @Synchronized get() = pending == null && committed == null
+
+    @Synchronized
+    fun requireSnapshot(publication: Long) {
+        missingPublication = maxOf(publication, missingPublication)
+    }
 
     val publication: Long get() = committed?.publication ?: 0
     val surfaceIdentity: String get() = committed?.surface?.toString() ?: ""
 
+    @Synchronized
     fun receive(
         mode: Int,
         bytes: ByteArray,
@@ -96,41 +103,45 @@ class DisplayClientImage {
         }
     }
 
+    @Synchronized
+    private fun candidate(): Tile? = pending ?: committed
+
+    @Synchronized
+    private fun commit(tile: Tile) {
+        density = tile.density
+        if (rgb !== tile.bytes && !rgb.contentEquals(tile.bytes)) revision++
+        rgb = tile.bytes
+        committed = tile
+        // A worker may already have prepared a later tile. Keep it for the next barrier.
+        if (pending === tile) pending = null
+    }
+
     fun publish(peer: (Long) -> DisplayClientImage?) {
-        val tile = pending ?: return
+        val tile = synchronized(this) { pending } ?: return
         val trace =
             ru.lazyhat.compukters.core.display.DisplayPerformanceTrace.begin("client.barrier")?.apply {
                 surface = tile.surface.toString()
                 publication = tile.publication
             }
-        var loaded = 0
+        val ready = ArrayList<Pair<DisplayClientImage, Tile>>()
         for (position in tile.panels) {
             val image = peer(position) ?: continue
-            loaded++
-            val candidate = image.pending ?: image.committed
+            val candidate = image.candidate()
             if (candidate?.surface != tile.surface || candidate.publication != tile.publication) {
                 trace?.apply {
-                    panels = loaded
+                    panels = ready.size + 1
                     commit()
                 }
                 return
             }
+            ready.add(image to candidate)
         }
         trace?.apply {
             phase = "client.ready"
-            panels = loaded
+            panels = ready.size
             commit()
         }
-        for (position in tile.panels) {
-            val image = peer(position) ?: continue
-            val candidate = image.pending ?: continue
-            image.density = candidate.density
-            if (image.rgb !== candidate.bytes && !image.rgb.contentEquals(candidate.bytes)) {
-                image.revision++
-            }
-            image.rgb = candidate.bytes
-            image.committed = candidate
-            image.pending = null
-        }
+        // Commit the exact candidates checked above, even if receive() has advanced a pending tile.
+        ready.forEach { (image, candidate) -> image.commit(candidate) }
     }
 }

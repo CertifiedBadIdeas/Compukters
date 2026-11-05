@@ -151,11 +151,26 @@ Asynchronous computer hibernation retains its lease validity through checkpoint 
 Guest operations still reject detached endpoints throughout that transition. Composite contracts opt into their own
 member reachability; the original four-argument JVM constructor remains available to already compiled addons.
 
-The server freezes a publication while its panel tiles are being sent under the dimension's 512KiB/tick budget.
-Every tile carries a screen identity, publication sequence and member positions. Clients stage tiles until all loaded
-members have the same publication, then swap images together. Chunk tracking sends the current frozen publication;
-unloaded members and holes do not block the client. Dynamic emissive textures update only on committed revisions and
-are released when panels unload. Deterministic clipping and a 4M pixel-work/tick budget bound server drawing.
+The server captures owned committed canvas pixels and membership on its owner thread. A per-server, two-thread
+encoder prepares RGB tiles and delta rectangles without world access. Admission permits at most 16 jobs and 64 MiB
+of estimated snapshot/output storage, with one job per surface; busy surfaces retain their authoritative newest
+canvas rather than queuing intermediate copies. Completion returns through the server executor, checks the exact
+level/surface/canvas/membership generation and immediately offers ready ordinary block tiles. Level unload and
+server shutdown invalidate pending results. Attached panels use the same encoder and their existing viewer transport.
+
+A publication stays frozen while panel tiles are sent under the dimension's unchanged 512KiB/tick budget. Ordinary
+block tiles use bounded custom payloads containing block instance UUID, screen identity, publication, member positions
+and full/delta RGB. Chunk tracking carries identity/metadata only. Clients request independent full tiles for first
+tracking or missing delta bases; the server keeps bounded, expiring recovery requests while encoding/admission waits.
+Requests never load chunks and require the player to be tracking the requested chunk, including distant visible screens. The client validates the loaded block instance on
+its owner thread, then prepares images in one ordered worker lane with at most 64 queued tile jobs. Switching levels
+shuts down that lane. Workers touch captured images only, so retired block objects cannot update replacements.
+
+Clients keep the previous frame until all loaded members have the same publication. The render-thread barrier
+commits the exact immutable candidates it checked, preserving any newer pending worker result. Unloaded members and
+holes do not block it. Texture upload stays on the render thread; dynamic emissive textures change only on committed
+revisions and are released when panels unload. Deterministic clipping and a 4M pixel-work/tick budget bound server
+drawing. Saved canvas schema, Guest calls and terminal transport are unchanged.
 
 
 ## Foreground termination

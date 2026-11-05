@@ -13,7 +13,6 @@ import net.minecraft.network.protocol.Packet
 import net.minecraft.network.protocol.game.ClientGamePacketListener
 import net.minecraft.network.protocol.game.ClientboundBlockEntityDataPacket
 import net.minecraft.server.level.ServerLevel
-import net.minecraft.world.level.block.Block
 import net.minecraft.world.level.block.entity.BlockEntity
 import net.minecraft.world.level.block.entity.BlockEntityType
 import net.minecraft.world.level.block.state.BlockState
@@ -37,8 +36,6 @@ open class DisplayBlockEntity(
     private var clientOpacity = 255
     private val clientImage = DisplayClientImage()
     private var sentRgb = ByteArray(64 * 64 * 3)
-    private var sentUpdate = DisplayTileUpdate.full(sentRgb, 64)
-    private var sentPanels = ""
     private var snapshotRequestTick = Long.MIN_VALUE
 
     fun displayColor(
@@ -84,7 +81,9 @@ open class DisplayBlockEntity(
 
     private fun requestMissingSnapshot() {
         val clientLevel = level ?: return
-        if (clientImage.needsSnapshot && (snapshotRequestTick == Long.MIN_VALUE || clientLevel.gameTime - snapshotRequestTick >= 20)) {
+        if ((clientImage.needsSnapshot || clientImage.needsInitialSnapshot) &&
+            (snapshotRequestTick == Long.MIN_VALUE || clientLevel.gameTime - snapshotRequestTick >= 20)
+        ) {
             requestSnapshot?.invoke(this)
             snapshotRequestTick = clientLevel.gameTime
         }
@@ -94,7 +93,7 @@ open class DisplayBlockEntity(
         val serverLevel = level as? ServerLevel ?: return
         val surface = DisplayWorldAccess.surface(serverLevel, this) ?: return
         surface.canvas.expire()
-        val publication = DisplayWorldAccess.publication(serverLevel, surface)
+        val publication = DisplayWorldAccess.publication(serverLevel, surface) ?: return
         if (publication.revision == publishedRevision && publication.id == publishedSurface &&
             surface.canvas.opacity == publishedOpacity
         ) {
@@ -109,9 +108,7 @@ open class DisplayBlockEntity(
         publishedMode = publication.mode
         publishedOpacity = surface.canvas.opacity
         sentRgb = pixels
-        sentUpdate = update
-        sentPanels = publication.panels
-        serverLevel.sendBlockUpdated(blockPos, blockState, blockState, Block.UPDATE_CLIENTS)
+        sendUpdate?.invoke(this, tile(publication, update))
         publication.remaining.remove(instance)
         ru.lazyhat.compukters.core.display.DisplayPerformanceTrace.begin("sync.admitted")?.apply {
             this.surface = publication.id.toString()
@@ -125,50 +122,78 @@ open class DisplayBlockEntity(
 
     fun hasDisplayPixels(): Boolean = canvasSurface()?.canvas?.encodeRgb()?.any { it != 0.toByte() } ?: sentRgb.any { it != 0.toByte() }
 
-    override fun getUpdatePacket(): Packet<ClientGamePacketListener> =
-        ClientboundBlockEntityDataPacket.create(this) { _, _ -> incrementalTag() }
+    override fun getUpdatePacket(): Packet<ClientGamePacketListener> = ClientboundBlockEntityDataPacket.create(this)
 
-    private fun incrementalTag(): CompoundTag =
-        CompoundTag().apply {
-            putInt("display_wire", 1)
-            putInt("display_mode", publishedMode)
-            putInt("display_opacity", publishedOpacity)
-            putString("display_surface", publishedSurface?.toString() ?: "")
-            putLong("display_revision", publishedRevision)
-            putString("display_panels", sentPanels)
-            putByteArray("display_rgb", sentUpdate.rgb)
-            putLong("display_base", sentUpdate.base)
-            putInt("display_x", sentUpdate.x)
-            putInt("display_y", sentUpdate.y)
-            putInt("display_width", sentUpdate.width)
-            putInt("display_height", sentUpdate.height)
-        }
-
-    /** Full snapshot for initial chunk tracking and explicit recovery; never depends on client history. */
-    fun snapshotPacket(): Packet<ClientGamePacketListener>? {
-        val serverLevel = level as? ServerLevel ?: return null
-        val surface = canvasSurface() ?: return null
-        val publication = DisplayWorldAccess.publication(serverLevel, surface)
-        val pixels = publication.tiles[java.util.UUID.fromString(checkpointIdentity)] ?: return null
-        if (!DisplayWorldAccess.admitSync(serverLevel, pixels.size + publication.panels.length * 2 + 192)) return null
-        return ClientboundBlockEntityDataPacket.create(this)
-    }
-
+    /** Pixels travel in bounded custom payloads; chunk tags contain only stable identity/metadata. */
     override fun getUpdateTag(registries: HolderLookup.Provider): CompoundTag =
         CompoundTag().apply {
-            val surface = canvasSurface()
-            val publication = surface?.let { DisplayWorldAccess.publication(level as ServerLevel, it) }
-            val bytes = publication?.tiles?.get(java.util.UUID.fromString(checkpointIdentity)) ?: sentRgb
-            putInt("display_wire", 1)
-            putInt("display_mode", publication?.mode ?: publishedMode.coerceAtLeast(0))
-            putInt("display_opacity", surface?.canvas?.opacity ?: publishedOpacity)
-            putByteArray("display_rgb", bytes)
-            if (publication != null) {
-                putString("display_surface", publication.id.toString())
-                putLong("display_revision", publication.revision)
-                putString("display_panels", publication.panels)
-            }
+            putString(IDENTITY_KEY, checkpointIdentity)
+            putInt("display_mode", publishedMode.coerceAtLeast(0))
+            putInt("display_opacity", publishedOpacity)
         }
+
+    private fun tile(
+        publication: DisplayWorldAccess.Publication,
+        update: DisplayTileUpdate,
+    ): WorldDisplayTile =
+        WorldDisplayTile(
+            blockPos.asLong(),
+            java.util.UUID.fromString(checkpointIdentity),
+            publication.id,
+            publication.revision,
+            publication.mode,
+            publishedOpacity,
+            publication.panels.split(',').map(String::toLong),
+            update.base,
+            update.x,
+            update.y,
+            update.width,
+            update.height,
+            update.rgb,
+        )
+
+    /** Full recovery independent of a viewer's history. A not-yet-ready publication is retried by the transport. */
+    fun snapshotUpdate(): WorldDisplayTile? {
+        val serverLevel = level as? ServerLevel ?: return null
+        val surface = canvasSurface() ?: return null
+        val publication = DisplayWorldAccess.publication(serverLevel, surface) ?: return null
+        val pixels = publication.tiles[java.util.UUID.fromString(checkpointIdentity)] ?: return null
+        if (!DisplayWorldAccess.admitSync(serverLevel, pixels.size + publication.panels.length * 2 + 192)) return null
+        return tile(
+            publication,
+            DisplayTileUpdate.full(pixels, ru.lazyhat.compukters.core.display.DisplayCanvas.DENSITIES[publication.mode]),
+        ).copy(opacity = surface.canvas.opacity)
+    }
+
+    /** Called on the client owner thread. The returned work touches only this image, never the world. */
+    fun prepareClientUpdate(tile: WorldDisplayTile): (() -> Unit)? {
+        if (level?.isClientSide != true || isRemoved || tile.position != blockPos.asLong() ||
+            tile.instance.toString() != checkpointIdentity
+        ) {
+            return null
+        }
+        clientOpacity = tile.opacity
+        val image = clientImage
+        val members = tile.members.joinToString(",")
+        return {
+            image.receive(
+                tile.mode,
+                tile.rgb,
+                tile.surface.toString(),
+                tile.publication,
+                members,
+                tile.base,
+                tile.x,
+                tile.y,
+                tile.width,
+                tile.height,
+            )
+        }
+    }
+
+    fun requireClientSnapshot(publication: Long) {
+        clientImage.requireSnapshot(publication)
+    }
 
     override fun loadAdditional(input: ValueInput) {
         super.loadAdditional(input)
@@ -223,6 +248,7 @@ open class DisplayBlockEntity(
     companion object {
         /** Client bootstrap supplies transport; common block entities never depend on loader client classes. */
         var requestSnapshot: ((DisplayBlockEntity) -> Unit)? = null
+        var sendUpdate: ((DisplayBlockEntity, WorldDisplayTile) -> Unit)? = null
         private const val IDENTITY_KEY = "compukters_display_identity"
     }
 }

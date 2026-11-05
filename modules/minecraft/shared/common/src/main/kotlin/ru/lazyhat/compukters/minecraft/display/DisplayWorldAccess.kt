@@ -35,78 +35,10 @@ internal object DisplayWorldAccess {
         val updates: Map<UUID, DisplayTileUpdate>,
     )
 
-    private val publications = java.util.WeakHashMap<ServerLevel, MutableMap<UUID, Publication>>()
-    private var publicationSequence = 0L
-
     fun publication(
         level: ServerLevel,
         surface: DisplaySurface,
-    ): Publication {
-        val cache = publications.getOrPut(level) { linkedMapOf() }
-        cache.keys.removeIf { DisplayStorage.get(level).directory.byId(it) == null }
-        val members = surface.panels.associate { it.instance to position(surface, it.column, it.row) }
-        val positions =
-            members.values
-                .map { it.asLong() }
-                .sorted()
-                .joinToString(",")
-        val previous = cache[surface.id]
-        previous?.remaining?.removeIf { instance ->
-            val pos = members[instance]
-            pos == null || !level.hasChunkAt(pos) ||
-                !matches(level, surface, instance, pos)
-        }
-        if (previous != null && previous.panels == positions && previous.tiles.keys == members.keys &&
-            (previous.remaining.isNotEmpty() || previous.sourceRevision == surface.canvas.revision)
-        ) {
-            return previous
-        }
-        val trace =
-            ru.lazyhat.compukters.core.display.DisplayPerformanceTrace
-                .begin("sync.publication")
-        val tiles = surface.panels.associate { it.instance to surface.canvas.tile(it.column, it.row) }
-        val compatible =
-            previous != null && previous.mode == surface.canvas.mode && previous.panels == positions && previous.tiles.keys == members.keys
-        val density = ru.lazyhat.compukters.core.display.DisplayCanvas.DENSITIES[surface.canvas.mode]
-        val updates =
-            tiles.mapValues { (id, bytes) ->
-                DisplayTileUpdate.between(if (compatible) previous?.tiles?.get(id) else null, bytes, density, previous?.revision ?: -1)
-            }
-        if (compatible && updates.values.all { it.rgb.isEmpty() }) {
-            val unchanged = checkNotNull(previous).copy(sourceRevision = surface.canvas.revision)
-            cache[surface.id] = unchanged
-            trace?.apply {
-                phase = "sync.unchanged"
-                canvas = System.identityHashCode(surface.canvas)
-                this.surface = surface.id.toString()
-                revision = unchanged.sourceRevision
-                publication = unchanged.revision
-                commit()
-            }
-            return unchanged
-        }
-        return Publication(
-            surface.id,
-            ++publicationSequence,
-            surface.canvas.mode,
-            positions,
-            tiles,
-            members.filterValues { level.hasChunkAt(it) }.keys.toMutableSet(),
-            surface.canvas.revision,
-            updates,
-        ).also { publication ->
-            cache[surface.id] = publication
-            trace?.apply {
-                canvas = System.identityHashCode(surface.canvas)
-                this.surface = surface.id.toString()
-                revision = publication.sourceRevision
-                this.publication = publication.revision
-                bytes = publication.updates.values.sumOf { it.rgb.size }
-                panels = publication.tiles.size
-                commit()
-            }
-        }
-    }
+    ): Publication? = DisplayPublications.publication(level, surface)
 
     private val budgets = java.util.WeakHashMap<ServerLevel, TickBudget>()
 
@@ -311,7 +243,7 @@ internal object DisplayWorldAccess {
         directory.remove(member.instance)
         val remaining = directory.byId(surface.id)
         if (remaining == null) {
-            publications[level]?.remove(surface.id)
+            DisplayPublications.invalidate(level, surface.id)
             DisplayNetworkAccess.remove(level, surface.id)
         } else {
             DisplayNetworkAccess.refresh(level, remaining)
@@ -335,7 +267,7 @@ internal object DisplayWorldAccess {
                 facings.indexOf(facing),
                 DisplayStorage.get(destination).directory,
             )
-        publications[source]?.remove(id)
+        DisplayPublications.invalidate(source, id)
         DisplayNetworkAccess.refresh(destination, moved)
         moved.panels.forEach { destination.getBlockEntity(position(moved, it.column, it.row))?.setChanged() }
     }
@@ -406,7 +338,7 @@ internal object DisplayWorldAccess {
         DisplayNetworkAccess.checkSplit(level, screen)
         val screens = directory.split(id)
         DisplayNetworkAccess.split(level, id, screens)
-        publications[level]?.remove(id)
+        DisplayPublications.invalidate(level, id)
         screens.forEach { screen -> level.getBlockEntity(BlockPos(screen.originX, screen.originY, screen.originZ))?.setChanged() }
         PeripheralCableTopologyCache.invalidate(level)
     }

@@ -97,7 +97,7 @@ class AttachedDisplayView {
         }
         for (surface in visible) {
             surface.canvas.expire()
-            val publication = DisplayWorldAccess.publication(current, surface)
+            val publication = DisplayWorldAccess.publication(current, surface) ?: continue
             val members = surface.panels.filter { current.hasChunkAt(DisplayWorldAccess.position(surface, it.column, it.row)) }
             if (members.isEmpty()) continue
             val manifest =
@@ -178,7 +178,7 @@ class AttachedDisplayView {
                         }
                     }
                 ) {
-                    DisplayWorldAccess.publication(level, surface).remaining.clear()
+                    DisplayWorldAccess.publication(level, surface)?.remaining?.clear()
                 }
             }
         }

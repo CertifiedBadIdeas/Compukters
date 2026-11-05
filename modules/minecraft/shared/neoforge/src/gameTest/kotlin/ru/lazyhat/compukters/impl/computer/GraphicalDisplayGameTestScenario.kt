@@ -251,31 +251,23 @@ internal object GraphicalDisplayGameTestScenario {
                 helper.assertTrue(other.displayColor(36, 18) == 0x654321, "pointer lifecycle did not traverse the Guest binding")
                 helper.assertTrue(display.displayColor(14, 6) == 0x00FF00, "local canvas RGB image did not use its viewport offset")
                 helper.assertTrue(display.displayColor(24, 4) == 0x101820, "canvas drawing escaped its viewport")
-            }.thenIdle(2)
-            .thenExecute {
-                val fullTag = other.getUpdateTag(helper.level.registryAccess())
-                val deltaTag = (other.updatePacket as net.minecraft.network.protocol.game.ClientboundBlockEntityDataPacket).tag
-
-                fun rgb(tag: net.minecraft.nbt.CompoundTag): java.nio.ByteBuffer =
-                    com.mojang.serialization.Codec.BYTE_BUFFER
-                        .fieldOf("display_rgb")
-                        .codec()
-                        .parse(net.minecraft.nbt.NbtOps.INSTANCE, tag)
-                        .result()
-                        .orElseThrow()
-                val base =
-                    com.mojang.serialization.Codec.LONG
-                        .fieldOf("display_base")
-                        .codec()
-                        .parse(net.minecraft.nbt.NbtOps.INSTANCE, deltaTag)
-                        .result()
-                        .orElseThrow()
-                helper.assertTrue(rgb(fullTag).remaining() == 16 * 16 * 3, "initial/recovery tag must contain an independent full tile")
+            }.thenWaitUntil {
+                val tile = other.snapshotUpdate()
                 helper.assertTrue(
-                    base >= 0 && rgb(deltaTag).remaining() < rgb(fullTag).remaining(),
-                    "small Guest pixel changes were sent as a full tile",
+                    tile != null && tile.mode == 0 && tile.rgb.size == 16 * 16 * 3,
+                    "independent full snapshot is not ready",
                 )
-                helper.assertTrue(other.snapshotPacket() != null, "bounded full-snapshot recovery did not produce a packet")
+                val rgb = requireNotNull(tile).rgb
+                val offset = (2 * 16 + 3) * 3
+                helper.assertTrue(
+                    rgb[offset] == 0x12.toByte() && rgb[offset + 1] == 0x34.toByte() && rgb[offset + 2] == 0x56.toByte(),
+                    "asynchronous snapshot has not reached the final Guest frame",
+                )
+            }.thenExecute {
+                helper.assertTrue(
+                    !other.getUpdateTag(helper.level.registryAccess()).contains("display_rgb"),
+                    "initial chunk metadata must not carry pixel arrays",
+                )
                 helper.assertTrue(display.screenMode() == 0, "applied ultra-low mode was not retained")
                 helper.assertTrue(
                     display.displayColor(2, 2) == 0xFF0000 && display.displayColor(3, 2) == 0x0000FF,
@@ -325,17 +317,16 @@ internal object GraphicalDisplayGameTestScenario {
                 DisplayAssembly.click(player, stack, absolute, { selections[it].orEmpty() }, { key, value ->
                     if (value == null) selections.remove(key) else selections[key] = value
                 })
-                val tile =
-                    com.mojang.serialization.Codec.BYTE_BUFFER
-                        .fieldOf("display_rgb")
-                        .codec()
-                        .parse(net.minecraft.nbt.NbtOps.INSTANCE, replacement.getUpdateTag(helper.level.registryAccess()))
-                        .result()
-                        .orElseThrow()
+            }.thenWaitUntil {
+                val replacement = helper.level.getBlockEntity(helper.absolutePos(first)) as DisplayBlockEntity
+                val tile = replacement.snapshotUpdate()
+                helper.assertTrue(tile != null, "replacement panel snapshot is not ready")
+                val rgb = requireNotNull(tile).rgb
                 helper.assertTrue(
-                    tile.get(0).toInt() and 255 == 255 && tile.get(1).toInt() and 255 == 255 && tile.get(2) == 0.toByte(),
-                    "replacement panel update packet did not recover its RGB tile",
+                    rgb[0].toInt() and 255 == 255 && rgb[1].toInt() and 255 == 255 && rgb[2] == 0.toByte(),
+                    "replacement panel payload did not recover its RGB tile",
                 )
+            }.thenExecute {
                 helper.setBlock(first, Blocks.AIR)
                 helper.setBlock(second, Blocks.AIR)
                 helper.assertTrue(inspection().entries.size == 1, "last panel removal retained network membership")

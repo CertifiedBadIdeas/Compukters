@@ -29,6 +29,7 @@ object DisplayClientBootstrap {
     private fun onTick(
         @Suppress("UNUSED_PARAMETER") event: net.neoforged.neoforge.client.event.ClientTickEvent.Post,
     ) {
+        WorldDisplayClient.tick()
         AttachedDisplayClient.tick()
         DisplayTextureCache.cleanup()
         DisplayPointerClient.tick()

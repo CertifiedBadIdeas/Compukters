@@ -13,6 +13,10 @@ headings so this page has one stable URL that can be shared outside the reposito
 
 ## 0.7.0 — In development
 
+- Display RGB encoding and delta calculation run in a bounded background worker pool. Ordinary display blocks
+  send pixels through dedicated packets and prepare client images off the render thread, retaining coherent
+  multi-panel frames and bounded full-image recovery. The existing Minecraft connection and traffic budget remain.
+
 - Preserve attached display identity, canvas and network membership when a guarded transfer creates
   a new native plot or permanently removes bulk source storage. Journal recovery reconciles attached
   surfaces against the coordinator's chosen copy, including rollback. Simple unload is not removal.

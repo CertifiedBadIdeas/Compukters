@@ -164,4 +164,47 @@ class DisplayClientImageTest {
         assertEquals(3L, image.publication)
         assertEquals(2, image.rgb[0].toInt())
     }
+
+    @Test
+    fun `a newer worker receive during barrier preserves the exact checked frame`() {
+        val first = DisplayClientImage()
+        val second = DisplayClientImage()
+        val id = UUID.randomUUID().toString()
+        val one = ByteArray(16 * 16 * 3) { 1 }
+        val two = ByteArray(one.size) { 2 }
+        first.receive(0, one, id, 1, "1,2")
+        second.receive(0, one, id, 1, "1,2")
+        first.publish { position ->
+            if (position == 1L) {
+                first
+            } else {
+                // first's exact candidate has been checked; its worker now receives the next frame.
+                first.receive(0, two, id, 2, "1,2")
+                second
+            }
+        }
+        assertEquals(1L, first.publication)
+        assertEquals(1L, second.publication)
+        assertContentEquals(one, first.rgb)
+        second.receive(0, two, id, 2, "1,2")
+        second.publish { if (it == 1L) first else second }
+        assertEquals(2L, first.publication)
+        assertEquals(2L, second.publication)
+        assertContentEquals(two, first.rgb)
+    }
+
+    @Test
+    fun `queued older full frames cannot cancel recovery for a rejected newer job`() {
+        val image = DisplayClientImage()
+        val id = UUID.randomUUID().toString()
+        val rgb = ByteArray(16 * 16 * 3)
+        image.receive(0, rgb, id, 1, "1")
+        image.publish { image }
+        image.requireSnapshot(3) // The bounded client queue rejected publication 3.
+        image.receive(0, rgb, id, 2, "1") // Previously queued work completes afterwards.
+        image.publish { image }
+        assertTrue(image.needsSnapshot)
+        image.receive(0, rgb, id, 3, "1")
+        assertFalse(image.needsSnapshot)
+    }
 }
