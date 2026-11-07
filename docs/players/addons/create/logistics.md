@@ -27,7 +27,7 @@ import create.logistics.StockTicker
 fun main() {
     val ticker = StockTicker.named("warehouse")
     val stock = ticker.snapshot()
-    val index = stock.findItem("minecraft:iron_ingot")
+    val index = stock.findItem("minecraft:iron_ingot", 0)
     if (index >= 0) {
         println("Available: ${stock.count(index)}")
         println("Accepted: ${stock.request(index, 16, "workshop")}")
@@ -39,7 +39,7 @@ fun main() {
 `StockTicker.at(Side.front)` and the other five side accessors use an adjacent block instead of a cable name.
 `snapshot()` captures an immutable list of at most 256 entries. Each entry has a registry item ID, a display name, and
 an available count. Its index identifies the **exact ItemStack variant**, including components: two entries may have
-the same item ID and different names or components. The list does not change after capture. `findItem(itemId)` searches
+the same item ID and different names or components. The list does not change after capture. `findItem(itemId, 0)` searches
 the snapshot in one bounded host call and returns the first matching index, or `-1` if absent. To inspect another
 variant with the same ID, call `findItem(itemId, previousIndex + 1)`; the start index is inclusive. IDs are exact,
 case-sensitive registry IDs such as `minecraft:iron_ingot`. Searching by ID does not merge or choose among variants.
@@ -50,7 +50,7 @@ To request packaging, use the index found in the snapshot:
 
 ```kotlin
 val stock = ticker.snapshot()
-val index = stock.findItem("minecraft:iron_ingot")
+val index = stock.findItem("minecraft:iron_ingot", 0)
 val accepted = if (index >= 0) stock.request(index, 16, "workshop") else false
 stock.close()
 println(accepted)

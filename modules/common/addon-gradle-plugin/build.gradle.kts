@@ -94,5 +94,6 @@ tasks.register("publishAddonSdkToMavenLocal") {
 
 dependencies {
     testImplementation(gradleTestKit())
+    testImplementation(projects.addonGuestApi)
     testImplementation(kotlin("test"))
 }

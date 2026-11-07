@@ -1111,6 +1111,22 @@ class CompletionQueryTest {
     }
 
     @Test
+    fun `completion exposes generated declarative device methods and Unit command factories`() {
+        val bundle = Path.of(requireNotNull(System.getProperty("compukters.test.declarativeAddonGuestApiFixture")))
+        val source = "import declarative.Engine\nfun use(engine: Engine) { engine. }"
+        for (attached in listOf(false, true)) {
+            K2QueryFixture.sourceWithGuestApi(attached, "main.kt" to source, addonBundlePath = bundle).use { fixture ->
+                val items = fixture.complete("main.kt", source.indexOf("engine.") + "engine.".length).items
+                val names = items.map { it.insertText }.toSet()
+                assertTrue(names.containsAll(setOf("speed", "aim", "aimCommand", "close")), items.toString())
+                assertTrue("speedCommand" !in names && "closeCommand" !in names, items.toString())
+                assertTrue(items.single { it.insertText == "aim" }.label.contains("Vector3d"), items.toString())
+                assertTrue(items.single { it.insertText == "aimCommand" }.label.contains("Vector3d"), items.toString())
+            }
+        }
+    }
+
+    @Test
     fun `completion proposes an available addon API before its module is selected`() {
         val source = "fun main() { Kin }"
         K2QueryFixture.sourceWithInactiveGuestApi("main.kt" to source).use { fixture ->

@@ -19,10 +19,13 @@
 package ru.lazyhat.compukters.gradle.addon
 
 import org.gradle.testkit.runner.GradleRunner
+import ru.lazyhat.compukters.addon.api.AddonGuestApiBundleCodec
+import java.io.ByteArrayInputStream
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.StandardCopyOption
 import java.util.zip.ZipFile
+import java.util.zip.ZipInputStream
 import kotlin.io.path.createDirectories
 import kotlin.io.path.writeText
 import kotlin.test.Test
@@ -88,6 +91,12 @@ class ExternalAddonBuildTest {
 
                 version = "2.3.4"
 
+                dependencies {
+                    testImplementation(kotlin("test"))
+                    testImplementation("ru.lazyhat.compukters:compukters-addon-api:$sdkVersion")
+                }
+                tasks.test { useJUnitPlatform() }
+
                 compuktersAddon {
                     register("fixture")
                     toolingCoordinate.set("ru.lazyhat.compukters:compukters-addon-tooling:$sdkVersion")
@@ -109,14 +118,48 @@ class ExternalAddonBuildTest {
                 }
                 """.trimIndent(),
             )
-            project.resolve("src/compuktersAddon/kotlin/fixture/kinetics/Kinetics.kt").also { source ->
+            project.resolve("src/test/kotlin/fixture/GeneratedContractTest.kt").also { target ->
+                target.parent.createDirectories()
+                requireNotNull(javaClass.getResourceAsStream("/declarative-addon/GeneratedContractTest.kt")).use { input ->
+                    Files.copy(input, target)
+                }
+            }
+            val contractSource = project.resolve("src/compuktersAddon/contracts/fixture/kinetics/Kinetics.kt")
+            contractSource.also { source ->
                 source.parent.createDirectories()
                 source.writeText(
                     """
                     package fixture.kinetics
 
-                    private object Bindings {
-                        external fun speed(handle: Int): Float
+                    import ru.lazyhat.compukters.api.contracts.GuestDevice
+                    import ru.lazyhat.compukters.api.contracts.GuestRecord
+                    import ru.lazyhat.compukters.api.contracts.GuestResource
+                    import ru.lazyhat.compukters.api.contracts.GuestRead
+                    import ru.lazyhat.compukters.api.contracts.GuestCall
+                    import ru.lazyhat.compukters.api.contracts.GuestCommand
+                    import ru.lazyhat.compukters.api.contracts.GuestWait
+                    import ru.lazyhat.compukters.api.contracts.Finite
+                    import ru.lazyhat.compukters.api.contracts.DoubleRange
+                    import ru.lazyhat.compukters.api.contracts.types.Vector3d
+                    import ru.lazyhat.compukters.api.contracts.types.Rotation3d
+
+                    @GuestRecord data class State(val position: Vector3d, val orientation: Rotation3d)
+
+                    @GuestResource interface Snapshot {
+                        @GuestRead fun size(): Int
+                        @GuestCall fun close(): Unit
+                    }
+
+                    @GuestDevice("fixture:engine") interface Engine {
+                        @GuestRead fun speed(): Float
+                        @GuestRead fun state(): State
+                        @GuestRead fun orientation(): Rotation3d
+                        @GuestRead fun snapshot(): Snapshot
+                        @GuestCommand fun aim(direction: Vector3d): Unit
+                        @GuestCommand fun target(state: State): Unit
+                        @GuestCommand fun setThrottle(@Finite @DoubleRange(min = 0.0, max = 1.0) throttle: Double): Unit
+                        @GuestCall fun close(): Unit
+                        @GuestWait fun awaitState(): State
                     }
                     """.trimIndent(),
                 )
@@ -125,6 +168,9 @@ class ExternalAddonBuildTest {
             runner(project, "updateCompuktersAddonAbiLock", "--configuration-cache").build()
             runner(project, "verifyCompuktersApiClasspath").build()
             runner(project, "jar", "--configuration-cache").build()
+            runner(project, "check", "compuktersGuestSourcesJar", "--configuration-cache").build()
+            val hostTests = Files.readString(project.resolve("build/test-results/test/TEST-fixture.GeneratedContractTest.xml"))
+            assertEquals(3, Regex("<testcase\\s").findAll(hostTests).count(), hostTests)
             Files.delete(project.resolve("build/compukters-addon/external-addon.cagb"))
             val replay = runner(project, "jar", "--configuration-cache").build()
             assertTrue(replay.output.contains("Reusing configuration cache"), replay.output)
@@ -139,11 +185,37 @@ class ExternalAddonBuildTest {
                     .contains("version 2.3.4"),
             )
             assertTrue(project.resolve("build/generated/sources/compuktersAddon/kotlin/GeneratedAddonHostContract.kt").toFile().isFile)
+            val guestRoot = project.resolve("build/generated/sources/compuktersGuest/kotlin")
+            val generatedFiles =
+                Files.walk(guestRoot).use { paths ->
+                    paths.filter { Files.isRegularFile(it) }.toList().associate {
+                        guestRoot.relativize(it).toString() to
+                            Files.readString(it)
+                    }
+                }
+            val guest = generatedFiles.getValue("fixture/kinetics/Engine.kt")
+            assertTrue("setThrottleCommand" in guest && "aimCommand" in guest)
+            assertTrue("closeCommand" !in guest && "speedCommand" !in guest && "awaitStateCommand" !in guest)
+            assertTrue("kotlin.math.Rotation3d.fromQuaternion" in guest)
+            val host = Files.readString(project.resolve("build/generated/sources/compuktersAddon/kotlin/GeneratedAddonHostContract.kt"))
+            assertTrue("batchCommands" !in host)
+            assertTrue("argument1 >= 0.0 && argument1 <= 1.0" in host)
+            val bundle = AddonGuestApiBundleCodec.decode(Files.readAllBytes(project.resolve("build/compukters-addon/external-addon.cagb")))
+            assertTrue(requireNotNull(bundle.moduleDescriptor.libraryFragment).toByteArray().isNotEmpty())
+            assertEquals(generatedFiles, sourceEntries(requireNotNull(bundle.sourcesJar).toByteArray()))
+            assertEquals(
+                generatedFiles,
+                sourceEntries(Files.readAllBytes(project.resolve("build/libs/external-addon-2.3.4-guest-sources.jar"))),
+            )
             val jar = project.resolve("build/libs/external-addon-2.3.4.jar").toFile()
             ZipFile(jar).use { zip ->
                 assertEquals(1, zip.entries().asSequence().count { it.name == "META-INF/compukters/addons/fixture.cagb" })
                 assertTrue(zip.entries().asSequence().none { it.name.startsWith("ru/lazyhat/compukters/") })
+                assertTrue(zip.getEntry("fixture/kinetics/Engine.class") == null)
             }
+            contractSource.toFile().appendText("\n@GuestDevice(\"fixture:invalid\") interface Invalid { @GuestCommand fun read(): Int }\n")
+            val invalid = runner(project, "generateCompuktersGuestSources").buildAndFail()
+            assertTrue("@GuestCommand must return Unit" in invalid.output, invalid.output)
         } finally {
             Files.walk(project).use { paths -> paths.sorted(Comparator.reverseOrder()).forEach(Files::deleteIfExists) }
         }
@@ -160,6 +232,16 @@ class ExternalAddonBuildTest {
             .withPluginClasspath()
             .forwardOutput()
 }
+
+private fun sourceEntries(bytes: ByteArray): Map<String, String> =
+    ZipInputStream(ByteArrayInputStream(bytes)).use { zip ->
+        buildMap {
+            while (true) {
+                val entry = zip.nextEntry ?: break
+                if (!entry.isDirectory && entry.name.endsWith(".kt")) put(entry.name, zip.readBytes().decodeToString())
+            }
+        }
+    }
 
 private fun stageModule(
     repository: Path,

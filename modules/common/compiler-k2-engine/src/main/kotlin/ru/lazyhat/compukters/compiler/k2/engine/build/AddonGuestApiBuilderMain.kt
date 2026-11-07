@@ -127,7 +127,26 @@ fun buildAddonGuestApiBundle(
 }
 
 fun main(args: Array<String>) {
+    require(args.size % 2 == 0) { "Builder arguments must be option/value pairs" }
     val arguments = args.toList().windowed(2, 2, partialWindows = false).associate { (name, value) -> name to value }
+    require("--sources" !in arguments) { "Handwritten addon Guest Kotlin is unsupported; use --contracts and --guest-output" }
+    val authoring = AddonAuthoringContract.parse(arguments.path("--descriptor").readLines())
+    val sourceRoot = arguments.path("--contracts")
+    val declaration = parseDeclarativeGuestContract(sourceRoot, authoring.addon)
+    val generated = arguments.path("--guest-output")
+    require(!sourceRoot.startsWith(generated) && !generated.startsWith(sourceRoot)) {
+        "Generated Guest output must not overlap the contract source directory"
+    }
+    writeGeneratedGuestSources(declaration, generated)
+    if (arguments["--generate-only"]?.toBooleanStrict() == true) return
+    buildTrustedAddonGuestApi(arguments + ("--sources" to generated.toString()), declaration)
+}
+
+/** Internal compiler-library entry point; the published addon CLI accepts declarations only. */
+fun buildTrustedAddonGuestApi(
+    arguments: Map<String, String>,
+    declaration: DeclarativeGuestContract? = null,
+) {
     val platformInput = arguments.path("--platform-input")
     val sourceRoot = arguments.path("--sources")
     val descriptor = arguments.path("--descriptor")
@@ -157,7 +176,9 @@ fun main(args: Array<String>) {
         }
     }
     writeAtomically(output, buildAddonGuestApiBundle(base, sourceRoot, resolved.contract))
-    hostOutput?.let { path -> writeAtomically(path, renderAddonHostContract(authoring, resolved.contract).encodeToByteArray()) }
+    hostOutput?.let { path ->
+        writeAtomically(path, renderAddonHostContract(authoring, resolved.contract, declaration).encodeToByteArray())
+    }
 }
 
 private fun writeSource(

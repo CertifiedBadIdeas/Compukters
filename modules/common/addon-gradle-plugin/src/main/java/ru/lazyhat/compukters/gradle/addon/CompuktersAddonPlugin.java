@@ -29,6 +29,8 @@ import org.gradle.api.file.FileCollection;
 import org.gradle.api.tasks.AbstractCopyTask;
 import org.gradle.api.tasks.JavaExec;
 import org.gradle.api.tasks.TaskProvider;
+import org.gradle.api.tasks.SourceSetContainer;
+import org.gradle.api.tasks.bundling.Jar;
 
 public final class CompuktersAddonPlugin implements Plugin<Project> {
     private static final Pattern IDENTITY = Pattern.compile("[a-z][a-z0-9_-]{0,63}");
@@ -65,7 +67,10 @@ public final class CompuktersAddonPlugin implements Plugin<Project> {
             configuration.setCanBeResolved(true);
         });
         FileCollection platformFiles = project.files(platform);
-        var sourceRoot = project.getLayout().getProjectDirectory().dir("src/compuktersAddon/kotlin");
+        var sourceRoot = project.getLayout().getProjectDirectory().dir("src/compuktersAddon/contracts");
+        var legacySourceRoot = project.getLayout().getProjectDirectory().dir("src/compuktersAddon/kotlin");
+        var legacyKotlin = project.fileTree(legacySourceRoot).matching(pattern -> pattern.include("**/*.kt"));
+        var generatedGuestRoot = project.getLayout().getBuildDirectory().dir("generated/sources/compuktersGuest/kotlin");
         var abiLock = project.getLayout().getProjectDirectory().file("src/compuktersAddon/addon.lock");
         var descriptor = project.getLayout().getBuildDirectory().file("compukters-addon/addon.api");
         var bundle = project.getLayout().getBuildDirectory().file("compukters-addon/" + project.getName() + ".cagb");
@@ -95,29 +100,53 @@ public final class CompuktersAddonPlugin implements Plugin<Project> {
             });
         });
 
-        TaskProvider<JavaExec> assemble = project.getTasks().register("assembleCompuktersAddon", JavaExec.class, task -> {
+        TaskProvider<JavaExec> generateGuest = project.getTasks().register("generateCompuktersGuestSources", JavaExec.class, task -> {
             task.setGroup("build");
-            task.setDescription("Builds the deterministic Compukters addon Guest Kotlin bundle.");
+            task.setDescription("Generates inspectable Guest Kotlin from declaration-only addon contracts.");
             task.dependsOn(generateDescriptor);
             task.setClasspath(tooling);
             task.getMainClass().set("ru.lazyhat.compukters.compiler.k2.engine.build.AddonGuestApiBuilderMainKt");
             task.getInputs().dir(sourceRoot);
+            task.getInputs().files(legacyKotlin);
+            task.getInputs().file(descriptor);
+            task.getOutputs().dir(generatedGuestRoot);
+            task.doFirst(ignored -> {
+                if (!legacyKotlin.isEmpty()) {
+                    throw new IllegalArgumentException("Handwritten addon Guest sources are unsupported; migrate src/compuktersAddon/kotlin to declarations in src/compuktersAddon/contracts");
+                }
+                task.setArgs(List.of("--contracts", sourceRoot.getAsFile().getAbsolutePath(),
+                        "--guest-output", generatedGuestRoot.get().getAsFile().getAbsolutePath(),
+                        "--descriptor", descriptor.get().getAsFile().getAbsolutePath(),
+                        "--generate-only", "true"));
+            });
+        });
+
+        TaskProvider<JavaExec> assemble = project.getTasks().register("assembleCompuktersAddon", JavaExec.class, task -> {
+            task.setGroup("build");
+            task.setDescription("Builds the deterministic Compukters addon Guest Kotlin bundle.");
+            task.dependsOn(generateGuest);
+            task.setClasspath(tooling);
+            task.getMainClass().set("ru.lazyhat.compukters.compiler.k2.engine.build.AddonGuestApiBuilderMainKt");
+            task.getInputs().dir(sourceRoot);
+            task.getInputs().dir(generatedGuestRoot);
             task.getInputs().file(descriptor);
             task.getInputs().file(abiLock);
             task.getInputs().files(platform);
             task.getOutputs().file(bundle);
             task.getOutputs().file(generatedHost);
             task.doFirst(ignored -> task.setArgs(builderArguments(platformFiles, sourceRoot.getAsFile().getAbsolutePath(),
+                    generatedGuestRoot.get().getAsFile().getAbsolutePath(),
                     descriptor.get().getAsFile().getAbsolutePath(), abiLock.getAsFile().getAbsolutePath(),
                     bundle.get().getAsFile().getAbsolutePath(), generatedHost.get().getAsFile().getAbsolutePath(), false)));
         });
         project.getTasks().register("updateCompuktersAddonAbiLock", JavaExec.class, task -> {
             task.setGroup("build setup");
             task.setDescription("Updates the checked-in Compukters addon ABI lock after an intentional API change.");
-            task.dependsOn(generateDescriptor);
+            task.dependsOn(generateGuest);
             task.setClasspath(tooling);
             task.getMainClass().set("ru.lazyhat.compukters.compiler.k2.engine.build.AddonGuestApiBuilderMainKt");
             task.getInputs().dir(sourceRoot);
+            task.getInputs().dir(generatedGuestRoot);
             task.getInputs().file(descriptor);
             task.getInputs().files(platform);
             task.getOutputs().file(abiLock);
@@ -125,6 +154,7 @@ public final class CompuktersAddonPlugin implements Plugin<Project> {
                     .file("compukters-addon/" + project.getName() + "-abi-lock-update.cagb");
             task.getOutputs().file(validationBundle);
             task.doFirst(ignored -> task.setArgs(builderArguments(platformFiles, sourceRoot.getAsFile().getAbsolutePath(),
+                    generatedGuestRoot.get().getAsFile().getAbsolutePath(),
                     descriptor.get().getAsFile().getAbsolutePath(), abiLock.getAsFile().getAbsolutePath(),
                     validationBundle.get().getAsFile().getAbsolutePath(), null, true)));
         });
@@ -137,6 +167,19 @@ public final class CompuktersAddonPlugin implements Plugin<Project> {
             artifact.builtBy(assemble);
             artifact.setType("cagb");
         });
+        TaskProvider<Jar> guestSources = project.getTasks().register("compuktersGuestSourcesJar", Jar.class, task -> {
+            task.setGroup("build");
+            task.dependsOn(generateGuest);
+            task.getArchiveClassifier().set("guest-sources");
+            task.from(generatedGuestRoot);
+            task.setPreserveFileTimestamps(false);
+            task.setReproducibleFileOrder(true);
+        });
+        Configuration consumableSources = project.getConfigurations().create("compuktersGuestSources", configuration -> {
+            configuration.setCanBeConsumed(true);
+            configuration.setCanBeResolved(false);
+        });
+        project.getArtifacts().add(consumableSources.getName(), guestSources);
 
         project.afterEvaluate(ignored -> {
             project.getDependencies().add(tooling.getName(), extension.getToolingCoordinate().get());
@@ -148,12 +191,18 @@ public final class CompuktersAddonPlugin implements Plugin<Project> {
             }
         });
         project.getPluginManager().withPlugin("org.jetbrains.kotlin.jvm", ignored -> {
+            var contracts = project.getExtensions().getByType(SourceSetContainer.class).create("compuktersContracts");
+            project.afterEvaluate(evaluated -> project.getDependencies().add(
+                    contracts.getCompileOnlyConfigurationName(), extension.getCommonApiCoordinate().get()));
             Object kotlin = project.getExtensions().getByName("kotlin");
             Object sourceSets = invoke(kotlin, "getSourceSets");
+            Object contractSources = invoke(sourceSets, "getByName", "compuktersContracts");
+            invoke(invoke(contractSources, "getKotlin"), "srcDir", sourceRoot);
             Object main = invoke(sourceSets, "getByName", "main");
             Object kotlinSources = invoke(main, "getKotlin");
             invoke(kotlinSources, "srcDir", generatedHostRoot);
             project.getTasks().named("compileKotlin").configure(task -> task.dependsOn(assemble));
+            project.getTasks().named("check").configure(task -> task.dependsOn(contracts.getClassesTaskName()));
         });
         project.getTasks().matching(task -> task.getName().equals("processResources") && task instanceof AbstractCopyTask)
                 .configureEach(task -> {
@@ -172,6 +221,7 @@ public final class CompuktersAddonPlugin implements Plugin<Project> {
     private static List<String> builderArguments(
             FileCollection platform,
             String sources,
+            String guestOutput,
             String descriptor,
             String lock,
             String output,
@@ -179,7 +229,8 @@ public final class CompuktersAddonPlugin implements Plugin<Project> {
             boolean updateLock) {
         List<String> arguments = new ArrayList<>(List.of(
                 "--platform-input", platform.getSingleFile().getAbsolutePath(),
-                "--sources", sources,
+                "--contracts", sources,
+                "--guest-output", guestOutput,
                 "--descriptor", descriptor,
                 "--abi-lock", lock,
                 "--output", output));

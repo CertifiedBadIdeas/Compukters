@@ -113,9 +113,15 @@ internal class K2QueryFixture private constructor(
             vararg sources: Pair<String, String>,
             limits: AnalysisLimits = AnalysisLimits(),
             includeAddonBundle: Boolean = true,
+            addonBundlePath: Path? = null,
         ): K2QueryFixture =
             create(
-                testAdmittedPlatform(selectAllModules = true, attachedSources = attachedSources, includeAddonBundle = includeAddonBundle),
+                testAdmittedPlatform(
+                    selectAllModules = true,
+                    attachedSources = attachedSources,
+                    includeAddonBundle = includeAddonBundle,
+                    addonBundlePath = addonBundlePath,
+                ),
                 limits,
                 sourceUpdater = null,
                 sources = sources,

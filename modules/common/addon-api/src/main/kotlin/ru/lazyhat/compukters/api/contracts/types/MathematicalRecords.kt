@@ -18,7 +18,7 @@
 
 package ru.lazyhat.compukters.api.contracts.types
 
-/** Signature descriptors for Guest mathematical types, usable by the ordinary Kotlin/JVM compiler. */
+/** JVM values for addon contracts and generated hosts. Guest libraries use the canonical stdlib types. */
 data class Vector2i(
     val x: Int,
     val y: Int,
@@ -140,14 +140,4 @@ data class Matrix4d(
     val m31: Double,
     val m32: Double,
     val m33: Double,
-)
-
-/** Generated Guest results are reconstructed through Rotation3f.fromQuaternion. */
-data class Rotation3f(
-    val quaternion: Quaternionf,
-)
-
-/** Generated Guest results are reconstructed through Rotation3d.fromQuaternion. */
-data class Rotation3d(
-    val quaternion: Quaterniond,
 )

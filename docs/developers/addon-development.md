@@ -134,26 +134,45 @@ Do not shade or Jar-in-Jar either artifact into the addon: the separately instal
 classes. Declare Compukters as a required dependency in the addon's `neoforge.mods.toml`, and add an ordinary
 Compukters development mod with its own product version to the run configuration used by your Loom setup.
 
-## Write the Guest API
+## Declare the Guest API
 
-Put declarations beneath `src/compuktersAddon/kotlin`. The first directory and Kotlin package must belong to the addon
-namespace. Write ordinary supported Guest Kotlin and keep only the host boundary `external`:
+SDK 0.8 uses ordinary Kotlin/JVM declarations in `src/compuktersAddon/contracts`. Their package paths must belong
+to the addon namespace. IntelliJ can resolve the SDK annotations and signature types without interpreting Guest Kotlin.
+Device and service interfaces contain explicitly typed methods without bodies; records are immutable constructor-only
+data classes. Executable helpers, initializers, inheritance, generic or nullable boundary types, mutable fields and
+default arguments are rejected.
 
 ```kotlin
-// src/compuktersAddon/kotlin/example/sensors/Sensors.kt
+// src/compuktersAddon/contracts/example/sensors/Sensors.kt
 package example.sensors
 
-public object Sensors {
-    public fun temperature(): Float = SensorBindings.temperature()
-}
+import ru.lazyhat.compukters.api.contracts.GuestRead
+import ru.lazyhat.compukters.api.contracts.GuestService
 
-private object SensorBindings {
-    external fun temperature(): Float
+@GuestService
+interface Sensors {
+    @GuestRead
+    fun temperature(): Float
 }
 ```
 
-The build derives operation signatures, asynchronous host operations, stable numeric selectors, capability schemas,
-bindings and request decoding. Addon source never contains those wire details.
+`@GuestDevice("example:sensor")` generates a peripheral value wrapper and typed discovery provider.
+`@GuestResource` describes a host-owned handle returned by another method, such as a stock snapshot, without discovery.
+Use `@GuestRead` for immediate observations, `@GuestCall` for other immediate operations, `@GuestCommand` for immediate
+Unit-returning mutations, and `@GuestWait` for operations allowed to return a pending continuation. A command also
+gets a local `methodCommand(...)` factory; value-returning calls and waits never get batch factories. A command failure
+is retained in its individual batch result and does not roll back or stop the remaining commands.
+
+`@Finite`, `@DoubleRange`, `@IntRange` and `@MaxLength` on parameters generate both Guest prechecks and authoritative
+host validation. Generated hosts derive batch eligibility from the declarations; handlers do not maintain command-name sets.
+Only methods marked `@GuestWait` may retain a pending continuation.
+
+The build derives operation signatures, selectors, bindings, schemas, argument decoding and command factories.
+`generateCompuktersGuestSources` writes the actual compiler input to `build/generated/sources/compuktersGuest/kotlin`.
+Inspect those files to understand a wrapper. They are generated artifacts: handwritten Guest API files in the former
+`src/compuktersAddon/kotlin` directory are rejected. The executable `.cagb` and its attached source archive contain
+those same generated files. `compuktersGuestSourcesJar` and the consumable `compuktersGuestSources` configuration
+expose them separately. The `compuktersContracts` JVM source set checks the declarations without packaging them in the mod JAR.
 
 ## Implement and register the host
 
@@ -164,7 +183,7 @@ bindings and request decoding. Addon source never contains those wire details.
 CompuktersAddonRegistry.register(ExampleAddonContract.guestApi(MyAddon::class.java)) { computer ->
     ExampleAddonContract.host(
         object : ExampleCapabilityHandler {
-            override fun temperature(): AddonCallResult<Float> =
+            override fun sensorsTemperature(): AddonCallResult<Float> =
                 addonCompleted(readTemperature(computer.level, computer.position))
         },
     )
@@ -229,11 +248,11 @@ block ids or contract names. Type metadata is bounded to 256 characters and must
 Existing constructors remain available. Addons that omit this metadata retain constant insertion and rename,
 but cannot offer typed lookup copying. This host metadata does not change the Guest module or platform ABI.
 
-Guest wrappers can be scalar value classes implementing `compukter.peripheral.Peripheral`; their companions inherit
-`TypedPeripheralProvider<Wrapper>("addon:contract")` and implement the protected `wrap(handle)` method.
-The base implements typed `first`, `firstOrNull`, `filter`, `all`, `at`, `atOrNull`, `named`, and `namedOrNull`.
-It owns bounded snapshots and exact-instance handles, with cleanup after early return or predicate failure.
-Addon capabilities continue to own device operations; they accept the base handle as an `Int`.
+The SDK generates device wrappers implementing `compukter.peripheral.Peripheral`; their companions inherit
+`TypedPeripheralProvider<Wrapper>("addon:contract")`. The base implements typed `first`, `firstOrNull`, `filter`, `all`,
+`at`, `atOrNull`, `named`, and `namedOrNull`. It owns bounded snapshots and exact-instance handles, with cleanup after
+early return or predicate failure. Addon capabilities accept the retained base handle as an `Int`; authors do not
+write the Guest handle plumbing.
 
 In a host handler, use `computer.peripheral(contract, handle)` with the same descriptor object used at registration.
 Forward `CompuktersPeripheralAccessException.kind` and `.message` through `addonFailed` rather than converting
@@ -254,7 +273,7 @@ compatibility line and rebuild dependents. Exact Guest bundle hashes still requi
 Legacy registration overloads remain available for addons using their existing discovery helpers.
 
 Handlers execute through the bounded server-side addon boundary. Return `addonCompleted(value)` for an immediate
-result, `addonFailed(kind, detail)` for a descriptive Guest failure, or `addonPending { ... }` when the world operation
+result, `addonFailed(kind, detail)` for a descriptive Guest failure, or `addonPending { ... }` for a `@GuestWait` operation when the world operation
 must wait. The generated host validates and decodes requests and routes completions back to the exact suspended Guest
 task.
 
@@ -291,16 +310,20 @@ produces no distributable umbrella mod; adding another addon does not introduce 
 
 ## Structured host results
 
-Workspace tooling accepts asynchronous bindings returning immutable data or value records. Use non-null `val`
-constructor fields containing Int, Long, Float, Double, Boolean, Char, String or supported nested records.
-Data records must be public and have an empty body; value records may also be internal wire payloads and contain
-methods or computed properties. Type parameters, supertypes, stored body properties, constructor defaults,
-initializers, arrays, nullable fields, record arguments and cycles are rejected.
+Declare immutable `@GuestRecord data class` values using non-null `val` fields containing Int, Long, Float, Double,
+Boolean, Char, String or supported nested records. Bodies, mutable fields, constructor defaults, initializers, arrays,
+cycles and generic or nullable field types are rejected. The SDK generates immutable Guest value records and handles
+nested serialization. Record arguments are flattened into ordered scalar wire arguments, with a limit of 32 including
+the SDK-owned device handle.
 
-Canonical constructor-safe stdlib geometry is also supported: Vector2i/3i, Vector2f/3f/4f, Vector2d/3d/4d,
-Quaternionf/d and Matrix3f/d/4f/d. Their exact field shapes and stdlib dependency are verified; addons cannot
-impersonate these types. Constrained values such as Rotation3d must be constructed through their Guest factory
-from a raw Quaterniond payload, preserving normalization and validation.
+Use signature types from `ru.lazyhat.compukters.api.contracts.types` for canonical Guest geometry: Vector2i/3i,
+Vector2f/3f/4f, Vector2d/3d/4d, Quaternionf/d, Matrix3f/d/4f/d and Rotation3f/d. Generated Guest signatures use the actual
+`kotlin.math` classes. Vectors, quaternions and matrices use verified canonical schemas. Rotations cross as quaternion
+components and are reconstructed through `Rotation3f/d.fromQuaternion`, preserving validation and normalization,
+including rotations nested inside addon records. Host handlers receive typed arguments such as `Vector3d`,
+`Rotation3d` and addon records; flattening into scalar components belongs to generated transport code.
+Canonical mathematical host types are shared SDK JVM types, with generated aliases in the addon package.
+Arbitrary stdlib classes are not implicitly admitted to the wire boundary.
 
 The SDK generates a JVM mirror DTO, an ordered nominal schema and its typed response encoder. Authors return the
 mirror through `AddonCallResult`; no reflection, handwritten operation numbers or Guest constructors are involved.

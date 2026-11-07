@@ -46,9 +46,11 @@ internal fun testAdmittedPlatform(
     selectAllModules: Boolean = false,
     attachedSources: Boolean = false,
     includeAddonBundle: Boolean = selectAllModules,
+    addonBundlePath: Path? = null,
 ): AdmittedAnalysisPlatform {
     val platform = testPlatform()
-    val addonBytes = Files.readAllBytes(Path.of(requireNotNull(System.getProperty("compukters.test.addonGuestApiFixture"))))
+    val addonBytes =
+        Files.readAllBytes(addonBundlePath ?: Path.of(requireNotNull(System.getProperty("compukters.test.addonGuestApiFixture"))))
     val addon = AddonGuestApiBundleCodec.decode(addonBytes)
     val modules =
         if (selectAllModules) {

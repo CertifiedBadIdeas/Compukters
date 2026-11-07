@@ -11,6 +11,25 @@ permalink: /ARCHITECTURE/abi/
 
 This reference groups versioned representation boundaries by the version that introduced them. Those versions are minimum feature requirements, not a claim that older Runtime distributions implement today’s platform. The source owners below define the active contract. Before changing a wire format, inspect each producer, consumer and verifier. Runtime release pins in `build-scripts/src/main/kotlin/RuntimeBundleSupport.kt` describe published bundles separately from the local VM checkout.
 
+## Declarative addon SDK
+
+SDK **0.8.0** accepts declarations-only Kotlin/JVM contracts and generates Guest Kotlin, executable
+CAGB libraries and host dispatch from the same model. Generated Kotlin lives under
+`build/generated/sources/compuktersGuest/kotlin` and is retained in source artifacts. The checked-in
+`addon.lock` remains ABI history: ordinary builds validate it, explicit updates retain selectors and
+tombstones. SDK 0.8 does not change CAGB, native VM or capability transport encoding.
+
+Only explicit `@GuestCommand` methods returning Unit receive command factories and server command
+bindings. `@GuestRead`/`@GuestCall` cannot retain a pending continuation; `@GuestWait` may wait and is
+excluded from batching. Constraints are checked on both Guest and host boundaries. Handler
+`batchCommands` is retained for binary compatibility with older hosts and ignored by generated
+declarative hosts.
+
+Supported SDK mathematical types and addon records remain typed in host arguments. Their scalar
+components cross the existing argument transport; reconstruction belongs to the SDK. Rotation inputs
+are finite, nonzero and normalized before handlers run, including inside nested records. Rotation
+results retain quaternion wire schemas and use validated Guest factories when reconstructed.
+
 ## Device command groups
 
 `compukter:core` 9.5.0 adds `compukters:commands` ABI 1.0, asynchronous operation 0

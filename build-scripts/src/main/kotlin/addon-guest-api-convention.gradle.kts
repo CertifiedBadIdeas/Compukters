@@ -20,17 +20,15 @@ plugins {
     id("kotlin-convention")
 }
 
-val platformBuilder = configurations.create("addonGuestApiPlatformBuilder") {
-    isCanBeConsumed = false
-    isCanBeResolved = true
-}
+// This convention belongs to the trusted compiler/IDE library fixture, not the public addon SDK.
+val fixtureBuilder = sourceSets.create("fixtureBuilder")
 val compuktersPlatformBundle = configurations.create("addonGuestApiBasePlatform") {
     isCanBeConsumed = false
     isCanBeResolved = true
 }
 
 dependencies {
-    add(platformBuilder.name, project(":compiler-k2-engine"))
+    add(fixtureBuilder.implementationConfigurationName, project(":compiler-k2-engine"))
     add(
         compuktersPlatformBundle.name,
         project(path = ":guest-platform", configuration = "compuktersPlatformBundle"),
@@ -50,8 +48,9 @@ val platformBundleFile = compuktersPlatformBundle.elements.map { files -> files.
 val assembleAddonGuestApiBundle = tasks.register<JavaExec>("assembleAddonGuestApiBundle") {
     group = "build"
     description = "Builds this project's deterministic addon Guest API bundle."
-    classpath = platformBuilder
-    mainClass = "ru.lazyhat.compukters.compiler.k2.engine.build.AddonGuestApiBuilderMainKt"
+    dependsOn(tasks.named(fixtureBuilder.classesTaskName))
+    classpath = fixtureBuilder.runtimeClasspath
+    mainClass = "fixture.builder.TrustedLibraryBuilderKt"
     inputs.file(platformBundleFile)
     inputs.dir(guestApiSourceRoot)
     inputs.file(guestApiDescriptor)
@@ -81,8 +80,9 @@ tasks.named("compileKotlin") {
 val updateAddonGuestApiAbiLock = tasks.register<JavaExec>("updateAddonGuestApiAbiLock") {
     group = "build setup"
     description = "Updates this project's checked-in addon Guest API ABI lock after an intentional API change."
-    classpath = platformBuilder
-    mainClass = "ru.lazyhat.compukters.compiler.k2.engine.build.AddonGuestApiBuilderMainKt"
+    dependsOn(tasks.named(fixtureBuilder.classesTaskName))
+    classpath = fixtureBuilder.runtimeClasspath
+    mainClass = "fixture.builder.TrustedLibraryBuilderKt"
     inputs.file(platformBundleFile)
     inputs.dir(guestApiSourceRoot)
     inputs.file(guestApiDescriptor)

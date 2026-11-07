@@ -13,6 +13,11 @@ headings so this page has one stable URL that can be shared outside the reposito
 
 ## 0.7.0 — In development
 
+- Addon SDK 0.8 generates inspectable Guest Kotlin, executable images and host dispatch from constrained Kotlin
+  contracts. Authors declare devices, resources, records, operations and argument constraints; command factories and
+  server validation share those declarations. Supported stdlib geometry works in arguments and results, including
+  validated rotations. Checked-in ABI locks preserve operation selectors and tombstones.
+
 - Computers running identical binaries reuse immutable program code and metadata, reducing duplicate
   runtime memory and preparation work for repeated programs such as the shell. The VM prepares typed
   operations and direct-call argument transfers before execution to reduce repeated operand-layout work
@@ -34,7 +39,7 @@ headings so this page has one stable URL that can be shared outside the reposito
 
 - Guest command lists capture device calls without sending them. `batch(commands)` applies immediate
   Unit commands in one ordered server-tick delivery and returns an independent result for every
-  position. Generated addon hosts explicitly opt in; limits and per-tick quotas apply to the whole group.
+  position. Addon contract declarations determine eligible Unit methods; limits and per-tick quotas apply to the whole group.
 
 - Guest Kotlin adds top-level `async`, typed `Deferred.await()` and ordered `awaitAll` over cooperative
   tasks. Repeated awaits preserve values and original task exceptions; ordinary direct vararg calls

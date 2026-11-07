@@ -32,3 +32,41 @@ tasks.processResources {
         rename { "fixture.cagb" }
     }
 }
+
+// A separate artifact exercises the public declarative builder through IDE metadata queries.
+val declarativeFixtureRoot = layout.projectDirectory.dir("src/declarativeGuestApi")
+val declarativeFixtureBundle = layout.buildDirectory.file("declarative-addon/declarative.cagb")
+val assembleDeclarativeAddonGuestApiFixture = tasks.register<JavaExec>("assembleDeclarativeAddonGuestApiFixture") {
+    dependsOn(tasks.named("fixtureBuilderClasses"))
+    classpath = sourceSets["fixtureBuilder"].runtimeClasspath
+    mainClass = "ru.lazyhat.compukters.compiler.k2.engine.build.AddonGuestApiBuilderMainKt"
+    val platform = configurations["addonGuestApiBasePlatform"].elements.map { it.single().asFile }
+    val guestOutput = layout.buildDirectory.dir("declarative-addon/guest")
+    val lock = layout.buildDirectory.file("declarative-addon/addon.lock")
+    inputs.dir(declarativeFixtureRoot)
+    inputs.file(platform)
+    outputs.file(declarativeFixtureBundle)
+    outputs.dir(guestOutput)
+    outputs.file(lock)
+    args("--update-abi-lock", "true")
+    argumentProviders.add(
+        fileOptionArguments(
+            "--platform-input" to platform,
+            "--contracts" to declarativeFixtureRoot.dir("contracts"),
+            "--descriptor" to declarativeFixtureRoot.file("addon.api"),
+            "--guest-output" to guestOutput,
+            "--abi-lock" to lock,
+            "--output" to declarativeFixtureBundle,
+        ),
+    )
+}
+val declarativeAddonGuestApiBundle = configurations.create("declarativeAddonGuestApiBundle") {
+    isCanBeConsumed = true
+    isCanBeResolved = false
+}
+artifacts {
+    add(declarativeAddonGuestApiBundle.name, declarativeFixtureBundle) {
+        builtBy(assembleDeclarativeAddonGuestApiFixture)
+        type = "cagb"
+    }
+}

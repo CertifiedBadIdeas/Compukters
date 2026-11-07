@@ -332,7 +332,18 @@ val verifyAnalysisWorkerLicenses = tasks.register("verifyAnalysisWorkerLicenses"
     }
 }
 
+val declarativeAddonGuestApiFixtureBundle = configurations.create("declarativeAddonGuestApiFixtureBundle") {
+    isCanBeConsumed = false
+    isCanBeResolved = true
+}
+dependencies {
+    add(declarativeAddonGuestApiFixtureBundle.name, project(path = ":addon-guest-api-fixture", configuration = "declarativeAddonGuestApiBundle"))
+}
+
 tasks.test {
+    dependsOn(declarativeAddonGuestApiFixtureBundle)
+    inputs.files(declarativeAddonGuestApiFixtureBundle)
+    systemProperty("compukters.test.declarativeAddonGuestApiFixture", declarativeAddonGuestApiFixtureBundle.singleFile.absolutePath)
     val boilerController = rootProject.file("examples/boiler-scada/src/control/BoilerControl.kt")
     inputs.file(boilerController)
     systemProperty("compukters.test.boilerController", boilerController.absolutePath)
