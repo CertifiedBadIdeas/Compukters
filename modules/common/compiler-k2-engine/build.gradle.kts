@@ -66,7 +66,11 @@ val assertCompilerEngineBoundary = tasks.register("assertCompilerEngineBoundary"
     inputs.property("runtimeComponents", runtimeComponents)
     doLast {
         val allowedProjects =
-            setOf(":addon-guest-api", ":compiler-artifact", ":compiler-client", ":platform-bundle", ":platform-k2", ":worker-client")
+            setOf(
+                ":addon-guest-api", ":compiler-artifact", ":compiler-client", ":platform-bundle", ":platform-k2", ":worker-client",
+                // compiler-client owns protected project paths; this is an existing transitive dependency.
+                ":project-files",
+            )
         val projects = runtimeComponents.get().filter { it.startsWith(":") }.toSet()
         check(projects.all { it in allowedProjects }) { "compiler engine has forbidden project dependencies: ${projects - allowedProjects}" }
     }
