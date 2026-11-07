@@ -206,7 +206,7 @@ fun resolveAddonContract(
             .mapNotNull { declaration ->
                 val name = declaration.signature.substringAfterLast(':')
                 if (name.substringAfterLast('.') in
-                    setOf("Unit", "Int", "Long", "Float", "Double", "Boolean", "Char", "String")
+                    setOf("Unit", "Int", "Long", "Float", "Double", "Boolean", "Char", "String", "ByteArray")
                 ) {
                     null
                 } else {
