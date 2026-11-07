@@ -105,9 +105,9 @@ outside the supported source subset, while legacy suspend-call artifact instruct
 ## Shared program ownership
 
 Rust separates an immutable artifact-derived `PreparedProgram` from each session's admission and
-execution state. Live byte-identical binaries normally share decoded metadata, resolved instructions,
+execution state. Live byte-identical binaries normally share decoded metadata, prepared operations and lifecycle descriptors,
 function/frame/GC-safepoint/dispatch tables, type identities/names, payload-relative field offsets,
-static layout and literals. The optional typed execution experiment also shares derived code by mode;
+static layout and literals. Additional experimental execution representations also share derived code by mode;
 its mutable decoder cache remains machine-owned. This is interpreted code preparation, not native JIT.
 
 Every session independently checks its resource profile and actual capability/record schemas. Heap-header-dependent
@@ -126,6 +126,30 @@ publishes a canonical winner. No host binding, world object or mutable Guest sta
 Restore still verifies pinned binaries and performs fresh admission; derived program sharing can be reused
 while another owner is live. Checkpoint serialization contains logical execution state, not cache pointers.
 Shared immutable storage is separate from each VM's admitted mutable execution-resident counter.
+
+## Prepared execution
+
+The compiler still emits one portable `.cpkt` executable. After verification, `PreparedProgram` derives the
+ordinary execution stream once for its live owners. No second distributable binary or native JIT is involved.
+A program-wide dense allocation contains 16-byte operations; only its allocation boundary is aligned to 64 bytes.
+Blocks retain ranges, fixed costs and function ownership. Short blocks do not each allocate or pad a cache line.
+Shared copy/field plans and sparse lifecycle descriptors occupy separate program-owned arrays.
+
+Numeric operations carry concrete kinds and checked physical frame offsets. Preparation also resolves scalar
+constants, moves, inline component copies, jumps/Boolean branches, and scalar/reference field and array accesses.
+Heap accesses retain dynamic null/type/assignability/bounds checks and use the admitted heap layout. Lifecycle
+instructions that need initialization, calls, allocation/GC, exceptions, host suspension or task machinery retain
+explicit resolved descriptors. Ordinary prepared operations have no duplicate resolved instruction descriptor;
+verified decoded metadata remains part of the shared program's source/type identity.
+
+Each operation still represents one logical instruction. No fusion or reordering changes block charges,
+attempt/retirement counts, source/exception locations, safepoints or checkpoint positions. Arithmetic uses the
+same wrapping, division, floating NaN and signed-zero rules as the previous interpreter. Inline component copies
+retain their sequential aliasing semantics. Checked frame accesses also update the initialization tracking used
+by GC tests. Checkpoints serialize logical state and rebuild the derived stream through normal verification/admission.
+
+The previous interpreter and compressed/SIMD decoder experiments are available only through private testing/benchmark
+selection. The ordinary VM uses prepared execution without an experimental feature or public runtime selector.
 
 ## Process quotas and diagnostics
 
