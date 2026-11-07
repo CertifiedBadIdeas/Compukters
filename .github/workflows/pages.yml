@@ -42,10 +42,12 @@ jobs:
         uses: actions/setup-java@v5
         with:
           distribution: temurin
-          java-version: "27"
+          java-version: "25"
       - name: Configure Pages
         id: pages
         uses: actions/configure-pages@v5
+      - name: Generate nightly addon Guest sources
+        run: ./gradlew generateAddonDocumentationSources --no-daemon
       - name: Generate nightly API reference
         run: ./gradlew -p api-build dokkaGeneratePublicationHtml --no-daemon
       - name: Generate release API reference

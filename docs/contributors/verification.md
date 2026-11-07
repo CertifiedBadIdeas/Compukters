@@ -223,9 +223,10 @@ The [Compukters API reference]({{ '/guest-api/' | relative_url }}) is generated 
 [Sable addon]({{ '/guest-api/sable/' | relative_url }}) and
 [Propulsion addon]({{ '/guest-api/propulsion/' | relative_url }}) modules. The publication and source-set target are named
 `Compukters`. Addon signatures link to types from the core mod;
-each addon module links to its own repository at the checked-out revision. Pages CI initializes
+addon signatures are generated from their declarative contracts. Pages CI initializes
 the three addon submodules at each documentation version's pinned revisions. For an unversioned local preview, first run
 `git submodule update --init addons/create addons/sable addons/propulsion`, then
+`./gradlew-sandbox-dev-parallel-summary generateAddonDocumentationSources` and
 `./gradlew-sandbox-dev-parallel-summary -p api-build dokkaGeneratePublicationHtml`, then
 `python3 docs/_tools/build_guest_api.py`, `python3 docs/_tools/build_ide_palette.py`, then
 `jekyll build --source docs --destination /tmp/compukters-site`.

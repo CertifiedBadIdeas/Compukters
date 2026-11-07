@@ -42,6 +42,32 @@ listOf(false, true).forEach { release ->
     }
 }
 
+// API reference generation needs Guest declarations, without configuring each Minecraft addon build.
+val addonDocumentationTooling = configurations.create("addonDocumentationTooling") {
+    isCanBeConsumed = false
+    isCanBeResolved = true
+}
+dependencies {
+    add(addonDocumentationTooling.name, project(path = ":compiler-k2-engine", configuration = "addonToolingElements")) { isTransitive = false }
+}
+val generateAddonDocumentationSources = tasks.register("generateAddonDocumentationSources") {
+    group = "documentation"
+    description = "Generates addon Guest Kotlin inputs for the API reference from pinned contracts."
+}
+listOf("create", "sable", "propulsion").forEach { addon ->
+    val generate = tasks.register<JavaExec>("generate${addon.replaceFirstChar(Char::uppercase)}DocumentationSources") {
+        val contracts = layout.projectDirectory.dir("addons/$addon/src/compuktersAddon/contracts")
+        val output = layout.buildDirectory.dir("generated/sources/addonDocumentation/$addon/kotlin")
+        classpath = addonDocumentationTooling
+        mainClass = "ru.lazyhat.compukters.compiler.k2.engine.build.AddonGuestApiBuilderMainKt"
+        inputs.dir(contracts)
+        outputs.dir(output)
+        args("--generate-only", "true", "--addon", addon)
+        argumentProviders.add(fileOptionArguments("--contracts" to contracts, "--guest-output" to output))
+    }
+    generateAddonDocumentationSources.configure { dependsOn(generate) }
+}
+
 val compukterVmBuildJobs =
     providers
         .gradleProperty("compukterVmBuildJobs")

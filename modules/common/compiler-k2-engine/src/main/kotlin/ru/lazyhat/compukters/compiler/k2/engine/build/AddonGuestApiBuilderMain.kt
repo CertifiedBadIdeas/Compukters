@@ -130,15 +130,22 @@ fun main(args: Array<String>) {
     require(args.size % 2 == 0) { "Builder arguments must be option/value pairs" }
     val arguments = args.toList().windowed(2, 2, partialWindows = false).associate { (name, value) -> name to value }
     require("--sources" !in arguments) { "Handwritten addon Guest Kotlin is unsupported; use --contracts and --guest-output" }
-    val authoring = AddonAuthoringContract.parse(arguments.path("--descriptor").readLines())
+    val generateOnly = arguments["--generate-only"]?.toBooleanStrict() == true
+    val addon =
+        if (generateOnly && "--addon" in arguments) {
+            require("--descriptor" !in arguments) { "Specify --addon or --descriptor for source generation, not both" }
+            arguments.getValue("--addon").also { require(it.matches(Regex("[a-z][a-z0-9_]*"))) { "Invalid addon name" } }
+        } else {
+            AddonAuthoringContract.parse(arguments.path("--descriptor").readLines()).addon
+        }
     val sourceRoot = arguments.path("--contracts")
-    val declaration = parseDeclarativeGuestContract(sourceRoot, authoring.addon)
+    val declaration = parseDeclarativeGuestContract(sourceRoot, addon)
     val generated = arguments.path("--guest-output")
     require(!sourceRoot.startsWith(generated) && !generated.startsWith(sourceRoot)) {
         "Generated Guest output must not overlap the contract source directory"
     }
     writeGeneratedGuestSources(declaration, generated)
-    if (arguments["--generate-only"]?.toBooleanStrict() == true) return
+    if (generateOnly) return
     buildTrustedAddonGuestApi(arguments + ("--sources" to generated.toString()), declaration)
 }
 

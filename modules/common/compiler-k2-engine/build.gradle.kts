@@ -32,6 +32,14 @@ val addonToolingJar = tasks.named<com.github.jengelman.gradle.plugins.shadow.tas
     exclude("META-INF/*.SF", "META-INF/*.RSA", "META-INF/*.DSA")
 }
 
+val addonToolingElements = configurations.create("addonToolingElements") {
+    isCanBeConsumed = true
+    isCanBeResolved = false
+}
+artifacts {
+    add(addonToolingElements.name, addonToolingJar) { type = "jar" }
+}
+
 // Stable SDK tooling for independent addon builds inside this workspace.
 tasks.register<Copy>("developmentAddonToolingJar") {
     from(addonToolingJar)
