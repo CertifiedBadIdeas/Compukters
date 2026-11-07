@@ -21,12 +21,19 @@ package declarative
 import ru.lazyhat.compukters.api.contracts.GuestCall
 import ru.lazyhat.compukters.api.contracts.GuestCommand
 import ru.lazyhat.compukters.api.contracts.GuestDevice
+import ru.lazyhat.compukters.api.contracts.GuestRecord
 import ru.lazyhat.compukters.api.contracts.GuestRead
 import ru.lazyhat.compukters.api.contracts.types.Vector3d
+import ru.lazyhat.compukters.api.contracts.types.Rotation3d
+
+@GuestRecord
+data class State(val position: Vector3d, val orientation: Rotation3d)
 
 @GuestDevice("declarative:engine")
 interface Engine {
     @GuestRead fun speed(): Float
     @GuestCommand fun aim(direction: Vector3d): Unit
+    @GuestCommand fun target(state: State): Unit
+    @GuestRead fun state(): State
     @GuestCall fun close(): Unit
 }
