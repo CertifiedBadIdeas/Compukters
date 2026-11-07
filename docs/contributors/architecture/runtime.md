@@ -151,6 +151,14 @@ by GC tests. Checkpoints serialize logical state and rebuild the derived stream 
 The previous interpreter and compressed/SIMD decoder experiments are available only through private testing/benchmark
 selection. The ordinary VM uses prepared execution without an experimental feature or public runtime selector.
 
+Direct and suspend-call descriptors index a flat immutable table of physical argument-component transfers.
+Preparation uses the actual caller and callee layouts; it drops the original logical argument arrays from
+ordinary execution descriptors. Scalar returns carry their prepared source access. Calls and returns still
+enter the common machine-owned lifecycle: scalar argument validation precedes frame reservation, failed
+transfers roll reservations back, and initialization, stack limits, exceptions, task continuation and logical
+checkpoint positions retain their existing ordering. Virtual/interface calls retain target-dependent layout
+resolution; inline returns keep their existing component transfer. There is no per-machine call-plan cache.
+
 ## Process quotas and diagnostics
 
 The production execution profile reserves a 256 KiB managed heap for each active foreground process; child-process
