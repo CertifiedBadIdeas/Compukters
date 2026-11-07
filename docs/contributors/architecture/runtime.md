@@ -102,6 +102,31 @@ server-tick permits continue until that timer wakes, even without terminal input
 Guest Kotlin exposes this as transparent stackful blocking through ordinary functions: `suspend` declarations are
 outside the supported source subset, while legacy suspend-call artifact instructions remain decodable and executable.
 
+## Shared program ownership
+
+Rust separates an immutable artifact-derived `PreparedProgram` from each session's admission and
+execution state. Live byte-identical binaries normally share decoded metadata, resolved instructions,
+function/frame/GC-safepoint/dispatch tables, type identities/names, payload-relative field offsets,
+static layout and literals. The optional typed execution experiment also shares derived code by mode;
+its mutable decoder cache remains machine-owned. This is interpreted code preparation, not native JIT.
+
+Every session independently checks its resource profile and actual capability/record schemas. Heap-header-dependent
+allocation layouts, external references, storage charges and slice limits belong to admission; managed heap,
+frames, static values, class initialization, tasks, requests and host bindings belong to the instance.
+A larger computer cannot lend its limits or device permissions to another computer through a shared program.
+Payload-relative field offsets are independent of heap header size, so shared instructions retain direct field access.
+
+A process-local 128-entry weak index canonicalizes only fully verified artifacts. It matches full container
+bytes as well as the digest, and never skips the caller's parsing/verification limits. The index is bounded
+and owns no strong code/data references. Evicting a live entry can reduce later sharing but cannot invalidate
+existing executions. Releasing the last artifact/image owner releases decoded metadata and prepared code;
+weak bookkeeping is bounded independently. Concurrent first preparation builds outside global locks and
+publishes a canonical winner. No host binding, world object or mutable Guest state enters the index.
+
+Restore still verifies pinned binaries and performs fresh admission; derived program sharing can be reused
+while another owner is live. Checkpoint serialization contains logical execution state, not cache pointers.
+Shared immutable storage is separate from each VM's admitted mutable execution-resident counter.
+
 ## Process quotas and diagnostics
 
 The production execution profile reserves a 256 KiB managed heap for each active foreground process; child-process
