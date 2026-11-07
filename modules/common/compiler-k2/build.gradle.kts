@@ -2386,3 +2386,19 @@ tasks.register<Test>("generateSumsConformanceArtifact") {
     systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
     systemProperty("compukter.vm.sumsArtifact", sumsConformanceArtifact.get().asFile.absolutePath)
 }
+
+val executionBenchmarkArtifacts = layout.buildDirectory.dir("generated/benchmarks/typed-execution")
+
+tasks.register<Test>("generateExecutionBenchmarkArtifacts") {
+    description = "Compiles opt-in Double arithmetic, PID and multi-field value workloads."
+    group = "benchmark"
+    dependsOn(tasks.jar)
+    useJUnitPlatform()
+    testClassesDirs = sourceSets.test.get().output.classesDirs
+    classpath = sourceSets.test.get().runtimeClasspath
+    filter.includeTestsMatching("*typed execution benchmark artifacts compile*")
+    inputs.file(workerJar)
+    outputs.dir(executionBenchmarkArtifacts)
+    systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
+    systemProperty("compukter.bench.executionOutput", executionBenchmarkArtifacts.get().asFile.absolutePath)
+}
