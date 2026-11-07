@@ -37,6 +37,7 @@ fun main() {
         println("Rotation rate (rad/s): " + mapping.rotation.rate.length)
         if (status.inDeepSpace) {
             val orbit = Space.orbit()
+            val bound = orbit.semiMajorAxis > 0.0 && orbit.eccentricity < 1.0
             println("Orbit frame: " + orbit.frame)
             println("Instance: " + orbit.instanceId + "; orbit tick: " + orbit.universeTick)
             val radius = orbit.position.length
@@ -48,11 +49,15 @@ fun main() {
             println("Radial speed (m/s): " + radialSpeed)
             println("Transverse speed (m/s): " + transverseSpeed)
             println("Circular speed at radius (m/s): " + sqrt(orbit.gravitationalParameter / radius))
-            println("Bound: " + orbit.bound)
+            println("Bound: " + bound)
             if (orbit.frame == planet.frame) {
                 println("Radius above planet radius (m): " + (radius - planet.radius))
-                println("Periapsis above planet radius (m): " + (orbit.periapsisRadius() - planet.radius))
-                if (orbit.bound) println("Apoapsis above planet radius (m): " + (orbit.apoapsisRadius() - planet.radius))
+                println("Periapsis above planet radius (m): " + ((orbit.semiMajorAxis * (1.0 - orbit.eccentricity)) - planet.radius))
+                if (bound) {
+                    val apoapsis = orbit.semiMajorAxis * (1.0 + orbit.eccentricity)
+                    check(apoapsis > 0.0 && apoapsis <= Double.MAX_VALUE) { "Apoapsis exceeds Double range" }
+                    println("Apoapsis above planet radius (m): " + (apoapsis - planet.radius))
+                }
             } else {
                 println("Planet frame changed between observations; planet-relative distances omitted.")
             }
