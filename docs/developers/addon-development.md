@@ -12,7 +12,7 @@ A Compukters addon is an ordinary, independently installed NeoForge mod. It owns
 Kotlin declarations and generated `.cagb` bundle. Compukters reads that data bundle when the addon registers it, but
 the base mod never links to or packages the addon implementation.
 
-The public addon SDK uses version 0.6.0 independently of the Compukters release version. The SDK has its own
+This guide describes development SDK 0.8.0, versioned independently of the Compukters release. The SDK has its own
 compatibility version: Compukters releases do not require addon authors to update unless the public addon boundary
 changes. All artifacts belonging to one SDK release share that SDK version:
 
@@ -37,7 +37,8 @@ is needed for public assets. The archive contains a local file Maven repository,
 plugin DSL remain unchanged. There is no separate hosted Maven repository for Compukters dependencies.
 Kotlin, NeoForge and other upstream build dependencies still use their normal repositories.
 
-The template defaults to the published SDK `compuktersRelease=0.5.1`. To develop against local sources, select source mode explicitly:
+Select SDK 0.8.0 before using the declarations in this guide. For a template targeting an earlier SDK, migrate its
+handwritten Guest sources using the contract layout below. To develop against local sources, select source mode explicitly:
 
 ```shell
 # In the Compukters checkout:
@@ -68,9 +69,8 @@ After staging the local SDK, run `check`,
 `buildProductionJar`, or `runClient` from `addons/create`. The Compukters root remains unaware of the addon and does not
 own or invoke its tasks. First-party addons use the two-part release policy below, independently of the SDK version.
 
-The Cosmonautics addon starts as an empty NeoForge scaffold with pinned upstream development dependencies. It has no
-Guest bundle, ABI lock, peripherals or registered Host operations. SDK API coordinates remain compile-only; the
-Guest addon plugin and release-bundle pipeline will be added with its first real Guest API.
+The Cosmonautics addon exposes world, vessel and orbit observations through generated records. Guest programs derive
+values such as apsides from those records; executable calculation helpers are not part of the addon contract.
 
 ## First-party addon versions
 
@@ -115,7 +115,7 @@ Then apply the matching Compukters plugin version:
 // build.gradle.kts
 plugins {
     kotlin("jvm") version "2.4.10"
-    id("ru.lazyhat.compukters.addon") version "0.6.0"
+    id("ru.lazyhat.compukters.addon") version "0.8.0"
     // Apply and configure Loom/NeoForge as usual for the target mod.
 }
 
@@ -265,8 +265,8 @@ Release any addon-owned control lease when closing or resetting your host.
 Provider roles are inferred from the interface in both source and admitted addon metadata, so no annotation is needed.
 Value classes retain scalar direct-call signatures and use canonical managed wrappers in interface, nullable and
 collection contexts. Implementing `Peripheral` does not require converting a device to an ordinary class.
-Create and Propulsion use `2.0` because their earlier acquisition helpers and separate side types are removed.
-Acquire devices through typed companion providers and `compukter.peripheral.Side`.
+Acquire Create and Propulsion devices through typed companion providers and `compukter.peripheral.Side`; their
+earlier acquisition helpers and separate side types have been removed.
 Changing a published wrapper's scalar/reference representation is a binary API change: increment the addon's `x`
 compatibility line and rebuild dependents. Exact Guest bundle hashes still require re-resolution after an update.
 
@@ -303,7 +303,7 @@ independent Create, Crafts & Additions, Sable, Propulsion and Cosmonautics build
 and Cosmonautics 26.08.307 on the runtime classpath. From that directory, run `./gradlew-sandbox-dev-parallel-summary verifyAddons`
 for all five addon checks, or `./gradlew-sandbox-dev-parallel runGameTestServer` for their shared real NeoForge scenarios.
 `runClient` and `runServer` use the same upstream dependency pins and ordinary development archives. Cosmonautics and
-its empty addon are excluded from the GameTest composition because its Deep Space dimension is required on ticks and
+its addon are excluded from the GameTest composition because its Deep Space dimension is required on ticks and
 is absent in vanilla GameTest worlds. This build
 produces no distributable umbrella mod; adding another addon does not introduce a dependency between existing addons.
 

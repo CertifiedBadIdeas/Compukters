@@ -3078,6 +3078,17 @@ class MinimalScriptLoweringTest {
         }
 
     @Test
+    fun `installed addon APIs with repeated device names compile together`() =
+        withAdapter { adapter ->
+            val bundles =
+                listOf("create", "createaddition", "sable", "propulsion", "cosmonautics").map { addon ->
+                    checkNotNull(System.getProperty("compukters.combinedBundle.$addon"))
+                }
+            val result = adapter.compile(projectRequest("examples/space-telemetry/src", bundles))
+            assertNotNull(result.artifact, result.diagnostics.joinToString())
+        }
+
+    @Test
     fun `contract descriptions emit the same executable instructions as plain functions`() =
         withAdapter { adapter ->
             val description = "contract { returns(true) implies (value is String) }"

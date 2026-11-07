@@ -302,6 +302,7 @@ tasks.test {
     dependsOn(tasks.jar)
     filter.excludeTestsMatching("ru.lazyhat.compukters.compiler.worker.integration.*")
     filter.excludeTestsMatching("*example compiles against the actual addon bundle*")
+    filter.excludeTestsMatching("*installed addon APIs with repeated device names compile together*")
     inputs.file(workerJar)
     inputs.files(addonGuestApiFixtureBundle)
     systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
@@ -2244,6 +2245,24 @@ tasks.register<Test>("compileSpaceTelemetryExample") {
     inputs.file(workerJar)
     systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
     bundle.orNull?.let { systemProperty("compukters.cosmonauticsTelemetryBundle", file(it).absolutePath) }
+}
+
+tasks.register<Test>("compileCombinedAddonApis") {
+    group = "verification"
+    description = "Compiles the installed addon APIs together, including devices with repeated class names."
+    dependsOn(tasks.jar)
+    useJUnitPlatform()
+    testClassesDirs = sourceSets.test.get().output.classesDirs
+    classpath = sourceSets.test.get().runtimeClasspath
+    filter.includeTestsMatching("*installed addon APIs with repeated device names compile together*")
+    for (addon in listOf("Create", "Createaddition", "Sable", "Propulsion", "Cosmonautics")) {
+        val bundle = providers.gradleProperty("compukters${addon}GuestApiBundle")
+        inputs.file(bundle)
+        bundle.orNull?.let { systemProperty("compukters.combinedBundle.${addon.lowercase()}", file(it).absolutePath) }
+    }
+    inputs.dir(rootProject.file("examples/space-telemetry/src"))
+    inputs.file(workerJar)
+    systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
 }
 
 val sequenceBenchmarkArtifacts = layout.buildDirectory.dir("generated/benchmarks/sequences")
