@@ -2238,9 +2238,13 @@ class MinimalScriptLoweringTest {
 
                         fun keepFirst(value: Int, ignored: Int): Int = value
 
+                        interface Reading { fun value(): Int }
+                        class ConstantReading(val number: Int): Reading { override fun value(): Int = number }
+
                         fun reader() {
-                            // The unused argument must still suspend and consume exactly one response after inlining.
-                            require(keepFirst(7, readln().length) == 7)
+                            val reading: Reading = ConstantReading(7)
+                            // Keep the proven receiver live across the unused argument's blocking response.
+                            require(keepFirst(reading.value(), readln().length) == reading.value())
                         }
 
                         fun writer() {

@@ -274,7 +274,7 @@ private fun IrType.classInstance(classes: Map<IrClassSymbol, IrClass>): GuestCla
 }
 
 @OptIn(UnsafeDuringIrConstructionAPI::class)
-private fun GuestClassInstance.declaringOwner(owner: IrClass): GuestClassInstance? {
+internal fun GuestClassInstance.declaringOwner(owner: IrClass): GuestClassInstance? {
     val visited = mutableSetOf<GuestClassInstance>()
 
     fun find(instance: GuestClassInstance): GuestClassInstance? {

@@ -27,7 +27,8 @@ headings so this page has one stable URL that can be shared outside the reposito
   in numeric code, data access and function calls.
 
 - Guest Kotlin compilation removes proven redundant register copies, can use smaller stack frames,
-  and automatically inlines small scalar and value-class leaf functions to reduce repeated calls.
+  automatically inlines small scalar and value-class leaf functions, and replaces eligible interface calls
+  with direct calls when immutable local references prove the concrete implementation.
   Existing compiled programs receive these improvements after recompilation.
 
 - Display RGB encoding and delta calculation run in a bounded background worker pool. Ordinary display blocks

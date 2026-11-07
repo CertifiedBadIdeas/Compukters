@@ -754,6 +754,15 @@ registerKotlinVmConformance(
     conformanceScenario = "primitives",
 )
 registerKotlinVmConformance(
+    taskName = "testKotlinConcreteReceiversVmConformance",
+    taskDescription = "Executes proven receiver calls, effects, captures and dispatch fallbacks in the pinned VM.",
+    artifactTask = ":compiler-k2-engine:generateConcreteReceiversConformanceArtifact",
+    artifact = project(":compiler-k2-engine").layout.buildDirectory.file("generated/conformance/kotlin-concrete-receivers.cpkt"),
+    cargoTargetDirectory = ".toolchain/build/cargo/compiler-k2-concrete-receivers-conformance",
+    artifactEnvironmentVariable = "COMPUKTER_KOTLIN_INLINE_BLOCKS_ARTIFACT",
+    conformanceScenario = "inline-blocks",
+)
+registerKotlinVmConformance(
     taskName = "testKotlinSmallInliningVmConformance",
     taskDescription = "Executes automatic leaf inlining argument, exception and value semantics in the pinned VM.",
     artifactTask = ":compiler-k2-engine:generateSmallInliningConformanceArtifact",

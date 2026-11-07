@@ -66,6 +66,10 @@ bound and unbound method references. Its virtual declaration remains available t
 and interfaces. Inherited fake overrides retain their existing dispatch path. Nullable receiver checks and
 exceptions from reading an uninitialized non-null field still precede method execution.
 Final ordinary class/object methods with their own type parameters support direct and inherited calls.
+The compiler also retains proven concrete types through immutable local reference aliases. Calls through a
+matching interface view can select an implementation declared in that final class without runtime lookup.
+Uncertain receivers and generic views requiring value adaptation retain normal dispatch. This preserves
+object identity, mutation and captures; it does not inline ordinary reference-class method bodies.
 Ordinary generic class inheritance uses concrete superclass type
 arguments for construction, fields, accessors and retained callbacks; see
 [direct generic methods](functions.md#direct-generic-methods). Generic virtual/interface methods, generic
@@ -81,6 +85,9 @@ methods reject unsupported callable shapes`, paired with the `testKotlinDispatch
 execution gate, and test `interface defaults lower to methods and computed accessors` paired with
 `testKotlinInterfaceDefaultsVmConformance`, and test `qualified interface super calls use direct default
 bodies` paired with `testKotlinInterfaceSuperVmConformance`.
+`testKotlinConcreteReceiversVmConformance` additionally executes immutable aliases, captured identity,
+receiver/argument effects, generic covariant views, defaults, mutable/unknown/inherited fallbacks and failed casts;
+the ordinary task conformance keeps a proven receiver live across a blocking call.
 
 **Related work:** [#626](https://github.com/CertifiedBadIdeas/Compukters/issues/626)
 [#641](https://github.com/CertifiedBadIdeas/Compukters/issues/641), and

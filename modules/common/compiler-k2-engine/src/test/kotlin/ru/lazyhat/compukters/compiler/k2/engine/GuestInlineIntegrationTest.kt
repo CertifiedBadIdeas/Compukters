@@ -12,7 +12,9 @@ import org.jetbrains.kotlin.backend.common.ir.SharedVariablesManager
 import org.jetbrains.kotlin.backend.common.lower.UpgradeCallableReferences
 import org.jetbrains.kotlin.cli.common.messages.MessageCollector
 import org.jetbrains.kotlin.config.CompilerConfiguration
+import org.jetbrains.kotlin.descriptors.ClassKind
 import org.jetbrains.kotlin.ir.IrElement
+import org.jetbrains.kotlin.ir.declarations.IrClass
 import org.jetbrains.kotlin.ir.declarations.IrFunction
 import org.jetbrains.kotlin.ir.declarations.IrSimpleFunction
 import org.jetbrains.kotlin.ir.declarations.IrVariable
@@ -66,6 +68,218 @@ import kotlin.test.assertTrue
 /** Exercises the shared Guest normalization pass and production lowering boundary. */
 @OptIn(UnsafeDuringIrConstructionAPI::class, CompilerConfiguration.Internals::class)
 class GuestInlineIntegrationTest {
+    @Test
+    fun `concrete immutable receiver aliases retain effects state and captured identity`() {
+        probe(
+            """
+            fun verify(value: Boolean) { if (!value) { val failed = IntArray(1); val invalid = failed[2] } }
+            interface Source {
+                fun read(): Int
+                fun add(value: Int = 2): Int
+                fun fail(value: Int): Int = value
+            }
+            class Counter(var value: Int): Source {
+                override fun read(): Int = value
+                override fun add(value: Int): Int { this.value += value; return this.value }
+                override fun fail(value: Int): Int = 10 / value
+            }
+            fun next(counter: Counter): Int { counter.value += 1; return counter.value }
+            fun exactReceiver(counter: Counter): Counter { counter.value += 1; return counter }
+            fun unknown(source: Source): Int = source.read()
+            class Other(val value: Int): Source {
+                override fun read(): Int = value
+                override fun add(value: Int): Int = this.value + value
+            }
+            open class Parent: Source {
+                override fun read(): Int = 40
+                override fun add(value: Int): Int = 40 + value
+            }
+            class Inherited: Parent()
+            fun choose(): Boolean = true
+            fun factory(): Source = Other(30)
+            fun fallbackScopes() {
+                var mutable: Source = Counter(1)
+                val snapshot = mutable
+                val capture = { mutable.read() }
+                mutable = Other(20)
+                verify(snapshot.read() == 1 && mutable.read() == 20 && capture() == 20)
+                val merged: Source = if (choose()) Counter(5) else Other(6)
+                verify(merged.read() == 5 && factory().read() == 30)
+                val inherited: Source = Inherited()
+                verify(inherited.read() == 40 && inherited.add() == 42)
+                val nullable: Source? = null
+                verify(nullable?.read() == null)
+                var caught = false
+                try { nullable!!.read() } catch (failure: Throwable) { caught = true }
+                verify(caught)
+                val effects = Counter(0)
+                caught = false
+                try { (factory() as Counter).add(next(effects)) } catch (failure: Throwable) { caught = true }
+                verify(caught && effects.value == 0)
+            }
+            interface Read<out T> { fun read(): T }
+            class Box<T>(val value: T): Read<T> { override fun read(): T = value }
+            fun genericViews() {
+                val box = Box(7)
+                val exact: Read<Int> = box
+                val widened: Read<Any> = box
+                verify(exact.read() == 7 && (widened.read() as Int) == 7)
+            }
+            fun main() {
+                val counter = Counter(3)
+                val alias: Source = counter
+                val retained = alias
+                verify(retained.read() == 3)
+                verify(retained.add(next(counter)) == 8 && counter.value == 8)
+                verify(alias.add() == 10)
+                val capture = { retained.read() }
+                counter.value = 11
+                verify(capture() == 11 && unknown(alias) == 11)
+                val reference = alias::read
+                verify(reference() == 11)
+                var caught = false
+                try { retained.fail(0) } catch (failure: Throwable) { caught = true }
+                verify(caught && counter.value == 11)
+                verify((exactReceiver(counter) as Source).add(next(counter)) == 26 && counter.value == 26)
+                fallbackScopes()
+                genericViews()
+                var allocation = 0
+                while (allocation < 128) {
+                    val garbage = IntArray(4096)
+                    garbage[0] = allocation
+                    verify(garbage[0] == allocation)
+                    allocation += 1
+                }
+                verify(capture() == 26 && reference() == 26)
+                val completed = IntArray(-1)
+            }
+            """.trimIndent(),
+            throughSharedEntry = true,
+        ) { main, _, diagnostics, artifact ->
+            assertTrue(diagnostics.isEmpty(), diagnostics.toString())
+            val reads = dispatchCalls(main, "read")
+            assertTrue(reads.isNotEmpty())
+            assertTrue(
+                reads.all { (it.symbol.owner.parent as? IrClass)?.name?.asString() == "Counter" },
+            )
+            assertEquals(
+                "Counter",
+                (
+                    dispatchCalls(main, "fail")
+                        .single()
+                        .symbol.owner.parent as IrClass
+                ).name.asString(),
+            )
+            val linked = LibraryModuleLinker.link(assertNotNull(artifact), emptyMap<String, Module>())
+            val encoded = ArtifactWriter.write(linked)
+            assertTrue(encoded is ArtifactWriteResult.Success, encoded.toString())
+            System.getProperty("compukter.vm.concreteReceiversArtifact")?.let { output ->
+                val path = Path.of(output)
+                Files.createDirectories(path.parent)
+                Files.write(path, encoded.bytes)
+            }
+        }
+    }
+
+    @Test
+    fun `receiver proof leaves mutable merged unknown and inherited implementations dispatched`() {
+        probe(
+            """
+            interface Source { fun read(): Int }
+            class First: Source { override fun read(): Int = 1 }
+            class Second: Source { override fun read(): Int = 2 }
+            open class Parent: Source { override fun read(): Int = 3 }
+            class Inherited: Parent()
+            fun choose(): Boolean = true
+            fun factory(): Source = First()
+            fun unknown(source: Source): Int = source.read()
+            fun main() {
+                var mutable: Source = First()
+                val replace = { mutable = Second() }
+                replace()
+                val first = mutable.read()
+                val merged: Source = if (choose()) First() else Second()
+                val second = merged.read()
+                val third = factory().read()
+                val inherited: Source = Inherited()
+                val fourth = inherited.read()
+            }
+            """.trimIndent(),
+            throughSharedEntry = true,
+        ) { main, _, diagnostics, artifact ->
+            assertTrue(diagnostics.isEmpty(), diagnostics.toString())
+            val reads = dispatchCalls(main, "read")
+            assertTrue(
+                reads.all {
+                    it.symbol.owner.isFakeOverride ||
+                        (it.symbol.owner.parent as? IrClass)?.kind == ClassKind.INTERFACE
+                },
+                reads
+                    .map {
+                        it.symbol.owner.name
+                            .toString() + ":" + it.symbol.owner.parent
+                    }.toString(),
+            )
+            val operations = assertNotNull(artifact).modules.flatMap { it.blocks }.flatMap { it.instructions }
+            assertTrue(operations.any { it is Instruction.CallInterface })
+        }
+    }
+
+    @Test
+    fun `concrete generic receivers preserve covariant boxed views`() {
+        probe(
+            """
+            interface Read<out T> { fun read(): T }
+            class Box<T>(val value: T): Read<T> { override fun read(): T = value }
+            fun main() {
+                val box = Box(7)
+                val exact: Read<Int> = box
+                val first = exact.read()
+                val widened: Read<Any> = box
+                val second = widened.read()
+            }
+            """.trimIndent(),
+            throughSharedEntry = true,
+        ) { main, _, diagnostics, artifact ->
+            assertTrue(diagnostics.isEmpty(), diagnostics.toString())
+            val reads = dispatchCalls(main, "read")
+            assertEquals(
+                listOf("Box", "Read"),
+                reads.map {
+                    (it.symbol.owner.parent as? IrClass)?.name?.asString()
+                },
+            )
+            assertNotNull(artifact)
+        }
+    }
+
+    private fun dispatchCalls(
+        function: IrSimpleFunction,
+        name: String,
+    ): List<IrCall> {
+        val calls = mutableListOf<IrCall>()
+        function.accept(
+            object : IrVisitorVoid() {
+                override fun visitElement(element: IrElement) = element.acceptChildren(this, null)
+
+                override fun visitRichFunctionReference(expression: IrRichFunctionReference) {
+                    expression.boundValues.forEach { it.accept(this, null) }
+                }
+
+                override fun visitCall(expression: IrCall) {
+                    if (expression.symbol.owner.name
+                            .asString() == name
+                    ) {
+                        calls += expression
+                    }
+                    super.visitCall(expression)
+                }
+            },
+            null,
+        )
+        return calls
+    }
+
     @Test
     fun `automatic leaf inlining preserves argument effects exceptions references and value results`() {
         probe(

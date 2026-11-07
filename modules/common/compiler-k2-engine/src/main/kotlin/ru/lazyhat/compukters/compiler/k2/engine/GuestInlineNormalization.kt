@@ -96,6 +96,7 @@ internal object GuestInlineNormalization {
         }
         if (!needed) {
             GuestSmallFunctionInlining.lower(automaticFiles, pluginContext, maximumExpansionNodes = maximumAutomaticExpansionNodes)
+            GuestConcreteReceivers.lower(automaticFiles)
             session.normalizedGuestModules += module
             return
         }
@@ -259,6 +260,7 @@ internal object GuestInlineNormalization {
             file.accept(removeTemplates, null)
         }
         GuestSmallFunctionInlining.lower(automaticFiles, pluginContext, maximumExpansionNodes = maximumAutomaticExpansionNodes)
+        GuestConcreteReceivers.lower(automaticFiles)
         session.normalizedGuestModules += module
     }
 

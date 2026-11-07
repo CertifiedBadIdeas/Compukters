@@ -448,6 +448,24 @@ rebuild instructions, costs, root maps and frame requirements from the optimized
 copying; automatic inlining can change code size, instruction charges and physical call stacks. No new artifact
 format, public compiler option or VM execution path is introduced.
 
+## Proven reference receivers
+
+After inline normalization, `GuestConcreteReceivers` preserves concrete class information through immutable
+project-local reference aliases. It refines the local declaration and its reads together, before specialization
+and capture layout. Constructors and non-null final reference types provide proofs; aliases retain them only
+when their declared generic view has the same inherited type arguments. A covariant view requiring boxing or
+other result adaptation keeps its original type. Mutable broad references, unknown interface results and
+interface-typed branch merges provide no proof. Alias traversal is bounded to 64 levels.
+
+An interface or virtual call may then select a unique concrete implementation declared in the proven final
+class, following override symbols rather than method spelling. Effective argument and result types must agree,
+and all arguments must already be explicit. Inherited implementations, fake overrides, interface defaults,
+generic methods, super calls and canonical Any operations retain their established paths. Override search is
+bounded to 256 symbols. Redundant implicit receiver upcasts can disappear; initializers, explicit casts and
+argument effects remain. Existing final-class lowering emits the direct call, with the same artifact verification,
+prepared calls, exception handling and GC protocol. This pass does not expand reference-method bodies or change
+the executable format.
+
 ## Reference arrays and register allocation
 
 Concrete `Array<GuestClass>` uses become distinct local nominal array types whose elements are exact Guest class

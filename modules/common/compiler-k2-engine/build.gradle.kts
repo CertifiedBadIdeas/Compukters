@@ -98,6 +98,23 @@ tasks.test {
 
 val inlineBlocksArtifact = layout.buildDirectory.file("generated/conformance/kotlin-inline-blocks.cpkt")
 val smallInliningArtifact = layout.buildDirectory.file("generated/conformance/kotlin-small-inlining.cpkt")
+val concreteReceiversArtifact = layout.buildDirectory.file("generated/conformance/kotlin-concrete-receivers.cpkt")
+tasks.register<Test>("generateConcreteReceiversConformanceArtifact") {
+    description = "Compiles proven receiver aliases and dynamic-dispatch fallback cases for VM conformance."
+    group = "verification"
+    dependsOn(tasks.jar)
+    useJUnitPlatform()
+    testClassesDirs = sourceSets.test.get().output.classesDirs
+    classpath = sourceSets.test.get().runtimeClasspath
+    filter.includeTestsMatching("*concrete immutable receiver aliases retain effects state and captured identity*")
+    val guestBuiltins = rootProject.file("modules/common/guest-platform/src/platform/builtins")
+    inputs.dir(guestBuiltins)
+    inputs.file(tasks.jar.flatMap { it.archiveFile })
+    outputs.file(concreteReceiversArtifact)
+    systemProperty("compukters.guest.builtins", guestBuiltins.absolutePath)
+    systemProperty("compukter.vm.concreteReceiversArtifact", concreteReceiversArtifact.get().asFile.absolutePath)
+}
+
 tasks.register<Test>("generateSmallInliningConformanceArtifact") {
     description = "Compiles automatic leaf inlining semantics for pinned VM conformance."
     group = "verification"
