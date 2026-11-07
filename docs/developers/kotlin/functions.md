@@ -450,6 +450,15 @@ recursive inline dependencies, depth above 64 and cumulative projected work abov
 specialization allows at most 256 variants and 64 active levels. These are conservative compiler safety
 bounds, not calibrated VM capacity budgets. Production worker and JVM-plugin entry tests exercise the shared
 pass; function-values, generic-library and transparent-call VM scenarios cover its integration.
+
+The compiler also automatically inlines selected small ordinary top-level and non-generic value-class methods
+from project sources. Eligible functions have scalar/value-class inputs and results and a small leaf expression;
+selection is bounded and does not require the `inline` modifier. Function references remain callable and arguments
+retain their evaluation order and effects, including an unused argument that blocks. This optimization does not
+extend the accepted declaration forms of explicit Kotlin `inline`. `GuestInlineIntegrationTest`,
+`testKotlinSmallInliningVmConformance` and `testKotlinTasksVmConformance` cover the semantic boundary; see the
+[compiler architecture](../../contributors/architecture/compiler.md#small-function-optimization) for selection limits.
+
 Callback-taking collection extensions are inline and admit non-local returns from direct lambdas. Ordinary
 generic wrappers retain their concrete emitter specialization; stored callbacks retain managed ownership.
 `Tasks.launch` accepts direct, stored, and returned `() -> Unit` values. A direct top-level

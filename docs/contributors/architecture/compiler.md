@@ -430,6 +430,24 @@ Nullable reference arrays have distinct nominal types with nullable element desc
 `List<Int?>` store the same managed Int boxes or null, while `List<Int>` retains scalar storage. Nullable and non-null
 lists expose `Any?` bridges for reads, iteration, and searches.
 
+## Small-function optimization
+
+Before VM instruction generation, optional small-function inlining reuses Kotlin's common IR inliner after
+mandatory source `inline` normalization. It selects project-defined top-level functions and methods of
+non-generic value classes with a single leaf return expression, at most four parameters including receivers,
+and non-null scalar/value-class inputs and results. Bodies admit constants, parameter reads, canonical external
+primitive operations, default value-class getters and value-class construction. Ordinary reference-class and
+object methods, generic functions, defaults, branches, mutation and nested source calls remain ordinary calls.
+Trusted platform source stays outside this optional pass, preserving canonical native handlers.
+
+A body is limited to 48 expression nodes. Declaration order deterministically selects candidates within a
+65,536-unit projected growth budget, charging every call site for its copied body and argument/result scaffolding.
+Over-budget candidates retain calls. The common inliner preserves evaluation of unused and repeated arguments;
+ordinary definitions and callable references retain their identities. Existing lowering, linking and allocation
+rebuild instructions, costs, root maps and frame requirements from the optimized IR. Source coordinates survive
+copying; automatic inlining can change code size, instruction charges and physical call stacks. No new artifact
+format, public compiler option or VM execution path is introduced.
+
 ## Reference arrays and register allocation
 
 Concrete `Array<GuestClass>` uses become distinct local nominal array types whose elements are exact Guest class

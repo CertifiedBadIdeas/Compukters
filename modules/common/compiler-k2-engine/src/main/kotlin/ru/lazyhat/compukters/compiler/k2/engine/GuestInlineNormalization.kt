@@ -46,6 +46,7 @@ internal object GuestInlineNormalization {
         maximumSpecializationDepth: Int = 64,
         maximumWork: Long = 1_000_000,
         maximumDepth: Int = 64,
+        maximumAutomaticExpansionNodes: Long = 65_536,
     ) {
         if (module in session.normalizedGuestModules) return
         module.files.forEach { file ->
@@ -70,6 +71,8 @@ internal object GuestInlineNormalization {
                             session.virtualSourcePath(it.fileEntry.name) in session.sourcePlatformPaths
                     )
             }
+        // Platform source may have canonical native handlers. Automatic expansion only owns project bodies.
+        val automaticFiles = files.filter { session.trustedPlatformModule(it.fileEntry.name) == null }
         var needed = false
         files.forEach { file ->
             file.accept(
@@ -92,6 +95,7 @@ internal object GuestInlineNormalization {
             )
         }
         if (!needed) {
+            GuestSmallFunctionInlining.lower(automaticFiles, pluginContext, maximumExpansionNodes = maximumAutomaticExpansionNodes)
             session.normalizedGuestModules += module
             return
         }
@@ -162,18 +166,7 @@ internal object GuestInlineNormalization {
             }
         }
         var normalizationLocation: IrElement = files.first()
-        val context =
-            object : LoweringContext {
-                override val configuration = CompilerConfiguration()
-                override var inVerbosePhase = false
-                override val irBuiltIns = pluginContext.irBuiltIns
-                override val irFactory = pluginContext.irFactory
-                override val messageCollector = MessageCollector.NONE
-                override val symbols: PreSerializationSymbols get() =
-                    throw UnsupportedKotlinIr(normalizationLocation, "inline shape requires backend-specific symbols")
-                override val sharedVariablesManager: SharedVariablesManager get() =
-                    throw UnsupportedKotlinIr(normalizationLocation, "inline shape requires backend shared-variable lowering")
-            }
+        val context = guestInliningContext(pluginContext) { normalizationLocation }
         val resolver =
             object : InlineFunctionResolver() {
                 override fun getFunctionDeclaration(symbol: IrFunctionSymbol): IrFunction? =
@@ -265,6 +258,7 @@ internal object GuestInlineNormalization {
             file.declarations.removeAll { it is IrSimpleFunction && it.isInline && it.symbol !in required }
             file.accept(removeTemplates, null)
         }
+        GuestSmallFunctionInlining.lower(automaticFiles, pluginContext, maximumExpansionNodes = maximumAutomaticExpansionNodes)
         session.normalizedGuestModules += module
     }
 
@@ -294,3 +288,20 @@ internal object GuestInlineNormalization {
             files.forEach { it.accept(visitor, null) }
         }
 }
+
+@OptIn(CompilerConfiguration.Internals::class)
+internal fun guestInliningContext(
+    pluginContext: IrPluginContext,
+    location: () -> IrElement,
+): LoweringContext =
+    object : LoweringContext {
+        override val configuration = CompilerConfiguration()
+        override var inVerbosePhase = false
+        override val irBuiltIns = pluginContext.irBuiltIns
+        override val irFactory = pluginContext.irFactory
+        override val messageCollector = MessageCollector.NONE
+        override val symbols: PreSerializationSymbols get() =
+            throw UnsupportedKotlinIr(location(), "inline shape requires backend-specific symbols")
+        override val sharedVariablesManager: SharedVariablesManager get() =
+            throw UnsupportedKotlinIr(location(), "inline shape requires backend shared-variable lowering")
+    }

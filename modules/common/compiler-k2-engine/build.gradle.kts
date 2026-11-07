@@ -89,6 +89,23 @@ tasks.test {
 }
 
 val inlineBlocksArtifact = layout.buildDirectory.file("generated/conformance/kotlin-inline-blocks.cpkt")
+val smallInliningArtifact = layout.buildDirectory.file("generated/conformance/kotlin-small-inlining.cpkt")
+tasks.register<Test>("generateSmallInliningConformanceArtifact") {
+    description = "Compiles automatic leaf inlining semantics for pinned VM conformance."
+    group = "verification"
+    dependsOn(tasks.jar)
+    useJUnitPlatform()
+    testClassesDirs = sourceSets.test.get().output.classesDirs
+    classpath = sourceSets.test.get().runtimeClasspath
+    filter.includeTestsMatching("*automatic leaf inlining preserves argument effects exceptions references and value results*")
+    val guestBuiltins = rootProject.file("modules/common/guest-platform/src/platform/builtins")
+    inputs.dir(guestBuiltins)
+    inputs.file(tasks.jar.flatMap { it.archiveFile })
+    outputs.file(smallInliningArtifact)
+    systemProperty("compukters.guest.builtins", guestBuiltins.absolutePath)
+    systemProperty("compukter.vm.smallInliningArtifact", smallInliningArtifact.get().asFile.absolutePath)
+}
+
 tasks.register<Test>("generateInlineBlocksConformanceArtifact") {
     description = "Compiles test-normalized inline blocks for pinned VM conformance."
     group = "verification"

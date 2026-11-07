@@ -728,6 +728,15 @@ registerKotlinVmConformance(
     conformanceScenario = "primitives",
 )
 registerKotlinVmConformance(
+    taskName = "testKotlinSmallInliningVmConformance",
+    taskDescription = "Executes automatic leaf inlining argument, exception and value semantics in the pinned VM.",
+    artifactTask = ":compiler-k2-engine:generateSmallInliningConformanceArtifact",
+    artifact = project(":compiler-k2-engine").layout.buildDirectory.file("generated/conformance/kotlin-small-inlining.cpkt"),
+    cargoTargetDirectory = ".toolchain/build/cargo/compiler-k2-small-inlining-conformance",
+    artifactEnvironmentVariable = "COMPUKTER_KOTLIN_INLINE_BLOCKS_ARTIFACT",
+    conformanceScenario = "inline-blocks",
+)
+registerKotlinVmConformance(
     taskName = "testKotlinInlineBlocksVmConformance",
     taskDescription = "Executes test-normalized Guest inline blocks and target-aware returns in the pinned VM.",
     artifactTask = ":compiler-k2-engine:generateInlineBlocksConformanceArtifact",

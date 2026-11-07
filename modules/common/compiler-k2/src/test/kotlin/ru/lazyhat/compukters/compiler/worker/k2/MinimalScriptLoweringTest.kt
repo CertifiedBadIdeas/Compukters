@@ -2236,8 +2236,11 @@ class MinimalScriptLoweringTest {
 
                         val level = 13
 
+                        fun keepFirst(value: Int, ignored: Int): Int = value
+
                         fun reader() {
-                            readln()
+                            // The unused argument must still suspend and consume exactly one response after inlining.
+                            require(keepFirst(7, readln().length) == 7)
                         }
 
                         fun writer() {

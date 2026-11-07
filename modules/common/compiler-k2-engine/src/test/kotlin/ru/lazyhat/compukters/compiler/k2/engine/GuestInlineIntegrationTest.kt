@@ -67,6 +67,148 @@ import kotlin.test.assertTrue
 @OptIn(UnsafeDuringIrConstructionAPI::class, CompilerConfiguration.Internals::class)
 class GuestInlineIntegrationTest {
     @Test
+    fun `automatic leaf inlining preserves argument effects exceptions references and value results`() {
+        probe(
+            """
+            fun verify(value: Boolean) { if (!value) { val failed = IntArray(1); val invalid = failed[2] } }
+            class Counter(var value: Int)
+            fun next(counter: Counter): Int { counter.value += 1; return counter.value }
+            fun twice(value: Int): Int = value + value
+            fun first(value: Int, ignored: Int): Int = value
+            fun digits(first: Int, second: Int): Int = first * 10 + second
+            fun divide(first: Int, second: Int): Int = first / second
+            value class PairValue(val x: Double, val y: Double) {
+                operator fun plus(other: PairValue): PairValue = PairValue(x + other.x, y + other.y)
+            }
+            open class Base { open fun value(): Int = 1 }
+            class Child: Base() { override fun value(): Int = 2 }
+            object Initialized { var count = 3; fun value(): Int = count }
+            fun main() {
+                val counter = Counter(0)
+                verify(twice(next(counter)) == 2 && counter.value == 1)
+                verify(first(next(counter), next(counter)) == 2 && counter.value == 3)
+                verify(digits(second = next(counter), first = next(counter)) == 54 && counter.value == 5)
+                val retained = ::twice
+                verify(retained(6) == 12)
+                val pair = PairValue(1.0, 2.0) + PairValue(3.0, 4.0)
+                verify(pair.x == 4.0 && pair.y == 6.0)
+                val base: Base = Child()
+                verify(base.value() == 2 && Initialized.value() == 3)
+                var caught = false
+                try { divide(next(counter), 0) } catch (failure: Throwable) { caught = true }
+                verify(caught && counter.value == 6)
+                val completed = IntArray(-1)
+            }
+            """.trimIndent(),
+            throughSharedEntry = true,
+        ) { main, _, diagnostics, artifact ->
+            assertTrue(diagnostics.isEmpty(), diagnostics.toString())
+            val names = callNames(main)
+            assertTrue(names.none { it in setOf("twice", "first", "digits", "divide") }, names.toString())
+            assertTrue("value" in names, "dispatch and object initialization must remain calls")
+            val linked = LibraryModuleLinker.link(assertNotNull(artifact), emptyMap<String, Module>())
+            val encoded = ArtifactWriter.write(linked)
+            assertTrue(encoded is ArtifactWriteResult.Success, encoded.toString())
+            System.getProperty("compukter.vm.smallInliningArtifact")?.let { output ->
+                val path = Path.of(output)
+                Files.createDirectories(path.parent)
+                Files.write(path, encoded.bytes)
+            }
+        }
+    }
+
+    @Test
+    fun `automatic inlining budget falls back without rejecting recursion defaults or generic functions`() {
+        probe(
+            """
+            fun twice(value: Int): Int = value + value
+            fun recursive(value: Int): Int = if (value == 0) 0 else recursive(value - 1)
+            fun defaulted(value: Int = 3): Int = value + value
+            fun <T> identity(value: T): T = value
+            fun main() { val result = twice(identity(defaulted())) + recursive(2) }
+            """.trimIndent(),
+            maximumAutomaticExpansionNodes = 0,
+        ) { main, _, diagnostics, artifact ->
+            assertTrue(diagnostics.isEmpty(), diagnostics.toString())
+            assertTrue(callNames(main).containsAll(listOf("twice", "recursive", "defaulted", "identity")))
+            assertNotNull(artifact)
+        }
+    }
+
+    private fun callNames(function: IrSimpleFunction): List<String> {
+        val names = mutableListOf<String>()
+        function.accept(
+            object : IrVisitorVoid() {
+                override fun visitElement(element: IrElement) {
+                    element.acceptChildren(this, null)
+                }
+
+                override fun visitCall(expression: IrCall) {
+                    names +=
+                        expression.symbol.owner.name
+                            .asString()
+                    super.visitCall(expression)
+                }
+            },
+            null,
+        )
+        return names
+    }
+
+    @Test
+    fun `automatic inlining retains source coordinates across project files`() {
+        probe(
+            source = "fun main() { val value = doubled(7) }",
+            additionalSource = "fun doubled(value: Int): Int = value + value",
+        ) { main, _, diagnostics, artifact ->
+            assertTrue(diagnostics.isEmpty(), diagnostics.toString())
+            assertTrue("doubled" !in callNames(main))
+            val application = assertNotNull(artifact).modules.single { it.kind == ModuleKind.APPLICATION }
+            val mainId = application.functions.indexOfFirst { application.strings[it.name.value.toInt()].toString() == "main" }
+            val entries = application.debug.filter { it.function.value.toInt() == mainId }
+            assertTrue(entries.any { it.sourcePath.toString() == "project/Other.kt" && it.sourceLine == 1u })
+            assertTrue(entries.any { it.sourcePath.toString() == "project/Main.kt" && it.sourceLine == 1u })
+        }
+    }
+
+    @Test
+    fun `automatic inlining skips excess candidates within a shared expansion budget`() {
+        probe(
+            source =
+                """
+                fun first(value: Int): Int = value + value
+                fun second(value: Int): Int = value + value
+                fun main() { val result = first(1) + first(2) + second(3) }
+                """.trimIndent(),
+            maximumAutomaticExpansionNodes = 60,
+        ) { main, _, diagnostics, artifact ->
+            assertTrue(diagnostics.isEmpty(), diagnostics.toString())
+            assertTrue("first" !in callNames(main))
+            assertTrue("second" in callNames(main))
+            assertNotNull(artifact)
+        }
+    }
+
+    @Test
+    fun `automatic inlining preserves canonical handlers even with admitted platform source`() {
+        probe(
+            source = "import probe.identity\nfun main() { val value = identity(3) }",
+            librarySource = "package probe\nfun identity(value: Int): Int = value + 99",
+            trustedLibrary = true,
+            admitTrustedSourceBodies = true,
+            canonicalIdentity = true,
+        ) { main, _, diagnostics, artifact ->
+            assertTrue(diagnostics.isEmpty(), diagnostics.toString())
+            assertTrue("identity" in callNames(main))
+            assertTrue(
+                assertNotNull(
+                    artifact,
+                ).modules.flatMap { it.blocks }.flatMap { it.instructions }.any { it is Instruction.CapabilityCallSync },
+            )
+        }
+    }
+
+    @Test
     fun `all primitive operators preserve narrow signed unsigned and nominal semantics`() {
         probe(
             """
@@ -428,6 +570,7 @@ class GuestInlineIntegrationTest {
         probe(
             source = "import probe.helper\nfun main() { helper(1 + 2) }",
             librarySource = "package probe\nfun helper(value: Int): Int { return value + 1 }",
+            maximumAutomaticExpansionNodes = 0,
         ) { _, _, diagnostics, artifact ->
             assertTrue(diagnostics.isEmpty(), diagnostics.toString())
             val mapped =
@@ -1032,6 +1175,7 @@ class GuestInlineIntegrationTest {
         maximumDepth: Int = 64,
         maximumExpansionWork: Long = 1_000_000,
         maximumExpansionDepth: Int = 64,
+        maximumAutomaticExpansionNodes: Long = 65_536,
         check: (IrSimpleFunction, InlineFacts, List<WorkerDiagnostic>, Artifact?) -> Unit,
     ) {
         val builtinsRoot = Path.of(checkNotNull(System.getProperty("compukters.guest.builtins")))
@@ -1142,6 +1286,7 @@ class GuestInlineIntegrationTest {
                     maximumDepth,
                     maximumExpansionWork,
                     maximumExpansionDepth,
+                    maximumAutomaticExpansionNodes,
                 )
             }
             val main = file.declarations.filterIsInstance<IrSimpleFunction>().single { it.name.asString() == "main" }
