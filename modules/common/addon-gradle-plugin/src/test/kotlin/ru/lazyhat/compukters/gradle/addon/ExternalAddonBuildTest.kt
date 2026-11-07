@@ -193,7 +193,7 @@ class ExternalAddonBuildTest {
                             Files.readString(it)
                     }
                 }
-            val guest = generatedFiles.getValue("fixture/kinetics/Engine.kt")
+            val guest = generatedFiles.getValue("fixture/kinetics/fixture.kinetics.Engine.kt")
             assertTrue("setThrottleCommand" in guest && "aimCommand" in guest)
             assertTrue("closeCommand" !in guest && "speedCommand" !in guest && "awaitStateCommand" !in guest)
             assertTrue("kotlin.math.Rotation3d.fromQuaternion" in guest)

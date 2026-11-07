@@ -63,10 +63,10 @@ class DeclarativeGuestContractTest {
         """,
         ) { model ->
             val generated = generateGuestContractSources(model)
-            val snapshot = generated.getValue("fixture/device/Snapshot.kt")
+            val snapshot = generated.getValue("fixture/device/fixture.device.Snapshot.kt")
             assertTrue("internal val handle: Int" in snapshot)
             assertTrue("TypedPeripheralProvider" !in snapshot)
-            assertTrue("fixture.device.Snapshot(reply)" in generated.getValue("fixture/device/Ticker.kt"))
+            assertTrue("fixture.device.Snapshot(reply)" in generated.getValue("fixture/device/fixture.device.Ticker.kt"))
             val root = Files.createTempDirectory("resource-handles")
             try {
                 writeGeneratedGuestSources(model, root)
@@ -116,14 +116,14 @@ class DeclarativeGuestContractTest {
                     .map { it.kind },
             )
             val files = generateGuestContractSources(model)
-            val device = files.getValue("fixture/device/Engine.kt")
+            val device = files.getValue("fixture/device/fixture.device.Engine.kt")
             assertTrue("TypedPeripheralProvider<Engine>" in device)
             assertTrue("fun setThrottleCommand(throttle: Double): Command<Unit>" in device)
             assertTrue("closeCommand" !in device && "stateCommand" !in device && "awaitStateCommand" !in device)
             assertEquals(files, generateGuestContractSources(model))
-            val state = files.getValue("fixture/device/State.kt")
+            val state = files.getValue("fixture/device/fixture.device.State.kt")
             assertTrue("public value class State" in state)
-            assertTrue("external fun state(handle: Int): State" in files.getValue("fixture/device/EngineBindings.kt"))
+            assertTrue("external fun state(handle: Int): State" in files.getValue("fixture/device/fixture.device.EngineBindings.kt"))
         }
 
     @Test
@@ -209,7 +209,7 @@ class DeclarativeGuestContractTest {
                 },
             )
             assertEquals(listOf("Int") + List(7) { "Double" }, arguments.map { it.type })
-            val device = files.getValue("fixture/device/Engine.kt")
+            val device = files.getValue("fixture/device/fixture.device.Engine.kt")
             assertTrue("target.orientation.quaternion.w" in device)
             assertTrue("CommandArgument.double(target.position.x)" in device)
             val root = Files.createTempDirectory("mathematical-arguments")
@@ -243,10 +243,10 @@ class DeclarativeGuestContractTest {
             val boundary = GuestBoundaryTypes(model)
             assertEquals("kotlin.math.Quaterniond", boundary.wireType(model.operations.first().result))
             val files = generateGuestContractSources(model)
-            val api = files.getValue("fixture/device/Api.kt")
+            val api = files.getValue("fixture/device/fixture.device.Api.kt")
             assertTrue("kotlin.math.Rotation3d.fromQuaternion(reply)" in api)
             assertTrue("fixture.device.State(kotlin.math.Rotation3d.fromQuaternion(reply.orientation), reply.location)" in api)
-            val wire = files.getValue("fixture/device/StateReply.kt")
+            val wire = files.getValue("fixture/device/fixture.device.StateReply.kt")
             assertTrue("orientation: Quaterniond" in wire)
             assertTrue("location: Vector3d" in wire)
         }
