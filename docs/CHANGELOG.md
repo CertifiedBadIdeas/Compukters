@@ -13,6 +13,9 @@ headings so this page has one stable URL that can be shared outside the reposito
 
 ## 0.7.0 — In development
 
+- Computers running identical binaries reuse immutable program code and metadata, reducing duplicate
+  runtime memory and preparation work for repeated programs such as the shell.
+
 - Guest Kotlin compilation removes proven redundant register copies and can use smaller stack frames.
   Existing compiled programs receive these improvements after recompilation.
 
