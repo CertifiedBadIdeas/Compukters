@@ -11665,6 +11665,23 @@ class MinimalScriptLoweringTest {
             }
         }
 
+    @Test
+    @org.junit.jupiter.api.condition.EnabledIfSystemProperty(named = "compukter.bench.executionOutput", matches = ".+")
+    fun `typed execution benchmark artifacts compile`() =
+        withAdapter { adapter ->
+            val output = Path.of(checkNotNull(System.getProperty("compukter.bench.executionOutput"))).createDirectories()
+            val manifest = mutableListOf("id\tchecksum\tartifact_bytes")
+            executionBenchmarkCases().forEach { case ->
+                val result = adapter.compile(request(case.source))
+                val bytes = assertNotNull(result.artifact, "${case.id}: ${result.diagnostics}").toByteArray()
+                ArtifactReader.read(bytes)
+                output.resolve("${case.id}.cpkt").writeBytes(bytes)
+                output.resolve("${case.id}.kt").writeText(case.source)
+                manifest += listOf(case.id, case.checksum, bytes.size).joinToString("\t")
+            }
+            output.resolve("manifest.tsv").writeText(manifest.joinToString("\n", postfix = "\n"))
+        }
+
     private fun withAdapter(block: (K2CompilerAdapter) -> Unit) {
         val root = createTempDirectory("compukters-minimal-lowering-test-")
         try {
