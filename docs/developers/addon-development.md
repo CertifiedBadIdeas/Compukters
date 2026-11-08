@@ -70,7 +70,7 @@ After staging the local SDK, run `check`,
 own or invoke its tasks. First-party addons use the two-part release policy below, independently of the SDK version.
 
 The Cosmonautics addon exposes world, vessel and orbit observations through generated records. Guest programs derive
-values such as apsides from those records; executable calculation helpers are not part of the addon contract.
+values such as apsides from those records. Native addons may also define ordinary supported Guest helpers alongside their server operations.
 
 ## First-party addon versions
 
@@ -137,7 +137,7 @@ Compukters development mod with its own product version to the run configuration
 ## Declare the Guest API
 
 SDK 0.8 compiles `src/contract/kotlin` as native Guest Kotlin against the actual Guest stdlib, without a JVM
-classpath. Package paths must belong to the addon namespace. Annotated interfaces describe server operations;
+classpath. Package paths must belong to the addon namespace. Top-level annotated interfaces describe server operations;
 those operations have explicit types and no bodies. Ordinary supported Guest functions, interface defaults and
 value-class methods can live alongside them and execute in the VM. Boundary layouts still require immutable,
 non-null constructor fields; generic boundary types, mutable stored state and operation defaults are rejected.
@@ -335,6 +335,9 @@ constructor defaults, arrays, cycles and generic or nullable field types are rej
 the actual Guest declarations and handles
 nested serialization. Record arguments are flattened into ordered scalar wire arguments, with a limit of 32 including
 the SDK-owned device handle.
+
+Use `value class` for immutable snapshots that should retain inline field representation. A native
+`data class` has ordinary Guest object semantics; the SDK preserves the author's chosen representation.
 
 Import Guest stdlib types directly, for example `kotlin.math.Vector3d` or `Rotation3d`. Types from declared
 Guest dependencies follow the same structural validation as addon-owned types; there is no selected math-type list.

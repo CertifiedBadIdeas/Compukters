@@ -27,7 +27,7 @@ import kotlin.math.Vector3d
 import kotlin.math.Rotation3d
 
 @GuestRecord
-data class State(val position: Vector3d, val orientation: Rotation3d) {
+value class State(val position: Vector3d, val orientation: Rotation3d) {
     fun direction(): Vector3d = position.normalized()
 }
 

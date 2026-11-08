@@ -18,6 +18,85 @@ import kotlin.test.assertTrue
 
 class NativeGuestContractAnalyzerTest {
     @Test
+    fun `binding defaults retain class prefixes and explicit historical names`() =
+        fixture(
+            """
+            @GuestDevice("fixture:engine") interface Engine {
+                @GuestRead fun state(): Int
+                @GuestCommand fun setThrottle(value: Double): Unit
+                @GuestCall(binding = "") fun close(): Unit
+            }
+            @GuestResource interface Snapshot { @GuestCall fun close(): Unit }
+            @GuestService interface Api { @GuestRead(binding = "legacyValue") fun value(): Int }
+            """.trimIndent(),
+        ) { model ->
+            assertEquals(
+                setOf(
+                    "fixture.EngineBindings.engineState",
+                    "fixture.EngineBindings.engineSetThrottle",
+                    "fixture.EngineBindings.engineClose",
+                    "fixture.SnapshotBindings.snapshotClose",
+                    "fixture.ApiBindings.legacyValue",
+                ),
+                model.operations.map { it.binding }.toSet(),
+            )
+            assertEquals(setOf("fixture.EngineBindings.engineSetThrottle"), model.commands)
+        }
+
+    @Test
+    fun `byte array results retain scalar wire semantics`() =
+        fixture("@GuestService interface Api { @GuestRead fun read(): ByteArray }") { model ->
+            val generated = Files.createTempDirectory("native-byte-array-")
+            try {
+                writeGeneratedGuestSources(model, generated)
+                val resolved =
+                    resolveAddonContract(
+                        generated,
+                        AddonAuthoringContract("fixture", "1.0"),
+                        AddonAbiLock.empty(),
+                        bindingAliases = model.bindingAliases,
+                        resolvedRecords = nativeResultSchemas(model),
+                    )
+                assertEquals(
+                    ru.lazyhat.compukters.addon.api.AddonCapabilityValueType.BYTE_ARRAY,
+                    resolved.contract.schemas
+                        .single()
+                        .operations
+                        .single()
+                        .result,
+                )
+            } finally {
+                generated.toFile().deleteRecursively()
+            }
+        }
+
+    @Test
+    fun `invalid transport shapes and constraint contracts are rejected natively`() {
+        listOf(
+            "abstract class Accidental { @GuestRead abstract fun value(): Int }",
+            "interface Accidental { @GuestRead fun value(): Int }",
+            "class Outer { @GuestService interface Nested { @GuestRead fun value(): Int } }",
+            "data class State(val value: Int = 1)\n@GuestService interface Api { @GuestRead fun state(): State }",
+            "data class State(val bytes: ByteArray)\n@GuestService interface Api { @GuestRead fun state(): State }",
+            "@GuestService interface Api<T> { @GuestRead fun value(): T }",
+            "@GuestService interface Api { @GuestRead fun value(): List<Int> }",
+            "@GuestService interface Api { @GuestRead fun value(): Int? }",
+            "@GuestService interface Api { @GuestRead fun value(arg: Int = 1): Int }",
+            "@GuestService interface Api { @GuestCall fun value(@Finite arg: Int): Unit }",
+            "@GuestService interface Api { @GuestCall fun value(@DoubleRange(min = 2.0, max = 1.0) arg: Double): Unit }",
+            "@GuestService interface Api { @GuestCall fun value(@MaxLength(-1) arg: String): Unit }",
+            "@GuestService interface Api { @GuestCommand fun write(): Unit; @GuestRead fun writeCommand(): Int }",
+            "data class Node(val child: Node)\n@GuestService interface Api { @GuestCall fun send(node: Node): Unit }",
+            "@GuestService interface Api { @GuestCall fun send(a: kotlin.math.Matrix4d, b: kotlin.math.Matrix4d, c: Double): Unit }",
+            "@GuestService interface Api { @GuestCall fun send(a: kotlin.math.Vector3d, a_x: Double): Unit }",
+        ).forEach { source ->
+            assertFailsWith<IllegalArgumentException>(source) {
+                fixture(source) { model -> model.operations.forEach { GuestBoundaryTypes(model).arguments(it) } }
+            }
+        }
+    }
+
+    @Test
     fun `native contracts resolve aliases and preserve executable methods without allocating selectors`() =
         fixture(
             """

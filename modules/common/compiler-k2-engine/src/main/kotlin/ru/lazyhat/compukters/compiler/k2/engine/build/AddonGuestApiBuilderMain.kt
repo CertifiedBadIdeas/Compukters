@@ -186,9 +186,9 @@ fun buildTrustedAddonGuestApi(
                 PlatformMetadataCompiler()
                     .compile(module.id, module.sources)
                     .recordCandidates
-                    .filter { it.symbol in canonicalRecordTypes && it.valueClass && it.rejection == null }
+                    .filter { it.valueClass && it.rejection == null }
             }.orEmpty()
-    val native = declaration?.nativeSources?.isNotEmpty() == true
+    val native = declaration != null
     val resolved =
         resolveAddonContract(
             sourceRoot,

@@ -327,8 +327,11 @@ remain in `addon.lock`; distinct physical intrinsic owners in the library map to
 also permits a service's legacy logical binding owner to equal its public interface name.
 `NativeGuestContractBuildTest` compiles actual standalone libraries containing interface defaults, MFVC
 helpers, resource handles and command factories, checks preserved selectors/tombstones and exact packaged
-sources, and covers a pure executable library without capabilities. This backend is not yet the default
-published Gradle authoring pipeline; it does not establish Rust execution or automatic IDEA import.
+sources, and covers a pure executable library without capabilities. The public Gradle addon plugin uses this
+native pipeline. `ExternalAddonBuildTest` verifies a separate Guest project dependency, typed host compilation
+and configuration-cache replay. `DeclarativeNativeIntegrationTest` compiles a consumer and executes interface
+defaults, MFVC methods and partial batch failures in the real VM. The pinned IDEA adapter imports the same
+module and dependency model; its actual Gradle import/reload tests are documented in the IDE support topic.
 
 Default-argument metadata includes an explicit array-receiver size expression, evaluated from the already computed
 receiver rather than re-evaluating its source expression, and an explicit null value distinct from an absent default.

@@ -23,10 +23,11 @@ This model is a separate IDE import boundary. Its version does not change the CA
 capability transport or VM formats. `:addon-gradle-plugin:testGuestGradleModel` verifies actual Tooling
 API transport, discovery without compilation, non-addon project rejection and missing-file diagnostics.
 
-## Declarative addon SDK
+## Native addon SDK
 
-SDK **0.8.0** accepts declarations-only Kotlin/JVM contracts and generates Guest Kotlin, executable
-CAGB libraries and host dispatch from the same model. Generated Kotlin lives under
+SDK **0.8.0** compiles native Guest Kotlin in `src/contract/kotlin`, with executable methods alongside
+annotated bodyless interface operations. It generates inspectable server plumbing, executable
+CAGB libraries and typed host dispatch from that native model. Generated Kotlin lives under
 `build/generated/sources/compuktersGuest/kotlin` and is retained in source artifacts. The checked-in
 `addon.lock` remains ABI history: ordinary builds validate it, explicit updates retain selectors and
 tombstones. SDK 0.8 does not change CAGB, native VM or capability transport encoding.
@@ -35,9 +36,9 @@ Only explicit `@GuestCommand` methods returning Unit receive command factories a
 bindings. `@GuestRead`/`@GuestCall` cannot retain a pending continuation; `@GuestWait` may wait and is
 excluded from batching. Constraints are checked on both Guest and host boundaries. Handler
 `batchCommands` is retained for binary compatibility with older hosts and ignored by generated
-declarative hosts.
+generated hosts.
 
-Supported SDK mathematical types and addon records remain typed in host arguments. Their scalar
+Structurally admissible stdlib, dependency and addon records remain typed in host arguments. Their scalar
 components cross the existing argument transport; reconstruction belongs to the SDK. Rotation inputs
 are finite, nonzero and normalized before handlers run, including inside nested records. Rotation
 results retain quaternion wire schemas and use validated Guest factories when reconstructed.
@@ -57,12 +58,16 @@ components for generated host reconstruction. `stdlib:core` 1.28.0 applies this 
 their quaternion wire schemas and validated Guest factories remain unchanged. Public constructors with
 initializers use generated raw reply records, followed by actual Guest construction. Host data classes
 are generated from the resolved fields and carry no JVM implementation of arbitrary Guest method bodies.
-These backend changes reuse existing CAGB, metadata, capability and VM encodings. Public Gradle pipeline
-integration and VM execution evidence are still pending.
+These changes reuse existing CAGB, metadata, capability and VM encodings. Gradle's native dependency variant
+keeps Guest artifacts separate from JVM dependencies. Explicit lock updates complete validation/compilation
+before writing selectors; ordinary compilation and IDE import do not mutate the lock.
 
 `NativeGuestContractAnalyzerTest`, `NativeGuestContractBuildTest` and `AddonRecordValidationTest` cover
 real stdlib factories, addon-defined factories, constructor invocation, typed replies, preserved ABI
 selectors and malformed dependency layouts. Codec tests cover bounded generic dependency record transport.
+`ExternalAddonBuildTest` verifies a real native project dependency and configuration-cache replay.
+`DeclarativeNativeIntegrationTest` executes interface methods, MFVC helpers, typed requests and command batches
+through the pinned native VM.
 
 ## Device command groups
 

@@ -13,15 +13,16 @@ headings so this page has one stable URL that can be shared outside the reposito
 
 ## 0.7.0 — In development
 
-- A developer IntelliJ prototype analyzes the independent Guest Kotlin platform with actual stdlib and addon
-  metadata, including executable MFVC methods, member completion, type diagnostics and stdlib source navigation.
-  The isolated prototype targets IDEA 2026.1.5.1; automatic Gradle import and unified executable contract authoring
-  remain future work.
+- A developer IntelliJ adapter imports native Guest modules from Gradle, resolves actual stdlib and addon
+  dependencies, completes commands and MFVC methods, reports type/operation errors and navigates to bundled sources.
+  A status widget shows activation and loading errors; artifact changes and Gradle reimport refresh analysis.
+  The adapter is pinned to IDEA 2026.1.5.1.
 
-- Addon SDK 0.8 generates inspectable Guest Kotlin, executable images and host dispatch from constrained Kotlin
-  contracts. Authors declare devices, resources, records, operations and argument constraints; command factories and
-  server validation share those declarations. Supported stdlib geometry works in arguments and results, including
-  validated rotations. Declarations live in `src/contract/kotlin`, checked by the `contract` source set;
+- Addon SDK 0.8 compiles native Guest Kotlin from `src/contract/kotlin`, combining annotated interface contracts
+  with supported executable methods and MFVCs. Actual stdlib and Guest dependencies supply signature types;
+  immutable boundary layouts and typed host DTOs are derived without duplicate SDK math classes.
+  Generated server plumbing remains inspectable. Unit-only command factories, argument constraints and host
+  validation share those declarations; constructor/factory metadata preserves record invariants, including rotations.
   operation binding names are inferred unless explicitly overridden. Checked-in ABI locks preserve operation selectors
   and tombstones. All eight maintained addons use the generated API. Aeronautics servo calls require explicit speed
   and wait timeout arguments;

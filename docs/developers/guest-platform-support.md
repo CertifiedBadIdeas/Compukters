@@ -63,10 +63,11 @@ attached-target compilation.
 **Status:** Supported.
 
 One host request can return bounded immutable data/value records with non-null scalar or nested-record fields.
-The SDK checks constructor-safe declarations and canonical stdlib geometry, generates typed host mirrors and retains the nominal field shape in the
+The SDK resolves immutable layouts from actual native stdlib, dependency and addon declarations, generates typed host mirrors and retains the nominal field shape in the
 addon ABI. Native admission validates the destination layout; resume copies the response, and normal budgeted
-advancement materializes rooted nodes without Guest constructors. Arrays, nullable fields, record arguments
-and cyclic records are unsupported. Ordinary data replies require Runtime ABI 1.13; value replies require 1.20.
+advancement materializes rooted nodes. Constructor invariants use SDK raw replies followed by actual Guest
+constructors or metadata-declared factories. Record arguments are flattened by generated transport code;
+arrays, nullable fields and cyclic records are unsupported. Ordinary data replies require Runtime ABI 1.13; value replies require 1.20.
 Inline value fields avoid Guest record allocations, with staged references rooted across GC and checkpoint restoration.
 
 **Evidence:** `ArtifactValidatorTest`, test `structured host responses require ABI 1 13 while String responses

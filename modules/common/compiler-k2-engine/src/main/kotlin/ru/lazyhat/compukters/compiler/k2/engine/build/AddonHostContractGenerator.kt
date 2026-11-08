@@ -128,10 +128,8 @@ fun renderAddonHostContract(
         appendLine()
         dtoFields.forEach { (type, fields) ->
             val name = type.substringAfterLast('.')
-            if (declaration?.nativeSources?.isNotEmpty() == true) {
+            if (declaration != null) {
                 appendNativeHostRecord(type, fields, requireNotNull(boundary))
-            } else if (declaration != null && type in guestMathematicalTypes) {
-                appendLine("public typealias $name = ru.lazyhat.compukters.api.contracts.types.$name")
             } else {
                 appendLine("public data class $name(")
                 fields.forEach { (name, fieldType) ->

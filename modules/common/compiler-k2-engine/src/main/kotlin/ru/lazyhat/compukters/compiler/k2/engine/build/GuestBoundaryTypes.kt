@@ -18,11 +18,6 @@
 
 package ru.lazyhat.compukters.compiler.k2.engine.build
 
-import ru.lazyhat.compukters.addon.api.AddonCapabilityValueType
-import ru.lazyhat.compukters.addon.api.CanonicalAddonRecordSchemas
-
-internal val guestMathematicalTypes = CanonicalAddonRecordSchemas.schemas.keys + setOf("kotlin.math.Rotation3f", "kotlin.math.Rotation3d")
-
 /** The SDK owns these adapters. Addon declarations cannot supply serialization or reconstruction code. */
 internal class GuestBoundaryTypes(
     private val contract: DeclarativeGuestContract,
@@ -35,22 +30,6 @@ internal class GuestBoundaryTypes(
     fun fields(type: String): List<GuestContractParameter>? {
         if (type in resources) return listOf(GuestContractParameter("handle", "Int", emptyList()))
         records[type]?.let { return it.fields }
-        if (contract.nativeSources.isNotEmpty()) return null
-        CanonicalAddonRecordSchemas.schemas[type]?.let { schema ->
-            return schema.fields.map { field ->
-                val scalar =
-                    when (field.type) {
-                        AddonCapabilityValueType.I32 -> "Int"
-                        AddonCapabilityValueType.F32 -> "Float"
-                        AddonCapabilityValueType.F64 -> "Double"
-                        else -> error("Unsupported mathematical component")
-                    }
-                GuestContractParameter(field.name, scalar, emptyList())
-            }
-        }
-        if (type == "kotlin.math.Rotation3f" || type == "kotlin.math.Rotation3d") {
-            return listOf(GuestContractParameter("quaternion", "kotlin.math.Quaternion${type.last()}", emptyList()))
-        }
         return null
     }
 
@@ -61,9 +40,6 @@ internal class GuestBoundaryTypes(
         require(type !in active) { "Cyclic contract record: $type" }
         require(active.size <= 8) { "Contract record nesting exceeds limit" }
         if (type in resources) return "Int"
-        if (contract.nativeSources.isEmpty() && (type == "kotlin.math.Rotation3f" || type == "kotlin.math.Rotation3d")) {
-            return "kotlin.math.Quaternion${type.last()}"
-        }
         val record = records[type] ?: return type
         if (record.construction?.factory?.isNotEmpty() == true && record.fields.size == 1) {
             return wireType(record.fields.single().type, active + type)
@@ -72,9 +48,9 @@ internal class GuestBoundaryTypes(
         if (record.construction == null && record.fields.indices.none { fieldTypes[it] != record.fields[it].type }) return type
         val addon =
             contract.nativeSources.keys
-                .firstOrNull()
-                ?.substringBefore('/')
-        return if (addon == null || type.startsWith("$addon.")) "${type}Reply" else "$addon.__compukters_wire.${record.name}Reply"
+                .first()
+                .substringBefore('/')
+        return if (type.startsWith("$addon.")) "${type}Reply" else "$addon.__compukters_wire.${record.name}Reply"
     }
 
     fun decode(
@@ -87,7 +63,7 @@ internal class GuestBoundaryTypes(
             }
 
             type in resources -> {
-                "${if (contract.nativeSources.isEmpty()) type else nativeImplementation(type)}($expression)"
+                "${nativeImplementation(type)}($expression)"
             }
 
             construction(type) != null -> {
@@ -105,10 +81,6 @@ internal class GuestBoundaryTypes(
                         ?.let { ".$it" }
                         .orEmpty()
                 "$type$factory($arguments)"
-            }
-
-            type == "kotlin.math.Rotation3f" || type == "kotlin.math.Rotation3d" -> {
-                "$type.fromQuaternion($expression)"
             }
 
             else -> {
@@ -130,7 +102,7 @@ internal class GuestBoundaryTypes(
             active: Set<String>,
         ) {
             require(type !in active && active.size <= 8) { "Cyclic or excessively nested contract argument: $type" }
-            if (contract.nativeSources.isNotEmpty() && type in resources) {
+            if (type in resources) {
                 result +=
                     GuestWireArgument(
                         "${name}_handle",
