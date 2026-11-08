@@ -32,6 +32,7 @@ import ru.lazyhat.compukters.lang.runtime.vm.VmDeploymentConflictException
 import ru.lazyhat.compukters.lang.runtime.vm.VmDeploymentFileSystemException
 import ru.lazyhat.compukters.lang.runtime.vm.VmDeploymentProfileChangedException
 import ru.lazyhat.compukters.lang.runtime.vm.VmDeploymentWrongMachineException
+import ru.lazyhat.compukters.lang.runtime.vm.VmStoreBusyException
 import ru.lazyhat.compukters.lang.runtime.vm.VmVerificationException
 import java.util.concurrent.CompletableFuture
 
@@ -110,6 +111,8 @@ internal class ProgramRuntimeActorProcessor(
                 ProgramRuntimeActorValue.Rejected(
                     ProgramRuntimeActorFailure.InvalidRequest(failure.message ?: "invalid runtime request"),
                 )
+            } catch (_: VmStoreBusyException) {
+                ProgramRuntimeActorValue.Rejected(ProgramRuntimeActorFailure.StoreBusy)
             } catch (failure: VmBridgeException) {
                 ProgramRuntimeActorValue.Rejected(
                     ProgramRuntimeActorFailure.Bridge(failure.message ?: "native VM bridge failure"),
@@ -139,6 +142,8 @@ internal class ProgramRuntimeActorProcessor(
                 val checkpoint =
                     try {
                         host.prepareRestoreBoot(command.worldTick)
+                    } catch (failure: VmStoreBusyException) {
+                        throw failure
                     } catch (failure: Exception) {
                         LOGGER.warn(failure) { "Computer checkpoint restoration failed; starting fresh execution" }
                         return coldBootAfterRestorationFailure(failure.message ?: "Checkpoint restoration failed")
@@ -161,6 +166,8 @@ internal class ProgramRuntimeActorProcessor(
                 try {
                     host.completeRestoration(command.worldTick)
                     ProgramRuntimeActorValue.Start(ru.lazyhat.compukters.core.device.runtime.program.ProgramStartResult.Started)
+                } catch (failure: VmStoreBusyException) {
+                    throw failure
                 } catch (failure: Exception) {
                     LOGGER.warn(failure) { "Computer checkpoint consumption failed; starting fresh execution" }
                     // Rebound addon resources belong to the owner thread; release them before requesting a fresh boot.

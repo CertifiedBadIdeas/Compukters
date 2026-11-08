@@ -85,6 +85,14 @@ close. Initial store opening happens during server startup rather than an ordina
 native world-store handle are serialized by a fair lock across VM actors and persistence work, while ordinary VM
 execution stays on actor workers.
 
+Initial system installation can temporarily exhaust the bounded native persistence queue. Both JVM transports
+preserve `StoreBusy` as a typed transient condition. The carrier retains one lifecycle stage and retries at most
+once on a later server tick, including mailbox admission pressure; it does not poll on an actor worker or enlarge
+the persistence queue. Its boot future remains pending until a definitive result. Busy checkpoint restoration and
+consumption retain the saved execution and already rebound resources. Shutdown, replacement and close cancel the
+pending stage; accepted actor work still drains through the existing close barrier. Other storage and admission
+failures keep their existing failure and restoration-fallback behavior.
+
 ## Native store boundary
 
 The native C ABI exposes opaque world-store lifecycle operations, machine creation inside a store, stateless

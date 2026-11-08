@@ -106,7 +106,7 @@ open class ComputerBlockEntity internal constructor(
     fun prepareTerminalAsync(): CompletableFuture<TerminalState?> {
         if (powerOffReason != null) return CompletableFuture.completedFuture(null)
         val current = carrier ?: attachCarrier() ?: return CompletableFuture.completedFuture(null)
-        if (current.state == neverStarted()) runtimeState = current.restore(resumeExpected)
+        if (current.state == neverStarted() && !current.restoring) runtimeState = current.restore(resumeExpected)
         return current.terminalFullStateAsync()
     }
 
@@ -194,7 +194,7 @@ open class ComputerBlockEntity internal constructor(
             return
         }
         val current = carrier ?: attachCarrier() ?: return
-        if (current.state == neverStarted()) runtimeState = current.restore(resumeExpected)
+        if (current.state == neverStarted() && !current.restoring) runtimeState = current.restore(resumeExpected)
         val serverLevel = level as? ServerLevel
         val redstoneInput =
             serverLevel?.let {
@@ -212,8 +212,10 @@ open class ComputerBlockEntity internal constructor(
                 }
             pendingInitialRedstoneInput = null
             runtimeState = current.serverTick(serverLevel?.server?.tickCount?.toLong() ?: 0L, input)
-        } else if (redstoneInput != null) {
-            pendingInitialRedstoneInput = redstoneInput
+        } else {
+            if (redstoneInput != null) pendingInitialRedstoneInput = redstoneInput
+            // Initial admission can be waiting for storage before a powered-on state exists.
+            runtimeState = current.serverTick(serverLevel?.server?.tickCount?.toLong() ?: 0L)
         }
     }
 

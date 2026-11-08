@@ -45,6 +45,8 @@ headings so this page has one stable URL that can be shared outside the reposito
   in `/home`. Bundled system files install once; `/compukters system-update x y z` explicitly reinstalls them
   and restarts the computer while preserving user files. Copied binaries and identical compilation results
   share file contents automatically across computers; editing one copy does not modify the others.
+  Mass startup waits and retries when the persistence queue is temporarily full, preserving saved execution
+  during restoration and cancelling pending startup when the computer is switched off.
 
 - Guest Kotlin compilation removes proven redundant register copies, can use smaller stack frames,
   automatically inlines small scalar and value-class leaf functions, and replaces eligible interface calls

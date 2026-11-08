@@ -50,6 +50,20 @@ import kotlin.test.assertTrue
 
 class ComputerBlockEntityTest {
     @Test
+    fun `initial boot receives lifecycle ticks without starting duplicate restoration requests`() {
+        val fixture = fixture(bootTicks = 2)
+        fixture.entity.serverTick()
+        val carrier = fixture.carriers.single()
+        assertEquals(neverStarted(), fixture.entity.runtimeState)
+        assertTrue(carrier.restoring)
+        fixture.entity.serverTick()
+        assertEquals(ProgramComputerState.Running, fixture.entity.runtimeState)
+        assertEquals(1, carrier.turnOnCalls)
+        assertEquals(2, carrier.serverTickCalls)
+        assertEquals(1, fixture.carriers.size)
+    }
+
+    @Test
     fun `transfer preparation waits for checkpoint and repeated close preserves its barrier`() {
         val original = fixture()
         original.entity.serverTick()
@@ -429,12 +443,17 @@ class ComputerBlockEntityTest {
         assertEquals(2, fixture.carriers.size)
     }
 
-    private fun fixture(): Fixture {
+    private fun fixture(bootTicks: Int = 0): Fixture {
         val carriers = mutableListOf<FakeCarrier>()
         val entity =
             TestComputerBlockEntity(
                 ComputerCarrierFactory { deviceId, _, stateSink, _, redstoneHostPort, _, _, initialRedstoneOutput ->
-                    FakeCarrier(deviceId, stateSink, redstoneHostPort, initialRedstoneOutput).also(carriers::add)
+                    FakeCarrier(
+                        deviceId,
+                        stateSink,
+                        redstoneHostPort,
+                        initialRedstoneOutput,
+                    ).apply { bootTicksRemaining = bootTicks }.also(carriers::add)
                 },
             )
         return Fixture(entity, carriers)
@@ -456,6 +475,9 @@ class ComputerBlockEntityTest {
         val initialRedstoneOutput: Int,
     ) : ComputerCarrier {
         override var state: ProgramComputerState = neverStarted()
+            private set
+        var bootTicksRemaining = 0
+        override var restoring = false
             private set
         var turnOnCalls = 0
         val restoreRequirements = mutableListOf<Boolean>()
@@ -493,6 +515,10 @@ class ComputerBlockEntityTest {
 
         override fun turnOn(): ProgramComputerState {
             turnOnCalls++
+            if (bootTicksRemaining > 0) {
+                restoring = true
+                return state
+            }
             return publishState(ProgramComputerState.Running)
         }
 
@@ -501,6 +527,10 @@ class ComputerBlockEntityTest {
             redstoneInput: Int?,
         ): ProgramComputerState {
             serverTickCalls++
+            if (bootTicksRemaining > 0 && --bootTicksRemaining == 0) {
+                restoring = false
+                publishState(ProgramComputerState.Running)
+            }
             redstoneInput?.let(redstoneInputs::add)
             return state
         }

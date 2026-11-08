@@ -50,6 +50,7 @@ import ru.lazyhat.compukters.lang.runtime.vm.VmHostRequest
 import ru.lazyhat.compukters.lang.runtime.vm.VmOutcome
 import ru.lazyhat.compukters.lang.runtime.vm.VmResourceSnapshot
 import ru.lazyhat.compukters.lang.runtime.vm.VmStartException
+import ru.lazyhat.compukters.lang.runtime.vm.VmStoreBusyException
 import ru.lazyhat.compukters.lang.runtime.vm.VmValue
 import ru.lazyhat.compukters.lang.runtime.vm.VmVerificationException
 
@@ -293,6 +294,9 @@ class ProgramRuntimeHost internal constructor(
             rejectStart(ProgramFailure.Start(error.code))
         } catch (error: VmBootException) {
             rejectStart(ProgramFailure.Start(error.code))
+        } catch (error: VmStoreBusyException) {
+            releaseSession()
+            throw error
         } catch (error: VmBridgeException) {
             releaseSession()
             rejectStart(ProgramFailure.Bridge(error.bridgeDetail()))

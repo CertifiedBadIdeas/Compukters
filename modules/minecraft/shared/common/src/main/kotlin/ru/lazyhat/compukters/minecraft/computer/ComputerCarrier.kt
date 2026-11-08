@@ -53,8 +53,11 @@ import ru.lazyhat.compukters.lang.runtime.vm.VmDeploymentFileSystemException
 import ru.lazyhat.compukters.lang.runtime.vm.VmDeploymentProfileChangedException
 import ru.lazyhat.compukters.lang.runtime.vm.VmDeploymentWrongMachineException
 import ru.lazyhat.compukters.lang.runtime.vm.VmExecutableRevision
+import ru.lazyhat.compukters.lang.runtime.vm.VmStoreBusyException
 import ru.lazyhat.compukters.lang.runtime.vm.VmVerificationException
+import java.util.concurrent.CancellationException
 import java.util.concurrent.CompletableFuture
+import java.util.concurrent.CompletionException
 
 internal interface ComputerCarrier : AutoCloseable {
     val state: ProgramComputerState
@@ -319,6 +322,8 @@ private class ActorComputerCarrier(
     }
 
     private fun actorFailure(failure: Throwable) {
+        val cause = if (failure is CompletionException) failure.cause ?: failure else failure
+        if (cause is CancellationException) return
         val next =
             ProgramComputerState.PoweredOff(
                 ProgramComputerStopReason.Failure(
@@ -383,6 +388,10 @@ private fun ProgramRuntimeState.toComputerState(): ProgramComputerState =
 
 private fun ProgramRuntimeActorFailure.toException(): RuntimeException =
     when (this) {
+        ProgramRuntimeActorFailure.StoreBusy -> {
+            VmStoreBusyException("filesystem store is busy")
+        }
+
         is ProgramRuntimeActorFailure.FileSystem -> {
             VmFileSystemReadException(failure)
         }

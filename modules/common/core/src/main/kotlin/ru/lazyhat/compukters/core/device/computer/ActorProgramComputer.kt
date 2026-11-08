@@ -26,6 +26,7 @@ import ru.lazyhat.compukters.core.LOGGER
 import ru.lazyhat.compukters.core.device.runtime.actor.ProgramActorHibernation
 import ru.lazyhat.compukters.core.device.runtime.actor.ProgramRuntimeActorCommand
 import ru.lazyhat.compukters.core.device.runtime.actor.ProgramRuntimeActorEffect
+import ru.lazyhat.compukters.core.device.runtime.actor.ProgramRuntimeActorFailure
 import ru.lazyhat.compukters.core.device.runtime.actor.ProgramRuntimeActorLease
 import ru.lazyhat.compukters.core.device.runtime.actor.ProgramRuntimeActorReply
 import ru.lazyhat.compukters.core.device.runtime.actor.ProgramRuntimeActorRequestException
@@ -45,6 +46,7 @@ import ru.lazyhat.compukters.lang.runtime.capability.HostResponse
 import ru.lazyhat.compukters.lang.runtime.vm.HostFailureKind
 import ru.lazyhat.compukters.lang.runtime.vm.RedstoneWire
 import ru.lazyhat.compukters.lang.runtime.vm.VmHostRequestIdentity
+import java.util.concurrent.CancellationException
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.CompletionException
 
@@ -68,6 +70,7 @@ class ActorProgramComputer(
     private val pendingAddonCompletions = ArrayDeque<ProgramAddonCompletion>()
     private val outstandingAddonRequests = mutableMapOf<VmHostRequestIdentity, Long>()
     private var closeResult: CompletableFuture<Long?>? = null
+    private var pendingLifecycle: LifecycleStage? = null
     private var bootRequest: CompletableFuture<ProgramRuntimeActorReply>? = null
     private var lastAdvanceTick = -1L
     private var lastObservedServerTick = -1L
@@ -116,7 +119,7 @@ class ActorProgramComputer(
                     return@thenCompose coldBootAfterAddonRestorationFailure(failure.message ?: "Addon resource restoration failed", version)
                 }
                 observe(
-                    service.request(lease.endpoint) { id ->
+                    retryLifecycleStage(version) { id ->
                         ProgramRuntimeActorCommand.CompleteRestoration(id, maxOf(0, lastObservedServerTick))
                     },
                     version,
@@ -148,11 +151,17 @@ class ActorProgramComputer(
         } catch (failure: Exception) {
             LOGGER.warn(failure) { "Computer restored addon cleanup failed before fresh boot" }
         }
-        return observe(service.request(lease.endpoint) { id -> ProgramRuntimeActorCommand.AbortRestoration(id, detail) }, version)
+        return observe(retryLifecycleStage(version) { id -> ProgramRuntimeActorCommand.AbortRestoration(id, detail) }, version)
     }
 
-    fun reboot(installSystem: Boolean = false): CompletableFuture<ProgramRuntimeActorReply> =
-        lifecycleRequest { id -> ProgramRuntimeActorCommand.Reboot(id, installSystem) }.also { bootRequest = it }.copy()
+    fun reboot(installSystem: Boolean = false): CompletableFuture<ProgramRuntimeActorReply> {
+        val request = lifecycleRequest { id -> ProgramRuntimeActorCommand.Reboot(id, installSystem) }
+        val version = lifecycle
+        restoring = true
+        request.whenComplete { _, _ -> if (version == lifecycle) restoring = false }
+        bootRequest = request
+        return request.copy()
+    }
 
     fun shutdown(): CompletableFuture<ProgramRuntimeActorReply> {
         checkOwner()
@@ -188,6 +197,11 @@ class ActorProgramComputer(
         collectAddonCompletions()
         lastObservedServerTick = maxOf(lastObservedServerTick, worldTick)
         if (closeResult != null) return
+        pendingLifecycle?.let { stage ->
+            if (!stage.inFlight && worldTick > stage.lastAttemptTick) submitLifecycleStage(stage)
+            return
+        }
+        if (restoring) return
         if (worldTick <= lastAdvanceTick ||
             (
                 state != ProgramRuntimeState.Running &&
@@ -268,6 +282,8 @@ class ActorProgramComputer(
         checkOwner()
         closeResult?.let { return it.copy() }
         require(worldTick >= 0)
+        // Admission has run no Guest code; retain the original checkpoint and its resource descriptions.
+        if (restoring) return hibernateAsync(worldTick, byteArrayOf())
         val resources =
             try {
                 collectAddonCompletions()
@@ -296,6 +312,7 @@ class ActorProgramComputer(
             }
         val request = ProgramActorHibernation(worldTick, addonState, effects, saveExecution)
         lifecycle++
+        cancelLifecycleStage()
         restoring = false
         pendingOutput = null
         pendingSound = null
@@ -319,6 +336,7 @@ class ActorProgramComputer(
         checkOwner()
         closeResult?.let { return it.copy() }
         lifecycle++
+        cancelLifecycleStage()
         restoring = false
         pendingOutput = null
         pendingSound = null
@@ -415,17 +433,61 @@ class ActorProgramComputer(
     ): CompletableFuture<ProgramRuntimeActorReply> {
         checkOwner()
         if (closeResult != null) return CompletableFuture.failedFuture(IllegalStateException("computer is closed"))
-        val submitted = service.request(lease.endpoint, command)
-        if (submitted.isCompletedExceptionally) return submitted
         lifecycle++
+        cancelLifecycleStage()
         restoring = false
         pendingOutput = null
         pendingSound = null
         pendingRedstoneInputs.clear()
         discardAddonRequests()
         hostCompletionTick = null
-        return observe(submitted, lifecycle)
+        return observe(retryLifecycleStage(lifecycle, command), lifecycle)
     }
+
+    private fun retryLifecycleStage(
+        version: Long,
+        command: (ProgramRuntimeRequestId) -> ProgramRuntimeActorCommand,
+    ): CompletableFuture<ProgramRuntimeActorReply> {
+        if (version != lifecycle || closeResult != null) {
+            return CompletableFuture.failedFuture(CancellationException("computer lifecycle was replaced"))
+        }
+        check(pendingLifecycle == null) { "a lifecycle stage is already pending" }
+        val stage = LifecycleStage(version, command)
+        pendingLifecycle = stage
+        submitLifecycleStage(stage)
+        return stage.result
+    }
+
+    private fun submitLifecycleStage(stage: LifecycleStage) {
+        checkOwner()
+        stage.inFlight = true
+        stage.lastAttemptTick = lastObservedServerTick
+        service.request(lease.endpoint, stage.command).whenComplete { reply, failure ->
+            checkOwner()
+            if (pendingLifecycle !== stage || stage.version != lifecycle || closeResult != null) return@whenComplete
+            stage.inFlight = false
+            val cause = if (failure is CompletionException) failure.cause ?: failure else failure
+            val admissionBusy = cause is ProgramRuntimeActorRequestException && cause.submission == VmActorSubmission.MAILBOX_FULL
+            val storeBusy = (reply?.value as? ProgramRuntimeActorValue.Rejected)?.failure == ProgramRuntimeActorFailure.StoreBusy
+            if (admissionBusy || storeBusy) return@whenComplete
+            pendingLifecycle = null
+            if (failure != null) stage.result.completeExceptionally(failure) else stage.result.complete(reply)
+        }
+    }
+
+    private fun cancelLifecycleStage() {
+        val previous = pendingLifecycle ?: return
+        pendingLifecycle = null
+        previous.result.completeExceptionally(CancellationException("computer lifecycle was replaced"))
+    }
+
+    private class LifecycleStage(
+        val version: Long,
+        val command: (ProgramRuntimeRequestId) -> ProgramRuntimeActorCommand,
+        val result: CompletableFuture<ProgramRuntimeActorReply> = CompletableFuture(),
+        var inFlight: Boolean = false,
+        var lastAttemptTick: Long = -1,
+    )
 
     private fun send(command: (ProgramRuntimeRequestId) -> ProgramRuntimeActorCommand): CompletableFuture<ProgramRuntimeActorReply> {
         checkOwner()

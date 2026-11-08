@@ -351,6 +351,8 @@ sealed interface ProgramRuntimeActorValue {
 private const val MAXIMUM_ADDON_BATCH = 256
 
 sealed interface ProgramRuntimeActorFailure {
+    data object StoreBusy : ProgramRuntimeActorFailure
+
     data class FileSystem(
         val failure: VmFileSystemReadFailure,
     ) : ProgramRuntimeActorFailure

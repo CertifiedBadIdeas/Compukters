@@ -60,6 +60,7 @@ import ru.lazyhat.compukters.lang.runtime.vm.TerminalPosition
 import ru.lazyhat.compukters.lang.runtime.vm.TerminalState
 import ru.lazyhat.compukters.lang.runtime.vm.TerminalUpdate
 import ru.lazyhat.compukters.lang.runtime.vm.VmAdvanceResult
+import ru.lazyhat.compukters.lang.runtime.vm.VmBridgeException
 import ru.lazyhat.compukters.lang.runtime.vm.VmCanonicalLineException
 import ru.lazyhat.compukters.lang.runtime.vm.VmCanonicalLineFailure
 import ru.lazyhat.compukters.lang.runtime.vm.VmCheckpointException
@@ -69,6 +70,7 @@ import ru.lazyhat.compukters.lang.runtime.vm.VmHostRequest
 import ru.lazyhat.compukters.lang.runtime.vm.VmHostRequestIdentity
 import ru.lazyhat.compukters.lang.runtime.vm.VmOutcome
 import ru.lazyhat.compukters.lang.runtime.vm.VmResourceSnapshot
+import ru.lazyhat.compukters.lang.runtime.vm.VmStoreBusyException
 import ru.lazyhat.compukters.lang.runtime.vm.VmValue
 import ru.lazyhat.compukters.lang.runtime.vm.VmVerificationException
 import java.util.concurrent.CountDownLatch
@@ -83,6 +85,353 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class ProgramRuntimeActorProcessorTest {
+    @Test
+    fun `mailbox refusal retains one boot stage until a later tick`() {
+        val entered = CountDownLatch(1)
+        val release = CountDownLatch(1)
+        var boots = 0
+        val blocked =
+            ProgramRuntimeHost(
+                object : ProgramVmSessionFactory {
+                    override fun open(artifact: ByteArray): ProgramVmSession = error("unexpected artifact")
+
+                    override fun boot(): ProgramVmSession {
+                        entered.countDown()
+                        check(release.await(TIMEOUT_SECONDS, TimeUnit.SECONDS))
+                        return RecordingSession()
+                    }
+                },
+            )
+        val target =
+            ProgramRuntimeHost(
+                object : ProgramVmSessionFactory {
+                    override fun open(artifact: ByteArray): ProgramVmSession = error("unexpected artifact")
+
+                    override fun boot(): ProgramVmSession {
+                        boots++
+                        return RecordingSession()
+                    }
+                },
+            )
+        ProgramRuntimeActorService(schedulerConfig(mailboxCapacity = 1)).use { service ->
+            val first = VmActorEndpoint(ComputerId.fromLongs(826, 822), 1)
+            val second = VmActorEndpoint(ComputerId.fromLongs(827, 822), 1)
+            requireNotNull(service.attach(first, blocked))
+            val lease = requireNotNull(service.attach(second, target))
+            try {
+                service.request(first, ProgramRuntimeActorCommand::StartBoot)
+                assertTrue(entered.await(TIMEOUT_SECONDS, TimeUnit.SECONDS))
+                service.request(second, ProgramRuntimeActorCommand::ResourceSnapshot)
+                val carrier = ActorProgramComputer(service, lease, { RedstoneCommitResult.Committed })
+                val boot = carrier.turnOn()
+                assertFalse(boot.isDone)
+                repeat(5) { carrier.turnOn() }
+                assertEquals(0, boots)
+                release.countDown()
+                awaitQueuedResults(service, 2)
+                service.pump(2)
+                carrier.serverTick(0)
+                awaitQueuedResult(service)
+                service.pump(1)
+                assertTrue(boot.isDone)
+                assertEquals(1, boots)
+                carrier.closeAsync().get(TIMEOUT_SECONDS, TimeUnit.SECONDS)
+            } finally {
+                release.countDown()
+            }
+        }
+    }
+
+    @Test
+    fun `close drains accepted boot and ignores its late successful reply`() {
+        val entered = CountDownLatch(1)
+        val release = CountDownLatch(1)
+        val session = RecordingSession()
+        val host =
+            ProgramRuntimeHost(
+                object : ProgramVmSessionFactory {
+                    override fun open(artifact: ByteArray): ProgramVmSession = error("unexpected artifact")
+
+                    override fun boot(): ProgramVmSession {
+                        entered.countDown()
+                        check(release.await(TIMEOUT_SECONDS, TimeUnit.SECONDS))
+                        return session
+                    }
+                },
+            )
+        ProgramRuntimeActorService(schedulerConfig()).use { service ->
+            val endpoint = VmActorEndpoint(ComputerId.fromLongs(828, 822), 1)
+            val carrier = ActorProgramComputer(service, requireNotNull(service.attach(endpoint, host)), { RedstoneCommitResult.Committed })
+            val boot = carrier.turnOn()
+            try {
+                assertTrue(entered.await(TIMEOUT_SECONDS, TimeUnit.SECONDS))
+                val closed = carrier.closeAsync()
+                assertTrue(boot.isCompletedExceptionally)
+                assertFalse(closed.isDone)
+                release.countDown()
+                closed.get(TIMEOUT_SECONDS, TimeUnit.SECONDS)
+                service.pump(32)
+                assertEquals(ProgramRuntimeState.Closed, carrier.state)
+                assertEquals(1, session.closeCalls)
+                assertFalse(carrier.restoring)
+            } finally {
+                release.countDown()
+            }
+        }
+    }
+
+    @Test
+    fun `busy boot retries once per later tick without completing or duplicating admission`() {
+        var attempts = 0
+        val session = RecordingSession()
+        val host =
+            ProgramRuntimeHost(
+                object : ProgramVmSessionFactory {
+                    override fun open(artifact: ByteArray): ProgramVmSession = error("unexpected artifact")
+
+                    override fun boot(): ProgramVmSession {
+                        attempts++
+                        if (attempts < 3) throw VmStoreBusyException("test queue full")
+                        return session
+                    }
+                },
+            )
+        ProgramRuntimeActorService(schedulerConfig()).use { service ->
+            val endpoint = VmActorEndpoint(ComputerId.fromLongs(820, 822), 1)
+            val carrier = ActorProgramComputer(service, requireNotNull(service.attach(endpoint, host)), { RedstoneCommitResult.Committed })
+            val boot = carrier.turnOn()
+            val duplicate = carrier.turnOn()
+            awaitQueuedResult(service)
+            service.pump(1)
+            assertFalse(boot.isDone)
+            assertFalse(duplicate.isDone)
+            assertTrue(carrier.restoring)
+            assertEquals(ProgramRuntimeState.Idle, carrier.state)
+            assertEquals(1, attempts)
+            assertEquals(0, service.metrics().queuedMessages)
+            carrier.serverTick(0)
+            awaitQueuedResult(service)
+            service.pump(1)
+            assertEquals(2, attempts)
+            repeat(10) { carrier.serverTick(0) }
+            assertEquals(2, attempts)
+            assertFalse(boot.isDone)
+            carrier.serverTick(1)
+            awaitQueuedResult(service)
+            service.pump(1)
+            assertEquals(3, attempts)
+            assertEquals(ProgramStartResult.Started, assertIs<ProgramRuntimeActorValue.Start>(boot.getNow(null).value).result)
+            assertTrue(duplicate.isDone)
+            assertFalse(carrier.restoring)
+            assertEquals(ProgramRuntimeState.Running, carrier.state)
+            assertTrue(session.calls.none { it.startsWith("advance") })
+            carrier.closeAsync().get(TIMEOUT_SECONDS, TimeUnit.SECONDS)
+            assertEquals(1, session.closeCalls)
+        }
+    }
+
+    @Test
+    fun `shutdown and close cancel queued busy boot without reopening the machine`() {
+        for (close in listOf(false, true)) {
+            var attempts = 0
+            val host =
+                ProgramRuntimeHost(
+                    object : ProgramVmSessionFactory {
+                        override fun open(artifact: ByteArray): ProgramVmSession = error("unexpected artifact")
+
+                        override fun boot(): ProgramVmSession {
+                            attempts++
+                            throw VmStoreBusyException("test queue full")
+                        }
+                    },
+                )
+            ProgramRuntimeActorService(schedulerConfig()).use { service ->
+                val endpoint = VmActorEndpoint(ComputerId.fromLongs(821, 822), 1)
+                val carrier =
+                    ActorProgramComputer(service, requireNotNull(service.attach(endpoint, host)), { RedstoneCommitResult.Committed })
+                val boot = carrier.turnOn()
+                awaitQueuedResult(service)
+                service.pump(1)
+                assertFalse(boot.isDone)
+                if (close) {
+                    carrier.closeAsync().get(TIMEOUT_SECONDS, TimeUnit.SECONDS)
+                } else {
+                    val shutdown = carrier.shutdown()
+                    awaitQueuedResult(service)
+                    service.pump(1)
+                    assertTrue(shutdown.isDone)
+                }
+                assertTrue(boot.isCompletedExceptionally)
+                repeat(3) { carrier.serverTick(it.toLong()) }
+                assertEquals(1, attempts)
+                assertFalse(carrier.restoring)
+                if (!close) carrier.closeAsync().get(TIMEOUT_SECONDS, TimeUnit.SECONDS)
+            }
+        }
+    }
+
+    @Test
+    fun `new reboot supersedes busy boot and retains explicit system update intent`() {
+        var attempts = 0
+        var updates = 0
+        val host =
+            ProgramRuntimeHost(
+                object : ProgramVmSessionFactory {
+                    override fun open(artifact: ByteArray): ProgramVmSession = error("unexpected artifact")
+
+                    override fun boot(): ProgramVmSession {
+                        if (++attempts == 1) throw VmStoreBusyException("test queue full")
+                        return RecordingSession()
+                    }
+
+                    override fun installSystem() {
+                        if (++updates == 1) throw VmStoreBusyException("installation queue full")
+                    }
+                },
+            )
+        ProgramRuntimeActorService(schedulerConfig()).use { service ->
+            val endpoint = VmActorEndpoint(ComputerId.fromLongs(823, 822), 1)
+            val carrier = ActorProgramComputer(service, requireNotNull(service.attach(endpoint, host)), { RedstoneCommitResult.Committed })
+            val old = carrier.turnOn()
+            awaitQueuedResult(service)
+            service.pump(1)
+            val reboot = carrier.reboot(installSystem = true)
+            awaitQueuedResult(service)
+            service.pump(1)
+            assertTrue(old.isCompletedExceptionally)
+            assertFalse(reboot.isDone)
+            assertTrue(carrier.restoring)
+            carrier.serverTick(0)
+            awaitQueuedResult(service)
+            service.pump(1)
+            assertTrue(reboot.isDone)
+            assertEquals(2, attempts)
+            assertEquals(2, updates)
+            assertEquals(ProgramRuntimeState.Running, carrier.state)
+            carrier.closeAsync().get(TIMEOUT_SECONDS, TimeUnit.SECONDS)
+        }
+    }
+
+    @Test
+    fun `permanent boot failure completes once and is never retried`() {
+        var attempts = 0
+        val host =
+            ProgramRuntimeHost(
+                object : ProgramVmSessionFactory {
+                    override fun open(artifact: ByteArray): ProgramVmSession = error("unexpected artifact")
+
+                    override fun boot(): ProgramVmSession {
+                        attempts++
+                        throw VmBridgeException("store faulted")
+                    }
+                },
+            )
+        ProgramRuntimeActorService(schedulerConfig()).use { service ->
+            val endpoint = VmActorEndpoint(ComputerId.fromLongs(824, 822), 1)
+            val carrier = ActorProgramComputer(service, requireNotNull(service.attach(endpoint, host)), { RedstoneCommitResult.Committed })
+            val boot = carrier.turnOn()
+            awaitQueuedResult(service)
+            service.pump(1)
+            assertIs<ProgramStartResult.Rejected>(assertIs<ProgramRuntimeActorValue.Start>(boot.getNow(null).value).result)
+            assertIs<ProgramRuntimeState.Failed>(carrier.state)
+            repeat(3) { carrier.serverTick(it.toLong()) }
+            assertEquals(1, attempts)
+            carrier.closeAsync().get(TIMEOUT_SECONDS, TimeUnit.SECONDS)
+        }
+    }
+
+    @Test
+    fun `busy restore and consumption retain saved execution and rebind resources exactly once`() {
+        for (hibernate in listOf(false, true)) {
+            val session = RecordingSession()
+            val saved =
+                ProgramHostCheckpoint(
+                    false,
+                    GrantedResourceBudgetSnapshot(20, 10, false),
+                    0,
+                    listOf(0),
+                    emptyList(),
+                    byteArrayOf(3),
+                ).encode()
+            var restores = 0
+            var consumes = 0
+            var rebounds = 0
+            val host =
+                ProgramRuntimeHost(
+                    object : ProgramVmSessionFactory {
+                        override fun open(artifact: ByteArray): ProgramVmSession = error("unexpected artifact")
+
+                        override fun boot(): ProgramVmSession = error("must retain saved execution")
+
+                        override fun restoreBoot(): ProgramVmRestoration {
+                            if (++restores == 1) throw VmStoreBusyException("restore queue full")
+                            return ProgramVmRestoration(session, saved)
+                        }
+
+                        override fun discardCheckpoint() {
+                            check(rebounds == 1)
+                            if (++consumes == 1) throw VmStoreBusyException("consume queue full")
+                        }
+                    },
+                )
+            val addon =
+                object : ProgramAddonHost {
+                    override val capabilitySchemas = emptyList<HostCapabilitySchema>()
+
+                    override fun dispatch(request: ProgramAddonRequest): ProgramAddonDispatch = error("unexpected dispatch")
+
+                    override fun restoreCheckpoint(state: ByteArray) {
+                        rebounds++
+                    }
+
+                    override fun reset() = Unit
+                }
+            ProgramRuntimeActorService(schedulerConfig()).use { service ->
+                val endpoint = VmActorEndpoint(ComputerId.fromLongs(825, 822), 1)
+                val carrier =
+                    ActorProgramComputer(
+                        service,
+                        requireNotNull(service.attach(endpoint, host)),
+                        { RedstoneCommitResult.Committed },
+                        addon = addon,
+                    )
+                val restored = carrier.turnOn(requiredCheckpoint = true)
+                awaitQueuedResult(service)
+                service.pump(1)
+                assertFalse(restored.isDone)
+                assertEquals(0, rebounds)
+                assertEquals(0, consumes)
+                carrier.serverTick(0)
+                awaitQueuedResult(service)
+                service.pump(1)
+                awaitQueuedResult(service)
+                service.pump(1)
+                assertFalse(restored.isDone)
+                assertEquals(1, rebounds)
+                assertEquals(1, consumes)
+                assertEquals(0, session.closeCalls)
+                if (hibernate) {
+                    carrier.hibernateAsync(1).get(TIMEOUT_SECONDS, TimeUnit.SECONDS)
+                    assertTrue(restored.isCompletedExceptionally)
+                    assertEquals(1, consumes)
+                    assertEquals(1, session.closeCalls)
+                    assertNull(session.capturedCheckpoint)
+                    assertEquals(ProgramRuntimeState.Closed, carrier.state)
+                    return@use
+                }
+                carrier.serverTick(1)
+                awaitQueuedResult(service)
+                service.pump(1)
+                assertEquals(ProgramStartResult.Started, assertIs<ProgramRuntimeActorValue.Start>(restored.getNow(null).value).result)
+                assertEquals(2, restores)
+                assertEquals(2, consumes)
+                assertEquals(1, rebounds)
+                assertTrue(session.calls.none { it.startsWith("advance") })
+                carrier.closeAsync().get(TIMEOUT_SECONDS, TimeUnit.SECONDS)
+            }
+        }
+    }
+
     @Test
     fun `ordinary reboot preserves the system and explicit update closes before installing`() {
         val sessions = mutableListOf<RecordingSession>()
