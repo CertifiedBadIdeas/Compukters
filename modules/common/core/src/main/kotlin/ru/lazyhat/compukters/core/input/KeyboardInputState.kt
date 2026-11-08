@@ -38,10 +38,22 @@ class KeyboardInputState(
         sequence: Long,
         keys: Long,
         tick: Long,
+    ): Boolean = update(sequence, keys, tick, 0L, 0L)
+
+    fun update(
+        sequence: Long,
+        keys: Long,
+        tick: Long,
+        pressed: Long,
+        released: Long,
     ): Boolean {
-        if (!connected || sequence < 0 || sequence <= lastSequence || tick < heartbeat || keys and mask.inv() != 0L) return false
-        pressed = pressed or (keys and held.inv())
-        released = released or (held and keys.inv())
+        if (!connected || sequence < 0 || sequence <= lastSequence || tick < heartbeat ||
+            (keys or pressed or released) and mask.inv() != 0L
+        ) {
+            return false
+        }
+        this.pressed = this.pressed or pressed or (keys and held.inv())
+        this.released = this.released or released or (held and keys.inv())
         held = keys
         lastSequence = sequence
         heartbeat = tick
