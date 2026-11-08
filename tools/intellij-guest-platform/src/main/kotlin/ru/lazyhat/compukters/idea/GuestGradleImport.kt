@@ -82,6 +82,38 @@ class GuestGradleData(
     }
 }
 
+/** A plain Gradle import has no Guest nodes, so it must reconcile at the project boundary. */
+class GuestGradleProjectDataService : AbstractProjectDataService<ProjectData, String>() {
+    override fun getTargetDataKey(): Key<ProjectData> = ProjectKeys.PROJECT
+
+    override fun importData(
+        toImport: Collection<DataNode<ProjectData>>,
+        projectData: ProjectData?,
+        project: Project,
+        modelsProvider: IdeModifiableModelsProvider,
+    ) {
+        val registry = project.getService(GuestProjectRegistry::class.java)
+        toImport.forEach { root ->
+            if (root.data.owner != GradleConstants.SYSTEM_ID) return@forEach
+            val directories = mutableSetOf<String>()
+            val pending = ArrayDeque<DataNode<*>>()
+            pending.add(root)
+            while (pending.isNotEmpty()) {
+                val node = pending.removeFirst()
+                (node.data as? GuestGradleData)?.model?.let { directories.add(it.projectDirectory.absolutePath) }
+                pending.addAll(node.children)
+            }
+            val removed =
+                registry
+                    .configurations()
+                    .filter { (_, config) ->
+                        config.externalRoot == root.data.linkedExternalProjectPath && config.projectDirectory !in directories
+                    }.keys
+            registry.removeModules(removed)
+        }
+    }
+}
+
 class GuestGradleDataService : AbstractProjectDataService<GuestGradleData, String>() {
     override fun getTargetDataKey(): Key<GuestGradleData> = GuestGradleData.KEY
 

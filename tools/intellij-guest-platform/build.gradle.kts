@@ -26,7 +26,7 @@ plugins {
 }
 
 group = "ru.lazyhat.compukters"
-version = "0.2.0-dev"
+version = "0.2.1-dev"
 
 repositories {
     mavenCentral()

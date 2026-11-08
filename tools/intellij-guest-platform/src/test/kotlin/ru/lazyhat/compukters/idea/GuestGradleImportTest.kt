@@ -40,6 +40,9 @@ import org.jetbrains.kotlin.analysis.api.analyze
 import org.jetbrains.kotlin.analysis.api.components.KaDiagnosticCheckerFilter
 import org.jetbrains.kotlin.analysis.api.permissions.allowAnalysisOnEdt
 import org.jetbrains.kotlin.analysis.api.projectStructure.KaModuleProvider
+import org.jetbrains.kotlin.idea.base.projectStructure.ModuleSourceRootGroup
+import org.jetbrains.kotlin.idea.configuration.ConfigureKotlinStatus
+import org.jetbrains.kotlin.idea.configuration.isModuleConfigured
 import org.jetbrains.kotlin.psi.KtFile
 import org.jetbrains.plugins.gradle.settings.DistributionType
 import org.jetbrains.plugins.gradle.settings.GradleProjectSettings
@@ -143,6 +146,14 @@ class GuestGradleImportTest : CodeInsightFixtureTestCase<ModuleFixtureBuilder<Mo
         val nativeModule = requireNotNull(ModuleUtilCore.findModuleForFile(file, project))
         assertEquals(name, nativeModule.name)
         assertEquals("Guest: active", GuestStatusWidget(project).getText())
+        assertTrue(
+            "Native Gradle import configures Kotlin without a JVM stdlib",
+            isModuleConfigured(ModuleSourceRootGroup(nativeModule, emptyList())),
+        )
+        assertEquals(
+            ConfigureKotlinStatus.NON_APPLICABLE,
+            GuestKotlinProjectConfigurator().getStatus(ModuleSourceRootGroup(myModule, emptyList())),
+        )
         allowAnalysisOnEdt {
             runReadActionBlocking {
                 assertEquals(CompuktersPlatforms.default, KaModuleProvider.getModule(project, ktFile, null).targetPlatform)
@@ -177,6 +188,17 @@ class GuestGradleImportTest : CodeInsightFixtureTestCase<ModuleFixtureBuilder<Mo
         assertEquals("Guest: active", GuestStatusWidget(project).getText())
 
         // Removing the plugin on reload removes stale native module state.
+        // A persisted entry may also outlive its module, with no removal event to deliver.
+        registry.loadState(
+            GuestRegistryState().apply {
+                modules.putAll(registry.configurations())
+                modules["stale-native-module"] =
+                    GuestModuleConfiguration().apply {
+                        externalRoot = root.toString()
+                        projectDirectory = root.resolve("removed-addon").toString()
+                    }
+            },
+        )
         Files.writeString(root.resolve("build.gradle"), "apply plugin: 'java'\n")
         importProject(root)
         waitUntil("removed native module reconciled") { registry.configurations().isEmpty() }

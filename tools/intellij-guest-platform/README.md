@@ -8,6 +8,8 @@ Install the ZIP through **Settings → Plugins → Install Plugin from Disk**, r
 Gradle project. The installed plugin is named **Compukters Guest Kotlin**. Enable the **Compukters Guest** status
 widget through the status-bar context menu if hidden. It shows active, loading or error state; click it for
 module names, input paths and the native compile task. Import does not compile the addon or change its ABI lock.
+Imported Guest modules and their `contract`/`kotlin` roots have a theme-aware purple name and a `Guest` label
+in the Project tree. Kotlin recognizes these modules as configured by their native Gradle model.
 Run `assembleCompuktersAddon` to compile; use `updateCompuktersAddonAbiLock` explicitly for contract changes.
 
 Platform and Guest dependency changes reload native analysis automatically. Imported configuration persists in

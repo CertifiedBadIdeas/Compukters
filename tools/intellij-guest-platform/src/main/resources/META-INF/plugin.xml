@@ -8,14 +8,17 @@
     <depends>org.jetbrains.kotlin</depends>
     <depends>com.intellij.gradle</depends>
     <extensions defaultExtensionNs="com.intellij">
+        <projectViewNodeDecorator implementation="ru.lazyhat.compukters.idea.GuestProjectViewDecorator"/>
         <gotoDeclarationHandler implementation="ru.lazyhat.compukters.idea.GuestSourceNavigation" order="first"/>
         <externalProjectDataService implementation="ru.lazyhat.compukters.idea.GuestGradleDataService"/>
+        <externalProjectDataService implementation="ru.lazyhat.compukters.idea.GuestGradleProjectDataService"/>
         <statusBarWidgetFactory id="CompuktersGuest" implementation="ru.lazyhat.compukters.idea.GuestStatusWidgetFactory"/>
     </extensions>
     <extensions defaultExtensionNs="org.jetbrains.plugins.gradle">
         <projectResolve implementation="ru.lazyhat.compukters.idea.GuestGradleResolver"/>
     </extensions>
     <extensions defaultExtensionNs="org.jetbrains.kotlin">
+        <projectConfigurator implementation="ru.lazyhat.compukters.idea.GuestKotlinProjectConfigurator"/>
         <supportsKotlinPluginMode supportsK2="true"/>
         <fir.extensions.firExtensionRegistrar implementation="ru.lazyhat.compukters.platform.k2.contracts.GuestContractFirExtensionRegistrar"/>
         <k2KaModuleFactory implementation="ru.lazyhat.compukters.idea.GuestModuleFactory" order="first"/>

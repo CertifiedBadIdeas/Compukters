@@ -18,6 +18,7 @@
 
 package ru.lazyhat.compukters.idea
 
+import com.intellij.ide.projectView.ProjectView
 import com.intellij.openapi.Disposable
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.application.WriteAction
@@ -28,6 +29,7 @@ import com.intellij.openapi.components.Storage
 import com.intellij.openapi.module.Module
 import com.intellij.openapi.project.ModuleListener
 import com.intellij.openapi.project.Project
+import com.intellij.openapi.util.io.FileUtil
 import com.intellij.openapi.vfs.VirtualFileManager
 import com.intellij.openapi.vfs.newvfs.BulkFileListener
 import com.intellij.openapi.vfs.newvfs.events.VFileEvent
@@ -158,6 +160,7 @@ class GuestProjectRegistry(
     fun removeModules(names: Collection<String>) {
         if (names.isEmpty()) return
         onWrite {
+            if (names.none(configuration.modules::containsKey)) return@onWrite
             project.publishGlobalModuleStateModificationEvent()
             configuration = GuestRegistryState().also { it.modules = (configuration.modules - names.toSet()).toMutableMap() }
             names.forEach {
@@ -166,6 +169,7 @@ class GuestProjectRegistry(
                 requested.remove(it)
             }
             WindowManager.getInstance().getStatusBar(project)?.updateWidget(GuestStatusWidget.ID)
+            ProjectView.getInstance(project).refresh()
         }
     }
 
@@ -182,6 +186,16 @@ class GuestProjectRegistry(
 
     fun configurations(): Map<String, GuestModuleConfiguration> = configuration.modules.toMap()
 
+    fun isGuestModule(name: String): Boolean = configuration.modules.containsKey(name)
+
+    fun isGuestSourceRoot(path: String): Boolean =
+        configuration.modules.values.any { config ->
+            config.sourceDirectories.any { source ->
+                val root = FileUtil.toSystemIndependentName(source).trimEnd('/')
+                path == root || path == root.substringBeforeLast('/')
+            }
+        }
+
     private fun reload(
         name: String,
         config: GuestModuleConfiguration,
@@ -197,6 +211,7 @@ class GuestProjectRegistry(
         onWrite {
             if (persist) {
                 configuration = GuestRegistryState().also { it.modules = (configuration.modules + (name to config)).toMutableMap() }
+                ProjectView.getInstance(project).refresh()
             }
             requested.add(name)
             val generation = sequence.incrementAndGet()
