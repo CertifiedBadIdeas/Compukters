@@ -35,7 +35,7 @@ class CommandBatchProgramHost internal constructor(
         bindings.forEach { binding ->
             val schema = delegate.capabilitySchemas.singleOrNull { it.identity == binding.capability }
             val operation = schema?.operations?.getOrNull(binding.operation)
-            require(operation?.result == HostValueType.UNIT && operation.arguments == binding.arguments) {
+            require(operation != null && operation.arguments == binding.arguments) {
                 "Command binding does not match its registered capability"
             }
         }
@@ -61,8 +61,22 @@ class CommandBatchProgramHost internal constructor(
                 } else {
                     try {
                         when (val response = binding.execute(command.arguments)) {
-                            HostResponse.UnitSuccess, is HostResponse.Failure -> response
-                            else -> HostResponse.Failure(HostFailureKind.OTHER, "Command handler must complete Unit")
+                            is HostResponse.Failure -> {
+                                response
+                            }
+
+                            else -> {
+                                val schema =
+                                    delegate.capabilitySchemas
+                                        .single {
+                                            it.identity == binding.capability
+                                        }.operations[binding.operation]
+                                if (response.matches(schema)) {
+                                    response
+                                } else {
+                                    HostResponse.Failure(HostFailureKind.OTHER, "Command result does not match schema")
+                                }
+                            }
                         }
                     } catch (_: Exception) {
                         HostResponse.Failure(HostFailureKind.OTHER, "Command handler failed")
@@ -77,8 +91,23 @@ class CommandBatchProgramHost internal constructor(
     companion object {
         val SCHEMA =
             HostCapabilitySchema(
-                CapabilityIdentity("compukters", "commands", 1, 0),
+                CapabilityIdentity("compukters", "commands", 2, 0),
                 listOf(HostOperationSchema(listOf(HostValueType.BYTE_ARRAY), HostValueType.BYTE_ARRAY, asynchronous = true)),
             )
     }
 }
+
+private fun HostResponse.matches(schema: HostOperationSchema): Boolean =
+    when (this) {
+        HostResponse.UnitSuccess -> schema.result == HostValueType.UNIT
+        is HostResponse.IntSuccess -> schema.result == HostValueType.I32
+        is HostResponse.LongSuccess -> schema.result == HostValueType.I64
+        is HostResponse.FloatSuccess -> schema.result == HostValueType.F32
+        is HostResponse.DoubleSuccess -> schema.result == HostValueType.F64
+        is HostResponse.BoolSuccess -> schema.result == HostValueType.BOOL
+        is HostResponse.CharSuccess -> schema.result == HostValueType.CHAR
+        is HostResponse.StringSuccess -> schema.result == HostValueType.STRING
+        is HostResponse.ByteArraySuccess -> schema.result == HostValueType.BYTE_ARRAY
+        is HostResponse.RecordSuccess -> schema.result == HostValueType.RECORD && schema.resultRecord == value.schema
+        is HostResponse.Failure -> true
+    }
