@@ -20,19 +20,11 @@ import compukter.filesystem.Path
 import compukter.io.Stderr
 import compukter.process.Process
 import compukter.process.ProcessFailureReason
-import compukter.process.ProcessResult
 
 fun main() {
-    val diagnostic = bootDiagnostic(Process.run(Path("/rom/shell")))
-    if (diagnostic.isNotEmpty()) Stderr.write("boot failed: " + diagnostic + "\n")
+    val failure = Process.exec(Path("/bin/shell"))
+    Stderr.write("boot failed: " + processFailure(failure.reason, failure.diagnostic) + "\n")
 }
-
-private fun bootDiagnostic(result: ProcessResult): String =
-    when (result) {
-        is ProcessResult.Exited -> if (result.code == 0) "" else "shell exited with an error"
-        is ProcessResult.Failed -> processFailure(result.reason, result.diagnostic)
-        else -> "shell failed"
-    }
 
 private fun processFailure(
     reason: ProcessFailureReason,

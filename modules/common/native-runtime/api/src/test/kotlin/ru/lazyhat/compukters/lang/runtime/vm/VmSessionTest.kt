@@ -343,6 +343,19 @@ class VmSessionTest {
         bridge.outcomes += bytes(14, long(7))
         assertEquals(VmOutcome.ProcessEntered(7), session.advance(64, 64, Int.MAX_VALUE))
         assertEquals(VmOutcome.ProcessExited(7), session.advance(64, 64, Int.MAX_VALUE))
+        bridge.outcomes += bytes(15, long(0), long(8))
+        assertEquals(VmOutcome.ProcessReplaced(0, 8), session.advance(64, 64, Int.MAX_VALUE))
+        for (payload in listOf(
+            bytes(15),
+            bytes(15, long(0)),
+            bytes(15, long(-1), long(8)),
+            bytes(15, long(8), long(8)),
+            bytes(15, long(8), long(7)),
+            bytes(15, long(0), long(8), 99),
+        )) {
+            bridge.outcomes += payload
+            assertFailsWith<VmBridgeException> { session.advance(64, 64, Int.MAX_VALUE) }
+        }
         for (tag in listOf(13, 14)) {
             for (payload in listOf(bytes(tag), bytes(tag, long(0)), bytes(tag, long(-1)), bytes(tag, long(1), 99))) {
                 bridge.outcomes += payload

@@ -32,14 +32,9 @@ fun programScopedAddonHostOf(factory: () -> ProgramAddonHost): ProgramAddonHost 
 private class ScopedProgramAddonHost(
     private val factory: () -> ProgramAddonHost,
 ) : ProgramAddonHost {
-    private val hosts = mutableMapOf<Long, ProgramAddonHost?>()
+    private val hosts = mutableMapOf<Long, ProgramAddonHost?>(0L to factory())
     private var lastProgramId = 0L
-    private val initial = factory()
-    override val capabilitySchemas = initial.capabilitySchemas.toList()
-
-    init {
-        hosts[0] = initial
-    }
+    override val capabilitySchemas = hosts.getValue(0L)!!.capabilitySchemas.toList()
 
     override fun programStarted(programId: Long) {
         require(programId > lastProgramId) { "addon process identity must not be reused" }
@@ -49,7 +44,7 @@ private class ScopedProgramAddonHost(
     }
 
     override fun programStopped(programId: Long) {
-        require(programId != 0L && hosts.containsKey(programId)) { "unknown addon process scope" }
+        require(hosts.containsKey(programId)) { "unknown addon process scope" }
         hosts.remove(programId)?.close()
     }
 
@@ -107,7 +102,7 @@ private class ScopedProgramAddonHost(
         state: ByteArray,
         programScopes: List<Long>,
     ) {
-        require(programScopes.size in 1..32 && programScopes.first() == 0L)
+        require(programScopes.size in 1..32 && programScopes.first() >= 0L)
         require(programScopes.zipWithNext().all { (parent, child) -> child > parent })
         require(state.size in 8..1024 * 1024)
         val count = ByteBuffer.wrap(state).order(ByteOrder.LITTLE_ENDIAN).getInt(4)
@@ -126,8 +121,9 @@ private class ScopedProgramAddonHost(
             require(present in 0..1 && (present == 1 || !bytes.hasRemaining()))
             saved[id] = if (present == 0) null else ByteArray(bytes.remaining()).also(bytes::get)
         }
-        require(0L in saved)
+        require(saved.isNotEmpty())
         reset()
+        hosts.clear()
         lastProgramId = maxOf(highWater, programScopes.last())
         programScopes.forEach { id ->
             val payload = saved[id]

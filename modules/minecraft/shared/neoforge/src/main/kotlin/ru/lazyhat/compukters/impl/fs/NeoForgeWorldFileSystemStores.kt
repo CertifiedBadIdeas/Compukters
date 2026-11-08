@@ -25,6 +25,7 @@ import net.neoforged.neoforge.event.level.LevelEvent
 import net.neoforged.neoforge.event.server.ServerStartingEvent
 import net.neoforged.neoforge.event.server.ServerStoppingEvent
 import ru.lazyhat.compukters.impl.compiler.NeoForgeCompilerServices
+import ru.lazyhat.compukters.lang.runtime.fs.VmSystemImage
 import ru.lazyhat.compukters.lang.runtime.fs.ComputerId
 import ru.lazyhat.compukters.lang.runtime.fs.WorldFileSystemStore
 import ru.lazyhat.compukters.minecraft.computer.ComputerFileSystemContext
@@ -451,13 +452,13 @@ object NeoForgeWorldFileSystemStores {
             override fun create(
                 level: ServerLevel,
                 computerId: ComputerId,
-                romImage: ByteArray,
+                systemImage: VmSystemImage,
             ): ComputerFileSystemContext {
                 val root = worldRoot(level.server)
                 return ComputerFileSystemContext(
                     registry.store(root),
                     computerId,
-                    romImage,
+                    systemImage,
                     registry.lifecycle(root),
                     NeoForgeCompilerServices.router(level.server),
                     ru.lazyhat.compukters.impl.computer.NeoForgeVmActorServices

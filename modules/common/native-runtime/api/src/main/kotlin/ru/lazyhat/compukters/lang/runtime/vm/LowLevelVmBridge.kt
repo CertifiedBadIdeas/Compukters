@@ -54,6 +54,12 @@ interface LowLevelVmBridge {
         id: ByteArray,
     ): Unit = error("filesystem recovery is unavailable")
 
+    fun storeInstallSystem(
+        handle: Long,
+        id: ByteArray,
+        image: ByteArray,
+    ): Unit = error("system installation is unavailable")
+
     fun storeClose(handle: Long): Unit = error("filesystem store close is unavailable")
 
     fun verifyArtifact(artifact: ByteArray): Boolean = error("artifact verification is unavailable")
@@ -87,7 +93,6 @@ interface LowLevelVmBridge {
 
     fun checkpointRestore(
         storeHandle: Long,
-        boot: Boolean,
         id: ByteArray,
         rom: ByteArray,
         capabilitySchemas: ByteArray,

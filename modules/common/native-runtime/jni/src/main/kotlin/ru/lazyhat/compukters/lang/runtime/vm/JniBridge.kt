@@ -72,6 +72,15 @@ internal class JniBridge private constructor() : LowLevelVmBridge {
         id: ByteArray,
     ) = storeIdOperation("filesystem recovery", handle, id, JniNative::storeRecover)
 
+    override fun storeInstallSystem(
+        handle: Long,
+        id: ByteArray,
+        image: ByteArray,
+    ) {
+        requireComputerId(id)
+        requireSuccess("system installation", JniNative.storeInstallSystem(handle, id, image))
+    }
+
     override fun storeClose(handle: Long) = requireSuccess("filesystem store close", JniNative.storeClose(handle))
 
     override fun verifyArtifact(artifact: ByteArray): Boolean =
@@ -130,7 +139,6 @@ internal class JniBridge private constructor() : LowLevelVmBridge {
 
     override fun checkpointRestore(
         storeHandle: Long,
-        boot: Boolean,
         id: ByteArray,
         rom: ByteArray,
         capabilitySchemas: ByteArray,
@@ -138,7 +146,7 @@ internal class JniBridge private constructor() : LowLevelVmBridge {
         requireComputerId(id)
         val output = ByteArray(maximumCreateBytes())
         val written = LongArray(1)
-        val status = JniNative.checkpointRestore(storeHandle, if (boot) 1 else 0, id, rom, capabilitySchemas, output, written)
+        val status = JniNative.checkpointRestore(storeHandle, id, rom, capabilitySchemas, output, written)
         if (status == 43) return null
         requireCheckpointSuccess("checkpoint restore", status)
         require(written[0] in 0..output.size.toLong()) { "invalid checkpoint creation length" }
@@ -611,7 +619,7 @@ internal class JniBridge private constructor() : LowLevelVmBridge {
 
         fun open(library: Path): JniBridge {
             System.load(library.toAbsolutePath().normalize().toString())
-            if (JniNative.abiVersion() != 24) throw VmBridgeException("unsupported Compukter JNI ABI")
+            if (JniNative.abiVersion() != 27) throw VmBridgeException("unsupported Compukter JNI ABI")
             return JniBridge()
         }
     }

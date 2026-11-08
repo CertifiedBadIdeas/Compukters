@@ -35,7 +35,7 @@ internal data class ProgramHostCheckpoint(
     fun validate() {
         require(granted.guestUnits >= 0 && granted.maintenanceUnits >= 0)
         RedstoneWire.requireOutputRegister(confirmedRedstoneOutput)
-        require(programScopes.size in 1..32 && programScopes.first() == 0L)
+        require(programScopes.size in 1..32 && programScopes.first() >= 0L)
         require(programScopes.zipWithNext().all { (parent, child) -> child > parent })
         require(timers.size <= 256 && timers.map { it.identity }.distinct().size == timers.size)
         timers.forEach {
@@ -71,7 +71,7 @@ internal data class ProgramHostCheckpoint(
 
     companion object {
         private const val MAGIC = 0x48545043
-        private const val VERSION = 1
+        private const val VERSION = 2
         private const val HEADER_BYTES = 42
         private const val TIMER_BYTES = 32
         private const val MAXIMUM_ADDON_BYTES = 1024 * 1024

@@ -505,7 +505,7 @@ class ComputerBlockEntityTest {
             return state
         }
 
-        override fun reboot(): ProgramComputerState {
+        override fun reboot(installSystem: Boolean): ProgramComputerState {
             terminal = terminalState("", 0)
             return publishState(ProgramComputerState.Running)
         }

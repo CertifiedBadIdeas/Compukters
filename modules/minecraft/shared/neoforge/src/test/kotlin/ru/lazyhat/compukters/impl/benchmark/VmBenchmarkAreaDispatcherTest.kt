@@ -79,7 +79,7 @@ class VmBenchmarkAreaDispatcherTest {
         assertEquals(2, dispatch.discoveredComputers)
         assertEquals(1, dispatch.scheduledComputers)
         assertEquals(1, dispatch.limitedComputers)
-        assertEquals(listOf("0:/rom/vmbench cpu 9"), submitted)
+        assertEquals(listOf("0:/bin/vmbench cpu 9"), submitted)
         assertEquals(VmBenchmarkAreaResult(1, 0, 1), dispatch.completion.getNow(null))
     }
 
@@ -125,7 +125,7 @@ class VmBenchmarkAreaDispatcherTest {
                 VmBenchmarkAreaWorkload.REDSTONE,
             )
 
-        assertEquals(listOf("/rom/vmbench redstone 3"), submitted)
+        assertEquals(listOf("/bin/vmbench redstone 3"), submitted)
         assertEquals(VmBenchmarkAreaResult(1, 0, 0), dispatch.completion.getNow(null))
     }
 }

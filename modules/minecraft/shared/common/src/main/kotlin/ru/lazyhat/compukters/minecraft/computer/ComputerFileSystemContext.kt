@@ -22,20 +22,21 @@ import net.minecraft.server.level.ServerLevel
 import ru.lazyhat.compukters.core.device.runtime.actor.ProgramRuntimeActorService
 import ru.lazyhat.compukters.core.device.runtime.compiler.CompilerCompletionRouter
 import ru.lazyhat.compukters.lang.runtime.fs.ComputerId
+import ru.lazyhat.compukters.lang.runtime.fs.VmSystemImage
 import ru.lazyhat.compukters.lang.runtime.fs.WorldFileSystemStore
 import java.util.concurrent.CompletableFuture
 
 class ComputerFileSystemContext(
     val store: WorldFileSystemStore,
     val computerId: ComputerId,
-    romImage: ByteArray,
+    systemImage: VmSystemImage,
     private val lifecycle: ComputerFileSystemLifecycle,
     internal val compilerRouter: CompilerCompletionRouter? = null,
     internal val actorService: ProgramRuntimeActorService,
 ) {
-    private val romImage = romImage.copyOf()
+    private val systemImage = systemImage
 
-    internal fun romImage(): ByteArray = romImage.copyOf()
+    internal fun systemImage(): VmSystemImage = systemImage
 
     internal fun attach(
         generation: () -> Long?,
@@ -53,7 +54,7 @@ fun interface ComputerFileSystemContextSource {
     fun create(
         level: ServerLevel,
         computerId: ComputerId,
-        romImage: ByteArray,
+        systemImage: VmSystemImage,
     ): ComputerFileSystemContext
 
     fun tombstone(

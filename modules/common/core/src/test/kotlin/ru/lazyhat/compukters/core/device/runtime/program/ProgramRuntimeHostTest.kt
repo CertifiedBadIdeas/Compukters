@@ -472,6 +472,64 @@ class ProgramRuntimeHostTest {
     }
 
     @Test
+    fun `replacement cancels old requests and timers and checkpoints the surviving scopes`() {
+        for (nested in listOf(false, true)) {
+            val previous = if (nested) 1L else 0L
+            val parent = VmHostRequest(11, TEST_ADDON_CAPABILITY, 1, listOf(VmValue.I32(3)), taskId = 2)
+            val old = VmHostRequest(12, TEST_ADDON_CAPABILITY, 1, listOf(VmValue.I32(4)), taskId = 2)
+            val replacement = VmHostRequest(13, TEST_ADDON_CAPABILITY, 1, listOf(VmValue.I32(5)), taskId = 2)
+            val outcomes =
+                buildList {
+                    if (nested) {
+                        add(VmOutcome.HostRequestBatch(listOf(parent)))
+                        add(VmOutcome.ProcessEntered(previous))
+                    }
+                    add(VmOutcome.HostRequestBatch(listOf(old, timer(51, 20))))
+                    add(VmOutcome.ProcessReplaced(previous, 2))
+                    add(VmOutcome.HostRequestBatch(listOf(replacement)))
+                    add(VmOutcome.WaitingForTerminalEvent)
+                }
+            val session = ScriptedSession(outcomes)
+            val actions = mutableListOf<ProgramAddonAction>()
+            val host =
+                ProgramRuntimeHost(
+                    sessionFactory = ProgramVmSessionFactory { session },
+                    tickBudget = ProgramTickBudget(maximumAdvancesPerTick = 10),
+                    addonCapabilitySchemas = listOf(TEST_ADDON_SCHEMA),
+                    addonRequestPort =
+                        ProgramAddonRequestPort {
+                            actions += ProgramAddonAction.Request(it)
+                            true
+                        },
+                    addonLifecyclePort =
+                        ProgramAddonLifecyclePort {
+                            actions += it
+                            true
+                        },
+                )
+            host.start(byteArrayOf(1))
+            assertEquals(ProgramRuntimeState.WaitingForInput, host.serverTick(10))
+            assertFalse(host.completeAddon(ProgramAddonCompletion(old.identity, HostResponse.IntSuccess(1))))
+            assertTrue(host.completeAddon(ProgramAddonCompletion(replacement.identity, HostResponse.IntSuccess(2))))
+            if (nested) assertTrue(host.completeAddon(ProgramAddonCompletion(parent.identity, HostResponse.IntSuccess(3))))
+            val stopped = actions.indexOf(ProgramAddonAction.Stopped(previous))
+            assertTrue(stopped >= 0)
+            assertEquals(ProgramAddonAction.Started(2), actions[stopped + 1])
+            assertEquals(
+                2L,
+                actions
+                    .filterIsInstance<ProgramAddonAction.Request>()
+                    .last()
+                    .request.programId,
+            )
+            assertTrue(host.hibernate(11, byteArrayOf()))
+            val saved = ProgramHostCheckpoint.decode(requireNotNull(session.capturedCheckpoint))
+            assertEquals(if (nested) listOf(0L, 2L) else listOf(2L), saved.programScopes)
+            assertTrue(saved.timers.isEmpty())
+        }
+    }
+
+    @Test
     fun `resource snapshots are pull based and include only budgets granted to native advances`() {
         val session =
             ScriptedSession(

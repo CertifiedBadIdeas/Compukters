@@ -164,7 +164,7 @@ class ComputerBlockTest {
 
         override fun submitCanonicalLineAsync(line: CharArray) = CompletableFuture.completedFuture(false)
 
-        override fun reboot(): ProgramComputerState = turnOn()
+        override fun reboot(installSystem: Boolean): ProgramComputerState = turnOn()
 
         override fun shutdown() = Unit
 

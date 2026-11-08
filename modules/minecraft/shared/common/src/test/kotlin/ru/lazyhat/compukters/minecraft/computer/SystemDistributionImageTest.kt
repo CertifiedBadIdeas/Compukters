@@ -25,16 +25,16 @@ import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 
-class SystemRomImageTest {
+class SystemDistributionImageTest {
     @Test
-    fun `program ROM is canonical executable and deterministic`() {
+    fun `system image is canonical executable and deterministic`() {
         val boot = byteArrayOf(9, 8)
         val shell = byteArrayOf(1, 2, 3, 4)
         val kotlinc = byteArrayOf(5, 6, 7)
         val edit = byteArrayOf(10, 11, 12)
         val vmbench = byteArrayOf(13, 14)
         val cmatrix = byteArrayOf(15, 16)
-        val first = SystemRomImage.encodePrograms(boot, shell, kotlinc, edit, vmbench, cmatrix)
+        val first = SystemDistributionImage.encodePrograms(boot, shell, kotlinc, edit, vmbench, cmatrix)
         boot.fill(0)
         shell.fill(0)
         kotlinc.fill(0)
@@ -42,7 +42,7 @@ class SystemRomImageTest {
         vmbench.fill(0)
         cmatrix.fill(0)
         val second =
-            SystemRomImage.encodePrograms(
+            SystemDistributionImage.encodePrograms(
                 byteArrayOf(9, 8),
                 byteArrayOf(1, 2, 3, 4),
                 byteArrayOf(5, 6, 7),
@@ -55,16 +55,16 @@ class SystemRomImageTest {
         val payload = first.copyOf(first.size - 32)
         assertContentEquals(MessageDigest.getInstance("SHA-256").digest(payload), first.copyOfRange(payload.size, first.size))
         val buffer = ByteBuffer.wrap(payload).order(ByteOrder.LITTLE_ENDIAN)
-        assertContentEquals("CPKTROM\u0000".encodeToByteArray(), ByteArray(8).also(buffer::get))
+        assertContentEquals("CPKTSYS\u0000".encodeToByteArray(), ByteArray(8).also(buffer::get))
         assertEquals(1, buffer.short.toInt())
         assertEquals(0, buffer.short.toInt())
         assertEquals(6, buffer.int)
-        assertEntry(buffer, "/rom/boot", byteArrayOf(9, 8))
-        assertEntry(buffer, "/rom/cmatrix", byteArrayOf(15, 16))
-        assertEntry(buffer, "/rom/edit", byteArrayOf(10, 11, 12))
-        assertEntry(buffer, "/rom/kotlinc", byteArrayOf(5, 6, 7))
-        assertEntry(buffer, "/rom/shell", byteArrayOf(1, 2, 3, 4))
-        assertEntry(buffer, "/rom/vmbench", byteArrayOf(13, 14))
+        assertEntry(buffer, "/bin/cmatrix", byteArrayOf(15, 16))
+        assertEntry(buffer, "/bin/edit", byteArrayOf(10, 11, 12))
+        assertEntry(buffer, "/bin/kotlinc", byteArrayOf(5, 6, 7))
+        assertEntry(buffer, "/bin/shell", byteArrayOf(1, 2, 3, 4))
+        assertEntry(buffer, "/bin/vmbench", byteArrayOf(13, 14))
+        assertEntry(buffer, "/boot/init", byteArrayOf(9, 8))
         assertEquals(0, buffer.remaining())
     }
 

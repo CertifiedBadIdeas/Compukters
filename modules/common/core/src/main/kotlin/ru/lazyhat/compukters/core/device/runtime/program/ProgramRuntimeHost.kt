@@ -29,6 +29,7 @@ import ru.lazyhat.compukters.core.device.runtime.compiler.ComputerCompilationOut
 import ru.lazyhat.compukters.lang.runtime.capability.HostCapabilitySchema
 import ru.lazyhat.compukters.lang.runtime.capability.HostResponse
 import ru.lazyhat.compukters.lang.runtime.fs.ComputerId
+import ru.lazyhat.compukters.lang.runtime.fs.VmSystemImage
 import ru.lazyhat.compukters.lang.runtime.fs.WorldFileSystemStore
 import ru.lazyhat.compukters.lang.runtime.vm.CapabilityIdentity
 import ru.lazyhat.compukters.lang.runtime.vm.HostFailureKind
@@ -69,7 +70,7 @@ class ProgramRuntimeHost internal constructor(
     constructor(
         store: WorldFileSystemStore,
         computerId: ComputerId,
-        romImage: ByteArray,
+        systemImage: VmSystemImage,
         tickBudget: ProgramTickBudget = ProgramTickBudget(),
         compilerRouter: CompilerCompletionRouter? = null,
         redstoneHostPort: RedstoneHostPort = UNAVAILABLE_REDSTONE_PORT,
@@ -80,7 +81,7 @@ class ProgramRuntimeHost internal constructor(
         addonLifecyclePort: ProgramAddonLifecyclePort = ProgramAddonLifecyclePort { true },
     ) : this(
         NativeProgramVmSessionFactory(
-            ProgramFileSystemLaunchContext(store, computerId, romImage),
+            ProgramFileSystemLaunchContext(store, computerId, systemImage),
             addonCapabilitySchemas,
         ),
         tickBudget,
@@ -129,7 +130,11 @@ class ProgramRuntimeHost internal constructor(
         return startSession { sessionFactory.open(launchArtifact) }
     }
 
-    fun startBoot(): ProgramStartResult = startSession(sessionFactory::boot)
+    fun startBoot(installSystem: Boolean = false): ProgramStartResult =
+        startSession {
+            if (installSystem) sessionFactory.installSystem()
+            sessionFactory.boot()
+        }
 
     internal fun discardCheckpoint() = sessionFactory.discardCheckpoint()
 
@@ -403,6 +408,21 @@ class ProgramRuntimeHost internal constructor(
                                 .Stopped(outcome.programId),
                         ),
                     ) {
+                        "addon lifecycle action limit exceeded"
+                    }
+                }
+
+                is VmOutcome.ProcessReplaced -> {
+                    check(programScopes.last() == outcome.previousProgramId) { "native replacement scope mismatch" }
+                    check(outcome.programId > programScopes.last()) { "native replacement identity must increase" }
+                    programScopes.removeLast()
+                    programScopes.addLast(outcome.programId)
+                    pendingAddonRequests.entries.removeAll { it.value.programId == outcome.previousProgramId }
+                    pendingTimerRequests.entries.removeAll { it.value.programId == outcome.previousProgramId }
+                    check(addonLifecyclePort.submit(ProgramAddonAction.Stopped(outcome.previousProgramId))) {
+                        "addon lifecycle action limit exceeded"
+                    }
+                    check(addonLifecyclePort.submit(ProgramAddonAction.Started(outcome.programId))) {
                         "addon lifecycle action limit exceeded"
                     }
                 }

@@ -53,7 +53,7 @@ class JniNativeEntryPointIntegrationTest {
         val candidate = LongArray(1)
         val capabilitySchemas = byteArrayOf(1, 0)
 
-        assertEquals(24, JniNative.abiVersion())
+        assertEquals(27, JniNative.abiVersion())
         assertTrue(JniNative.maximumOutcomeBytes() > 0)
         assertTrue(JniNative.maximumCreateBytes() > 0)
         statuses(
@@ -66,7 +66,7 @@ class JniNativeEntryPointIntegrationTest {
             JniNative.storeRecover(0, id),
             JniNative.storeClose(0),
             JniNative.checkpointSave(0, 0, id, bytes),
-            JniNative.checkpointRestore(0, 1, id, bytes, capabilitySchemas, output, written),
+            JniNative.checkpointRestore(0, id, bytes, capabilitySchemas, output, written),
             JniNative.checkpointDiscard(0, id),
             JniNative.checkpointHostSize(0, written),
             JniNative.checkpointHostCopy(0, output, written),

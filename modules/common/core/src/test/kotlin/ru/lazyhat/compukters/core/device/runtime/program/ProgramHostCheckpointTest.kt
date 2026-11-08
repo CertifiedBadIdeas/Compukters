@@ -55,7 +55,7 @@ class ProgramHostCheckpointTest {
             assertFailsWith<IllegalArgumentException> { ProgramHostCheckpoint.decode(encoded.copyOf(length)) }
         }
         assertFailsWith<IllegalArgumentException> { ProgramHostCheckpoint.decode(encoded + byteArrayOf(0)) }
-        for ((offset, value) in listOf(4 to 2, 30 to Int.MAX_VALUE, 30 to -1)) {
+        for ((offset, value) in listOf(4 to 1, 4 to 3, 30 to Int.MAX_VALUE, 30 to -1)) {
             val invalid = encoded.copyOf()
             ByteBuffer.wrap(invalid).order(ByteOrder.LITTLE_ENDIAN).putInt(offset, value)
             assertFailsWith<IllegalArgumentException> { ProgramHostCheckpoint.decode(invalid) }
@@ -68,7 +68,7 @@ class ProgramHostCheckpointTest {
     fun `timer identities scopes and remaining durations are bounded`() {
         for (invalid in listOf(
             checkpoint.copy(programScopes = listOf(0, 7, 7)),
-            checkpoint.copy(programScopes = listOf(1)),
+            checkpoint.copy(programScopes = listOf(-1, 7, 12)),
             checkpoint.copy(timers = checkpoint.timers + checkpoint.timers),
             checkpoint.copy(timers = listOf(checkpoint.timers.single().copy(programId = 99))),
             checkpoint.copy(timers = listOf(checkpoint.timers.single().copy(remainingTicks = 21))),

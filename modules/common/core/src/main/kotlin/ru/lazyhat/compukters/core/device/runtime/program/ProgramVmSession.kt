@@ -24,6 +24,7 @@ import ru.lazyhat.compukters.lang.runtime.fs.ComputerId
 import ru.lazyhat.compukters.lang.runtime.fs.VmDirectoryListing
 import ru.lazyhat.compukters.lang.runtime.fs.VmFileChunk
 import ru.lazyhat.compukters.lang.runtime.fs.VmFileStat
+import ru.lazyhat.compukters.lang.runtime.fs.VmSystemImage
 import ru.lazyhat.compukters.lang.runtime.fs.VmVirtualPath
 import ru.lazyhat.compukters.lang.runtime.fs.WorldFileSystemStore
 import ru.lazyhat.compukters.lang.runtime.vm.TerminalKey
@@ -132,11 +133,13 @@ private class NativeProgramDeploymentCandidate(
 internal fun interface ProgramVmSessionFactory {
     fun open(artifact: ByteArray): ProgramVmSession
 
-    fun boot(): ProgramVmSession = throw VmBridgeException("ROM boot is not configured")
+    fun boot(): ProgramVmSession = throw VmBridgeException("system boot is not configured")
 
     fun restoreBoot(): ProgramVmRestoration? = null
 
     fun discardCheckpoint() = Unit
+
+    fun installSystem(): Unit = throw VmBridgeException("system installation is not configured")
 }
 
 internal data class ProgramVmRestoration(
@@ -147,17 +150,17 @@ internal data class ProgramVmRestoration(
 internal class ProgramFileSystemLaunchContext(
     val store: WorldFileSystemStore,
     val computerId: ComputerId,
-    romImage: ByteArray,
+    systemImage: VmSystemImage,
 ) {
-    private val romImage = romImage.copyOf()
+    private val systemImage = systemImage
 
     fun open(
         artifact: ByteArray,
         capabilitySchemas: List<HostCapabilitySchema>,
-    ): VmSession = VmSession.openInStore(artifact, store, computerId, romImage.copyOf(), capabilitySchemas)
+    ): VmSession = VmSession.openInStore(artifact, store, computerId, systemImage.copyBytes(), capabilitySchemas)
 
     fun restoreBoot(capabilitySchemas: List<HostCapabilitySchema>) =
-        VmSession.restoreInStore(store, computerId, romImage.copyOf(), capabilitySchemas, boot = true)
+        VmSession.restoreInStore(store, computerId, systemImage.copyBytes(), capabilitySchemas)
 
     fun checkpoint(
         session: VmSession,
@@ -166,8 +169,10 @@ internal class ProgramFileSystemLaunchContext(
 
     fun discardCheckpoint() = store.discardCheckpoint(computerId)
 
+    fun installSystem() = store.installSystem(computerId, systemImage.copyBytes())
+
     fun boot(capabilitySchemas: List<HostCapabilitySchema>): VmSession =
-        VmSession.bootInStore(store, computerId, romImage.copyOf(), capabilitySchemas)
+        VmSession.bootInStore(store, computerId, systemImage.copyBytes(), capabilitySchemas)
 }
 
 internal class NativeProgramVmSessionFactory(
@@ -180,7 +185,7 @@ internal class NativeProgramVmSessionFactory(
         NativeProgramVmSession(filesystem?.open(artifact, capabilitySchemas) ?: VmSession.open(artifact, capabilitySchemas), filesystem)
 
     override fun boot(): ProgramVmSession {
-        val context = filesystem ?: throw VmBridgeException("ROM boot requires a persistent filesystem")
+        val context = filesystem ?: throw VmBridgeException("system boot requires a persistent filesystem")
         return NativeProgramVmSession(context.boot(capabilitySchemas), context)
     }
 
@@ -188,6 +193,10 @@ internal class NativeProgramVmSessionFactory(
         val context = filesystem ?: return null
         val restored = context.restoreBoot(capabilitySchemas) ?: return null
         return ProgramVmRestoration(NativeProgramVmSession(restored.session, context), restored.hostStateBytes())
+    }
+
+    override fun installSystem() {
+        requireNotNull(filesystem) { "system installation requires persistent storage" }.installSystem()
     }
 
     override fun discardCheckpoint() {

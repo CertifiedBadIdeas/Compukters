@@ -84,6 +84,31 @@ import kotlin.test.assertTrue
 
 class ProgramRuntimeActorProcessorTest {
     @Test
+    fun `ordinary reboot preserves the system and explicit update closes before installing`() {
+        val sessions = mutableListOf<RecordingSession>()
+        var updates = 0
+        val factory =
+            object : ProgramVmSessionFactory {
+                override fun open(artifact: ByteArray): ProgramVmSession = error("unexpected artifact")
+
+                override fun boot(): ProgramVmSession = RecordingSession().also(sessions::add)
+
+                override fun installSystem() {
+                    assertEquals(1, sessions.last().closeCalls)
+                    updates++
+                }
+            }
+        ProgramRuntimeActorProcessor(ProgramRuntimeHost(sessionFactory = factory)).use { processor ->
+            processor.process(ProgramRuntimeActorCommand.StartBoot(request(1)))
+            processor.process(ProgramRuntimeActorCommand.Reboot(request(2)))
+            assertEquals(0, updates)
+            processor.process(ProgramRuntimeActorCommand.Reboot(request(3), installSystem = true))
+            assertEquals(1, updates)
+            assertEquals(3, sessions.size)
+        }
+    }
+
+    @Test
     fun `restored actor rebinds resources on owner thread before consuming and advancing`() {
         val session = RecordingSession()
         val saved =

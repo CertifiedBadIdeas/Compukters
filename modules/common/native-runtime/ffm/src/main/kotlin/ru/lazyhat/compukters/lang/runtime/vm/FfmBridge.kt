@@ -39,6 +39,7 @@ internal class FfmBridge private constructor(
     private val storeFlushHandle: MethodHandle,
     private val storeTombstoneHandle: MethodHandle,
     private val storeRecoverHandle: MethodHandle,
+    private val storeInstallSystemHandle: MethodHandle,
     private val storeCloseHandle: MethodHandle,
     private val verifyArtifactHandle: MethodHandle,
     private val createHandle: MethodHandle,
@@ -163,6 +164,25 @@ internal class FfmBridge private constructor(
         id: ByteArray,
     ) = storeIdOperation("filesystem recovery", storeRecoverHandle, handle, id)
 
+    override fun storeInstallSystem(
+        handle: Long,
+        id: ByteArray,
+        image: ByteArray,
+    ) {
+        requireComputerId(id)
+        Arena.ofConfined().use { callArena ->
+            requireSuccess(
+                "system installation",
+                storeInstallSystemHandle.invokeExact(
+                    handle,
+                    callArena.nativeBytes(id),
+                    callArena.nativeBytes(image),
+                    image.size.toLong(),
+                ) as Int,
+            )
+        }
+    }
+
     override fun storeClose(handle: Long) = requireSuccess("filesystem store close", storeCloseHandle.invokeExact(handle) as Int)
 
     override fun verifyArtifact(artifact: ByteArray): Boolean =
@@ -284,7 +304,6 @@ internal class FfmBridge private constructor(
 
     override fun checkpointRestore(
         storeHandle: Long,
-        boot: Boolean,
         id: ByteArray,
         rom: ByteArray,
         capabilitySchemas: ByteArray,
@@ -297,7 +316,6 @@ internal class FfmBridge private constructor(
             val status =
                 checkpointRestoreHandle.invokeExact(
                     storeHandle,
-                    if (boot) 1 else 0,
                     callArena.nativeBytes(id),
                     callArena.nativeBytes(rom),
                     rom.size.toLong(),
@@ -1034,6 +1052,7 @@ internal class FfmBridge private constructor(
                         downcall(FfmAbiFunction.STORE_TOMBSTONE),
                     storeRecoverHandle =
                         downcall(FfmAbiFunction.STORE_RECOVER),
+                    storeInstallSystemHandle = downcall(FfmAbiFunction.STORE_INSTALL_SYSTEM),
                     storeCloseHandle =
                         downcall(FfmAbiFunction.STORE_CLOSE),
                     verifyArtifactHandle =
@@ -1109,7 +1128,7 @@ internal class FfmBridge private constructor(
                     terminalTextHandle =
                         downcall(FfmAbiFunction.TERMINAL_TEXT),
                 ).also { bridge ->
-                    if (bridge.abiVersion() != 24) throw VmBridgeException("unsupported Compukter FFM ABI")
+                    if (bridge.abiVersion() != 27) throw VmBridgeException("unsupported Compukter FFM ABI")
                 }
             } catch (error: Throwable) {
                 arena.close()

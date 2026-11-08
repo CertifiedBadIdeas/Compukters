@@ -113,7 +113,7 @@ internal interface ComputerCarrier : AutoCloseable {
 
     fun submitCanonicalLineAsync(line: CharArray): CompletableFuture<Boolean>
 
-    fun reboot(): ProgramComputerState
+    fun reboot(installSystem: Boolean = false): ProgramComputerState
 
     fun shutdown()
 
@@ -157,7 +157,7 @@ internal object RuntimeComputerCarrierFactory : ComputerCarrierFactory {
             context.actorService.attachBootable(
                 endpoint,
                 context.store,
-                context.romImage(),
+                context.systemImage(),
                 compilerRouter = context.compilerRouter,
                 initialRedstoneOutput = initialRedstoneOutput,
                 addonHost = effectiveAddonHost,
@@ -278,8 +278,8 @@ private class ActorComputerCarrier(
 
     override fun submitCanonicalLineAsync(line: CharArray) = accepted { ProgramRuntimeActorCommand.SubmitCanonicalLine(it, line) }
 
-    override fun reboot(): ProgramComputerState {
-        delegate.reboot().whenComplete { _, failure -> if (failure == null) observeRuntime() else actorFailure(failure) }
+    override fun reboot(installSystem: Boolean): ProgramComputerState {
+        delegate.reboot(installSystem).whenComplete { _, failure -> if (failure == null) observeRuntime() else actorFailure(failure) }
         return observedState
     }
 

@@ -28,23 +28,26 @@ import ru.lazyhat.compukters.minecraft.computer.ComputerBlockEntity
 /** Explicit recovery preserves identity and files while discarding the stored execution state. */
 internal object ComputerCommands {
     fun register(event: RegisterCommandsEvent) {
-        event.dispatcher.register(
-            Commands.literal("compukters").requires(::hasGameMasterPermission).then(
-                Commands.literal("reboot").then(
-                    Commands.argument("position", BlockPosArgument.blockPos()).executes { context ->
-                        val position = BlockPosArgument.getLoadedBlockPos(context, "position")
-                        val computer = context.source.level.getBlockEntity(position) as? ComputerBlockEntity
-                        if (computer == null) {
-                            context.source.sendFailure(Component.literal("No Compukter at this position"))
-                            0
-                        } else {
-                            computer.reboot()
-                            context.source.sendSuccess({ Component.literal("Compukter restart requested; /home files retained") }, true)
-                            1
-                        }
-                    },
+        for ((name, installSystem) in listOf("reboot" to false, "system-update" to true)) {
+            event.dispatcher.register(
+                Commands.literal("compukters").requires(::hasGameMasterPermission).then(
+                    Commands.literal(name).then(
+                        Commands.argument("position", BlockPosArgument.blockPos()).executes { context ->
+                            val position = BlockPosArgument.getLoadedBlockPos(context, "position")
+                            val computer = context.source.level.getBlockEntity(position) as? ComputerBlockEntity
+                            if (computer == null) {
+                                context.source.sendFailure(Component.literal("No Compukter at this position"))
+                                0
+                            } else {
+                                computer.reboot(installSystem)
+                                val message = if (installSystem) "Compukter system update and restart requested; /home retained" else "Compukter restart requested; files retained"
+                                context.source.sendSuccess({ Component.literal(message) }, true)
+                                1
+                            }
+                        },
+                    ),
                 ),
-            ),
-        )
+            )
+        }
     }
 }

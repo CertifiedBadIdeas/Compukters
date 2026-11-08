@@ -27,6 +27,24 @@ public object Process {
         return ProcessResult.Failed(failureReason(-raw), ProcessBindings.takeFailureDiagnostic())
     }
 
+    /** Replaces this program and all its tasks. Only a failed launch returns to the caller. */
+    public fun exec(path: Path): ProcessResult.Failed = exec(path, arrayOf<String>())
+
+    public fun exec(
+        path: Path,
+        args: Array<String>,
+    ): ProcessResult.Failed {
+        if (path.value.length > 4096) {
+            return ProcessResult.Failed(ProcessFailureReason.INVALID_PATH, "path exceeds the transport limit")
+        }
+        val canonicalPath = path.normalize().value
+        val encodedArgs =
+            encodeArgs(args, 4096 - canonicalPath.length)
+                ?: return ProcessResult.Failed(ProcessFailureReason.LIMIT_EXCEEDED, "process arguments exceed the transport limit")
+        val raw = ProcessBindings.exec(canonicalPath, encodedArgs)
+        return ProcessResult.Failed(failureReason(-raw), ProcessBindings.takeFailureDiagnostic())
+    }
+
     public fun exit(code: Int): Nothing = ProcessBindings.exit(code)
 }
 
@@ -57,6 +75,11 @@ public enum class ProcessFailureReason {
 
 private object ProcessBindings {
     external fun run(
+        path: String,
+        encodedArgs: String,
+    ): Int
+
+    external fun exec(
         path: String,
         encodedArgs: String,
     ): Int

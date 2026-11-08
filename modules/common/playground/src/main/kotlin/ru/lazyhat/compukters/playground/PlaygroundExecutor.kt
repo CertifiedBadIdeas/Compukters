@@ -175,7 +175,7 @@ class NativePlaygroundExecutor(
                             }
                         }
 
-                        is VmOutcome.ProcessEntered, is VmOutcome.ProcessExited -> {
+                        is VmOutcome.ProcessEntered, is VmOutcome.ProcessExited, is VmOutcome.ProcessReplaced -> {
                             return@repeat
                         }
 

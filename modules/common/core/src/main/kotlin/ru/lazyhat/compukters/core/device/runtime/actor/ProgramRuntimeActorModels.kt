@@ -199,6 +199,7 @@ sealed interface ProgramRuntimeActorCommand : ProgramRuntimeActorMessage {
 
     data class Reboot(
         override val requestId: ProgramRuntimeRequestId,
+        val installSystem: Boolean = false,
     ) : ProgramRuntimeActorCommand
 }
 

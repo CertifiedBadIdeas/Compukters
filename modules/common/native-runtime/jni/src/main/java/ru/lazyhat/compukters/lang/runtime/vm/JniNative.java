@@ -40,10 +40,11 @@ final class JniNative {
     static native int storeTombstone(long handle, byte[] id);
 
     static native int storeRecover(long handle, byte[] id);
+    static native int storeInstallSystem(long handle, byte[] id, byte[] image);
 
     static native int checkpointSave(long handle, long storeHandle, byte[] id, byte[] hostState);
 
-    static native int checkpointRestore(long storeHandle, int boot, byte[] id, byte[] rom, byte[] schemas, byte[] output, long[] written);
+    static native int checkpointRestore(long storeHandle, byte[] id, byte[] rom, byte[] schemas, byte[] output, long[] written);
 
     static native int checkpointDiscard(long storeHandle, byte[] id);
 

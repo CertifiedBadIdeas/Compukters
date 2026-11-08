@@ -40,6 +40,7 @@ import ru.lazyhat.compukters.core.device.runtime.program.ProgramRuntimeState
 import ru.lazyhat.compukters.core.device.runtime.program.ProgramStartResult
 import ru.lazyhat.compukters.core.device.runtime.program.ProgramTickBudget
 import ru.lazyhat.compukters.lang.runtime.fs.ComputerId
+import ru.lazyhat.compukters.lang.runtime.fs.VmSystemImage
 import ru.lazyhat.compukters.lang.runtime.fs.VmVirtualPath
 import ru.lazyhat.compukters.lang.runtime.fs.WorldFileSystemStore
 import ru.lazyhat.compukters.lang.runtime.vm.TerminalKey
@@ -69,6 +70,7 @@ import kotlin.io.path.readBytes
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertTrue
 
@@ -102,7 +104,10 @@ class ProgramRuntimeHostIntegrationTest {
                     ProgramRuntimeHost(sessionFactory = NativeProgramVmSessionFactory(), compilerRouter = compiler.router).use { host ->
                         assertEquals(ProgramStartResult.Started, host.start(artifact))
                         advanceUntil(host) { it is ProgramRuntimeState.Halted }
-                        assertEquals("42\n42\ncompiler and process Path API ok\n", terminalText(requireNotNull(host.terminalFullState())))
+                        assertEquals(
+                            "42\n42\n42\ncompiler and process Path API ok\n",
+                            terminalText(requireNotNull(host.terminalFullState())),
+                        )
                     }
                 }
         } finally {
@@ -312,7 +317,7 @@ class ProgramRuntimeHostIntegrationTest {
         }
 
     @Test
-    fun `builtin shell reports usage invalid paths and immutable ROM errors and remains usable`() =
+    fun `builtin shell reports invalid paths and can remove its installed executable`() =
         withShell { host ->
             for (command in listOf("cat", "mkdir -p", "mv one", "rm \"\"")) {
                 val output = shellCommand(host, command)
@@ -321,8 +326,9 @@ class ProgramRuntimeHostIntegrationTest {
             assertTrue(shellCommand(host, "cat /home//bad").contains("invalid path"))
             assertTrue(shellCommand(host, "ls /home//bad").contains("invalid path"))
             assertTrue(shellCommand(host, "/home//bad").contains("invalid path"))
-            assertTrue(shellCommand(host, "rm ../rom/shell").contains("rm:"))
-            assertTrue(shellCommand(host, "stat /rom/shell").contains("file:"))
+            assertTrue(shellCommand(host, "stat /bin/shell").contains("file:"))
+            assertFalse(shellCommand(host, "rm ../bin/shell").contains("rm:"))
+            assertTrue(shellCommand(host, "stat /bin/shell").contains("not found"))
             assertTrue(shellCommand(host, "cat /home").contains("is a directory"))
             assertTrue(shellCommand(host, "help mkdir").contains("mkdir [-p] <path>"))
             assertTrue(shellCommand(host, "echo alive").contains("alive\n>"))
@@ -515,7 +521,7 @@ class ProgramRuntimeHostIntegrationTest {
                 Path.of(requiredProperty("compukters.editRuntime.artifact")).readBytes(),
                 Path.of(requiredProperty("compukters.processTerminalChild.artifact")).readBytes(),
             )
-        val installer = Path.of(requiredProperty("compukters.processInstallRomExecutable.artifact")).readBytes()
+        val installer = Path.of(requiredProperty("compukters.processCopyExecutable.artifact")).readBytes()
         val root = Files.createTempDirectory("compukters-editor-regression-").toRealPath()
         try {
             WorldFileSystemStore.open(root).use { store ->
@@ -526,7 +532,7 @@ class ProgramRuntimeHostIntegrationTest {
                         session.filesystemGeneration()
                     }
                 store.flush(computerId, generation)
-                ProgramRuntimeHost(store = store, computerId = computerId, romImage = rom).use { host ->
+                ProgramRuntimeHost(store = store, computerId = computerId, systemImage = VmSystemImage.of(rom)).use { host ->
                     assertEquals(ProgramStartResult.Started, host.startBoot())
                     advanceUntil(host) { it == ProgramRuntimeState.WaitingForInput }
                     block(host)
@@ -538,14 +544,14 @@ class ProgramRuntimeHostIntegrationTest {
     }
 
     @Test
-    fun `ROM boot runs a foreground child and reboot creates a fresh shell`() {
+    fun `installed boot runs a foreground child and reboot creates a fresh shell`() {
         VmRuntime.loadNativeLibrary(Path.of(requiredProperty("compukters.ffi.library")))
         val boot = Path.of(requiredProperty("compukters.bootRuntime.artifact")).readBytes()
         val shell = Path.of(requiredProperty("compukters.programRuntime.artifact")).readBytes()
         val kotlinc = Path.of(requiredProperty("compukters.kotlincRuntime.artifact")).readBytes()
         val edit = Path.of(requiredProperty("compukters.editRuntime.artifact")).readBytes()
         val child = Path.of(requiredProperty("compukters.processTerminalChild.artifact")).readBytes()
-        val installer = Path.of(requiredProperty("compukters.processInstallRomExecutable.artifact")).readBytes()
+        val installer = Path.of(requiredProperty("compukters.processCopyExecutable.artifact")).readBytes()
         assertTrue(VmArtifactVerifier.verify(edit))
         val rom = rom(boot, shell, kotlinc, edit, child)
         val root = Files.createTempDirectory("compukters-foreground-process-").toRealPath()
@@ -568,7 +574,7 @@ class ProgramRuntimeHostIntegrationTest {
                             ProgramRuntimeHost(
                                 store = store,
                                 computerId = computerId,
-                                romImage = rom,
+                                systemImage = VmSystemImage.of(rom),
                                 // Value-class constructor validation raises the editor minimum slice above 64.
                                 tickBudget = ProgramTickBudget(128, 64, 4),
                                 compilerRouter = compiler.router,
@@ -577,6 +583,11 @@ class ProgramRuntimeHostIntegrationTest {
                             assertEquals(ProgramStartResult.Started, computer.startBoot())
                             advanceUntil(computer) { it == ProgramRuntimeState.WaitingForInput }
                             assertEquals(">\n", terminalText(requireNotNull(computer.terminalFullState())))
+                            val resources =
+                                assertIs<ru.lazyhat.compukters.core.device.runtime.program.ProgramResourceSnapshot.Available>(
+                                    computer.resourceSnapshot(),
+                                )
+                            assertEquals(256L * 1024L, resources.heapCapacityBytes, "boot must release its process heap")
 
                             submit(computer, "hello")
                             pressEnter(computer)
@@ -621,7 +632,7 @@ class ProgramRuntimeHostIntegrationTest {
                             pressEnter(computer)
                             val missingOutput = terminalText(requireNotNull(computer.terminalFullState()))
                             assertTrue(
-                                missingOutput.endsWith("> missing\nnot found: /rom/missing\n>\n"),
+                                missingOutput.endsWith("> missing\nnot found: /bin/missing\n>\n"),
                                 missingOutput,
                             )
 
@@ -794,7 +805,7 @@ class ProgramRuntimeHostIntegrationTest {
         submit(host, "missing")
         pressEnter(host)
         val missingOutput = terminalText(requireNotNull(host.terminalFullState()))
-        assertTrue(missingOutput.endsWith("> missing\naccess denied: /rom/missing\n>\n"), missingOutput)
+        assertTrue(missingOutput.endsWith("> missing\naccess denied: /bin/missing\n>\n"), missingOutput)
 
         submit(host, "echo λ😀")
         press(host, TerminalKey.BACKSPACE)
@@ -804,7 +815,7 @@ class ProgramRuntimeHostIntegrationTest {
 
         submit(host, "wat argument")
         pressEnter(host)
-        assertTrue(terminalText(requireNotNull(host.terminalFullState())).endsWith("access denied: /rom/wat\n>\n"))
+        assertTrue(terminalText(requireNotNull(host.terminalFullState())).endsWith("access denied: /bin/wat\n>\n"))
 
         submit(host, "clear")
         pressEnter(host)
@@ -900,13 +911,13 @@ class ProgramRuntimeHostIntegrationTest {
     ): ByteArray {
         val programs =
             listOf(
-                "/rom/boot" to boot,
-                "/rom/cmatrix" to Path.of(requiredProperty("compukters.cmatrixRuntime.artifact")).readBytes(),
-                "/rom/edit" to edit,
-                "/rom/hello" to child,
-                "/rom/kotlinc" to kotlinc,
-                "/rom/shell" to shell,
-            )
+                "/boot/init" to boot,
+                "/bin/cmatrix" to Path.of(requiredProperty("compukters.cmatrixRuntime.artifact")).readBytes(),
+                "/bin/edit" to edit,
+                "/bin/hello" to child,
+                "/bin/kotlinc" to kotlinc,
+                "/bin/shell" to shell,
+            ).sortedBy { it.first }
         val size =
             programs.fold(16) { total, (path, artifact) ->
                 Math.addExact(total, 16 + path.encodeToByteArray().size + artifact.size)
@@ -915,7 +926,7 @@ class ProgramRuntimeHostIntegrationTest {
             ByteBuffer
                 .allocate(size)
                 .order(ByteOrder.LITTLE_ENDIAN)
-                .put("CPKTROM\u0000".encodeToByteArray())
+                .put("CPKTSYS\u0000".encodeToByteArray())
                 .putShort(1.toShort())
                 .putShort(0.toShort())
                 .putInt(programs.size)

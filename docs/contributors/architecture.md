@@ -10,7 +10,7 @@ permalink: /ARCHITECTURE/
 ## Product boundary
 
 Compukters is an in-game Kotlin programming platform with two production authoring paths. Programs created inside a
-computer use the Rust-owned `/home` filesystem and the packaged `/rom/edit` and `/rom/kotlinc` tools. The client IDE
+computer use the Rust-owned `/home` filesystem and the packaged `/bin/edit` and `/bin/kotlinc` tools. The client IDE
 owns bounded multi-file projects with `compukter.toml`, an optional `compukter.lock`, and Kotlin sources beneath `src`;
 it can analyze and compile a project locally, attach to a computer, and deploy the resulting executable.
 
@@ -64,11 +64,11 @@ See [runtime ownership and scheduling](architecture/runtime.md) for admission, c
 
 ## Filesystem and machine lifetime
 
-Minecraft persists a stable `ComputerId`; Rust persists `/home` beneath the world filesystem store. `/rom` is immutable packaged content. Guest paths and bytes do not enter block-entity NBT or a JVM mirror.
+Minecraft persists a stable `ComputerId`; Rust persists the complete writable root tree beneath the world filesystem store. `/boot/init` and `/bin` are installed once and updated explicitly. Guest paths and bytes do not enter block-entity NBT or a JVM mirror.
 
 Running computers hibernate on carrier unload and orderly server shutdown, preserving Guest heap, stacks, tasks,
 terminal state and host resource descriptions. Restore validates the saved execution and rebinds supported resources
-before continuing. Missing, corrupt, incompatible or unsupported checkpoints fall back to fresh ROM execution while
+before continuing. Missing, corrupt, incompatible or unsupported checkpoints fall back to fresh execution of installed system files while
 retaining `/home` and logging the failed restoration; explicit reboot also starts fresh execution. Live object identities
 survive within that saved execution, not as general durable IDs.
 
@@ -76,7 +76,7 @@ Close barriers drain accepted work before flushing the final generation. An iden
 
 ## Guest programs and APIs
 
-Boot, shell, compiler command, editor and benchmarks are ordinary packaged Guest programs. `/rom/kotlinc` currently accepts one source file; IDE projects support bounded multi-file snapshots. A child suspends its foreground parent until it finishes.
+Boot, shell, compiler command, editor and benchmarks are ordinary packaged Guest programs. `/bin/kotlinc` currently accepts one source file; IDE projects support bounded multi-file snapshots. A child suspends its foreground parent until it finishes.
 
 World capabilities cross typed bounded host interfaces. Device handles retain exact endpoint identity; replacement, renaming or rewiring cannot silently redirect a handle. Discovery does not force chunk loads. Addons own their operations and temporary control leases; upstream mods retain their world and physics state.
 

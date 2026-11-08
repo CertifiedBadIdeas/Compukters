@@ -62,6 +62,10 @@ internal enum class FfmAbiFunction(
     ),
     STORE_TOMBSTONE("compukter_store_tombstone", status(ValueLayout.JAVA_LONG, ValueLayout.ADDRESS)),
     STORE_RECOVER("compukter_store_recover", status(ValueLayout.JAVA_LONG, ValueLayout.ADDRESS)),
+    STORE_INSTALL_SYSTEM(
+        "compukter_store_install_system",
+        status(ValueLayout.JAVA_LONG, ValueLayout.ADDRESS, ValueLayout.ADDRESS, ValueLayout.JAVA_LONG),
+    ),
     STORE_CLOSE("compukter_store_close", status(ValueLayout.JAVA_LONG)),
     CREATE(
         "compukter_create",
@@ -113,7 +117,6 @@ internal enum class FfmAbiFunction(
         "compukter_checkpoint_restore",
         status(
             ValueLayout.JAVA_LONG,
-            ValueLayout.JAVA_INT,
             ValueLayout.ADDRESS,
             ValueLayout.ADDRESS,
             ValueLayout.JAVA_LONG,

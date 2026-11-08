@@ -119,12 +119,13 @@ frames, static values, class initialization, tasks, requests and host bindings b
 A larger computer cannot lend its limits or device permissions to another computer through a shared program.
 Payload-relative field offsets are independent of heap header size, so shared instructions retain direct field access.
 
-A process-local 128-entry weak index canonicalizes only fully verified artifacts. It matches full container
-bytes as well as the digest, and never skips the caller's parsing/verification limits. The index is bounded
-and owns no strong code/data references. Evicting a live entry can reduce later sharing but cannot invalidate
-existing executions. Releasing the last artifact/image owner releases decoded metadata and prepared code;
-weak bookkeeping is bounded independently. Concurrent first preparation builds outside global locks and
-publishes a canonical winner. No host binding, world object or mutable Guest state enters the index.
+A process-local digest-indexed weak registry canonicalizes fully verified artifacts with complete-container
+equality. It never skips caller limits or evicts a live identity. The final artifact owner removes its registry
+entry and releases decoded metadata and prepared code. A separate weak registry shares immutable file blobs
+among private namespaces; executable reads pin those bytes without chunk copying. Global locks cover identity
+publication only. Candidates, verification and preparation run outside them, as do final owner destructors.
+No host binding, world object or mutable Guest state enters either registry. The JVM distribution image is
+immutable and shared by carrier and launch contexts, with defensive copies at mutable transport boundaries.
 
 Restore still verifies pinned binaries and performs fresh admission; derived program sharing can be reused
 while another owner is live. Checkpoint serialization contains logical execution state, not cache pointers.
@@ -164,8 +165,14 @@ resolution; inline returns keep their existing component transfer. There is no p
 
 ## Process quotas and diagnostics
 
-The production execution profile reserves a 256 KiB managed heap for each active foreground process; child-process
-capacity is charged independently while its parent is suspended. Heap arenas are released with their owning machine.
+The production execution profile grants a 256 KiB managed heap quota to each active foreground process; child-process
+capacity is charged independently while its parent is suspended. Each heap initially allocates at most 4 KiB of backing
+and grows its contiguous initialized prefix on demand, doubling or covering a larger request up to the quota. Guest references retain their logical
+offsets when the host buffer grows. Free-block metadata covers the full logical quota without allocating its unused
+tail; all allocated payloads and free-list headers remain backed. Growth is fallible and precedes allocator mutation.
+A host allocation failure follows the existing collection/retry and bounded exhaustion path, even when logical free
+capacity remains. Freeing objects reuses backing; the heap does not shrink during execution. Heap backing is released
+with its owning machine.
 An OOM in a foreground child remains a bounded `LIMIT_EXCEEDED` process result, not a failure of its parent.
 Before releasing the child, the runtime formats its executable path, heap capacity, requested allocation, used/free
 bytes, largest free block and GC-attempt status. Child frames retain the immutable verified executable metadata,
@@ -186,10 +193,20 @@ percentage. No sampling loop, history buffer, heap-content scan, or unsolicited 
 ## Program-owned addon resources
 
 Native C ABI 20 adds outcome tags 13 (`ProcessEntered`) and 14 (`ProcessExited`) with positive computer-wide
-process IDs. Root ID 0 remains live until the computer stops. Child enter is published before child execution;
+process IDs. Root ID 0 identifies the initial execution. Child enter is published before child execution;
 exit is published before the resumed parent executes. The export inventory remains unchanged. External host
 request IDs are remapped through a bounded table to their owning process and task, including suspended parents;
 retired process routes are discarded and IDs are never reused within a computer.
+
+Native C ABI 26 adds tag 15, `ProcessReplaced(previous, current)`. Successful `Process.exec` retires
+all tasks and process-owned resources, then enters a fresh monotonically increasing scope in the same
+stack slot. The actor removes old addon completions and timers and emits stop/start actions in order.
+Filesystem, terminal and confirmed world output remain computer-owned. A suspended parent retains its
+pending `Process.run` and receives the replacement's completion. Failure before publication leaves
+the caller usable. Replacement consumes the lifetime start budget without another steady heap/frame
+reservation; admission temporarily holds both sessions so it can roll back. Boot uses replacement,
+so an idle shell retains one process heap. Checkpoint schema 8 and host descriptor version 2 permit
+a nonzero root scope and retain only the currently executing root artifact.
 
 The actor carries ordered lifecycle actions alongside addon requests and ordinary world effects. The server carrier
 creates addon hosts lazily per program, closes only the exiting program's hosts, and rejects its queued completions.

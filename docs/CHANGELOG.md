@@ -13,6 +13,9 @@ headings so this page has one stable URL that can be shared outside the reposito
 
 ## 0.7.0 — In development
 
+- Added `Process.exec` to replace the current Guest program without retaining its suspended heap.
+  Boot now replaces itself with the shell; failed replacement returns a typed diagnostic.
+
 - A developer IntelliJ adapter imports native Guest modules from Gradle, resolves actual stdlib and addon
   dependencies, completes commands and MFVC methods, reports type/operation errors and navigates to bundled sources.
   A status widget shows activation and loading errors; artifact changes and Gradle reimport refresh analysis.
@@ -30,9 +33,15 @@ headings so this page has one stable URL that can be shared outside the reposito
   consumers calculate derived apsides instead of calling bundled Guest helpers.
 
 - Computers running identical binaries reuse immutable program code and metadata, reducing duplicate
-  runtime memory and preparation work for repeated programs such as the shell. The VM prepares typed
+  runtime memory and preparation work for repeated programs such as the shell. Managed heaps allocate
+  backing memory on demand while preserving each program's full memory quota. The VM prepares typed
   operations and direct-call argument transfers before execution to reduce repeated operand-layout work
   in numeric code, data access and function calls.
+
+- Computers have a fully writable persistent root: `/boot/init`, system utilities in `/bin`, and user files
+  in `/home`. Bundled system files install once; `/compukters system-update x y z` explicitly reinstalls them
+  and restarts the computer while preserving user files. Copied binaries and identical compilation results
+  share file contents automatically across computers; editing one copy does not modify the others.
 
 - Guest Kotlin compilation removes proven redundant register copies, can use smaller stack frames,
   automatically inlines small scalar and value-class leaf functions, and replaces eligible interface calls

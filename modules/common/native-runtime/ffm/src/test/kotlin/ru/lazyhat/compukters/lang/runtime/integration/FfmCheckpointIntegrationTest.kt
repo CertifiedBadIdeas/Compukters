@@ -54,10 +54,6 @@ class FfmCheckpointIntegrationTest {
                         session.advanceWithRetirementLimit(ShellProgram.GUEST_BUDGET, 64, 64, 1)
                         val resources = session.resourceSnapshot()
                         session.checkpoint(store, id, host)
-                        assertEquals(
-                            VmCheckpointFailure.INCOMPATIBLE,
-                            assertFailsWith<VmCheckpointException> { VmSession.restoreInStore(store, id, rom, boot = false) }.failure,
-                        )
                         resources
                     }
                 }
@@ -89,6 +85,10 @@ class FfmCheckpointIntegrationTest {
                     )
                     store.discardCheckpoint(id)
                 }
+                store.installSystem(id, rom)
+                VmSession.bootInStore(store, id, emptyRom()).use { session ->
+                    assertEquals(2, session.filesystemGeneration())
+                }
             }
         } finally {
             root.toFile().deleteRecursively()
@@ -102,7 +102,7 @@ class FfmCheckpointIntegrationTest {
             ByteBuffer
                 .allocate(16)
                 .order(ByteOrder.LITTLE_ENDIAN)
-                .put("CPKTROM\u0000".encodeToByteArray())
+                .put("CPKTSYS\u0000".encodeToByteArray())
                 .putShort(1.toShort())
                 .putShort(0.toShort())
                 .putInt(0)
@@ -111,12 +111,12 @@ class FfmCheckpointIntegrationTest {
     }
 
     private fun bootRom(artifact: ByteArray): ByteArray {
-        val path = "/rom/boot".encodeToByteArray()
+        val path = "/boot/init".encodeToByteArray()
         val unsigned =
             ByteBuffer
                 .allocate(16 + Int.SIZE_BYTES + path.size + 1 + 1 + Short.SIZE_BYTES + Long.SIZE_BYTES + artifact.size)
                 .order(ByteOrder.LITTLE_ENDIAN)
-                .put("CPKTROM\u0000".encodeToByteArray())
+                .put("CPKTSYS\u0000".encodeToByteArray())
                 .putShort(1.toShort())
                 .putShort(0.toShort())
                 .putInt(1)

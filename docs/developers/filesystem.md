@@ -11,7 +11,7 @@ permalink: /FILESYSTEM/
 Guest programs pass `compukter.filesystem.Path` values to `compukter.filesystem.FileSystem`. Path is an
 immutable lexical `value class` backed by a String. Constructing it, comparing it, or resolving a child
 never accesses storage or submits a native request. FileSystem owns access to the current computer's virtual storage. Rust owns the files,
-permissions and persistence. `/home` is private persistent storage and `/rom` is immutable packaged content.
+permissions and persistence. The complete root tree is private persistent storage: `/boot/init` starts the computer, `/bin` contains writable system utilities, and `/home` holds user files.
 The API uses its own types and has no JVM filesystem classes, host paths, working directory, symlinks or
 platform-dependent separators.
 
@@ -72,9 +72,8 @@ operation on it throws typed `INVALID_PATH`.
 
 Normalization grants no permissions. Rust independently admits only canonical absolute virtual paths;
 a direct native request containing `.` or `..` is rejected. Native capability checks compare components
-of the normalized target, and `/rom` remains immutable even when addressed through `/home/../rom`.
-A path such as `/home/../../etc/passwd` normalizes to `/etc/passwd` in the virtual namespace, where no
-such mount exists. It never addresses the host OS filesystem. Guest names are stored in the virtual tree;
+of the normalized target; normalization never broadens the granted capability.
+A path such as `/home/../../etc/passwd` normalizes to `/etc/passwd` in the virtual namespace, inside the private computer filesystem. It never addresses the host OS filesystem. Guest names are stored in the virtual tree;
 host persistence addresses computer IDs and content objects rather than appending guest path strings
 to a host directory. There are no guest symlinks or OS-dependent separators in this contract.
 
@@ -307,4 +306,19 @@ later compilations. Failed compilation preserves any previously installed execut
 The canonical path and encoded arguments share a 4096-unit outbound limit; exceeding it returns
 `ProcessFailureReason.LIMIT_EXCEEDED`. An oversized original path returns `INVALID_PATH` even when dot
 normalization would shorten it. Path syntax errors happen when constructing a Path, before either operation.
-Neither operation maps a virtual path to an operating-system path. Writing into `/rom` remains denied.
+Neither operation maps a virtual path to an operating-system path. System files follow the same capability and quota checks as other paths.
+
+
+Use `Process.exec` when the caller should be replaced, for example a boot launcher:
+
+```kotlin
+fun main() {
+    val failure = Process.exec("/bin/shell".toPath())
+    println("shell could not start: ${failure.diagnostic}")
+}
+```
+
+Only failed launch returns `ProcessResult.Failed`. A successful replacement releases every task and
+process-owned resource of the caller, keeps its filesystem and terminal, and runs at the same process
+depth. Its eventual completion reaches any parent waiting in `Process.run`. A failed replacement leaves
+the caller running. Path/argument bounds match `Process.run`; the lifetime process-start limit still applies.

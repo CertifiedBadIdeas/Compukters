@@ -21,8 +21,7 @@ The persistent ComputerId below identifies a computer and its filesystem, not an
 ## Persistent filesystem
 
 The Rust runtime owns the guest filesystem and its persistence. Minecraft stores only a stable 128-bit `ComputerId`;
-guest paths and bytes never enter block-entity NBT or a JVM-side mirror. Every computer sees an immutable packaged
-`/rom` and a private persistent `/home`. The world store lives under `<world>/compukters/filesystems`, performs bounded
+guest paths and bytes never enter block-entity NBT or a JVM-side mirror. Every computer owns a private persistent root tree, including writable `/boot`, `/bin` and `/home`. The world store lives under `<world>/compukters/filesystems`, performs bounded
 I/O on its own worker, flushes active generations on world saves, and drains, flushes, and closes before server shutdown
 completes. A permanent `lock` anchor carries a process-lifetime exclusive OS file lock: a live second server is
 rejected, while orderly close or process termination releases ownership without deleting the anchor. Removing a
@@ -51,8 +50,8 @@ unavailable failures; restoration never repeats their physical effects. Pending 
 source bytes and may be resubmitted without applying a stale worker response.
 
 A missing required checkpoint, corruption, incompatible runtime/artifacts/capabilities, filesystem generation mismatch,
-or failed addon resource rebinding abandons saved execution, logs the failure and cold boots from ROM while retaining
-ComputerId and `/home`. Partial restored resources are released before fresh execution starts. Explicit
+or failed addon resource rebinding abandons saved execution, logs the failure and cold boots from the installed `/boot/init` while retaining
+ComputerId and the complete filesystem. Partial restored resources are released before fresh execution starts. Explicit
 `/compukters reboot x y z` requests the same fresh boot without attempting restoration. Clean halt/shutdown stays
 powered off across block-entity reload.
 Addon hosts must implement checkpoint capture and restoration, including mutable tokens and resource leases;
@@ -105,8 +104,7 @@ their requests, the NeoForge post-tick hook divides aggregate instruction capaci
 computers and releases their permits. World effects remain ahead of each permit, while later actor commands stay behind
 it. A deferred permit releases its worker token while waiting for the post-tick allocation.
 The Guest `Path` facade exposes typed metadata, bounded byte transfers, strict UTF-8 conveniences, directory
-snapshots and guarded atomic replacement drafts. Rust validates paths, permissions and quotas while `/rom`
-remains immutable. Immutable read snapshots and unpublished drafts belong to each process and are retained
+snapshots and guarded atomic replacement drafts. Rust validates paths, permissions and quotas throughout the writable root tree. Immutable read snapshots and unpublished drafts belong to each process and are retained
 in logical checkpoint schema 3 (native ABI 23); completion aborts unpublished work. The shell and editor map stable failures to user-facing
 diagnostics. Executable installation remains a Rust-owned filesystem transaction and never accepts a host path.
 
@@ -135,3 +133,39 @@ deletes its screen; unloading panels leaves the record intact. Panel NBT retains
 Computer resource snapshots store display leases and private, bounded frame drafts for suspended execution. They do
 not store or replay published images. Saving the world during an open frame saves the previous published canvas;
 the computer checkpoint independently retains the draft for successful resumption.
+
+## System installation and content sharing
+
+A bounded `CPKTSYS\0` version-1 image supplies initial `/boot/init` and `/bin` programs. It seeds ordinary
+`/bin`, `/boot` and `/home` directories and cannot target `/home`. Initialization publishes once as a flat
+journal transaction. Existing computer generations restore only their persisted tree; supplying a different
+package does not replace edits, deletions or saved execution. Explicit `/compukters system-update x y z`
+uses the existing Game Master command permission, closes active execution on its actor, discards its execution
+checkpoint, atomically reinstalls package paths, waits for durability, and boots the installed entry point.
+This operation can repair a deleted or invalid entry point without running Guest code. It preserves `/home`
+and paths absent from the package. File/directory conflicts require explicit repair and leave all files unchanged.
+It does not remove obsolete or user-added utilities automatically. Plain reboot changes no installed files.
+
+Namespace journals/checkpoints use version 2 and persist all root descendants. Logical execution envelope/schema 8
+contains that same complete tree and rejects old formats. All replacement payloads become durable before one
+batch journal record can become visible; recovery admits either the old or complete new distribution.
+Quotas charge logical bytes per computer regardless of physical sharing, including installed system files.
+
+World file objects live under `objects/<first-two-hex>/<sha256>`. Computer trees store object references;
+identical binaries copied or installed by compilation converge on the same object. Live immutable bytes are
+also shared across native namespaces and snapshot readers. Editing replaces one namespace reference; readers
+and running programs retain their pinned version. Live verified execution images have their own weak identity
+registry. Neither registry is a durable cache. Filesystem collection uses persisted roots; running execution
+and hibernation retain their own program bytes, so deleting a pathname cannot invalidate them.
+
+The server compiler already coalesces identical outstanding build identities and caches successful validated
+artifacts. Its cache is independent of installed file objects and may be removed without deleting programs.
+Build identity includes logical source paths and compiler/platform inputs, so equal source text at different
+paths is not promised to produce identical debug metadata. No binary is trusted merely because its digest
+matches a cached live program: verification and per-computer admission remain mandatory.
+
+Managed heaps in envelope/schema 8 retain their initialized backing prefix and logical quota.
+Unallocated tail payload bytes are absent; all allocated blocks and allocator metadata must fit
+inside the saved prefix. Restoring a small heap preserves its small allocation and permits later
+growth without changing Guest reference offsets. Earlier execution envelopes use the existing
+filesystem-preserving cold-boot fallback.

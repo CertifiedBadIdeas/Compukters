@@ -62,8 +62,9 @@ class PackagedFfmRuntimeIntegrationTest {
                         computerId,
                         emptyRom(),
                     ).use { }
-                assertEquals(0, store.durableGeneration(computerId))
-                store.flush(computerId, 0)
+                store.flush(computerId, 1)
+                assertEquals(1, store.durableGeneration(computerId))
+                store.installSystem(computerId, emptyRom())
                 store.tombstone(computerId)
                 store.recover(computerId)
             }
@@ -79,7 +80,7 @@ class PackagedFfmRuntimeIntegrationTest {
             ByteBuffer
                 .allocate(16)
                 .order(ByteOrder.LITTLE_ENDIAN)
-                .put("CPKTROM\u0000".encodeToByteArray())
+                .put("CPKTSYS\u0000".encodeToByteArray())
                 .putShort(1.toShort())
                 .putShort(0.toShort())
                 .putInt(0)
