@@ -422,10 +422,10 @@ ABI 3.0 with four operations: existing run/diagnostic/exit selectors 0..2 and as
 
 Native C ABI 26 adds outcome tag 15 followed by previous and current u64 little-endian execution
 scope IDs; previous may be zero, current must be larger. Consumers retire the old scope and enter
-the new scope at unchanged depth before further execution or capture. Logical checkpoint envelope
-and schema 8 intentionally reject older execution. Host descriptor version 2 permits a nonzero
+the new scope at unchanged depth before further execution or capture. Current logical checkpoint envelope
+and schema 9 intentionally reject older execution. Host descriptor version 2 permits a nonzero
 root scope. CPKT 3.0 and filesystem namespace/journal version 2 remain unchanged. Source Runtime
-0.27.0 is distinct from the separately published/pinned Runtime release.
+0.28.0 is distinct from the separately published/pinned Runtime release.
 
 ## Portable Guest filesystem
 
@@ -502,7 +502,7 @@ Protocol 17 workers are rejected at handshake; compiler, platform, artifact and 
 | Boundary | Current representation | Owner |
 | --- | --- | --- |
 | Executable container | Format 3; covariant method results require Runtime ABI 1.18 | `modules/common/compiler-artifact` and `host/compukter-vm/src/artifact/format.rs` |
-| Native session transport | C ABI 27, checked by both FFM and JNI | `host/compukter-vm/ffi/src/lib.rs` and `modules/common/native-runtime` |
+| Native session transport | C ABI 28, checked by both FFM and JNI | `host/compukter-vm/ffi/src/lib.rs` and `modules/common/native-runtime` |
 | Base platform | Bundle format 9, standalone module format 5, platform ABI 3 | `PlatformBundleCodec` in `modules/common/platform-bundle` |
 | Kotlin metadata carrier | Private format 6 | `platform-k2` |
 | Compiler worker | Protocol 5; explicit source-free library preparation | `compiler-client` and `compiler-k2` |
@@ -636,10 +636,10 @@ checkpoint restore in both directions, filesystem state, executable admission an
 contract or codec changes require an ABI increment; a revision must preserve those contracts. The earlier
 unpublished development identity based on the full version is rejected without a fallback. CI exchanges a
 full-computer checkpoint between two real builds of adjacent revisions in both directions.
-FFM/JNI admission checks native ABI 27 without a package-revision constraint. Release selection is
+FFM/JNI admission checks native ABI 28 without a package-revision constraint. Release selection is
 separate: `config/runtime-release.properties` selects one compatible published revision and its exact
 release commit, independently of the development VM submodule. Alternate descriptors may select any
-`0.27.x`; packaging still verifies the selected archive identity, formats and hashes. Both mod archives
+`0.28.x`; packaging still verifies the selected archive identity, formats and hashes. Both mod archives
 and the release inventory record the actual selected native component for future external delivery.
 Production version preparation queries the latest complete stable GitHub Release. Revision and ABI requests
 are idempotent within a release cycle; an ABI request updates the native constant and version together.
@@ -648,19 +648,21 @@ marks incompatible development; semantic breaking changes are not inferred from 
 Rust exposes contextual capture/restore and bounded atomic store methods through C ABI 21, JNI and FFM. Minecraft carriers use this boundary for unload and orderly shutdown; failed restoration cold boots from installed system files while retaining ComputerId and `/home`.
 The native reference is `host/compukter-vm/docs/architecture/computer-checkpoints.md`.
 
-The current source Runtime is 0.27.0 / C ABI 27. It deliberately breaks prior ROM and persisted filesystem
+The current source Runtime is 0.28.0 / C ABI 28. It deliberately breaks prior ROM and persisted filesystem
 contracts: system installation images are `CPKTSYS\0` version 1; root namespace journals/checkpoints are
-version 2; logical execution envelope/schema is 8. `compukter_store_install_system(store, id, image, length)`
+version 2; logical execution envelope/schema is 9. `compukter_store_install_system(store, id, image, length)`
 is a status-returning operation with caller-owned inputs and no retained pointers. Close that computer's
 active session first; run it away from the server thread. Both JVM transports expose it through the existing
 serialized world-store owner. Checkpoint restoration no longer takes a boot-mode flag: direct and booted
 programs use the same private root authority, and the saved program determines execution. Source builds use this VM; the published Runtime descriptor still selects
-ABI 24 and cannot be used for a release until a compatible ABI 27 Runtime is published and pinned separately.
+ABI 24 and cannot be used for a release until a compatible ABI 28 Runtime is published and pinned separately.
 
-Runtime 0.27.0 uses C ABI 27 and logical checkpoint envelope/schema 8. Managed heaps serialize
-their initialized backing prefix separately from their full Guest quota. Restore validates every
-allocated payload and allocator header against that prefix, then permits bounded later growth.
-Public resource capacity counters remain granted limits, not physical host-memory measurements.
+Runtime 0.28.0 uses C ABI 28 and logical checkpoint envelope/schema 9. Managed heaps retain
+initialized prefixes and logical quotas. Frame arenas also retain only their backed prefix;
+active and suspended tasks retain lazy record vectors. Restore checks live frame backing,
+free-region partition, call-depth bounds and task ownership. Context switches exchange vectors
+without allocating or copying records. Public resource snapshots retain admitted upper bounds.
+Earlier execution envelopes use filesystem-preserving cold boot.
 
 The core host descriptor uses little-endian version 2 (`CPTH`, u32 version), a checked input-wait flag,
 cumulative granted Guest/maintenance counters and saturation flag, confirmed redstone output, live process

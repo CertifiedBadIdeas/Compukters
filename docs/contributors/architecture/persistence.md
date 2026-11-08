@@ -146,7 +146,7 @@ This operation can repair a deleted or invalid entry point without running Guest
 and paths absent from the package. File/directory conflicts require explicit repair and leave all files unchanged.
 It does not remove obsolete or user-added utilities automatically. Plain reboot changes no installed files.
 
-Namespace journals/checkpoints use version 2 and persist all root descendants. Logical execution envelope/schema 8
+Namespace journals/checkpoints use version 2 and persist all root descendants. Logical execution envelope/schema 9
 contains that same complete tree and rejects old formats. All replacement payloads become durable before one
 batch journal record can become visible; recovery admits either the old or complete new distribution.
 Quotas charge logical bytes per computer regardless of physical sharing, including installed system files.
@@ -164,8 +164,13 @@ Build identity includes logical source paths and compiler/platform inputs, so eq
 paths is not promised to produce identical debug metadata. No binary is trusted merely because its digest
 matches a cached live program: verification and per-computer admission remain mandatory.
 
-Managed heaps in envelope/schema 8 retain their initialized backing prefix and logical quota.
+Managed heaps in envelope/schema 9 retain their initialized backing prefix and logical quota.
 Unallocated tail payload bytes are absent; all allocated blocks and allocator metadata must fit
 inside the saved prefix. Restoring a small heap preserves its small allocation and permits later
 growth without changing Guest reference offsets. Earlier execution envelopes use the existing
 filesystem-preserving cold-boot fallback.
+
+Frame arenas likewise retain their initialized prefix and full quota in schema 9. Lazy active
+and suspended-task record buffers restore at their saved lengths, with depths and ownership
+validated against the admitted program and scheduler. Runtime 0.28.0 / C ABI 28 identifies this
+persisted-state change; previous execution envelopes cold boot while retaining the filesystem.

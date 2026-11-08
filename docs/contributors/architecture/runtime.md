@@ -205,7 +205,7 @@ Filesystem, terminal and confirmed world output remain computer-owned. A suspend
 pending `Process.run` and receives the replacement's completion. Failure before publication leaves
 the caller usable. Replacement consumes the lifetime start budget without another steady heap/frame
 reservation; admission temporarily holds both sessions so it can roll back. Boot uses replacement,
-so an idle shell retains one process heap. Checkpoint schema 8 and host descriptor version 2 permit
+so an idle shell retains one process heap. Checkpoint schema 9 and host descriptor version 2 permit
 a nonzero root scope and retain only the currently executing root artifact.
 
 The actor carries ordered lifecycle actions alongside addon requests and ordinary world effects. The server carrier
@@ -230,6 +230,14 @@ the payload address itself to be eight-byte aligned. During roots/mark, the pred
 holds the intrusive gray link while Guest execution and allocation are paused. The bounded forward sweep restores
 predecessor sizes before coalescing. No per-object side table or extra heap scan is required.
 Arena backing and admitted heap budgets retain their existing 16-byte granularity.
+
+Frame arenas back only an eight-byte free header initially and grow within their admitted
+quota before publishing allocations. Free regions remain ordered and coalesce across non-LIFO
+task completion; all live payloads and free-list headers are backed. Record buffers grow with
+call depth, and each cooperative task owns a lazy vector. Switching transfers vector ownership
+without allocating or copying records. GC retains task/depth traversal order across sparse
+buffers. Neither arena nor record backing shrinks during execution. Resource observations keep
+reporting admitted upper bounds; physical backing is a separate benchmark observation.
 
 ## Player keyboard capability
 
