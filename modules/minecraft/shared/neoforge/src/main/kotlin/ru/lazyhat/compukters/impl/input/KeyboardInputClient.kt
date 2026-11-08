@@ -11,6 +11,7 @@ import net.minecraft.network.chat.Component
 import net.minecraft.network.protocol.common.ServerboundCustomPayloadPacket
 import net.neoforged.neoforge.client.event.ClientTickEvent
 import org.lwjgl.glfw.GLFW
+import ru.lazyhat.compukters.core.input.KeyboardInputSender
 import ru.lazyhat.compukters.core.input.KeyboardKeys
 import ru.lazyhat.compukters.core.input.KeyboardPerformanceTrace
 import java.util.UUID
@@ -19,7 +20,8 @@ import java.util.UUID
 object KeyboardInputClient {
     private var token: UUID? = null
     private var mask = 0L
-    private var sequence = 0L
+    private var sequence = -1L
+    private var sender: KeyboardInputSender? = null
     private var connection: Any? = null
     private var level: Any? = null
 
@@ -27,9 +29,35 @@ object KeyboardInputClient {
         val client = Minecraft.getInstance()
         token = payload.token
         mask = payload.mask
-        sequence = 0
+        sequence = -1
         connection = client.connection
         level = client.level
+        sender =
+            payload.token?.let { current ->
+                KeyboardInputSender(mask) { update ->
+                    sequence = update.sequence
+                    KeyboardPerformanceTrace.begin("keyboard.send")?.apply {
+                        capture = current.toString()
+                        sequence = update.sequence
+                        keys = update.keys
+                        pressed = update.pressed
+                        released = update.released
+                        commit()
+                    }
+                    client.connection?.send(
+                        ServerboundCustomPayloadPacket(
+                            KeyboardHeldPayload(
+                                current,
+                                update.sequence,
+                                update.keys,
+                                false,
+                                update.pressed,
+                                update.released,
+                            ),
+                        ),
+                    )
+                }
+            }
         net.minecraft.client.KeyMapping
             .releaseAll()
     }
@@ -41,7 +69,7 @@ object KeyboardInputClient {
     ): Boolean {
         if (token == null) return false
         val client = Minecraft.getInstance()
-        if (key == GLFW.GLFW_KEY_ESCAPE || client.screen != null || !client.isWindowActive) {
+        if (key == GLFW.GLFW_KEY_ESCAPE || !valid(client)) {
             release()
             return false
         }
@@ -54,6 +82,10 @@ object KeyboardInputClient {
                 this.action = action
                 commit()
             }
+            when (action) {
+                GLFW.GLFW_PRESS -> sender?.keyDown(key)
+                GLFW.GLFW_RELEASE -> sender?.keyUp(key)
+            }
         }
         return captured
     }
@@ -62,39 +94,35 @@ object KeyboardInputClient {
         @Suppress("UNUSED_PARAMETER") event: ClientTickEvent.Post,
     ) {
         val client = Minecraft.getInstance()
-        val current = token ?: return
-        if (client.connection !== connection || client.level !== level || client.screen != null || !client.isWindowActive ||
-            client.player?.isAlive != true
-        ) {
+        if (token == null) return
+        if (!valid(client)) {
             release()
             return
         }
-        var held = 0L
+        val down = mutableSetOf<Int>()
+        val window = KeyboardWindow.handle()
         KeyboardKeys.codes.forEachIndexed { index, code ->
-            if (mask and (1L shl index) != 0L && down(code)) held = held or (1L shl index)
+            if (mask and (1L shl index) != 0L) {
+                if (GLFW.glfwGetKey(window, code) == GLFW.GLFW_PRESS) down.add(code)
+                if (code in 340..342 && GLFW.glfwGetKey(window, code + 4) == GLFW.GLFW_PRESS) down.add(code + 4)
+            }
         }
-        KeyboardPerformanceTrace.begin("keyboard.send")?.apply {
-            capture = current.toString()
-            this.sequence = KeyboardInputClient.sequence
-            keys = held
-            commit()
-        }
-        client.connection?.send(ServerboundCustomPayloadPacket(KeyboardHeldPayload(current, sequence++, held, false)))
+        sender?.tick(down)
     }
 
     fun caption(): Component? = token?.let { Component.translatable("input.compukters.keyboard.active") }
 
-    private fun down(code: Int): Boolean {
-        val window = KeyboardWindow.handle()
-        return GLFW.glfwGetKey(window, code) == GLFW.GLFW_PRESS ||
-            (code in 340..342 && GLFW.glfwGetKey(window, code + 4) == GLFW.GLFW_PRESS)
-    }
+    private fun valid(client: Minecraft): Boolean =
+        client.connection === connection && client.level === level && client.screen == null && client.isWindowActive &&
+            client.player?.isAlive == true
 
     private fun release() {
         val client = Minecraft.getInstance()
         val current = token ?: return
         token = null
         mask = 0L
+        sender = null
+        sequence++
         if (client.connection ===
             connection
         ) {
@@ -104,7 +132,7 @@ object KeyboardInputClient {
                 release = true
                 commit()
             }
-            client.connection?.send(ServerboundCustomPayloadPacket(KeyboardHeldPayload(current, sequence++, 0L, true)))
+            client.connection?.send(ServerboundCustomPayloadPacket(KeyboardHeldPayload(current, sequence, 0L, true)))
         }
         net.minecraft.client.KeyMapping
             .releaseAll()

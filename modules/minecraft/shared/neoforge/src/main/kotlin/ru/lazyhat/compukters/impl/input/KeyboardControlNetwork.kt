@@ -20,10 +20,8 @@ import ru.lazyhat.compukters.minecraft.input.ComputerKeyboard
 import java.util.UUID
 
 object KeyboardControlNetwork {
-    private val lastTick = java.util.WeakHashMap<ServerPlayer, Long>()
-
     fun register(event: RegisterPayloadHandlersEvent) {
-        val registrar = event.registrar("1")
+        val registrar = event.registrar("2")
         registrar.playToServer(KeyboardHeldPayload.TYPE, KeyboardHeldPayload.CODEC) { payload, context ->
             val player = context.player() as? ServerPlayer ?: return@playToServer
             val level = player.level() as? net.minecraft.server.level.ServerLevel ?: return@playToServer
@@ -32,23 +30,22 @@ object KeyboardControlNetwork {
                 capture = payload.token.toString()
                 sequence = payload.sequence
                 keys = payload.keys
+                pressed = payload.pressed
+                released = payload.released
                 tick = now
                 release = payload.release
                 commit()
             }
-            // Release is always admissible, including after an earlier held packet in the same tick.
-            if (!payload.release && lastTick[player] == now) {
-                KeyboardPerformanceTrace.begin("keyboard.rate_limited")?.apply {
-                    capture = payload.token.toString()
-                    sequence = payload.sequence
-                    keys = payload.keys
-                    tick = now
-                    commit()
-                }
-                return@playToServer
-            }
-            lastTick[player] = now
-            ComputerKeyboard.heartbeat(player, payload.token, payload.sequence, payload.keys, payload.release)
+            // Capture-owned admission retains burst edges and remains confined to the server thread.
+            ComputerKeyboard.heartbeat(
+                player,
+                payload.token,
+                payload.sequence,
+                payload.keys,
+                payload.release,
+                payload.pressed,
+                payload.released,
+            )
         }
         registrar.playToClient(
             KeyboardStatusPayload.TYPE,
@@ -63,6 +60,8 @@ internal data class KeyboardHeldPayload(
     val sequence: Long,
     val keys: Long,
     val release: Boolean,
+    val pressed: Long = 0L,
+    val released: Long = 0L,
 ) : CustomPacketPayload {
     override fun type() = TYPE
 
@@ -74,10 +73,17 @@ internal data class KeyboardHeldPayload(
                     b.writeUUID(v.token)
                     b.writeLong(v.sequence)
                     b.writeLong(v.keys)
+                    b.writeLong(v.pressed)
+                    b.writeLong(v.released)
                     b.writeBoolean(v.release)
                 },
                 StreamDecoder { b ->
-                    KeyboardHeldPayload(b.readUUID(), b.readLong().also { require(it >= 0) }, b.readLong(), b.readBoolean())
+                    val token = b.readUUID()
+                    val sequence = b.readLong().also { require(it >= 0) }
+                    val keys = b.readLong()
+                    val pressed = b.readLong()
+                    val released = b.readLong()
+                    KeyboardHeldPayload(token, sequence, keys, b.readBoolean(), pressed, released)
                 },
             )
     }

@@ -65,6 +65,14 @@ physical-code table. Snapshot wire version 1 has exactly 34 bytes: U8 version=1,
 then little-endian I64 server tick, held mask, accumulated pressed mask and accumulated released mask.
 Edges clear only when that program reads a snapshot. A timed-out or released session has no held keys.
 
+Minecraft keyboard payload registration version 2 sends the capture UUID, increasing I64 sequence,
+held/pressed/released I64 masks and a release flag. Captured GLFW transitions send immediately within
+an eight-update client-tick allowance; overflow retains one sample with accumulated edges. A physical
+state reconciliation runs each client tick, with unchanged state heartbeats every two ticks. Server
+admission belongs to the capture: at most eight immediate updates and one coalesced drain per server
+tick. Invalid masks/sequences cannot alter that state; capture release clears pending work immediately.
+This packet version requires matching peers and leaves the Guest snapshot and capability ABI unchanged.
+
 The existing generic host capability transport admits these operations; Rust/native ABI and artifact
 encoding remain unchanged. Keyboard resource checkpoint version 1 stores only handle cursor, active
 handle and requested mask. Player identity/consent, nonce, sequence, heartbeat and physical key state

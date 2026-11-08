@@ -2825,6 +2825,22 @@ class MinimalScriptLoweringTest {
                         }
                         require(released)
                         println("KEYBOARD-RELEASED")
+                        var tapped = false
+                        for (i in 0 until 200) {
+                            val state = input.snapshot()
+                            if (!state.isDown(Key.SPACE) && state.wasPressed(Key.SPACE) && state.wasReleased(Key.SPACE)) { tapped = true; break }
+                            Tasks.sleepTicks(1)
+                        }
+                        require(tapped)
+                        println("KEYBOARD-TAPPED")
+                        var disconnected = false
+                        for (i in 0 until 200) {
+                            val state = input.snapshot()
+                            if (!state.connected && !state.isDown(Key.SPACE)) { disconnected = true; break }
+                            Tasks.sleepTicks(1)
+                        }
+                        require(disconnected)
+                        println("KEYBOARD-DISCONNECTED")
                     } finally { input.close() }
                     println("KEYBOARD-CLOSED")
                 }

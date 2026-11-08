@@ -20,9 +20,11 @@ class KeyboardPayloadTest {
     fun `held release and stop round trip including the signed last key`() {
         val token = UUID.randomUUID()
         for (release in listOf(false, true)) {
-            val value = KeyboardHeldPayload(token, Long.MAX_VALUE, Long.MIN_VALUE or 1L, release)
-            assertEquals(value, roundTrip(KeyboardHeldPayload.CODEC, value))
+            val value = KeyboardHeldPayload(token, Long.MAX_VALUE, Long.MIN_VALUE or 1L, release, 1L, Long.MIN_VALUE)
+            assertEquals(value, roundTrip(KeyboardHeldPayload.CODEC, value, 49))
         }
+        val tap = KeyboardHeldPayload(token, 0, 0, false, Long.MIN_VALUE, Long.MIN_VALUE)
+        assertEquals(tap, roundTrip(KeyboardHeldPayload.CODEC, tap, 49))
         for (value in listOf(KeyboardStatusPayload(token, -1L), KeyboardStatusPayload(null, 0))) {
             assertEquals(value, roundTrip(KeyboardStatusPayload.CODEC, value))
         }
@@ -38,11 +40,13 @@ class KeyboardPayloadTest {
     private fun <T : Any> roundTrip(
         codec: StreamCodec<RegistryFriendlyByteBuf, T>,
         value: T,
+        expectedBytes: Int? = null,
     ): T {
         val buffer = RegistryFriendlyByteBuf.decorator(RegistryAccess.EMPTY).apply(Unpooled.buffer())
         try {
             codec.encode(buffer, value)
-            return codec.decode(buffer)
+            if (expectedBytes != null) assertEquals(expectedBytes, buffer.readableBytes())
+            return codec.decode(buffer).also { assertEquals(0, buffer.readableBytes()) }
         } finally {
             buffer.release()
         }
