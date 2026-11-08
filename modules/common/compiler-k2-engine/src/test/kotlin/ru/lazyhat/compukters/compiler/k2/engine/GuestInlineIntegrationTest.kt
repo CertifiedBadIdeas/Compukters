@@ -69,6 +69,74 @@ import kotlin.test.assertTrue
 @OptIn(UnsafeDuringIrConstructionAPI::class, CompilerConfiguration.Internals::class)
 class GuestInlineIntegrationTest {
     @Test
+    fun `dynamic calls preserve mixed scalar inline reference arguments and defaults`() {
+        probe(
+            """
+            fun verify(value: Boolean) { if (!value) { val failed = IntArray(1); val invalid = failed[2] } }
+            class Cell(var count: Int)
+            value class Payload(val wide: Long, val real: Double, val tag: Int, val cell: Cell)
+            interface Combiner {
+                fun apply(flag: Boolean, letter: Char, wide: Long, real: Double, value: Payload): Payload
+                fun normal(value: Payload): Payload = apply(true, 'Z', 9000000000L, 3.25, value)
+                fun fail(value: Int): Int
+            }
+            open class Base: Combiner {
+                override fun apply(flag: Boolean, letter: Char, wide: Long, real: Double, value: Payload): Payload {
+                    verify(flag && letter == 'Z' && wide == 9000000000L && real == 3.25)
+                    value.cell.count += value.tag
+                    return Payload(value.wide + wide, value.real + real, value.tag + 1, value.cell)
+                }
+                override fun fail(value: Int): Int = 10 / value
+            }
+            class Inherited: Base()
+            class Other: Combiner {
+                override fun apply(flag: Boolean, letter: Char, wide: Long, real: Double, value: Payload): Payload {
+                    verify(flag && letter == 'Z' && wide == 9000000000L && real == 3.25)
+                    value.cell.count += value.tag
+                    return Payload(value.wide - wide, value.real - real, value.tag + 2, value.cell)
+                }
+                override fun fail(value: Int): Int = 20 / value
+            }
+            fun select(flag: Boolean): Combiner { if (flag) return Inherited(); return Other() }
+            fun invoke(target: Combiner, value: Payload): Payload = target.normal(value)
+            fun crash(target: Combiner, value: Int): Int = target.fail(value)
+            fun main() {
+                val cell = Cell(0)
+                val value = Payload(7L, 1.5, 4, cell)
+                val a = invoke(select(true), value)
+                verify(a.wide == 9000000007L && a.real == 4.75 && a.tag == 5 && a.cell === cell)
+                val b = invoke(select(false), value)
+                verify(b.wide == -8999999993L && b.real == -1.75 && b.tag == 6 && b.cell === cell)
+                verify(cell.count == 8)
+                var caught = false
+                try { crash(select(true), 0) } catch (failure: Throwable) { caught = true }
+                verify(caught)
+                val saved = { invoke(select(true), value) }
+                var index = 0
+                while (index < 128) {
+                    val garbage = IntArray(4096)
+                    garbage[0] = index
+                    verify(garbage[0] == index)
+                    index += 1
+                }
+                val c = saved()
+                verify(c.cell === cell && cell.count == 12 && c.wide == 9000000007L)
+                val completed = IntArray(-1)
+            }
+            """.trimIndent(),
+        ) { _, _, diagnostics, artifact ->
+            val linked = LibraryModuleLinker.link(assertNotNull(artifact, diagnostics.toString()), emptyMap<String, Module>())
+            val encoded = ArtifactWriter.write(linked)
+            assertTrue(encoded is ArtifactWriteResult.Success, encoded.toString())
+            System.getProperty("compukter.vm.dynamicTransfersArtifact")?.let { output ->
+                val path = Path.of(output)
+                Files.createDirectories(path.parent)
+                Files.write(path, encoded.bytes)
+            }
+        }
+    }
+
+    @Test
     fun `concrete immutable receiver aliases retain effects state and captured identity`() {
         probe(
             """

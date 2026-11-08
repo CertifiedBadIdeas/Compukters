@@ -754,6 +754,15 @@ registerKotlinVmConformance(
     conformanceScenario = "primitives",
 )
 registerKotlinVmConformance(
+    taskName = "testKotlinDynamicTransfersVmConformance",
+    taskDescription = "Executes dynamic calls with mixed scalar, inline and reference transfers in the pinned VM.",
+    artifactTask = ":compiler-k2-engine:generateDynamicTransfersConformanceArtifact",
+    artifact = project(":compiler-k2-engine").layout.buildDirectory.file("generated/conformance/kotlin-dynamic-transfers.cpkt"),
+    cargoTargetDirectory = ".toolchain/build/cargo/compiler-k2-dynamic-transfers-conformance",
+    artifactEnvironmentVariable = "COMPUKTER_KOTLIN_INLINE_BLOCKS_ARTIFACT",
+    conformanceScenario = "inline-blocks",
+)
+registerKotlinVmConformance(
     taskName = "testKotlinConcreteReceiversVmConformance",
     taskDescription = "Executes proven receiver calls, effects, captures and dispatch fallbacks in the pinned VM.",
     artifactTask = ":compiler-k2-engine:generateConcreteReceiversConformanceArtifact",

@@ -98,6 +98,23 @@ tasks.test {
 
 val inlineBlocksArtifact = layout.buildDirectory.file("generated/conformance/kotlin-inline-blocks.cpkt")
 val smallInliningArtifact = layout.buildDirectory.file("generated/conformance/kotlin-small-inlining.cpkt")
+val dynamicTransfersArtifact = layout.buildDirectory.file("generated/conformance/kotlin-dynamic-transfers.cpkt")
+tasks.register<Test>("generateDynamicTransfersConformanceArtifact") {
+    description = "Compiles dynamic calls with mixed scalar, inline and reference transfers for VM conformance."
+    group = "verification"
+    dependsOn(tasks.jar)
+    useJUnitPlatform()
+    testClassesDirs = sourceSets.test.get().output.classesDirs
+    classpath = sourceSets.test.get().runtimeClasspath
+    filter.includeTestsMatching("*dynamic calls preserve mixed scalar inline reference arguments and defaults*")
+    val guestBuiltins = rootProject.file("modules/common/guest-platform/src/platform/builtins")
+    inputs.dir(guestBuiltins)
+    inputs.file(tasks.jar.flatMap { it.archiveFile })
+    outputs.file(dynamicTransfersArtifact)
+    systemProperty("compukters.guest.builtins", guestBuiltins.absolutePath)
+    systemProperty("compukter.vm.dynamicTransfersArtifact", dynamicTransfersArtifact.get().asFile.absolutePath)
+}
+
 val concreteReceiversArtifact = layout.buildDirectory.file("generated/conformance/kotlin-concrete-receivers.cpkt")
 tasks.register<Test>("generateConcreteReceiversConformanceArtifact") {
     description = "Compiles proven receiver aliases and dynamic-dispatch fallback cases for VM conformance."

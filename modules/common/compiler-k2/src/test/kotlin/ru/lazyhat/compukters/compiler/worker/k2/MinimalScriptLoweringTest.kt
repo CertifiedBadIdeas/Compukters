@@ -2240,11 +2240,18 @@ class MinimalScriptLoweringTest {
 
                         interface Reading { fun value(): Int }
                         class ConstantReading(val number: Int): Reading { override fun value(): Int = number }
+                        interface TextReading { fun text(): String }
+                        class TerminalReading: TextReading { override fun text(): String = readln() }
+                        fun terminalSource(flag: Boolean): TextReading {
+                            if (flag) return TerminalReading()
+                            return TerminalReading()
+                        }
+                        fun readThroughInterface(source: TextReading): String = source.text()
 
                         fun reader() {
                             val reading: Reading = ConstantReading(7)
-                            // Keep the proven receiver live across the unused argument's blocking response.
-                            require(keepFirst(reading.value(), readln().length) == reading.value())
+                            // Keep the proven receiver live across a dynamically dispatched blocking call.
+                            require(keepFirst(reading.value(), readThroughInterface(terminalSource(true)).length) == reading.value())
                         }
 
                         fun writer() {
