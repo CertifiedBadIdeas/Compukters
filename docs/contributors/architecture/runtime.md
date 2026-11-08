@@ -107,11 +107,14 @@ outside the supported source subset, while legacy suspend-call artifact instruct
 Rust separates an immutable artifact-derived `PreparedProgram` from each session's admission and
 execution state. Live byte-identical binaries normally share decoded metadata, prepared operations and lifecycle descriptors,
 function/frame/GC-safepoint/dispatch tables, type identities/names, payload-relative field offsets,
-static layout and literals. Additional experimental execution representations also share derived code by mode;
+static layout and literals. Allocation layouts are shared lazily per program and heap-header width
+(8-byte compact or 12-byte legacy), with at most two variants retained by that program. Compact size/link
+bit widths remain specific to each admission; object field layouts depend only on the header width.
+Additional experimental execution representations also share derived code by mode;
 its mutable decoder cache remains machine-owned. This is interpreted code preparation, not native JIT.
 
-Every session independently checks its resource profile and actual capability/record schemas. Heap-header-dependent
-allocation layouts, external references, storage charges and slice limits belong to admission; managed heap,
+Every session independently checks its resource profile and actual capability/record schemas. External references,
+resolved record schemas, storage charges and slice limits belong to admission; managed heap,
 frames, static values, class initialization, tasks, requests and host bindings belong to the instance.
 A larger computer cannot lend its limits or device permissions to another computer through a shared program.
 Payload-relative field offsets are independent of heap header size, so shared instructions retain direct field access.
