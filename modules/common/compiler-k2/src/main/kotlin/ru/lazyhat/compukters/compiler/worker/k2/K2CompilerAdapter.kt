@@ -381,6 +381,14 @@ class K2CompilerAdapter(
         require(resolved.map(PlatformModule::id).toSet() == requested.map(PlatformModule::id).toSet()) {
             "compile request platform module closure is incomplete"
         }
+        addonBundles.forEach { bundle ->
+            val recordDependencies = PlatformModuleGraph(merged).resolve(setOf(bundle.moduleDescriptor.id)).modules
+            ru.lazyhat.compukters.compiler.k2.engine.build.validateAddonRecordResults(
+                listOf(platform.builtins) + recordDependencies,
+                bundle.capabilitySchemas,
+                bundle.bindings,
+            )
+        }
         return SelectedPlatform(listOf(platform.builtins) + resolved, addonBundles)
     }
 

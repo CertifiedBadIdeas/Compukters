@@ -10,6 +10,7 @@ package kotlin.math
  * Spatial rotation with unit length up to Double rounding. Factories validate and normalize input.
  * Uses right-handed active rotations of column vectors; a * b applies b first.
  */
+@kotlin.annotation.RecordConstructor(factory = "fromQuaternion", normalize = "quaternion")
 public value class Rotation3d private constructor(
     val quaternion: Quaterniond,
 ) {

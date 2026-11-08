@@ -17,14 +17,18 @@ internal fun nativeResultSchemas(contract: DeclarativeGuestContract): Map<String
 
     fun resolve(type: String): AddonRecordSchema {
         records[type]?.let { return it }
+        if (boundary.construction(type)?.factory?.isNotEmpty() == true && boundary.fields(type)?.size == 1) {
+            return resolve(requireNotNull(boundary.fields(type)).single().type)
+        }
         val name = boundary.wireType(type)
         val fields = requireNotNull(boundary.fields(type)) { "Unknown native record: $type" }
         val schema =
             AddonRecordSchema(
                 name,
                 fields.map { field ->
+                    val wireType = boundary.wireType(field.type)
                     val scalar =
-                        when (field.type) {
+                        when (wireType) {
                             "Int" -> AddonCapabilityValueType.I32
                             "Long" -> AddonCapabilityValueType.I64
                             "Float" -> AddonCapabilityValueType.F32
@@ -37,12 +41,7 @@ internal fun nativeResultSchemas(contract: DeclarativeGuestContract): Map<String
                     if (scalar != null) {
                         AddonRecordField(field.name, scalar)
                     } else {
-                        val wireType = boundary.wireType(field.type)
-                        if (wireType == "Int") {
-                            AddonRecordField(field.name, AddonCapabilityValueType.I32)
-                        } else {
-                            AddonRecordField(field.name, AddonCapabilityValueType.RECORD, resolve(field.type))
-                        }
+                        AddonRecordField(field.name, AddonCapabilityValueType.RECORD, resolve(field.type))
                     }
                 },
             )
@@ -50,7 +49,7 @@ internal fun nativeResultSchemas(contract: DeclarativeGuestContract): Map<String
         return schema
     }
     contract.operations.forEach { operation ->
-        if (operation.result in contract.boundaryRecords) resolve(operation.result)
+        if (operation.result in contract.boundaryRecords && boundary.wireType(operation.result).contains('.')) resolve(operation.result)
     }
     val result = records.values.associateBy { it.typeName }.toMutableMap()
     records.values.groupBy { it.typeName.substringAfterLast('.') }.forEach { (name, schemas) ->

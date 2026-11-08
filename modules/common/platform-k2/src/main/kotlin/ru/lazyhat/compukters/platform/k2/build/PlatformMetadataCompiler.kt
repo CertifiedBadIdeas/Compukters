@@ -281,9 +281,9 @@ class PlatformMetadataCompiler {
                                 }
 
                                 klass.declarations.any {
-                                    it is KtClassInitializer || (it is KtProperty && (it.initializer != null || it.hasDelegate()))
+                                    it is KtProperty && (it.initializer != null || it.hasDelegate())
                                 } -> {
-                                    "cannot contain stored body properties or initializers"
+                                    "cannot contain stored body properties"
                                 }
 
                                 listOf(KtTokens.PRIVATE_KEYWORD, KtTokens.INTERNAL_KEYWORD, KtTokens.PROTECTED_KEYWORD).any {
@@ -291,6 +291,10 @@ class PlatformMetadataCompiler {
                                         true
                                 } -> {
                                     "must have a public constructor"
+                                }
+
+                                klass.declarations.any { it is KtClassInitializer } -> {
+                                    "requires constructor invocation"
                                 }
 
                                 klass.primaryConstructorParameters.isEmpty() -> {

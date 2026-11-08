@@ -10,6 +10,7 @@ package ru.lazyhat.compukters.compiler.k2.engine.build
 
 import org.jetbrains.kotlin.KtPsiSourceElement
 import org.jetbrains.kotlin.descriptors.ClassKind
+import org.jetbrains.kotlin.descriptors.Visibilities
 import org.jetbrains.kotlin.fir.FirEvaluatorResult
 import org.jetbrains.kotlin.fir.FirSession
 import org.jetbrains.kotlin.fir.declarations.FirNamedFunction
@@ -229,7 +230,7 @@ fun analyzeNativeGuestContract(
     }
 }
 
-private class NativeBoundaryResolver(
+internal class NativeBoundaryResolver(
     private val session: FirSession,
     private val candidates: Map<String, PlatformRecordCandidate>,
 ) {
@@ -241,14 +242,23 @@ private class NativeBoundaryResolver(
         require(
             !type.isMarkedNullable && type.typeArguments.isEmpty(),
         ) { "Nullable and generic server boundary types are unsupported: $type" }
-        val symbol = type.toRegularClassSymbol(session) ?: error("Server boundary requires a concrete type: $type")
+        val symbol = requireNotNull(type.toRegularClassSymbol(session)) { "Server boundary requires a concrete type: $type" }
         val name = symbol.classId.asSingleFqName().asString()
         if (name in scalarNames) return name.removePrefix("kotlin.")
         if (symbol.getAnnotationByClassId(GuestContractAnnotations.resource, session) != null) return name
         if (name in records) return name
         require(active.add(name) && active.size <= 8) { "Cyclic or excessively nested server boundary: $name" }
         val candidate = requireNotNull(candidates[name]) { "Unsupported server boundary type $name" }
-        require(candidate.rejection == null) { "$name: ${candidate.rejection}" }
+        val construction =
+            symbol.getAnnotationByClassId(ClassId.topLevel(FqName("kotlin.annotation.RecordConstructor")), session)?.let { annotation ->
+                GuestRecordConstruction(annotation.string("factory"), annotation.string("normalize"))
+            } ?: GuestRecordConstruction("", "").takeIf { candidate.rejection == "requires constructor invocation" }
+        require(
+            candidate.rejection == null || candidate.rejection == "requires constructor invocation" ||
+                (candidate.rejection == "must have a public constructor" && construction != null),
+        ) {
+            "$name: ${candidate.rejection}"
+        }
         val constructor =
             symbol
                 .declaredMemberScope(
@@ -262,6 +272,32 @@ private class NativeBoundaryResolver(
                 require(fieldType != "Unit" && fieldType != "ByteArray") { "$name: record fields cannot be Unit or arrays" }
                 GuestContractParameter(field.name.asString(), fieldType, emptyList())
             }
+        if (construction != null && construction.factory.isNotEmpty()) {
+            require(construction.factory.matches(Regex("[A-Za-z_][A-Za-z0-9_]*"))) { "$name: invalid record factory" }
+            val functions = mutableListOf<org.jetbrains.kotlin.fir.symbols.impl.FirNamedFunctionSymbol>()
+            symbol.fir.companionObjectSymbol?.declaredMemberScope(session, memberRequiredPhase = null)?.processFunctionsByName(
+                Name.identifier(construction.factory),
+                functions::add,
+            )
+            val matching =
+                functions.filter { factory ->
+                    factory.typeParameterSymbols.isEmpty() && factory.fir.receiverParameter == null &&
+                        factory.fir.contextParameters.isEmpty() && factory.fir.status.visibility == Visibilities.Public &&
+                        factory.valueParameterSymbols.map { it.resolvedReturnType.fullyExpandedType(session) } ==
+                        constructor.valueParameterSymbols.map { it.resolvedReturnType.fullyExpandedType(session) } &&
+                        factory.resolvedReturnType.fullyExpandedType(session) == type
+                }
+            require(matching.size == 1) { "$name: record factory must be public and match the primary constructor's types" }
+            if (construction.normalize.isNotEmpty()) {
+                val field = requireNotNull(fields.singleOrNull { it.name == construction.normalize }) { "$name: unknown normalized field" }
+
+                fun components(type: String): List<String> = records[type]?.fields?.flatMap { components(it.type) } ?: listOf(type)
+                val leaves = components(field.type)
+                require(leaves.isNotEmpty() && leaves.distinct().size == 1 && leaves.first() in setOf("Float", "Double")) {
+                    "$name: normalized fields require homogeneous Float or Double components"
+                }
+            }
+        }
         records[name] =
             GuestContractType(
                 symbol.classId.packageFqName.asString(),
@@ -273,6 +309,7 @@ private class NativeBoundaryResolver(
                 emptyList(),
                 emptyList(),
                 "",
+                construction,
             )
         active.remove(name)
         return name

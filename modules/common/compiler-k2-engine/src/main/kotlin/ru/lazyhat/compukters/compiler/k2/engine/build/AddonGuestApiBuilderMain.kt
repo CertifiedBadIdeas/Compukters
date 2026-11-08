@@ -32,6 +32,7 @@ import ru.lazyhat.compukters.compiler.k2.engine.intrinsic.PlatformCapabilityId
 import ru.lazyhat.compukters.platform.bundle.PlatformBundle
 import ru.lazyhat.compukters.platform.bundle.PlatformBundleCodec
 import ru.lazyhat.compukters.platform.bundle.PlatformModule
+import ru.lazyhat.compukters.platform.bundle.PlatformModuleGraph
 import ru.lazyhat.compukters.platform.bundle.PlatformModuleId
 import ru.lazyhat.compukters.platform.bundle.PlatformSource
 import ru.lazyhat.compukters.platform.k2.build.PlatformMetadataCompiler
@@ -111,6 +112,8 @@ fun buildAddonGuestApiBundle(
         require(combined.modules.none { contract.module in it.dependencies }) {
             "base platform module depends on addon module ${contract.module}"
         }
+        val recordDependencies = PlatformModuleGraph(combined).resolve(setOf(contract.module)).modules
+        validateAddonRecordResults(listOf(combined.builtins) + recordDependencies, contract.schemas, contract.bindings)
         val addon =
             AddonGuestApiBundleCodec.assemble(
                 contract.addon,

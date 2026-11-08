@@ -90,6 +90,51 @@ class NativeGuestContractAnalyzerTest {
         }
 
     @Test
+    fun `record factories resolve from native metadata and work for addon types`() =
+        fixture(
+            """
+            import kotlin.math.Vector3d
+            import kotlin.math.Rotation3d
+            @kotlin.annotation.RecordConstructor(factory = "fromAxis", normalize = "axis")
+            value class Direction private constructor(val axis: Vector3d) {
+                companion object { fun fromAxis(value: Vector3d): Direction = Direction(value.normalized()) }
+            }
+            @GuestService interface Api {
+                @GuestRead fun orientation(): Rotation3d
+                @GuestCommand fun aim(direction: Direction): Unit
+            }
+            """.trimIndent(),
+        ) { model ->
+            assertEquals(
+                GuestRecordConstruction("fromQuaternion", "quaternion"),
+                model.boundaryRecords.getValue("kotlin.math.Rotation3d").construction,
+            )
+            assertEquals(
+                GuestRecordConstruction("fromAxis", "axis"),
+                model.boundaryRecords.getValue("fixture.Direction").construction,
+            )
+            assertEquals("kotlin.math.Quaterniond", GuestBoundaryTypes(model).wireType("kotlin.math.Rotation3d"))
+            assertEquals("kotlin.math.Vector3d", GuestBoundaryTypes(model).wireType("fixture.Direction"))
+        }
+
+    @Test
+    fun `record factories must match the actual primary constructor`() {
+        val error =
+            assertFailsWith<IllegalArgumentException> {
+                fixture(
+                    """
+                    @kotlin.annotation.RecordConstructor(factory = "of")
+                    value class Quantity private constructor(val value: Double) {
+                        companion object { fun of(value: Int): Quantity = Quantity(value.toDouble()) }
+                    }
+                    @GuestService interface Api { @GuestRead fun value(): Quantity }
+                    """.trimIndent(),
+                ) {}
+            }
+        assertTrue(error.message.orEmpty().contains("record factory must be public"), error.message)
+    }
+
+    @Test
     fun `mutable data is rejected at the transport boundary`() {
         val error =
             assertFailsWith<IllegalArgumentException> {

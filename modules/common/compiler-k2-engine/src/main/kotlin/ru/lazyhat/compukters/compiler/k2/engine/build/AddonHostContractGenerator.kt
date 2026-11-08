@@ -128,7 +128,9 @@ fun renderAddonHostContract(
         appendLine()
         dtoFields.forEach { (type, fields) ->
             val name = type.substringAfterLast('.')
-            if (declaration != null && type in guestMathematicalTypes) {
+            if (declaration?.nativeSources?.isNotEmpty() == true) {
+                appendNativeHostRecord(type, fields, requireNotNull(boundary))
+            } else if (declaration != null && type in guestMathematicalTypes) {
                 appendLine("public typealias $name = ru.lazyhat.compukters.api.contracts.types.$name")
             } else {
                 appendLine("public data class $name(")
@@ -432,7 +434,9 @@ private fun StringBuilder.hostArguments(
         val fields = types.fields(type) ?: return "argument${cursor++}"
         val values = fields.map { construct(it.type) }
         val name = type.substringAfterLast('.')
-        return if (type == "kotlin.math.Rotation3d" ||
+        return if (types.construction(type)?.factory?.isNotEmpty() == true) {
+            "$name.${requireNotNull(types.construction(type)).factory}(${values.joinToString()})"
+        } else if (type == "kotlin.math.Rotation3d" ||
             type == "kotlin.math.Rotation3f"
         ) {
             "$name.fromQuaternion(${values.single()})"
@@ -442,7 +446,8 @@ private fun StringBuilder.hostArguments(
     }
 
     fun checked(type: String): Boolean =
-        type == "kotlin.math.Rotation3d" || type == "kotlin.math.Rotation3f" || types.fields(type).orEmpty().any { checked(it.type) }
+        types.construction(type)?.normalize?.isNotEmpty() == true ||
+            type == "kotlin.math.Rotation3d" || type == "kotlin.math.Rotation3f" || types.fields(type).orEmpty().any { checked(it.type) }
     val arguments = if (operation.device) mutableListOf("argument0") else mutableListOf()
     operation.parameters.forEachIndexed { index, parameter ->
         val expression = construct(parameter.type)

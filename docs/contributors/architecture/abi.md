@@ -42,6 +42,28 @@ components cross the existing argument transport; reconstruction belongs to the 
 are finite, nonzero and normalized before handlers run, including inside nested records. Rotation
 results retain quaternion wire schemas and use validated Guest factories when reconstructed.
 
+## Native addon record backend
+
+The native backend derives layouts from resolved Guest symbols in the selected dependency closure.
+Record transport has no mathematical-type whitelist. CAGB decoding checks structural bounds and declared
+dependency presence; actual compilation checks every active response layout against its owning native
+module. Field order/type changes, unknown records and raw construction of invariant-bearing types are
+rejected before execution. Tombstone schemas remain ABI history after their types disappear.
+
+`kotlin:builtins` 1.17.0 adds binary `kotlin.annotation.RecordConstructor` metadata. Its public companion
+factory must match the primary constructor's field types. A single factory field retains its underlying
+wire representation. The optional normalized field describes finite, nonzero, homogeneous floating
+components for generated host reconstruction. `stdlib:core` 1.28.0 applies this metadata to rotations;
+their quaternion wire schemas and validated Guest factories remain unchanged. Public constructors with
+initializers use generated raw reply records, followed by actual Guest construction. Host data classes
+are generated from the resolved fields and carry no JVM implementation of arbitrary Guest method bodies.
+These backend changes reuse existing CAGB, metadata, capability and VM encodings. Public Gradle pipeline
+integration and VM execution evidence are still pending.
+
+`NativeGuestContractAnalyzerTest`, `NativeGuestContractBuildTest` and `AddonRecordValidationTest` cover
+real stdlib factories, addon-defined factories, constructor invocation, typed replies, preserved ABI
+selectors and malformed dependency layouts. Codec tests cover bounded generic dependency record transport.
+
 ## Device command groups
 
 `compukter:core` 9.5.0 adds `compukters:commands` ABI 1.0, asynchronous operation 0

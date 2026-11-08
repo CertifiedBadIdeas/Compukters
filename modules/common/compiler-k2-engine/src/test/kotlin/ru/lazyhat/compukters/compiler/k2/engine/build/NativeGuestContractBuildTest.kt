@@ -22,10 +22,11 @@ class NativeGuestContractBuildTest {
         build(
             """
             import kotlin.math.Vector3d
+            import kotlin.math.Rotation3d
             value class Velocity(val vector: Vector3d) {
                 fun direction(): Vector3d = vector.normalized()
             }
-            data class State(val velocity: Velocity) {
+            data class State(val velocity: Velocity, val orientation: Rotation3d) {
                 fun direction(): Vector3d = velocity.direction()
             }
             @GuestResource interface Token {
@@ -34,7 +35,9 @@ class NativeGuestContractBuildTest {
             }
             @GuestDevice("fixture:engine", bindings = "EngineBindings") interface Engine {
                 @GuestRead fun state(): State
+                @GuestRead fun bounds(): kotlin.math.Rect2i
                 @GuestCommand(binding = "aim") fun aim(direction: Vector3d): Unit
+                @GuestCommand fun target(state: State): Unit
                 @GuestCall fun open(): Token
                 @GuestCommand fun consume(token: Token): Unit
                 fun direction(): Vector3d = state().direction()

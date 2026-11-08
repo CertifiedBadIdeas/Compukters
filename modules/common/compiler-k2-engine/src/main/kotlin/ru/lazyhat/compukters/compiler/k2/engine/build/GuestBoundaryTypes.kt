@@ -30,6 +30,8 @@ internal class GuestBoundaryTypes(
     private val records = contract.boundaryRecords + contract.types.filter { it.record }.associateBy { "${it.packageName}.${it.name}" }
     private val resources = contract.types.filter { it.resource }.mapTo(mutableSetOf()) { "${it.packageName}.${it.name}" }
 
+    fun construction(type: String): GuestRecordConstruction? = records[type]?.construction
+
     fun fields(type: String): List<GuestContractParameter>? {
         if (type in resources) return listOf(GuestContractParameter("handle", "Int", emptyList()))
         records[type]?.let { return it.fields }
@@ -63,8 +65,16 @@ internal class GuestBoundaryTypes(
             return "kotlin.math.Quaternion${type.last()}"
         }
         val record = records[type] ?: return type
+        if (record.construction?.factory?.isNotEmpty() == true && record.fields.size == 1) {
+            return wireType(record.fields.single().type, active + type)
+        }
         val fieldTypes = record.fields.map { wireType(it.type, active + type) }
-        return if (record.fields.indices.any { fieldTypes[it] != record.fields[it].type }) "${type}Reply" else type
+        if (record.construction == null && record.fields.indices.none { fieldTypes[it] != record.fields[it].type }) return type
+        val addon =
+            contract.nativeSources.keys
+                .firstOrNull()
+                ?.substringBefore('/')
+        return if (addon == null || type.startsWith("$addon.")) "${type}Reply" else "$addon.__compukters_wire.${record.name}Reply"
     }
 
     fun decode(
@@ -72,10 +82,38 @@ internal class GuestBoundaryTypes(
         expression: String,
     ): String =
         when {
-            wireType(type) == type -> expression
-            type in resources -> "${if (contract.nativeSources.isEmpty()) type else nativeImplementation(type)}($expression)"
-            type == "kotlin.math.Rotation3f" || type == "kotlin.math.Rotation3d" -> "$type.fromQuaternion($expression)"
-            else -> "$type(${requireNotNull(fields(type)).joinToString { decode(it.type, "$expression.${it.name}") }})"
+            wireType(type) == type -> {
+                expression
+            }
+
+            type in resources -> {
+                "${if (contract.nativeSources.isEmpty()) type else nativeImplementation(type)}($expression)"
+            }
+
+            construction(type) != null -> {
+                val record = records.getValue(type)
+                val arguments =
+                    if (record.construction?.factory?.isNotEmpty() == true && record.fields.size == 1) {
+                        decode(record.fields.single().type, expression)
+                    } else {
+                        record.fields.joinToString { decode(it.type, "$expression.${it.name}") }
+                    }
+                val factory =
+                    requireNotNull(record.construction)
+                        .factory
+                        .takeIf { it.isNotEmpty() }
+                        ?.let { ".$it" }
+                        .orEmpty()
+                "$type$factory($arguments)"
+            }
+
+            type == "kotlin.math.Rotation3f" || type == "kotlin.math.Rotation3d" -> {
+                "$type.fromQuaternion($expression)"
+            }
+
+            else -> {
+                "$type(${requireNotNull(fields(type)).joinToString { decode(it.type, "$expression.${it.name}") }})"
+            }
         }
 
     fun arguments(

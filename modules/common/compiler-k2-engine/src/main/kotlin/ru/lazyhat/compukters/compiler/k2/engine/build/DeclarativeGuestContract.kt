@@ -77,6 +77,12 @@ data class GuestContractType(
     val operations: List<GuestContractOperation>,
     val constants: List<Pair<String, String>>,
     val documentation: String,
+    val construction: GuestRecordConstruction? = null,
+)
+
+data class GuestRecordConstruction(
+    val factory: String,
+    val normalize: String,
 )
 
 data class GuestContractOperation(
