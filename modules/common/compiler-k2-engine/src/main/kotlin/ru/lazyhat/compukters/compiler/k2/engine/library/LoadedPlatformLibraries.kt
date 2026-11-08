@@ -136,17 +136,33 @@ fun loadPlatformLibraries(modules: List<PlatformModule>): LoadedPlatformLibrarie
                                 library.strings[export.name.value.toInt()].toString() ==
                                 platformFunctionExportName(declaration.symbol, signature)
                         }
+                    val qualifiedDeclaration =
+                        exactDeclaration ?: library.exports.singleOrNull { export ->
+                            export.kind == SymbolKind.FUNCTION &&
+                                library.strings[export.name.value.toInt()].toString().let { name ->
+                                    name.substringBefore('#') == declaration.symbol &&
+                                        name.substringAfter('#', "").shortTypeNames() == signature.shortTypeNames()
+                                }
+                        }
                     val export =
-                        exactDeclaration ?: mangled.singleOrNull() ?: matching.singleOrNull() ?: exactName.singleOrNull()
+                        qualifiedDeclaration ?: mangled.singleOrNull() ?: matching.singleOrNull() ?: exactName.singleOrNull()
                             ?: candidates.singleOrNull()
                             ?: error(
                                 "cannot uniquely match ${declaration.symbol} ${declaration.signature} to a platform export: " +
                                     candidates.joinToString { library.strings[it.name.value.toInt()].toString() },
                             )
+                    val exportName = library.strings[export.name.value.toInt()].toString()
+                    // Qualified exports carry the compiler's canonical IR signature. Metadata
+                    // retains source spellings (including fully qualified names and aliases).
+                    val linkSignature =
+                        exportName
+                            .removePrefix("${declaration.symbol}#")
+                            .takeIf { exportName.startsWith("${declaration.symbol}#") && it.startsWith("fun(") }
+                            ?: signature
                     PlatformFunctionLink(
                         declaration.symbol,
-                        signature,
-                        library.strings[export.name.value.toInt()].toString(),
+                        linkSignature,
+                        exportName,
                         moduleHash.copyOf(),
                         declaration.defaultArguments,
                     )
@@ -292,7 +308,7 @@ private fun Module.canonicalType(type: ValueType): String =
 private fun ByteArray.toHex(): String = joinToString("") { byte -> "%02x".format(byte.toInt() and 0xff) }
 
 private fun String.shortTypeNames(): String =
-    Regex("[A-Za-z_][A-Za-z0-9_.]*").replace(this) { match -> match.value.substringAfterLast('.') }
+    Regex("[A-Za-z_][A-Za-z0-9_]*(?:\\.[A-Za-z_][A-Za-z0-9_]*)*").replace(this) { match -> match.value.substringAfterLast('.') }
 
 private fun String.withLeadingSourceParameter(type: String): String {
     require(startsWith("(")) { "not a source function shape: $this" }

@@ -201,8 +201,9 @@ fun renderAddonHostContract(
                         "        run {"
                     },
                 )
+                val commandSymbol = declaration?.bindingAliases?.get(binding.symbol) ?: binding.symbol
                 appendLine(
-                    "            add(ProgramCommandBinding(\"${binding.symbol}\", ${capability.identityConstant()}, ${binding.operation}, listOf($types), command@ { arguments ->",
+                    "            add(ProgramCommandBinding(\"$commandSymbol\", ${capability.identityConstant()}, ${binding.operation}, listOf($types), command@ { arguments ->",
                 )
                 appendLine("                if (arguments.size != ${operation.arguments.size}) return@command invalidCommand()")
                 operation.arguments.forEachIndexed { index, type ->

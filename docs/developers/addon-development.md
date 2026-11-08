@@ -136,11 +136,11 @@ Compukters development mod with its own product version to the run configuration
 
 ## Declare the Guest API
 
-SDK 0.8 uses ordinary Kotlin/JVM declarations in `src/contract/kotlin`. Their package paths must belong
-to the addon namespace. IntelliJ can resolve the SDK annotations and signature types without interpreting Guest Kotlin.
-Device and service interfaces contain explicitly typed methods without bodies; records are immutable constructor-only
-data classes. Executable helpers, initializers, inheritance, generic or nullable boundary types, mutable fields and
-default arguments are rejected.
+SDK 0.8 compiles `src/contract/kotlin` as native Guest Kotlin against the actual Guest stdlib, without a JVM
+classpath. Package paths must belong to the addon namespace. Annotated interfaces describe server operations;
+those operations have explicit types and no bodies. Ordinary supported Guest functions, interface defaults and
+value-class methods can live alongside them and execute in the VM. Boundary layouts still require immutable,
+non-null constructor fields; generic boundary types, mutable stored state and operation defaults are rejected.
 
 ```kotlin
 // src/contract/kotlin/example/sensors/Sensors.kt
@@ -156,7 +156,7 @@ interface Sensors {
 }
 ```
 
-`@GuestDevice("example:sensor")` generates a peripheral value wrapper and typed discovery provider.
+`@GuestDevice("example:sensor")` retains the interface and generates its internal handle implementation and typed discovery provider.
 `@GuestResource` describes a host-owned handle returned by another method, such as a stock snapshot, without discovery.
 Use `@GuestRead` for immediate observations, `@GuestCall` for other immediate operations, `@GuestCommand` for immediate
 Unit-returning mutations, and `@GuestWait` for operations allowed to return a pending continuation. A command also
@@ -178,9 +178,20 @@ The build derives operation signatures, selectors, bindings, schemas, argument d
 Inspect those files to understand a wrapper. They are generated artifacts: handwritten Guest API files in the former
 `src/compuktersAddon/kotlin` directory are rejected. The executable `.cagb` and its attached source archive contain
 those same generated files. `compuktersGuestSourcesJar` and the consumable `compuktersGuestSources` configuration
-expose them separately. The `contract` JVM source set checks the declarations in `src/contract/kotlin`
-without packaging them in the mod JAR. Its classes are built by `compileContractKotlin`, which also runs as part
-of `check`. The Gradle configuration block remains `compuktersAddon { ... }`.
+expose them separately. `assembleCompuktersAddon` performs native analysis and compilation; no JVM classes or
+`compileContractKotlin` task are created for this source directory. Host Kotlin compilation, `check` and
+`assemble` depend on the compiled bundle. The Gradle configuration block remains `compuktersAddon { ... }`.
+
+Use `compuktersGuestDependencies` for compiled Guest dependencies, for example
+`add("compuktersGuestDependencies", project(":shared"))`. The outgoing `compuktersAddonBundle` variant supplies
+the native artifact and its transitive Guest dependencies independently of host JVM dependencies.
+Model discovery reports source paths, selected platform and dependency artifacts without running compilation or
+updating the checked-in ABI lock. Only the explicit `updateCompuktersAddonAbiLock` task allocates or changes selectors.
+
+**Evidence:** `ExternalAddonBuildTest` builds a standalone addon with a separate Guest dependency, executes the
+generated host tests, packages the bundle and replays the build with configuration cache.
+`DeclarativeNativeIntegrationTest.generatedValuesAndCommandsCrossTheRealNativeBoundary` compiles a consumer and
+executes interface defaults, MFVC helpers, typed requests and partial batch failures through the pinned native VM.
 
 ## Implement and register the host
 
@@ -318,20 +329,23 @@ produces no distributable umbrella mod; adding another addon does not introduce 
 
 ## Structured host results
 
-Declare immutable `@GuestRecord data class` values using non-null `val` fields containing Int, Long, Float, Double,
-Boolean, Char, String or supported nested records. Bodies, mutable fields, constructor defaults, initializers, arrays,
-cycles and generic or nullable field types are rejected. The SDK generates immutable Guest value records and handles
+Declare immutable data/value classes using non-null `val` fields containing Int, Long, Float, Double,
+Boolean, Char, String or supported nested records. Methods do not affect their wire layout. Mutable stored fields,
+constructor defaults, arrays, cycles and generic or nullable field types are rejected. The SDK resolves layouts from
+the actual Guest declarations and handles
 nested serialization. Record arguments are flattened into ordered scalar wire arguments, with a limit of 32 including
 the SDK-owned device handle.
 
-Use signature types from `ru.lazyhat.compukters.api.contracts.types` for canonical Guest geometry: Vector2i/3i,
-Vector2f/3f/4f, Vector2d/3d/4d, Quaternionf/d, Matrix3f/d/4f/d and Rotation3f/d. Generated Guest signatures use the actual
-`kotlin.math` classes. Vectors, quaternions and matrices use verified canonical schemas. Rotations cross as quaternion
-components and are reconstructed through `Rotation3f/d.fromQuaternion`, preserving validation and normalization,
-including rotations nested inside addon records. Host handlers receive typed arguments such as `Vector3d`,
-`Rotation3d` and addon records; flattening into scalar components belongs to generated transport code.
-Canonical mathematical host types are shared SDK JVM types, with generated aliases in the addon package.
-Arbitrary stdlib classes are not implicitly admitted to the wire boundary.
+Import Guest stdlib types directly, for example `kotlin.math.Vector3d` or `Rotation3d`. Types from declared
+Guest dependencies follow the same structural validation as addon-owned types; there is no selected math-type list.
+The SDK generates immutable JVM DTOs in each addon's namespace from those resolved layouts. Host handlers retain
+typed arguments; flattening belongs to generated transport code. Guest method bodies are not copied to JVM DTOs.
+
+Classes with constructor invariants use a raw response DTO and invoke the actual Guest constructor on return.
+Private constructors require `kotlin.annotation.RecordConstructor` metadata naming a public companion factory.
+An optional `normalize` field describes homogeneous floating components for generated host normalization.
+Stdlib rotations use this metadata to cross as quaternion components and reconstruct through `fromQuaternion`;
+this retains validation and normalization for nested rotations without a rotation-specific SDK rule.
 
 The SDK generates a JVM mirror DTO, an ordered nominal schema and its typed response encoder. Authors return the
 mirror through `AddonCallResult`; no reflection, handwritten operation numbers or Guest constructors are involved.

@@ -63,10 +63,11 @@ internal fun discoverGuestPlatformLinks(
     functionRoots: List<IrElement>,
     symbolRoots: List<IrElement>,
     session: CompilationSession,
+    resolvedTypes: List<IrType> = emptyList(),
 ): GuestPlatformLinks =
     GuestPlatformLinks(
         linkedPlatformFunctions(functionRoots, session),
-        linkedPlatformSymbols(symbolRoots, session),
+        linkedPlatformSymbols(symbolRoots, session, resolvedTypes),
     )
 
 /** The library dependencies used by emission; per-function register and block state stays in the emitter. */
@@ -245,6 +246,7 @@ internal data class LinkedPlatformSymbols(
 private fun linkedPlatformSymbols(
     elements: List<IrElement>,
     session: CompilationSession,
+    resolvedTypes: List<IrType>,
 ): LinkedPlatformSymbols {
     val typeLinks = session.platformTypes.associateBy { it.symbol }
     val fieldLinks = session.platformFields.associateBy { it.symbol }
@@ -288,6 +290,9 @@ private fun linkedPlatformSymbols(
             }
         }
     }
+
+    // Generic specialization may introduce imported bounds absent from the original IR syntax.
+    resolvedTypes.forEach(::considerType)
 
     fun fieldTarget(
         symbol: String,

@@ -1847,6 +1847,14 @@ internal object KotlinProjectLowering {
                     userFunctions + constructorDeclarations + concreteExecutableRoots +
                         sourceClasses.filter { inlineValueClasses.contains(it.symbol) },
                 session = session,
+                resolvedTypes =
+                    functionInstances.flatMap { instance ->
+                        (listOf(instance.declaration.returnType) + loweredParameters(instance.declaration, session).map { it.type })
+                            .map(instance::substitute)
+                    } +
+                        classInstances.flatMap { instance ->
+                            instance.arguments + instance.declaration.superTypes.map(instance::substitute)
+                        },
             )
         val linkedSymbols = platformLinks.symbols
 
@@ -4472,7 +4480,10 @@ internal object KotlinProjectLowering {
         ) {
             throw UnsupportedKotlinIr(
                 function,
-                "unsupported function signature ${function.fqNameWhenAvailable}: ${function.canonicalPlatformSignature()}",
+                "unsupported function signature ${function.fqNameWhenAvailable}: ${function.canonicalPlatformSignature()}; " +
+                    "resolved result=${instance.substitute(function.returnType).specializationTypeIdentity()}; " +
+                    "owner=${instance.ownerClass?.declaration?.fqNameWhenAvailable}" +
+                    "<${instance.ownerClass?.arguments.orEmpty().joinToString { it.specializationTypeIdentity() }}>",
             )
         }
     }

@@ -88,7 +88,7 @@ class NativeGuestContractBuildTest {
             assertTrue(bundle.bindings.any { it.symbol == "fixture.__CompuktersSpace.time" && it.operation == 0 })
             val host = renderAddonHostContract(AddonAuthoringContract("fixture", "1.0.0"), resolved.contract, declaration)
             assertTrue("argument1: Vector3d" in host)
-            assertTrue("ProgramCommandBinding(\"fixture.__CompuktersEngineBindings.aim\"" in host)
+            assertTrue("ProgramCommandBinding(\"fixture.EngineBindings.aim\"" in host)
             assertEquals(
                 generateGuestContractSources(declaration),
                 bundle.moduleDescriptor.sources.associate { it.path to it.content.toByteArray().decodeToString() },

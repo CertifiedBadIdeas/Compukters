@@ -170,7 +170,7 @@ private fun StringBuilder.appendNativeOperation(
                 val method = if (argument.type == "ByteArray") "bytes" else argument.type.replaceFirstChar(Char::lowercase)
                 "compukter.commands.CommandArgument.$method(${argument.expression})"
             }
-        appendLine("$indent    return compukter.commands.Command.unit(\"$symbol\", listOf($encoded))")
+        appendLine("$indent    return compukter.commands.Command.unit(\"${operation.binding}\", listOf($encoded))")
         appendLine("$indent}")
     }
 }

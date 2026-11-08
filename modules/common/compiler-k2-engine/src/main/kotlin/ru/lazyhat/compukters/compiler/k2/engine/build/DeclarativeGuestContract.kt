@@ -51,7 +51,7 @@ data class DeclarativeGuestContract(
 ) {
     val operations: List<GuestContractOperation> get() = types.flatMap { it.operations }
     val commands: Set<String>
-        get() = operations.filter { it.kind == GuestOperationKind.COMMAND }.mapTo(sortedSetOf()) { bindingSymbol(it) }
+        get() = operations.filter { it.kind == GuestOperationKind.COMMAND }.mapTo(sortedSetOf()) { it.binding }
 
     /** Source-level ABI names remain stable even when native implementation owners change. */
     fun bindingSymbol(operation: GuestContractOperation): String =

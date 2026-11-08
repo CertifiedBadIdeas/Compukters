@@ -23,11 +23,17 @@ import ru.lazyhat.compukters.api.contracts.GuestCommand
 import ru.lazyhat.compukters.api.contracts.GuestDevice
 import ru.lazyhat.compukters.api.contracts.GuestRecord
 import ru.lazyhat.compukters.api.contracts.GuestRead
-import ru.lazyhat.compukters.api.contracts.types.Vector3d
-import ru.lazyhat.compukters.api.contracts.types.Rotation3d
+import kotlin.math.Vector3d
+import kotlin.math.Rotation3d
 
 @GuestRecord
-data class State(val position: Vector3d, val orientation: Rotation3d)
+data class State(val position: Vector3d, val orientation: Rotation3d) {
+    fun direction(): Vector3d = position.normalized()
+}
+
+value class Velocity(val x: Double, val y: Double, val z: Double) {
+    fun direction(): Vector3d = Vector3d(x, y, z).normalized()
+}
 
 @GuestDevice("declarative:engine")
 interface Engine {
@@ -36,4 +42,8 @@ interface Engine {
     @GuestCommand fun target(state: State): Unit
     @GuestRead fun state(): State
     @GuestCall fun close(): Unit
+    fun velocity(): Velocity {
+        val position = state().position
+        return Velocity(position.x, position.y, position.z)
+    }
 }
