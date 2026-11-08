@@ -29,12 +29,12 @@ import ru.lazyhat.compukters.compiler.k2.engine.intrinsic.TrustedIntrinsicRegist
 import ru.lazyhat.compukters.compiler.k2.engine.library.PlatformLibraryCompiler
 import ru.lazyhat.compukters.platform.bundle.PlatformBundle
 import ru.lazyhat.compukters.platform.bundle.PlatformBundleCodec
+import ru.lazyhat.compukters.platform.bundle.PlatformMetadataCodec
 import ru.lazyhat.compukters.platform.bundle.PlatformModule
 import ru.lazyhat.compukters.platform.bundle.PlatformModuleId
 import ru.lazyhat.compukters.platform.bundle.PlatformSource
 import ru.lazyhat.compukters.platform.k2.build.CompuktersFirBuildEnvironment
 import ru.lazyhat.compukters.platform.k2.build.CompuktersFirModuleOutput
-import ru.lazyhat.compukters.platform.k2.build.PlatformMetadataCodec
 import ru.lazyhat.compukters.platform.k2.build.PlatformMetadataCompiler
 import ru.lazyhat.compukters.worker.value.ImmutableBytes
 import java.nio.file.Files
@@ -82,7 +82,7 @@ class PlatformBundleBuilder(
                 .associate { descriptorModule ->
                     val sources = sourceByModule.getValue(descriptorModule.id)
                     val metadata = metadataCompiler.compile(descriptorModule.id, sources)
-                    PlatformMetadataCodec.validateAgainstSources(PlatformMetadataCodec.decode(metadata.metadata), sources)
+                    PlatformMetadataCompiler().validateAgainstSources(PlatformMetadataCodec.decode(metadata.metadata), sources)
                     descriptorModule.id to metadata
                 }.toMutableMap()
         CompuktersFirBuildEnvironment.create().use { fir ->

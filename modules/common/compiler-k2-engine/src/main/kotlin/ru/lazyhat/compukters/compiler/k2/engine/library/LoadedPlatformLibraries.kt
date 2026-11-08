@@ -32,8 +32,8 @@ import ru.lazyhat.compukters.compiler.artifact.write.ArtifactWriter
 import ru.lazyhat.compukters.compiler.k2.engine.PlatformFieldLink
 import ru.lazyhat.compukters.compiler.k2.engine.PlatformFunctionLink
 import ru.lazyhat.compukters.compiler.k2.engine.PlatformTypeLink
+import ru.lazyhat.compukters.platform.bundle.PlatformMetadataCodec
 import ru.lazyhat.compukters.platform.bundle.PlatformModule
-import ru.lazyhat.compukters.platform.k2.build.PlatformMetadataCodec
 
 fun loadPlatformLibraries(modules: List<PlatformModule>): LoadedPlatformLibraries {
     val artifacts =

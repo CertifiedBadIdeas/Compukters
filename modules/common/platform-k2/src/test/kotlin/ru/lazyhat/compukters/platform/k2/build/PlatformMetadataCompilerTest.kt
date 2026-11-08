@@ -21,9 +21,11 @@ package ru.lazyhat.compukters.platform.k2.build
 import org.jetbrains.kotlin.fir.resolve.providers.symbolProvider
 import org.jetbrains.kotlin.name.ClassId
 import org.jetbrains.kotlin.name.FqName
+import ru.lazyhat.compukters.platform.bundle.DecodedPlatformMetadata
 import ru.lazyhat.compukters.platform.bundle.PlatformCompletionKind
 import ru.lazyhat.compukters.platform.bundle.PlatformDeclaration
 import ru.lazyhat.compukters.platform.bundle.PlatformDefaultArgument
+import ru.lazyhat.compukters.platform.bundle.PlatformMetadataCodec
 import ru.lazyhat.compukters.platform.bundle.PlatformModule
 import ru.lazyhat.compukters.platform.bundle.PlatformModuleId
 import ru.lazyhat.compukters.platform.bundle.PlatformScalarConstant
@@ -226,7 +228,10 @@ class PlatformMetadataCompilerTest {
         val mismatched = decoded.copy(declarations = decoded.declarations.map { it.copy(signature = "fun():String") })
 
         assertFailsWith<IllegalArgumentException> {
-            PlatformMetadataCodec.validateAgainstSources(mismatched, listOf(source("api.kt", "package sample\nexternal fun ping(): Int")))
+            PlatformMetadataCompiler().validateAgainstSources(
+                mismatched,
+                listOf(source("api.kt", "package sample\nexternal fun ping(): Int")),
+            )
         }
     }
 

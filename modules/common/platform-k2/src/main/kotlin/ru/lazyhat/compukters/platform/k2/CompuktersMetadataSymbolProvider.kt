@@ -28,9 +28,9 @@ import org.jetbrains.kotlin.fir.session.MetadataLibraryBasedSymbolProvider
 import org.jetbrains.kotlin.library.components.KlibMetadataComponent
 import org.jetbrains.kotlin.name.FqName
 import org.jetbrains.kotlin.serialization.deserialization.descriptors.DeserializedContainerSource
+import ru.lazyhat.compukters.platform.bundle.DecodedPlatformMetadata
+import ru.lazyhat.compukters.platform.bundle.PlatformMetadataCodec
 import ru.lazyhat.compukters.platform.bundle.PlatformModule
-import ru.lazyhat.compukters.platform.k2.build.DecodedPlatformMetadata
-import ru.lazyhat.compukters.platform.k2.build.PlatformMetadataCodec
 
 /** Deserializes Compukters-owned common FIR metadata without a KLIB or foreign classpath. */
 internal class CompuktersMetadataSymbolProvider(
