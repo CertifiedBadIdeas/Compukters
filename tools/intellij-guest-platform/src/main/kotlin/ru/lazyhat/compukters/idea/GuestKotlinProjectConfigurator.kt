@@ -23,6 +23,7 @@ import com.intellij.openapi.project.Project
 import org.jetbrains.kotlin.config.ApiVersion
 import org.jetbrains.kotlin.config.LanguageFeature
 import org.jetbrains.kotlin.idea.base.projectStructure.ModuleSourceRootGroup
+import org.jetbrains.kotlin.idea.base.projectStructure.getWholeModuleGroup
 import org.jetbrains.kotlin.idea.configuration.ConfigureKotlinStatus
 import org.jetbrains.kotlin.idea.configuration.KotlinProjectConfigurator
 import ru.lazyhat.compukters.platform.k2.CompuktersPlatforms
@@ -33,11 +34,29 @@ class GuestKotlinProjectConfigurator : KotlinProjectConfigurator {
     override val presentableText: String = "Compukters Guest Kotlin"
     override val targetPlatform = CompuktersPlatforms.default
 
-    override fun isApplicable(module: Module): Boolean =
-        module.project.getService(GuestProjectRegistry::class.java).isGuestModule(module.name)
+    override fun isApplicable(module: Module): Boolean {
+        val registry = module.project.getService(GuestProjectRegistry::class.java)
+        if (registry.isGuestModule(module.name)) return true
+        if (registry.configurations().isEmpty()) return false
+        // Kotlin asks applicability on a Gradle group's owner, even for a single source set.
+        return module.getWholeModuleGroup().sourceRootModules.any { registry.isGuestModule(it.name) }
+    }
 
-    override fun getStatus(moduleSourceRootGroup: ModuleSourceRootGroup): ConfigureKotlinStatus =
-        if (isApplicable(moduleSourceRootGroup.baseModule)) ConfigureKotlinStatus.CONFIGURED else ConfigureKotlinStatus.NON_APPLICABLE
+    override fun getStatus(moduleSourceRootGroup: ModuleSourceRootGroup): ConfigureKotlinStatus {
+        val registry = moduleSourceRootGroup.baseModule.project.getService(GuestProjectRegistry::class.java)
+        val sources = moduleSourceRootGroup.sourceRootModules.ifEmpty { listOf(moduleSourceRootGroup.baseModule) }
+        // A Guest source set is configured independently of its JVM neighbours and group owner.
+        return if (sources.all {
+                registry.isGuestModule(
+                    it.name,
+                )
+            }
+        ) {
+            ConfigureKotlinStatus.CONFIGURED
+        } else {
+            ConfigureKotlinStatus.NON_APPLICABLE
+        }
+    }
 
     override fun shouldShowNotConfiguredDialog(): Boolean = false
 

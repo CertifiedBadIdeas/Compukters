@@ -34,6 +34,7 @@ import com.intellij.openapi.vfs.VirtualFileManager
 import com.intellij.openapi.vfs.newvfs.BulkFileListener
 import com.intellij.openapi.vfs.newvfs.events.VFileEvent
 import com.intellij.openapi.wm.WindowManager
+import com.intellij.ui.EditorNotifications
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -146,6 +147,7 @@ class GuestProjectRegistry(
         sources.clear()
         requested.clear()
         state.modules.forEach { (name, config) -> reload(name, config) }
+        onWrite { EditorNotifications.getInstance(project).updateAllNotifications() }
     }
 
     fun importModule(
@@ -170,6 +172,7 @@ class GuestProjectRegistry(
             }
             WindowManager.getInstance().getStatusBar(project)?.updateWidget(GuestStatusWidget.ID)
             ProjectView.getInstance(project).refresh()
+            EditorNotifications.getInstance(project).updateAllNotifications()
         }
     }
 
@@ -212,6 +215,7 @@ class GuestProjectRegistry(
             if (persist) {
                 configuration = GuestRegistryState().also { it.modules = (configuration.modules + (name to config)).toMutableMap() }
                 ProjectView.getInstance(project).refresh()
+                EditorNotifications.getInstance(project).updateAllNotifications()
             }
             requested.add(name)
             val generation = sequence.incrementAndGet()

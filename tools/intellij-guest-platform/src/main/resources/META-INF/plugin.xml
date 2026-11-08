@@ -18,7 +18,7 @@
         <projectResolve implementation="ru.lazyhat.compukters.idea.GuestGradleResolver"/>
     </extensions>
     <extensions defaultExtensionNs="org.jetbrains.kotlin">
-        <projectConfigurator implementation="ru.lazyhat.compukters.idea.GuestKotlinProjectConfigurator"/>
+        <projectConfigurator implementation="ru.lazyhat.compukters.idea.GuestKotlinProjectConfigurator" order="first"/>
         <supportsKotlinPluginMode supportsK2="true"/>
         <fir.extensions.firExtensionRegistrar implementation="ru.lazyhat.compukters.platform.k2.contracts.GuestContractFirExtensionRegistrar"/>
         <k2KaModuleFactory implementation="ru.lazyhat.compukters.idea.GuestModuleFactory" order="first"/>

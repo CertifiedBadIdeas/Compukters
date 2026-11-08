@@ -31,6 +31,7 @@ import com.intellij.openapi.module.ModuleUtilCore
 import com.intellij.openapi.projectRoots.JavaSdk
 import com.intellij.openapi.projectRoots.ProjectJdkTable
 import com.intellij.openapi.projectRoots.Sdk
+import com.intellij.openapi.util.registry.Registry
 import com.intellij.openapi.vfs.LocalFileSystem
 import com.intellij.testFramework.builders.ModuleFixtureBuilder
 import com.intellij.testFramework.fixtures.CodeInsightFixtureTestCase
@@ -41,7 +42,11 @@ import org.jetbrains.kotlin.analysis.api.components.KaDiagnosticCheckerFilter
 import org.jetbrains.kotlin.analysis.api.permissions.allowAnalysisOnEdt
 import org.jetbrains.kotlin.analysis.api.projectStructure.KaModuleProvider
 import org.jetbrains.kotlin.idea.base.projectStructure.ModuleSourceRootGroup
+import org.jetbrains.kotlin.idea.base.projectStructure.toModuleGroup
 import org.jetbrains.kotlin.idea.configuration.ConfigureKotlinStatus
+import org.jetbrains.kotlin.idea.configuration.KotlinProjectConfigurationService
+import org.jetbrains.kotlin.idea.configuration.KotlinSetupEnvironmentNotificationProvider
+import org.jetbrains.kotlin.idea.configuration.findApplicableConfigurator
 import org.jetbrains.kotlin.idea.configuration.isModuleConfigured
 import org.jetbrains.kotlin.psi.KtFile
 import org.jetbrains.plugins.gradle.settings.DistributionType
@@ -150,6 +155,29 @@ class GuestGradleImportTest : CodeInsightFixtureTestCase<ModuleFixtureBuilder<Mo
             "Native Gradle import configures Kotlin without a JVM stdlib",
             isModuleConfigured(ModuleSourceRootGroup(nativeModule, emptyList())),
         )
+        val nativeGroup = nativeModule.toModuleGroup()
+        assertTrue("The actual Kotlin source-set group must be configured", isModuleConfigured(nativeGroup))
+        assertEquals(
+            ConfigureKotlinStatus.NON_APPLICABLE,
+            GuestKotlinProjectConfigurator().getStatus(nativeGroup.baseModule.toModuleGroup()),
+        )
+        assertEquals(
+            ConfigureKotlinStatus.NON_APPLICABLE,
+            GuestKotlinProjectConfigurator().getStatus(ModuleSourceRootGroup(nativeGroup.baseModule, listOf(nativeModule, myModule))),
+        )
+        assertTrue(
+            "Guest must own configuration before the generic Gradle configurator: ${findApplicableConfigurator(nativeModule).name}",
+            findApplicableConfigurator(nativeModule) is GuestKotlinProjectConfigurator,
+        )
+        assertFalse(
+            "Configured Guest files must not request Kotlin setup",
+            KotlinProjectConfigurationService.getInstance(project).shouldShowNotConfiguredDialog(nativeModule),
+        )
+        Registry.get("kotlin.not.configured.show.notification").setValue(true, testRootDisposable)
+        runReadActionBlocking {
+            assertNull(KotlinSetupEnvironmentNotificationProvider().collectNotificationData(project, file))
+        }
+        assertFalse("Host configuration must remain independent", findApplicableConfigurator(myModule) is GuestKotlinProjectConfigurator)
         assertEquals(
             ConfigureKotlinStatus.NON_APPLICABLE,
             GuestKotlinProjectConfigurator().getStatus(ModuleSourceRootGroup(myModule, emptyList())),
