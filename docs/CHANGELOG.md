@@ -85,6 +85,9 @@ headings so this page has one stable URL that can be shared outside the reposito
   control by clicking that computer in the configurator's Keyboard mode, without opening a terminal.
   Active control keeps only the small top caption and hides the configurator's central help panel.
   Mouse look remains available; Escape, GUI/focus loss and expired input clear held keys.
+  Captured key changes send immediately, and bounded burst coalescing retains short press/release
+  transitions between ticks. Unchanged held state uses fewer heartbeat packets. This keyboard packet
+  update requires matching client and server mod versions; the Guest keyboard API stays compatible.
 
 - Construction integrations can await VM checkpoint publication and filesystem release before copying a
   computer, guard staged copies, and reconcile exact device identities after journal recovery. The

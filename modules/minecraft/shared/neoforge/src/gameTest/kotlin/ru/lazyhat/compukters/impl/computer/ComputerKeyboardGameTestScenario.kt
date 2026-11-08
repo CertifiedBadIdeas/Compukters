@@ -9,6 +9,8 @@ package ru.lazyhat.compukters.impl.computer
 import net.minecraft.core.BlockPos
 import net.minecraft.gametest.framework.GameTestHelper
 import ru.lazyhat.compukters.core.device.computer.ProgramComputerState
+import ru.lazyhat.compukters.core.input.KeyboardInputGate
+import ru.lazyhat.compukters.core.input.KeyboardKeys
 import ru.lazyhat.compukters.impl.registry.CompuktersRegistry
 import ru.lazyhat.compukters.lang.runtime.vm.TerminalKey
 import ru.lazyhat.compukters.lang.runtime.vm.TerminalKeyAction
@@ -33,6 +35,8 @@ internal object ComputerKeyboardGameTestScenario {
         var sequence = 0L
         var held = 0L
         var activated = false
+        var tapped = false
+        var releasedCapture = false
         val previous = ComputerKeyboard.sendStatus
         ComputerKeyboard.sendStatus = { target, current, mask ->
             if (target === player) token = current else previous(target, current, mask)
@@ -79,7 +83,38 @@ internal object ComputerKeyboardGameTestScenario {
                 }
                 if ("KEYBOARD-CONNECTED" in output && "KEYBOARD-DOWN" !in output) held = (1L shl 22) or Long.MIN_VALUE
                 if ("KEYBOARD-DOWN" in output) held = 0
-                val done = "KEYBOARD-RELEASED" in output && "KEYBOARD-CLOSED" in output
+                val space = 1L shl KeyboardKeys.index(32)
+                if ("KEYBOARD-RELEASED" in output && !tapped) {
+                    val current = requireNotNull(token)
+                    // A malformed high sequence must not poison admission for the real capture.
+                    ComputerKeyboard.heartbeat(player, current, Long.MAX_VALUE, 1L, false)
+                    repeat(KeyboardInputGate.MAX_IMMEDIATE_PER_TICK) {
+                        ComputerKeyboard.heartbeat(player, current, sequence++, 0, false)
+                    }
+                    ComputerKeyboard.heartbeat(player, current, sequence++, space, false, space, 0)
+                    ComputerKeyboard.heartbeat(player, current, sequence++, 0, false, 0, space)
+                    repeat(30) { ComputerKeyboard.heartbeat(player, current, sequence++, 0, false) }
+                    tapped = true
+                }
+                if ("KEYBOARD-TAPPED" in output && !releasedCapture) {
+                    val current = requireNotNull(token)
+                    repeat(40) { index ->
+                        val down = index % 2 == 0
+                        ComputerKeyboard.heartbeat(
+                            player,
+                            current,
+                            sequence++,
+                            if (down) space else 0,
+                            false,
+                            if (down) space else 0,
+                            if (down) 0 else space,
+                        )
+                    }
+                    ComputerKeyboard.heartbeat(player, current, sequence++, 0, true)
+                    helper.assertTrue(token == null, "capture release was deferred behind burst input")
+                    releasedCapture = true
+                }
+                val done = "KEYBOARD-TAPPED" in output && "KEYBOARD-DISCONNECTED" in output && "KEYBOARD-CLOSED" in output
                 if (done) {
                     helper.assertTrue(token == null, "closed program retained player capture")
                     helper.assertFalse(ComputerKeyboard.toggle(player, absolute), "closed keyboard request was revived")

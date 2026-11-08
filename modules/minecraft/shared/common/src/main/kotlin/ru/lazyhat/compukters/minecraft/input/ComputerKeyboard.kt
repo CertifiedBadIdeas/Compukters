@@ -12,7 +12,9 @@ import net.minecraft.server.level.ServerLevel
 import net.minecraft.server.level.ServerPlayer
 import ru.lazyhat.compukters.core.input.KeyboardEndpoint
 import ru.lazyhat.compukters.core.input.KeyboardFrame
+import ru.lazyhat.compukters.core.input.KeyboardInputGate
 import ru.lazyhat.compukters.core.input.KeyboardInputState
+import ru.lazyhat.compukters.core.input.KeyboardInputUpdate
 import ru.lazyhat.compukters.core.input.KeyboardPerformanceTrace
 import ru.lazyhat.compukters.core.input.KeyboardUnavailable
 import ru.lazyhat.compukters.minecraft.computer.ComputerBlockEntity
@@ -26,6 +28,7 @@ object ComputerKeyboard {
         val owner: Any,
         val input: KeyboardInputState,
     ) {
+        val gate = KeyboardInputGate(input.mask)
         var epoch: Long? = computer.terminalMachineId
         var player: UUID? = null
         var token: UUID? = null
@@ -119,6 +122,7 @@ object ComputerKeyboard {
         entry.player = player.uuid
         entry.token = UUID.randomUUID()
         entry.sequence = -1
+        entry.gate.reset()
         entry.input.connect(level.server.overworld().gameTime)
         store.players[player.uuid] = entry
         sendStatus(player, entry.token, entry.input.mask)
@@ -131,6 +135,16 @@ object ComputerKeyboard {
         sequence: Long,
         keys: Long,
         release: Boolean,
+    ) = heartbeat(player, token, sequence, keys, release, 0L, 0L)
+
+    fun heartbeat(
+        player: ServerPlayer,
+        token: UUID,
+        sequence: Long,
+        keys: Long,
+        release: Boolean,
+        pressed: Long,
+        released: Long,
     ) {
         val level = player.level() as? ServerLevel ?: return
         check(level.server.isSameThread)
@@ -145,14 +159,13 @@ object ComputerKeyboard {
             return
         }
         val tick = level.server.overworld().gameTime
-        val accepted = entry.input.update(sequence, keys, tick)
-        if (accepted) entry.sequence = sequence
-        KeyboardPerformanceTrace.begin(if (accepted) "keyboard.accepted" else "keyboard.rejected")?.apply {
-            capture = token.toString()
-            this.sequence = sequence
-            this.keys = keys
-            this.tick = tick
-            commit()
+        val update = KeyboardInputUpdate(sequence, keys, pressed, released)
+        val admission = entry.gate.offer(update, tick)
+        val ready = admission.ready
+        if (ready != null) {
+            apply(entry, ready, tick)
+        } else {
+            trace(entry, update, tick, if (admission.accepted) "keyboard.coalesced" else "keyboard.rejected")
         }
     }
 
@@ -171,6 +184,10 @@ object ComputerKeyboard {
                 (player == null || !entry.input.connected || !validPlayer(entry, player))
             ) {
                 stop(server, store, entry)
+                continue
+            }
+            if (player != null) {
+                entry.gate.drain(server.overworld().gameTime)?.let { apply(entry, it, server.overworld().gameTime) }
             }
         }
     }
@@ -184,6 +201,33 @@ object ComputerKeyboard {
     fun shutdown(server: MinecraftServer) {
         val store = stores.remove(server) ?: return
         store.computers.values.forEach { stop(server, store, it) }
+    }
+
+    private fun apply(
+        entry: Entry,
+        update: KeyboardInputUpdate,
+        tick: Long,
+    ) {
+        val accepted = entry.input.update(update.sequence, update.keys, tick, update.pressed, update.released)
+        if (accepted) entry.sequence = update.sequence
+        trace(entry, update, tick, if (accepted) "keyboard.accepted" else "keyboard.rejected")
+    }
+
+    private fun trace(
+        entry: Entry,
+        update: KeyboardInputUpdate,
+        tick: Long,
+        phase: String,
+    ) {
+        KeyboardPerformanceTrace.begin(phase)?.apply {
+            capture = entry.token?.toString() ?: ""
+            sequence = update.sequence
+            keys = update.keys
+            pressed = update.pressed
+            released = update.released
+            this.tick = tick
+            commit()
+        }
     }
 
     private fun valid(entry: Entry): Boolean {
@@ -214,6 +258,7 @@ object ComputerKeyboard {
         }
         entry.player = null
         entry.token = null
+        entry.gate.reset()
         entry.input.disconnect()
     }
 }
