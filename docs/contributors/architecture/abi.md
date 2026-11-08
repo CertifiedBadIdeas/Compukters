@@ -11,6 +11,18 @@ permalink: /ARCHITECTURE/abi/
 
 This reference groups versioned representation boundaries by the version that introduced them. Those versions are minimum feature requirements, not a claim that older Runtime distributions implement today’s platform. The source owners below define the active contract. Before changing a wire format, inspect each producer, consumer and verifier. Runtime release pins in `build-scripts/src/main/kotlin/RuntimeBundleSupport.kt` describe published bundles separately from the local VM checkout.
 
+## Guest Gradle tooling model
+
+`GuestProjectModel` version 1 describes an addon's native source roots, platform files, compiled Guest
+dependencies, generated sources, bundle output and compile task. The Gradle plugin registers its builder
+with the Tooling API; the IntelliJ adapter compiles the same compiler-independent Java model sources.
+Discovery resolves declared inputs without running build tasks or updating the ABI lock. Missing or
+unresolvable inputs remain explicit model problems. Host JVM configurations are excluded.
+
+This model is a separate IDE import boundary. Its version does not change the CAGB, platform metadata,
+capability transport or VM formats. `:addon-gradle-plugin:testGuestGradleModel` verifies actual Tooling
+API transport, discovery without compilation, non-addon project rejection and missing-file diagnostics.
+
 ## Declarative addon SDK
 
 SDK **0.8.0** accepts declarations-only Kotlin/JVM contracts and generates Guest Kotlin, executable

@@ -21,6 +21,7 @@ package ru.lazyhat.compukters.gradle.addon;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.regex.Pattern;
+import javax.inject.Inject;
 import org.gradle.api.Plugin;
 import org.gradle.api.Project;
 import org.gradle.api.artifacts.Configuration;
@@ -31,9 +32,15 @@ import org.gradle.api.tasks.JavaExec;
 import org.gradle.api.tasks.TaskProvider;
 import org.gradle.api.tasks.SourceSetContainer;
 import org.gradle.api.tasks.bundling.Jar;
+import org.gradle.tooling.provider.model.ToolingModelBuilderRegistry;
 
 public final class CompuktersAddonPlugin implements Plugin<Project> {
     private static final Pattern IDENTITY = Pattern.compile("[a-z][a-z0-9_-]{0,63}");
+
+    @Inject
+    public CompuktersAddonPlugin(ToolingModelBuilderRegistry registry) {
+        registry.register(new GuestProjectModelBuilder());
+    }
 
     @Override
     public void apply(Project project) {
@@ -67,6 +74,11 @@ public final class CompuktersAddonPlugin implements Plugin<Project> {
             configuration.setCanBeResolved(true);
         });
         FileCollection platformFiles = project.files(platform);
+        project.getConfigurations().create("compuktersGuestDependencies", configuration -> {
+            configuration.setCanBeConsumed(false);
+            configuration.setCanBeResolved(true);
+            configuration.setDescription("Compiled native Guest addon dependencies; excludes the host JVM classpath.");
+        });
         var sourceRoot = project.getLayout().getProjectDirectory().dir("src/contract/kotlin");
         var legacySourceRoot = project.getLayout().getProjectDirectory().dir("src/compuktersAddon/kotlin");
         var legacyKotlin = project.fileTree(legacySourceRoot).matching(pattern -> pattern.include("**/*.kt"));

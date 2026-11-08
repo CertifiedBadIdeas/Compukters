@@ -56,6 +56,8 @@ val addonAdapterArtifact =
     }
 
 tasks.test {
+    systemProperty("compukters.test.gradle.home", gradle.gradleHomeDir!!.absolutePath)
+    systemProperty("compukters.test.gradle.user.home", gradle.gradleUserHomeDir.absolutePath)
     dependsOn(
         ":addon-api:shadowJar",
         ":compiler-k2-engine:shadowJar",
@@ -69,6 +71,17 @@ tasks.test {
     systemProperty("compukters.addon.test.tooling", addonToolingArtifact.get().asFile.absolutePath)
     systemProperty("compukters.addon.test.platform", guestPlatformArtifact.get().asFile.absolutePath)
     systemProperty("compukters.addon.test.adapter", addonAdapterArtifact.get().asFile.absolutePath)
+}
+
+tasks.register<Test>("testGuestGradleModel") {
+    description = "Verifies native Guest model discovery through Gradle Tooling API without building the compiler SDK."
+    group = "verification"
+    testClassesDirs = sourceSets.test.get().output.classesDirs
+    classpath = sourceSets.test.get().runtimeClasspath
+    useJUnitPlatform()
+    systemProperty("compukters.test.gradle.home", gradle.gradleHomeDir!!.absolutePath)
+    systemProperty("compukters.test.gradle.user.home", gradle.gradleUserHomeDir.absolutePath)
+    filter { includeTestsMatching("*GuestProjectModelTest") }
 }
 
 publishing {

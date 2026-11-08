@@ -46,6 +46,9 @@ dependencies {
 
 // Compile the shared platform against the IDE compiler. Never package the worker's K2 distribution.
 val common = file("../../modules/common")
+sourceSets.main {
+    java.srcDir(common.resolve("addon-gradle-plugin/src/main/java/ru/lazyhat/compukters/gradle/model"))
+}
 kotlin {
     compilerOptions {
         jvmTarget = JvmTarget.JVM_21
