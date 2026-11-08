@@ -100,7 +100,7 @@ class GuestGradleImportTest : CodeInsightFixtureTestCase<ModuleFixtureBuilder<Mo
             import kotlin.math.Vector3d
             import prototype.flight.Velocity
             @GuestDevice("fixture:engine") interface Engine {
-                @GuestCommand fun aim(direction: Vector3d): Unit
+                @GuestCall fun aim(direction: Vector3d): Unit
                 fun direction(v: Velocity): Vector3d = v.direction()
             }
             fun use(engine: Engine) { engine.aimCommand(Vector3d(1.0, 0.0, 0.0)) }
