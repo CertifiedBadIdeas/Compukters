@@ -25,7 +25,9 @@ import ru.lazyhat.compukters.lang.runtime.fs.FileSystemStoreOpenFailure
 import ru.lazyhat.compukters.lang.runtime.fs.WorldFileSystemStore
 import ru.lazyhat.compukters.lang.runtime.vm.FfmBridge
 import ru.lazyhat.compukters.lang.runtime.vm.VmBootException
+import ru.lazyhat.compukters.lang.runtime.vm.VmBridgeException
 import ru.lazyhat.compukters.lang.runtime.vm.VmSession
+import ru.lazyhat.compukters.lang.runtime.vm.VmStoreBusyException
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.nio.file.Files
@@ -34,9 +36,73 @@ import java.security.MessageDigest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class FfmFileSystemIntegrationTest {
+    @Test
+    fun `bounded native store pressure remains typed and leaves first installation retryable`() {
+        val root = Files.createTempDirectory("compukters-ffm-busy-").toRealPath()
+        try {
+            val bridge = FfmBridge.open(Path.of(requiredProperty("compukter.ffi.library")))
+            try {
+                val artifact = Files.readAllBytes(Path.of(requiredProperty("compukters.shell.artifact")))
+                val rom = bootRom(artifact)
+                val id = ComputerId.fromLongs(81, 82)
+                // Version-1 FileSystemLimits: ordinary bounds, but only one queued byte.
+                val limits =
+                    longArrayOf(
+                        4096,
+                        255,
+                        64,
+                        64L shl 20,
+                        8L shl 20,
+                        65536,
+                        4096,
+                        256,
+                        64L shl 10,
+                        16L shl 20,
+                        1L shl 20,
+                        512L shl 10,
+                        128L shl 20,
+                        65536,
+                        512L shl 20,
+                        4096,
+                        1,
+                    )
+                val wire = ByteBuffer.allocate(1 + limits.size * 8).order(ByteOrder.LITTLE_ENDIAN).put(1.toByte())
+                limits.forEach(wire::putLong)
+                val opened = bridge.storeOpen(root.toString().encodeToByteArray(), wire.array())
+                val handle = ByteBuffer.wrap(opened).order(ByteOrder.LITTLE_ENDIAN).getLong(2)
+                try {
+                    repeat(2) {
+                        assertFailsWith<VmStoreBusyException> {
+                            bridge.createBootInStore(handle, id.toByteArray(), rom, byteArrayOf(1, 0))
+                        }
+                    }
+                    assertFailsWith<VmStoreBusyException> { bridge.storeInstallSystem(handle, id.toByteArray(), rom) }
+                } finally {
+                    bridge.storeClose(handle)
+                }
+                val closed =
+                    assertFailsWith<VmBridgeException> {
+                        bridge.createBootInStore(handle, id.toByteArray(), rom, byteArrayOf(1, 0))
+                    }
+                assertFalse(closed is VmStoreBusyException)
+                // Reopening with capacity admits the same identity and complete initial tree.
+                WorldFileSystemStore.open(root, bridge).use { store ->
+                    VmSession.bootInStore(store, id, rom).use { session ->
+                        assertEquals(1, session.filesystemGeneration())
+                    }
+                }
+            } finally {
+                bridge.close()
+            }
+        } finally {
+            root.toFile().deleteRecursively()
+        }
+    }
+
     @Test
     fun `JDK 25 FFM owns the Rust world store lifecycle`() {
         val root = Files.createTempDirectory("compukters-ffm-store-").toRealPath()

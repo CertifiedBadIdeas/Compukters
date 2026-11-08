@@ -968,7 +968,12 @@ internal class FfmBridge private constructor(
     private fun failure(
         operation: String,
         status: Int,
-    ): VmBridgeException = VmBridgeException("FFM $operation failed with status $status")
+    ): VmBridgeException =
+        if (status == STATUS_STORE_BUSY) {
+            VmStoreBusyException("FFM $operation deferred: filesystem store is busy")
+        } else {
+            VmBridgeException("FFM $operation failed with status $status")
+        }
 
     private fun Arena.nativeBytes(value: ByteArray): MemorySegment {
         if (value.isEmpty()) return MemorySegment.NULL
@@ -992,6 +997,7 @@ internal class FfmBridge private constructor(
     }
 
     companion object {
+        private const val STATUS_STORE_BUSY = 14
         private const val STATUS_OK = 0
         private const val STATUS_BUFFER_TOO_SMALL = 10
         private const val STATUS_VERIFICATION = 2

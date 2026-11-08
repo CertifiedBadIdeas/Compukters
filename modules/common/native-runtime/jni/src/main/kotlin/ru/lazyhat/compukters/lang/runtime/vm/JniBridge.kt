@@ -574,9 +574,15 @@ internal class JniBridge private constructor() : LowLevelVmBridge {
     private fun failure(
         operation: String,
         status: Int,
-    ): VmBridgeException = VmBridgeException("JNI $operation failed with status $status")
+    ): VmBridgeException =
+        if (status == STATUS_STORE_BUSY) {
+            VmStoreBusyException("JNI $operation deferred: filesystem store is busy")
+        } else {
+            VmBridgeException("JNI $operation failed with status $status")
+        }
 
     companion object {
+        private const val STATUS_STORE_BUSY = 14
         private const val STATUS_OK = 0
         private const val STATUS_BUFFER_TOO_SMALL = 10
         private const val STATUS_VERIFICATION = 2

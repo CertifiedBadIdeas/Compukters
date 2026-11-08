@@ -436,10 +436,15 @@ class VmCanonicalLineException(
     val failure: VmCanonicalLineFailure,
 ) : IllegalStateException("canonical line submission failed: $failure")
 
-class VmBridgeException(
+open class VmBridgeException(
     message: String,
     cause: Throwable? = null,
 ) : IllegalStateException(message, cause)
+
+/** The bounded persistence queue refused admission; the caller may retry on a later turn. */
+class VmStoreBusyException(
+    message: String,
+) : VmBridgeException(message)
 
 enum class VmCheckpointFailure {
     INCOMPATIBLE,
