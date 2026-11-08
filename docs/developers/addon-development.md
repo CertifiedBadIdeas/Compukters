@@ -136,14 +136,14 @@ Compukters development mod with its own product version to the run configuration
 
 ## Declare the Guest API
 
-SDK 0.8 uses ordinary Kotlin/JVM declarations in `src/compuktersAddon/contracts`. Their package paths must belong
+SDK 0.8 uses ordinary Kotlin/JVM declarations in `src/contract/kotlin`. Their package paths must belong
 to the addon namespace. IntelliJ can resolve the SDK annotations and signature types without interpreting Guest Kotlin.
 Device and service interfaces contain explicitly typed methods without bodies; records are immutable constructor-only
 data classes. Executable helpers, initializers, inheritance, generic or nullable boundary types, mutable fields and
 default arguments are rejected.
 
 ```kotlin
-// src/compuktersAddon/contracts/example/sensors/Sensors.kt
+// src/contract/kotlin/example/sensors/Sensors.kt
 package example.sensors
 
 import ru.lazyhat.compukters.api.contracts.GuestRead
@@ -163,6 +163,12 @@ Unit-returning mutations, and `@GuestWait` for operations allowed to return a pe
 gets a local `methodCommand(...)` factory; value-returning calls and waits never get batch factories. A command failure
 is retained in its individual batch result and does not roll back or stop the remaining commands.
 
+The operation annotations have an optional `binding` parameter. Omit it for new methods: the SDK derives a name
+from the class and method, so `LiquidThruster.setThrottle` becomes `liquidThrusterSetThrottle`. The class prefix
+keeps methods such as `close()` distinct in the shared host handler. Set `binding` explicitly only when you need
+a different ABI name, for example `@GuestCommand(binding = "liquidSetThrottle")` to retain an existing lock entry
+when migrating or renaming a method. Existing explicit names do not need to change.
+
 `@Finite`, `@DoubleRange`, `@IntRange` and `@MaxLength` on parameters generate both Guest prechecks and authoritative
 host validation. Generated hosts derive batch eligibility from the declarations; handlers do not maintain command-name sets.
 Only methods marked `@GuestWait` may retain a pending continuation.
@@ -172,7 +178,9 @@ The build derives operation signatures, selectors, bindings, schemas, argument d
 Inspect those files to understand a wrapper. They are generated artifacts: handwritten Guest API files in the former
 `src/compuktersAddon/kotlin` directory are rejected. The executable `.cagb` and its attached source archive contain
 those same generated files. `compuktersGuestSourcesJar` and the consumable `compuktersGuestSources` configuration
-expose them separately. The `compuktersContracts` JVM source set checks the declarations without packaging them in the mod JAR.
+expose them separately. The `contract` JVM source set checks the declarations in `src/contract/kotlin`
+without packaging them in the mod JAR. Its classes are built by `compileContractKotlin`, which also runs as part
+of `check`. The Gradle configuration block remains `compuktersAddon { ... }`.
 
 ## Implement and register the host
 
@@ -283,7 +291,7 @@ from the addon's JAR; the plugin automatically packages it as `META-INF/compukte
 ## Preserve the ABI lock
 
 Operation selectors are an artifact/runtime ABI even though addon authors never choose their numbers. Check in
-`src/compuktersAddon/addon.lock`. Create it, or update it after an intentional Guest API change, with:
+`src/contract/addon.lock`. Create it, or update it after an intentional Guest API change, with:
 
 ```shell
 ./gradlew updateCompuktersAddonAbiLock

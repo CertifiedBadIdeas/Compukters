@@ -16,8 +16,10 @@ headings so this page has one stable URL that can be shared outside the reposito
 - Addon SDK 0.8 generates inspectable Guest Kotlin, executable images and host dispatch from constrained Kotlin
   contracts. Authors declare devices, resources, records, operations and argument constraints; command factories and
   server validation share those declarations. Supported stdlib geometry works in arguments and results, including
-  validated rotations. Checked-in ABI locks preserve operation selectors and tombstones. All eight maintained
-  addons use the generated API. Aeronautics servo calls require explicit speed and wait timeout arguments;
+  validated rotations. Declarations live in `src/contract/kotlin`, checked by the `contract` source set;
+  operation binding names are inferred unless explicitly overridden. Checked-in ABI locks preserve operation selectors
+  and tombstones. All eight maintained addons use the generated API. Aeronautics servo calls require explicit speed
+  and wait timeout arguments;
   Create stock lookup requires an explicit start index. Cosmonautics orbit snapshots expose orbital fields;
   consumers calculate derived apsides instead of calling bundled Guest helpers.
 

@@ -28,6 +28,38 @@ import kotlin.test.assertTrue
 
 class DeclarativeGuestContractTest {
     @Test
+    fun `optional bindings derive names from their class and method while explicit names override them`() =
+        contract(
+            """
+        @GuestDevice("fixture:engine") interface Engine {
+            @GuestRead fun state(): Int
+            @GuestCommand fun setThrottle(throttle: Double): Unit
+            @GuestCall(binding = "") fun close(): Unit
+            @GuestWait fun awaitState(): Int
+        }
+        @GuestResource interface Snapshot {
+            @GuestCall fun close(): Unit
+        }
+        @GuestService interface Api {
+            @GuestRead(binding = "legacyValue") fun value(): Int
+        }
+        """,
+        ) { model ->
+            assertEquals(
+                setOf(
+                    "fixture.device.EngineBindings.engineState",
+                    "fixture.device.EngineBindings.engineSetThrottle",
+                    "fixture.device.EngineBindings.engineClose",
+                    "fixture.device.EngineBindings.engineAwaitState",
+                    "fixture.device.SnapshotBindings.snapshotClose",
+                    "fixture.device.ApiBindings.legacyValue",
+                ),
+                model.operations.map { it.binding }.toSet(),
+            )
+            assertEquals(setOf("fixture.device.EngineBindings.engineSetThrottle"), model.commands)
+        }
+
+    @Test
     fun `byte arrays are scalar responses rather than record candidates`() =
         contract(
             "@GuestService interface Api { @GuestRead fun read(): ByteArray }",

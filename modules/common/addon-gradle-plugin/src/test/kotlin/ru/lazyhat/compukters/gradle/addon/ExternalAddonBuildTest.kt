@@ -124,7 +124,7 @@ class ExternalAddonBuildTest {
                     Files.copy(input, target)
                 }
             }
-            val contractSource = project.resolve("src/compuktersAddon/contracts/fixture/kinetics/Kinetics.kt")
+            val contractSource = project.resolve("src/contract/kotlin/fixture/kinetics/Kinetics.kt")
             contractSource.also { source ->
                 source.parent.createDirectories()
                 source.writeText(
@@ -169,6 +169,7 @@ class ExternalAddonBuildTest {
             runner(project, "verifyCompuktersApiClasspath").build()
             runner(project, "jar", "--configuration-cache").build()
             runner(project, "check", "compuktersGuestSourcesJar", "--configuration-cache").build()
+            assertTrue(project.resolve("build/classes/kotlin/contract/fixture/kinetics/Engine.class").toFile().isFile)
             val hostTests = Files.readString(project.resolve("build/test-results/test/TEST-fixture.GeneratedContractTest.xml"))
             assertEquals(3, Regex("<testcase\\s").findAll(hostTests).count(), hostTests)
             Files.delete(project.resolve("build/compukters-addon/external-addon.cagb"))
@@ -176,7 +177,7 @@ class ExternalAddonBuildTest {
             assertTrue(replay.output.contains("Reusing configuration cache"), replay.output)
             assertEquals(org.gradle.testkit.runner.TaskOutcome.SUCCESS, replay.task(":assembleCompuktersAddon")?.outcome)
 
-            assertTrue(project.resolve("src/compuktersAddon/addon.lock").toFile().isFile)
+            assertTrue(project.resolve("src/contract/addon.lock").toFile().isFile)
             assertTrue(
                 project
                     .resolve("build/compukters-addon/addon.api")

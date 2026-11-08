@@ -56,7 +56,7 @@ val generateAddonDocumentationSources = tasks.register("generateAddonDocumentati
 }
 listOf("create", "sable", "propulsion").forEach { addon ->
     val generate = tasks.register<JavaExec>("generate${addon.replaceFirstChar(Char::uppercase)}DocumentationSources") {
-        val contracts = layout.projectDirectory.dir("addons/$addon/src/compuktersAddon/contracts")
+        val contracts = layout.projectDirectory.dir("addons/$addon/src/contract/kotlin")
         val output = layout.buildDirectory.dir("generated/sources/addonDocumentation/$addon/kotlin")
         classpath = addonDocumentationTooling
         mainClass = "ru.lazyhat.compukters.compiler.k2.engine.build.AddonGuestApiBuilderMainKt"

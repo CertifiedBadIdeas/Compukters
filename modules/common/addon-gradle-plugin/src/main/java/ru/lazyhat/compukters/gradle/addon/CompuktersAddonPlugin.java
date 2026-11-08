@@ -67,11 +67,11 @@ public final class CompuktersAddonPlugin implements Plugin<Project> {
             configuration.setCanBeResolved(true);
         });
         FileCollection platformFiles = project.files(platform);
-        var sourceRoot = project.getLayout().getProjectDirectory().dir("src/compuktersAddon/contracts");
+        var sourceRoot = project.getLayout().getProjectDirectory().dir("src/contract/kotlin");
         var legacySourceRoot = project.getLayout().getProjectDirectory().dir("src/compuktersAddon/kotlin");
         var legacyKotlin = project.fileTree(legacySourceRoot).matching(pattern -> pattern.include("**/*.kt"));
         var generatedGuestRoot = project.getLayout().getBuildDirectory().dir("generated/sources/compuktersGuest/kotlin");
-        var abiLock = project.getLayout().getProjectDirectory().file("src/compuktersAddon/addon.lock");
+        var abiLock = project.getLayout().getProjectDirectory().file("src/contract/addon.lock");
         var descriptor = project.getLayout().getBuildDirectory().file("compukters-addon/addon.api");
         var bundle = project.getLayout().getBuildDirectory().file("compukters-addon/" + project.getName() + ".cagb");
         var generatedHostRoot = project.getLayout().getBuildDirectory().dir("generated/sources/compuktersAddon/kotlin");
@@ -112,7 +112,7 @@ public final class CompuktersAddonPlugin implements Plugin<Project> {
             task.getOutputs().dir(generatedGuestRoot);
             task.doFirst(ignored -> {
                 if (!legacyKotlin.isEmpty()) {
-                    throw new IllegalArgumentException("Handwritten addon Guest sources are unsupported; migrate src/compuktersAddon/kotlin to declarations in src/compuktersAddon/contracts");
+                    throw new IllegalArgumentException("Handwritten addon Guest sources are unsupported; migrate src/compuktersAddon/kotlin to declarations in src/contract/kotlin");
                 }
                 task.setArgs(List.of("--contracts", sourceRoot.getAsFile().getAbsolutePath(),
                         "--guest-output", generatedGuestRoot.get().getAsFile().getAbsolutePath(),
@@ -191,18 +191,18 @@ public final class CompuktersAddonPlugin implements Plugin<Project> {
             }
         });
         project.getPluginManager().withPlugin("org.jetbrains.kotlin.jvm", ignored -> {
-            var contracts = project.getExtensions().getByType(SourceSetContainer.class).create("compuktersContracts");
+            var contract = project.getExtensions().getByType(SourceSetContainer.class).create("contract");
             project.afterEvaluate(evaluated -> project.getDependencies().add(
-                    contracts.getCompileOnlyConfigurationName(), extension.getCommonApiCoordinate().get()));
+                    contract.getCompileOnlyConfigurationName(), extension.getCommonApiCoordinate().get()));
             Object kotlin = project.getExtensions().getByName("kotlin");
             Object sourceSets = invoke(kotlin, "getSourceSets");
-            Object contractSources = invoke(sourceSets, "getByName", "compuktersContracts");
-            invoke(invoke(contractSources, "getKotlin"), "srcDir", sourceRoot);
+            Object contractSources = invoke(sourceSets, "getByName", "contract");
+            invoke(invoke(contractSources, "getKotlin"), "setSrcDirs", List.of(sourceRoot));
             Object main = invoke(sourceSets, "getByName", "main");
             Object kotlinSources = invoke(main, "getKotlin");
             invoke(kotlinSources, "srcDir", generatedHostRoot);
             project.getTasks().named("compileKotlin").configure(task -> task.dependsOn(assemble));
-            project.getTasks().named("check").configure(task -> task.dependsOn(contracts.getClassesTaskName()));
+            project.getTasks().named("check").configure(task -> task.dependsOn(contract.getClassesTaskName()));
         });
         project.getTasks().matching(task -> task.getName().equals("processResources") && task instanceof AbstractCopyTask)
                 .configureEach(task -> {

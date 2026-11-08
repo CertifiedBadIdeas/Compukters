@@ -45,28 +45,41 @@ annotation class GuestResource(
 @Retention(AnnotationRetention.SOURCE)
 annotation class GuestRecord
 
-/** Immediate observation. Binding overrides preserve an existing ABI identity during migration. */
+/**
+ * Immediate observation.
+ * @param binding Optional ABI name; defaults to the class name in camelCase followed by the capitalized method name.
+ * Set it explicitly to preserve an existing ABI identity when renaming or migrating declarations.
+ */
 @Target(AnnotationTarget.FUNCTION)
 @Retention(AnnotationRetention.SOURCE)
 annotation class GuestRead(
     val binding: String = "",
 )
 
-/** Immediate ordinary call, including operations that return a value or release a device. */
+/**
+ * Immediate ordinary call, including operations that return a value or release a device.
+ * @param binding Optional ABI name; defaults to the class name in camelCase followed by the capitalized method name.
+ */
 @Target(AnnotationTarget.FUNCTION)
 @Retention(AnnotationRetention.SOURCE)
 annotation class GuestCall(
     val binding: String = "",
 )
 
-/** Immediate Unit command. Generates both the ordinary method and its immutable Command<Unit> factory. */
+/**
+ * Immediate Unit command. Generates both the ordinary method and its immutable Command<Unit> factory.
+ * @param binding Optional ABI name; defaults to the class name in camelCase followed by the capitalized method name.
+ */
 @Target(AnnotationTarget.FUNCTION)
 @Retention(AnnotationRetention.SOURCE)
 annotation class GuestCommand(
     val binding: String = "",
 )
 
-/** Explicitly allows a host operation to retain a pending continuation. Never generates a batch command. */
+/**
+ * Explicitly allows a host operation to retain a pending continuation. Never generates a batch command.
+ * @param binding Optional ABI name; defaults to the class name in camelCase followed by the capitalized method name.
+ */
 @Target(AnnotationTarget.FUNCTION)
 @Retention(AnnotationRetention.SOURCE)
 annotation class GuestWait(

@@ -131,7 +131,7 @@ fun parseDeclarativeGuestContract(
     root: Path,
     addon: String,
 ): DeclarativeGuestContract {
-    require(Files.isDirectory(root)) { "Addon contracts are missing in $root; author declarations in src/compuktersAddon/contracts" }
+    require(Files.isDirectory(root)) { "Addon contracts are missing in $root; author declarations in src/contract/kotlin" }
     val paths =
         Files.walk(root).use {
             it
