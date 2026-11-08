@@ -13,6 +13,9 @@ headings so this page has one stable URL that can be shared outside the reposito
 
 ## 0.7.0 — In development
 
+- Added `Process.exec` to replace the current Guest program without retaining its suspended heap.
+  Boot now replaces itself with the shell; failed replacement returns a typed diagnostic.
+
 - A developer IntelliJ prototype analyzes the independent Guest Kotlin platform with actual stdlib and addon
   metadata, including executable MFVC methods, member completion, type diagnostics and stdlib source navigation.
   The isolated prototype targets IDEA 2026.1.5.1; automatic Gradle import and unified executable contract authoring

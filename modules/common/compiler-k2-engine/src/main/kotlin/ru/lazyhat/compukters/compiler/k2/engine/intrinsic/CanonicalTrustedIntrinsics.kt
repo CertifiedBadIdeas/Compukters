@@ -27,7 +27,7 @@ import ru.lazyhat.compukters.platform.bundle.PlatformModuleId
 object CanonicalTrustedIntrinsics {
     val terminal = PlatformCapabilityId("compukter", "terminal", 2)
     val stdio = PlatformCapabilityId("compukter", "stdio", 1)
-    val process = PlatformCapabilityId("compukter", "process", 2)
+    val process = PlatformCapabilityId("compukter", "process", 3)
     val filesystem = PlatformCapabilityId("compukter", "filesystem", 2)
     val compiler = PlatformCapabilityId("compukter", "compiler", 2)
     val redstone = PlatformCapabilityId("compukter", "redstone", 1)
@@ -289,6 +289,7 @@ object CanonicalTrustedIntrinsics {
                 true,
             )
             capability("compukter", "core", "compukter.process", "ProcessBindings.run", "fun(String,String):Int", process, 0u, true)
+            capability("compukter", "core", "compukter.process", "ProcessBindings.exec", "fun(String,String):Int", process, 3u, true)
             capability("compukter", "core", "compukter.process", "ProcessBindings.takeFailureDiagnostic", "fun():String", process, 1u)
             capability(
                 "compukter",

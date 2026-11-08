@@ -412,6 +412,21 @@ class ProgramRuntimeHost internal constructor(
                     }
                 }
 
+                is VmOutcome.ProcessReplaced -> {
+                    check(programScopes.last() == outcome.previousProgramId) { "native replacement scope mismatch" }
+                    check(outcome.programId > programScopes.last()) { "native replacement identity must increase" }
+                    programScopes.removeLast()
+                    programScopes.addLast(outcome.programId)
+                    pendingAddonRequests.entries.removeAll { it.value.programId == outcome.previousProgramId }
+                    pendingTimerRequests.entries.removeAll { it.value.programId == outcome.previousProgramId }
+                    check(addonLifecyclePort.submit(ProgramAddonAction.Stopped(outcome.previousProgramId))) {
+                        "addon lifecycle action limit exceeded"
+                    }
+                    check(addonLifecyclePort.submit(ProgramAddonAction.Started(outcome.programId))) {
+                        "addon lifecycle action limit exceeded"
+                    }
+                }
+
                 VmOutcome.SliceExhausted -> {
                     if (retirementAllowance != Int.MAX_VALUE && retiredInstructionsLastTick >= retirementAllowance) return
                     continue

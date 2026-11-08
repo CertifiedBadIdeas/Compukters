@@ -307,3 +307,18 @@ The canonical path and encoded arguments share a 4096-unit outbound limit; excee
 `ProcessFailureReason.LIMIT_EXCEEDED`. An oversized original path returns `INVALID_PATH` even when dot
 normalization would shorten it. Path syntax errors happen when constructing a Path, before either operation.
 Neither operation maps a virtual path to an operating-system path. System files follow the same capability and quota checks as other paths.
+
+
+Use `Process.exec` when the caller should be replaced, for example a boot launcher:
+
+```kotlin
+fun main() {
+    val failure = Process.exec("/bin/shell".toPath())
+    println("shell could not start: ${failure.diagnostic}")
+}
+```
+
+Only failed launch returns `ProcessResult.Failed`. A successful replacement releases every task and
+process-owned resource of the caller, keeps its filesystem and terminal, and runs at the same process
+depth. Its eventual completion reaches any parent waiting in `Process.run`. A failed replacement leaves
+the caller running. Path/argument bounds match `Process.run`; the lifetime process-start limit still applies.

@@ -353,7 +353,7 @@ tests `terminal output preserves scalar sequence and buffer contracts`
 [`ProgramRuntimeHostIntegrationTest`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/core/src/nativeIntegrationTest/kotlin/ru/lazyhat/compukters/core/device/runtime/program/integration/ProgramRuntimeHostIntegrationTest.kt),
 tests `builtin shell edits scalar boundaries and restores history drafts`,
 `builtin shell bounds session history and retains the current draft`,
-`ROM boot runs a foreground child and reboot creates a fresh shell`,
+`installed boot runs a foreground child and reboot creates a fresh shell`,
 `IDE submits a complete command to the builtin shell`, and
 `IDE complete lines preserve drafts and reject busy children and queued input`;
 native `terminal_observations_read_authoritative_geometry_without_mutating_it`, `ctrl_c_*`,
@@ -405,14 +405,23 @@ Native lifecycle, quotas, guarded replacements and checkpoint rejection are exer
 `Process.exit(code)` terminates explicitly. Process argument encoding and diagnostics are task-owned;
 path and encoded arguments share a bounded outbound request.
 
+`Process.exec(path: Path, args: Array<String>)` and its no-argument overload replace the current
+program and all its cooperative tasks. Success never returns; failure returns a typed
+`ProcessResult.Failed` with the same path, argument and diagnostic bounds as `Process.run`.
+The current directory model, filesystem and terminal stay with the computer. Replacement does not
+add a process level. A parent waiting in `Process.run` receives the replacement's eventual result.
+The initial boot uses this operation to release its heap when the shell starts. Native/host tests
+cover root and nested scope replacement, failure rollback, resource cleanup and checkpoint restoration.
+
 **Evidence:**
 [`MinimalScriptLoweringTest`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/compiler-k2/src/test/kotlin/ru/lazyhat/compukters/compiler/worker/k2/MinimalScriptLoweringTest.kt),
 test `typed process v2 facade lowers without public capability masks or suspend calls`, and
 [`ProgramRuntimeHostIntegrationTest`](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/modules/common/core/src/nativeIntegrationTest/kotlin/ru/lazyhat/compukters/core/device/runtime/program/integration/ProgramRuntimeHostIntegrationTest.kt),
 tests `typed Guest compilation and process paths preserve diagnostics permissions and outputs` and
-`ROM boot runs a foreground child and reboot creates a fresh shell`.
+`installed boot runs a foreground child and reboot creates a fresh shell`.
 
-**Related work:** [#739](https://github.com/CertifiedBadIdeas/Compukters/issues/739)
+**Related work:** [#739](https://github.com/CertifiedBadIdeas/Compukters/issues/739),
+[#817](https://github.com/CertifiedBadIdeas/Compukters/issues/817)
 
 ### Compiler facade
 

@@ -60,7 +60,7 @@ class FfmAbiParityIntegrationTest {
                 }.toMutableList()
         return when (function) {
             FfmAbiFunction.ABI_VERSION -> {
-                Probe(arguments, 25)
+                Probe(arguments, 26)
             }
 
             FfmAbiFunction.MAXIMUM_OUTCOME_BYTES -> {

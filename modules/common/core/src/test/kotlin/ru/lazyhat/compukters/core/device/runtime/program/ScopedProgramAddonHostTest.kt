@@ -110,6 +110,29 @@ class ScopedProgramAddonHostTest {
         host.reset()
     }
 
+    @Test fun `root replacement releases old resources and checkpoints only live scopes`() {
+        val created = mutableListOf<RecordingHost>()
+        val host = programScopedAddonHostOf { RecordingHost().also { created += it } }
+        host.dispatch(request(0, 1))
+        host.programStopped(0)
+        assertTrue(created.single().closed)
+        host.programStarted(1)
+        host.dispatch(request(1, 2))
+        assertFailsWith<IllegalArgumentException> { host.dispatch(request(0, 3)) }
+        val saved = host.checkpoint()
+        val restored = programScopedAddonHostOf { RecordingHost().also { created += it } }
+        restored.restoreCheckpoint(saved, listOf(1))
+        assertFailsWith<IllegalArgumentException> { restored.dispatch(request(0, 4)) }
+        restored.dispatch(request(1, 5))
+        assertEquals(2, created.last().calls)
+        assertFailsWith<IllegalArgumentException> { restored.programStarted(1) }
+        restored.programStopped(1)
+        restored.programStarted(2)
+        restored.close()
+        host.close()
+        assertTrue(created.all { it.closed })
+    }
+
     private class RecordingHost : ProgramAddonHost {
         override val capabilitySchemas = emptyList<ru.lazyhat.compukters.lang.runtime.capability.HostCapabilitySchema>()
         var closed = false

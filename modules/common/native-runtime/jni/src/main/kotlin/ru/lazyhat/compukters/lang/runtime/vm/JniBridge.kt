@@ -619,7 +619,7 @@ internal class JniBridge private constructor() : LowLevelVmBridge {
 
         fun open(library: Path): JniBridge {
             System.load(library.toAbsolutePath().normalize().toString())
-            if (JniNative.abiVersion() != 25) throw VmBridgeException("unsupported Compukter JNI ABI")
+            if (JniNative.abiVersion() != 26) throw VmBridgeException("unsupported Compukter JNI ABI")
             return JniBridge()
         }
     }

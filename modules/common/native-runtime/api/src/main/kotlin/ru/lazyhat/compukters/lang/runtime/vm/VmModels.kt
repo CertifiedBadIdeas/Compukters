@@ -236,6 +236,16 @@ sealed interface VmOutcome {
         }
     }
 
+    /** Retires one execution scope and enters its replacement at the same stack depth. */
+    data class ProcessReplaced(
+        val previousProgramId: Long,
+        val programId: Long,
+    ) : VmOutcome {
+        init {
+            require(previousProgramId >= 0 && programId > previousProgramId)
+        }
+    }
+
     data class ProcessExited(
         val programId: Long,
     ) : VmOutcome {

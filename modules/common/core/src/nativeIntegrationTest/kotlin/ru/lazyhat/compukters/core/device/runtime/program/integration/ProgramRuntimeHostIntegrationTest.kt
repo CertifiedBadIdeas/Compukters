@@ -104,7 +104,10 @@ class ProgramRuntimeHostIntegrationTest {
                     ProgramRuntimeHost(sessionFactory = NativeProgramVmSessionFactory(), compilerRouter = compiler.router).use { host ->
                         assertEquals(ProgramStartResult.Started, host.start(artifact))
                         advanceUntil(host) { it is ProgramRuntimeState.Halted }
-                        assertEquals("42\n42\ncompiler and process Path API ok\n", terminalText(requireNotNull(host.terminalFullState())))
+                        assertEquals(
+                            "42\n42\n42\ncompiler and process Path API ok\n",
+                            terminalText(requireNotNull(host.terminalFullState())),
+                        )
                     }
                 }
         } finally {
@@ -580,6 +583,11 @@ class ProgramRuntimeHostIntegrationTest {
                             assertEquals(ProgramStartResult.Started, computer.startBoot())
                             advanceUntil(computer) { it == ProgramRuntimeState.WaitingForInput }
                             assertEquals(">\n", terminalText(requireNotNull(computer.terminalFullState())))
+                            val resources =
+                                assertIs<ru.lazyhat.compukters.core.device.runtime.program.ProgramResourceSnapshot.Available>(
+                                    computer.resourceSnapshot(),
+                                )
+                            assertEquals(256L * 1024L, resources.heapCapacityBytes, "boot must release its process heap")
 
                             submit(computer, "hello")
                             pressEnter(computer)

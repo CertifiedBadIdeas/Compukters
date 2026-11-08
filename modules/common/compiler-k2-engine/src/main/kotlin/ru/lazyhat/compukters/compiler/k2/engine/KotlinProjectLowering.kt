@@ -11168,7 +11168,7 @@ private fun capabilityShape(
             when (capability.namespace to capability.name) {
                 "compukter" to "terminal" -> 23u
                 "compukter" to "stdio" -> 3u
-                "compukter" to "process" -> 3u
+                "compukter" to "process" -> 4u
                 "compukter" to "filesystem" -> 15u
                 "compukter" to "compiler" -> 1u
                 "compukter" to "redstone" -> 8u

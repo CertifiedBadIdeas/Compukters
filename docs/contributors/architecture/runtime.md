@@ -187,10 +187,20 @@ percentage. No sampling loop, history buffer, heap-content scan, or unsolicited 
 ## Program-owned addon resources
 
 Native C ABI 20 adds outcome tags 13 (`ProcessEntered`) and 14 (`ProcessExited`) with positive computer-wide
-process IDs. Root ID 0 remains live until the computer stops. Child enter is published before child execution;
+process IDs. Root ID 0 identifies the initial execution. Child enter is published before child execution;
 exit is published before the resumed parent executes. The export inventory remains unchanged. External host
 request IDs are remapped through a bounded table to their owning process and task, including suspended parents;
 retired process routes are discarded and IDs are never reused within a computer.
+
+Native C ABI 26 adds tag 15, `ProcessReplaced(previous, current)`. Successful `Process.exec` retires
+all tasks and process-owned resources, then enters a fresh monotonically increasing scope in the same
+stack slot. The actor removes old addon completions and timers and emits stop/start actions in order.
+Filesystem, terminal and confirmed world output remain computer-owned. A suspended parent retains its
+pending `Process.run` and receives the replacement's completion. Failure before publication leaves
+the caller usable. Replacement consumes the lifetime start budget without another steady heap/frame
+reservation; admission temporarily holds both sessions so it can roll back. Boot uses replacement,
+so an idle shell retains one process heap. Checkpoint schema 7 and host descriptor version 2 permit
+a nonzero root scope and retain only the currently executing root artifact.
 
 The actor carries ordered lifecycle actions alongside addon requests and ordinary world effects. The server carrier
 creates addon hosts lazily per program, closes only the exiting program's hosts, and rejects its queued completions.
