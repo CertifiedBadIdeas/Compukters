@@ -18,10 +18,8 @@
 
 package ru.lazyhat.compukters.lang.runtime.vm
 
-import java.lang.foreign.Arena
 import java.lang.foreign.MemorySegment
 import java.lang.foreign.ValueLayout
-import java.nio.ByteOrder
 
 internal fun interface TerminalFullStateCall {
     fun call(
@@ -43,24 +41,16 @@ internal fun interface TerminalChangesSinceCall {
 }
 
 internal class ReusableTerminalWireTransport(
-    private val maximumBytes: Int,
+    private val scratchPool: TerminalWireScratchPool,
     private val fullStateCall: TerminalFullStateCall,
     private val changesSinceCall: TerminalChangesSinceCall,
 ) : TerminalWireTransport {
     private val lock = Any()
-    private val arena = Arena.ofShared()
-    private val output = arena.allocate(maximumBytes.toLong())
-    private val written = arena.allocate(ValueLayout.JAVA_LONG)
-    private val buffer = output.asByteBuffer().order(ByteOrder.LITTLE_ENDIAN)
     private var closed = false
-
-    init {
-        require(maximumBytes > 0) { "terminal FFM output capacity must be positive" }
-    }
 
     override fun fullState(handle: Long): TerminalState =
         read("terminal full state", {
-            fullStateCall.call(handle, output, maximumBytes.toLong(), written)
+            fullStateCall.call(handle, it.output, it.output.byteSize(), it.written)
         }) { decoder ->
             decoder.fullState()
         }
@@ -70,7 +60,7 @@ internal class ReusableTerminalWireTransport(
         revision: Long,
     ): TerminalUpdate =
         read("terminal changes", {
-            changesSinceCall.call(handle, revision, output, maximumBytes.toLong(), written)
+            changesSinceCall.call(handle, revision, it.output, it.output.byteSize(), it.written)
         }) { decoder ->
             decoder.update()
         }
@@ -79,25 +69,26 @@ internal class ReusableTerminalWireTransport(
         synchronized(lock) {
             if (closed) return
             closed = true
-            arena.close()
         }
     }
 
-    private inline fun <T> read(
+    private fun <T> read(
         operation: String,
-        call: () -> Int,
+        call: (TerminalWireScratch) -> Int,
         decode: (TerminalWireDecoder) -> T,
     ): T =
         synchronized(lock) {
             check(!closed) { "terminal transport is closed" }
-            buffer.clear()
-            written.set(ValueLayout.JAVA_LONG, 0, 0)
-            val status = call()
-            if (status != STATUS_OK) throw VmBridgeException("FFM $operation failed with status $status")
-            val length = written.get(ValueLayout.JAVA_LONG, 0)
-            if (length !in 1..maximumBytes.toLong()) throw VmBridgeException("invalid FFM $operation length")
-            buffer.limit(length.toInt())
-            decode(TerminalWireDecoder(buffer))
+            scratchPool.withScratch { scratch ->
+                scratch.buffer.clear()
+                scratch.written.set(ValueLayout.JAVA_LONG, 0, 0)
+                val status = call(scratch)
+                if (status != STATUS_OK) throw VmBridgeException("FFM $operation failed with status $status")
+                val length = scratch.written.get(ValueLayout.JAVA_LONG, 0)
+                if (length !in 1..scratch.output.byteSize()) throw VmBridgeException("invalid FFM $operation length")
+                scratch.buffer.limit(length.toInt())
+                decode(TerminalWireDecoder(scratch.buffer))
+            }
         }
 
     private companion object {

@@ -239,6 +239,17 @@ without allocating or copying records. GC retains task/depth traversal order acr
 buffers. Neither arena nor record backing shrinks during execution. Resource observations keep
 reporting admitted upper bounds; physical backing is a separate benchmark observation.
 
+## Terminal transport storage
+
+The JDK 25 FFM bridge owns a lazy pool of temporary terminal wire buffers. A read exclusively borrows one buffer
+through the native call and decoding; returned terminal states contain owned JVM values, never borrowed views.
+The pool retains at most eight idle 256 KiB output buffers plus length slots and arena bookkeeping. Additional
+simultaneous readers receive independent temporary buffers, released on return when idle retention is full.
+Peak scratch follows concurrent reads; admitted but unobserved computers allocate no terminal scratch of their own.
+Session close only closes that session's read guard. Bridge close drains idle storage and rejects new loans;
+outstanding loans release their storage on return. The ordinary native-library lifetime rule still requires all
+native calls to finish before unloading the bridge. JNI retains its existing per-call transport behavior.
+
 ## Player keyboard capability
 
 The loader-independent `core/input` package owns the program's keyboard handle, requested key mask and

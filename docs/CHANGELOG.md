@@ -38,7 +38,8 @@ headings so this page has one stable URL that can be shared outside the reposito
   backing memory on demand while preserving each program's full memory quota. Frame arenas and call
   records also grow on demand; cooperative task switches transfer stack buffers without copying them. The VM prepares typed
   operations and direct-call argument transfers before execution to reduce repeated operand-layout work
-  in numeric code, data access and function calls.
+  in numeric code, data access and function calls. The Java 25 FFM transport shares temporary terminal
+  read buffers instead of reserving a maximum-size buffer for every computer.
 
 - Computers have a fully writable persistent root: `/boot/init`, system utilities in `/bin`, and user files
   in `/home`. Bundled system files install once; `/compukters system-update x y z` explicitly reinstalls them

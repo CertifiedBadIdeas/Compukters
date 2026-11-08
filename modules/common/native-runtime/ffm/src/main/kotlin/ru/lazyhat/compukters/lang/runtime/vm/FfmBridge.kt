@@ -88,11 +88,13 @@ internal class FfmBridge private constructor(
             ?.toInt()
             ?: throw VmBridgeException("invalid maximum FFM outcome size")
 
+    private val terminalScratchPool = TerminalWireScratchPool(TerminalHistoryLimits.NATIVE_BUFFER_BYTES)
+
     fun abiVersion(): Int = abiVersionHandle.invokeExact() as Int
 
     override fun openTerminalTransport(): TerminalWireTransport =
         ReusableTerminalWireTransport(
-            maximumBytes = TerminalHistoryLimits.NATIVE_BUFFER_BYTES,
+            scratchPool = terminalScratchPool,
             fullStateCall =
                 TerminalFullStateCall { handle, output, maximum, written ->
                     terminalFullStateHandle.invokeExact(handle, output, maximum, written) as Int
@@ -775,7 +777,13 @@ internal class FfmBridge private constructor(
         }
     }
 
-    override fun close() = arena.close()
+    override fun close() {
+        try {
+            terminalScratchPool.close()
+        } finally {
+            arena.close()
+        }
+    }
 
     private fun completeCompilation(
         handle: Long,
