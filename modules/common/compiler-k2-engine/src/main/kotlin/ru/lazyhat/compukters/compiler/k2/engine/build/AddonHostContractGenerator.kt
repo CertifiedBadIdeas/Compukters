@@ -31,14 +31,14 @@ fun renderAddonHostContract(
     val packageName = authoring.addon
     val contractName = "${authoring.addon.pascalCase()}AddonContract"
     val resourceName = "${authoring.addon}.cagb"
-    val capabilities = listOf(authoring.capability)
+    val capabilities = resolved.schemas.map { it.identity }
     val handlers =
         capabilities.associateWith { capability ->
             "${capability.name.pascalCase()}CapabilityHandler"
         }
     val schemas = resolved.schemas.associateBy { it.identity }
     val bindings = resolved.bindings.groupBy(AddonGuestApiBinding::capability)
-    val declaredOperations = declaration?.operations?.associateBy { it.binding }
+    val declaredOperations = declaration?.operations?.associateBy { declaration.bindingSymbol(it) }
     val boundary = declaration?.let(::GuestBoundaryTypes)
 
     fun checks(binding: AddonGuestApiBinding): List<String> =

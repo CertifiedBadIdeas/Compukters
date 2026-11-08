@@ -28,10 +28,14 @@ import org.jetbrains.kotlin.fir.symbols.impl.FirRegularClassSymbol
 import org.jetbrains.kotlin.fir.types.ConeClassLikeType
 import org.jetbrains.kotlin.fir.types.ConeKotlinType
 import org.jetbrains.kotlin.fir.types.isMarkedNullable
+import org.jetbrains.kotlin.lexer.KtTokens
 import org.jetbrains.kotlin.name.ClassId
 import org.jetbrains.kotlin.name.FqName
 import org.jetbrains.kotlin.name.Name
 import org.jetbrains.kotlin.psi.KtClass
+import org.jetbrains.kotlin.psi.KtFile
+import org.jetbrains.kotlin.psi.KtNamedDeclaration
+import org.jetbrains.kotlin.psi.psiUtil.collectDescendantsOfType
 import ru.lazyhat.compukters.platform.bundle.PlatformBundle
 import ru.lazyhat.compukters.platform.bundle.PlatformModuleId
 import ru.lazyhat.compukters.platform.bundle.PlatformSource
@@ -94,6 +98,13 @@ fun analyzeNativeGuestContract(
         val interfaces = mutableListOf<NativeGuestInterface>()
         val types = mutableListOf<GuestContractType>()
         output.frontendOutput.fir.forEach { file ->
+            val sourceFile = (file.source as KtPsiSourceElement).psi as KtFile
+            sourceFile.collectDescendantsOfType<KtNamedDeclaration>().forEach { declaration ->
+                require(!declaration.hasModifier(KtTokens.EXTERNAL_KEYWORD)) { "Only annotated server operations may declare intrinsics" }
+                require(
+                    declaration.name?.startsWith("__Compukters") != true,
+                ) { "The __Compukters prefix is reserved for generated declarations" }
+            }
             val pkg = file.packageDirective.packageFqName.asString()
             require(pkg == addon || pkg.startsWith("$addon.")) { "Guest source package must belong to $addon: $pkg" }
             val path = "${pkg.replace('.', '/')}/${file.name}"
@@ -180,6 +191,7 @@ fun analyzeNativeGuestContract(
                 val psi = (klass.source as KtPsiSourceElement).psi as KtClass
                 val body = requireNotNull(psi.body) { "$owner must declare an interface body" }
                 val companion = psi.companionObjects.singleOrNull()
+                require(companion == null || companion.body != null) { "$owner: a declared companion must have a body" }
                 interfaces +=
                     NativeGuestInterface(
                         owner,

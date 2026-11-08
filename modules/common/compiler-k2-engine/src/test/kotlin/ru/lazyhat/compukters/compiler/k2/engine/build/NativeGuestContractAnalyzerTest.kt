@@ -112,6 +112,20 @@ class NativeGuestContractAnalyzerTest {
         assertTrue(result.message.orEmpty().contains("must return Unit"), result.message)
     }
 
+    @Test
+    fun `authors cannot introduce raw intrinsics or reserved generated declarations`() {
+        val intrinsic =
+            assertFailsWith<IllegalArgumentException> {
+                fixture("external fun unsafe(): Int") {}
+            }
+        assertTrue(intrinsic.message.orEmpty().contains("Only annotated server operations"), intrinsic.message)
+        val reserved =
+            assertFailsWith<IllegalArgumentException> {
+                fixture("fun __CompuktersUnsafe(): Int = 1") {}
+            }
+        assertTrue(reserved.message.orEmpty().contains("prefix is reserved"), reserved.message)
+    }
+
     private fun fixture(
         text: String,
         block: (DeclarativeGuestContract) -> Unit,

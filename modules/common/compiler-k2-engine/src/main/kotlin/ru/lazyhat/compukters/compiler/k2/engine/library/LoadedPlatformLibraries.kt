@@ -54,7 +54,11 @@ fun loadPlatformLibraries(modules: List<PlatformModule>): LoadedPlatformLibrarie
                 module.kind == ModuleKind.LIBRARY && module.exports.isNotEmpty()
             }
         val moduleHash = ArtifactWriter.moduleSemanticHash(library)
-        val constructors = platformModule.declarations.filter { it.signature.startsWith("constructor(") }
+        val annotations = platformModule.declarations.filter { it.signature.startsWith("annotation(") }.mapTo(mutableSetOf()) { it.symbol }
+        val constructors =
+            platformModule.declarations.filter {
+                it.signature.startsWith("constructor(") && it.symbol.removeSuffix(".<init>") !in annotations
+            }
         val exportedDeclarations =
             if (constructors.isEmpty()) {
                 emptySet()

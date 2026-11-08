@@ -318,6 +318,18 @@ Managed object/companion instances use existing class initializers and static fi
 fields for independent libraries. Typed callback interfaces use names derived from their complete signatures and
 participate in trusted specialization ownership, so producer/consumer discovery order cannot change their identity.
 These changes reuse the existing bundle and artifact representations and do not change the native ABI.
+
+The native addon contract backend analyzes annotated interfaces with the shared FIR augmentation, then
+expands their original sources with concrete companions, command factories and separate internal handle
+implementations. Only the expanded sources are compiled and packaged; analysis-only generated FIR bodies
+are never used as executable implementations. Ordinary source bodies remain intact. Logical binding names
+remain in `addon.lock`; distinct physical intrinsic owners in the library map to the same selectors. This
+also permits a service's legacy logical binding owner to equal its public interface name.
+`NativeGuestContractBuildTest` compiles actual standalone libraries containing interface defaults, MFVC
+helpers, resource handles and command factories, checks preserved selectors/tombstones and exact packaged
+sources, and covers a pure executable library without capabilities. This backend is not yet the default
+published Gradle authoring pipeline; it does not establish Rust execution or automatic IDEA import.
+
 Default-argument metadata includes an explicit array-receiver size expression, evaluated from the already computed
 receiver rather than re-evaluating its source expression, and an explicit null value distinct from an absent default.
 Private Kotlin metadata format 6 carries the same defaults, including primary-constructor defaults without a receiver slot.

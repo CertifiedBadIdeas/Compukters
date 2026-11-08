@@ -172,7 +172,18 @@ fun buildTrustedAddonGuestApi(
                     .recordCandidates
                     .filter { it.symbol in canonicalRecordTypes && it.valueClass && it.rejection == null }
             }.orEmpty()
-    val resolved = resolveAddonContract(sourceRoot, authoring, currentLock, base.modules.map(PlatformModule::id), trustedRecords)
+    val native = declaration?.nativeSources?.isNotEmpty() == true
+    val resolved =
+        resolveAddonContract(
+            sourceRoot,
+            authoring,
+            currentLock,
+            base.modules.map(PlatformModule::id),
+            trustedRecords,
+            bindingAliases = declaration?.bindingAliases.orEmpty(),
+            resolvedRecords = if (native) nativeResultSchemas(requireNotNull(declaration)) else null,
+            allowExecutableOnly = native,
+        )
     val updateLock = arguments["--update-abi-lock"]?.toBooleanStrict() ?: false
     if (updateLock) {
         writeAtomically(abiLock, resolved.expectedLock.render().encodeToByteArray())

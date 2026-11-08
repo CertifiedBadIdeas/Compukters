@@ -50,7 +50,19 @@ data class DeclarativeGuestContract(
     val nativeInterfaces: List<NativeGuestInterface> = emptyList(),
 ) {
     val operations: List<GuestContractOperation> get() = types.flatMap { it.operations }
-    val commands: Set<String> get() = operations.filter { it.kind == GuestOperationKind.COMMAND }.mapTo(sortedSetOf()) { it.binding }
+    val commands: Set<String>
+        get() = operations.filter { it.kind == GuestOperationKind.COMMAND }.mapTo(sortedSetOf()) { bindingSymbol(it) }
+
+    /** Source-level ABI names remain stable even when native implementation owners change. */
+    fun bindingSymbol(operation: GuestContractOperation): String =
+        if (nativeSources.isEmpty()) {
+            operation.binding
+        } else {
+            val owner = operation.binding.substringBeforeLast('.')
+            "${owner.substringBeforeLast('.')}.__Compukters${owner.substringAfterLast('.')}.${operation.binding.substringAfterLast('.')}"
+        }
+
+    val bindingAliases: Map<String, String> get() = operations.associate { bindingSymbol(it) to it.binding }
 }
 
 enum class GuestOperationKind { READ, CALL, COMMAND, WAIT }
@@ -544,6 +556,7 @@ private class ContractResolver(
 
 /** The source files returned here are exactly the Guest compiler input, not a pretty-printed side artifact. */
 fun generateGuestContractSources(contract: DeclarativeGuestContract): Map<String, String> {
+    if (contract.nativeSources.isNotEmpty()) return generateNativeGuestSources(contract)
     val sources = sortedMapOf<String, String>()
     val boundary = GuestBoundaryTypes(contract)
     val bindings = linkedMapOf<String, MutableList<GuestContractOperation>>()

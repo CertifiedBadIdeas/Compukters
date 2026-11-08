@@ -349,7 +349,7 @@ internal fun lowerValueClassBoxes(
                                     it == ValueType.Unit || bridge.target == null
                                 },
                             )
-                    ).map(FunctionValue::scalar),
+                    ).map(guestTypes::functionValue),
                     parameters.size.toUInt(),
                     BlockId.of(start),
                     1u,
