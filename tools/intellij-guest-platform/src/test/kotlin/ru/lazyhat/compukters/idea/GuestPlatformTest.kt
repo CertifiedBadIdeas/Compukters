@@ -69,6 +69,104 @@ class GuestPlatformTest : BasePlatformTestCase() {
         )
     }
 
+    fun testNativeContractAndExecutableMfvc() {
+        val file =
+            myFixture.configureByText(
+                "NativeContract.kt",
+                """
+                package fixture
+                import ru.lazyhat.compukters.api.contracts.*
+                import kotlin.math.Vector3d
+                import compukter.commands.Command
+                value class Velocity(val x: Double, val y: Double, val z: Double) {
+                    fun direction(): Vector3d = Vector3d(x, y, z).normalized()
+                }
+                @GuestDevice("fixture:engine") interface Engine {
+                    @GuestRead fun velocity(): Velocity
+                    @GuestCommand fun aim(direction: Vector3d): Unit
+                    fun direction(): Vector3d = velocity().direction()
+                }
+                fun use(): Vector3d {
+                    val engine: Engine = Engine.first()
+                    val command: Command<Unit> = engine.aimCommand(engine.direction())
+                    return engine.direction()
+                }
+                """.trimIndent(),
+            ) as KtFile
+        allowAnalysisOnEdt {
+            runReadActionBlocking {
+                analyze(file) {
+                    val errors =
+                        file.collectDiagnostics(KaDiagnosticCheckerFilter.ONLY_COMMON_CHECKERS).filter {
+                            it.severity.name ==
+                                "ERROR"
+                        }
+                    assertTrue(errors.joinToString { "${it.factoryName}: ${it.defaultMessage}" }, errors.isEmpty())
+                }
+            }
+        }
+    }
+
+    fun testNativeCommandFactoryCompletion() {
+        myFixture.configureByText(
+            "CommandCompletion.kt",
+            """
+            import ru.lazyhat.compukters.api.contracts.*
+            @GuestDevice("fixture:engine") interface Engine {
+                @GuestCommand fun setThrottle(value: Double): Unit
+            }
+            fun use(engine: Engine) { engine.setTh<caret> }
+            """.trimIndent(),
+        )
+        val items = myFixture.completeBasic()?.map { it.lookupString }.orEmpty()
+        assertTrue("Expected generated command factory; received $items", "setThrottleCommand" in items)
+        assertTrue("Expected ordinary operation; received $items", "setThrottle" in items)
+    }
+
+    fun testNativeProviderCompletion() {
+        myFixture.configureByText(
+            "ProviderCompletion.kt",
+            """
+            import ru.lazyhat.compukters.api.contracts.*
+            @GuestDevice("fixture:engine") interface Engine {
+                @GuestRead fun speed(): Double
+            }
+            fun use() { Engine.fi<caret> }
+            """.trimIndent(),
+        )
+        val items = myFixture.completeBasic()?.map { it.lookupString }.orEmpty()
+        assertTrue("Expected typed provider completion; received $items", "first" in items)
+    }
+
+    fun testServerOperationBoundariesHaveNativeDiagnostics() {
+        val file =
+            myFixture.configureByText(
+                "InvalidContract.kt",
+                """
+                import ru.lazyhat.compukters.api.contracts.*
+                abstract class Accidental { @GuestRead abstract fun value(): Int }
+                @GuestService interface Control {
+                    @GuestCommand fun invalidResult(): Int
+                    @GuestRead fun invalidBody(): Int = 42
+                    fun ordinaryBody(): Int = 42
+                }
+                """.trimIndent(),
+            ) as KtFile
+        allowAnalysisOnEdt {
+            runReadActionBlocking {
+                analyze(file) {
+                    val errors =
+                        file
+                            .collectDiagnostics(KaDiagnosticCheckerFilter.ONLY_COMMON_CHECKERS)
+                            .filter { it.severity.name == "ERROR" }
+                    assertTrue(errors.joinToString { it.defaultMessage }, errors.any { "must have no body" in it.defaultMessage })
+                    assertTrue(errors.joinToString { it.defaultMessage }, errors.any { "must return Unit" in it.defaultMessage })
+                    assertTrue(errors.joinToString { it.defaultMessage }, errors.any { "annotated interface" in it.defaultMessage })
+                }
+            }
+        }
+    }
+
     fun testCompiledAddonLibraryConsumer() {
         val fixture = Path.of(System.getProperty("compukters.prototype.fixture"))
         val file = myFixture.addFileToProject("main.kt", Files.readString(fixture.resolve("consumer/main.kt"))) as KtFile

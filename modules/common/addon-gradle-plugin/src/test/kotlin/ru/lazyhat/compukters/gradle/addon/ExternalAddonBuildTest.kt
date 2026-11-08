@@ -79,6 +79,7 @@ class ExternalAddonBuildTest {
                     }
                 }
                 rootProject.name = "external-addon"
+                include("shared")
                 """.trimIndent(),
             )
             project.resolve("build.gradle.kts").writeText(
@@ -92,6 +93,7 @@ class ExternalAddonBuildTest {
                 version = "2.3.4"
 
                 dependencies {
+                    add("compuktersGuestDependencies", project(":shared"))
                     testImplementation(kotlin("test"))
                     testImplementation("ru.lazyhat.compukters:compukters-addon-api:$sdkVersion")
                 }
@@ -118,6 +120,39 @@ class ExternalAddonBuildTest {
                 }
                 """.trimIndent(),
             )
+            project.resolve("shared/build.gradle.kts").apply {
+                parent.createDirectories()
+                writeText(
+                    """
+                    plugins { id("ru.lazyhat.compukters.addon") }
+                    version = "1.0.0"
+                    compuktersAddon {
+                        register("shared")
+                        toolingCoordinate.set("ru.lazyhat.compukters:compukters-addon-tooling:$sdkVersion")
+                        platformCoordinate.set("ru.lazyhat.compukters:compukters-guest-platform:$sdkVersion@cpb")
+                    }
+                    """.trimIndent(),
+                )
+            }
+            project.resolve("shared/src/contract/kotlin/shared/time/Epoch.kt").apply {
+                parent.createDirectories()
+                writeText(
+                    """
+                    package shared.time
+                    import ru.lazyhat.compukters.api.contracts.*
+                    import kotlin.math.Vector3d
+                    value class Direction(val vector: Vector3d) {
+                        fun normalized(): Vector3d = vector.normalized()
+                    }
+                    @GuestService interface Epoch {
+                        @GuestRead(binding = "now") fun now(): Long
+                    }
+                    """.trimIndent(),
+                )
+            }
+            project.resolve("shared/src/contract/addon.lock").writeText(
+                "lock 1\noperation shared shared 1 0 active shared.time.EpochBindings.now fun():Long\n",
+            )
             project.resolve("src/test/kotlin/fixture/GeneratedContractTest.kt").also { target ->
                 target.parent.createDirectories()
                 requireNotNull(javaClass.getResourceAsStream("/declarative-addon/GeneratedContractTest.kt")).use { input ->
@@ -140,10 +175,15 @@ class ExternalAddonBuildTest {
                     import ru.lazyhat.compukters.api.contracts.GuestWait
                     import ru.lazyhat.compukters.api.contracts.Finite
                     import ru.lazyhat.compukters.api.contracts.DoubleRange
-                    import ru.lazyhat.compukters.api.contracts.types.Vector3d
-                    import ru.lazyhat.compukters.api.contracts.types.Rotation3d
+                    import kotlin.math.Vector3d
+                    import kotlin.math.Rotation3d
 
-                    @GuestRecord data class State(val position: Vector3d, val orientation: Rotation3d)
+                    @GuestRecord data class State(val position: Vector3d, val orientation: Rotation3d) {
+                        fun distance(): Double = position.length
+                    }
+                    value class Velocity(val x: Double, val y: Double, val z: Double) {
+                        fun direction(): Vector3d = Vector3d(x, y, z).normalized()
+                    }
 
                     @GuestResource interface Snapshot {
                         @GuestRead fun size(): Int
@@ -153,6 +193,7 @@ class ExternalAddonBuildTest {
                     @GuestDevice("fixture:engine") interface Engine {
                         @GuestRead fun speed(): Float
                         @GuestRead fun state(): State
+                        @GuestRead fun direction(): shared.time.Direction
                         @GuestRead fun orientation(): Rotation3d
                         @GuestRead fun snapshot(): Snapshot
                         @GuestCommand fun aim(direction: Vector3d): Unit
@@ -160,6 +201,7 @@ class ExternalAddonBuildTest {
                         @GuestCommand fun setThrottle(@Finite @DoubleRange(min = 0.0, max = 1.0) throttle: Double): Unit
                         @GuestCall fun close(): Unit
                         @GuestWait fun awaitState(): State
+                        fun currentTime(): Long = shared.time.Epoch.now()
                     }
                     """.trimIndent(),
                 )
@@ -169,7 +211,7 @@ class ExternalAddonBuildTest {
             runner(project, "verifyCompuktersApiClasspath").build()
             runner(project, "jar", "--configuration-cache").build()
             runner(project, "check", "compuktersGuestSourcesJar", "--configuration-cache").build()
-            assertTrue(project.resolve("build/classes/kotlin/contract/fixture/kinetics/Engine.class").toFile().isFile)
+            assertTrue(Files.notExists(project.resolve("build/classes/kotlin/contract")))
             val hostTests = Files.readString(project.resolve("build/test-results/test/TEST-fixture.GeneratedContractTest.xml"))
             assertEquals(3, Regex("<testcase\\s").findAll(hostTests).count(), hostTests)
             Files.delete(project.resolve("build/compukters-addon/external-addon.cagb"))
@@ -194,7 +236,7 @@ class ExternalAddonBuildTest {
                             Files.readString(it)
                     }
                 }
-            val guest = generatedFiles.getValue("fixture/kinetics/fixture.kinetics.Engine.kt")
+            val guest = generatedFiles.getValue("fixture/kinetics/fixture.kinetics.__CompuktersHandleEngine.kt")
             assertTrue("setThrottleCommand" in guest && "aimCommand" in guest)
             assertTrue("closeCommand" !in guest && "speedCommand" !in guest && "awaitStateCommand" !in guest)
             assertTrue("kotlin.math.Rotation3d.fromQuaternion" in guest)
@@ -202,6 +244,7 @@ class ExternalAddonBuildTest {
             assertTrue("batchCommands" !in host)
             assertTrue("argument1 >= 0.0 && argument1 <= 1.0" in host)
             val bundle = AddonGuestApiBundleCodec.decode(Files.readAllBytes(project.resolve("build/compukters-addon/external-addon.cagb")))
+            assertTrue(bundle.moduleDescriptor.dependencies.any { it.toString() == "shared:api" })
             assertTrue(requireNotNull(bundle.moduleDescriptor.libraryFragment).toByteArray().isNotEmpty())
             assertEquals(generatedFiles, sourceEntries(requireNotNull(bundle.sourcesJar).toByteArray()))
             assertEquals(
@@ -216,7 +259,7 @@ class ExternalAddonBuildTest {
             }
             contractSource.toFile().appendText("\n@GuestDevice(\"fixture:invalid\") interface Invalid { @GuestCommand fun read(): Int }\n")
             val invalid = runner(project, "generateCompuktersGuestSources").buildAndFail()
-            assertTrue("@GuestCommand must return Unit" in invalid.output, invalid.output)
+            assertTrue("must return Unit" in invalid.output, invalid.output)
         } finally {
             Files.walk(project).use { paths -> paths.sorted(Comparator.reverseOrder()).forEach(Files::deleteIfExists) }
         }

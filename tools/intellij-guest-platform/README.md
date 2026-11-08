@@ -1,82 +1,65 @@
-# Guest Kotlin platform prototype for IntelliJ
+# Compukters Guest Kotlin for IntelliJ
 
-This developer prototype connects the independent Compukters target to the real IntelliJ Kotlin K2 plugin.
-It reads canonical `.cpb` metadata, enables multi-field value classes, uses Kotlin's own completion and type
-checking, and supplies source navigation from that same bundle. Guest modules receive no JVM SDK or JVM
-stdlib dependencies from this adapter.
+The adapter imports native Guest Kotlin from addons using `ru.lazyhat.compukters.addon`. It creates a separate
+IDE module for `src/contract/kotlin` and uses actual Guest platform and dependency metadata, including MFVCs,
+stdlib methods and executable addon helpers. Host source modules keep their ordinary JVM model.
 
-The fixture's `prototype.flight.Velocity` is an ordinary Guest MFVC. Its executable `direction` and `advance`
-methods use the real `kotlin.math.Vector3d`. A separate consumer imports the compiled addon library and checks
-its results in the pinned Rust VM. No server operations, capability selectors or ABI lock entries are introduced
-for these computations.
+Install the ZIP through **Settings → Plugins → Install Plugin from Disk**, restart IDEA and reload the addon
+Gradle project. The installed plugin is named **Compukters Guest Kotlin**. Enable the **Compukters Guest** status
+widget through the status-bar context menu if hidden. It shows active, loading or error state; click it for
+module names, input paths and the native compile task. Import does not compile the addon or change its ABI lock.
+Run `assembleCompuktersAddon` to compile; use `updateCompuktersAddonAbiLock` explicitly for contract changes.
+
+Platform and Guest dependency changes reload native analysis automatically. Imported configuration persists in
+`.idea/compukters-guest.xml`; Gradle reimport updates it and removes obsolete modules. Invalid input files show an
+error while the module remains native. Generated compiler inputs remain inspectable under
+`build/generated/sources/compuktersGuest/kotlin`.
 
 ## Build and verify
 
-Run from the Compukters checkout after `worktree-task doctor`:
+Run from the Compukters task checkout after `worktree-task doctor`:
 
 ```sh
-./gradlew-sandbox-dev-parallel-summary testKotlinGuestLibraryPrototypeVmConformance
+./gradlew-sandbox-dev-parallel-summary testKotlinGuestLibraryPrototypeVmConformance :addon-gradle-plugin:jar
 ```
 
-This produces the reusable addon bundle, its linked consumer and a platform carrying its metadata under
-`modules/common/compiler-k2/build/generated/conformance/guest-library-prototype/`:
+The conformance task builds an independent `prototype.flight.Velocity` library, its linked consumer and a platform
+with its metadata under `modules/common/compiler-k2/build/generated/conformance/guest-library-prototype/`.
+The consumer executes its MFVC methods using real `kotlin.math.Vector3d` in the pinned Rust VM.
 
-- `prototype.cagb`: independently compiled addon metadata, source archive and executable library fragment.
-- `consumer.cpkt`: linked consumer program, executed by the conformance task in the Rust VM.
-- `prototype-platform.cpb`: the actual base platform plus the compiled addon module, for the IDE experiment.
-
-Build and test the IDE plugin against an installed IntelliJ IDEA:
+Build against an installed IDEA and a local Gradle distribution:
 
 ```sh
-./gradlew-sandbox-dev-parallel-summary -p tools/intellij-guest-platform \
-  formatKotlin test lintKotlin buildPlugin \
+./gradlew-sandbox-dev-parallel-summary -p tools/intellij-guest-platform formatKotlin \
   -PideaHome=/absolute/path/to/intellij-idea \
   -PguestPlatform="$PWD/modules/common/compiler-k2/build/generated/conformance/guest-library-prototype/prototype-platform.cpb"
+
+./gradlew-sandbox-dev-parallel-summary -p tools/intellij-guest-platform test lintKotlin buildPlugin \
+  -PideaHome=/absolute/path/to/intellij-idea \
+  -PguestPlatform="$PWD/modules/common/compiler-k2/build/generated/conformance/guest-library-prototype/prototype-platform.cpb" \
+  -PguestGradlePluginJar="$PWD/modules/common/addon-gradle-plugin/build/libs/addon-gradle-plugin-0.8.0.jar" \
+  -PguestGradleHome=/absolute/path/to/gradle-9.8.1 \
+  -PguestBasePlatform="$PWD/modules/common/guest-platform/build/platform/compukters-platform.cpb" \
+  -PguestDependency="$PWD/modules/common/compiler-k2/build/generated/conformance/guest-library-prototype/prototype.cagb"
 ```
 
-Tests run inside that IDE's platform and bundled Kotlin plugin, using isolated configuration, plugins and
-indexes under `.intellijPlatform/sandbox`. They do not use the standalone analysis worker. The packaged plugin
-ZIP is written to `tools/intellij-guest-platform/build/distributions/`.
+Tests run in the real installed IDE/Kotlin platform with isolated configuration and indexes. They cover MFVC
+methods, compiled dependencies, generated command/provider completion, operation restrictions, source navigation,
+actual Gradle import, artifact reload and removal on reimport. They do not modify the user's IDE installation.
+The ZIP is written to `build/distributions/` under this adapter project.
 
-The tests cover a source-owned MFVC with executable methods, a consumer of the compiled addon without its
-source in the project, actual member completion for stdlib and addon methods, an incorrect argument diagnostic,
-and navigation into the bundle's actual stdlib source.
+Use `runIde` with the same properties for a separate development sandbox. A non-Gradle diagnostic fixture can
+still opt its whole module in using `compukters-guest.properties` in the content root, with
+`platform=/absolute/path/to/platform.cpb`. That manual fixture mode reads the marker once per module instance;
+use Gradle import for normal addon authoring and automatic reload.
 
-## Try in a separate IDE sandbox
+## Compatibility
 
-Use `runIde` with the same Gradle properties to start the plugin's development sandbox. Create a dedicated
-source module, and put `compukters-guest.properties` in its **module content root**:
+Verified on Linux against IntelliJ IDEA 2026.1.5.1, build `261.27258.136`, with bundled Kotlin `2.4.0-ij261-71`.
+The adapter is pinned to that build and compiles shared native platform/frontend sources against its APIs.
+The ZIP does not bundle the worker compiler, a second Kotlin runtime or an Analysis API distribution.
 
-```properties
-platform=/absolute/path/to/prototype-platform.cpb
-```
-
-Copy `fixture/consumer/main.kt` into its source root. The `prototype.flight.Velocity` import is resolved from
-the compiled library metadata. Completion after a `Velocity` or `Vector3d` receiver uses Guest declarations.
-The marker opts the entire IDE module into the Guest platform. Keep the addon host module separate.
-
-The Gradle sandbox provides the complete experiment without modifying an existing IDE installation.
-
-## Compatibility and remaining work
-
-Verified against IntelliJ IDEA 2026.1.5.1, build `261.27258.136`, with its bundled Kotlin
-`2.4.0-ij261-71`, on Linux. The adapter is deliberately pinned to this IDE build. It compiles the shared
-platform and symbol-provider sources against the IDE APIs, rather than packaging the compiler worker's
-Kotlin 2.4.10 runtime. Its ZIP must not contain a second Kotlin compiler or Analysis API distribution.
-
-IDEA 261's project-structure service requires its internal `KaSourceModuleBase` implementation, even when a
-module is supplied through the K2 module-factory extension point. The small version-specific adapter subclasses
-that base. This is an internal API dependency, with explicit Kotlin visibility suppressions; it needs an upstream
-extension contract or per-version maintenance before a supported plugin can be promised. The IDE's MFVC feature
-flag is also version-specific (`ValueClasses`, versus the compiler worker's `JvmInlineMultiFieldValueClasses`).
-
-The marker and platform bundle are read once per module instance; changing them requires reopening the project.
-The prototype is not a Gradle model importer, build/run integration, general dependency resolver, debugger or
-complete IDE implementation. Automatic import of `src/contract/kotlin`, completion of unimported library names,
-and complete library-source tooling remain separate follow-up work. Navigation currently opens a read-only
-source view; overload-specific navigation and editable library-source projects are not implemented.
-
-The production `contract` source set and declarative generator retain their existing SDK behavior. This slice
-proves that executable Guest libraries and an actual IntelliJ platform can share native Guest types. It does not
-yet merge ordinary executable classes and annotated server declarations into one new authoring pipeline.
-Existing annotated server operations still reject bodies and keep their checked-in selector locks.
+IDEA's project-structure service requires an internal `KaSourceModuleBase` subclass. The adapter therefore needs
+per-version maintenance or a future upstream extension contract. Its MFVC flag is also IDE-specific (`ValueClasses`).
+Navigation opens read-only bundled sources; overload-specific navigation, editable library projects, a debugger,
+and build/run controls inside the editor remain outside this adapter.

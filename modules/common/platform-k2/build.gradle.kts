@@ -39,3 +39,9 @@ dependencies {
     testImplementation(libs.kotlin.analysis.low.level.fir) { isTransitive = false }
     testImplementation(kotlin("test"))
 }
+
+tasks.test {
+    val platformSources = rootProject.file("modules/common/guest-platform/src/platform")
+    inputs.dir(platformSources)
+    systemProperty("compukters.guest.platform.sources", platformSources.absolutePath)
+}

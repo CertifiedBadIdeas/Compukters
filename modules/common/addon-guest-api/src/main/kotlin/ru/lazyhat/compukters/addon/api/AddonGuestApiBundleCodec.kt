@@ -242,11 +242,8 @@ object AddonGuestApiBundleCodec {
             fun validateRecord(record: AddonRecordSchema) {
                 require(
                     (record.typeName.startsWith("$addon.") && !record.typeName.startsWith("kotlin.")) ||
-                        (
-                            record == CanonicalAddonRecordSchemas.schemas[record.typeName] &&
-                                module.dependencies.any { it.toString() == "stdlib:core" }
-                        ),
-                ) { "record response escapes addon namespace or changes canonical geometry" }
+                        module.dependencies.isNotEmpty(),
+                ) { "foreign record response requires a native dependency" }
                 record.fields.forEach { it.record?.let(::validateRecord) }
             }
             operation.resultRecord?.let(::validateRecord)

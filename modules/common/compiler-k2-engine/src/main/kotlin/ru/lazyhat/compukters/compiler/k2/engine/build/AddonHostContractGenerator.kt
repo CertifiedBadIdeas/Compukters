@@ -31,14 +31,14 @@ fun renderAddonHostContract(
     val packageName = authoring.addon
     val contractName = "${authoring.addon.pascalCase()}AddonContract"
     val resourceName = "${authoring.addon}.cagb"
-    val capabilities = listOf(authoring.capability)
+    val capabilities = resolved.schemas.map { it.identity }
     val handlers =
         capabilities.associateWith { capability ->
             "${capability.name.pascalCase()}CapabilityHandler"
         }
     val schemas = resolved.schemas.associateBy { it.identity }
     val bindings = resolved.bindings.groupBy(AddonGuestApiBinding::capability)
-    val declaredOperations = declaration?.operations?.associateBy { it.binding }
+    val declaredOperations = declaration?.operations?.associateBy { declaration.bindingSymbol(it) }
     val boundary = declaration?.let(::GuestBoundaryTypes)
 
     fun checks(binding: AddonGuestApiBinding): List<String> =
@@ -128,8 +128,8 @@ fun renderAddonHostContract(
         appendLine()
         dtoFields.forEach { (type, fields) ->
             val name = type.substringAfterLast('.')
-            if (declaration != null && type in guestMathematicalTypes) {
-                appendLine("public typealias $name = ru.lazyhat.compukters.api.contracts.types.$name")
+            if (declaration != null) {
+                appendNativeHostRecord(type, fields, requireNotNull(boundary))
             } else {
                 appendLine("public data class $name(")
                 fields.forEach { (name, fieldType) ->
@@ -199,8 +199,9 @@ fun renderAddonHostContract(
                         "        run {"
                     },
                 )
+                val commandSymbol = declaration?.bindingAliases?.get(binding.symbol) ?: binding.symbol
                 appendLine(
-                    "            add(ProgramCommandBinding(\"${binding.symbol}\", ${capability.identityConstant()}, ${binding.operation}, listOf($types), command@ { arguments ->",
+                    "            add(ProgramCommandBinding(\"$commandSymbol\", ${capability.identityConstant()}, ${binding.operation}, listOf($types), command@ { arguments ->",
                 )
                 appendLine("                if (arguments.size != ${operation.arguments.size}) return@command invalidCommand()")
                 operation.arguments.forEachIndexed { index, type ->
@@ -432,7 +433,9 @@ private fun StringBuilder.hostArguments(
         val fields = types.fields(type) ?: return "argument${cursor++}"
         val values = fields.map { construct(it.type) }
         val name = type.substringAfterLast('.')
-        return if (type == "kotlin.math.Rotation3d" ||
+        return if (types.construction(type)?.factory?.isNotEmpty() == true) {
+            "$name.${requireNotNull(types.construction(type)).factory}(${values.joinToString()})"
+        } else if (type == "kotlin.math.Rotation3d" ||
             type == "kotlin.math.Rotation3f"
         ) {
             "$name.fromQuaternion(${values.single()})"
@@ -442,7 +445,8 @@ private fun StringBuilder.hostArguments(
     }
 
     fun checked(type: String): Boolean =
-        type == "kotlin.math.Rotation3d" || type == "kotlin.math.Rotation3f" || types.fields(type).orEmpty().any { checked(it.type) }
+        types.construction(type)?.normalize?.isNotEmpty() == true ||
+            type == "kotlin.math.Rotation3d" || type == "kotlin.math.Rotation3f" || types.fields(type).orEmpty().any { checked(it.type) }
     val arguments = if (operation.device) mutableListOf("argument0") else mutableListOf()
     operation.parameters.forEachIndexed { index, parameter ->
         val expression = construct(parameter.type)

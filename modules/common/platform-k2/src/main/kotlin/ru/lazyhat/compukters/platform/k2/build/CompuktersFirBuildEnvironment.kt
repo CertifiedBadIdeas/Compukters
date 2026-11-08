@@ -103,6 +103,7 @@ class CompuktersFirBuildEnvironment private constructor(
         module: PlatformModuleId,
         sources: List<PlatformSource>,
         dependencies: List<CompuktersFirModuleOutput>,
+        extensions: List<FirExtensionRegistrar> = emptyList(),
     ): CompuktersFirModuleOutput {
         val configuration = configuration(module)
         val moduleData =
@@ -119,7 +120,7 @@ class CompuktersFirBuildEnvironment private constructor(
                 moduleData,
                 projectEnvironment,
                 IncrementalCompilationContext(emptyList(), EMPTY_METADATA_PROVIDER, AbstractProjectFileSearchScope.EMPTY),
-                emptyList<FirExtensionRegistrar>(),
+                extensions,
                 configuration,
                 context,
                 false,
@@ -135,6 +136,7 @@ class CompuktersFirBuildEnvironment private constructor(
         sources: List<PlatformSource>,
         platformModules: List<PlatformModule>,
         sourceDependencies: List<CompuktersFirModuleOutput> = emptyList(),
+        extensions: List<FirExtensionRegistrar> = emptyList(),
     ): CompuktersFirModuleOutput {
         require(platformModules.isNotEmpty()) { "Guest FIR requires Compukters built-ins metadata" }
         val libraryModuleData =
@@ -178,7 +180,7 @@ class CompuktersFirBuildEnvironment private constructor(
                 moduleData,
                 projectEnvironment,
                 IncrementalCompilationContext(emptyList(), EMPTY_METADATA_PROVIDER, AbstractProjectFileSearchScope.EMPTY),
-                emptyList<FirExtensionRegistrar>(),
+                extensions,
                 configuration(module),
                 context,
                 false,

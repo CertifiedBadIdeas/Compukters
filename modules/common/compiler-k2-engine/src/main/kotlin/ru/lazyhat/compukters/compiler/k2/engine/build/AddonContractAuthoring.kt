@@ -193,6 +193,9 @@ fun resolveAddonContract(
     currentLock: AddonAbiLock,
     dependencies: List<PlatformModuleId> = emptyList(),
     trustedRecords: List<PlatformRecordCandidate> = emptyList(),
+    bindingAliases: Map<String, String> = emptyMap(),
+    resolvedRecords: Map<String, ru.lazyhat.compukters.addon.api.AddonRecordSchema>? = null,
+    allowExecutableOnly: Boolean = false,
 ): ResolvedAddonContract {
     val sources = discoverAuthoringSources(sourceRoot)
     require(sources.isNotEmpty()) { "addon module ${authoring.module} has no Kotlin sources" }
@@ -213,13 +216,17 @@ fun resolveAddonContract(
                     name
                 }
             }.toSet()
-    val records = resolveAddonRecordSchemas(authoring.addon, recordReturns, metadata.recordCandidates, trustedRecords)
-    require(external.isNotEmpty()) { "addon ${authoring.addon} contains no external declarations" }
+    val records = resolvedRecords ?: resolveAddonRecordSchemas(authoring.addon, recordReturns, metadata.recordCandidates, trustedRecords)
+    require(allowExecutableOnly || external.isNotEmpty()) { "addon ${authoring.addon} contains no external declarations" }
+    require(bindingAliases.keys.all { symbol -> external.any { it.symbol == symbol } }) { "binding alias has no external declaration" }
+    val logicalSymbols = external.associate { it.symbol to (bindingAliases[it.symbol] ?: it.symbol) }
+    require(logicalSymbols.values.distinct().size == logicalSymbols.size) { "duplicate logical binding identity" }
+    val physicalSymbols = logicalSymbols.entries.associate { (physical, logical) -> logical to physical }
     external.forEach { declaration -> AddonCapabilitySignature.parse(declaration.signature, records.keys) }
 
     val actual =
         external.mapTo(mutableSetOf()) { declaration ->
-            authoring.capability.capabilityKey() to (declaration.symbol to declaration.signature)
+            authoring.capability.capabilityKey() to (logicalSymbols.getValue(declaration.symbol) to declaration.signature)
         }
     val retained =
         currentLock.entries
@@ -242,9 +249,9 @@ fun resolveAddonContract(
             .maxOfOrNull(AddonAbiEntry::operation)
             ?.plus(1) ?: 0
     external
-        .sortedWith(compareBy(PlatformDeclaration::symbol, PlatformDeclaration::signature))
+        .sortedWith(compareBy({ logicalSymbols.getValue(it.symbol) }, PlatformDeclaration::signature))
         .forEach { declaration ->
-            val callableKey = declaration.symbol to declaration.signature
+            val callableKey = logicalSymbols.getValue(declaration.symbol) to declaration.signature
             if (retained.none { it.capabilityKey == capabilityKey && it.callableKey == callableKey }) {
                 retained +=
                     AddonAbiEntry(
@@ -253,7 +260,7 @@ fun resolveAddonContract(
                         authoring.capability.abiMajor,
                         next++,
                         AddonAbiEntryState.ACTIVE,
-                        declaration.symbol,
+                        logicalSymbols.getValue(declaration.symbol),
                         declaration.signature,
                     )
             }
@@ -282,12 +289,12 @@ fun resolveAddonContract(
                         },
                 )
             }
-    val schemas = listOf(AddonCapabilitySchema(authoring.capability, operations))
+    val schemas = if (operations.isEmpty()) emptyList() else listOf(AddonCapabilitySchema(authoring.capability, operations))
     val bindings =
         expectedLock.entries
             .filter { entry -> entry.state == AddonAbiEntryState.ACTIVE && entry.capabilityKey == capabilityKey }
             .map { entry ->
-                val ownerName = entry.symbol.substringBeforeLast('.')
+                val ownerName = physicalSymbols.getValue(entry.symbol).substringBeforeLast('.')
                 AddonGuestApiBinding(
                     ownerName.substringBeforeLast('.'),
                     ownerName.substringAfterLast('.'),

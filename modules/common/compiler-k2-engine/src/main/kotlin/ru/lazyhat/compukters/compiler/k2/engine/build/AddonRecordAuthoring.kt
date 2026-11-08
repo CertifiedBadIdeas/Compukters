@@ -64,15 +64,9 @@ internal fun resolveAddonRecordSchemas(
                 }
             }
         active.remove(name)
-        return AddonRecordSchema(name, fields).also { schema ->
-            if (name in trustedNames) {
-                require(schema == ru.lazyhat.compukters.addon.api.CanonicalAddonRecordSchemas.schemas[name]) {
-                    "canonical response type has an unsupported shape: $name"
-                }
-            }
-            completed[name] = schema
-        }
+        return AddonRecordSchema(name, fields).also { completed[name] = it }
     }
+
     resultTypes.sorted().forEach { raw ->
         val matches = byName.keys.filter { it == raw || it.substringAfterLast('.') == raw }
         require(matches.size == 1) { "record response type is unknown or ambiguous: $raw" }
@@ -81,6 +75,3 @@ internal fun resolveAddonRecordSchemas(
     }
     return completed
 }
-
-/** Only public constructor-safe geometry from the base stdlib module can cross as raw host values. */
-internal val canonicalRecordTypes = ru.lazyhat.compukters.addon.api.CanonicalAddonRecordSchemas.schemas.keys

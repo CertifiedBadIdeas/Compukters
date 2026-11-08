@@ -253,12 +253,11 @@ class AddonContractAuthoringTest {
         }
 
     @Test
-    fun `record responses reject mutable executable nullable array and cyclic shapes`() {
+    fun `record responses reject mutable initialized nullable array and cyclic shapes`() {
         listOf(
             "data class Snapshot(var x: Double)",
             "data class Snapshot(val x: Double = 0.0)",
             "data class Snapshot(val x: Double) { init { println(x) } }",
-            "data class Snapshot(val x: Double) { fun value(): Double = x }",
             "private data class Snapshot(val x: Double)",
             "data class Snapshot private constructor(val x: Double)",
             "data class Snapshot internal constructor(val x: Double)",

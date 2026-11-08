@@ -52,7 +52,8 @@ class GuestSourceNavigation : GotoDeclarationHandler {
                     else -> null
                 }
             } ?: return null
-        val modules = listOf(module.bundle.builtins) + module.bundle.modules
+        val bundle = module.bundle ?: return null
+        val modules = listOf(bundle.builtins) + bundle.modules
         val declaration = modules.flatMap { it.declarations }.firstOrNull { it.symbol == symbolName } ?: return null
         val source = modules.flatMap { it.sources }.single { it.path == declaration.sourcePath }
         val virtualFile =

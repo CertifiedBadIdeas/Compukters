@@ -1,16 +1,23 @@
 <idea-plugin>
     <id>ru.lazyhat.compukters.guest-platform</id>
-    <name>Compukters Guest Kotlin Platform (Prototype)</name>
+    <name>Compukters Guest Kotlin</name>
     <vendor>Compukters</vendor>
-    <description>Independent Guest Kotlin platform using canonical Compukters metadata.</description>
+    <description>Native Compukters Guest Kotlin: Gradle import, actual stdlib and addon metadata, diagnostics, completion and source navigation. Requires the pinned IDEA build.</description>
     <depends>com.intellij.modules.platform</depends>
     <depends>com.intellij.java</depends>
     <depends>org.jetbrains.kotlin</depends>
+    <depends>com.intellij.gradle</depends>
     <extensions defaultExtensionNs="com.intellij">
         <gotoDeclarationHandler implementation="ru.lazyhat.compukters.idea.GuestSourceNavigation" order="first"/>
+        <externalProjectDataService implementation="ru.lazyhat.compukters.idea.GuestGradleDataService"/>
+        <statusBarWidgetFactory id="CompuktersGuest" implementation="ru.lazyhat.compukters.idea.GuestStatusWidgetFactory"/>
+    </extensions>
+    <extensions defaultExtensionNs="org.jetbrains.plugins.gradle">
+        <projectResolve implementation="ru.lazyhat.compukters.idea.GuestGradleResolver"/>
     </extensions>
     <extensions defaultExtensionNs="org.jetbrains.kotlin">
         <supportsKotlinPluginMode supportsK2="true"/>
+        <fir.extensions.firExtensionRegistrar implementation="ru.lazyhat.compukters.platform.k2.contracts.GuestContractFirExtensionRegistrar"/>
         <k2KaModuleFactory implementation="ru.lazyhat.compukters.idea.GuestModuleFactory" order="first"/>
         <llFirSessionConfigurator implementation="ru.lazyhat.compukters.idea.GuestSessionConfigurator"/>
         <idea.base.platforms.targetPlatformDetector implementation="ru.lazyhat.compukters.idea.GuestPlatformDetector" order="first"/>

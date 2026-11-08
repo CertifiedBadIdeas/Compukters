@@ -18,36 +18,18 @@
 
 package ru.lazyhat.compukters.compiler.k2.engine.build
 
-import ru.lazyhat.compukters.addon.api.AddonCapabilityValueType
-import ru.lazyhat.compukters.addon.api.CanonicalAddonRecordSchemas
-
-internal val guestMathematicalTypes = CanonicalAddonRecordSchemas.schemas.keys + setOf("kotlin.math.Rotation3f", "kotlin.math.Rotation3d")
-
 /** The SDK owns these adapters. Addon declarations cannot supply serialization or reconstruction code. */
 internal class GuestBoundaryTypes(
     private val contract: DeclarativeGuestContract,
 ) {
-    private val records = contract.types.filter { it.record }.associateBy { "${it.packageName}.${it.name}" }
+    private val records = contract.boundaryRecords + contract.types.filter { it.record }.associateBy { "${it.packageName}.${it.name}" }
     private val resources = contract.types.filter { it.resource }.mapTo(mutableSetOf()) { "${it.packageName}.${it.name}" }
+
+    fun construction(type: String): GuestRecordConstruction? = records[type]?.construction
 
     fun fields(type: String): List<GuestContractParameter>? {
         if (type in resources) return listOf(GuestContractParameter("handle", "Int", emptyList()))
         records[type]?.let { return it.fields }
-        CanonicalAddonRecordSchemas.schemas[type]?.let { schema ->
-            return schema.fields.map { field ->
-                val scalar =
-                    when (field.type) {
-                        AddonCapabilityValueType.I32 -> "Int"
-                        AddonCapabilityValueType.F32 -> "Float"
-                        AddonCapabilityValueType.F64 -> "Double"
-                        else -> error("Unsupported mathematical component")
-                    }
-                GuestContractParameter(field.name, scalar, emptyList())
-            }
-        }
-        if (type == "kotlin.math.Rotation3f" || type == "kotlin.math.Rotation3d") {
-            return listOf(GuestContractParameter("quaternion", "kotlin.math.Quaternion${type.last()}", emptyList()))
-        }
         return null
     }
 
@@ -58,10 +40,17 @@ internal class GuestBoundaryTypes(
         require(type !in active) { "Cyclic contract record: $type" }
         require(active.size <= 8) { "Contract record nesting exceeds limit" }
         if (type in resources) return "Int"
-        if (type == "kotlin.math.Rotation3f" || type == "kotlin.math.Rotation3d") return "kotlin.math.Quaternion${type.last()}"
         val record = records[type] ?: return type
+        if (record.construction?.factory?.isNotEmpty() == true && record.fields.size == 1) {
+            return wireType(record.fields.single().type, active + type)
+        }
         val fieldTypes = record.fields.map { wireType(it.type, active + type) }
-        return if (record.fields.indices.any { fieldTypes[it] != record.fields[it].type }) "${type}Reply" else type
+        if (record.construction == null && record.fields.indices.none { fieldTypes[it] != record.fields[it].type }) return type
+        val addon =
+            contract.nativeSources.keys
+                .first()
+                .substringBefore('/')
+        return if (type.startsWith("$addon.")) "${type}Reply" else "$addon.__compukters_wire.${record.name}Reply"
     }
 
     fun decode(
@@ -69,13 +58,40 @@ internal class GuestBoundaryTypes(
         expression: String,
     ): String =
         when {
-            wireType(type) == type -> expression
-            type in resources -> "$type($expression)"
-            type == "kotlin.math.Rotation3f" || type == "kotlin.math.Rotation3d" -> "$type.fromQuaternion($expression)"
-            else -> "$type(${requireNotNull(fields(type)).joinToString { decode(it.type, "$expression.${it.name}") }})"
+            wireType(type) == type -> {
+                expression
+            }
+
+            type in resources -> {
+                "${nativeImplementation(type)}($expression)"
+            }
+
+            construction(type) != null -> {
+                val record = records.getValue(type)
+                val arguments =
+                    if (record.construction?.factory?.isNotEmpty() == true && record.fields.size == 1) {
+                        decode(record.fields.single().type, expression)
+                    } else {
+                        record.fields.joinToString { decode(it.type, "$expression.${it.name}") }
+                    }
+                val factory =
+                    requireNotNull(record.construction)
+                        .factory
+                        .takeIf { it.isNotEmpty() }
+                        ?.let { ".$it" }
+                        .orEmpty()
+                "$type$factory($arguments)"
+            }
+
+            else -> {
+                "$type(${requireNotNull(fields(type)).joinToString { decode(it.type, "$expression.${it.name}") }})"
+            }
         }
 
-    fun arguments(operation: GuestContractOperation): List<GuestWireArgument> {
+    fun arguments(
+        operation: GuestContractOperation,
+        handleExpression: String = "handle",
+    ): List<GuestWireArgument> {
         val result = mutableListOf<GuestWireArgument>()
 
         fun flatten(
@@ -86,6 +102,16 @@ internal class GuestBoundaryTypes(
             active: Set<String>,
         ) {
             require(type !in active && active.size <= 8) { "Cyclic or excessively nested contract argument: $type" }
+            if (type in resources) {
+                result +=
+                    GuestWireArgument(
+                        "${name}_handle",
+                        "Int",
+                        "($expression as ${nativeImplementation(type)}).__compuktersHandle",
+                        emptyList(),
+                    )
+                return
+            }
             val members = fields(type)
             if (members == null) {
                 result += GuestWireArgument(name, type, expression, constraints)
@@ -93,7 +119,7 @@ internal class GuestBoundaryTypes(
                 members.forEach { flatten("${name}_${it.name}", "$expression.${it.name}", it.type, emptyList(), active + type) }
             }
         }
-        if (operation.device) result += GuestWireArgument("handle", "Int", "handle", emptyList())
+        if (operation.device) result += GuestWireArgument("handle", "Int", handleExpression, emptyList())
         operation.parameters.forEach { flatten(it.name, it.name, it.type, it.constraints, emptySet()) }
         require(result.size <= 32) { "${operation.name}: flattened operation exceeds 32 wire arguments" }
         require(result.distinctBy { it.name }.size == result.size) { "${operation.name}: flattened parameter name collision" }

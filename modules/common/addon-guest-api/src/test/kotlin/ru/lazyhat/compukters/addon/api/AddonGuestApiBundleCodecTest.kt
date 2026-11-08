@@ -225,6 +225,7 @@ class AddonGuestApiBundleCodecTest {
             bundle(
                 result = AddonCapabilityValueType.RECORD,
                 signature = "fun(Int):Snapshot",
+                dependencies = emptyList(),
                 resultRecord =
                     AddonRecordSchema(
                         snapshot.typeName,
@@ -241,19 +242,11 @@ class AddonGuestApiBundleCodecTest {
     }
 
     @Test
-    fun `canonical geometry records require exact trusted shapes`() {
-        val vector = CanonicalAddonRecordSchemas.schemas.getValue("kotlin.math.Vector3d")
-        val original = bundle(result = AddonCapabilityValueType.RECORD, signature = "fun(Int):kotlin.math.Vector3d", resultRecord = vector)
+    fun `dependency records round trip without a type whitelist`() {
+        val record = AddonRecordSchema("dependency.UnlistedRecord", listOf(AddonRecordField("value", AddonCapabilityValueType.F64)))
+        val original =
+            bundle(result = AddonCapabilityValueType.RECORD, signature = "fun(Int):dependency.UnlistedRecord", resultRecord = record)
         assertEquals(original, AddonGuestApiBundleCodec.decode(AddonGuestApiBundleCodec.encode(original)))
-        for (invalid in listOf(
-            AddonRecordSchema(vector.typeName, vector.fields.reversed()),
-            AddonRecordSchema(vector.typeName, vector.fields.map { it.copy(type = AddonCapabilityValueType.F32) }),
-            AddonRecordSchema("kotlin.math.Rotation3d", vector.fields),
-        )) {
-            assertFailsWith<IllegalArgumentException> {
-                bundle(result = AddonCapabilityValueType.RECORD, signature = "fun(Int):${invalid.typeName}", resultRecord = invalid)
-            }
-        }
     }
 
     private fun bundle(
@@ -267,6 +260,7 @@ class AddonGuestApiBundleCodecTest {
         capability: AddonCapabilityIdentity = AddonCapabilityIdentity("fixture", "meters", 1, 0),
         includeSources: Boolean = true,
         resultRecord: AddonRecordSchema? = null,
+        dependencies: List<PlatformModuleId> = listOf(PlatformModuleId("stdlib", "core")),
     ): AddonGuestApiBundle {
         val path = "fixture/meters/Meters.kt"
         val moduleId = PlatformModuleId("fixture", "api")
@@ -284,7 +278,7 @@ class AddonGuestApiBundleCodecTest {
             PlatformModule(
                 moduleId,
                 "1.0.0",
-                listOf(PlatformModuleId("stdlib", "core")),
+                dependencies,
                 ImmutableBytes.of(byteArrayOf(1, 2, 3)),
                 null,
                 listOf(PlatformSource(path, ImmutableBytes.of(source.encodeToByteArray()))),

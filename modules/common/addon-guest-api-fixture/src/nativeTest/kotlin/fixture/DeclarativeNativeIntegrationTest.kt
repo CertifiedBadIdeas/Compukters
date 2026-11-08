@@ -104,6 +104,9 @@ class DeclarativeNativeIntegrationTest {
                 val engine = Engine.at(Side.front)
                 val state = engine.state()
                 check(state.orientation.quaternion.w == 1.0)
+                val direction = engine.velocity().direction()
+                check(direction.length > 0.999 && direction.length < 1.001)
+                check(direction == state.direction())
                 engine.aim(state.position)
                 engine.target(state)
                 val results = batch(listOf(

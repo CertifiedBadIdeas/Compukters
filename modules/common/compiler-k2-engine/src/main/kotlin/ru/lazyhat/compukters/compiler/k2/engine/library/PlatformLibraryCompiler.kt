@@ -472,6 +472,8 @@ private class LibraryDeclarationCollector(
     }
 
     override fun visitClass(declaration: IrClass) {
+        // Annotations belong to Kotlin metadata. They do not have executable Guest instances.
+        if (declaration.kind == ClassKind.ANNOTATION_CLASS) return
         if (declaration.startOffset >= 0 && declaration.fileOrNull() in files) classes += declaration
         super.visitClass(declaration)
     }

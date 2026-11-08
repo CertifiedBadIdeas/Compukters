@@ -24,6 +24,12 @@ plugins {
     `maven-publish`
 }
 
+// Annotation declarations are authored once on the native platform. The host SDK retains their
+// source-only JVM compatibility names while contract modules migrate to native compilation.
+kotlin.sourceSets.main {
+    kotlin.srcDir(rootProject.file("modules/common/guest-platform/src/platform/libraries/compukter-core/ru/lazyhat/compukters/api/contracts"))
+}
+
 val addonSdkVersion = libs.versions.addon.sdk.get()
 val addonApiContents = configurations.create("addonApiContents")
 

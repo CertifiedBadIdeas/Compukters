@@ -47,8 +47,14 @@ val addonDocumentationTooling = configurations.create("addonDocumentationTooling
     isCanBeConsumed = false
     isCanBeResolved = true
 }
+val addonDocumentationPlatform = configurations.create("addonDocumentationPlatform") {
+    isCanBeConsumed = false
+    isCanBeResolved = true
+}
+val addonDocumentationPlatformFile = layout.file(addonDocumentationPlatform.elements.map { it.single().asFile })
 dependencies {
     add(addonDocumentationTooling.name, project(path = ":compiler-k2-engine", configuration = "addonToolingElements")) { isTransitive = false }
+    add(addonDocumentationPlatform.name, project(path = ":guest-platform", configuration = "compuktersPlatformBundle"))
 }
 val generateAddonDocumentationSources = tasks.register("generateAddonDocumentationSources") {
     group = "documentation"
@@ -61,9 +67,14 @@ listOf("create", "sable", "propulsion").forEach { addon ->
         classpath = addonDocumentationTooling
         mainClass = "ru.lazyhat.compukters.compiler.k2.engine.build.AddonGuestApiBuilderMainKt"
         inputs.dir(contracts)
+        inputs.files(addonDocumentationPlatform)
         outputs.dir(output)
         args("--generate-only", "true", "--addon", addon)
-        argumentProviders.add(fileOptionArguments("--contracts" to contracts, "--guest-output" to output))
+        argumentProviders.add(fileOptionArguments(
+            "--contracts" to contracts,
+            "--guest-output" to output,
+            "--platform-input" to addonDocumentationPlatformFile,
+        ))
     }
     generateAddonDocumentationSources.configure { dependsOn(generate) }
 }

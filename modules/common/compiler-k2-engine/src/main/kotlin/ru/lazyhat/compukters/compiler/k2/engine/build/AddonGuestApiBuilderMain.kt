@@ -23,6 +23,7 @@ import ru.lazyhat.compukters.addon.api.AddonCapabilityOperation
 import ru.lazyhat.compukters.addon.api.AddonCapabilitySchema
 import ru.lazyhat.compukters.addon.api.AddonCapabilityValueType
 import ru.lazyhat.compukters.addon.api.AddonGuestApiBinding
+import ru.lazyhat.compukters.addon.api.AddonGuestApiBundle
 import ru.lazyhat.compukters.addon.api.AddonGuestApiBundleCodec
 import ru.lazyhat.compukters.compiler.k2.engine.PlatformCapabilityShape
 import ru.lazyhat.compukters.compiler.k2.engine.intrinsic.AddonIntrinsicContract
@@ -32,9 +33,11 @@ import ru.lazyhat.compukters.compiler.k2.engine.intrinsic.PlatformCapabilityId
 import ru.lazyhat.compukters.platform.bundle.PlatformBundle
 import ru.lazyhat.compukters.platform.bundle.PlatformBundleCodec
 import ru.lazyhat.compukters.platform.bundle.PlatformModule
+import ru.lazyhat.compukters.platform.bundle.PlatformModuleGraph
 import ru.lazyhat.compukters.platform.bundle.PlatformModuleId
 import ru.lazyhat.compukters.platform.bundle.PlatformSource
 import ru.lazyhat.compukters.platform.k2.build.PlatformMetadataCompiler
+import java.io.File
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.StandardCopyOption
@@ -46,6 +49,7 @@ fun buildAddonGuestApiBundle(
     base: PlatformBundle,
     addonSourceRoot: Path,
     contract: AddonContract,
+    addonDependencies: List<AddonGuestApiBundle> = emptyList(),
 ): ByteArray {
     val availableModules = (listOf(base.builtins) + base.modules).associateBy(PlatformModule::id)
     contract.dependencies.forEach { dependency ->
@@ -72,14 +76,23 @@ fun buildAddonGuestApiBundle(
         val descriptor = workspace.resolve("modules.toml")
         Files.writeString(descriptor, renderCatalog(baseModules, contract, stagedAddonSources))
         val addonIntrinsic = AddonIntrinsicContract(contract.module, contract.schemas, contract.bindings)
-        val registry = AddonTrustedIntrinsics.extend(CanonicalTrustedIntrinsics.registry, listOf(addonIntrinsic))
+        val dependencyIntrinsics =
+            addonDependencies.map {
+                AddonIntrinsicContract(
+                    it.moduleDescriptor.id,
+                    it.capabilitySchemas,
+                    it.bindings,
+                )
+            }
+        val registry = AddonTrustedIntrinsics.extend(CanonicalTrustedIntrinsics.registry, dependencyIntrinsics + addonIntrinsic)
+        val allSchemas = addonDependencies.flatMap { it.capabilitySchemas } + contract.schemas
         val capabilities =
             CanonicalTrustedIntrinsics.executableCapabilities +
-                contract.schemas.mapTo(mutableSetOf()) { schema ->
+                allSchemas.mapTo(mutableSetOf()) { schema ->
                     PlatformCapabilityId(schema.identity.namespace, schema.identity.name, schema.identity.abiMajor)
                 }
         val capabilityShapes =
-            contract.schemas.associate { schema ->
+            allSchemas.associate { schema ->
                 PlatformCapabilityId(schema.identity.namespace, schema.identity.name, schema.identity.abiMajor) to
                     PlatformCapabilityShape(schema.identity.abiMinor, schema.operations.size.toUInt())
             }
@@ -111,6 +124,8 @@ fun buildAddonGuestApiBundle(
         require(combined.modules.none { contract.module in it.dependencies }) {
             "base platform module depends on addon module ${contract.module}"
         }
+        val recordDependencies = PlatformModuleGraph(combined).resolve(setOf(contract.module)).modules
+        validateAddonRecordResults(listOf(combined.builtins) + recordDependencies, contract.schemas, contract.bindings)
         val addon =
             AddonGuestApiBundleCodec.assemble(
                 contract.addon,
@@ -129,7 +144,7 @@ fun buildAddonGuestApiBundle(
 fun main(args: Array<String>) {
     require(args.size % 2 == 0) { "Builder arguments must be option/value pairs" }
     val arguments = args.toList().windowed(2, 2, partialWindows = false).associate { (name, value) -> name to value }
-    require("--sources" !in arguments) { "Handwritten addon Guest Kotlin is unsupported; use --contracts and --guest-output" }
+    require("--sources" !in arguments) { "Use --contracts for the native Guest source module and --guest-output for expanded sources" }
     val generateOnly = arguments["--generate-only"]?.toBooleanStrict() == true
     val addon =
         if (generateOnly && "--addon" in arguments) {
@@ -139,7 +154,8 @@ fun main(args: Array<String>) {
             AddonAuthoringContract.parse(arguments.path("--descriptor").readLines()).addon
         }
     val sourceRoot = arguments.path("--contracts")
-    val declaration = parseDeclarativeGuestContract(sourceRoot, addon)
+    val nativeInputs = loadNativeAddonInputs(arguments)
+    val declaration = analyzeNativeGuestContract(nativeInputs.platform, sourceRoot, addon)
     val generated = arguments.path("--guest-output")
     require(!sourceRoot.startsWith(generated) && !generated.startsWith(sourceRoot)) {
         "Generated Guest output must not overlap the contract source directory"
@@ -149,18 +165,18 @@ fun main(args: Array<String>) {
     buildTrustedAddonGuestApi(arguments + ("--sources" to generated.toString()), declaration)
 }
 
-/** Internal compiler-library entry point; the published addon CLI accepts declarations only. */
+/** Internal compiler-library entry point; the public CLI first analyzes and expands a native Guest module. */
 fun buildTrustedAddonGuestApi(
     arguments: Map<String, String>,
     declaration: DeclarativeGuestContract? = null,
 ) {
-    val platformInput = arguments.path("--platform-input")
     val sourceRoot = arguments.path("--sources")
     val descriptor = arguments.path("--descriptor")
     val abiLock = arguments.path("--abi-lock")
     val output = arguments.path("--output")
     val hostOutput = arguments["--host-output"]?.let { Path.of(it).toAbsolutePath().normalize() }
-    val base = PlatformBundleCodec.decode(Files.readAllBytes(platformInput))
+    val nativeInputs = loadNativeAddonInputs(arguments)
+    val base = nativeInputs.platform
     val authoring = AddonAuthoringContract.parse(descriptor.readLines())
     val currentLock = if (Files.exists(abiLock)) AddonAbiLock.parse(abiLock.readLines()) else AddonAbiLock.empty()
     val trustedRecords =
@@ -170,22 +186,66 @@ fun buildTrustedAddonGuestApi(
                 PlatformMetadataCompiler()
                     .compile(module.id, module.sources)
                     .recordCandidates
-                    .filter { it.symbol in canonicalRecordTypes && it.valueClass && it.rejection == null }
+                    .filter { it.valueClass && it.rejection == null }
             }.orEmpty()
-    val resolved = resolveAddonContract(sourceRoot, authoring, currentLock, base.modules.map(PlatformModule::id), trustedRecords)
+    val native = declaration != null
+    val resolved =
+        resolveAddonContract(
+            sourceRoot,
+            authoring,
+            currentLock,
+            base.modules.map(PlatformModule::id),
+            trustedRecords,
+            bindingAliases = declaration?.bindingAliases.orEmpty(),
+            resolvedRecords = if (native) nativeResultSchemas(requireNotNull(declaration)) else null,
+            allowExecutableOnly = native,
+        )
     val updateLock = arguments["--update-abi-lock"]?.toBooleanStrict() ?: false
-    if (updateLock) {
-        writeAtomically(abiLock, resolved.expectedLock.render().encodeToByteArray())
-    } else {
+    if (!updateLock) {
         require(Files.exists(abiLock)) { "addon ABI lock is missing; run updateAddonGuestApiAbiLock" }
         require(currentLock == resolved.expectedLock && Files.readString(abiLock) == currentLock.render()) {
             "addon ABI lock is stale; run updateAddonGuestApiAbiLock and review the ABI change"
         }
     }
-    writeAtomically(output, buildAddonGuestApiBundle(base, sourceRoot, resolved.contract))
-    hostOutput?.let { path ->
-        writeAtomically(path, renderAddonHostContract(authoring, resolved.contract, declaration).encodeToByteArray())
-    }
+    val bundleBytes = buildAddonGuestApiBundle(base, sourceRoot, resolved.contract, nativeInputs.dependencies)
+    val hostBytes = hostOutput?.let { renderAddonHostContract(authoring, resolved.contract, declaration).encodeToByteArray() }
+    if (updateLock) writeAtomically(abiLock, resolved.expectedLock.render().encodeToByteArray())
+    writeAtomically(output, bundleBytes)
+    hostOutput?.let { path -> writeAtomically(path, requireNotNull(hostBytes)) }
+}
+
+private data class NativeAddonInputs(
+    val platform: PlatformBundle,
+    val dependencies: List<AddonGuestApiBundle>,
+)
+
+private fun loadNativeAddonInputs(arguments: Map<String, String>): NativeAddonInputs {
+    val platform = PlatformBundleCodec.decode(Files.readAllBytes(arguments.path("--platform-input")))
+    val dependencies =
+        arguments["--addon-inputs"].orEmpty().split(File.pathSeparatorChar).filter(String::isNotEmpty).map { path ->
+            AddonGuestApiBundleCodec.decode(Files.readAllBytes(Path.of(path))).also { bundle ->
+                require(bundle.identity.platformAbi == platform.identity.platformAbi) { "Addon dependency platform ABI mismatch: $path" }
+            }
+        }
+    require(dependencies.map { it.moduleDescriptor.id }.distinct().size == dependencies.size) { "Duplicate native addon dependency" }
+    require(
+        dependencies.none { addon ->
+            platform.modules.any { it.id == addon.moduleDescriptor.id }
+        },
+    ) { "Addon dependency shadows base platform" }
+    val combined =
+        if (dependencies.isEmpty()) {
+            platform
+        } else {
+            PlatformBundleCodec.assemble(
+                platform.identity.languageVersion,
+                platform.identity.platformAbi,
+                platform.builtins,
+                platform.modules + dependencies.map { it.moduleDescriptor },
+            )
+        }
+    PlatformModuleGraph(combined)
+    return NativeAddonInputs(combined, dependencies)
 }
 
 private fun writeSource(
