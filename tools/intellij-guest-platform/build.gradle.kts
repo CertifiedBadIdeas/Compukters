@@ -56,6 +56,7 @@ kotlin {
     }
     sourceSets.main {
         kotlin.srcDir(common.resolve("platform-bundle/src/main/kotlin"))
+        kotlin.srcDir(common.resolve("platform-k2/src/main/kotlin/ru/lazyhat/compukters/platform/k2/contracts"))
     }
 }
 tasks.compileKotlin {

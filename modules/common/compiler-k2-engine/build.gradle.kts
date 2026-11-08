@@ -89,6 +89,10 @@ tasks.check {
 }
 
 tasks.test {
+    val nativeContractPlatform = project(":guest-platform").layout.buildDirectory.file("platform/compukters-platform.cpb")
+    dependsOn(":guest-platform:assemblePlatformBundle")
+    inputs.file(nativeContractPlatform)
+    systemProperty("compukters.native.contract.platform", nativeContractPlatform.get().asFile.absolutePath)
     val guestBuiltins = rootProject.file("modules/common/guest-platform/src/platform/builtins")
     inputs.dir(guestBuiltins)
     dependsOn(tasks.jar)

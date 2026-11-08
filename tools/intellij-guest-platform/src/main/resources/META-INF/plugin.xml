@@ -11,6 +11,7 @@
     </extensions>
     <extensions defaultExtensionNs="org.jetbrains.kotlin">
         <supportsKotlinPluginMode supportsK2="true"/>
+        <fir.extensions.firExtensionRegistrar implementation="ru.lazyhat.compukters.platform.k2.contracts.GuestContractFirExtensionRegistrar"/>
         <k2KaModuleFactory implementation="ru.lazyhat.compukters.idea.GuestModuleFactory" order="first"/>
         <llFirSessionConfigurator implementation="ru.lazyhat.compukters.idea.GuestSessionConfigurator"/>
         <idea.base.platforms.targetPlatformDetector implementation="ru.lazyhat.compukters.idea.GuestPlatformDetector" order="first"/>

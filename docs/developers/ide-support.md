@@ -39,6 +39,16 @@ members, reports argument type errors and navigates to bundled stdlib sources. I
 from the user's IDE. The adapter depends on internal IDE module APIs and is pinned to the verified build;
 automatic Gradle import and the unified executable contract authoring pipeline are not yet implemented.
 
+The shared native FIR extension also analyzes annotated device/service interfaces alongside ordinary
+Guest bodies. Device discovery companions and Unit command factories participate in actual K2 resolution
+and completion; the public declarations remain interfaces. Contract annotations are metadata-only declarations
+in `compukter:core` 9.6.0. These analysis tests do not yet establish executable addon contract generation.
+
+**Contract frontend evidence:** `GuestContractFirTest`, `NativeGuestContractAnalyzerTest` and the real
+IDE tests `testNativeContractAndExecutableMfvc`, `testNativeCommandFactoryCompletion`,
+`testNativeProviderCompletion`. Boundary analysis resolves real stdlib/custom record field types and aliases
+through FIR, rejects mutable record layouts and bodies on server operations, and evaluates constraint constants.
+
 **Evidence:** `GuestPlatformTest`; `testKotlinGuestLibraryPrototypeVmConformance` compiles the same `Velocity`
 fixture as a separate addon library and executes its stdlib-based methods from a consumer in the Rust VM.
 See the [prototype workflow](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/tools/intellij-guest-platform/README.md).

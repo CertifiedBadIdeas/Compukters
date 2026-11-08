@@ -18,7 +18,7 @@
 
 package ru.lazyhat.compukters.api.contracts
 
-/** Declarations only. The SDK generates the device implementation and its discovery provider. */
+/** Native Guest interface. The SDK generates its implementation and discovery companion. */
 @Target(AnnotationTarget.CLASS)
 @Retention(AnnotationRetention.SOURCE)
 annotation class GuestDevice(
@@ -40,7 +40,7 @@ annotation class GuestResource(
     val bindings: String = "",
 )
 
-/** An immutable constructor-only response record. */
+/** An immutable boundary record. Ordinary supported Guest methods may have bodies. */
 @Target(AnnotationTarget.CLASS)
 @Retention(AnnotationRetention.SOURCE)
 annotation class GuestRecord

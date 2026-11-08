@@ -280,10 +280,6 @@ class PlatformMetadataCompiler {
                                     "cannot declare supertypes"
                                 }
 
-                                klass.hasModifier(KtTokens.DATA_KEYWORD) && klass.declarations.isNotEmpty() -> {
-                                    "cannot contain a class body or initializers"
-                                }
-
                                 klass.declarations.any {
                                     it is KtClassInitializer || (it is KtProperty && (it.initializer != null || it.hasDelegate()))
                                 } -> {
@@ -514,6 +510,7 @@ class PlatformMetadataCompiler {
         ownerHasDispatchReceiver: Boolean = false,
         inheritedSource: Boolean = false,
         declaration: KtDeclaration,
+        inheritedMetadataOnly: Boolean = false,
     ): List<ParsedDeclaration> {
         val named = declaration as? KtNamedDeclaration ?: return emptyList()
         val name =
@@ -524,6 +521,7 @@ class PlatformMetadataCompiler {
             }
         val symbol = (listOf(packageName).filter(String::isNotEmpty) + owners + name).joinToString(".")
         val external = declaration.hasModifier(KtTokens.EXTERNAL_KEYWORD)
+        val metadataOnly = inheritedMetadataOnly || (declaration is KtClass && declaration.isAnnotation())
         val managedObject = declaration is KtObjectDeclaration && declaration.superTypeListEntries.isNotEmpty()
         val requiresSource =
             !external && (
@@ -575,6 +573,7 @@ class PlatformMetadataCompiler {
                     declaration is KtClass || managedObject,
                     requiresSource,
                     child,
+                    inheritedMetadataOnly = metadataOnly,
                 )
             }
         val parsed =
@@ -586,14 +585,18 @@ class PlatformMetadataCompiler {
                     is KtProperty -> declaration.hasInitializer() || declaration.accessors.any { it.hasBody() }
                     else -> false
                 },
-                when (declaration) {
-                    is KtNamedFunction -> PlatformLibraryDeclarationKind.FUNCTION
-                    is KtEnumEntry -> PlatformLibraryDeclarationKind.FIELD
-                    is KtParameter -> PlatformLibraryDeclarationKind.FIELD.takeIf { declaration.hasValOrVar() }
-                    is KtProperty -> PlatformLibraryDeclarationKind.PROPERTY
-                    is KtClass -> PlatformLibraryDeclarationKind.TYPE.takeUnless { declaration.hasModifier(KtTokens.VALUE_KEYWORD) }
-                    is KtObjectDeclaration -> PlatformLibraryDeclarationKind.TYPE.takeIf { managedObject }
-                    else -> null
+                if (metadataOnly) {
+                    null
+                } else {
+                    when (declaration) {
+                        is KtNamedFunction -> PlatformLibraryDeclarationKind.FUNCTION
+                        is KtEnumEntry -> PlatformLibraryDeclarationKind.FIELD
+                        is KtParameter -> PlatformLibraryDeclarationKind.FIELD.takeIf { declaration.hasValOrVar() }
+                        is KtProperty -> PlatformLibraryDeclarationKind.PROPERTY
+                        is KtClass -> PlatformLibraryDeclarationKind.TYPE.takeUnless { declaration.hasModifier(KtTokens.VALUE_KEYWORD) }
+                        is KtObjectDeclaration -> PlatformLibraryDeclarationKind.TYPE.takeIf { managedObject }
+                        else -> null
+                    }
                 },
                 requiresSource,
                 abstractMember =

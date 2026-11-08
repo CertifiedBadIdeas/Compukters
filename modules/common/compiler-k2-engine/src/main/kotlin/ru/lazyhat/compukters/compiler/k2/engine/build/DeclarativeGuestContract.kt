@@ -42,9 +42,12 @@ import java.nio.file.Files
 import java.nio.file.Path
 import kotlin.io.path.invariantSeparatorsPathString
 
-/** A closed authoring model. No executable author-supplied Kotlin enters the generated Guest library. */
+/** Resolved server operations, with original Guest sources when analyzed on the native platform. */
 data class DeclarativeGuestContract(
     val types: List<GuestContractType>,
+    val nativeSources: Map<String, String> = emptyMap(),
+    val boundaryRecords: Map<String, GuestContractType> = emptyMap(),
+    val nativeInterfaces: List<NativeGuestInterface> = emptyList(),
 ) {
     val operations: List<GuestContractOperation> get() = types.flatMap { it.operations }
     val commands: Set<String> get() = operations.filter { it.kind == GuestOperationKind.COMMAND }.mapTo(sortedSetOf()) { it.binding }
