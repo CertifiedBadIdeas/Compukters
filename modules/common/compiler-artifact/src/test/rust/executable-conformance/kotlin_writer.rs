@@ -26,6 +26,10 @@ fn main() {
     );
 
     match scenario.as_str() {
+        "guest-library-prototype" => {
+            let mut session = k2_stdio_session_with_heap("COMPUKTER_GUEST_LIBRARY_PROTOTYPE_ARTIFACT", 1, 256 * 1024);
+            k2_assert_prints(&mut session, ["GUEST_LIBRARY_OK\n"], 256);
+        },
         "geometry" => {
             let mut session = k2_stdio_session_with_heap("COMPUKTER_KOTLIN_GEOMETRY_ARTIFACT", 1, 256 * 1024);
             k2_assert_prints(&mut session, ["geometry ok\n"], 1024);

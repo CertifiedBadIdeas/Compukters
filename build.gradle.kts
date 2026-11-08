@@ -1787,3 +1787,13 @@ registerKotlinVmConformance(
     artifactEnvironmentVariable = "COMPUKTER_KOTLIN_SUMS_ARTIFACT",
     conformanceScenario = "sums",
 )
+
+registerKotlinVmConformance(
+    taskName = "testKotlinGuestLibraryPrototypeVmConformance",
+    taskDescription = "Executes the IntelliJ prototype's independently compiled Guest library in the Rust VM.",
+    artifactTask = ":compiler-k2:generateGuestLibraryPrototype",
+    artifact = project(":compiler-k2").layout.buildDirectory.file("generated/conformance/guest-library-prototype/consumer.cpkt"),
+    cargoTargetDirectory = ".toolchain/build/cargo/guest-library-prototype-conformance",
+    artifactEnvironmentVariable = "COMPUKTER_GUEST_LIBRARY_PROTOTYPE_ARTIFACT",
+    conformanceScenario = "guest-library-prototype",
+)

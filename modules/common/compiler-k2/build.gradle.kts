@@ -2421,3 +2421,18 @@ tasks.register<Test>("generateExecutionBenchmarkArtifacts") {
     systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
     systemProperty("compukter.bench.executionOutput", executionBenchmarkArtifacts.get().asFile.absolutePath)
 }
+
+val generateGuestLibraryPrototype = tasks.register<Test>("generateGuestLibraryPrototype") {
+    description = "Compiles the IntelliJ prototype's executable addon MFVC library and its separate consumer."
+    group = "verification"
+    dependsOn(tasks.jar)
+    useJUnitPlatform()
+    testClassesDirs = sourceSets.test.get().output.classesDirs
+    classpath = sourceSets.test.get().runtimeClasspath
+    filter.includeTestsMatching("*native addon library prototype executes MFVC methods against the real stdlib*")
+    inputs.dir(rootProject.file("tools/intellij-guest-platform/fixture"))
+    val output = layout.buildDirectory.dir("generated/conformance/guest-library-prototype")
+    outputs.dir(output)
+    systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
+    systemProperty("compukters.prototype.output", output.get().asFile.absolutePath)
+}

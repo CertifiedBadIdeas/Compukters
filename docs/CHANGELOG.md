@@ -13,6 +13,11 @@ headings so this page has one stable URL that can be shared outside the reposito
 
 ## 0.7.0 — In development
 
+- A developer IntelliJ prototype analyzes the independent Guest Kotlin platform with actual stdlib and addon
+  metadata, including executable MFVC methods, member completion, type diagnostics and stdlib source navigation.
+  The isolated prototype targets IDEA 2026.1.5.1; automatic Gradle import and unified executable contract authoring
+  remain future work.
+
 - Addon SDK 0.8 generates inspectable Guest Kotlin, executable images and host dispatch from constrained Kotlin
   contracts. Authors declare devices, resources, records, operations and argument constraints; command factories and
   server validation share those declarations. Supported stdlib geometry works in arguments and results, including

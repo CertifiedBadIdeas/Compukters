@@ -29,6 +29,20 @@ physical paths are bounded`.
 
 ## IDE and tooling
 
+### IntelliJ Guest platform prototype
+
+**Status:** Developer prototype; separate from the supported embedded editor and SDK contract source set.
+
+`tools/intellij-guest-platform` connects the independent Guest target to IntelliJ IDEA 2026.1.5.1's bundled
+K2 plugin. It reads actual platform metadata, enables MFVC source methods, completes stdlib and compiled addon
+members, reports argument type errors and navigates to bundled stdlib sources. Its test sandbox is isolated
+from the user's IDE. The adapter depends on internal IDE module APIs and is pinned to the verified build;
+automatic Gradle import and the unified executable contract authoring pipeline are not yet implemented.
+
+**Evidence:** `GuestPlatformTest`; `testKotlinGuestLibraryPrototypeVmConformance` compiles the same `Velocity`
+fixture as a separate addon library and executes its stdlib-based methods from a consumer in the Rust VM.
+See the [prototype workflow](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/tools/intellij-guest-platform/README.md).
+
 ### Kotlin typing and indentation
 
 **Status:** Supported.

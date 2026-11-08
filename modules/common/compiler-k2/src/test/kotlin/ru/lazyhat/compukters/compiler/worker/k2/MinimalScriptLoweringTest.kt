@@ -80,6 +80,54 @@ import kotlin.test.assertTrue
 
 class MinimalScriptLoweringTest {
     @Test
+    fun `native addon library prototype executes MFVC methods against the real stdlib`() =
+        withAdapter { adapter ->
+            val root = createTempDirectory("compukters-guest-library-prototype-")
+            try {
+                val fixture = repositoryFile("tools/intellij-guest-platform/fixture")
+                val librarySource = fixture.resolve("library/prototype/flight/Velocity.kt").readText()
+                root.resolve("prototype/flight/Velocity.kt").also { it.parent.createDirectories() }.writeText(librarySource)
+                val base = K2CompilerAdapter.loadPackagedPlatform()
+                val contract =
+                    AddonContract(
+                        addon = "prototype",
+                        module = PlatformModuleId("prototype", "api"),
+                        version = "1.0.0",
+                        dependencies = listOf(PlatformModuleId("stdlib", "core")),
+                        schemas = emptyList(),
+                        bindings = emptyList(),
+                    )
+                val bundleBytes = buildAddonGuestApiBundle(base, root, contract)
+                val addon = AddonGuestApiBundleCodec.decode(bundleBytes)
+                assertTrue(addon.bindings.isEmpty())
+                assertTrue(addon.capabilitySchemas.isEmpty())
+                assertNotNull(addon.moduleDescriptor.libraryFragment)
+                val result = adapter.compile(request(fixture.resolve("consumer/main.kt").readText(), addonOverride = addon))
+                val artifactBytes = assertNotNull(result.artifact, result.diagnostics.joinToString()).toByteArray()
+                val artifact = ArtifactReader.read(artifactBytes)
+                assertTrue(artifact.modules.any { module -> module.types.any { it is NominalType.InlineValue } })
+                System.getProperty("compukters.prototype.output")?.let { output ->
+                    val target = Path.of(output).also { it.createDirectories() }
+                    target.resolve("prototype.cagb").writeBytes(bundleBytes)
+                    target.resolve("consumer.cpkt").writeBytes(artifactBytes)
+                    val platform = ru.lazyhat.compukters.platform.bundle.PlatformBundleCodec
+                    target.resolve("prototype-platform.cpb").writeBytes(
+                        platform.encode(
+                            platform.assemble(
+                                base.identity.languageVersion,
+                                base.identity.platformAbi,
+                                base.builtins,
+                                base.modules + addon.moduleDescriptor,
+                            ),
+                        ),
+                    )
+                }
+            } finally {
+                root.toFile().deleteRecursively()
+            }
+        }
+
+    @Test
     fun `value class initializer literals are retained without an ordinary constructor body`() =
         withAdapter { adapter ->
             val source =
