@@ -19,7 +19,7 @@ headings so this page has one stable URL that can be shared outside the reposito
 - A developer IntelliJ adapter imports native Guest modules from Gradle, resolves actual stdlib and addon
   dependencies, completes commands and MFVC methods, reports type/operation errors and navigates to bundled sources.
   A status widget shows activation and loading errors; artifact changes and Gradle reimport refresh analysis.
-  Guest source sets are marked in the Project tree and recognized as configured Kotlin modules.
+  Guest source sets have purple names and folder icons in the Project tree and are recognized as configured Kotlin modules.
   The adapter is pinned to IDEA 2026.1.5.1.
 
 - Addon SDK 0.9 compiles native Guest Kotlin from `src/contract/kotlin`, combining annotated interface contracts

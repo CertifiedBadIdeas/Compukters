@@ -21,7 +21,9 @@ package ru.lazyhat.compukters.idea
 import com.intellij.ide.projectView.PresentationData
 import com.intellij.ide.projectView.ProjectViewNode
 import com.intellij.ide.projectView.ProjectViewNodeDecorator
+import com.intellij.openapi.editor.colors.EditorColorsManager
 import com.intellij.openapi.module.Module
+import com.intellij.openapi.util.IconLoader
 import com.intellij.psi.PsiDirectory
 import com.intellij.ui.JBColor
 import com.intellij.ui.SimpleTextAttributes
@@ -40,14 +42,24 @@ class GuestProjectViewDecorator : ProjectViewNodeDecorator {
                 else -> false
             }
         if (!guest) return
+        data.setIcon(ICON)
         data.forcedTextForeground = FOREGROUND
         // NodeRenderer gives explicit fragment colours priority over forcedTextForeground.
         // Like the renderer, keep the name separate from the grey supplementary text.
         val fragments = data.coloredText.toList()
+        // The renderer merges the scheme's attributes into the first fragment after decoration.
+        // Resolve them here so its source-root foreground cannot overwrite the Guest colour.
+        val schemeAttributes = data.textAttributesKey?.let { EditorColorsManager.getInstance().globalScheme.getAttributes(it) }
+        if (fragments.isNotEmpty()) data.setAttributesKey(null)
         data.clearText()
         var mainText = true
         fragments.forEachIndexed { index, fragment ->
-            val attributes = fragment.attributes
+            val attributes =
+                if (index == 0 && schemeAttributes != null) {
+                    SimpleTextAttributes.merge(fragment.attributes, SimpleTextAttributes.fromTextAttributes(schemeAttributes))
+                } else {
+                    fragment.attributes
+                }
             if (index > 0 && attributes.fgColor == SimpleTextAttributes.GRAYED_ATTRIBUTES.fgColor) mainText = false
             data.addText(
                 fragment.text,
@@ -62,5 +74,6 @@ class GuestProjectViewDecorator : ProjectViewNodeDecorator {
 
     companion object {
         val FOREGROUND: JBColor = JBColor.namedColor("Compukters.GuestSource.foreground", JBColor(0x7653B5, 0xB69AEC))
+        private val ICON = IconLoader.getIcon("/icons/guestSourceRoot.svg", GuestProjectViewDecorator::class.java)
     }
 }
