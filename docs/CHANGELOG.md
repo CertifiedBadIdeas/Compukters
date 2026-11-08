@@ -22,12 +22,12 @@ headings so this page has one stable URL that can be shared outside the reposito
   Guest source sets are marked in the Project tree and recognized as configured Kotlin modules.
   The adapter is pinned to IDEA 2026.1.5.1.
 
-- Addon SDK 0.8 compiles native Guest Kotlin from `src/contract/kotlin`, combining annotated interface contracts
+- Addon SDK 0.9 compiles native Guest Kotlin from `src/contract/kotlin`, combining annotated interface contracts
   with supported executable methods and MFVCs. Actual stdlib and Guest dependencies supply signature types;
   immutable boundary layouts and typed host DTOs are derived without duplicate SDK math classes.
-  Generated server plumbing remains inspectable. Unit-only command factories, argument constraints and host
+  Generated server plumbing remains inspectable. Typed command factories, argument constraints and host
   validation share those declarations; constructor/factory metadata preserves record invariants, including rotations.
-  operation binding names are inferred unless explicitly overridden. Checked-in ABI locks preserve operation selectors
+  Operation binding names are inferred unless explicitly overridden. Checked-in ABI locks preserve operation selectors
   and tombstones. All eight maintained addons use the generated API. Aeronautics servo calls require explicit speed
   and wait timeout arguments;
   Create stock lookup requires an explicit start index. Cosmonautics orbit snapshots expose orbital fields;
@@ -64,8 +64,11 @@ headings so this page has one stable URL that can be shared outside the reposito
 
 
 - Guest command lists capture device calls without sending them. `batch(commands)` applies immediate
-  Unit commands in one ordered server-tick delivery and returns an independent result for every
-  position. Addon contract declarations determine eligible Unit methods; limits and per-tick quotas apply to the whole group.
+  calls in one ordered server-tick delivery and returns independent typed results, including records.
+  Every `@GuestCall` is batchable; `@GuestWait` may wait and is excluded. Results support iteration, typed
+  lookup by command identity and repeated positions. Contract records are inferred without `@GuestRecord`;
+  `@GuestRead` and `@GuestCommand` are consolidated into `@GuestCall`. SDK 0.9 and command ABI 2 require
+  recompiling older batch programs; limits and per-tick quotas apply to the whole group.
 
 - Guest Kotlin adds top-level `async`, typed `Deferred.await()` and ordered `awaitAll` over cooperative
   tasks. Repeated awaits preserve values and original task exceptions; ordinary direct vararg calls
@@ -165,6 +168,8 @@ headings so this page has one stable URL that can be shared outside the reposito
 - Guest Kotlin supports covariant read views for custom `out` interfaces, Sequence and Iterator,
   including primitive-to-nullable and Any views. Widening preserves object identity and scalar
   storage, boxing only widened reads; nested results and precompiled library owners share the same model.
+  Number conversions and Comparable calls also work through common types, including custom implementations,
+  nullable values and mixed numeric collections.
 
 - Tagged releases can submit both supported NeoForge base-mod JARs and the separate Create, CreateAddition,
   Sable and Propulsion addons to CurseForge with required dependency relations, recorded upload outcomes
@@ -196,7 +201,7 @@ headings so this page has one stable URL that can be shared outside the reposito
 - Retained peripheral handles restore network devices by their saved instance UUID after address changes;
   translated direct devices use computer-relative locations. Replacements and competing process owners remain rejected.
 
-- Addon SDK 0.6.0 supports transient actuator acquisition/release callbacks and lazy item groups in the shared
+- Addon SDK supports transient actuator acquisition/release callbacks and lazy item groups in the shared
   Compukters creative tab. Base items stay first; addon groups follow in stable order without extra tabs.
 
 - Guest files support eager `readLines` and scoped streaming `useLines`, with strict UTF-8 across transfer chunks,

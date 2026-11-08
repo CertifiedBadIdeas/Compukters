@@ -68,6 +68,48 @@ class DeclarativeNativeIntegrationTest {
         val states = mutableListOf<State>()
         val handler =
             object : DeclarativeCapabilityHandler {
+                override fun valuesInteger(): AddonCallResult<Int> = addonCompleted(Int.MIN_VALUE)
+
+                override fun valuesLongValue(): AddonCallResult<Long> = addonCompleted(Long.MAX_VALUE)
+
+                override fun valuesDecimal(): AddonCallResult<Double> = addonCompleted(-0.0)
+
+                override fun valuesBoolean(): AddonCallResult<Boolean> = addonCompleted(false)
+
+                override fun valuesCharacter(): AddonCallResult<Char> = addonCompleted('λ')
+
+                override fun valuesText(): AddonCallResult<String> = addonCompleted("λ😀")
+
+                override fun valuesBytes(): AddonCallResult<ByteArray> = addonCompleted(byteArrayOf(-1, 0, 7))
+
+                override fun valuesFloating(argument0: Int): AddonCallResult<Double> =
+                    addonCompleted(
+                        listOf(
+                            Double.MIN_VALUE,
+                            Double.MAX_VALUE,
+                            Double.POSITIVE_INFINITY,
+                            Double.NEGATIVE_INFINITY,
+                            Double.NaN,
+                            -0.0,
+                            1.0000000000000002,
+                        )[argument0],
+                    )
+
+                override fun valuesSingle(argument0: Int): AddonCallResult<Float> =
+                    addonCompleted(
+                        listOf(
+                            Float.MIN_VALUE,
+                            Float.MAX_VALUE,
+                            Float.POSITIVE_INFINITY,
+                            Float.NEGATIVE_INFINITY,
+                            Float.NaN,
+                            -0.0f,
+                            1.0000001f,
+                        )[argument0],
+                    )
+
+                override fun valuesOversized(): AddonCallResult<String> = addonCompleted("x".repeat(4096))
+
                 override fun engineAim(
                     argument0: Int,
                     argument1: Vector3d,
@@ -90,6 +132,13 @@ class DeclarativeNativeIntegrationTest {
                 override fun engineState(argument0: Int): AddonCallResult<StateReply> =
                     addonCompleted(StateReply(Vector3d(1.0, 2.0, 3.0), Quaterniond(0.0, 0.0, 0.0, 2.0)))
 
+                override fun engineSnapshot(argument0: Int): AddonCallResult<Int> = addonCompleted(42)
+
+                override fun snapshotClose(argument0: Int): AddonCallResult<Unit> {
+                    assertEquals(42, argument0)
+                    return addonCompleted(Unit)
+                }
+
                 override fun engineSpeed(argument0: Int): AddonCallResult<Float> = addonCompleted(1.0f)
 
                 override fun engineClose(argument0: Int): AddonCallResult<Unit> = addonCompleted(Unit)
@@ -97,7 +146,8 @@ class DeclarativeNativeIntegrationTest {
         val source =
             """
             import declarative.Engine
-            import compukter.commands.batch
+            import declarative.Values
+            import compukter.commands.*
             import compukter.peripheral.Side
             import kotlin.math.Vector3d
             fun main() {
@@ -109,14 +159,100 @@ class DeclarativeNativeIntegrationTest {
                 check(direction == state.direction())
                 engine.aim(state.position)
                 engine.target(state)
-                val results = batch(listOf(
+                val speed = engine.speedCommand()
+                val readState = engine.stateCommand()
+                val close = engine.closeCommand()
+                val snapshot = engine.snapshotCommand()
+                val aim = engine.aimCommand(Vector3d(7.0, 8.0, 9.0))
+                val commands = listOf(
                     engine.aimCommand(Vector3d(4.0, 5.0, 6.0)),
-                    engine.targetCommand(state),
-                    engine.aimCommand(Vector3d(7.0, 8.0, 9.0)),
-                ))
-                check(results.size == 3 && results[0].isFailure)
-                results[1].getOrThrow()
-                results[2].getOrThrow()
+                    engine.targetCommand(state), aim, speed, readState, close, snapshot,
+                )
+                val results = batch(commands)
+                check(results.size == 7 && results[0].isFailure)
+                val measured: Float = results[speed].getOrThrow()
+                check(measured == 1.0f)
+                val batchedState: declarative.State = results[readState].getOrThrow()
+                check(batchedState.position == state.position)
+                check(batchedState.orientation.quaternion.w == 1.0)
+                results[close].getOrThrow()
+                val resource = results[snapshot].getOrThrow()
+                for (result in batch(listOf(resource.closeCommand()))) result.getOrThrow()
+                var failures = 0
+                for (result in results) {
+                    if (result.isFailure) failures++ else result.getOrThrow()
+                }
+                check(failures == 1)
+                val reads = listOf(engine.speedCommand(), engine.speedCommand())
+                val temperatures = batch(reads)
+                for (result in temperatures) {
+                    val value: Float = result.getOrThrow()
+                    check(value == measured)
+                }
+                for (command in reads) {
+                    val value: Float = temperatures[command].getOrThrow()
+                    check(value == measured)
+                }
+                val duplicates = batch(listOf(speed, speed))
+                check(duplicates.getAll(speed).size == 2)
+                for (result in duplicates.getAll(speed)) check(result.getOrThrow() == 1.0f)
+                try { duplicates[speed]; error("ambiguous command accepted") }
+                catch (expected: IllegalArgumentException) {}
+                try { results[engine.speedCommand()]; error("foreign command accepted") }
+                catch (expected: IllegalArgumentException) {}
+                check(results.getAll(engine.speedCommand()).isEmpty())
+                check(batch(listOf(speed))[speed].getOrThrow() == 1.0f)
+                check(results[speed].getOrThrow() == measured)
+                val integer = Values.integerCommand()
+                val long = Values.longValueCommand()
+                val decimal = Values.decimalCommand()
+                val boolean = Values.booleanCommand()
+                val character = Values.characterCommand()
+                val text = Values.textCommand()
+                val bytes = Values.bytesCommand()
+                val values = batch(listOf(integer, long, decimal, boolean, character, text, bytes))
+                check(values[integer].getOrThrow() == Int.MIN_VALUE)
+                check(values[long].getOrThrow() == Long.MAX_VALUE)
+                check(1.0 / values[decimal].getOrThrow() == Double.NEGATIVE_INFINITY)
+                check(!values[boolean].getOrThrow())
+                check(values[character].getOrThrow() == 'λ')
+                check(values[text].getOrThrow() == "λ😀")
+                val array: ByteArray = values[bytes].getOrThrow()
+                check(array.size == 3 && array[0] == (-1).toByte() && array[2] == 7.toByte())
+                val numeric = batch(listOf(integer, long, decimal))
+                var numericTotal = 0.0
+                for (result in numeric) numericTotal += result.getOrThrow().toDouble()
+                check(numericTotal == Int.MIN_VALUE.toDouble() + Long.MAX_VALUE.toDouble())
+                val oversized = Values.oversizedCommand()
+                val bounded = batch(listOf(oversized, integer))
+                check(bounded[oversized].isFailure)
+                check(bounded[integer].getOrThrow() == Int.MIN_VALUE)
+                val doubles = listOf(Double.MIN_VALUE, Double.MAX_VALUE, Double.POSITIVE_INFINITY, Double.NEGATIVE_INFINITY, Double.NaN, -0.0, 1.0000000000000002)
+                val floats = listOf(Float.MIN_VALUE, Float.MAX_VALUE, Float.POSITIVE_INFINITY, Float.NEGATIVE_INFINITY, Float.NaN, -0.0f, 1.0000001f)
+                val doubleCommands = ArrayList<Command<Double>>()
+                val floatCommands = ArrayList<Command<Float>>()
+                for (index in 0 until doubles.size) {
+                    doubleCommands.add(Values.floatingCommand(index))
+                    floatCommands.add(Values.singleCommand(index))
+                }
+                val doubleResults = batch(doubleCommands)
+                val floatResults = batch(floatCommands)
+                for (index in 0 until doubles.size) {
+                    val actualDouble: Double = doubleResults[index].getOrThrow()
+                    val actualFloat: Float = floatResults[index].getOrThrow()
+                    if (index == 4) {
+                        check(actualDouble != actualDouble && actualFloat != actualFloat)
+                    } else {
+                        check(actualDouble == doubles[index] && actualFloat == floats[index])
+                    }
+                    if (index == 5) {
+                        check(1.0 / actualDouble == Double.NEGATIVE_INFINITY)
+                        check(1.0f / actualFloat == Float.NEGATIVE_INFINITY)
+                    }
+                }
+
+
+
             }
             """.trimIndent()
         val artifact = compile(source)
@@ -126,6 +262,7 @@ class DeclarativeNativeIntegrationTest {
             VmSession.open(artifact, listOf(PeripheralProgramHost.SCHEMA) + host.capabilitySchemas).use { session ->
                 var halted = false
                 var lookups = 0
+                var batchRequests = 0
                 for (slice in 0 until 1000) {
                     when (val outcome = session.advance(100_000, 10_000, 64)) {
                         is VmOutcome.HostRequestBatch -> {
@@ -141,6 +278,10 @@ class DeclarativeNativeIntegrationTest {
                                         lookups++
                                         HostResponse.IntSuccess(7)
                                     } else {
+                                        if (request.capability.name == "commands") {
+                                            batchRequests++
+                                            assertEquals(2, request.capability.abiMajor)
+                                        }
                                         assertIs<ProgramAddonDispatch.Completed>(
                                             host.dispatch(
                                                 ProgramAddonRequest(
@@ -172,6 +313,7 @@ class DeclarativeNativeIntegrationTest {
                 }
                 check(halted) { "Generated Guest program did not finish" }
                 assertEquals(1, lookups)
+                assertEquals(10, batchRequests)
             }
         }
         assertEquals(listOf(Vector3d(1.0, 2.0, 3.0), Vector3d(7.0, 8.0, 9.0)), directions)

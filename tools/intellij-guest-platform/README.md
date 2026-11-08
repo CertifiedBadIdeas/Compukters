@@ -39,7 +39,7 @@ Build against an installed IDEA and a local Gradle distribution:
 ./gradlew-sandbox-dev-parallel-summary -p tools/intellij-guest-platform test lintKotlin buildPlugin \
   -PideaHome=/absolute/path/to/intellij-idea \
   -PguestPlatform="$PWD/modules/common/compiler-k2/build/generated/conformance/guest-library-prototype/prototype-platform.cpb" \
-  -PguestGradlePluginJar="$PWD/modules/common/addon-gradle-plugin/build/libs/addon-gradle-plugin-0.8.0.jar" \
+  -PguestGradlePluginJar="$PWD/modules/common/addon-gradle-plugin/build/libs/addon-gradle-plugin-0.9.0.jar" \
   -PguestGradleHome=/absolute/path/to/gradle-9.8.1 \
   -PguestBasePlatform="$PWD/modules/common/guest-platform/build/platform/compukters-platform.cpb" \
   -PguestDependency="$PWD/modules/common/compiler-k2/build/generated/conformance/guest-library-prototype/prototype.cagb"

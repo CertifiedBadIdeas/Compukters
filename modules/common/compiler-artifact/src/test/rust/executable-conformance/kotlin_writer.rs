@@ -264,6 +264,10 @@ fn main() {
             let mut session = k2_stdio_session_with_heap("COMPUKTER_KOTLIN_ASYNC_ARTIFACT", 64, 256 * 1024);
             k2_assert_prints(&mut session, ["async ok\n"], 64);
         },
+        "primitive-supertypes" => {
+            let mut session = k2_stdio_session_with_heap("COMPUKTER_KOTLIN_PRIMITIVE_SUPERTYPES_ARTIFACT", 1, 256 * 1024);
+            k2_assert_prints(&mut session, ["primitive supertypes ok\n"], 1024);
+        },
         "commands" => k2_command_batches_capture_and_return_positional_results(),
         "tasks" => k2_tasks_keep_independent_host_requests_in_flight(),
         "timer" => k2_timer_sleep_publishes_one_bounded_request(),
@@ -2845,7 +2849,7 @@ fn k2_command_batches_capture_and_return_positional_results() {
     let command_operations = [OperationSchema::asynchronous(&bytes_arguments, HostValueType::ByteArray)];
     let capabilities = [
         CapabilityBinding::new("compukter", "stdio", 1, 0, &stdio_operations),
-        CapabilityBinding::new("compukters", "commands", 1, 0, &command_operations),
+        CapabilityBinding::new("compukters", "commands", 2, 0, &command_operations),
     ];
     let profile = ExecutionProfile {
         heap_bytes: 256 * 1024, frame_storage_bytes: 1024 * 1024,
@@ -2862,13 +2866,13 @@ fn k2_command_batches_capture_and_return_positional_results() {
         output.extend_from_slice(&(units.len() as u16).to_le_bytes());
         for unit in units { output.extend_from_slice(&unit.to_le_bytes()); }
     }
-    let mut expected = vec![1, 2];
+    let mut expected = vec![2, 2];
     text(&mut expected, "fixture.Binding.write");
     expected.extend_from_slice(&[3, 1]); text(&mut expected, "7");
     expected.push(4); text(&mut expected, "0.4");
     expected.extend_from_slice(&[8, 2, 0, 1, 2]);
     text(&mut expected, "fixture.Binding.missing"); expected.push(0);
-    let mut response = vec![1, 2, 0, 2]; text(&mut response, "stale");
+    let mut response = vec![2, 2, 2, 0, 0, 0, 13, 0, 2]; text(&mut response, "stale");
     let mut submissions = 0;
     let mut printed = false;
     for _ in 0..100_000 {

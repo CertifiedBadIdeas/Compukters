@@ -760,6 +760,22 @@ val generateAsyncConformanceArtifact = tasks.register<Test>("generateAsyncConfor
     systemProperty("compukter.vm.asyncArtifact", output.get().asFile.absolutePath)
 }
 
+tasks.register<Test>("generatePrimitiveSupertypesConformanceArtifact") {
+    description = "Compiles primitive Number and Comparable views for native execution."
+    group = "verification"
+    dependsOn(tasks.jar)
+    useJUnitPlatform()
+    testClassesDirs = sourceSets.test.get().output.classesDirs
+    classpath = sourceSets.test.get().runtimeClasspath
+    filter.includeTestsMatching("*primitive Number and Comparable views preserve conversions dispatch and covariance*")
+    inputs.file(workerJar)
+    inputs.file("src/test/resources/kotlin/primitive-supertypes.kt")
+    val output = layout.buildDirectory.file("generated/conformance/primitive-supertypes.cpkt")
+    outputs.file(output)
+    systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
+    systemProperty("compukter.vm.primitiveSupertypesArtifact", output.get().asFile.absolutePath)
+}
+
 val generateCommandsConformanceArtifact = tasks.register<Test>("generateCommandsConformanceArtifact") {
     description = "Compiles immutable command descriptions and positional batch results."
     group = "verification"

@@ -44,7 +44,8 @@ running compilation or updating the ABI lock.
 The shared native FIR extension also analyzes annotated device/service interfaces alongside ordinary
 Guest bodies. Device discovery companions and Unit command factories participate in actual K2 resolution
 and completion; the public declarations remain interfaces. Contract annotations are metadata-only declarations
-in `compukter:core` 9.6.0. Server operation bodies and non-Unit commands report errors in native analysis.
+in `compukter:core` 10.0.0. Every `@GuestCall` exposes a factory returning `Command<T>` with its actual result type;
+`@GuestWait` does not. Server operation bodies report errors in native analysis.
 The same source module can contain ordinary executable Guest methods.
 
 The `Compukters Guest` status widget shows active, loading and error states, and opens module/input details.

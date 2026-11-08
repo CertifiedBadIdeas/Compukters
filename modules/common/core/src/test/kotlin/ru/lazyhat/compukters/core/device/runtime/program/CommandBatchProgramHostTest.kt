@@ -65,7 +65,7 @@ class CommandBatchProgramHostTest {
                 },
             )
         val valid = CommandBatchCodec.encode(listOf(command(1), command(2)))
-        val malformed = listOf(byteArrayOf(), valid + 0, valid.copyOf(valid.size - 1), byteArrayOf(2, 1), byteArrayOf(1, 33))
+        val malformed = listOf(byteArrayOf(), valid + 0, valid.copyOf(valid.size - 1), byteArrayOf(1, 1), byteArrayOf(2, 33))
         malformed.forEach { assertIs<HostResponse.Failure>(dispatch(wrapped, it)) }
         assertTrue(calls.isEmpty())
     }
@@ -116,8 +116,25 @@ class CommandBatchProgramHostTest {
     }
 
     @Test
-    fun `provider eligibility must match its registered schema`() {
-        assertFailsWith<IllegalArgumentException> { withCommandBatches(TestHost(result = HostValueType.I32) { HostResponse.UnitSuccess }) }
+    fun `typed results must match the registered schema and failures leave later positions runnable`() {
+        val wrapped =
+            withCommandBatches(
+                TestHost(result = HostValueType.I32) {
+                    if (it == 2) HostResponse.UnitSuccess else HostResponse.IntSuccess(it)
+                },
+            )
+        val response =
+            assertIs<HostResponse.ByteArraySuccess>(dispatch(wrapped, CommandBatchCodec.encode(listOf(command(1), command(2), command(3)))))
+        assertContentEquals(
+            CommandBatchCodec.encodeResults(
+                listOf(
+                    HostResponse.IntSuccess(1),
+                    HostResponse.Failure(HostFailureKind.OTHER, "Command result does not match schema"),
+                    HostResponse.IntSuccess(3),
+                ),
+            ),
+            response.value,
+        )
     }
 
     @Test

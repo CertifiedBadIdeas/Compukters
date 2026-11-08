@@ -82,13 +82,14 @@ class GuestPlatformTest : BasePlatformTestCase() {
                     fun direction(): Vector3d = Vector3d(x, y, z).normalized()
                 }
                 @GuestDevice("fixture:engine") interface Engine {
-                    @GuestRead fun velocity(): Velocity
-                    @GuestCommand fun aim(direction: Vector3d): Unit
+                    @GuestCall fun velocity(): Velocity
+                    @GuestCall fun aim(direction: Vector3d): Unit
                     fun direction(): Vector3d = velocity().direction()
                 }
                 fun use(): Vector3d {
                     val engine: Engine = Engine.first()
                     val command: Command<Unit> = engine.aimCommand(engine.direction())
+                    val read: Command<Velocity> = engine.velocityCommand()
                     return engine.direction()
                 }
                 """.trimIndent(),
@@ -107,13 +108,46 @@ class GuestPlatformTest : BasePlatformTestCase() {
         }
     }
 
+    fun testNumberAndComparableResolveAndComplete() {
+        val file =
+            myFixture.configureByText(
+                "Numeric.kt",
+                """
+                class Rank(val value: Int) : Comparable<Rank> {
+                    override fun compareTo(other: Rank): Int = value.compareTo(other.value)
+                }
+                fun total(values: List<Number>): Double {
+                    var total = 0.0
+                    for (value in values) total += value.toDouble()
+                    return total
+                }
+                fun compare(value: Comparable<Rank>): Int = value.compareTo(Rank(1))
+                """.trimIndent(),
+            ) as KtFile
+        allowAnalysisOnEdt {
+            runReadActionBlocking {
+                analyze(file) {
+                    val errors =
+                        file.collectDiagnostics(KaDiagnosticCheckerFilter.ONLY_COMMON_CHECKERS).filter {
+                            it.severity.name ==
+                                "ERROR"
+                        }
+                    assertTrue(errors.joinToString { "${it.factoryName}: ${it.defaultMessage}" }, errors.isEmpty())
+                }
+            }
+        }
+        myFixture.configureByText("NumericCompletion.kt", "fun use(value: Number) { value.toDo<caret> }")
+        val items = myFixture.completeBasic()?.map { it.lookupString }.orEmpty()
+        assertTrue("Expected Number conversion completion; received $items", "toDouble" in items || "value.toDouble" in myFixture.file.text)
+    }
+
     fun testNativeCommandFactoryCompletion() {
         myFixture.configureByText(
             "CommandCompletion.kt",
             """
             import ru.lazyhat.compukters.api.contracts.*
             @GuestDevice("fixture:engine") interface Engine {
-                @GuestCommand fun setThrottle(value: Double): Unit
+                @GuestCall fun setThrottle(value: Double): Unit
             }
             fun use(engine: Engine) { engine.setTh<caret> }
             """.trimIndent(),
@@ -123,13 +157,30 @@ class GuestPlatformTest : BasePlatformTestCase() {
         assertTrue("Expected ordinary operation; received $items", "setThrottle" in items)
     }
 
+    fun testNativeValueCommandFactoryCompletion() {
+        myFixture.configureByText(
+            "ReadCompletion.kt",
+            """
+            import ru.lazyhat.compukters.api.contracts.*
+            @GuestDevice("fixture:engine") interface Engine {
+                @GuestCall fun temperature(): Float
+                @GuestWait fun awaitTemperature(): Float
+            }
+            fun use(engine: Engine) { engine.temp<caret> }
+            """.trimIndent(),
+        )
+        val items = myFixture.completeBasic()?.map { it.lookupString }.orEmpty()
+        assertTrue("Expected typed value factory; received $items", "temperatureCommand" in items)
+        assertTrue("Expected ordinary observation; received $items", "temperature" in items)
+    }
+
     fun testNativeProviderCompletion() {
         myFixture.configureByText(
             "ProviderCompletion.kt",
             """
             import ru.lazyhat.compukters.api.contracts.*
             @GuestDevice("fixture:engine") interface Engine {
-                @GuestRead fun speed(): Double
+                @GuestCall fun speed(): Double
             }
             fun use() { Engine.fi<caret> }
             """.trimIndent(),
@@ -144,10 +195,10 @@ class GuestPlatformTest : BasePlatformTestCase() {
                 "InvalidContract.kt",
                 """
                 import ru.lazyhat.compukters.api.contracts.*
-                abstract class Accidental { @GuestRead abstract fun value(): Int }
+                abstract class Accidental { @GuestCall abstract fun value(): Int }
                 @GuestService interface Control {
-                    @GuestCommand fun invalidResult(): Int
-                    @GuestRead fun invalidBody(): Int = 42
+                    @GuestCall fun validResult(): Int
+                    @GuestCall fun invalidBody(): Int = 42
                     fun ordinaryBody(): Int = 42
                 }
                 """.trimIndent(),
@@ -160,7 +211,6 @@ class GuestPlatformTest : BasePlatformTestCase() {
                             .collectDiagnostics(KaDiagnosticCheckerFilter.ONLY_COMMON_CHECKERS)
                             .filter { it.severity.name == "ERROR" }
                     assertTrue(errors.joinToString { it.defaultMessage }, errors.any { "must have no body" in it.defaultMessage })
-                    assertTrue(errors.joinToString { it.defaultMessage }, errors.any { "must return Unit" in it.defaultMessage })
                     assertTrue(errors.joinToString { it.defaultMessage }, errors.any { "annotated interface" in it.defaultMessage })
                 }
             }

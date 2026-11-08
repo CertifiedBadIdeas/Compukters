@@ -837,6 +837,15 @@ registerKotlinVmConformance(
     conformanceScenario = "async",
 )
 registerKotlinVmConformance(
+    taskName = "testKotlinPrimitiveSupertypesVmConformance",
+    taskDescription = "Executes Number and Comparable views, conversions, checked comparison and covariant results.",
+    artifactTask = ":compiler-k2:generatePrimitiveSupertypesConformanceArtifact",
+    artifact = project(":compiler-k2").layout.buildDirectory.file("generated/conformance/primitive-supertypes.cpkt"),
+    cargoTargetDirectory = ".toolchain/build/cargo/compiler-k2-primitive-supertypes-conformance",
+    artifactEnvironmentVariable = "COMPUKTER_KOTLIN_PRIMITIVE_SUPERTYPES_ARTIFACT",
+    conformanceScenario = "primitive-supertypes",
+)
+registerKotlinVmConformance(
     taskName = "testKotlinCommandsVmConformance",
     taskDescription = "Executes immutable Guest command batches through the bounded native capability transport.",
     artifactTask = ":compiler-k2:generateCommandsConformanceArtifact",

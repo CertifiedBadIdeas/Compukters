@@ -37,9 +37,9 @@ internal fun generateNativeGuestSources(contract: DeclarativeGuestContract): Map
         }
         val factories =
             buildString {
-                type.operations.filter { it.kind == GuestOperationKind.COMMAND }.forEach { operation ->
+                type.operations.filter { it.kind == GuestOperationKind.CALL }.forEach { operation ->
                     appendLine(
-                        "\n    public fun ${operation.name}Command(${operation.nativeParameters()}): compukter.commands.Command<Unit>",
+                        "\n    public fun ${operation.name}Command(${operation.nativeParameters()}): compukter.commands.Command<${operation.result}>",
                     )
                 }
             }
@@ -160,9 +160,9 @@ private fun StringBuilder.appendNativeOperation(
         appendLine("$indent    return ${boundary.decode(operation.result, "reply")}")
     }
     appendLine("$indent}")
-    if (operation.kind == GuestOperationKind.COMMAND) {
+    if (operation.kind == GuestOperationKind.CALL) {
         appendLine(
-            "${indent}public override fun ${operation.name}Command(${operation.nativeParameters()}): compukter.commands.Command<Unit> {",
+            "${indent}public override fun ${operation.name}Command(${operation.nativeParameters()}): compukter.commands.Command<${operation.result}> {",
         )
         validate()
         val encoded =
@@ -170,7 +170,11 @@ private fun StringBuilder.appendNativeOperation(
                 val method = if (argument.type == "ByteArray") "bytes" else argument.type.replaceFirstChar(Char::lowercase)
                 "compukter.commands.CommandArgument.$method(${argument.expression})"
             }
-        appendLine("$indent    return compukter.commands.Command.unit(\"${operation.binding}\", listOf($encoded))")
+        appendLine(
+            "$indent    return compukter.commands.createCommand<${operation.result}>(\"${operation.binding}\", listOf($encoded)) { reply ->",
+        )
+        boundary.decodeCommand(operation.result, "reply").lineSequence().forEach { appendLine("$indent        $it") }
+        appendLine("$indent    }")
         appendLine("$indent}")
     }
 }

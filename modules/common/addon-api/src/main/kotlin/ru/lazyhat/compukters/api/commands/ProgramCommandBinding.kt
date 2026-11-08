@@ -11,7 +11,7 @@ import ru.lazyhat.compukters.lang.runtime.capability.HostValueType
 import ru.lazyhat.compukters.lang.runtime.vm.CapabilityIdentity
 import ru.lazyhat.compukters.lang.runtime.vm.VmValue
 
-/** An explicit immediate Unit operation, normally emitted from an addon's canonical binding. */
+/** An immediate operation, normally emitted from an addon's canonical binding. */
 class ProgramCommandBinding(
     val symbol: String,
     val capability: CapabilityIdentity,
@@ -33,7 +33,7 @@ class ProgramCommandBinding(
     }
 }
 
-/** Implemented by SDK-generated hosts that explicitly opt immediate operations into batching. */
+/** Implemented by SDK-generated hosts exposing immediate operations for batching. */
 interface ProgramCommandProvider {
     val commandBindings: List<ProgramCommandBinding>
 }

@@ -1276,7 +1276,7 @@ private const val ENUM_ORDINAL_IMPORT = 63u
 private const val ENUM_NAME = "kotlin.Enum"
 private const val ENUM_NAME_FIELD = "kotlin.Enum.name"
 private const val ENUM_ORDINAL_FIELD = "kotlin.Enum.ordinal"
-private const val RUNTIME_IMPORT_COUNT = 64
+private const val RUNTIME_IMPORT_COUNT = 73
 private const val CHAR_SEQUENCE_NAME = "kotlin.CharSequence"
 private val charSequenceMethods = listOf("<get-length>", "get", "subSequence")
 private val charSequenceMemberNames = charSequenceMethods.map { "$CHAR_SEQUENCE_NAME.$it" }
@@ -1300,7 +1300,7 @@ private val runtimeMemberNames =
     listOf(INT_BOX_VALUE_NAME, THROWABLE_MESSAGE_NAME, THROWABLE_CAUSE_NAME) +
         scalarBoxes.drop(1).take(5).map { it.name } + UNIT_INSTANCE_NAME + ANY_TO_STRING_NAME + ANY_HASH_CODE_NAME + ANY_EQUALS_NAME +
         scalarBoxes.drop(6).map { it.name } + CHAR_SEQUENCE_NAME + charSequenceMemberNames +
-        listOf(ENUM_NAME, ENUM_NAME_FIELD, ENUM_ORDINAL_FIELD)
+        listOf(ENUM_NAME, ENUM_NAME_FIELD, ENUM_ORDINAL_FIELD) + primitiveSupertypeNames
 private const val INT_BOX_VALUE_NAME = "kotlin.Int.<boxed-value>"
 private const val THROWABLE_MESSAGE_NAME = "kotlin.Throwable.message"
 private const val THROWABLE_CAUSE_NAME = "kotlin.Throwable.cause"
@@ -1373,6 +1373,7 @@ private fun mapGuestValueType(
     if (((type as? IrSimpleType)?.classifier as? IrClassSymbol)?.owner?.fqNameWhenAvailable?.asString() == ENUM_NAME) {
         return ValueType.Ref(type.isNullable(), TypeRef.Imported(ImportId.of(ENUM_IMPORT)))
     }
+    primitiveSupertypeImport(type)?.let { return ValueType.Ref(type.isNullable(), TypeRef.Imported(ImportId.of(it))) }
     if (type.isNullableUnit()) return ValueType.Ref(true, TypeRef.Imported(ImportId.of(UNIT_RUNTIME_TYPE)))
     if (type.isNullable() && (type as? IrSimpleType)?.classifier == pluginContext.irBuiltIns.nothingClass) {
         return ValueType.Ref(true, TypeRef.Imported(ImportId.of(ANY_RUNTIME_TYPE)))
@@ -1642,9 +1643,13 @@ internal object KotlinProjectLowering {
                                 declaration.fqNameWhenAvailable?.asString() !in session.sourcePlatformSymbols &&
                                 session.trustedPlatformModule(declaration.file.fileEntry.name) != null
                         ) ||
-                        (!includeTrustedPlatformBodies && declaration.fqNameWhenAvailable?.asString() in platformTypeSymbols) ||
+                        (
+                            !includeTrustedPlatformBodies && declaration.fqNameWhenAvailable?.asString() in platformTypeSymbols &&
+                                declaration.fqNameWhenAvailable?.asString() !in specializedPlatformBaseTypes
+                        ) ||
                         (
                             !includeTrustedPlatformBodies && declaration !in collectionInterfaceClasses &&
+                                declaration.fqNameWhenAvailable?.asString() !in specializedPlatformBaseTypes &&
                                 session.virtualSourcePath(declaration.file.fileEntry.name) in session.sourcePlatformPaths &&
                                 declaration.fqNameWhenAvailable?.asString() !in session.sourcePlatformSymbols
                         )
@@ -2326,7 +2331,7 @@ internal object KotlinProjectLowering {
             val imported = externalBoxTypes[box] ?: externalClassTypes[box.symbol]
             if (imported == null) {
                 box.type =
-                    TypeRef.Local(TypeId.of((externalFunctionTypeBase + externalFunctionImports.size + 6 + localBoxTypeCount).toUInt()))
+                    TypeRef.Local(TypeId.of((externalFunctionTypeBase + externalFunctionImports.size + 13 + localBoxTypeCount).toUInt()))
                 localBoxTypeCount += 4 + boxInterfaceMethods(box).size
             } else {
                 box.type = imported
@@ -2334,7 +2339,7 @@ internal object KotlinProjectLowering {
                 box.field = box.payloadFields.first()
             }
         }
-        var nextInlineType = externalFunctionTypeBase + externalFunctionImports.size + 6 + localBoxTypeCount
+        var nextInlineType = externalFunctionTypeBase + externalFunctionImports.size + 13 + localBoxTypeCount
         guestTypes.valueClassBoxes.toSortedMap().values.filter { it.scalar == ValueType.Unit }.forEach { box ->
             box.inlineType =
                 ValueType.Inline(
@@ -3497,7 +3502,9 @@ internal object KotlinProjectLowering {
                         parentInstance?.let { parent ->
                             classInstanceTypeIds[parent]?.let { parent.declaration.symbol to TypeRef.Local(it) }
                         } ?: ((resolved as? IrSimpleType)?.classifier as? IrClassSymbol)?.let { symbol ->
-                            if (symbol.owner.fqNameWhenAvailable?.asString() == CHAR_SEQUENCE_NAME) {
+                            if (primitiveSupertypeImport(resolved) != null) {
+                                symbol to TypeRef.Imported(ImportId.of(requireNotNull(primitiveSupertypeImport(resolved))))
+                            } else if (symbol.owner.fqNameWhenAvailable?.asString() == CHAR_SEQUENCE_NAME) {
                                 symbol to TypeRef.Imported(ImportId.of(CHAR_SEQUENCE_IMPORT))
                             } else if (symbol.owner.fqNameWhenAvailable?.asString() == ENUM_NAME) {
                                 symbol to TypeRef.Imported(ImportId.of(ENUM_IMPORT))
@@ -3727,7 +3734,8 @@ internal object KotlinProjectLowering {
                         val symbol = (parent as? IrSimpleType)?.classifier as? IrClassSymbol ?: return@mapNotNull null
                         if (symbol.owner.kind != ClassKind.INTERFACE) return@mapNotNull null
                         val instance = parent.classInstance(classInstanceTypeIds.keys.associate { it.declaration.symbol to it.declaration })
-                        instance?.let(classInstanceTypeIds::get)?.let(TypeRef::Local) ?: externalClassTypes[symbol]
+                        primitiveSupertypeImport(parent)?.let { TypeRef.Imported(ImportId.of(it)) }
+                            ?: instance?.let(classInstanceTypeIds::get)?.let(TypeRef::Local) ?: externalClassTypes[symbol]
                             ?: throw UnsupportedKotlinIr(box.symbol.owner, "value class interface parent is outside the supported subset")
                     }.distinct()
                     .sortedWith(
@@ -3949,7 +3957,7 @@ internal object KotlinProjectLowering {
                                 TypeRef.Imported(ImportId.of(CHAR_SEQUENCE_IMPORT)),
                                 requireNotNull(metadataIds["$CHAR_SEQUENCE_NAME.$name"]),
                             )
-                        } + valueClassBoxArtifacts.types +
+                        } + primitiveSupertypeSignatures(metadataIds) + valueClassBoxArtifacts.types +
                         guestTypes.valueClassBoxes.values
                             .filter { it.inlineType?.type is TypeRef.Local }
                             .sortedBy {
@@ -4440,7 +4448,7 @@ internal object KotlinProjectLowering {
                 return true
             }
             if (((type as? IrSimpleType)?.classifier as? IrClassSymbol)?.owner?.fqNameWhenAvailable?.asString() ==
-                CHAR_SEQUENCE_NAME ||
+                CHAR_SEQUENCE_NAME || primitiveSupertypeImport(type) != null ||
                 ((type as? IrSimpleType)?.classifier as? IrClassSymbol)?.owner?.fqNameWhenAvailable?.asString() == ENUM_NAME
             ) {
                 return true
@@ -4616,7 +4624,9 @@ internal object KotlinProjectLowering {
         }
     }
 
-    private fun kotlinLibrary(): Module {
+    private fun kotlinLibrary(): Module = primitiveSupertypeRuntime(baseKotlinLibrary())
+
+    private fun baseKotlinLibrary(): Module {
         val names =
             (
                 runtimeTypeNames + runtimeMemberNames +
@@ -4625,8 +4635,8 @@ internal object KotlinProjectLowering {
                         "hashCode",
                         "equals",
                         "<unit-init>",
-                    ) + charSequenceMethods
-            ).sorted()
+                    ) + charSequenceMethods + numberMethods + "compareTo"
+            ).distinct().sorted()
         val ids = names.withIndex().associate { (index, name) -> name to StringId.of(index.toUInt()) }
         val anyType = TypeRef.Local(TypeId.of(ANY_RUNTIME_TYPE))
         val string = ValueType.Ref(false, TypeRef.Local(TypeId.of(STRING_RUNTIME_TYPE)))
@@ -5378,6 +5388,18 @@ internal object KotlinProjectLowering {
                     TypeRef.Imported(ImportId.of(ENUM_IMPORT)),
                     libraryHash,
                 )
+            } +
+            listOf(NUMBER_NAME, COMPARABLE_NAME).mapIndexed { index, name ->
+                runtimeTypeImport(NUMBER_IMPORT.toInt() + index, metadataIds.getValue(name), libraryHash)
+            } +
+            (numberMethods.map { "$NUMBER_NAME.$it" } + "$COMPARABLE_NAME.compareTo").mapIndexed { index, name ->
+                Import(
+                    SymbolKind.FUNCTION,
+                    ModuleId.of(1u),
+                    metadataIds.getValue(name),
+                    TypeRef.Local(TypeId.of((functionTypeBase + 6 + index).toUInt())),
+                    libraryHash,
+                )
             }
 
     private fun runtimeTypeImport(
@@ -5934,7 +5956,7 @@ private class FunctionCompiler(
     private fun compileDelegatingConstructorCall(call: IrDelegatingConstructorCall) {
         if (constructorDeclaration == null) throw UnsupportedKotlinIr(call, "delegating constructor call is outside a constructor")
         val target = call.symbol.owner
-        if (target.parentAsClass.fqNameWhenAvailable?.asString() == "kotlin.Any") return
+        if (target.parentAsClass.fqNameWhenAvailable?.asString() in setOf("kotlin.Any", NUMBER_NAME)) return
         if (target.parentAsClass.fqNameWhenAvailable?.asString() == "kotlin.collections.CharIterator") return
         if (target.parentAsClass.fqNameWhenAvailable?.asString() == "kotlin.Throwable") {
             val arguments = compileExceptionArguments(target, call.arguments, call)
@@ -5995,6 +6017,14 @@ private class FunctionCompiler(
         }
     }
 
+    private fun compileAs(
+        expression: IrExpression,
+        target: ValueType.Ref,
+    ): RegisterId {
+        val value = compileExpression(expression, pluginContext.irBuiltIns.anyNType)
+        return allocate(target).also { emit(Instruction.CheckedCast(it, value, target.type)) }
+    }
+
     private fun compileExpression(expression: IrExpression): RegisterId = compileExpression(expression, null)
 
     private fun compileExpression(
@@ -6026,7 +6056,13 @@ private class FunctionCompiler(
             guestTypes.valueClassBox(resolvedType(targetType))?.let { return unboxValueClass(source, it) }
             GuestPrimitive.scalar(resolvedType(targetType))?.let { return unboxScalar(source, target, it) }
         }
-        if (actual !is ValueType.Ref && target is ValueType.Ref && guestTypes.valueClassBox(resolvedType(expression.type)) != null) {
+        if (actual !is ValueType.Ref && target is ValueType.Ref &&
+            (
+                guestTypes.valueClassBox(
+                    resolvedType(expression.type),
+                ) != null || GuestPrimitive.scalar(resolvedType(expression.type)) != null
+            )
+        ) {
             return boxValue(source, expression.type, target)
         }
         if (expectedType != null && actual is ValueType.Ref) {
@@ -6372,7 +6408,12 @@ private class FunctionCompiler(
         val targetConstructor =
             constructorLayouts[call.symbol]
                 ?: resolveClassInstance(call.type)?.let(genericConstructorLayouts::get)
-                ?: throw UnsupportedKotlinIr(call, "constructor is outside the project subset")
+                ?: throw UnsupportedKotlinIr(
+                    call,
+                    "constructor ${target.parentAsClass.fqNameWhenAvailable} for ${resolvedType(
+                        call.type,
+                    ).specializationTypeIdentity()} is outside the project subset",
+                )
         val compiledArguments = compileConstructorArguments(target, call.arguments, targetConstructor.instance, call)
         val ownerType = targetConstructor.ownerType
         prepareAllocationBlock()
@@ -6542,8 +6583,20 @@ private class FunctionCompiler(
                 pluginContext,
             )
         }
+        val negatedTest = expression.operator == IrTypeOperator.NOT_INSTANCEOF
+
+        fun tested(value: RegisterId): RegisterId =
+            if (!negatedTest) {
+                value
+            } else {
+                allocate(ValueType.Bool).also { result ->
+                    val falseValue = allocate(ValueType.Bool)
+                    emit(Instruction.Const(falseValue, requireNotNull(constantIds[Constant.Bool(false)])))
+                    emit(Instruction.Equal(ScalarValueType.BOOL, result, value, falseValue))
+                }
+            }
         val source =
-            if (expression.operator == IrTypeOperator.INSTANCEOF &&
+            if (expression.operator in setOf(IrTypeOperator.INSTANCEOF, IrTypeOperator.NOT_INSTANCEOF) &&
                 (expression.argument as? IrConst)?.let { it.value == null } == true
             ) {
                 allocate(ValueType.Ref(nullable = true, type = TypeRef.Imported(ImportId.of(ANY_RUNTIME_TYPE)))).also {
@@ -6554,6 +6607,7 @@ private class FunctionCompiler(
                     expression.operator == IrTypeOperator.CAST &&
                         (
                             expression.typeOperand.isNullableScalar() || expression.typeOperand.isKotlinAny() ||
+                                primitiveSupertypeImport(resolvedType(expression.typeOperand)) != null ||
                                 (
                                     valueType(expression.typeOperand, expression) is ValueType.Ref &&
                                         guestTypes.valueClassBox(resolvedType(expression.argument.type)) != null
@@ -6572,7 +6626,7 @@ private class FunctionCompiler(
         val target = valueType(expression.typeOperand, expression)
         val valueBox = guestTypes.valueClassBox(resolvedType(expression.typeOperand))
         return when (expression.operator) {
-            IrTypeOperator.INSTANCEOF -> {
+            IrTypeOperator.INSTANCEOF, IrTypeOperator.NOT_INSTANCEOF -> {
                 val reference =
                     if (target == ValueType.Unit) {
                         TypeRef.Imported(ImportId.of(UNIT_RUNTIME_TYPE))
@@ -6599,7 +6653,7 @@ private class FunctionCompiler(
                     }
                 val matches = allocate(ValueType.Bool)
                 emit(Instruction.IsType(matches, referenceSource, reference))
-                if (!expression.typeOperand.isNullable()) return matches
+                if (!expression.typeOperand.isNullable()) return tested(matches)
                 val sourceType =
                     registerValueType(referenceSource) as? ValueType.Ref
                         ?: throw UnsupportedKotlinIr(expression, "nullable type test requires a reference operand")
@@ -6617,7 +6671,7 @@ private class FunctionCompiler(
                 emit(Instruction.RefEqual(destination, referenceSource, nullValue))
                 jumpTo(join)
                 currentBlock = join
-                destination
+                tested(destination)
             }
 
             IrTypeOperator.SAFE_CAST -> {
@@ -7533,6 +7587,60 @@ private class FunctionCompiler(
                 return destination
             }
         }
+        val primitiveSupertype = (target.parent as? IrClass)?.fqNameWhenAvailable?.asString()
+        if (primitiveSupertype == ENUM_NAME && target.name.asString() == "compareTo") {
+            val arguments = call.arguments.filterNotNull().map(::compileExpression)
+            val left = allocate(ValueType.I32)
+            val right = allocate(ValueType.I32)
+            val field = FieldRef.Imported(ImportId.of(ENUM_ORDINAL_IMPORT))
+            emit(Instruction.FieldGet(left, arguments[0], field))
+            emit(Instruction.FieldGet(right, arguments[1], field))
+            return allocate(ValueType.I32).also { emit(Instruction.Subtract(it, left, right)) }
+        }
+        if (primitiveSupertype in setOf(NUMBER_NAME, COMPARABLE_NAME)) {
+            val name = target.name.asString()
+            val method =
+                if (primitiveSupertype == NUMBER_NAME) {
+                    numberMethods.indexOf(name)
+                } else if (name == "compareTo") {
+                    6
+                } else {
+                    -1
+                }
+            if (method >= 0) {
+                val expressions = call.arguments.filterNotNull()
+                val receiver =
+                    compileAs(
+                        expressions.first(),
+                        ValueType.Ref(
+                            false,
+                            TypeRef.Imported(ImportId.of(if (method == 6) COMPARABLE_IMPORT else NUMBER_IMPORT)),
+                        ),
+                    )
+                val arguments =
+                    listOf(receiver) +
+                        if (method == 6) {
+                            listOf(
+                                compileAs(
+                                    expressions[1],
+                                    ValueType.Ref(true, TypeRef.Imported(ImportId.of(ANY_RUNTIME_TYPE))),
+                                ),
+                            )
+                        } else {
+                            emptyList()
+                        }
+                val destination = allocate(valueType(call.type, call))
+                val function = FunctionRef.Imported(ImportId.of(NUMBER_METHOD_IMPORT + method.toUInt()))
+                emit(
+                    if (method == 6) {
+                        Instruction.CallInterface(Destination.Register(destination), function, arguments)
+                    } else {
+                        Instruction.CallVirtual(Destination.Register(destination), function, arguments)
+                    },
+                )
+                return destination
+            }
+        }
         compileCompareToPredicate(call, target)?.let { return it }
         val targetId = projectFunctionId(call, target)
         if (targetId == null) {
@@ -8305,6 +8413,13 @@ private class FunctionCompiler(
         if (zero.value != 0) return null
         val operands = compareCall.arguments.filterNotNull()
         if (operands.size != 2) return null
+        // Reference Comparable calls must execute their implementation before comparing the
+        // resulting Int. Do not evaluate operands while deciding whether scalar fusion applies.
+        if (operands.any { GuestPrimitive.scalar(resolvedType(it.type)) == null } &&
+            operands.any { resolvedType(it.type) != kotlinStringType }
+        ) {
+            return null
+        }
         var left = compileExpression(operands[0])
         var right = compileExpression(operands[1])
         val compareFqName =
@@ -10744,27 +10859,31 @@ private fun canonicalPlatformBaseClasses(
     pluginContext: IrPluginContext,
     session: CompilationSession,
 ): List<IrClass> =
-    specializedPlatformBaseTypes.filter { name -> session.platformTypes.none { it.symbol == name } }.mapNotNull { name ->
-        val classId =
-            when (name) {
-                "kotlin.collections.Map.Entry" -> {
-                    ClassId
-                        .topLevel(FqName("kotlin.collections.Map"))
-                        .createNestedClassId(Name.identifier("Entry"))
-                }
+    specializedPlatformBaseTypes
+        .filter { name ->
+            name in CollectionValueBridges.protocolNames ||
+                session.platformTypes.none { it.symbol == name }
+        }.mapNotNull { name ->
+            val classId =
+                when (name) {
+                    "kotlin.collections.Map.Entry" -> {
+                        ClassId
+                            .topLevel(FqName("kotlin.collections.Map"))
+                            .createNestedClassId(Name.identifier("Entry"))
+                    }
 
-                "kotlin.collections.MutableMap.MutableEntry" -> {
-                    ClassId
-                        .topLevel(FqName("kotlin.collections.MutableMap"))
-                        .createNestedClassId(Name.identifier("MutableEntry"))
-                }
+                    "kotlin.collections.MutableMap.MutableEntry" -> {
+                        ClassId
+                            .topLevel(FqName("kotlin.collections.MutableMap"))
+                            .createNestedClassId(Name.identifier("MutableEntry"))
+                    }
 
-                else -> {
-                    ClassId.topLevel(FqName(name))
+                    else -> {
+                        ClassId.topLevel(FqName(name))
+                    }
                 }
-            }
-        pluginContext.referenceClass(classId)?.owner
-    }
+            pluginContext.referenceClass(classId)?.owner
+        }
 
 private val specializedPlatformBaseTypes =
     setOf(
@@ -11013,6 +11132,8 @@ private class GuestArrayUsageCollector(
             when {
                 ((element as? IrSimpleType)?.classifier as? IrClassSymbol)?.owner?.fqNameWhenAvailable?.asString() ==
                     CHAR_SEQUENCE_NAME -> CHAR_SEQUENCE_IMPORT
+
+                primitiveSupertypeImport(element) != null -> requireNotNull(primitiveSupertypeImport(element))
 
                 ((element as? IrSimpleType)?.classifier as? IrClassSymbol)?.owner?.fqNameWhenAvailable?.asString() ==
                     ENUM_NAME -> ENUM_IMPORT

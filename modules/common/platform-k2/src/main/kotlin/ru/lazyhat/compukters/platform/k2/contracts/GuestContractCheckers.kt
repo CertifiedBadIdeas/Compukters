@@ -33,10 +33,7 @@ import org.jetbrains.kotlin.fir.declarations.FirNamedFunction
 import org.jetbrains.kotlin.fir.declarations.hasAnnotation
 import org.jetbrains.kotlin.fir.declarations.origin
 import org.jetbrains.kotlin.fir.moduleData
-import org.jetbrains.kotlin.fir.resolve.fullyExpandedType
 import org.jetbrains.kotlin.fir.symbols.impl.FirRegularClassSymbol
-import org.jetbrains.kotlin.fir.types.coneType
-import org.jetbrains.kotlin.fir.types.isUnit
 import ru.lazyhat.compukters.platform.k2.CompuktersPlatforms
 
 /** Report the intrinsic boundary in both standalone analysis and native IDEA source modules. */
@@ -70,17 +67,6 @@ private object GuestOperationChecker : FirSimpleFunctionChecker(MppCheckerKind.C
         }
         if (declaration.body != null) {
             reporter.reportOn(declaration.source, FirErrors.UNSUPPORTED, "Guest server operations must have no body")
-        }
-        if (declaration.symbol.hasAnnotation(GuestContractAnnotations.command, session) &&
-            !declaration.returnTypeRef.coneType
-                .fullyExpandedType()
-                .isUnit
-        ) {
-            reporter.reportOn(
-                declaration.returnTypeRef.source ?: declaration.source,
-                FirErrors.UNSUPPORTED,
-                "@GuestCommand must return Unit",
-            )
         }
     }
 }

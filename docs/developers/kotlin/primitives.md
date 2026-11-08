@@ -46,6 +46,29 @@ scalar types and nullable signatures compile through the canonical platform` in 
 
 **Related work:** [#700](https://github.com/CertifiedBadIdeas/Compukters/issues/700).
 
+## `Number` and `Comparable` views
+
+**Status:** Supported.
+
+The six signed numeric primitives widen to `Number`, with `toByte`, `toShort`, `toInt`, `toLong`,
+`toFloat` and `toDouble` using the concrete primitive's existing conversion rules. Char, Boolean and
+unsigned types do not inherit Number. Nullable values, reference arrays, collections, inferred mixed numeric
+lists and covariant producer results retain their source values and nominal type. Custom Number subclasses
+provide the six conversion methods.
+
+All twelve primitives, String, enums and custom implementations support `Comparable<T>` invocation.
+The source argument remains checked by Kotlin; `Comparable<*>` does not accept an arbitrary comparison
+argument. The managed call checks the concrete argument type, including for custom generic/value classes
+and enum owners. Floating comparison orders NaN after numeric values and distinguishes signed zero.
+Primitive storage and ordinary concrete calls remain scalar; widening to a reference boxes the primitive.
+Covariant widening preserves an existing reference's identity.
+
+**Evidence:** `primitive Number and Comparable views preserve conversions dispatch and covariance`, executed
+by `testKotlinPrimitiveSupertypesVmConformance`, covers all primitive families, custom implementations,
+MFVC and generic comparison, inferred and explicit numeric lists, arrays, nullable values, covariance,
+conversion extremes, NaN, signed zero and checked comparison failures.
+`Comparable source arguments and Number membership remain checked` protects rejected source arguments.
+
 ## `Unit` and `Nothing`
 
 **Status:** Partial.

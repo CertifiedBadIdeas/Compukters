@@ -25,18 +25,17 @@ API transport, discovery without compilation, non-addon project rejection and mi
 
 ## Native addon SDK
 
-SDK **0.8.0** compiles native Guest Kotlin in `src/contract/kotlin`, with executable methods alongside
+SDK **0.9.0** compiles native Guest Kotlin in `src/contract/kotlin`, with executable methods alongside
 annotated bodyless interface operations. It generates inspectable server plumbing, executable
 CAGB libraries and typed host dispatch from that native model. Generated Kotlin lives under
 `build/generated/sources/compuktersGuest/kotlin` and is retained in source artifacts. The checked-in
 `addon.lock` remains ABI history: ordinary builds validate it, explicit updates retain selectors and
-tombstones. SDK 0.8 does not change CAGB, native VM or capability transport encoding.
+tombstones. SDK 0.9 retains CAGB, native VM and capability transport encoding; the command payload has its own ABI below.
 
-Only explicit `@GuestCommand` methods returning Unit receive command factories and server command
-bindings. `@GuestRead`/`@GuestCall` cannot retain a pending continuation; `@GuestWait` may wait and is
-excluded from batching. Constraints are checked on both Guest and host boundaries. Handler
-`batchCommands` is retained for binary compatibility with older hosts and ignored by generated
-generated hosts.
+`@GuestCall` describes every immediate server operation and generates a typed command factory; `@GuestWait`
+may retain a pending continuation and is excluded from batching. `GuestRead`, `GuestCommand` and `GuestRecord`
+are removed. Boundary record discovery is structural and does not require annotations. Constraints are checked
+on both Guest and host boundaries. The deprecated handler `batchCommands` property is ignored by declarative hosts.
 
 Structurally admissible stdlib, dependency and addon records remain typed in host arguments. Their scalar
 components cross the existing argument transport; reconstruction belongs to the SDK. Rotation inputs
@@ -69,30 +68,52 @@ selectors and malformed dependency layouts. Codec tests cover bounded generic de
 `DeclarativeNativeIntegrationTest` executes interface methods, MFVC helpers, typed requests and command batches
 through the pinned native VM.
 
+## Numeric and comparison runtime views
+
+`kotlin:builtins` 1.18.0 gives `Number` its six conversion methods and makes the signed numeric
+primitives override them. The compiler-generated Kotlin runtime library supplies nominal Number
+and Comparable views, primitive boxing, virtual numeric conversion and erased comparison dispatch.
+Source-level `Comparable<T>` arguments remain checked by K2; custom, generic and value-class
+implementations receive checked argument bridges. Unsigned primitives implement Comparable without
+inheriting Number. String comparisons use UTF-16 order; floating comparisons preserve NaN and signed-zero order.
+
+These views reuse existing type, field, conversion and call instructions. They add no VM opcode,
+artifact format or host capability. Canonical runtime library hashes include the generated methods;
+private binary helper types and implicit constructors retain linkable identities without becoming
+public source declarations. `testKotlinPrimitiveSupertypesVmConformance`, generic-library and sequence
+conformance scenarios cover runtime dispatch, nullable views, covariance and helper linkage.
+
 ## Device command groups
 
-`compukter:core` 9.5.0 adds `compukters:commands` ABI 1.0, asynchronous operation 0
-`submit(ByteArray):ByteArray`, over the existing capability transport. Artifact, CAGB and native VM
-encodings are unchanged. SDK 0.7.0 adds `AddonHostHandler.batchCommands`: an explicit set of immediate
-Unit callable names. Generated `ProgramCommandProvider` entries derive binding symbols, capability
-identities, selectors and argument types from the existing canonical addon contract. They invoke the
-same program-scoped handler; a pending result becomes a per-command failure and is never polled.
+`compukter:core` 10.0.0 uses `compukters:commands` ABI **2.0**, asynchronous operation 0
+`submit(ByteArray):ByteArray`. This intentionally replaces ABI 1 and requires recompiling old batch programs;
+no legacy packet decoder or operation is retained. Native VM and outer capability encodings remain unchanged.
+Generated `ProgramCommandProvider` bindings use the canonical operation identity, argument layout and typed response
+encoder. Declarative `GuestCall` methods are eligible automatically; `GuestWait` bindings are absent. Pending
+handler results fail that position and are never retained or polled.
 
-`CommandBatchCodec` owns wire version 1. Both packets are bounded to 4096 bytes, with 1..32 commands.
-The request starts with U8 version=1 and U8 count, followed by command entries: UTF-16 symbol,
-U8 argument count (0..32), then tagged arguments. UTF-16 fields use U16 little-endian code-unit count
-and U16 little-endian units. Symbols are 1..256 units from letters, digits, `_`, `.` and `$`.
-Tags 1..7 encode I32, I64, F32, F64, Boolean, Char and String as UTF-16 text; tag 8 is U16 little-endian
-byte length followed by bytes. Numeric text uses Kotlin scalar conversion, including signed zero;
-NaN payload bits are not retained. Boolean text must be `true` or `false`, Char has exactly one unit.
-All entries and the exact packet end are validated before execution.
+`CommandBatchCodec` owns packet version **2**. Requests and responses are each bounded to 4096 bytes and 1..32
+positions. Requests begin U8 version=2, U8 count, followed by the existing scalar command entries: UTF-16 binding
+symbol, U8 argument count (0..32), then tagged arguments. Text uses U16 little-endian code-unit count and U16
+little-endian units. Symbols have 1..256 letter/digit/`_.$` units. Tags 1..7 are I32, I64, F32, F64, Boolean,
+Char and String as text; tag 8 is U16 byte length followed by bytes. Numeric text uses Kotlin scalar conversion,
+including signed zero; NaN payload bits are not retained. Boolean text is `true`/`false`, Char has one code unit.
+All entries and the exact request end are validated before any execution.
 
-Responses start with the same U8 version/count, followed by one U8 status per command: 0=Unit success,
-1=EOF, 2=Unavailable, 3=I/O, 4=Cancelled, 5=Other. Failures append a UTF-16 message bounded to 48 units;
-truncation does not split a surrogate pair. Unknown symbols/type mismatches fail only that position.
-Each group runs synchronously in one program-scoped server-thread callback, with no rollback or
-isolation from world callbacks. Nested commands consume host-request quota individually; a group
-is deferred intact if the current tick lacks credits, or rejected if it exceeds the full tick allowance.
+Responses begin U8 version=2, U8 count. Each position has a U16 byte-length frame containing U8 status:
+0=typed success, 1=EOF, 2=Unavailable, 3=I/O, 4=Cancelled, 5=Other. Failure statuses append UTF-16 text bounded
+to 48 code units, without splitting a surrogate pair. Success appends a tagged value: tag 0 is Unit; 1/2 are little-endian I32/I64; 3/4 are little-endian IEEE
+F32/F64 bits; 5 is Boolean U8 (0/1); 6 is Char U16; 7 is length-prefixed UTF-16; 8 is length-prefixed bytes;
+9 is U16 field count followed by recursively tagged record fields (depth at most 8). Floating decoding preserves
+finite values, infinities and signed zero; NaN payload bits are not part of the Guest API contract.
+Record schemas are not sent: SDK-generated decoders use the resolved native layout and validated Guest constructors
+or factories. The host checks each reply against its registered operation schema before encoding.
+
+The encoder reserves 101 bytes for each remaining position's maximum framed failure. A reply exceeding its
+remaining budget becomes an individual Other failure; later calls still execute. Unknown bindings/type mismatches
+also fail only that position. Each group runs synchronously in one program-scoped server-thread callback, without
+rollback or isolation from world callbacks. Nested calls consume host-request quota individually; a group is deferred
+intact when remaining tick credits are insufficient, or rejected when it exceeds the full tick allowance.
 
 ## In-world keyboard input
 

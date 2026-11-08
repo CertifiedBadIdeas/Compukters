@@ -259,8 +259,10 @@ Value-class implementations receive the same bridges in their managed method tab
 retain the original managed receiver, including when a default interface body observes `this`.
 
 Changed element/callback parameter signatures and changed callable result signatures are rejected
-with source diagnostics. Primitive `Number`/`Comparable` views and generic declaration-site `in`
-remain outside this contract. Trusted List/Collection views retain their existing explicit bridges.
+with source diagnostics. Primitive `Number`/`Comparable` views are supported, including nested covariant
+results; see [primitive supertypes](primitives.md#number-and-comparable-views). General user-defined generic
+declaration-site `in` remains outside this contract; the trusted `Comparable<in T>` boundary retains its
+ordinary Kotlin argument checks. Trusted List/Collection views retain their existing explicit bridges.
 View expansion is bounded to depth 64 and 1024 combinations per specialization; generated result
 bridges have a compilation-wide limit of 4096 methods, alongside the existing class/function budgets.
 

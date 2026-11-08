@@ -159,7 +159,10 @@ class PlatformMetadataCompiler {
                     .filter { parsed ->
                         parsed.hasBody || parsed.abstractMember ||
                             (
-                                !parsed.private &&
+                                (
+                                    !parsed.private ||
+                                        (parsed.libraryKind == PlatformLibraryDeclarationKind.TYPE && !parsed.requiresSource)
+                                ) &&
                                     parsed.libraryKind in
                                     setOf(
                                         PlatformLibraryDeclarationKind.TYPE,
@@ -701,7 +704,21 @@ class PlatformMetadataCompiler {
             } else {
                 null
             }
-        return listOf(parsed) + listOfNotNull(getter, setter, singleton, enumEntries) + nested
+        val implicitConstructor =
+            (declaration as? KtClass)
+                ?.takeIf {
+                    !metadataOnly && !external && it !is KtEnumEntry && !it.isInterface() && !it.isEnum() &&
+                        it.primaryConstructor == null && it.secondaryConstructors.isEmpty()
+                }?.let {
+                    ParsedDeclaration(
+                        platformDeclaration.copy(symbol = "$symbol.<init>", signature = "constructor()"),
+                        private,
+                        hasBody = false,
+                        libraryKind = null,
+                        requiresSource = requiresSource,
+                    )
+                }
+        return listOf(parsed) + listOfNotNull(getter, setter, singleton, enumEntries, implicitConstructor) + nested
     }
 
     private fun defaultArguments(

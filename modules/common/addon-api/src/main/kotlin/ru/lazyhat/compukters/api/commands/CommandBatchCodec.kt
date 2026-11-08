@@ -12,7 +12,7 @@ import ru.lazyhat.compukters.lang.runtime.vm.HostFailureKind
 import ru.lazyhat.compukters.lang.runtime.vm.VmValue
 import java.io.ByteArrayOutputStream
 
-/** Canonical compukters:commands ABI 1 payload. All text is length-prefixed little-endian UTF-16. */
+/** Canonical compukters:commands ABI 2 payload. All text is length-prefixed little-endian UTF-16. */
 object CommandBatchCodec {
     const val MAXIMUM_COMMANDS = 32
     const val MAXIMUM_BYTES = 4096
@@ -28,7 +28,7 @@ object CommandBatchCodec {
     fun decode(bytes: ByteArray): List<Command> {
         require(bytes.size in 2..MAXIMUM_BYTES) { "Invalid command packet size" }
         val input = Reader(bytes)
-        require(input.byte() == 1) { "Unsupported command packet version" }
+        require(input.byte() == 2) { "Unsupported command packet version" }
         val count = input.byte()
         require(count in 1..MAXIMUM_COMMANDS) { "Invalid command count" }
         val commands =
@@ -93,7 +93,7 @@ object CommandBatchCodec {
     fun encode(commands: List<Command>): ByteArray {
         require(commands.size in 1..MAXIMUM_COMMANDS)
         val output = Writer()
-        output.byte(1)
+        output.byte(2)
         output.byte(commands.size)
         commands.forEach { command ->
             output.text(command.symbol)
@@ -150,36 +150,29 @@ object CommandBatchCodec {
         return output.finish().also(::decode)
     }
 
+    /** Reserve a bounded failure for every later position, so a large reply cannot lose the batch. */
     fun encodeResults(results: List<HostResponse>): ByteArray {
         require(results.size in 1..MAXIMUM_COMMANDS)
         val output = Writer()
-        output.byte(1)
+        output.byte(2)
         output.byte(results.size)
-        results.forEach { result ->
-            when (result) {
-                HostResponse.UnitSuccess -> {
-                    output.byte(0)
+        results.forEachIndexed { index, result ->
+            val available = MAXIMUM_BYTES - output.size - (results.size - index - 1) * 101 - 2
+            var encoded =
+                try {
+                    Writer().also { it.result(result) }.finish()
+                } catch (_: IllegalArgumentException) {
+                    byteArrayOf()
                 }
-
-                is HostResponse.Failure -> {
-                    output.byte(
-                        when (result.kind) {
-                            HostFailureKind.END_OF_FILE -> 1
-                            HostFailureKind.UNAVAILABLE -> 2
-                            HostFailureKind.INPUT_OUTPUT -> 3
-                            HostFailureKind.CANCELLED -> 4
-                            HostFailureKind.OTHER -> 5
-                        },
-                    )
-                    var end = minOf(result.detail.length, MAXIMUM_FAILURE_UNITS)
-                    if (end < result.detail.length && end > 0 && result.detail[end - 1].isHighSurrogate()) end--
-                    output.text(result.detail.substring(0, end))
-                }
-
-                else -> {
-                    throw IllegalArgumentException("Command handler must complete Unit")
-                }
+            if (encoded.isEmpty() || encoded.size > available) {
+                encoded =
+                    Writer()
+                        .also {
+                            it.result(HostResponse.Failure(HostFailureKind.OTHER, "Command result exceeds byte limit"))
+                        }.finish()
             }
+            output.short(encoded.size)
+            output.raw(encoded)
         }
         return output.finish()
     }
@@ -227,6 +220,12 @@ object CommandBatchCodec {
     private class Writer {
         private val output = ByteArrayOutputStream()
 
+        val size: Int get() = output.size()
+
+        fun raw(bytes: ByteArray) {
+            bytes.forEach { byte(it.toInt()) }
+        }
+
         fun byte(value: Int) {
             require(output.size() < MAXIMUM_BYTES) { "Command packet exceeds byte limit" }
             output.write(value and 255)
@@ -247,6 +246,96 @@ object CommandBatchCodec {
         fun bytes(value: ByteArray) {
             short(value.size)
             value.forEach { byte(it.toInt()) }
+        }
+
+        private fun int(value: Int) {
+            repeat(4) { byte(value ushr (it * 8)) }
+        }
+
+        private fun long(value: Long) {
+            repeat(8) { byte((value ushr (it * 8)).toInt()) }
+        }
+
+        fun result(result: HostResponse) {
+            if (result is HostResponse.Failure) {
+                byte(
+                    when (result.kind) {
+                        HostFailureKind.END_OF_FILE -> 1
+                        HostFailureKind.UNAVAILABLE -> 2
+                        HostFailureKind.INPUT_OUTPUT -> 3
+                        HostFailureKind.CANCELLED -> 4
+                        HostFailureKind.OTHER -> 5
+                    },
+                )
+                var end = minOf(result.detail.length, MAXIMUM_FAILURE_UNITS)
+                if (end < result.detail.length && end > 0 && result.detail[end - 1].isHighSurrogate()) end--
+                text(result.detail.substring(0, end))
+            } else {
+                byte(0)
+                writeValue(result, 0)
+            }
+        }
+
+        private fun writeValue(
+            value: HostResponse,
+            depth: Int,
+        ) {
+            require(depth <= 8) { "Command record nesting exceeds limit" }
+            when (value) {
+                HostResponse.UnitSuccess -> {
+                    byte(0)
+                }
+
+                is HostResponse.IntSuccess -> {
+                    byte(1)
+                    int(value.value)
+                }
+
+                is HostResponse.LongSuccess -> {
+                    byte(2)
+                    long(value.value)
+                }
+
+                is HostResponse.FloatSuccess -> {
+                    byte(3)
+                    int(value.value.toRawBits())
+                }
+
+                is HostResponse.DoubleSuccess -> {
+                    byte(4)
+                    long(value.value.toRawBits())
+                }
+
+                is HostResponse.BoolSuccess -> {
+                    byte(5)
+                    byte(if (value.value) 1 else 0)
+                }
+
+                is HostResponse.CharSuccess -> {
+                    byte(6)
+                    short(value.value.code)
+                }
+
+                is HostResponse.StringSuccess -> {
+                    byte(7)
+                    text(value.value)
+                }
+
+                is HostResponse.ByteArraySuccess -> {
+                    byte(8)
+                    bytes(value.value)
+                }
+
+                is HostResponse.RecordSuccess -> {
+                    byte(9)
+                    short(value.value.values.size)
+                    value.value.values.forEach { writeValue(it, depth + 1) }
+                }
+
+                is HostResponse.Failure -> {
+                    error("Failures cannot be nested values")
+                }
+            }
         }
 
         fun finish(): ByteArray = output.toByteArray()

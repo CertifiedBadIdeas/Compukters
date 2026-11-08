@@ -145,7 +145,7 @@ class ExternalAddonBuildTest {
                         fun normalized(): Vector3d = vector.normalized()
                     }
                     @GuestService interface Epoch {
-                        @GuestRead(binding = "now") fun now(): Long
+                        @GuestCall(binding = "now") fun now(): Long
                     }
                     """.trimIndent(),
                 )
@@ -167,18 +167,15 @@ class ExternalAddonBuildTest {
                     package fixture.kinetics
 
                     import ru.lazyhat.compukters.api.contracts.GuestDevice
-                    import ru.lazyhat.compukters.api.contracts.GuestRecord
                     import ru.lazyhat.compukters.api.contracts.GuestResource
-                    import ru.lazyhat.compukters.api.contracts.GuestRead
                     import ru.lazyhat.compukters.api.contracts.GuestCall
-                    import ru.lazyhat.compukters.api.contracts.GuestCommand
                     import ru.lazyhat.compukters.api.contracts.GuestWait
                     import ru.lazyhat.compukters.api.contracts.Finite
                     import ru.lazyhat.compukters.api.contracts.DoubleRange
-                    import kotlin.math.Vector3d
                     import kotlin.math.Rotation3d
+                    import kotlin.math.Vector3d
 
-                    @GuestRecord data class State(val position: Vector3d, val orientation: Rotation3d) {
+                    data class State(val position: Vector3d, val orientation: Rotation3d) {
                         fun distance(): Double = position.length
                     }
                     value class Velocity(val x: Double, val y: Double, val z: Double) {
@@ -186,19 +183,19 @@ class ExternalAddonBuildTest {
                     }
 
                     @GuestResource interface Snapshot {
-                        @GuestRead fun size(): Int
+                        @GuestCall fun size(): Int
                         @GuestCall fun close(): Unit
                     }
 
                     @GuestDevice("fixture:engine") interface Engine {
-                        @GuestRead fun speed(): Float
-                        @GuestRead fun state(): State
-                        @GuestRead fun direction(): shared.time.Direction
-                        @GuestRead fun orientation(): Rotation3d
-                        @GuestRead fun snapshot(): Snapshot
-                        @GuestCommand fun aim(direction: Vector3d): Unit
-                        @GuestCommand fun target(state: State): Unit
-                        @GuestCommand fun setThrottle(@Finite @DoubleRange(min = 0.0, max = 1.0) throttle: Double): Unit
+                        @GuestCall fun speed(): Float
+                        @GuestCall fun state(): State
+                        @GuestCall fun direction(): shared.time.Direction
+                        @GuestCall fun orientation(): Rotation3d
+                        @GuestCall fun snapshot(): Snapshot
+                        @GuestCall fun aim(direction: Vector3d): Unit
+                        @GuestCall fun target(state: State): Unit
+                        @GuestCall fun setThrottle(@Finite @DoubleRange(min = 0.0, max = 1.0) throttle: Double): Unit
                         @GuestCall fun close(): Unit
                         @GuestWait fun awaitState(): State
                         fun currentTime(): Long = shared.time.Epoch.now()
@@ -238,7 +235,7 @@ class ExternalAddonBuildTest {
                 }
             val guest = generatedFiles.getValue("fixture/kinetics/fixture.kinetics.__CompuktersHandleEngine.kt")
             assertTrue("setThrottleCommand" in guest && "aimCommand" in guest)
-            assertTrue("closeCommand" !in guest && "speedCommand" !in guest && "awaitStateCommand" !in guest)
+            assertTrue("closeCommand" in guest && "speedCommand" in guest && "awaitStateCommand" !in guest)
             assertTrue("kotlin.math.Rotation3d.fromQuaternion" in guest)
             val host = Files.readString(project.resolve("build/generated/sources/compuktersAddon/kotlin/GeneratedAddonHostContract.kt"))
             assertTrue("batchCommands" !in host)
@@ -257,9 +254,9 @@ class ExternalAddonBuildTest {
                 assertTrue(zip.entries().asSequence().none { it.name.startsWith("ru/lazyhat/compukters/") })
                 assertTrue(zip.getEntry("fixture/kinetics/Engine.class") == null)
             }
-            contractSource.toFile().appendText("\n@GuestDevice(\"fixture:invalid\") interface Invalid { @GuestCommand fun read(): Int }\n")
+            contractSource.toFile().appendText("\n@GuestDevice(\"fixture:invalid\") interface Invalid { @GuestCall fun read(): Int = 1 }\n")
             val invalid = runner(project, "generateCompuktersGuestSources").buildAndFail()
-            assertTrue("must return Unit" in invalid.output, invalid.output)
+            assertTrue("must have no body" in invalid.output, invalid.output)
         } finally {
             Files.walk(project).use { paths -> paths.sorted(Comparator.reverseOrder()).forEach(Files::deleteIfExists) }
         }
