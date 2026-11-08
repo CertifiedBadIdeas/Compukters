@@ -32,7 +32,8 @@ headings so this page has one stable URL that can be shared outside the reposito
   consumers calculate derived apsides instead of calling bundled Guest helpers.
 
 - Computers running identical binaries reuse immutable program code and metadata, reducing duplicate
-  runtime memory and preparation work for repeated programs such as the shell. The VM prepares typed
+  runtime memory and preparation work for repeated programs such as the shell. Managed heaps allocate
+  backing memory on demand while preserving each program's full memory quota. The VM prepares typed
   operations and direct-call argument transfers before execution to reduce repeated operand-layout work
   in numeric code, data access and function calls.
 

@@ -165,8 +165,14 @@ resolution; inline returns keep their existing component transfer. There is no p
 
 ## Process quotas and diagnostics
 
-The production execution profile reserves a 256 KiB managed heap for each active foreground process; child-process
-capacity is charged independently while its parent is suspended. Heap arenas are released with their owning machine.
+The production execution profile grants a 256 KiB managed heap quota to each active foreground process; child-process
+capacity is charged independently while its parent is suspended. Each heap initially allocates at most 4 KiB of backing
+and grows its contiguous initialized prefix on demand, doubling or covering a larger request up to the quota. Guest references retain their logical
+offsets when the host buffer grows. Free-block metadata covers the full logical quota without allocating its unused
+tail; all allocated payloads and free-list headers remain backed. Growth is fallible and precedes allocator mutation.
+A host allocation failure follows the existing collection/retry and bounded exhaustion path, even when logical free
+capacity remains. Freeing objects reuses backing; the heap does not shrink during execution. Heap backing is released
+with its owning machine.
 An OOM in a foreground child remains a bounded `LIMIT_EXCEEDED` process result, not a failure of its parent.
 Before releasing the child, the runtime formats its executable path, heap capacity, requested allocation, used/free
 bytes, largest free block and GC-attempt status. Child frames retain the immutable verified executable metadata,
@@ -199,7 +205,7 @@ Filesystem, terminal and confirmed world output remain computer-owned. A suspend
 pending `Process.run` and receives the replacement's completion. Failure before publication leaves
 the caller usable. Replacement consumes the lifetime start budget without another steady heap/frame
 reservation; admission temporarily holds both sessions so it can roll back. Boot uses replacement,
-so an idle shell retains one process heap. Checkpoint schema 7 and host descriptor version 2 permit
+so an idle shell retains one process heap. Checkpoint schema 8 and host descriptor version 2 permit
 a nonzero root scope and retain only the currently executing root artifact.
 
 The actor carries ordered lifecycle actions alongside addon requests and ordinary world effects. The server carrier
