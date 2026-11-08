@@ -32,7 +32,6 @@ import ru.lazyhat.compukters.compiler.artifact.write.ArtifactWriter
 import ru.lazyhat.compukters.compiler.k2.engine.PlatformFieldLink
 import ru.lazyhat.compukters.compiler.k2.engine.PlatformFunctionLink
 import ru.lazyhat.compukters.compiler.k2.engine.PlatformTypeLink
-import ru.lazyhat.compukters.platform.bundle.PlatformMetadataCodec
 import ru.lazyhat.compukters.platform.bundle.PlatformModule
 
 fun loadPlatformLibraries(modules: List<PlatformModule>): LoadedPlatformLibraries {
@@ -55,6 +54,8 @@ fun loadPlatformLibraries(modules: List<PlatformModule>): LoadedPlatformLibrarie
             }
         val moduleHash = ArtifactWriter.moduleSemanticHash(library)
         val annotations = platformModule.declarations.filter { it.signature.startsWith("annotation(") }.mapTo(mutableSetOf()) { it.symbol }
+        // Kotlin visibility is enforced by the frontend. Trusted source templates also need
+        // internal constructors and helper types, just as they already import private functions.
         val constructors =
             platformModule.declarations.filter {
                 it.signature.startsWith("constructor(") && it.symbol.removeSuffix(".<init>") !in annotations
@@ -63,17 +64,23 @@ fun loadPlatformLibraries(modules: List<PlatformModule>): LoadedPlatformLibrarie
             if (constructors.isEmpty()) {
                 emptySet()
             } else {
-                PlatformMetadataCodec
-                    .decode(
-                        platformModule.metadata,
-                    ).exportedSymbols
+                ru.lazyhat.compukters.platform.bundle.PlatformMetadataCodec
+                    .decode(platformModule.metadata)
+                    .exportedSymbols
                     .toSet()
             }
         functions +=
             constructors
                 .filter { declaration ->
                     !declaration.trustedExternal && declaration.signature.startsWith("constructor(") &&
-                        declaration.identity !in platformModule.sourceDeclarations && declaration.symbol in exportedDeclarations &&
+                        declaration.identity !in platformModule.sourceDeclarations &&
+                        (
+                            declaration.symbol in exportedDeclarations ||
+                                library.exports.any { export ->
+                                    export.kind == SymbolKind.TYPE &&
+                                        library.strings[export.name.value.toInt()].toString() == declaration.symbol.removeSuffix(".<init>")
+                                }
+                        ) &&
                         platformModule.scalarTypes.none { it.symbol == declaration.symbol.removeSuffix(".<init>") } &&
                         library.exports.none { export ->
                             export.kind == SymbolKind.TYPE &&

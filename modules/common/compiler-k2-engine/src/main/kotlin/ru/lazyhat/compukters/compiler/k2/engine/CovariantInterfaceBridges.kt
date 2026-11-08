@@ -21,6 +21,7 @@ package ru.lazyhat.compukters.compiler.k2.engine
 import org.jetbrains.kotlin.backend.common.extensions.IrPluginContext
 import org.jetbrains.kotlin.backend.common.lower.DeclarationIrBuilder
 import org.jetbrains.kotlin.descriptors.ClassKind
+import org.jetbrains.kotlin.ir.builders.irAs
 import org.jetbrains.kotlin.ir.builders.irBlockBody
 import org.jetbrains.kotlin.ir.builders.irCall
 import org.jetbrains.kotlin.ir.builders.irGet
@@ -37,6 +38,7 @@ import org.jetbrains.kotlin.ir.types.IrTypeProjection
 import org.jetbrains.kotlin.ir.types.IrTypeSystemContextImpl
 import org.jetbrains.kotlin.ir.types.makeNotNull
 import org.jetbrains.kotlin.ir.types.makeNullable
+import org.jetbrains.kotlin.ir.types.starProjectedType
 import org.jetbrains.kotlin.ir.types.typeWith
 import org.jetbrains.kotlin.ir.util.fqNameWhenAvailable
 import org.jetbrains.kotlin.ir.util.isNullable
@@ -135,6 +137,13 @@ internal class CovariantInterfaceBridges private constructor(
                     val expectedShape = expected.guestFunctionShape()
                     if (actualShape != expectedShape && (actualShape != null || expectedShape != null)) return@all false
                     if (!actual.isSubtypeOf(expected, typeSystem)) return@all false
+                    if (actual == expected || (
+                            primitiveSupertypeImport(actual) != null &&
+                                primitiveSupertypeImport(actual) == primitiveSupertypeImport(expected)
+                        )
+                    ) {
+                        return@all true
+                    }
                     val a = actual as? IrSimpleType
                     val e = expected as? IrSimpleType
                     val declaration = (a?.classifier as? IrClassSymbol)?.owner
@@ -176,12 +185,17 @@ internal class CovariantInterfaceBridges private constructor(
                     result.putIfAbsent(type.specializationTypeIdentity(), type)
                 }
                 add(argument)
+                val sourceOwner = ((argument as? IrSimpleType)?.classifier as? IrClassSymbol)?.owner
+                if (sourceOwner?.fqNameWhenAvailable?.asString() == COMPARABLE_NAME) {
+                    val erased = sourceOwner.symbol.starProjectedType
+                    add(if (argument.isNullable()) erased.makeNullable() else erased)
+                }
                 add(argument.makeNullable())
                 add(anyType.makeNullable())
                 if (!argument.isNullable()) add(anyType)
                 val simple = argument.makeNotNull() as? IrSimpleType
                 val owner = (simple?.classifier as? IrClassSymbol)?.owner
-                if (owner != null && GuestPrimitive.scalar(argument.makeNotNull()) == null && argument.guestFunctionShape() == null) {
+                if (owner != null && argument.guestFunctionShape() == null) {
                     val arguments = simple.arguments.map { (it as? IrTypeProjection)?.type ?: return result.values.toList() }
                     val current = GuestClassInstance(owner, arguments)
                     for (wide in views(current, context, depth + 1)) {
@@ -199,7 +213,7 @@ internal class CovariantInterfaceBridges private constructor(
                     // Compiler-only read adapters are not source-level covariance targets.
                     for (parent in owner.superTypes.filterNot {
                         ((it as? IrSimpleType)?.classifier as? IrClassSymbol)?.owner?.fqNameWhenAvailable?.asString() in
-                            (setOf("kotlin.Comparable", "kotlin.Number") + CollectionValueBridges.protocolNames)
+                            CollectionValueBridges.protocolNames
                     }) {
                         for (wide in widen(current.substitute(parent), depth + 1)) {
                             add(if (argument.isNullable()) wide.makeNullable() else wide)
@@ -255,6 +269,53 @@ internal class CovariantInterfaceBridges private constructor(
                 }
             val generated = mutableListOf<GuestFunctionInstance>()
             for (owner in classes.filter { it.declaration.kind != ClassKind.INTERFACE }) {
+                // Comparable keeps Kotlin's source parameter type and uses one erased managed
+                // invocation signature, including for custom and generic implementations.
+                fun comparableArgument(
+                    current: GuestClassInstance,
+                    seen: MutableSet<GuestClassInstance>,
+                ): IrType? {
+                    if (!seen.add(current)) return null
+                    for (parent in current.declaration.superTypes) {
+                        val resolved = current.substitute(parent) as? IrSimpleType ?: continue
+                        val declaration = (resolved.classifier as? IrClassSymbol)?.owner ?: continue
+                        val arguments = resolved.arguments.mapNotNull { (it as? IrTypeProjection)?.type }
+                        if (declaration.fqNameWhenAvailable?.asString() == COMPARABLE_NAME) return arguments.singleOrNull()
+                        if (arguments.size == declaration.typeParameters.size) {
+                            comparableArgument(GuestClassInstance(declaration, arguments), seen)?.let { return it }
+                        }
+                    }
+                    return null
+                }
+                val comparedType = comparableArgument(owner, mutableSetOf())
+                if (comparedType != null) {
+                    val method =
+                        methods(owner.declaration).firstOrNull { function ->
+                            function.name.asString() == "compareTo" && function.parameters.count {
+                                it.kind == IrParameterKind.Regular
+                            } == 1
+                        }
+                    if (method != null) {
+                        val bridge = copyGuestFunction(method, emptyList(), owner.declaration.typeParameters, owner.arguments)
+                        bridge.parent = owner.declaration
+                        bridge.parameters.first { it.kind == IrParameterKind.DispatchReceiver }.type = type(owner)
+                        val parameter = bridge.parameters.single { it.kind == IrParameterKind.Regular }
+                        parameter.type = context.irBuiltIns.anyNType
+                        bridge.body =
+                            DeclarationIrBuilder(context, bridge.symbol, method.startOffset, method.endOffset).irBlockBody {
+                                val delegate =
+                                    irCall(method.symbol, context.irBuiltIns.intType).apply {
+                                        for ((index, argument) in bridge.parameters.withIndex()) {
+                                            arguments[index] =
+                                                if (argument == parameter) irAs(irGet(argument), comparedType) else irGet(argument)
+                                        }
+                                    }
+                                +irReturn(delegate)
+                            }
+                        bridge.patchDeclarationParents(owner.declaration)
+                        generated += GuestFunctionInstance(bridge, emptyList(), owner)
+                    }
+                }
                 val ancestors = linkedSetOf<GuestClassInstance>()
 
                 fun visit(current: GuestClassInstance) {
@@ -283,7 +344,12 @@ internal class CovariantInterfaceBridges private constructor(
                                 continue
                             }
                             val signature =
-                                method.name.asString() + ":" + expected.specializationTypeIdentity() + ":" +
+                                method.name.asString() + ":" +
+                                    (
+                                        primitiveSupertypeImport(expected)?.let { "runtime:$it:${expected.isNullable()}" }
+                                            ?: expected.specializationTypeIdentity()
+                                    ) +
+                                    ":" +
                                     method.parameters
                                         .filter {
                                             it.kind != IrParameterKind.DispatchReceiver

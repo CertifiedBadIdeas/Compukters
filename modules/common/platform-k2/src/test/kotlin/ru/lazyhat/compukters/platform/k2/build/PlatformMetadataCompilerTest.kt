@@ -47,6 +47,35 @@ class PlatformMetadataCompilerTest {
     private val module = PlatformModuleId("test", "library")
 
     @Test
+    fun `implicit constructors retain binary identity without changing source visibility`() {
+        val result =
+            compiler.compile(
+                module,
+                listOf(
+                    source(
+                        "Helpers.kt",
+                        """
+                        package sample
+                        internal class Helper
+                        class Generic<T>
+                        interface Readable
+                        enum class Mode { ENTRY }
+                        class Secondary { constructor(value: Int) }
+                        """.trimIndent(),
+                    ),
+                ),
+            )
+        val helper = result.declarations.single { it.symbol == "sample.Helper.<init>" }
+        assertEquals("constructor()", helper.signature)
+        assertFalse(helper.symbol in result.exportedSymbols)
+        assertTrue(result.libraryDeclarations.any { it.symbol == "sample.Helper" && !it.exported })
+        val generic = result.declarations.single { it.symbol == "sample.Generic.<init>" }
+        assertTrue(generic.identity in result.sourceDeclarations)
+        assertFalse(result.declarations.any { it.symbol == "sample.Readable.<init>" || it.symbol == "sample.Mode.ENTRY.<init>" })
+        assertEquals(listOf("constructor(Int)"), result.declarations.filter { it.symbol == "sample.Secondary.<init>" }.map { it.signature })
+    }
+
+    @Test
     fun `enum entries getters retain static typed library identities`() {
         val result =
             compiler.compile(
@@ -142,7 +171,7 @@ class PlatformMetadataCompilerTest {
         val reverse = compiler.compile(module, listOf(second, first))
 
         assertContentEquals(forward.metadata.toByteArray(), reverse.metadata.toByteArray())
-        assertEquals(listOf("sample.Alpha", "sample.zebra"), forward.exportedSymbols)
+        assertEquals(listOf("sample.Alpha", "sample.Alpha.<init>", "sample.zebra"), forward.exportedSymbols)
         assertEquals(forward.declarations, reverse.declarations)
     }
 

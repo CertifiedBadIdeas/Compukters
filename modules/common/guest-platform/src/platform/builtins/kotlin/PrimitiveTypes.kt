@@ -9,10 +9,17 @@ package kotlin
 /**
  * Common supertype of the signed numeric primitives.
  *
- * The current Guest API exposes conversions on concrete numeric types rather than on [Number].
+ * Conversions retain the same truncation, saturation and floating rounding rules as concrete primitives.
  * Unsigned primitives are separate types and do not inherit from this class.
  */
-public abstract class Number
+public abstract class Number {
+    public abstract fun toByte(): Byte
+    public abstract fun toShort(): Short
+    public abstract fun toInt(): Int
+    public abstract fun toLong(): Long
+    public abstract fun toFloat(): Float
+    public abstract fun toDouble(): Double
+}
 
 /**
  * A truth value, either true or false.
@@ -568,7 +575,7 @@ public class Byte private constructor() : Number(), Comparable<Byte> {
      *
      * @return this Byte value.
      */
-    public external fun toByte(): Byte
+    public external override fun toByte(): Byte
 
     /**
      * Converts this value to [Short].
@@ -577,7 +584,7 @@ public class Byte private constructor() : Number(), Comparable<Byte> {
      *
      * @return the converted Short value.
      */
-    public external fun toShort(): Short
+    public external override fun toShort(): Short
 
     /**
      * Converts this value to [Int].
@@ -586,7 +593,7 @@ public class Byte private constructor() : Number(), Comparable<Byte> {
      *
      * @return the converted Int value.
      */
-    public external fun toInt(): Int
+    public external override fun toInt(): Int
 
     /**
      * Converts this value to [Long].
@@ -595,7 +602,7 @@ public class Byte private constructor() : Number(), Comparable<Byte> {
      *
      * @return the converted Long value.
      */
-    public external fun toLong(): Long
+    public external override fun toLong(): Long
 
     /**
      * Converts this value to [Float].
@@ -604,7 +611,7 @@ public class Byte private constructor() : Number(), Comparable<Byte> {
      *
      * @return the floating-point representation.
      */
-    public external fun toFloat(): Float
+    public external override fun toFloat(): Float
 
     /**
      * Converts this value to [Double].
@@ -613,7 +620,7 @@ public class Byte private constructor() : Number(), Comparable<Byte> {
      *
      * @return the floating-point representation.
      */
-    public external fun toDouble(): Double
+    public external override fun toDouble(): Double
 
     /**
      * Converts this value to a UTF-16 code unit using its lowest 16 integer bits.
@@ -1104,14 +1111,14 @@ public class Short private constructor() : Number(), Comparable<Short> {
      *
      * @return the converted Byte value.
      */
-    public external fun toByte(): Byte
+    public external override fun toByte(): Byte
 
     /**
      * Returns this value unchanged.
      *
      * @return this Short value.
      */
-    public external fun toShort(): Short
+    public external override fun toShort(): Short
 
     /**
      * Converts this value to [Int].
@@ -1120,7 +1127,7 @@ public class Short private constructor() : Number(), Comparable<Short> {
      *
      * @return the converted Int value.
      */
-    public external fun toInt(): Int
+    public external override fun toInt(): Int
 
     /**
      * Converts this value to [Long].
@@ -1129,7 +1136,7 @@ public class Short private constructor() : Number(), Comparable<Short> {
      *
      * @return the converted Long value.
      */
-    public external fun toLong(): Long
+    public external override fun toLong(): Long
 
     /**
      * Converts this value to [Float].
@@ -1138,7 +1145,7 @@ public class Short private constructor() : Number(), Comparable<Short> {
      *
      * @return the floating-point representation.
      */
-    public external fun toFloat(): Float
+    public external override fun toFloat(): Float
 
     /**
      * Converts this value to [Double].
@@ -1147,7 +1154,7 @@ public class Short private constructor() : Number(), Comparable<Short> {
      *
      * @return the floating-point representation.
      */
-    public external fun toDouble(): Double
+    public external override fun toDouble(): Double
 
     /**
      * Converts this value to a UTF-16 code unit using its lowest 16 integer bits.
@@ -1701,7 +1708,7 @@ public class Int private constructor() : Number(), Comparable<Int> {
      *
      * @return the converted Byte value.
      */
-    public external fun toByte(): Byte
+    public external override fun toByte(): Byte
 
     /**
      * Converts this value to [Short].
@@ -1710,14 +1717,14 @@ public class Int private constructor() : Number(), Comparable<Int> {
      *
      * @return the converted Short value.
      */
-    public external fun toShort(): Short
+    public external override fun toShort(): Short
 
     /**
      * Returns this value unchanged.
      *
      * @return this Int value.
      */
-    public external fun toInt(): Int
+    public external override fun toInt(): Int
 
     /**
      * Converts this value to [Long].
@@ -1726,7 +1733,7 @@ public class Int private constructor() : Number(), Comparable<Int> {
      *
      * @return the converted Long value.
      */
-    public external fun toLong(): Long
+    public external override fun toLong(): Long
 
     /**
      * Converts this value to [Float].
@@ -1735,7 +1742,7 @@ public class Int private constructor() : Number(), Comparable<Int> {
      *
      * @return the floating-point representation.
      */
-    public external fun toFloat(): Float
+    public external override fun toFloat(): Float
 
     /**
      * Converts this value to [Double].
@@ -1744,7 +1751,7 @@ public class Int private constructor() : Number(), Comparable<Int> {
      *
      * @return the floating-point representation.
      */
-    public external fun toDouble(): Double
+    public external override fun toDouble(): Double
 
     /**
      * Converts this value to a UTF-16 code unit using its lowest 16 integer bits.
@@ -2299,7 +2306,7 @@ public class Long private constructor() : Number(), Comparable<Long> {
      *
      * @return the converted Byte value.
      */
-    public external fun toByte(): Byte
+    public external override fun toByte(): Byte
 
     /**
      * Converts this value to [Short].
@@ -2308,7 +2315,7 @@ public class Long private constructor() : Number(), Comparable<Long> {
      *
      * @return the converted Short value.
      */
-    public external fun toShort(): Short
+    public external override fun toShort(): Short
 
     /**
      * Converts this value to [Int].
@@ -2317,14 +2324,14 @@ public class Long private constructor() : Number(), Comparable<Long> {
      *
      * @return the converted Int value.
      */
-    public external fun toInt(): Int
+    public external override fun toInt(): Int
 
     /**
      * Returns this value unchanged.
      *
      * @return this Long value.
      */
-    public external fun toLong(): Long
+    public external override fun toLong(): Long
 
     /**
      * Converts this value to [Float].
@@ -2333,7 +2340,7 @@ public class Long private constructor() : Number(), Comparable<Long> {
      *
      * @return the floating-point representation.
      */
-    public external fun toFloat(): Float
+    public external override fun toFloat(): Float
 
     /**
      * Converts this value to [Double].
@@ -2342,7 +2349,7 @@ public class Long private constructor() : Number(), Comparable<Long> {
      *
      * @return the floating-point representation.
      */
-    public external fun toDouble(): Double
+    public external override fun toDouble(): Double
 
     /**
      * Converts this value to a UTF-16 code unit using its lowest 16 integer bits.
@@ -2875,7 +2882,7 @@ public class Float private constructor() : Number(), Comparable<Float> {
      *
      * @return the converted Byte value.
      */
-    public external fun toByte(): Byte
+    public external override fun toByte(): Byte
 
     /**
      * Converts this value to [Short].
@@ -2885,7 +2892,7 @@ public class Float private constructor() : Number(), Comparable<Float> {
      *
      * @return the converted Short value.
      */
-    public external fun toShort(): Short
+    public external override fun toShort(): Short
 
     /**
      * Converts this value to [Int].
@@ -2894,7 +2901,7 @@ public class Float private constructor() : Number(), Comparable<Float> {
      *
      * @return the converted Int value.
      */
-    public external fun toInt(): Int
+    public external override fun toInt(): Int
 
     /**
      * Converts this value to [Long].
@@ -2903,14 +2910,14 @@ public class Float private constructor() : Number(), Comparable<Float> {
      *
      * @return the converted Long value.
      */
-    public external fun toLong(): Long
+    public external override fun toLong(): Long
 
     /**
      * Returns this value unchanged.
      *
      * @return this Float value.
      */
-    public external fun toFloat(): Float
+    public external override fun toFloat(): Float
 
     /**
      * Converts this value to [Double].
@@ -2919,7 +2926,7 @@ public class Float private constructor() : Number(), Comparable<Float> {
      *
      * @return the floating-point representation.
      */
-    public external fun toDouble(): Double
+    public external override fun toDouble(): Double
 
     /**
      * Converts this value to a UTF-16 code unit using its lowest 16 integer bits.
@@ -3473,7 +3480,7 @@ public class Double private constructor() : Number(), Comparable<Double> {
      *
      * @return the converted Byte value.
      */
-    public external fun toByte(): Byte
+    public external override fun toByte(): Byte
 
     /**
      * Converts this value to [Short].
@@ -3483,7 +3490,7 @@ public class Double private constructor() : Number(), Comparable<Double> {
      *
      * @return the converted Short value.
      */
-    public external fun toShort(): Short
+    public external override fun toShort(): Short
 
     /**
      * Converts this value to [Int].
@@ -3492,7 +3499,7 @@ public class Double private constructor() : Number(), Comparable<Double> {
      *
      * @return the converted Int value.
      */
-    public external fun toInt(): Int
+    public external override fun toInt(): Int
 
     /**
      * Converts this value to [Long].
@@ -3501,7 +3508,7 @@ public class Double private constructor() : Number(), Comparable<Double> {
      *
      * @return the converted Long value.
      */
-    public external fun toLong(): Long
+    public external override fun toLong(): Long
 
     /**
      * Converts this value to [Float].
@@ -3511,14 +3518,14 @@ public class Double private constructor() : Number(), Comparable<Double> {
      *
      * @return the floating-point representation.
      */
-    public external fun toFloat(): Float
+    public external override fun toFloat(): Float
 
     /**
      * Returns this value unchanged.
      *
      * @return this Double value.
      */
-    public external fun toDouble(): Double
+    public external override fun toDouble(): Double
 
     /**
      * Converts this value to a UTF-16 code unit using its lowest 16 integer bits.

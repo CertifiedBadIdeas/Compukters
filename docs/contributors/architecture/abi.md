@@ -69,6 +69,21 @@ selectors and malformed dependency layouts. Codec tests cover bounded generic de
 `DeclarativeNativeIntegrationTest` executes interface methods, MFVC helpers, typed requests and command batches
 through the pinned native VM.
 
+## Numeric and comparison runtime views
+
+`kotlin:builtins` 1.18.0 gives `Number` its six conversion methods and makes the signed numeric
+primitives override them. The compiler-generated Kotlin runtime library supplies nominal Number
+and Comparable views, primitive boxing, virtual numeric conversion and erased comparison dispatch.
+Source-level `Comparable<T>` arguments remain checked by K2; custom, generic and value-class
+implementations receive checked argument bridges. Unsigned primitives implement Comparable without
+inheriting Number. String comparisons use UTF-16 order; floating comparisons preserve NaN and signed-zero order.
+
+These views reuse existing type, field, conversion and call instructions. They add no VM opcode,
+artifact format or host capability. Canonical runtime library hashes include the generated methods;
+private binary helper types and implicit constructors retain linkable identities without becoming
+public source declarations. `testKotlinPrimitiveSupertypesVmConformance`, generic-library and sequence
+conformance scenarios cover runtime dispatch, nullable views, covariance and helper linkage.
+
 ## Device command groups
 
 `compukter:core` 9.5.0 adds `compukters:commands` ABI 1.0, asynchronous operation 0

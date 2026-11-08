@@ -152,7 +152,15 @@ class K2CompilerAdapterTest {
                         return "length=" + size
                     }
 
-                    fun <T> describe(value: T, measure: (T) -> Int): String = label(measure(value))
+                    class LibraryReader internal constructor(val size: Int)
+                    private class LibraryCounter { fun read(reader: LibraryReader): Int = reader.size }
+                    private interface Measured { fun size(): Int }
+                    private class MeasuredValue<T>(val value: T, count: Int): Measured {
+                        private val reader = LibraryReader(count)
+                        private val counter = LibraryCounter()
+                        override fun size(): Int = counter.read(reader)
+                    }
+                    fun <T> describe(value: T, measure: (T) -> Int): String = label(MeasuredValue(value, measure(value)).size())
 
                     fun describeSize(size: Int): String = label(size)
                     internal fun internalLabel(size: Int): String = label(size)
@@ -391,6 +399,20 @@ class K2CompilerAdapterTest {
                 )
             assertNull(privateAccess.artifact)
             assertTrue(privateAccess.diagnostics.any { it.code == "INVISIBLE_REFERENCE" }, privateAccess.diagnostics.toString())
+            val internalConstructor =
+                adapter.compile(
+                    CompileRequest(
+                        RequestId.of(40u),
+                        listOf(source("project/Constructor.kt", "fun main() { sample.LibraryReader(1) }")),
+                        TargetSettings.KOTLIN_2_4_JVM_17,
+                        workerIdentity,
+                        WorkerLimits(),
+                        selected,
+                        emptyList(),
+                    ),
+                )
+            assertNull(internalConstructor.artifact)
+            assertTrue(internalConstructor.diagnostics.any { it.code == "INVISIBLE_REFERENCE" }, internalConstructor.diagnostics.toString())
             val internalAccess =
                 adapter.compile(
                     CompileRequest(

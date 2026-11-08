@@ -301,7 +301,9 @@ class PlatformMetadataCompilerTest {
                 it.symbol == "sample.Reason.MISSING" && it.kind.name == "FIELD"
             },
         )
-        assertFalse(metadata.libraryDeclarations.any { it.symbol.startsWith("sample.Hidden") })
+        assertTrue(metadata.libraryDeclarations.any { it.symbol == "sample.Hidden" && !it.exported })
+        assertFalse(metadata.exportedSymbols.any { it.startsWith("sample.Hidden") })
+        assertFalse(metadata.completionDeclarations.any { it.symbol.startsWith("sample.Hidden") })
         assertFalse(metadata.libraryDeclarations.any { it.symbol.startsWith("sample.Signal") })
     }
 }

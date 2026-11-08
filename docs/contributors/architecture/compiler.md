@@ -328,7 +328,10 @@ also permits a service's legacy logical binding owner to equal its public interf
 `NativeGuestContractBuildTest` compiles actual standalone libraries containing interface defaults, MFVC
 helpers, resource handles and command factories, checks preserved selectors/tombstones and exact packaged
 sources, and covers a pure executable library without capabilities. The public Gradle addon plugin uses this
-native pipeline. `ExternalAddonBuildTest` verifies a separate Guest project dependency, typed host compilation
+native pipeline. Trusted generic source templates link their private helper types and internal constructors
+through canonical library symbols, including implicit no-argument constructors; Kotlin source visibility remains enforced. `K2CompilerAdapterTest`
+(`source library generic functions and classes specialize in consumer`) covers helper reuse and rejected direct
+constructor access. `ExternalAddonBuildTest` verifies a separate Guest project dependency, typed host compilation
 and configuration-cache replay. `DeclarativeNativeIntegrationTest` compiles a consumer and executes interface
 defaults, MFVC methods and partial batch failures in the real VM. The pinned IDEA adapter imports the same
 module and dependency model; its actual Gradle import/reload tests are documented in the IDE support topic.

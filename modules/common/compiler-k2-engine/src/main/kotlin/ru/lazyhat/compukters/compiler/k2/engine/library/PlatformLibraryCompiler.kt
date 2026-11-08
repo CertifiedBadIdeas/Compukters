@@ -258,7 +258,7 @@ private fun ru.lazyhat.compukters.compiler.artifact.model.Artifact.withLibraryFr
     val lowered = modules.first()
     val typeDeclarations =
         declarations
-            .filter { it.exported && it.kind == PlatformLibraryDeclarationKind.TYPE }
+            .filter { it.kind == PlatformLibraryDeclarationKind.TYPE }
             .associateBy(PlatformLibraryDeclaration::symbol)
     val fieldDeclarations =
         declarations

@@ -162,6 +162,8 @@ headings so this page has one stable URL that can be shared outside the reposito
 - Guest Kotlin supports covariant read views for custom `out` interfaces, Sequence and Iterator,
   including primitive-to-nullable and Any views. Widening preserves object identity and scalar
   storage, boxing only widened reads; nested results and precompiled library owners share the same model.
+  Number conversions and Comparable calls also work through common types, including custom implementations,
+  nullable values and mixed numeric collections.
 
 - Tagged releases can submit both supported NeoForge base-mod JARs and the separate Create, CreateAddition,
   Sable and Propulsion addons to CurseForge with required dependency relations, recorded upload outcomes

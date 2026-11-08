@@ -1775,6 +1775,31 @@ class MinimalScriptLoweringTest {
         }
 
     @Test
+    fun `primitive Number and Comparable views preserve conversions dispatch and covariance`() =
+        withAdapter { adapter ->
+            val source = repositoryFile("modules/common/compiler-k2/src/test/resources/kotlin/primitive-supertypes.kt").readText()
+            val result = adapter.compile(request(source))
+            val bytes = assertNotNull(result.artifact, result.diagnostics.joinToString()).toByteArray()
+            System.getProperty("compukter.vm.primitiveSupertypesArtifact")?.let { output ->
+                Path.of(output).also { it.parent.createDirectories() }.writeBytes(bytes)
+            }
+        }
+
+    @Test
+    fun `Comparable source arguments and Number membership remain checked`() =
+        withAdapter { adapter ->
+            for (source in listOf(
+                "fun main() { val value: Comparable<Int> = 1; value.compareTo(\"bad\") }",
+                "fun main() { val value: Comparable<*> = 1; value.compareTo(2) }",
+                "fun main() { val value: Number = 1u }",
+            )) {
+                val result = adapter.compile(request(source))
+                assertNull(result.artifact, source)
+                assertTrue(result.diagnostics.any { it.severity == DiagnosticSeverity.ERROR }, source)
+            }
+        }
+
+    @Test
     fun `command descriptions capture values and batch results remain positional`() =
         withAdapter { adapter ->
             val source =

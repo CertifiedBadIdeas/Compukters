@@ -264,6 +264,10 @@ fn main() {
             let mut session = k2_stdio_session_with_heap("COMPUKTER_KOTLIN_ASYNC_ARTIFACT", 64, 256 * 1024);
             k2_assert_prints(&mut session, ["async ok\n"], 64);
         },
+        "primitive-supertypes" => {
+            let mut session = k2_stdio_session_with_heap("COMPUKTER_KOTLIN_PRIMITIVE_SUPERTYPES_ARTIFACT", 1, 256 * 1024);
+            k2_assert_prints(&mut session, ["primitive supertypes ok\n"], 1024);
+        },
         "commands" => k2_command_batches_capture_and_return_positional_results(),
         "tasks" => k2_tasks_keep_independent_host_requests_in_flight(),
         "timer" => k2_timer_sleep_publishes_one_bounded_request(),
