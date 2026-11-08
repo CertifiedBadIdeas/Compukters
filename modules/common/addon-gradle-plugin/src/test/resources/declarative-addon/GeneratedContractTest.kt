@@ -43,7 +43,7 @@ class GeneratedContractTest {
             addonCompleted(Unit)
         })
         val commands = assertIs<ProgramCommandProvider>(host).commandBindings
-        assertEquals(setOf("engineAim", "engineSetThrottle", "engineTarget"), commands.map { it.symbol.substringAfterLast('.') }.toSet())
+        assertEquals(setOf("engineAim", "engineSetThrottle", "engineTarget", "engineSpeed", "engineOrientation", "engineSnapshot", "engineClose", "engineState", "engineDirection", "snapshotSize", "snapshotClose"), commands.map { it.symbol.substringAfterLast('.') }.toSet())
         val throttle = commands.single { it.symbol.endsWith(".engineSetThrottle") }
         fun values(value: Double) = listOf(VmValue.I32(7), VmValue.F64(value.toBits()))
         for (invalid in listOf(Double.NaN, Double.POSITIVE_INFINITY, -0.01, 1.01)) {
@@ -103,6 +103,10 @@ class GeneratedContractTest {
         val host = FixtureAddonContract.host(handler { _, _ ->
             addonPending<Any> { polls++; null }
         })
+        val commands = assertIs<ProgramCommandProvider>(host).commandBindings
+        assertTrue(commands.none { it.symbol.endsWith(".engineAwaitState") })
+        assertIs<HostResponse.Failure>(commands.single { it.symbol.endsWith(".engineSpeed") }.execute(listOf(VmValue.I32(7))))
+        assertEquals(0, polls)
         val immediate = assertIs<ProgramAddonDispatch.Completed>(host.dispatch(request("engineSpeed", listOf(VmValue.I32(7)))))
         assertIs<HostResponse.Failure>(immediate.response)
         assertTrue(host.poll(8).isEmpty())

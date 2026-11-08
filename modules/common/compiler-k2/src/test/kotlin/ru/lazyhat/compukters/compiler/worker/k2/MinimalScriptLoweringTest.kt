@@ -1806,7 +1806,7 @@ class MinimalScriptLoweringTest {
                 """
                 import compukter.commands.*
                 fun main() {
-                    check(batch(emptyList()).isEmpty())
+                    check(batch<Unit>(emptyList()).isEmpty())
                     val bytes = byteArrayOf(1, 2)
                     val first = Command.unit("fixture.Binding.write", listOf(CommandArgument.int(7), CommandArgument.double(0.4), CommandArgument.bytes(bytes)))
                     bytes[0] = 99

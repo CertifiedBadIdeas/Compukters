@@ -150,19 +150,14 @@ fun analyzeNativeGuestContract(
                         }
                         val (operationId, operationAnnotation) = operationAnnotations.single()
                         val operationKind =
-                            when (operationId.shortClassName.asString()) {
-                                "GuestRead" -> GuestOperationKind.READ
-                                "GuestCall" -> GuestOperationKind.CALL
-                                "GuestCommand" -> GuestOperationKind.COMMAND
-                                else -> GuestOperationKind.WAIT
+                            if (operationId.shortClassName.asString() ==
+                                "GuestCall"
+                            ) {
+                                GuestOperationKind.CALL
+                            } else {
+                                GuestOperationKind.WAIT
                             }
                         val result = resolver.type(function.symbol.resolvedReturnType)
-                        require(
-                            operationKind != GuestOperationKind.COMMAND || result == "Unit",
-                        ) { "$owner.${function.name}: @GuestCommand must return Unit" }
-                        require(
-                            operationKind != GuestOperationKind.READ || result != "Unit",
-                        ) { "$owner.${function.name}: @GuestRead must return a value" }
                         val parameters =
                             function.valueParameters.map { parameter ->
                                 require(
@@ -223,7 +218,7 @@ fun analyzeNativeGuestContract(
         types.forEach { type ->
             val names =
                 type.operations.map { it.name } +
-                    type.operations.filter { it.kind == GuestOperationKind.COMMAND }.map { it.name + "Command" }
+                    type.operations.filter { it.kind == GuestOperationKind.CALL }.map { it.name + "Command" }
             require(names.distinct().size == names.size) { "${type.name}: overloaded or generated server method collision" }
         }
         DeclarativeGuestContract(types, sourceText, resolver.records.toMap(), interfaces)

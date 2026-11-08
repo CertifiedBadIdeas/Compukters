@@ -31,7 +31,7 @@ data class DeclarativeGuestContract(
 ) {
     val operations: List<GuestContractOperation> get() = types.flatMap { it.operations }
     val commands: Set<String>
-        get() = operations.filter { it.kind == GuestOperationKind.COMMAND }.mapTo(sortedSetOf()) { it.binding }
+        get() = operations.filter { it.kind == GuestOperationKind.CALL }.mapTo(sortedSetOf()) { it.binding }
 
     /** Source-level ABI names remain stable even when native implementation owners change. */
     fun bindingSymbol(operation: GuestContractOperation): String {
@@ -43,7 +43,7 @@ data class DeclarativeGuestContract(
     val bindingAliases: Map<String, String> get() = operations.associate { bindingSymbol(it) to it.binding }
 }
 
-enum class GuestOperationKind { READ, CALL, COMMAND, WAIT }
+enum class GuestOperationKind { CALL, WAIT }
 
 data class GuestContractType(
     val packageName: String,

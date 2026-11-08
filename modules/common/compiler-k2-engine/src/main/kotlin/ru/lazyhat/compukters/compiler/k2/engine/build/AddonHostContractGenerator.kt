@@ -183,9 +183,9 @@ fun renderAddonHostContract(
         capabilities.forEach { capability ->
             bindings.getValue(capability).sortedBy(AddonGuestApiBinding::operation).forEach { binding ->
                 val operation = schemas.getValue(binding.capability).operations[binding.operation]
-                if (operation.result != AddonCapabilityValueType.UNIT) return@forEach
+                if (declaration == null && operation.result != AddonCapabilityValueType.UNIT) return@forEach
                 if (declaredOperations != null &&
-                    declaredOperations.getValue(binding.symbol).kind != GuestOperationKind.COMMAND
+                    declaredOperations.getValue(binding.symbol).kind != GuestOperationKind.CALL
                 ) {
                     return@forEach
                 }
@@ -217,7 +217,12 @@ fun renderAddonHostContract(
                         "return@command invalidCommand()",
                         "                ",
                     )
-                appendLine("                acceptCommand(${capability.name}Handler.${binding.callableName}($arguments))")
+                val resultEncoder =
+                    operation.resultRecord?.let { "encode${it.simpleName()}(it)" }
+                        ?: operation.result.encodeExpression("it")
+                appendLine(
+                    "                acceptCommand(${capability.name}Handler.${binding.callableName}($arguments)) { $resultEncoder }",
+                )
                 appendLine("            }))")
                 appendLine("        }")
             }
@@ -243,8 +248,10 @@ fun renderAddonHostContract(
             "    private fun invalidCommand(): HostResponse = HostResponse.Failure(HostFailureKind.OTHER, \"Malformed command arguments\")",
         )
         appendLine()
-        appendLine("    private fun acceptCommand(result: AddonCallResult<Unit>): HostResponse = when (result) {")
-        appendLine("        is AddonCallResult.Completed -> HostResponse.UnitSuccess")
+        appendLine(
+            "    private fun <T> acceptCommand(result: AddonCallResult<T>, encode: (T) -> HostResponse): HostResponse = when (result) {",
+        )
+        appendLine("        is AddonCallResult.Completed -> encode(result.value)")
         appendLine("        is AddonCallResult.Failed -> HostResponse.Failure(result.kind, result.detail)")
         appendLine(
             "        is AddonCallResult.Pending -> HostResponse.Failure(HostFailureKind.OTHER, \"Command handler attempted to wait\")",

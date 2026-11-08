@@ -88,6 +88,47 @@ internal class GuestBoundaryTypes(
             }
         }
 
+    /** Read the ordinary response shape before invoking the original Guest constructors/factories. */
+    fun decodeCommand(
+        type: String,
+        reader: String,
+    ): String =
+        if (type == "Unit") {
+            "$reader.unit()"
+        } else {
+            buildString {
+                var next = 0
+
+                fun read(type: String): String {
+                    val expression =
+                        if (type in resources) {
+                            "${nativeImplementation(type)}($reader.int())"
+                        } else {
+                            val record = records[type]
+                            if (record == null) {
+                                val method = if (type == "ByteArray") "bytes" else type.replaceFirstChar(Char::lowercase)
+                                "$reader.$method()"
+                            } else {
+                                val factory =
+                                    record.construction
+                                        ?.factory
+                                        ?.takeIf { it.isNotEmpty() }
+                                        ?.let { ".$it" }
+                                        .orEmpty()
+                                if (factory.isEmpty() || record.fields.size != 1) appendLine("$reader.record(${record.fields.size})")
+                                val arguments = record.fields.map { read(it.type) }.joinToString()
+                                "$type$factory($arguments)"
+                            }
+                        }
+                    val name = "__reply${next++}"
+                    appendLine("val $name = $expression")
+                    return name
+                }
+                val result = read(type)
+                append(result)
+            }
+        }
+
     fun arguments(
         operation: GuestContractOperation,
         handleExpression: String = "handle",

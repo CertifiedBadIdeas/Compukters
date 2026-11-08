@@ -220,6 +220,12 @@ malformed or shadowing bundles, and never execute addon JVM code. The first prod
 integration, whose declarations and contract are owned by the Create addon and built against the canonical
 base platform.
 
+Addon native interfaces use `@GuestCall` for immediate operations and `@GuestWait` for event-dependent replies.
+Boundary records are discovered from signatures without a marker. Every immediate operation gets a typed
+command factory; [command lists](kotlin/tasks.md#device-command-lists) support mixed results, identity-based typed
+lookup and positional iteration. `NativeGuestContractBuildTest`, `ExternalAddonBuildTest` and
+`DeclarativeNativeIntegrationTest` cover compilation, generated hosts and real native execution.
+
 ### One-shot sound
 
 **Status:** Supported.

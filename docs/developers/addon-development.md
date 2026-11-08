@@ -12,7 +12,7 @@ A Compukters addon is an ordinary, independently installed NeoForge mod. It owns
 Kotlin declarations and generated `.cagb` bundle. Compukters reads that data bundle when the addon registers it, but
 the base mod never links to or packages the addon implementation.
 
-This guide describes development SDK 0.8.0, versioned independently of the Compukters release. The SDK has its own
+This guide describes development SDK 0.9.0, versioned independently of the Compukters release. The SDK has its own
 compatibility version: Compukters releases do not require addon authors to update unless the public addon boundary
 changes. All artifacts belonging to one SDK release share that SDK version:
 
@@ -37,7 +37,7 @@ is needed for public assets. The archive contains a local file Maven repository,
 plugin DSL remain unchanged. There is no separate hosted Maven repository for Compukters dependencies.
 Kotlin, NeoForge and other upstream build dependencies still use their normal repositories.
 
-Select SDK 0.8.0 before using the declarations in this guide. For a template targeting an earlier SDK, migrate its
+Select SDK 0.9.0 before using the declarations in this guide. For a template targeting an earlier SDK, migrate its
 handwritten Guest sources using the contract layout below. To develop against local sources, select source mode explicitly:
 
 ```shell
@@ -115,7 +115,7 @@ Then apply the matching Compukters plugin version:
 // build.gradle.kts
 plugins {
     kotlin("jvm") version "2.4.10"
-    id("ru.lazyhat.compukters.addon") version "0.8.0"
+    id("ru.lazyhat.compukters.addon") version "0.9.0"
     // Apply and configure Loom/NeoForge as usual for the target mod.
 }
 
@@ -136,7 +136,7 @@ Compukters development mod with its own product version to the run configuration
 
 ## Declare the Guest API
 
-SDK 0.8 compiles `src/contract/kotlin` as native Guest Kotlin against the actual Guest stdlib, without a JVM
+SDK 0.9 compiles `src/contract/kotlin` as native Guest Kotlin against the actual Guest stdlib, without a JVM
 classpath. Package paths must belong to the addon namespace. Top-level annotated interfaces describe server operations;
 those operations have explicit types and no bodies. Ordinary supported Guest functions, interface defaults and
 value-class methods can live alongside them and execute in the VM. Boundary layouts still require immutable,
@@ -146,27 +146,34 @@ non-null constructor fields; generic boundary types, mutable stored state and op
 // src/contract/kotlin/example/sensors/Sensors.kt
 package example.sensors
 
-import ru.lazyhat.compukters.api.contracts.GuestRead
+import ru.lazyhat.compukters.api.contracts.GuestCall
 import ru.lazyhat.compukters.api.contracts.GuestService
 
 @GuestService
 interface Sensors {
-    @GuestRead
+    @GuestCall
     fun temperature(): Float
 }
 ```
 
 `@GuestDevice("example:sensor")` retains the interface and generates its internal handle implementation and typed discovery provider.
 `@GuestResource` describes a host-owned handle returned by another method, such as a stock snapshot, without discovery.
-Use `@GuestRead` for immediate observations, `@GuestCall` for other immediate operations, `@GuestCommand` for immediate
-Unit-returning mutations, and `@GuestWait` for operations allowed to return a pending continuation. A command also
-gets a local `methodCommand(...)` factory; value-returning calls and waits never get batch factories. A command failure
-is retained in its individual batch result and does not roll back or stop the remaining commands.
+Use `@GuestCall` for every immediate server operation, including observations, mutations and calls returning values.
+Each gets a local `methodCommand(...)` factory returning `Command<T>`. `@GuestWait` is reserved for operations
+allowed to retain a pending continuation and never gets a batch factory. A command failure is retained in its
+individual batch result and does not roll back or stop remaining commands. `batch(commands)` returns `BatchResults<T>`:
+iterate it to check every position, or use `results[command]` to retain that command's result type. Repeated objects
+execute at every position and use `results.getAll(command)`; the singular accessor rejects ambiguous matches.
+
+Boundary record types are discovered structurally from operation signatures, including nested stdlib and dependency
+types; no record marker is required. Records keep the same constructor/factory checks and ABI lock validation.
+When migrating older contracts, replace `@GuestRead` and `@GuestCommand` with `@GuestCall` and remove `@GuestRecord`.
+Recompile Guest programs using batches: this SDK uses command capability ABI 2 and does not retain the old wire format.
 
 The operation annotations have an optional `binding` parameter. Omit it for new methods: the SDK derives a name
 from the class and method, so `LiquidThruster.setThrottle` becomes `liquidThrusterSetThrottle`. The class prefix
 keeps methods such as `close()` distinct in the shared host handler. Set `binding` explicitly only when you need
-a different ABI name, for example `@GuestCommand(binding = "liquidSetThrottle")` to retain an existing lock entry
+a different ABI name, for example `@GuestCall(binding = "liquidSetThrottle")` to retain an existing lock entry
 when migrating or renaming a method. Existing explicit names do not need to change.
 
 `@Finite`, `@DoubleRange`, `@IntRange` and `@MaxLength` on parameters generate both Guest prechecks and authoritative

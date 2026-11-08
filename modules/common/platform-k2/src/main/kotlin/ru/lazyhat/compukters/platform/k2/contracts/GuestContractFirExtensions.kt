@@ -64,14 +64,14 @@ object GuestContractAnnotations {
     val device = ClassId.topLevel(FqName("$PACKAGE.GuestDevice"))
     val service = ClassId.topLevel(FqName("$PACKAGE.GuestService"))
     val resource = ClassId.topLevel(FqName("$PACKAGE.GuestResource"))
-    val command = ClassId.topLevel(FqName("$PACKAGE.GuestCommand"))
-    val operations = listOf("GuestRead", "GuestCall", "GuestCommand", "GuestWait").map { ClassId.topLevel(FqName("$PACKAGE.$it")) }
+    val call = ClassId.topLevel(FqName("$PACKAGE.GuestCall"))
+    val operations = listOf("GuestCall", "GuestWait").map { ClassId.topLevel(FqName("$PACKAGE.$it")) }
 }
 
 private val devicePredicate = LookupPredicate.create { annotated(GuestContractAnnotations.device.asSingleFqName()) }
 private val servicePredicate = LookupPredicate.create { annotated(GuestContractAnnotations.service.asSingleFqName()) }
 private val resourcePredicate = LookupPredicate.create { annotated(GuestContractAnnotations.resource.asSingleFqName()) }
-private val commandPredicate = LookupPredicate.create { annotated(GuestContractAnnotations.command.asSingleFqName()) }
+private val callPredicate = LookupPredicate.create { annotated(GuestContractAnnotations.call.asSingleFqName()) }
 private val operationPredicate = LookupPredicate.create { annotated(GuestContractAnnotations.operations.map { it.asSingleFqName() }) }
 private val companionPredicate =
     LookupPredicate.create {
@@ -133,7 +133,7 @@ private class GuestContractDeclarations(
     session: FirSession,
 ) : FirDeclarationGenerationExtension(session) {
     override fun FirDeclarationPredicateRegistrar.registerPredicates() {
-        register(devicePredicate, servicePredicate, resourcePredicate, commandPredicate, operationPredicate, companionPredicate)
+        register(devicePredicate, servicePredicate, resourcePredicate, callPredicate, operationPredicate, companionPredicate)
     }
 
     private fun FirClassSymbol<*>.isDevice() = session.predicateBasedProvider.matches(devicePredicate, this)
@@ -195,7 +195,7 @@ private class GuestContractDeclarations(
                 ) {
                     add(function.name)
                 }
-                if (function.symbol.hasAnnotation(GuestContractAnnotations.command, session)) {
+                if (function.symbol.hasAnnotation(GuestContractAnnotations.call, session)) {
                     add(Name.identifier("${function.name.asString()}Command"))
                 }
             }
@@ -227,7 +227,7 @@ private class GuestContractDeclarations(
         return functions(contract).mapNotNull { function ->
             val factory =
                 callableId.callableName.asString() == "${function.name.asString()}Command" &&
-                    function.symbol.hasAnnotation(GuestContractAnnotations.command, session)
+                    function.symbol.hasAnnotation(GuestContractAnnotations.call, session)
             val serviceCall =
                 outer != null && callableId.callableName == function.name &&
                     GuestContractAnnotations.operations.any { function.symbol.hasAnnotation(it, session) }
@@ -239,7 +239,7 @@ private class GuestContractDeclarations(
             val result =
                 if (factory) {
                     command.constructClassLikeType(
-                        arrayOf(session.builtinTypes.unitType.coneType),
+                        arrayOf(function.symbol.resolvedReturnType),
                         false,
                     )
                 } else {

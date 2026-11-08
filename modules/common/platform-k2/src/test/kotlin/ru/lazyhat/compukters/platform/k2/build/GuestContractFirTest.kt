@@ -39,14 +39,15 @@ class GuestContractFirTest {
             }
             @GuestDevice("fixture:engine")
             interface Engine {
-                @GuestRead fun velocity(): Velocity
-                @GuestCommand fun setThrottle(value: Double): Unit
+                @GuestCall fun velocity(): Velocity
+                @GuestCall fun setThrottle(value: Double): Unit
                 fun direction(): Vector3d = velocity().direction()
             }
             fun use(): Vector3d {
                 val engine: Engine = Engine.first()
                 val peripheral: Peripheral = engine
                 val command: Command<Unit> = engine.setThrottleCommand(0.4)
+                val read: Command<Velocity> = engine.velocityCommand()
                 return engine.direction()
             }
             """.trimIndent(),
@@ -66,7 +67,7 @@ class GuestContractFirTest {
             import ru.lazyhat.compukters.api.contracts.*
             import kotlin.math.Vector3d
             @GuestService interface Space {
-                @GuestRead fun position(): Vector3d
+                @GuestCall fun position(): Vector3d
                 fun distance(): Double = position().length
             }
             fun use(): Double = Space.distance() + Space.position().x
@@ -79,16 +80,17 @@ class GuestContractFirTest {
             """
             package fixture
             import ru.lazyhat.compukters.api.contracts.*
+            import kotlin.math.Vector3d
             @GuestDevice("fixture:engine") interface Engine {
                 companion object { const val DEFAULT: Double = 0.5 }
-                @GuestCommand fun setThrottle(value: Double): Unit
+                @GuestCall fun setThrottle(value: Double): Unit
             }
             @GuestService interface Space {
                 companion object {
                     const val SECONDS: Double = 0.05
                     fun twice(): Double = SECONDS * 2.0
                 }
-                @GuestRead fun time(): Double
+                @GuestCall fun time(): Double
             }
             fun use(): Double {
                 Engine.first().setThrottleCommand(Engine.DEFAULT)
@@ -105,7 +107,7 @@ class GuestContractFirTest {
             import ru.lazyhat.compukters.api.contracts.*
             import kotlin.math.Vector3d
             @GuestDevice("fixture:engine") interface Engine {
-                @GuestCommand fun aim(value: Vector3d): Unit
+                @GuestCall fun aim(value: Vector3d): Unit
             }
             fun use() { Engine.first().aimCommand("invalid") }
             """.trimIndent(),
@@ -146,7 +148,10 @@ class GuestContractFirTest {
                 },
             )
             listOf(stdlib, core).forEach { output ->
-                assertFalse(output.diagnostics.hasErrors, output.diagnostics.diagnostics.joinToString { it.factoryName })
+                assertFalse(
+                    output.diagnostics.hasErrors,
+                    output.diagnostics.diagnostics.joinToString { "${it.factoryName}: ${it.renderMessage()}" },
+                )
             }
             val output =
                 environment.compile(
@@ -155,7 +160,13 @@ class GuestContractFirTest {
                     listOf(builtins, stdlib, core),
                     listOf(GuestContractFirExtensionRegistrar()),
                 )
-            assertEquals(errors, output.diagnostics.hasErrors, output.diagnostics.diagnostics.joinToString { it.factoryName })
+            assertEquals(
+                errors,
+                output.diagnostics.hasErrors,
+                output.diagnostics.diagnostics.joinToString {
+                    "${it.factoryName}: ${it.renderMessage()}"
+                },
+            )
             block(output)
         }
     }

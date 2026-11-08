@@ -57,8 +57,8 @@ sealed interface AddonCallResult<out T> {
 }
 
 interface AddonHostHandler : AutoCloseable {
-    /** Legacy host compatibility only; declarative contracts derive eligibility from @GuestCommand. */
-    @Deprecated("Declare @GuestCommand in the addon contract; generated hosts ignore this set")
+    /** Legacy host compatibility only; declarative contracts derive eligibility from @GuestCall. */
+    @Deprecated("Declare @GuestCall in the addon contract; generated hosts ignore this set")
     val batchCommands: Set<String> get() = emptySet()
 
     fun checkpoint(): ByteArray = throw UnsupportedOperationException("Addon handler does not support hibernation")

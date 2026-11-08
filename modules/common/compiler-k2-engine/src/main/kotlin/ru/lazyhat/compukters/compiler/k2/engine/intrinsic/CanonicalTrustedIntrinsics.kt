@@ -37,7 +37,7 @@ object CanonicalTrustedIntrinsics {
     val peripheral = PlatformCapabilityId("compukters", "peripheral", 1)
     val keyboard = PlatformCapabilityId("compukters", "keyboard", 1)
     val network = PlatformCapabilityId("compukters", "network", 1)
-    val commands = PlatformCapabilityId("compukters", "commands", 1)
+    val commands = PlatformCapabilityId("compukters", "commands", 2)
     val timer = PlatformCapabilityId("compukter", "timer", 1)
 
     val executableCapabilities: Set<PlatformCapabilityId> =

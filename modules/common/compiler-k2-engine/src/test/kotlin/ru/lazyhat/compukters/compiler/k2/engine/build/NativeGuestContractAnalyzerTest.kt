@@ -22,12 +22,12 @@ class NativeGuestContractAnalyzerTest {
         fixture(
             """
             @GuestDevice("fixture:engine") interface Engine {
-                @GuestRead fun state(): Int
-                @GuestCommand fun setThrottle(value: Double): Unit
+                @GuestCall fun state(): Int
+                @GuestCall fun setThrottle(value: Double): Unit
                 @GuestCall(binding = "") fun close(): Unit
             }
             @GuestResource interface Snapshot { @GuestCall fun close(): Unit }
-            @GuestService interface Api { @GuestRead(binding = "legacyValue") fun value(): Int }
+            @GuestService interface Api { @GuestCall(binding = "legacyValue") fun value(): Int }
             """.trimIndent(),
         ) { model ->
             assertEquals(
@@ -40,12 +40,12 @@ class NativeGuestContractAnalyzerTest {
                 ),
                 model.operations.map { it.binding }.toSet(),
             )
-            assertEquals(setOf("fixture.EngineBindings.engineSetThrottle"), model.commands)
+            assertEquals(model.operations.map { it.binding }.toSet(), model.commands)
         }
 
     @Test
     fun `byte array results retain scalar wire semantics`() =
-        fixture("@GuestService interface Api { @GuestRead fun read(): ByteArray }") { model ->
+        fixture("@GuestService interface Api { @GuestCall fun read(): ByteArray }") { model ->
             val generated = Files.createTempDirectory("native-byte-array-")
             try {
                 writeGeneratedGuestSources(model, generated)
@@ -73,19 +73,19 @@ class NativeGuestContractAnalyzerTest {
     @Test
     fun `invalid transport shapes and constraint contracts are rejected natively`() {
         listOf(
-            "abstract class Accidental { @GuestRead abstract fun value(): Int }",
-            "interface Accidental { @GuestRead fun value(): Int }",
-            "class Outer { @GuestService interface Nested { @GuestRead fun value(): Int } }",
-            "data class State(val value: Int = 1)\n@GuestService interface Api { @GuestRead fun state(): State }",
-            "data class State(val bytes: ByteArray)\n@GuestService interface Api { @GuestRead fun state(): State }",
-            "@GuestService interface Api<T> { @GuestRead fun value(): T }",
-            "@GuestService interface Api { @GuestRead fun value(): List<Int> }",
-            "@GuestService interface Api { @GuestRead fun value(): Int? }",
-            "@GuestService interface Api { @GuestRead fun value(arg: Int = 1): Int }",
+            "abstract class Accidental { @GuestCall abstract fun value(): Int }",
+            "interface Accidental { @GuestCall fun value(): Int }",
+            "class Outer { @GuestService interface Nested { @GuestCall fun value(): Int } }",
+            "data class State(val value: Int = 1)\n@GuestService interface Api { @GuestCall fun state(): State }",
+            "data class State(val bytes: ByteArray)\n@GuestService interface Api { @GuestCall fun state(): State }",
+            "@GuestService interface Api<T> { @GuestCall fun value(): T }",
+            "@GuestService interface Api { @GuestCall fun value(): List<Int> }",
+            "@GuestService interface Api { @GuestCall fun value(): Int? }",
+            "@GuestService interface Api { @GuestCall fun value(arg: Int = 1): Int }",
             "@GuestService interface Api { @GuestCall fun value(@Finite arg: Int): Unit }",
             "@GuestService interface Api { @GuestCall fun value(@DoubleRange(min = 2.0, max = 1.0) arg: Double): Unit }",
             "@GuestService interface Api { @GuestCall fun value(@MaxLength(-1) arg: String): Unit }",
-            "@GuestService interface Api { @GuestCommand fun write(): Unit; @GuestRead fun writeCommand(): Int }",
+            "@GuestService interface Api { @GuestCall fun write(): Unit; @GuestCall fun writeCommand(): Int }",
             "data class Node(val child: Node)\n@GuestService interface Api { @GuestCall fun send(node: Node): Unit }",
             "@GuestService interface Api { @GuestCall fun send(a: kotlin.math.Matrix4d, b: kotlin.math.Matrix4d, c: Double): Unit }",
             "@GuestService interface Api { @GuestCall fun send(a: kotlin.math.Vector3d, a_x: Double): Unit }",
@@ -109,8 +109,8 @@ class NativeGuestContractAnalyzerTest {
                 fun direction(): Vector = velocity.direction()
             }
             @GuestDevice("fixture:engine") interface Engine {
-                @GuestRead fun state(): State
-                @GuestCommand fun aim(direction: Direction): Unit
+                @GuestCall fun state(): State
+                @GuestCall fun aim(direction: Direction): Unit
                 fun direction(): Vector = state().direction()
             }
             fun use(): Vector = Engine.first().direction()
@@ -153,7 +153,7 @@ class NativeGuestContractAnalyzerTest {
             """
             const val LIMIT: Double = 2.0
             @GuestDevice("fixture:engine") interface Engine {
-                @GuestCommand fun set(@DoubleRange(min = -LIMIT, max = LIMIT + 1.0) value: Double): Unit
+                @GuestCall fun set(@DoubleRange(min = -LIMIT, max = LIMIT + 1.0) value: Double): Unit
             }
             """.trimIndent(),
         ) { model ->
@@ -179,8 +179,8 @@ class NativeGuestContractAnalyzerTest {
                 companion object { fun fromAxis(value: Vector3d): Direction = Direction(value.normalized()) }
             }
             @GuestService interface Api {
-                @GuestRead fun orientation(): Rotation3d
-                @GuestCommand fun aim(direction: Direction): Unit
+                @GuestCall fun orientation(): Rotation3d
+                @GuestCall fun aim(direction: Direction): Unit
             }
             """.trimIndent(),
         ) { model ->
@@ -206,7 +206,7 @@ class NativeGuestContractAnalyzerTest {
                     value class Quantity private constructor(val value: Double) {
                         companion object { fun of(value: Int): Quantity = Quantity(value.toDouble()) }
                     }
-                    @GuestService interface Api { @GuestRead fun value(): Quantity }
+                    @GuestService interface Api { @GuestCall fun value(): Quantity }
                     """.trimIndent(),
                 ) {}
             }
@@ -217,23 +217,23 @@ class NativeGuestContractAnalyzerTest {
     fun `mutable data is rejected at the transport boundary`() {
         val error =
             assertFailsWith<IllegalArgumentException> {
-                fixture("data class State(var value: Double)\n@GuestService interface Api { @GuestRead fun state(): State }") {}
+                fixture("data class State(var value: Double)\n@GuestService interface Api { @GuestCall fun state(): State }") {}
             }
         assertTrue(error.message.orEmpty().contains("public val fields"), error.message)
     }
 
     @Test
-    fun `server annotations require bodyless methods and commands require Unit`() {
+    fun `server annotations require bodyless methods and immediate values get command factories`() {
         val body =
             assertFailsWith<IllegalArgumentException> {
-                fixture("@GuestService interface Api { @GuestRead fun value(): Double = 1.0 }") {}
+                fixture("@GuestService interface Api { @GuestCall fun value(): Double = 1.0 }") {}
             }
         assertTrue(body.message.orEmpty().contains("must have no body"), body.message)
-        val result =
-            assertFailsWith<IllegalArgumentException> {
-                fixture("@GuestService interface Api { @GuestCommand fun value(): Double }") {}
-            }
-        assertTrue(result.message.orEmpty().contains("must return Unit"), result.message)
+        fixture("@GuestService interface Api { @GuestCall fun value(): Double; @GuestWait fun awaitValue(): Double }") { model ->
+            val sources = generateGuestContractSources(model).values.joinToString("\n")
+            assertTrue("valueCommand(): compukter.commands.Command<Double>" in sources)
+            assertTrue("awaitValueCommand" !in sources)
+        }
     }
 
     @Test

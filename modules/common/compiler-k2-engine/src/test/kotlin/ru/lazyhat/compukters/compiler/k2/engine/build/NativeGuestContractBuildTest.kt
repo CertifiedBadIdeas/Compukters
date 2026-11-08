@@ -30,21 +30,21 @@ class NativeGuestContractBuildTest {
                 fun direction(): Vector3d = velocity.direction()
             }
             @GuestResource interface Token {
-                @GuestRead fun value(): Double
+                @GuestCall fun value(): Double
                 fun twice(): Double = value() * 2.0
             }
             @GuestDevice("fixture:engine", bindings = "EngineBindings") interface Engine {
-                @GuestRead fun state(): State
-                @GuestRead fun bounds(): kotlin.math.Rect2i
-                @GuestCommand(binding = "aim") fun aim(direction: Vector3d): Unit
-                @GuestCommand fun target(state: State): Unit
+                @GuestCall fun state(): State
+                @GuestCall fun bounds(): kotlin.math.Rect2i
+                @GuestCall(binding = "aim") fun aim(direction: Vector3d): Unit
+                @GuestCall fun target(state: State): Unit
                 @GuestCall fun open(): Token
-                @GuestCommand fun consume(token: Token): Unit
+                @GuestCall fun consume(token: Token): Unit
                 fun direction(): Vector3d = state().direction()
             }
             @GuestService(bindings = "Space") interface Space {
                 companion object { const val SCALE: Double = 2.0 }
-                @GuestRead(binding = "time") fun time(): Double
+                @GuestCall(binding = "time") fun time(): Double
                 fun twice(): Double = time() * SCALE
             }
             fun use(): Double {
