@@ -42,7 +42,7 @@ object ComputerBlockGameTest {
                 ),
                 Identifier.fromNamespaceAndPath(MOD_ID, "empty"),
                 // GameTestServer runs ticks without pacing; allow real filesystem/compiler workers to finish.
-                100_000,
+                if (System.getProperty("compukters.memoryProbe.population") != null) 2_000_000 else 100_000,
                 0,
                 true,
                 Rotation.NONE,
@@ -52,6 +52,13 @@ object ComputerBlockGameTest {
                 false,
                 0,
             )
+        if (System.getProperty("compukters.memoryProbe.population") != null) {
+            event.registerTest(
+                Identifier.fromNamespaceAndPath(MOD_ID, "vm_benchmark"),
+                VmBenchmarkGameTest(testData("vm_benchmark")),
+            )
+            return
+        }
         event.registerTest(
             Identifier.fromNamespaceAndPath(MOD_ID, "redstone_port"),
             RedstonePortGameTest(testData("redstone_port")),

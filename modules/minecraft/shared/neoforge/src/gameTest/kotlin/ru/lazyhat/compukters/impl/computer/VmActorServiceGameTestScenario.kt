@@ -18,7 +18,6 @@
 
 package ru.lazyhat.compukters.impl.computer
 
-import ru.lazyhat.compukters.lang.runtime.fs.VmSystemImage
 import net.minecraft.gametest.framework.GameTestHelper
 import ru.lazyhat.compukters.core.device.computer.ActorProgramComputer
 import ru.lazyhat.compukters.core.device.runtime.actor.ProgramRuntimeActorCommand
@@ -28,6 +27,7 @@ import ru.lazyhat.compukters.core.device.runtime.program.ProgramRuntimeState
 import ru.lazyhat.compukters.core.device.runtime.program.RedstoneCommitResult
 import ru.lazyhat.compukters.impl.fs.WorldFileSystemStoreRegistry
 import ru.lazyhat.compukters.lang.runtime.fs.ComputerId
+import ru.lazyhat.compukters.lang.runtime.fs.VmSystemImage
 import ru.lazyhat.compukters.lang.runtime.fs.WorldFileSystemStore
 import java.nio.file.Files
 import java.util.concurrent.CompletableFuture

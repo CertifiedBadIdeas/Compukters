@@ -87,6 +87,16 @@ loom.runs.register("gameTestServer") {
     runDir("run/gameTestServer")
     property("neoforge.enabledGameTestNamespaces", "compukters")
     ideConfigGenerated(true)
+    val memoryPopulation = providers.gradleProperty("compuktersMemoryProbePopulation").orNull
+    if (memoryPopulation != null && buildContext.versionKey == "v261") {
+        require(memoryPopulation.toInt() in 1..4096) { "Memory probe population must be in 1..4096" }
+        val directory = providers.gradleProperty("compuktersMemoryProbeDirectory").get()
+        require(file(directory).isAbsolute) { "Memory probe directory must be absolute" }
+        property("compukters.memoryProbe.population", memoryPopulation)
+        property("compukters.memoryProbe.directory", directory)
+        runDir("$directory/server")
+        vmArgs("-Xms256m", "-Xmx2g", "-XX:+UseSerialGC", "-XX:NativeMemoryTracking=summary")
+    }
     if (buildContext.versionKey == "v261") {
         vmArgs("--enable-native-access=ALL-UNNAMED", "--illegal-native-access=deny")
     }

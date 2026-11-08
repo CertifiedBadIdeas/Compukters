@@ -29,6 +29,10 @@ import java.util.concurrent.CompletableFuture
 
 internal object VmBenchmarkGameTestScenario {
     fun run(helper: GameTestHelper) {
+        if (System.getProperty("compukters.memoryProbe.population") != null) {
+            PhysicalVmMemoryProbe.run(helper)
+            return
+        }
         val server = helper.level.server
         val firstPosition = BlockPos.ZERO
         val secondPosition = firstPosition.east()

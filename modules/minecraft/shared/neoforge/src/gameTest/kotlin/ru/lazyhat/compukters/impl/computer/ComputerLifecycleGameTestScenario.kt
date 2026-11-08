@@ -18,7 +18,6 @@
 
 package ru.lazyhat.compukters.impl.computer
 
-import ru.lazyhat.compukters.lang.runtime.fs.VmSystemImage
 import net.minecraft.core.BlockPos
 import net.minecraft.gametest.framework.GameTestHelper
 import net.minecraft.world.level.GameType
@@ -61,6 +60,7 @@ import ru.lazyhat.compukters.impl.network.serverOperation
 import ru.lazyhat.compukters.impl.registry.CompuktersRegistry
 import ru.lazyhat.compukters.lang.runtime.fs.ComputerId
 import ru.lazyhat.compukters.lang.runtime.fs.FileSystemStoreHealth
+import ru.lazyhat.compukters.lang.runtime.fs.VmSystemImage
 import ru.lazyhat.compukters.lang.runtime.vm.TerminalKey
 import ru.lazyhat.compukters.lang.runtime.vm.TerminalKeyAction
 import ru.lazyhat.compukters.lang.runtime.vm.TerminalModifier
@@ -331,10 +331,20 @@ internal object ComputerLifecycleGameTestScenario {
                 .router(helper.level.server)
 
         TestProgramComputer(
-            ProgramRuntimeHost(store = firstContext.store, computerId = firstId, systemImage = VmSystemImage.of(rom), compilerRouter = router),
+            ProgramRuntimeHost(
+                store = firstContext.store,
+                computerId = firstId,
+                systemImage = VmSystemImage.of(rom),
+                compilerRouter = router,
+            ),
         ).use { first ->
             TestProgramComputer(
-                ProgramRuntimeHost(store = secondContext.store, computerId = secondId, systemImage = VmSystemImage.of(rom), compilerRouter = router),
+                ProgramRuntimeHost(
+                    store = secondContext.store,
+                    computerId = secondId,
+                    systemImage = VmSystemImage.of(rom),
+                    compilerRouter = router,
+                ),
             ).use { second ->
                 helper.assertTrue(first.turnOn() == ProgramComputerState.Running, "first compiler computer did not boot")
                 helper.assertTrue(second.turnOn() == ProgramComputerState.Running, "second compiler computer did not boot")
@@ -371,7 +381,12 @@ internal object ComputerLifecycleGameTestScenario {
 
         val generation =
             TestProgramComputer(
-                ProgramRuntimeHost(store = firstContext.store, computerId = firstId, systemImage = VmSystemImage.of(rom), compilerRouter = router),
+                ProgramRuntimeHost(
+                    store = firstContext.store,
+                    computerId = firstId,
+                    systemImage = VmSystemImage.of(rom),
+                    compilerRouter = router,
+                ),
             ).use { computer ->
                 helper.assertTrue(computer.turnOn() == ProgramComputerState.Running, "editor computer did not boot")
                 advanceUntilInput(computer)
@@ -412,7 +427,12 @@ internal object ComputerLifecycleGameTestScenario {
         firstContext.store.flush(firstId, generation)
 
         TestProgramComputer(
-            ProgramRuntimeHost(store = firstContext.store, computerId = firstId, systemImage = VmSystemImage.of(rom), compilerRouter = router),
+            ProgramRuntimeHost(
+                store = firstContext.store,
+                computerId = firstId,
+                systemImage = VmSystemImage.of(rom),
+                compilerRouter = router,
+            ),
         ).use { restored ->
             helper.assertTrue(restored.turnOn() == ProgramComputerState.Running, "restored editor computer did not boot")
             advanceUntilInput(restored)
@@ -429,7 +449,12 @@ internal object ComputerLifecycleGameTestScenario {
         }
 
         TestProgramComputer(
-            ProgramRuntimeHost(store = secondContext.store, computerId = secondId, systemImage = VmSystemImage.of(rom), compilerRouter = router),
+            ProgramRuntimeHost(
+                store = secondContext.store,
+                computerId = secondId,
+                systemImage = VmSystemImage.of(rom),
+                compilerRouter = router,
+            ),
         ).use { isolated ->
             helper.assertTrue(isolated.turnOn() == ProgramComputerState.Running, "isolated editor computer did not boot")
             advanceUntilInput(isolated)
@@ -448,7 +473,9 @@ internal object ComputerLifecycleGameTestScenario {
         val rom = processTestRom()
         val context = NeoForgeWorldFileSystemStores.contextSource.create(helper.level, computerId, VmSystemImage.of(rom))
         writeFixture(context.store, computerId, "filesystem-write.cpkt", rom)
-        TestProgramComputer(ProgramRuntimeHost(store = context.store, computerId = computerId, systemImage = VmSystemImage.of(rom))).use { computer ->
+        TestProgramComputer(
+            ProgramRuntimeHost(store = context.store, computerId = computerId, systemImage = VmSystemImage.of(rom)),
+        ).use { computer ->
             helper.assertTrue(computer.turnOn() == ProgramComputerState.Running, "IDE filesystem computer did not boot")
             advanceUntilInput(computer)
             val profile =
