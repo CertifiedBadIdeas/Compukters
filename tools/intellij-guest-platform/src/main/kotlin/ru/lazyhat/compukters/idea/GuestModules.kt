@@ -65,9 +65,10 @@ class GuestPlatformDetector : TargetPlatformDetector {
     }
 }
 
-class GuestSourceModule private constructor(
+class GuestSourceModule internal constructor(
     private val hostModule: Module,
-    val bundle: PlatformBundle,
+    val bundle: PlatformBundle?,
+    val generation: Long = 0,
 ) : KaSourceModuleBase() {
     internal val navigationFiles = ConcurrentHashMap<String, VirtualFile>()
     override val entityId get() = ModuleId(hostModule.name)
@@ -75,9 +76,9 @@ class GuestSourceModule private constructor(
     override val name get() = hostModule.name
     override val project: Project get() = hostModule.project
 
-    override fun equals(other: Any?) = other is GuestSourceModule && other.hostModule == hostModule
+    override fun equals(other: Any?) = other is GuestSourceModule && other.hostModule == hostModule && other.generation == generation
 
-    override fun hashCode() = hostModule.hashCode()
+    override fun hashCode() = 31 * hostModule.hashCode() + generation.hashCode()
 
     override val targetPlatform get() = CompuktersPlatforms.default
     override val languageVersionSettings =
@@ -87,7 +88,7 @@ class GuestSourceModule private constructor(
             specificFeatures = mapOf(LanguageFeature.ValueClasses to LanguageFeature.State.ENABLED),
         )
     override val baseContentScope get() = GlobalSearchScope.moduleScope(hostModule)
-    override val directRegularDependencies: List<KaModule> = listOf(GuestLibraryModule(project, bundle))
+    override val directRegularDependencies: List<KaModule> = bundle?.let { listOf(GuestLibraryModule(project, it)) }.orEmpty()
     override val directDependsOnDependencies: List<KaModule> = emptyList()
     override val transitiveDependsOnDependencies: List<KaModule> = emptyList()
     override val directFriendDependencies: List<KaModule> = emptyList()
@@ -97,6 +98,10 @@ class GuestSourceModule private constructor(
 
         @Synchronized
         fun forModule(module: Module): GuestSourceModule? {
+            module.project
+                .getService(GuestProjectRegistry::class.java)
+                .sourceFor(module)
+                ?.let { return it }
             module.getUserData(KEY)?.let { return it }
             val root =
                 ModuleRootManager.getInstance(module).contentRoots.firstOrNull {

@@ -29,20 +29,27 @@ physical paths are bounded`.
 
 ## IDE and tooling
 
-### IntelliJ Guest platform prototype
+### IntelliJ Guest Kotlin adapter
 
-**Status:** Developer prototype; separate from the supported embedded editor and SDK contract source set.
+**Status:** Developer adapter pinned to IntelliJ IDEA 2026.1.5.1; separate from the embedded editor.
 
 `tools/intellij-guest-platform` connects the independent Guest target to IntelliJ IDEA 2026.1.5.1's bundled
 K2 plugin. It reads actual platform metadata, enables MFVC source methods, completes stdlib and compiled addon
 members, reports argument type errors and navigates to bundled stdlib sources. Its test sandbox is isolated
-from the user's IDE. The adapter depends on internal IDE module APIs and is pinned to the verified build;
-automatic Gradle import and the unified executable contract authoring pipeline are not yet implemented.
+from the user's IDE. The adapter depends on internal IDE module APIs and is pinned to the verified build.
+Gradle import creates a separate native module for `src/contract/kotlin`, leaving host modules on their ordinary
+JVM target. The addon plugin's tooling model supplies native platform and Guest dependency artifacts without
+running compilation or updating the ABI lock.
 
 The shared native FIR extension also analyzes annotated device/service interfaces alongside ordinary
 Guest bodies. Device discovery companions and Unit command factories participate in actual K2 resolution
 and completion; the public declarations remain interfaces. Contract annotations are metadata-only declarations
-in `compukter:core` 9.6.0. These analysis tests do not yet establish executable addon contract generation.
+in `compukter:core` 9.6.0. Server operation bodies and non-Unit commands report errors in native analysis.
+The same source module can contain ordinary executable Guest methods.
+
+The `Compukters Guest` status widget shows active, loading and error states, and opens module/input details.
+Gradle reload and changes to platform/dependency files invalidate K2 analysis; invalid artifacts retain the
+native target and report a loading error. Imported configuration is persisted in `.idea/compukters-guest.xml`.
 
 **Contract frontend evidence:** `GuestContractFirTest`, `NativeGuestContractAnalyzerTest` and the real
 IDE tests `testNativeContractAndExecutableMfvc`, `testNativeCommandFactoryCompletion`,
@@ -51,7 +58,10 @@ through FIR, rejects mutable record layouts and bodies on server operations, and
 
 **Evidence:** `GuestPlatformTest`; `testKotlinGuestLibraryPrototypeVmConformance` compiles the same `Velocity`
 fixture as a separate addon library and executes its stdlib-based methods from a consumer in the Rust VM.
-See the [prototype workflow](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/tools/intellij-guest-platform/README.md).
+The real `GuestGradleImportTest.testNativeModuleImportCompletionAndArtifactReload` imports an external Gradle
+fixture through IDEA's resolver, analyzes stdlib and dependency methods, completes generated commands, reloads
+corrupted/restored artifacts and removes obsolete configuration on reimport.
+See the [adapter workflow](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/tools/intellij-guest-platform/README.md).
 
 ### Kotlin typing and indentation
 

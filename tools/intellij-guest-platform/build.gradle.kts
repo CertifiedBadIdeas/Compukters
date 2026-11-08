@@ -26,7 +26,7 @@ plugins {
 }
 
 group = "ru.lazyhat.compukters"
-version = "0.1.0-prototype"
+version = "0.2.0-dev"
 
 repositories {
     mavenCentral()
@@ -38,6 +38,7 @@ dependencies {
         local(providers.gradleProperty("ideaHome"))
         bundledPlugin("org.jetbrains.kotlin")
         bundledPlugin("com.intellij.java")
+        bundledPlugin("com.intellij.gradle")
         testFramework(TestFrameworkType.Platform)
     }
     testImplementation("junit:junit:4.13.2")
@@ -56,6 +57,7 @@ kotlin {
     }
     sourceSets.main {
         kotlin.srcDir(common.resolve("platform-bundle/src/main/kotlin"))
+        kotlin.srcDir(common.resolve("addon-guest-api/src/main/kotlin"))
         kotlin.srcDir(common.resolve("platform-k2/src/main/kotlin/ru/lazyhat/compukters/platform/k2/contracts"))
     }
 }
@@ -76,15 +78,18 @@ java {
 intellijPlatform {
     pluginConfiguration {
         id = "ru.lazyhat.compukters.guest-platform"
-        name = "Compukters Guest Kotlin Platform (Prototype)"
+        name = "Compukters Guest Kotlin"
         ideaVersion { sinceBuild = "261.27258.136"; untilBuild = "261.27258.136" }
     }
     buildSearchableOptions = false
     instrumentCode = false
 }
 tasks.test {
-    systemProperty("idea.load.plugins.id", "ru.lazyhat.compukters.guest-platform,org.jetbrains.kotlin,com.intellij.java")
+    systemProperty("idea.load.plugins.id", "ru.lazyhat.compukters.guest-platform,org.jetbrains.kotlin,com.intellij.java,com.intellij.gradle")
     systemProperty("compukters.prototype.platform", providers.gradleProperty("guestPlatform").get())
     systemProperty("compukters.prototype.fixture", file("fixture").absolutePath)
+    listOf("guestGradlePluginJar", "guestGradleHome", "guestBasePlatform", "guestDependency").forEach { name ->
+        providers.gradleProperty(name).orNull?.let { systemProperty("compukters.test.$name", it) }
+    }
     maxHeapSize = "3g"
 }

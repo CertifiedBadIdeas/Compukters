@@ -53,6 +53,7 @@ class GuestContractFirExtensionRegistrar : FirExtensionRegistrar() {
     override fun ExtensionRegistrarContext.configurePlugin() {
         +::GuestContractDeclarations
         +::GuestContractSupertypes
+        +::GuestContractCheckers
     }
 }
 
@@ -79,6 +80,11 @@ private val companionPredicate =
 private val peripheral = ClassId.topLevel(FqName("compukter.peripheral.Peripheral"))
 private val provider = ClassId.topLevel(FqName("compukter.peripheral.TypedPeripheralProvider"))
 private val command = ClassId.topLevel(FqName("compukter.commands.Command"))
+
+internal fun FirSession.isGuestContractOwner(symbol: FirClassSymbol<*>): Boolean =
+    predicateBasedProvider.matches(devicePredicate, symbol) ||
+        predicateBasedProvider.matches(servicePredicate, symbol) ||
+        predicateBasedProvider.matches(resourcePredicate, symbol)
 
 private fun FirSession.contractCompanionOwner(symbol: FirClassSymbol<*>): FirClassSymbol<*>? {
     if (moduleData.platform != CompuktersPlatforms.default) return null

@@ -138,6 +138,35 @@ class GuestPlatformTest : BasePlatformTestCase() {
         assertTrue("Expected typed provider completion; received $items", "first" in items)
     }
 
+    fun testServerOperationBoundariesHaveNativeDiagnostics() {
+        val file =
+            myFixture.configureByText(
+                "InvalidContract.kt",
+                """
+                import ru.lazyhat.compukters.api.contracts.*
+                abstract class Accidental { @GuestRead abstract fun value(): Int }
+                @GuestService interface Control {
+                    @GuestCommand fun invalidResult(): Int
+                    @GuestRead fun invalidBody(): Int = 42
+                    fun ordinaryBody(): Int = 42
+                }
+                """.trimIndent(),
+            ) as KtFile
+        allowAnalysisOnEdt {
+            runReadActionBlocking {
+                analyze(file) {
+                    val errors =
+                        file
+                            .collectDiagnostics(KaDiagnosticCheckerFilter.ONLY_COMMON_CHECKERS)
+                            .filter { it.severity.name == "ERROR" }
+                    assertTrue(errors.joinToString { it.defaultMessage }, errors.any { "must have no body" in it.defaultMessage })
+                    assertTrue(errors.joinToString { it.defaultMessage }, errors.any { "must return Unit" in it.defaultMessage })
+                    assertTrue(errors.joinToString { it.defaultMessage }, errors.any { "annotated interface" in it.defaultMessage })
+                }
+            }
+        }
+    }
+
     fun testCompiledAddonLibraryConsumer() {
         val fixture = Path.of(System.getProperty("compukters.prototype.fixture"))
         val file = myFixture.addFileToProject("main.kt", Files.readString(fixture.resolve("consumer/main.kt"))) as KtFile

@@ -259,7 +259,7 @@ class ExternalAddonBuildTest {
             }
             contractSource.toFile().appendText("\n@GuestDevice(\"fixture:invalid\") interface Invalid { @GuestCommand fun read(): Int }\n")
             val invalid = runner(project, "generateCompuktersGuestSources").buildAndFail()
-            assertTrue("@GuestCommand must return Unit" in invalid.output, invalid.output)
+            assertTrue("must return Unit" in invalid.output, invalid.output)
         } finally {
             Files.walk(project).use { paths -> paths.sorted(Comparator.reverseOrder()).forEach(Files::deleteIfExists) }
         }
