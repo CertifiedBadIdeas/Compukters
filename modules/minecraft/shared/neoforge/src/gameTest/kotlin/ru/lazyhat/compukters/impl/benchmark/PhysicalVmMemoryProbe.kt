@@ -37,6 +37,8 @@ import kotlin.io.path.writeText
 /** Explicit, disposable GameTest profile. Diagnostic full GC deliberately pauses this test server. */
 internal object PhysicalVmMemoryProbe {
     fun run(helper: GameTestHelper) {
+        val admission = System.getProperty("compukters.memoryProbe.admission", "gradual")
+        require(admission in setOf("gradual", "burst"))
         val count = requireNotNull(System.getProperty("compukters.memoryProbe.population")).toInt()
         require(count in 1..4096)
         val output = Path.of(requireNotNull(System.getProperty("compukters.memoryProbe.directory")))
@@ -67,7 +69,7 @@ internal object PhysicalVmMemoryProbe {
             output.resolve("$phase-nmt.txt").writeText(diagnostic("vmNativeMemory", arrayOf("summary", "scale=KB")))
             output.resolve("$phase-smaps.txt").writeText(Files.readString(Path.of("/proc/self/smaps_rollup")))
             output.resolve("$phase-metadata.txt").writeText(
-                "population=$count\nactors=${actors()}\nserverTick=${server.tickCount}\npid=${ProcessHandle.current().pid()}\n",
+                "population=$count\nadmission=$admission\nactors=${actors()}\nserverTick=${server.tickCount}\npid=${ProcessHandle.current().pid()}\n",
             )
         }
         helper.setBlock(warmup, CompuktersRegistry.COMPUTER.get())
@@ -96,6 +98,11 @@ internal object PhysicalVmMemoryProbe {
                 helper.assertTrue(System.nanoTime() >= baselineReadyNanos, "Minecraft baseline is warming")
             }.thenExecute {
                 snapshot("baseline")
+                if (admission == "burst") {
+                    // Place the whole fleet before another server tick can admit boot work.
+                    positions.forEach { helper.setBlock(it, CompuktersRegistry.COMPUTER.get()) }
+                    admitted = count
+                }
             }.thenWaitUntil {
                 // GameTest ticks are unpaced. Keep this yield below the VM host window.
                 LockSupport.parkNanos(100_000L)

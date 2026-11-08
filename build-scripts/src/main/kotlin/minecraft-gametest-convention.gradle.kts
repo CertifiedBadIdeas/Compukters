@@ -92,6 +92,9 @@ loom.runs.register("gameTestServer") {
         require(memoryPopulation.toInt() in 1..4096) { "Memory probe population must be in 1..4096" }
         val directory = providers.gradleProperty("compuktersMemoryProbeDirectory").get()
         require(file(directory).isAbsolute) { "Memory probe directory must be absolute" }
+        val admission = providers.gradleProperty("compuktersMemoryProbeAdmission").getOrElse("gradual")
+        require(admission in setOf("gradual", "burst")) { "Memory probe admission must be gradual or burst" }
+        property("compukters.memoryProbe.admission", admission)
         property("compukters.memoryProbe.population", memoryPopulation)
         property("compukters.memoryProbe.directory", directory)
         runDir("$directory/server")
