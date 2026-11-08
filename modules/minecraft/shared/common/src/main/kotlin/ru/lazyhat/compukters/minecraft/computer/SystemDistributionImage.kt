@@ -18,20 +18,26 @@
 
 package ru.lazyhat.compukters.minecraft.computer
 
+import ru.lazyhat.compukters.lang.runtime.fs.VmSystemImage
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.security.MessageDigest
 
-internal object SystemRomImage {
-    fun packaged(): ByteArray =
-        encodePrograms(
-            SystemProgramImage.boot(),
-            SystemProgramImage.shell(),
-            SystemProgramImage.kotlinc(),
-            SystemProgramImage.edit(),
-            SystemProgramImage.vmbench(),
-            SystemProgramImage.cmatrix(),
+internal object SystemDistributionImage {
+    fun packaged(): VmSystemImage = packagedImage
+
+    private val packagedImage: VmSystemImage by lazy {
+        VmSystemImage.of(
+            encodePrograms(
+                SystemProgramImage.boot(),
+                SystemProgramImage.shell(),
+                SystemProgramImage.kotlinc(),
+                SystemProgramImage.edit(),
+                SystemProgramImage.vmbench(),
+                SystemProgramImage.cmatrix(),
+            ),
         )
+    }
 
     fun encodePrograms(
         bootArtifact: ByteArray,
@@ -43,12 +49,12 @@ internal object SystemRomImage {
     ): ByteArray {
         val programs =
             listOf(
-                "/rom/boot" to bootArtifact,
-                "/rom/shell" to shellArtifact,
-                "/rom/kotlinc" to kotlincArtifact,
-                "/rom/edit" to editArtifact,
-                "/rom/vmbench" to vmbenchArtifact,
-                "/rom/cmatrix" to cmatrixArtifact,
+                "/boot/init" to bootArtifact,
+                "/bin/shell" to shellArtifact,
+                "/bin/kotlinc" to kotlincArtifact,
+                "/bin/edit" to editArtifact,
+                "/bin/vmbench" to vmbenchArtifact,
+                "/bin/cmatrix" to cmatrixArtifact,
             ).sortedBy { it.first }
         programs.forEach { (path, artifact) ->
             require(artifact.isNotEmpty()) { "system program $path must not be empty" }
@@ -81,7 +87,7 @@ internal object SystemRomImage {
         return payload + MessageDigest.getInstance("SHA-256").digest(payload)
     }
 
-    private val MAGIC = "CPKTROM\u0000".encodeToByteArray()
+    private val MAGIC = "CPKTSYS\u0000".encodeToByteArray()
     private const val VERSION: Short = 1
     private const val FILE_KIND: Byte = 2
     private const val EXECUTABLE_FLAG: Byte = 1

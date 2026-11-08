@@ -259,7 +259,7 @@ internal class ProgramRuntimeActorProcessor(
                 discardAllCandidates()
                 host.shutdown()
                 host.discardCheckpoint()
-                ProgramRuntimeActorValue.Start(host.startBoot())
+                ProgramRuntimeActorValue.Start(host.startBoot(command.installSystem))
             }
         }
     }

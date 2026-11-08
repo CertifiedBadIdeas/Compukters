@@ -10495,8 +10495,8 @@ class MinimalScriptLoweringTest {
                     normalized("/home/😀/../λ/./漢", "/home/λ/漢")
                     require(Path("/home/./notes") != Path("/home/notes"))
                     require(Path("/home/..").parent == Path("/home"))
-                    require(Path("/home").resolve("../rom").value == "/home/../rom")
-                    require(Path("/home").resolve("../rom").normalize() == Path("/rom"))
+                    require(Path("/home").resolve("../bin").value == "/home/../bin")
+                    require(Path("/home").resolve("../bin").normalize() == Path("/bin"))
                     val home = "/home".toPath()
                     require(home == Path("/home"))
                     val construct: (String) -> Path = ::Path
@@ -10512,10 +10512,10 @@ class MinimalScriptLoweringTest {
                     require(nullable?.value == "/")
                     val absent: Path? = Path("/").parent
                     require(absent == null)
-                    val paths = arrayOf(home, Path("/rom"))
-                    require(paths[0] == home && paths[1].value == "/rom")
-                    val list = listOf(home, Path("/rom"))
-                    require(list[0] == home && list[1].value == "/rom")
+                    val paths = arrayOf(home, Path("/bin"))
+                    require(paths[0] == home && paths[1].value == "/bin")
+                    val list = listOf(home, Path("/bin"))
+                    require(list[0] == home && list[1].value == "/bin")
                     val keys = mutableMapOf<Path, String>()
                     keys[home] = "found"
                     require(keys[Path("/home")] == "found")
@@ -10800,7 +10800,7 @@ class MinimalScriptLoweringTest {
                     FileSystem.delete(directory)
                     FileSystem.delete(home.resolve("fs-check"))
                     expect(FileSystemError.NOT_FOUND) { FileSystem.readBytes(file) }
-                    expect(FileSystemError.READ_ONLY) { FileSystem.writeBytes(Path("/rom/readonly"), byteArrayOf(1)) }
+                    expect(FileSystemError.PERMISSION_DENIED) { FileSystem.writeBytes(Path("/bin/readonly"), byteArrayOf(1)) }
                     val navigation = Path("/home/fs-nav")
                     FileSystem.createDirectory(navigation)
                     FileSystem.createDirectory(navigation.resolve("missing/../made"))
@@ -10828,12 +10828,12 @@ class MinimalScriptLoweringTest {
                     FileSystem.move(alias, destination)
                     require(FileSystem.statOrNull(canonical) == null)
                     require(FileSystem.readText(destination) == "new revision")
-                    expect(FileSystemError.READ_ONLY) { FileSystem.writeBytes(Path("/home/../rom/forbidden"), byteArrayOf(1)) }
-                    expect(FileSystemError.PERMISSION_DENIED) { FileSystem.createDirectories(Path("/home/../rom/forbidden/deep")) }
-                    expect(FileSystemError.READ_ONLY) { FileSystem.move(destination, Path("/home/../rom/moved")) }
+                    expect(FileSystemError.PERMISSION_DENIED) { FileSystem.writeBytes(Path("/home/../bin/forbidden"), byteArrayOf(1)) }
+                    expect(FileSystemError.PERMISSION_DENIED) { FileSystem.createDirectories(Path("/home/../bin/forbidden/deep")) }
+                    expect(FileSystemError.PERMISSION_DENIED) { FileSystem.move(destination, Path("/home/../bin/moved")) }
                     require(FileSystem.readText(destination) == "new revision")
                     expect(FileSystemError.PERMISSION_DENIED) { FileSystem.readBytes(Path("/home/../../etc/passwd")) }
-                    expect(FileSystemError.NOT_FOUND) { FileSystem.writeBytes(Path("/home/../../tmp/outside"), byteArrayOf(1)) }
+                    expect(FileSystemError.PERMISSION_DENIED) { FileSystem.writeBytes(Path("/home/../../tmp/outside"), byteArrayOf(1)) }
                     val rawOverLimit = Path("/home/" + String(CharArray(5000) { 'a' }, 0, 5000) + "/../fs-nav/moved")
                     require(rawOverLimit.normalize() == destination.normalize())
                     expect(FileSystemError.INVALID_PATH) { FileSystem.stat(rawOverLimit) }
@@ -10928,7 +10928,7 @@ class MinimalScriptLoweringTest {
                         require(result.diagnostics.contains("missingSymbol"))
                     }
                     val second = Tasks.launch {
-                        val result = failure(Compiler.compile(source, Path("/home/../rom/forbidden")))
+                        val result = failure(Compiler.compile(source, Path("/home/../bin/forbidden")))
                         require(result.reason == CompilationFailureReason.REJECTED)
                         require(result.diagnostics == "output is not writable")
                     }
@@ -10994,7 +10994,7 @@ class MinimalScriptLoweringTest {
                 import compukter.process.ProcessResult
 
                 fun main() {
-                    when (val result = Process.run(compukter.filesystem.Path("/rom/tool"), arrayOf("a", ""))) {
+                    when (val result = Process.run(compukter.filesystem.Path("/bin/tool"), arrayOf("a", ""))) {
                         is ProcessResult.Exited -> if (result.code != 0) Process.exit(result.code)
                         is ProcessResult.Failed -> if (result.reason == ProcessFailureReason.NOT_FOUND) {
                             Process.exit(2)
@@ -11024,8 +11024,8 @@ class MinimalScriptLoweringTest {
             assertTrue("compukter.process.ProcessFailureReason.NOT_FOUND" in imports.getValue(SymbolKind.FIELD))
 
             listOf(
-                "import compukter.process.Process\nfun main() { Process.run(\"/rom/tool\") }",
-                "import compukter.process.Process\nfun main() { Process.run(\"/rom/tool\", 1) }",
+                "import compukter.process.Process\nfun main() { Process.run(\"/bin/tool\") }",
+                "import compukter.process.Process\nfun main() { Process.run(\"/bin/tool\", 1) }",
                 "import compukter.process.Process\nfun main() { Process.commandLine() }",
                 "import compukter.process.ProcessBindings\nfun main() { ProcessBindings.takeFailureDiagnostic() }",
             ).forEach { forbiddenSource ->

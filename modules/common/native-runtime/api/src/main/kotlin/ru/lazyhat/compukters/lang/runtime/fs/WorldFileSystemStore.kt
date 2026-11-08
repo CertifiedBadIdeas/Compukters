@@ -65,6 +65,14 @@ class WorldFileSystemStore private constructor(
             bridge.storeRecover(requireHandle(), id.toByteArray())
         }
 
+    /** Explicit update/recovery; the caller must close the active machine first. */
+    fun installSystem(
+        id: ComputerId,
+        image: ByteArray,
+    ) = operationLock.withLock {
+        bridge.storeInstallSystem(requireHandle(), id.toByteArray(), image.copyOf())
+    }
+
     internal fun createMachine(
         id: ComputerId,
         romImage: ByteArray,
@@ -95,13 +103,12 @@ class WorldFileSystemStore private constructor(
     }
 
     internal fun restoreCheckpointMachine(
-        boot: Boolean,
         id: ComputerId,
         romImage: ByteArray,
         capabilitySchemas: ByteArray,
     ): Pair<LowLevelVmBridge, ByteArray?> =
         operationLock.withLock {
-            bridge to bridge.checkpointRestore(requireHandle(), boot, id.toByteArray(), romImage, capabilitySchemas)
+            bridge to bridge.checkpointRestore(requireHandle(), id.toByteArray(), romImage, capabilitySchemas)
         }
 
     fun discardCheckpoint(id: ComputerId) =

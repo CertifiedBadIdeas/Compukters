@@ -151,8 +151,8 @@ class ActorProgramComputer(
         return observe(service.request(lease.endpoint) { id -> ProgramRuntimeActorCommand.AbortRestoration(id, detail) }, version)
     }
 
-    fun reboot(): CompletableFuture<ProgramRuntimeActorReply> =
-        lifecycleRequest(ProgramRuntimeActorCommand::Reboot).also { bootRequest = it }.copy()
+    fun reboot(installSystem: Boolean = false): CompletableFuture<ProgramRuntimeActorReply> =
+        lifecycleRequest { id -> ProgramRuntimeActorCommand.Reboot(id, installSystem) }.also { bootRequest = it }.copy()
 
     fun shutdown(): CompletableFuture<ProgramRuntimeActorReply> {
         checkOwner()

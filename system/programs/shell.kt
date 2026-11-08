@@ -133,7 +133,7 @@ fun shellFallbackPath(
 ): String {
     if (command.isEmpty() || command.startsWith("/")) return ""
     if (result is ProcessResult.Failed && result.reason == ProcessFailureReason.NOT_FOUND) {
-        return "/rom/" + command
+        return "/bin/" + command
     }
     return ""
 }

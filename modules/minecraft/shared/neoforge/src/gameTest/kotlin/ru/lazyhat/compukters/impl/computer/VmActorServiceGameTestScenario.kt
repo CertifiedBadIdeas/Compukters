@@ -18,6 +18,7 @@
 
 package ru.lazyhat.compukters.impl.computer
 
+import ru.lazyhat.compukters.lang.runtime.fs.VmSystemImage
 import net.minecraft.gametest.framework.GameTestHelper
 import ru.lazyhat.compukters.core.device.computer.ActorProgramComputer
 import ru.lazyhat.compukters.core.device.runtime.actor.ProgramRuntimeActorCommand
@@ -47,7 +48,7 @@ internal object VmActorServiceGameTestScenario {
                 closer = WorldFileSystemStore::close,
             )
         val store = stores.store(root)
-        val lease = requireNotNull(service.attachBootable(endpoint, store, rom))
+        val lease = requireNotNull(service.attachBootable(endpoint, store, VmSystemImage.of(rom)))
         val computer = ActorProgramComputer(service, lease, { RedstoneCommitResult.Committed })
         stores.lifecycle(root).attach(endpoint.computerId, { computer.fileSystemGeneration }, computer::closeAsync)
         val boot = computer.turnOn()

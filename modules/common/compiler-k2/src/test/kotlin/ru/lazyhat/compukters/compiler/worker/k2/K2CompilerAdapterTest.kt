@@ -488,6 +488,24 @@ class K2CompilerAdapterTest {
     }
 
     @Test
+    fun `independent compiler instances produce identical program bytes`() {
+        val source = "fun main() { val values = intArrayOf(2, 3, 5); println(values[0] + values[1] + values[2]) }"
+        val packaged = K2CompilerAdapter.loadPackagedPlatform()
+        val selected =
+            packaged.modules.map { module ->
+                TrustedBundleIdentity.of(module.id.toString(), Hash256.of(PlatformBundleCodec.moduleContentHash(module).toByteArray()))
+            }
+        val results = mutableListOf<ByteArray>()
+        repeat(2) {
+            withAdapter(packaged) { adapter, _ ->
+                val result = adapter.compile(request(source, platformModules = selected))
+                results += assertNotNull(result.artifact, result.diagnostics.toString()).toByteArray()
+            }
+        }
+        assertContentEquals(results[0], results[1])
+    }
+
+    @Test
     fun `prepared libraries still enforce each requests artifact and temporary limits`() {
         val packaged = K2CompilerAdapter.loadPackagedPlatform()
         val selected =

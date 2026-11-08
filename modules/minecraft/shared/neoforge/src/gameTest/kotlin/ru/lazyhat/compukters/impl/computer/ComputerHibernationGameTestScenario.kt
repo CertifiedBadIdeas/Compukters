@@ -230,6 +230,23 @@ internal object ComputerHibernationGameTestScenario {
         awaitText("Compukters edit")
         awaitText("unsaved-before-between-after")
         sequence.thenExecute { helper.assertTrue(computer.computerId() == identity, "explicit reboot changed ComputerId") }
+        sequence.thenExecute {
+            val absolutePosition = helper.absolutePos(position)
+            helper.level.server.commands.performPrefixedCommand(
+                helper.level.server.createCommandSourceStack(),
+                "compukters system-update ${absolutePosition.x} ${absolutePosition.y} ${absolutePosition.z}",
+            )
+        }
+        awaitText(">\n", exact = true)
+        input {
+            computer.submitTerminalTextAsync("edit hibernation.txt").thenCompose {
+                check(it)
+                computer.submitTerminalKeyAsync(TerminalKey.ENTER, TerminalKeyAction.PRESS)
+            }
+        }
+        awaitText("Compukters edit")
+        awaitText("unsaved-before-between-after")
+        sequence.thenExecute { helper.assertTrue(computer.computerId() == identity, "system update changed ComputerId") }
         // Admission failure must leave a fresh usable shell and preserve the persisted /home file.
         listOf<(Path) -> Unit>(
             { checkpoint ->

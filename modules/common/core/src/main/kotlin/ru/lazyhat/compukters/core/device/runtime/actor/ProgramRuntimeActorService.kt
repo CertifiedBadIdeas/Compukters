@@ -33,6 +33,7 @@ import ru.lazyhat.compukters.core.device.runtime.program.RedstoneHostPort
 import ru.lazyhat.compukters.core.device.runtime.program.SoundCommitResult
 import ru.lazyhat.compukters.core.device.runtime.program.SoundHostPort
 import ru.lazyhat.compukters.core.device.runtime.program.SoundRequest
+import ru.lazyhat.compukters.lang.runtime.fs.VmSystemImage
 import ru.lazyhat.compukters.lang.runtime.fs.WorldFileSystemStore
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.ConcurrentHashMap
@@ -103,17 +104,17 @@ class ProgramRuntimeActorService(
     fun registerBootable(
         endpoint: VmActorEndpoint,
         store: WorldFileSystemStore,
-        romImage: ByteArray,
+        systemImage: VmSystemImage,
         tickBudget: ProgramTickBudget = ProgramTickBudget(),
         compilerRouter: CompilerCompletionRouter? = null,
         initialRedstoneOutput: Int = 0,
         addonHost: ProgramAddonHost? = null,
-    ): Boolean = attachBootable(endpoint, store, romImage, tickBudget, compilerRouter, initialRedstoneOutput, addonHost) != null
+    ): Boolean = attachBootable(endpoint, store, systemImage, tickBudget, compilerRouter, initialRedstoneOutput, addonHost) != null
 
     fun attachBootable(
         endpoint: VmActorEndpoint,
         store: WorldFileSystemStore,
-        romImage: ByteArray,
+        systemImage: VmSystemImage,
         tickBudget: ProgramTickBudget = ProgramTickBudget(),
         compilerRouter: CompilerCompletionRouter? = null,
         initialRedstoneOutput: Int = 0,
@@ -127,7 +128,7 @@ class ProgramRuntimeActorService(
             ProgramRuntimeHost(
                 store = store,
                 computerId = endpoint.computerId,
-                romImage = romImage,
+                systemImage = systemImage,
                 tickBudget = tickBudget,
                 compilerRouter = compilerRouter,
                 redstoneHostPort = port,

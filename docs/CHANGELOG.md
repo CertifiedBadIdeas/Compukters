@@ -28,6 +28,11 @@ headings so this page has one stable URL that can be shared outside the reposito
   operations and direct-call argument transfers before execution to reduce repeated operand-layout work
   in numeric code, data access and function calls.
 
+- Computers have a fully writable persistent root: `/boot/init`, system utilities in `/bin`, and user files
+  in `/home`. Bundled system files install once; `/compukters system-update x y z` explicitly reinstalls them
+  and restarts the computer while preserving user files. Copied binaries and identical compilation results
+  share file contents automatically across computers; editing one copy does not modify the others.
+
 - Guest Kotlin compilation removes proven redundant register copies, can use smaller stack frames,
   automatically inlines small scalar and value-class leaf functions, and replaces eligible interface calls
   with direct calls when immutable local references prove the concrete implementation.

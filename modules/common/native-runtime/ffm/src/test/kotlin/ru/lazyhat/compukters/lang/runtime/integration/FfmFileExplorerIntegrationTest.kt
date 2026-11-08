@@ -47,22 +47,22 @@ class FfmFileExplorerIntegrationTest {
                 val artifact = Files.readAllBytes(Path.of(requiredProperty("compukters.shell.artifact")))
                 WorldFileSystemStore.open(root, bridge).use { store ->
                     VmSession.bootInStore(store, ComputerId.fromLongs(3, 4), bootRom(artifact)).use { session ->
-                        val stat = session.fileStat(VmVirtualPath.of("/rom/boot"))
+                        val stat = session.fileStat(VmVirtualPath.of("/boot/init"))
                         assertEquals(VmFileKind.FILE, stat.metadata.kind)
                         assertEquals(artifact.size.toLong(), stat.metadata.logicalBytes)
                         assertTrue(stat.metadata.executable)
 
                         val firstRoot = session.fileList(VmVirtualPath.of("/"), null, 1)
-                        assertEquals(listOf("home"), firstRoot.entries.map { it.name })
+                        assertEquals(listOf("bin"), firstRoot.entries.map { it.name })
                         assertFalse(firstRoot.complete)
-                        val secondRoot = session.fileList(VmVirtualPath.of("/"), "home", 1)
-                        assertEquals(listOf("rom"), secondRoot.entries.map { it.name })
+                        val secondRoot = session.fileList(VmVirtualPath.of("/"), "boot", 1)
+                        assertEquals(listOf("home"), secondRoot.entries.map { it.name })
                         assertTrue(secondRoot.complete)
 
-                        val first = session.fileRead(VmVirtualPath.of("/rom/boot"), 0, 8, stat.metadata.generation)
+                        val first = session.fileRead(VmVirtualPath.of("/boot/init"), 0, 8, stat.metadata.generation)
                         val second =
                             session.fileRead(
-                                VmVirtualPath.of("/rom/boot"),
+                                VmVirtualPath.of("/boot/init"),
                                 first.nextOffset,
                                 8,
                                 stat.metadata.generation,
@@ -73,7 +73,7 @@ class FfmFileExplorerIntegrationTest {
                         val failure =
                             assertFailsWith<VmFileSystemReadException> {
                                 session.fileRead(
-                                    VmVirtualPath.of("/rom/boot"),
+                                    VmVirtualPath.of("/boot/init"),
                                     0,
                                     8,
                                     stat.metadata.generation + 1,
@@ -91,12 +91,12 @@ class FfmFileExplorerIntegrationTest {
     private fun requiredProperty(name: String): String = requireNotNull(System.getProperty(name)) { "missing $name test property" }
 
     private fun bootRom(artifact: ByteArray): ByteArray {
-        val path = "/rom/boot".encodeToByteArray()
+        val path = "/boot/init".encodeToByteArray()
         val unsigned =
             ByteBuffer
                 .allocate(16 + Int.SIZE_BYTES + path.size + 1 + 1 + Short.SIZE_BYTES + Long.SIZE_BYTES + artifact.size)
                 .order(ByteOrder.LITTLE_ENDIAN)
-                .put("CPKTROM\u0000".encodeToByteArray())
+                .put("CPKTSYS\u0000".encodeToByteArray())
                 .putShort(1.toShort())
                 .putShort(0.toShort())
                 .putInt(1)

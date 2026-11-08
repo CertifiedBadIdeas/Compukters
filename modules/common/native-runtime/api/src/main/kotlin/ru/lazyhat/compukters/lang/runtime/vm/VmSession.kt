@@ -383,10 +383,9 @@ class VmSession private constructor(
             id: ComputerId,
             romImage: ByteArray,
             capabilities: List<HostCapabilitySchema> = emptyList(),
-            boot: Boolean = true,
         ): VmCheckpointRestoration? {
             val schemas = HostCapabilitySchemaWire.encode(capabilities)
-            val (bridge, result) = store.restoreCheckpointMachine(boot, id, romImage.copyOf(), schemas)
+            val (bridge, result) = store.restoreCheckpointMachine(id, romImage.copyOf(), schemas)
             if (result == null) return null
             val handle = decodeNative { WireDecoder(result).createdHandle() }
             val session = admitted(handle, bridge)

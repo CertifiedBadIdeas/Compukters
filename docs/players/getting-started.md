@@ -84,7 +84,7 @@ rm "notes folder/archive/message.txt"
 `cat` prints strict UTF-8 text up to 65,536 encoded bytes, preserving the file's line endings without adding a newline.
 `mv` takes the complete destination path and refuses to replace an existing entry. `rm` removes a file or an empty
 directory; it does not delete a directory tree. Paths may contain `.` and `..`; filesystem access normalizes them,
-and `/rom` remains read-only. Executable paths also normalize before the shell starts a child program.
+including paths in the writable system directories. Executable paths also normalize before the shell starts a child program.
 
 ## Unload, resume and restart
 
@@ -92,10 +92,10 @@ Running computers hibernate when their carrier unloads and during orderly server
 the saved program, including unsaved editor text, terminal state and nested foreground programs. Timer waits retain their
 remaining ticks. A cleanly halted or shut-down computer stays off.
 
-If a saved execution snapshot is corrupt or incompatible, the computer logs the failure and boots again from ROM,
-retaining its identity and `/home` files. An operator can request a fresh boot with `/compukters reboot x y z` for a
+If a saved execution snapshot is corrupt or incompatible, the computer logs the failure and boots again from the installed `/boot/init`,
+retaining its identity and all saved files. An operator can request a fresh boot with `/compukters reboot x y z` for a
 loaded computer. This discards execution and unsaved edits,
-but retains the computer identity and `/home` files. Physics on Sable constructions keeps running while the computer
+but retains the computer identity and all saved files. Physics on Sable constructions keeps running while the computer
 restores. Restoration time depends on the saved execution, storage and server load.
 
 The base runtime, Sable observation addon and Propulsion engine controls support hibernation. Propulsion restores
@@ -163,9 +163,24 @@ Hello from Compukters!
 ```
 
 The source and executable live in this computer's writable `/home` filesystem. The built-in `edit`, `kotlinc`, and
-`shell` programs live in the read-only `/rom` filesystem. `/home` survives ordinary saves and world reloads; breaking a
+`shell` programs live in writable `/bin`; the boot program is `/boot/init`. `/home` survives ordinary saves and world reloads; breaking a
 computer removes its active filesystem and moves the data to a recoverable tombstone rather than treating the dropped
 block as a portable disk.
+
+### Explicit system update and recovery
+
+A new computer installs the bundled system once. Updating the mod or restarting a computer does not replace
+its installed system files. You can edit, move or delete them just like user files.
+
+An operator can run `/compukters system-update x y z` for a loaded computer. This closes its running programs,
+reinstalls the bundled system files atomically, and starts `/boot/init`. It also works when the installed boot
+or shell is missing. `/home` and files absent from the package are retained. A directory in place of a packaged
+file causes the update to fail without replacing any files; move or remove the conflicting directory first.
+The command uses the same Game Master permission as explicit reboot.
+
+Identical program binaries copied to several computers share their stored contents automatically. Compiling
+identical build inputs also reuses results and storage. Each computer keeps its own filenames and attributes;
+editing or deleting one copy does not change another computer or a running program.
 
 ### Useful IDE shortcuts
 

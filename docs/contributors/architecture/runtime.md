@@ -119,12 +119,13 @@ frames, static values, class initialization, tasks, requests and host bindings b
 A larger computer cannot lend its limits or device permissions to another computer through a shared program.
 Payload-relative field offsets are independent of heap header size, so shared instructions retain direct field access.
 
-A process-local 128-entry weak index canonicalizes only fully verified artifacts. It matches full container
-bytes as well as the digest, and never skips the caller's parsing/verification limits. The index is bounded
-and owns no strong code/data references. Evicting a live entry can reduce later sharing but cannot invalidate
-existing executions. Releasing the last artifact/image owner releases decoded metadata and prepared code;
-weak bookkeeping is bounded independently. Concurrent first preparation builds outside global locks and
-publishes a canonical winner. No host binding, world object or mutable Guest state enters the index.
+A process-local digest-indexed weak registry canonicalizes fully verified artifacts with complete-container
+equality. It never skips caller limits or evicts a live identity. The final artifact owner removes its registry
+entry and releases decoded metadata and prepared code. A separate weak registry shares immutable file blobs
+among private namespaces; executable reads pin those bytes without chunk copying. Global locks cover identity
+publication only. Candidates, verification and preparation run outside them, as do final owner destructors.
+No host binding, world object or mutable Guest state enters either registry. The JVM distribution image is
+immutable and shared by carrier and launch contexts, with defensive copies at mutable transport boundaries.
 
 Restore still verifies pinned binaries and performs fresh admission; derived program sharing can be reused
 while another owner is live. Checkpoint serialization contains logical execution state, not cache pointers.

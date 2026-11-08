@@ -12,9 +12,9 @@ permalink: /ARCHITECTURE/guest-execution/
 * On this page
 {:toc}
 
-Boot, shell, `kotlinc`, `edit`, and `vmbench` are ordinary no-std Kotlin programs packaged as extensionless executables in `/rom`.
+Boot, shell, `kotlinc`, `edit`, and `vmbench` are ordinary no-std Kotlin programs packaged as extensionless executables under `/bin`, with `/boot/init` as the boot entry.
 Shell owns line editing, authoritative echo, prompts, and direct built-ins. A non-absolute external command resolves
-first to `/home/<name>` and, only when that path is absent, falls back to `/rom/<name>`; an absolute command is used as
+first to `/home/<name>` and, only when that path is absent, falls back to `/bin/<name>`; an absolute command is used as
 given.
 
 `Process.run(path: Path)` and `Process.run(path: Path, args)` execute one verified extensionless artifact as a foreground child and
@@ -121,7 +121,7 @@ the same dispatch path.
 
 ## In-computer tools
 
-`/rom/kotlinc source.kt [-o output]` accepts exactly one source file today; its default output is the source basename
+`/bin/kotlinc source.kt [-o output]` accepts exactly one source file today; its default output is the source basename
 without `.kt`. This single-file in-computer command is distinct from the IDE and compiler protocol, which support
 bounded multi-file project snapshots. It converts explicit or `/home`-relative command arguments to lexical
 Path values; Compiler normalizes them before the native transaction. `Compiler.compile(source: Path, output: Path)`
@@ -129,7 +129,7 @@ returns a typed result containing the canonical successful output or a failure r
 Compiler capability ABI 2 returns status and diagnostics together, so other cooperative tasks cannot replace
 that result's diagnostic. Rust checks source and output revisions and rights before atomic executable installation.
 
-`/rom/edit <path>` is a nano-like 51x19 editor backed by one managed 4096-unit `CharArray` gap buffer. Cursor motion and
+`/bin/edit <path>` is a nano-like 51x19 editor backed by one managed 4096-unit `CharArray` gap buffer. Cursor motion and
 deletion preserve UTF-16 surrogate pairs, CRLF input is normalized to LF, Tab inserts four spaces, Enter inherits
 leading indentation, and the viewport scrolls in both axes. Ctrl+S writes through Rust-owned atomic `FileSystem.writeText`;
 Ctrl+X exits directly when clean or opens a Y/N/Escape save prompt when dirty. The buffer, source, and compiled artifact
@@ -138,8 +138,8 @@ in-computer loop is `edit demo.kt` -> `kotlinc demo.kt` -> `demo`; source and ar
 isolated by `ComputerId`.
 
 
-`/rom/vmbench cpu <rounds>` runs the documented deterministic, allocation-free integer/branch workload through the
-ordinary foreground process and VM quota path. `/rom/vmbench redstone <rounds>` normalizes the local top output to zero
+`/bin/vmbench cpu <rounds>` runs the documented deterministic, allocation-free integer/branch workload through the
+ordinary foreground process and VM quota path. `/bin/vmbench redstone <rounds>` normalizes the local top output to zero
 and then emits one acknowledged weak-power `15 -> 0` pulse per round; every transition suspends through the ordinary
 Guest redstone API until its physical server-thread commit is confirmed. These workloads exist to measure aggregate
 in-world runtime cost and do not own a timing capability, privileged execution budget, or benchmark-only host path.

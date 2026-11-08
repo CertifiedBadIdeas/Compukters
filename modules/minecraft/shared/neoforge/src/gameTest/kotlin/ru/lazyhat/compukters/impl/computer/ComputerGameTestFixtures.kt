@@ -26,20 +26,20 @@ internal object ComputerGameTestFixtures {
     fun processTestRom(): ByteArray {
         val programs =
             listOf(
-                "/rom/boot" to resource("/system/programs/boot"),
-                "/rom/edit" to resource("/system/programs/edit"),
-                "/rom/hello" to fixture("process-terminal-child.cpkt"),
-                "/rom/kotlinc" to resource("/system/programs/kotlinc"),
-                "/rom/shell" to resource("/system/programs/shell"),
-                "/rom/vmbench" to resource("/system/programs/vmbench"),
-            )
+                "/boot/init" to resource("/system/programs/boot"),
+                "/bin/edit" to resource("/system/programs/edit"),
+                "/bin/hello" to fixture("process-terminal-child.cpkt"),
+                "/bin/kotlinc" to resource("/system/programs/kotlinc"),
+                "/bin/shell" to resource("/system/programs/shell"),
+                "/bin/vmbench" to resource("/system/programs/vmbench"),
+            ).sortedBy { it.first }
         val payloadSize =
             programs.fold(16) { size, (path, artifact) ->
                 Math.addExact(size, 16 + path.encodeToByteArray().size + artifact.size)
             }
         val payload = ByteBuffer.allocate(payloadSize).order(ByteOrder.LITTLE_ENDIAN)
         payload
-            .put("CPKTROM\u0000".encodeToByteArray())
+            .put("CPKTSYS\u0000".encodeToByteArray())
             .putShort(1.toShort())
             .putShort(0.toShort())
             .putInt(programs.size)

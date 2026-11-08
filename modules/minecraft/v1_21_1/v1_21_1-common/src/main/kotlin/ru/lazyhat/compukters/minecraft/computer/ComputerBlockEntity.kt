@@ -234,12 +234,12 @@ open class ComputerBlockEntity internal constructor(
     }
 
     /** Discards execution state while retaining the computer identity and /home files. */
-    fun reboot(): ProgramComputerState {
+    fun reboot(installSystem: Boolean = false): ProgramComputerState {
         powerOffReason = null
         resumeExpected = false
         setChanged()
         val current = carrier ?: attachCarrier() ?: return runtimeState
-        runtimeState = current.reboot()
+        runtimeState = current.reboot(installSystem)
         return runtimeState
     }
 
@@ -296,7 +296,7 @@ open class ComputerBlockEntity internal constructor(
         val machineId = ComputerMachineEpochs.next()
         val filesystem =
             (level as? ServerLevel)?.let { serverLevel ->
-                filesystemContextSource?.create(serverLevel, identity.id(), SystemRomImage.packaged())
+                filesystemContextSource?.create(serverLevel, identity.id(), SystemDistributionImage.packaged())
             }
         val created =
             carrierFactory.create(

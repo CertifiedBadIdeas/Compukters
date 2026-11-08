@@ -15,7 +15,7 @@ permalink: /ARCHITECTURE/world-integration/
 ## World-thread effects and devices
 
 The Minecraft carrier owns exactly one actor endpoint and submits ordinary advancement once per server tick. Eligible host continuations may reuse the remaining frame credit, deadline and cumulative quotas described in [runtime ownership](runtime.md). Rust starts
-`/rom/boot`, compiled from `system/programs/boot.kt`; boot delegates to `/rom/shell`, compiled from
+`/boot/init`, compiled from `system/programs/boot.kt`; boot delegates to `/bin/shell`, compiled from
 `system/programs/shell.kt`. A foreground child suspends its parent until it exits or fails. There is one active
 foreground lane today, while the runtime contract leaves room for later parallel execution. Hibernation preserves the machine stack and terminal across unload/reload; reboot replaces the
 complete machine stack and clears the terminal. Minecraft sends full state to a new viewer and ordered deltas
@@ -179,7 +179,7 @@ drawing. Saved canvas schema, Guest calls and terminal transport are unchanged.
 
 Ctrl+C is reserved in computer terminal input (key code 67, CONTROL modifier), including the IDE target terminal.
 The native computer consumes it independently of Guest input polling and queue capacity. A press marks the foreground
-child below the nearest `/rom/shell` frame, or the first child of a standalone parent, for termination. An idle shell
+child below the nearest `/bin/shell` frame, or the first child of a standalone parent, for termination. An idle shell
 and a root without a parent are preserved; an idle press reaches Guest input. Successive native advances unwind its descendants with status 130 and
 ordinary `ProcessExited` lifecycle events, allowing the existing host scope cleanup to release peripheral leases and
 reject stale completions. The host cancels pending compilation and wakes an input/compiler wait; native termination

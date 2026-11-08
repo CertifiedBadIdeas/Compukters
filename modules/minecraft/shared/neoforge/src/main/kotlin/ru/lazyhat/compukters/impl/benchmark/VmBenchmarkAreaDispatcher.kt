@@ -106,7 +106,7 @@ internal enum class VmBenchmarkAreaWorkload(
     REDSTONE("redstone", 2),
     ;
 
-    fun command(rounds: Int): String = "/rom/vmbench $argument $rounds"
+    fun command(rounds: Int): String = "/bin/vmbench $argument $rounds"
 }
 
 internal interface VmBenchmarkAreaAccess {

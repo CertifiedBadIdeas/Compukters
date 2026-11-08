@@ -60,7 +60,7 @@ class FfmAbiParityIntegrationTest {
                 }.toMutableList()
         return when (function) {
             FfmAbiFunction.ABI_VERSION -> {
-                Probe(arguments, 24)
+                Probe(arguments, 25)
             }
 
             FfmAbiFunction.MAXIMUM_OUTCOME_BYTES -> {
@@ -122,6 +122,7 @@ class FfmAbiParityIntegrationTest {
             FfmAbiFunction.STORE_FLUSH,
             FfmAbiFunction.STORE_TOMBSTONE,
             FfmAbiFunction.STORE_RECOVER,
+            FfmAbiFunction.STORE_INSTALL_SYSTEM,
             FfmAbiFunction.CREATE,
             FfmAbiFunction.CREATE_IN_STORE,
             FfmAbiFunction.CREATE_BOOT_IN_STORE,

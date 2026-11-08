@@ -18,6 +18,7 @@
 
 package ru.lazyhat.compukters.impl.computer
 
+import ru.lazyhat.compukters.lang.runtime.fs.VmSystemImage
 import net.minecraft.core.BlockPos
 import net.minecraft.gametest.framework.GameTestHelper
 import net.minecraft.world.level.GameType
@@ -192,7 +193,7 @@ internal object ComputerLifecycleGameTestScenario {
         helper.setBlock(position, block)
         val entity = helper.compuktersComputerBlockEntity(position)
         val computerId = entity.computerId()
-        val context = NeoForgeWorldFileSystemStores.contextSource.create(helper.level, computerId, emptyRom())
+        val context = NeoForgeWorldFileSystemStores.contextSource.create(helper.level, computerId, VmSystemImage.of(emptyRom()))
         writeFixture(context.store, computerId, "filesystem-write.cpkt")
 
         val absolutePosition = helper.absolutePos(position)
@@ -237,12 +238,12 @@ internal object ComputerLifecycleGameTestScenario {
         computerId: ComputerId,
     ) {
         val rom = processTestRom()
-        val context = NeoForgeWorldFileSystemStores.contextSource.create(helper.level, computerId, rom)
+        val context = NeoForgeWorldFileSystemStores.contextSource.create(helper.level, computerId, VmSystemImage.of(rom))
         val generation =
-            VmSession.openInStore(fixture("process-install-rom-executable.cpkt"), context.store, computerId, rom).use { session ->
+            VmSession.openInStore(fixture("process-copy-executable.cpkt"), context.store, computerId, rom).use { session ->
                 helper.assertTrue(
                     advanceUntilHalted(session) == VmOutcome.Halted(VmValue.I32(0)),
-                    "ROM executable installer failed",
+                    "executable copy failed",
                 )
                 session.filesystemGeneration()
             }
@@ -251,7 +252,7 @@ internal object ComputerLifecycleGameTestScenario {
             ProgramRuntimeHost(
                 store = context.store,
                 computerId = computerId,
-                romImage = rom,
+                systemImage = VmSystemImage.of(rom),
                 // The compiled shell requires at least 66 guest units per slice.
                 tickBudget = ProgramTickBudget(128, 64, 4),
             ),
@@ -321,19 +322,19 @@ internal object ComputerLifecycleGameTestScenario {
         val rom = processTestRom()
         val firstId = uniqueComputerId()
         val secondId = uniqueComputerId()
-        val firstContext = NeoForgeWorldFileSystemStores.contextSource.create(helper.level, firstId, rom)
-        val secondContext = NeoForgeWorldFileSystemStores.contextSource.create(helper.level, secondId, rom)
-        writeFixture(firstContext.store, firstId, "filesystem-compilation-source.cpkt")
-        writeFixture(secondContext.store, secondId, "filesystem-compilation-source.cpkt")
+        val firstContext = NeoForgeWorldFileSystemStores.contextSource.create(helper.level, firstId, VmSystemImage.of(rom))
+        val secondContext = NeoForgeWorldFileSystemStores.contextSource.create(helper.level, secondId, VmSystemImage.of(rom))
+        writeFixture(firstContext.store, firstId, "filesystem-compilation-source.cpkt", rom)
+        writeFixture(secondContext.store, secondId, "filesystem-compilation-source.cpkt", rom)
         val router =
             ru.lazyhat.compukters.impl.compiler.NeoForgeCompilerServices
                 .router(helper.level.server)
 
         TestProgramComputer(
-            ProgramRuntimeHost(store = firstContext.store, computerId = firstId, romImage = rom, compilerRouter = router),
+            ProgramRuntimeHost(store = firstContext.store, computerId = firstId, systemImage = VmSystemImage.of(rom), compilerRouter = router),
         ).use { first ->
             TestProgramComputer(
-                ProgramRuntimeHost(store = secondContext.store, computerId = secondId, romImage = rom, compilerRouter = router),
+                ProgramRuntimeHost(store = secondContext.store, computerId = secondId, systemImage = VmSystemImage.of(rom), compilerRouter = router),
             ).use { second ->
                 helper.assertTrue(first.turnOn() == ProgramComputerState.Running, "first compiler computer did not boot")
                 helper.assertTrue(second.turnOn() == ProgramComputerState.Running, "second compiler computer did not boot")
@@ -362,15 +363,15 @@ internal object ComputerLifecycleGameTestScenario {
         val rom = processTestRom()
         val firstId = uniqueComputerId()
         val secondId = uniqueComputerId()
-        val firstContext = NeoForgeWorldFileSystemStores.contextSource.create(helper.level, firstId, rom)
-        val secondContext = NeoForgeWorldFileSystemStores.contextSource.create(helper.level, secondId, rom)
+        val firstContext = NeoForgeWorldFileSystemStores.contextSource.create(helper.level, firstId, VmSystemImage.of(rom))
+        val secondContext = NeoForgeWorldFileSystemStores.contextSource.create(helper.level, secondId, VmSystemImage.of(rom))
         val router =
             ru.lazyhat.compukters.impl.compiler.NeoForgeCompilerServices
                 .router(helper.level.server)
 
         val generation =
             TestProgramComputer(
-                ProgramRuntimeHost(store = firstContext.store, computerId = firstId, romImage = rom, compilerRouter = router),
+                ProgramRuntimeHost(store = firstContext.store, computerId = firstId, systemImage = VmSystemImage.of(rom), compilerRouter = router),
             ).use { computer ->
                 helper.assertTrue(computer.turnOn() == ProgramComputerState.Running, "editor computer did not boot")
                 advanceUntilInput(computer)
@@ -411,7 +412,7 @@ internal object ComputerLifecycleGameTestScenario {
         firstContext.store.flush(firstId, generation)
 
         TestProgramComputer(
-            ProgramRuntimeHost(store = firstContext.store, computerId = firstId, romImage = rom, compilerRouter = router),
+            ProgramRuntimeHost(store = firstContext.store, computerId = firstId, systemImage = VmSystemImage.of(rom), compilerRouter = router),
         ).use { restored ->
             helper.assertTrue(restored.turnOn() == ProgramComputerState.Running, "restored editor computer did not boot")
             advanceUntilInput(restored)
@@ -428,7 +429,7 @@ internal object ComputerLifecycleGameTestScenario {
         }
 
         TestProgramComputer(
-            ProgramRuntimeHost(store = secondContext.store, computerId = secondId, romImage = rom, compilerRouter = router),
+            ProgramRuntimeHost(store = secondContext.store, computerId = secondId, systemImage = VmSystemImage.of(rom), compilerRouter = router),
         ).use { isolated ->
             helper.assertTrue(isolated.turnOn() == ProgramComputerState.Running, "isolated editor computer did not boot")
             advanceUntilInput(isolated)
@@ -445,9 +446,9 @@ internal object ComputerLifecycleGameTestScenario {
     private fun verifyIdeTargetFileImport(helper: GameTestHelper) {
         val computerId = uniqueComputerId()
         val rom = processTestRom()
-        val context = NeoForgeWorldFileSystemStores.contextSource.create(helper.level, computerId, rom)
+        val context = NeoForgeWorldFileSystemStores.contextSource.create(helper.level, computerId, VmSystemImage.of(rom))
         writeFixture(context.store, computerId, "filesystem-write.cpkt", rom)
-        TestProgramComputer(ProgramRuntimeHost(store = context.store, computerId = computerId, romImage = rom)).use { computer ->
+        TestProgramComputer(ProgramRuntimeHost(store = context.store, computerId = computerId, systemImage = VmSystemImage.of(rom))).use { computer ->
             helper.assertTrue(computer.turnOn() == ProgramComputerState.Running, "IDE filesystem computer did not boot")
             advanceUntilInput(computer)
             val profile =
@@ -746,8 +747,8 @@ internal object ComputerLifecycleGameTestScenario {
         val secondId = second.computerId()
         helper.assertTrue(firstId != secondId, "two computers received the same identity")
 
-        val firstContext = NeoForgeWorldFileSystemStores.contextSource.create(helper.level, firstId, emptyRom())
-        val secondContext = NeoForgeWorldFileSystemStores.contextSource.create(helper.level, secondId, emptyRom())
+        val firstContext = NeoForgeWorldFileSystemStores.contextSource.create(helper.level, firstId, VmSystemImage.of(emptyRom()))
+        val secondContext = NeoForgeWorldFileSystemStores.contextSource.create(helper.level, secondId, VmSystemImage.of(emptyRom()))
         val firstGeneration = writeFixture(firstContext.store, firstId, "filesystem-write.cpkt")
         val secondGeneration = writeFixture(secondContext.store, secondId, "filesystem-write-alternate.cpkt")
 
@@ -795,7 +796,7 @@ internal object ComputerLifecycleGameTestScenario {
                     "closed store accepted a write after worker shutdown",
                 )
 
-                val reopened = NeoForgeWorldFileSystemStores.contextSource.create(helper.level, firstId, emptyRom()).store
+                val reopened = NeoForgeWorldFileSystemStores.contextSource.create(helper.level, firstId, VmSystemImage.of(emptyRom())).store
                 assertMarker(helper, reopened, firstId, FIRST_MARKER)
                 assertMarker(helper, reopened, secondId, SECOND_MARKER)
             },
@@ -877,7 +878,7 @@ internal object ComputerLifecycleGameTestScenario {
             ByteBuffer
                 .allocate(16)
                 .order(ByteOrder.LITTLE_ENDIAN)
-                .put("CPKTROM\u0000".encodeToByteArray())
+                .put("CPKTSYS\u0000".encodeToByteArray())
                 .putShort(1.toShort())
                 .putShort(0.toShort())
                 .putInt(0)

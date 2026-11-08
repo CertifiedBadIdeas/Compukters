@@ -20,9 +20,9 @@ for the features included in a published release.
 The compiler, canonical artifact, Java 21 JNI and JDK 25 FFM transports, managed Rust VM, standalone
 playground, loader-independent `ProgramRuntimeHost`, and server computer block
 form the executable platform. A computer starts the source-visible no-std
-`system/programs/boot.kt` from `/rom/boot`; boot launches `/rom/shell`, and the
+`system/programs/boot.kt` from `/boot/init`; boot launches `/bin/shell`, and the
 shell can run verified extensionless programs in the foreground through
-`Process.run`. The ordinary `/rom/kotlinc` program compiles one `.kt` source
+`Process.run`. The ordinary `/bin/kotlinc` program compiles one `.kt` source
 from `/home` into an extensionless executable, using a server-global persistent
 cache and an isolated K2 child process without blocking the server tick.
 NeoForge GameTests cover registration, automatic boot, two computers compiling
@@ -46,8 +46,8 @@ Compukter artifacts cross into the Rust runtime, which owns execution, quotas,
 managed memory, scheduling, and host-neutral sessions.
 
 The Rust runtime also owns each computer's filesystem. Minecraft persists only
-a stable `ComputerId`; the immutable packaged `/rom` and isolated persistent
-`/home` are mounted inside Rust. World data is rooted at
+a stable `ComputerId`; a private writable root tree with `/boot`, `/bin` and
+`/home` is persisted inside Rust. World data is rooted at
 `<world>/compukters/filesystems`, flushed on saves and shutdown, and moved to a
 recoverable tombstone when a player destroys the corresponding computer. Guest
 code passes pure `Path` values to `FileSystem` for metadata, directory snapshots, byte I/O and strict UTF-8

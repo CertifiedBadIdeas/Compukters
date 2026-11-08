@@ -24,6 +24,7 @@ import ru.lazyhat.compukters.lang.runtime.fs.FileSystemStoreOpenException
 import ru.lazyhat.compukters.lang.runtime.fs.FileSystemStoreOpenFailure
 import ru.lazyhat.compukters.lang.runtime.fs.WorldFileSystemStore
 import ru.lazyhat.compukters.lang.runtime.vm.FfmBridge
+import ru.lazyhat.compukters.lang.runtime.vm.VmBootException
 import ru.lazyhat.compukters.lang.runtime.vm.VmSession
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
@@ -58,8 +59,13 @@ class FfmFileSystemIntegrationTest {
                         id,
                         emptyRom(),
                     ).use { }
-                VmSession.bootInStore(store, id, bootRom(artifact)).use { }
-                assertEquals(0, store.durableGeneration(id))
+                // Supplying a new distribution must not silently repair or update an installed tree.
+                assertFailsWith<VmBootException> { VmSession.bootInStore(store, id, bootRom(artifact)) }
+                store.installSystem(id, bootRom(artifact))
+                VmSession.bootInStore(store, id, emptyRom()).use { session ->
+                    assertEquals(2, session.filesystemGeneration())
+                }
+                assertEquals(2, store.durableGeneration(id))
                 store.tombstone(id)
                 store.recover(id)
                 store.close()
@@ -82,7 +88,7 @@ class FfmFileSystemIntegrationTest {
             ByteBuffer
                 .allocate(16)
                 .order(ByteOrder.LITTLE_ENDIAN)
-                .put("CPKTROM\u0000".encodeToByteArray())
+                .put("CPKTSYS\u0000".encodeToByteArray())
                 .putShort(1.toShort())
                 .putShort(0.toShort())
                 .putInt(0)
@@ -91,12 +97,12 @@ class FfmFileSystemIntegrationTest {
     }
 
     private fun bootRom(artifact: ByteArray): ByteArray {
-        val path = "/rom/boot".encodeToByteArray()
+        val path = "/boot/init".encodeToByteArray()
         val unsigned =
             ByteBuffer
                 .allocate(16 + Int.SIZE_BYTES + path.size + 1 + 1 + Short.SIZE_BYTES + Long.SIZE_BYTES + artifact.size)
                 .order(ByteOrder.LITTLE_ENDIAN)
-                .put("CPKTROM\u0000".encodeToByteArray())
+                .put("CPKTSYS\u0000".encodeToByteArray())
                 .putShort(1.toShort())
                 .putShort(0.toShort())
                 .putInt(1)

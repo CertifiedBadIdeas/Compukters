@@ -23,7 +23,7 @@ import compukter.process.ProcessFailureReason
 import compukter.process.ProcessResult
 
 fun main() {
-    val diagnostic = bootDiagnostic(Process.run(Path("/rom/shell")))
+    val diagnostic = bootDiagnostic(Process.run(Path("/bin/shell")))
     if (diagnostic.isNotEmpty()) Stderr.write("boot failed: " + diagnostic + "\n")
 }
 

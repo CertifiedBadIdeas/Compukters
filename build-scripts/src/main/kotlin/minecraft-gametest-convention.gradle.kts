@@ -55,7 +55,7 @@ tasks.named<ProcessResources>(gameTest.processResourcesTaskName) {
         "filesystem-compilation-source.cpkt",
         "filesystem-read.cpkt",
         "process-terminal-child.cpkt",
-        "process-install-rom-executable.cpkt",
+        "process-copy-executable.cpkt",
     ).forEach { fixture ->
         from(rootProject.layout.projectDirectory.file("host/compukter-vm/tests/fixtures/$fixture")) {
             into("fixtures")

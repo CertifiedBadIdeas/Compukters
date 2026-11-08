@@ -24,10 +24,10 @@ import kotlin.test.assertEquals
 
 class FfmAbiFunctionTest {
     @Test
-    fun `ABI v23 inventory has 49 unique C status and scalar functions`() {
+    fun `ABI v25 inventory has 50 unique C status and scalar functions`() {
         val functions = FfmAbiFunction.entries
 
-        assertEquals(49, functions.size)
+        assertEquals(50, functions.size)
         assertEquals(functions.size, functions.map(FfmAbiFunction::symbol).toSet().size)
         functions.forEach { function ->
             assert(function.symbol.startsWith("compukter_"))
