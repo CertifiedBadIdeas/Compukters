@@ -145,3 +145,19 @@ val programRuntimeIntegrationTest =
 tasks.check {
     dependsOn(programRuntimeIntegrationTest)
 }
+
+tasks.register("prepareJvmMemoryProbe") {
+    description = "Prepares a standalone JVM computer-memory probe; no measurement runs inside Gradle."
+    group = "verification"
+    dependsOn(nativeIntegrationTest.classesTaskName, ":native-runtime-ffm:jar", rootProject.tasks.named("cargoBuildCompukterFfi"))
+    val launchClasspath = layout.buildDirectory.file("jvm-memory-probe/classpath.txt")
+    val probeClasspath = nativeIntegrationTest.runtimeClasspath
+    inputs.files(probeClasspath)
+    outputs.file(launchClasspath)
+    doLast {
+        launchClasspath.get().asFile.apply {
+            parentFile.mkdirs()
+            writeText(probeClasspath.asPath)
+        }
+    }
+}
