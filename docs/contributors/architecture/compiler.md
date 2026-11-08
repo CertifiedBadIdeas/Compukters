@@ -22,8 +22,11 @@ host API, and thin target adapter from one independently versioned SDK release b
 changes with its public compatibility boundary rather than every Compukters release. The plugin derives the wire
 schema and bindings from Guest Kotlin declarations, validates a checked-in selector lock, generates the typed JVM host
 contract, and packages the resulting `.cagb` in the independent addon JAR.
-`platform-bundle` owns the base bundle model, codec, module graph, and default imports; `platform-k2` exposes that
-metadata to K2 without making the K2 implementation part of the platform format.
+`platform-bundle` owns the base bundle model, codecs (including the compiler-independent native metadata envelope),
+module graph, and default imports; `platform-k2` exposes that metadata to K2 without making the K2 implementation
+part of the platform format. Source/metadata consistency validation belongs to `PlatformMetadataCompiler`.
+An IDE adapter can therefore compile its symbol provider against the IDE's own K2 build while reading the same
+metadata envelope. Moving this codec does not change its format or any bundle identity.
 
 ## Default arguments and loops
 

@@ -19,9 +19,9 @@
 package ru.lazyhat.compukters.platform.k2
 
 import ru.lazyhat.compukters.platform.bundle.PlatformDefaultArgument
+import ru.lazyhat.compukters.platform.bundle.PlatformMetadataCodec
 import ru.lazyhat.compukters.platform.bundle.PlatformModuleId
 import ru.lazyhat.compukters.platform.bundle.PlatformSource
-import ru.lazyhat.compukters.platform.k2.build.PlatformMetadataCodec
 import ru.lazyhat.compukters.platform.k2.build.PlatformMetadataCompiler
 import ru.lazyhat.compukters.worker.value.ImmutableBytes
 import kotlin.test.Test
