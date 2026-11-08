@@ -24,6 +24,7 @@ import com.intellij.ide.projectView.ProjectViewNodeDecorator
 import com.intellij.openapi.module.Module
 import com.intellij.psi.PsiDirectory
 import com.intellij.ui.JBColor
+import com.intellij.ui.SimpleTextAttributes
 
 /** Marks imported native sources without changing their source-root type or JVM neighbours. */
 class GuestProjectViewDecorator : ProjectViewNodeDecorator {
@@ -40,6 +41,19 @@ class GuestProjectViewDecorator : ProjectViewNodeDecorator {
             }
         if (!guest) return
         data.forcedTextForeground = FOREGROUND
+        // NodeRenderer gives explicit fragment colours priority over forcedTextForeground.
+        // Like the renderer, keep the name separate from the grey supplementary text.
+        val fragments = data.coloredText.toList()
+        data.clearText()
+        var mainText = true
+        fragments.forEachIndexed { index, fragment ->
+            val attributes = fragment.attributes
+            if (index > 0 && attributes.fgColor == SimpleTextAttributes.GRAYED_ATTRIBUTES.fgColor) mainText = false
+            data.addText(
+                fragment.text,
+                if (mainText) attributes.derive(attributes.style, FOREGROUND, null, null) else attributes,
+            )
+        }
         val location = data.locationString
         if (location != "Guest" && location?.endsWith(" · Guest") != true) {
             data.locationString = if (location.isNullOrBlank()) "Guest" else "$location · Guest"
