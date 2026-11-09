@@ -138,6 +138,8 @@ ordinary execution stream once for its live owners. No second distributable bina
 A program-wide dense allocation contains 16-byte operations; only its allocation boundary is aligned to 64 bytes.
 Blocks retain ranges, fixed costs and function ownership. Short blocks do not each allocate or pad a cache line.
 Shared copy/field plans and sparse lifecycle descriptors occupy separate program-owned arrays.
+The dispatcher borrows a checked operation to select its handler, then copies its operands at the handler
+boundary. Fetch does not materialize a complete operation before inspecting the opcode or add per-machine storage.
 
 Numeric operations carry concrete kinds and checked physical frame offsets. Preparation also resolves scalar
 constants, moves, inline component copies, jumps/Boolean branches, and scalar/reference field and array accesses.
