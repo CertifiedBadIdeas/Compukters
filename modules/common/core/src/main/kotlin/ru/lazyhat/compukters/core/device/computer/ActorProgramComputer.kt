@@ -33,6 +33,7 @@ import ru.lazyhat.compukters.core.device.runtime.actor.ProgramRuntimeActorReques
 import ru.lazyhat.compukters.core.device.runtime.actor.ProgramRuntimeActorService
 import ru.lazyhat.compukters.core.device.runtime.actor.ProgramRuntimeActorValue
 import ru.lazyhat.compukters.core.device.runtime.actor.ProgramRuntimeRequestId
+import ru.lazyhat.compukters.core.device.runtime.actor.ProgramRuntimeTurnCompletion
 import ru.lazyhat.compukters.core.device.runtime.actor.VmActorSubmission
 import ru.lazyhat.compukters.core.device.runtime.program.EmptyProgramAddonHost
 import ru.lazyhat.compukters.core.device.runtime.program.ProgramFailure
@@ -244,37 +245,56 @@ class ActorProgramComputer(
                 if (addonCompletions.isNotEmpty()) add(ProgramRuntimeActorEffect.CompleteAddons(addonCompletions))
                 input?.let { add(ProgramRuntimeActorEffect.RedstoneInput(it)) }
             }
-        val submitted =
-            if (continuation) {
-                service.continueTurn(lease.endpoint, worldTick, effects) ?: return
-            } else {
-                lastAdvanceTick = worldTick
-                service.turn(lease.endpoint, worldTick, effects)
-            }
         val currentLifecycle = lifecycle
-        val future = observe(submitted, lifecycle)
-        if (!future.isCompletedExceptionally) {
-            pendingOutput = null
-            pendingSound = null
-            repeat(addonCompletions.size) {
-                outstandingAddonRequests.remove(pendingAddonCompletions.removeFirst().identity)
+        val completion =
+            ProgramRuntimeTurnCompletion { reply, failure ->
+                completeTurn(reply, failure, currentLifecycle, worldTick)
             }
-            if (input != null) pendingRedstoneInputs.removeFirst()
-            hostCompletionTick?.let { completedAt ->
-                service.recordHostContinuationDelay((worldTick - completedAt).coerceAtLeast(0))
-                hostCompletionTick = null
+        if (continuation) {
+            if (!service.continueTurn(lease.endpoint, worldTick, effects, completion)) return
+        } else {
+            lastAdvanceTick = worldTick
+            val submission = service.submitTurn(lease.endpoint, worldTick, effects, completion)
+            if (submission != VmActorSubmission.ACCEPTED) {
+                failUnlessBusy(ProgramRuntimeActorRequestException(submission))
+                return
             }
         }
-        future.whenComplete { reply, failure ->
-            if (currentLifecycle != lifecycle || closeResult != null) return@whenComplete
-            if (failure != null) {
-                failUnlessBusy(failure)
-                return@whenComplete
-            }
-            acceptAdvanceReply(reply, currentLifecycle)
+        pendingOutput = null
+        pendingSound = null
+        repeat(addonCompletions.size) {
+            outstandingAddonRequests.remove(pendingAddonCompletions.removeFirst().identity)
+        }
+        if (input != null) pendingRedstoneInputs.removeFirst()
+        hostCompletionTick?.let { completedAt ->
+            service.recordHostContinuationDelay((worldTick - completedAt).coerceAtLeast(0))
+            hostCompletionTick = null
+        }
+    }
+
+    private fun completeTurn(
+        reply: ProgramRuntimeActorReply?,
+        failure: Throwable?,
+        version: Long,
+        worldTick: Long,
+    ) {
+        checkOwner()
+        if (version != lifecycle || closeResult != null) return
+        if (failure != null) {
+            failUnlessBusy(failure)
+            return
+        }
+        try {
+            val observed = requireNotNull(reply)
+            fileSystemGeneration = observed.fileSystemGeneration
+            publish(observed.state)
+            if (version != lifecycle || closeResult != null) return
+            acceptAdvanceReply(observed, version)
             if (pendingOutput != null || pendingSound != null || pendingAddonCompletions.isNotEmpty()) {
                 submitTurn(worldTick, continuation = true)
             }
+        } catch (cause: Throwable) {
+            if (version == lifecycle && closeResult == null) failUnlessBusy(cause)
         }
     }
 

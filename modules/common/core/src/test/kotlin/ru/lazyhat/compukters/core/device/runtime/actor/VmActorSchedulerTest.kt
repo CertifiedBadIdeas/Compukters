@@ -32,6 +32,28 @@ import kotlin.test.assertTrue
 
 class VmActorSchedulerTest {
     @Test
+    fun `single polling visits both queued lanes and retains each actor order`() {
+        val endpoints = (910..930).map { endpoint(it) }.distinctBy { Math.floorMod(it.computerId.hashCode(), 2) }
+        assertEquals(2, endpoints.size)
+        scheduler(workerCount = 2, messagesPerTurn = 1).use { scheduler ->
+            endpoints.forEach { endpoint ->
+                assertTrue(scheduler.register(endpoint, processor { command: Int -> command }))
+                assertEquals(VmActorSubmission.ACCEPTED, scheduler.submit(endpoint, 1))
+                assertEquals(VmActorSubmission.ACCEPTED, scheduler.submit(endpoint, 2))
+            }
+            val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(TIMEOUT_SECONDS)
+            while (scheduler.metrics().queuedResults < 4 && System.nanoTime() < deadline) Thread.onSpinWait()
+            assertEquals(4, scheduler.metrics().queuedResults)
+            val events = List(4) { assertIs<VmActorEvent.Result<Int>>(scheduler.pollEvent()) }
+            assertEquals(endpoints.toSet(), events.take(2).map { it.endpoint }.toSet())
+            endpoints.forEach { endpoint -> assertEquals(listOf(1, 2), events.filter { it.endpoint == endpoint }.map { it.value }) }
+            assertEquals(4, scheduler.metrics().drainedEvents)
+            assertEquals(null, scheduler.pollEvent())
+            assertEquals(4, scheduler.metrics().drainedEvents)
+        }
+    }
+
+    @Test
     fun `quiescence includes deferred permits executing work and undelivered results`() {
         val entered = CountDownLatch(1)
         val release = CountDownLatch(1)

@@ -59,6 +59,20 @@ retains the exact continuation for a later tick without repeating the world muta
 Its close future reports the final filesystem generation after accepted work drains and native resources close; this
 barrier does not depend on server result pumping and may complete on a worker thread.
 
+Routine carrier turns use internal completions rather than a chain of request and observation futures. Both forms
+share one pending-request registry, frame reservations and bounded result lanes. Admission refusal is synchronous;
+the carrier retains its exact world completions and input until accepted. Each accepted turn captures its lifecycle
+version independently, so a later admission cannot overwrite the identity of an older queued result. The owner pump
+removes pending ownership before invoking its completion and polls one event at a time, checking its event and time
+allowance between callbacks. Callback failures are isolated from other computers. Lifecycle invalidation is checked
+again after publishing state, because a state observer may synchronously close or replace the carrier before world
+effects are applied. Explicit commands and lifecycle operations retain their future and cancellation contracts.
+
+The standalone fleet probe waits using lightweight observations of the existing pending, scheduling, execution and
+queue state, and reads the existing retirement counter for frame progress. These observations collect no latency
+histograms and are valid for its serialized admission/pump loop; they are not an admission barrier for concurrent
+callers. Production diagnostic snapshots retain their full histograms and logging cadence.
+
 ## Addon host boundary
 
 Third-party world capabilities use the same continuation boundary. Loader integrations register bounded

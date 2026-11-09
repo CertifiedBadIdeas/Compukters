@@ -239,6 +239,24 @@ class VmActorScheduler<C : Any, P : Any, R : Any>(
         return actor.closeBarrier
     }
 
+    /** Polls one result without allocating a temporary batch, retaining round-robin lane progress. */
+    internal fun pollEvent(): VmActorEvent<R>? {
+        var laneIndex = Math.floorMod(drainCursor.getAndIncrement(), resultLanes.size)
+        repeat(resultLanes.size) {
+            val queued = resultLanes[laneIndex].poll()
+            if (queued != null) {
+                val latency = (System.nanoTime() - queued.completedAtNanos).coerceAtLeast(0)
+                resultLatencyHistogram.record(latency)
+                drainedEvents.incrementAndGet()
+                totalResultLatencyNanos.addAndGet(latency)
+                maximumResultLatencyNanos.accumulateAndGet(latency, ::maxOf)
+                return queued.event
+            }
+            laneIndex = (laneIndex + 1) % resultLanes.size
+        }
+        return null
+    }
+
     fun drainEvents(maximumEvents: Int): List<VmActorEvent<R>> {
         require(maximumEvents >= 0) { "maximum events must not be negative" }
         if (maximumEvents == 0) return emptyList()

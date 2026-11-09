@@ -21,6 +21,7 @@ package ru.lazyhat.compukters.core.device.runtime.actor
 import ru.lazyhat.compukters.api.addon.ProgramAddonAction
 import ru.lazyhat.compukters.api.addon.ProgramAddonHost
 import ru.lazyhat.compukters.api.addon.ProgramAddonRequest
+import ru.lazyhat.compukters.core.LOGGER
 import ru.lazyhat.compukters.core.device.runtime.compiler.CompilerCompletionRouter
 import ru.lazyhat.compukters.core.device.runtime.program.EmptyProgramAddonHost
 import ru.lazyhat.compukters.core.device.runtime.program.ProgramAddonLifecyclePort
@@ -162,7 +163,7 @@ class ProgramRuntimeActorService(
         require(preparedCommand.requestId == requestId) { "runtime command factory returned a mismatched request id" }
         val address = RequestAddress(endpoint, requestId)
         val future = CompletableFuture<ProgramRuntimeActorReply>()
-        val pendingRequest = PendingRequest(future, completesWorldRequest = false)
+        val pendingRequest = FutureRequest(future, completesWorldRequest = false)
         check(pending.putIfAbsent(address, pendingRequest) == null) { "runtime request id collision" }
         val submission = scheduler.submit(endpoint, preparedCommand)
         if (submission != VmActorSubmission.ACCEPTED) {
@@ -184,18 +185,27 @@ class ProgramRuntimeActorService(
         worldTick: Long,
         effects: List<ProgramRuntimeActorEffect> = emptyList(),
     ): CompletableFuture<ProgramRuntimeActorReply> {
+        val future = CompletableFuture<ProgramRuntimeActorReply>()
+        admitTurn(endpoint, worldTick, effects, FutureRequest(future, effects.any(::isWorldCompletion)))
+        return future
+    }
+
+    /** Rejection is synchronous; replies run through the owner pump. Service close fails outstanding requests. */
+    internal fun submitTurn(
+        endpoint: VmActorEndpoint,
+        worldTick: Long,
+        effects: List<ProgramRuntimeActorEffect>,
+        completion: ProgramRuntimeTurnCompletion,
+    ): VmActorSubmission = admitTurn(endpoint, worldTick, effects, DirectRequest(completion, effects.any(::isWorldCompletion)))
+
+    private fun admitTurn(
+        endpoint: VmActorEndpoint,
+        worldTick: Long,
+        effects: List<ProgramRuntimeActorEffect>,
+        pendingRequest: PendingRequest,
+    ): VmActorSubmission {
         val requestId = ProgramRuntimeRequestId(nextRequestId.updateAndGet(::incrementRequestId))
         val address = RequestAddress(endpoint, requestId)
-        val future = CompletableFuture<ProgramRuntimeActorReply>()
-        val pendingRequest =
-            PendingRequest(
-                future,
-                effects.any {
-                    it is ProgramRuntimeActorEffect.CompleteRedstoneOutput ||
-                        it is ProgramRuntimeActorEffect.CompleteSound ||
-                        it is ProgramRuntimeActorEffect.CompleteAddons
-                },
-            )
         check(pending.putIfAbsent(address, pendingRequest) == null) { "runtime request id collision" }
         val permit = ProgramRuntimeTickPermit(requestId, worldTick)
         val submission =
@@ -215,13 +225,11 @@ class ProgramRuntimeActorService(
         if (submission != VmActorSubmission.ACCEPTED) {
             pending.remove(address, pendingRequest)
             if (effects.any { it is ProgramRuntimeActorEffect.RedstoneInput }) rejectedInputRequests.incrementAndGet()
-            future.completeExceptionally(ProgramRuntimeActorRequestException(submission))
+            if (pendingRequest is FutureRequest) pendingRequest.fail(ProgramRuntimeActorRequestException(submission))
         } else {
-            future.whenComplete { _, _ ->
-                if (future.isCancelled) pending.remove(address, pendingRequest)
-            }
+            watchCancellation(address, pendingRequest)
         }
-        return future
+        return submission
     }
 
     /** Reuses a matching frame grant; null leaves the caller's exact completion available for a later tick. */
@@ -229,20 +237,35 @@ class ProgramRuntimeActorService(
         endpoint: VmActorEndpoint,
         worldTick: Long,
         effects: List<ProgramRuntimeActorEffect>,
-    ): CompletableFuture<ProgramRuntimeActorReply>? =
+    ): CompletableFuture<ProgramRuntimeActorReply>? {
+        val future = CompletableFuture<ProgramRuntimeActorReply>()
+        return if (admitContinuation(endpoint, worldTick, effects, FutureRequest(future, completesWorldRequest = true))) future else null
+    }
+
+    internal fun continueTurn(
+        endpoint: VmActorEndpoint,
+        worldTick: Long,
+        effects: List<ProgramRuntimeActorEffect>,
+        completion: ProgramRuntimeTurnCompletion,
+    ): Boolean = admitContinuation(endpoint, worldTick, effects, DirectRequest(completion, completesWorldRequest = true))
+
+    private fun admitContinuation(
+        endpoint: VmActorEndpoint,
+        worldTick: Long,
+        effects: List<ProgramRuntimeActorEffect>,
+        request: PendingRequest,
+    ): Boolean =
         synchronized(frameLock) {
-            val credit = frameCredits[endpoint] ?: return@synchronized null
+            val credit = frameCredits[endpoint] ?: return@synchronized false
             if (closed.get() || credit.worldTick != worldTick || credit.inFlight || credit.remaining <= 0 ||
                 credit.continuations >= MAXIMUM_CONTINUATIONS_PER_FRAME ||
                 (credit.deadlineNanos != Long.MAX_VALUE && nanoTime() - credit.deadlineNanos >= 0) ||
                 effects.none(::completesWorldRequest)
             ) {
-                return@synchronized null
+                return@synchronized false
             }
             val requestId = ProgramRuntimeRequestId(nextRequestId.updateAndGet(::incrementRequestId))
             val address = RequestAddress(endpoint, requestId)
-            val future = CompletableFuture<ProgramRuntimeActorReply>()
-            val request = PendingRequest(future, completesWorldRequest = true)
             check(pending.putIfAbsent(address, request) == null) { "runtime request id collision" }
             val allowance = credit.remaining.toInt()
             credit.inFlight = true
@@ -257,12 +280,26 @@ class ProgramRuntimeActorService(
                 reservations.remove(address)
                 credit.inFlight = false
                 pending.remove(address, request)
-                return@synchronized null
+                return@synchronized false
             }
             credit.continuations++
-            future.whenComplete { _, _ -> if (future.isCancelled) pending.remove(address, request) }
-            future
+            watchCancellation(address, request)
+            true
         }
+
+    private fun watchCancellation(
+        address: RequestAddress,
+        request: PendingRequest,
+    ) {
+        if (request is FutureRequest) {
+            request.future.whenComplete { _, _ -> if (request.future.isCancelled) pending.remove(address, request) }
+        }
+    }
+
+    private fun isWorldCompletion(effect: ProgramRuntimeActorEffect): Boolean =
+        effect is ProgramRuntimeActorEffect.CompleteRedstoneOutput ||
+            effect is ProgramRuntimeActorEffect.CompleteSound ||
+            effect is ProgramRuntimeActorEffect.CompleteAddons
 
     private fun completesWorldRequest(effect: ProgramRuntimeActorEffect): Boolean =
         when (effect) {
@@ -327,7 +364,7 @@ class ProgramRuntimeActorService(
                     reservations.remove(turn.address)?.let { addSaturating(totalUnusedReservations, it.allowance) }
                     frameCredits.remove(turn.endpoint)
                     pending.remove(turn.address, turn.request)
-                    turn.request.future.completeExceptionally(ProgramRuntimeActorRequestException(VmActorSubmission.STALE_ENDPOINT))
+                    turn.request.fail(ProgramRuntimeActorRequestException(VmActorSubmission.STALE_ENDPOINT))
                 }
             }
         }
@@ -362,7 +399,7 @@ class ProgramRuntimeActorService(
             // A closing computer may drain its queued effects, but receives no Guest execution.
             if (!scheduler.releaseDeferredPermit(endpoint, deferred.permit.copy(retirementAllowance = 0))) {
                 pending.remove(deferred.address, deferred.request)
-                deferred.request.future.completeExceptionally(
+                deferred.request.fail(
                     ProgramRuntimeActorRequestException(VmActorSubmission.STALE_ENDPOINT),
                 )
             }
@@ -378,7 +415,7 @@ class ProgramRuntimeActorService(
         val startedAt = nanoTime()
         var count = 0
         while (count < maximumEvents && (deadlineNanos == Long.MAX_VALUE || nanoTime() - deadlineNanos < 0)) {
-            val event = scheduler.drainEvents(1).singleOrNull() ?: break
+            val event = scheduler.pollEvent() ?: break
             count++
             when (event) {
                 is VmActorEvent.Result -> {
@@ -412,7 +449,7 @@ class ProgramRuntimeActorService(
                     ) {
                         totalDeferredWorldRequests.incrementAndGet()
                     }
-                    request.future.complete(reply)
+                    request.complete(reply)
                 }
 
                 is VmActorEvent.Failed -> {
@@ -430,7 +467,7 @@ class ProgramRuntimeActorService(
                     }
                     pending.entries.removeIf { (address, request) ->
                         if (address.endpoint != event.endpoint) return@removeIf false
-                        request.future.completeExceptionally(failure)
+                        request.fail(failure)
                         true
                     }
                 }
@@ -514,7 +551,7 @@ class ProgramRuntimeActorService(
         }
         scheduler.close()
         val failure = ProgramRuntimeActorServiceClosedException()
-        pending.values.forEach { it.future.completeExceptionally(failure) }
+        pending.values.forEach { it.fail(failure) }
         pending.clear()
         reservations.clear()
         deferredWorldRequests.clear()
@@ -539,10 +576,46 @@ class ProgramRuntimeActorService(
         val requestId: ProgramRuntimeRequestId,
     )
 
-    private data class PendingRequest(
+    private sealed interface PendingRequest {
+        val completesWorldRequest: Boolean
+
+        fun complete(reply: ProgramRuntimeActorReply)
+
+        fun fail(failure: Throwable)
+    }
+
+    private class FutureRequest(
         val future: CompletableFuture<ProgramRuntimeActorReply>,
-        val completesWorldRequest: Boolean,
-    )
+        override val completesWorldRequest: Boolean,
+    ) : PendingRequest {
+        override fun complete(reply: ProgramRuntimeActorReply) {
+            future.complete(reply)
+        }
+
+        override fun fail(failure: Throwable) {
+            future.completeExceptionally(failure)
+        }
+    }
+
+    private class DirectRequest(
+        val completion: ProgramRuntimeTurnCompletion,
+        override val completesWorldRequest: Boolean,
+    ) : PendingRequest {
+        override fun complete(reply: ProgramRuntimeActorReply) = deliver(reply, null)
+
+        override fun fail(failure: Throwable) = deliver(null, failure)
+
+        private fun deliver(
+            reply: ProgramRuntimeActorReply?,
+            failure: Throwable?,
+        ) {
+            try {
+                completion.complete(reply, failure)
+            } catch (callbackFailure: Throwable) {
+                LOGGER.warn(callbackFailure) { "VM turn completion failed" }
+            }
+        }
+    }
 
     private data class PendingTurn(
         val endpoint: VmActorEndpoint,
@@ -587,6 +660,14 @@ class ProgramRuntimeActorService(
                 this is ProgramRuntimeActorCommand.SendTerminalText ||
                 this is ProgramRuntimeActorCommand.SubmitCanonicalLine
     }
+}
+
+/** Internal owner-delivered turn result. A rejected submission never invokes this callback. */
+internal fun interface ProgramRuntimeTurnCompletion {
+    fun complete(
+        reply: ProgramRuntimeActorReply?,
+        failure: Throwable?,
+    )
 }
 
 class ProgramRuntimeActorRequestException(

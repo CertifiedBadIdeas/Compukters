@@ -86,6 +86,108 @@ import kotlin.test.assertTrue
 
 class ProgramRuntimeActorProcessorTest {
     @Test
+    fun `state observer closing a carrier prevents world effects from the same turn`() {
+        val session = RecordingSession()
+        val port = ActorRedstoneHostPort()
+        val host =
+            ProgramRuntimeHost(
+                object : ProgramVmSessionFactory {
+                    override fun open(artifact: ByteArray) = session
+
+                    override fun boot() = session
+                },
+                redstoneHostPort = port,
+            )
+        val endpoint = VmActorEndpoint(ComputerId.fromLongs(830, 1), 1)
+        ProgramRuntimeActorService(schedulerConfig()).use { service ->
+            var closeOnRunning = false
+            var commits = 0
+            lateinit var carrier: ActorProgramComputer
+            carrier =
+                ActorProgramComputer(
+                    service,
+                    requireNotNull(service.attach(endpoint, host, port)),
+                    {
+                        commits++
+                        RedstoneCommitResult.Committed
+                    },
+                    stateSink = { state -> if (closeOnRunning && state == ProgramRuntimeState.Running) carrier.closeAsync() },
+                )
+            val boot = carrier.turnOn()
+            awaitQueuedResult(service)
+            service.pump(1)
+            assertTrue(boot.isDone)
+            session.nextOutcome = VmOutcome.WaitingForTerminalEvent
+            carrier.serverTick(0)
+            awaitQueuedResult(service)
+            service.pump(1)
+            assertEquals(ProgramRuntimeState.WaitingForInput, carrier.state)
+            closeOnRunning = true
+            session.nextOutcome =
+                VmOutcome.HostRequestBatch(
+                    listOf(VmHostRequest(1, REDSTONE, 6, listOf(VmValue.I32(2), VmValue.I32(7)))),
+                )
+            carrier.serverTick(1, RedstoneWire.packInput(1, IntArray(6) { 1 }))
+            awaitQueuedResult(service)
+            service.pump(1)
+            assertEquals(ProgramRuntimeState.Closed, carrier.state)
+            assertEquals(0, commits)
+            carrier.closeAsync().get(TIMEOUT_SECONDS, TimeUnit.SECONDS)
+        }
+    }
+
+    @Test
+    fun `queued turn world effects are discarded after carrier reboot or close`() {
+        listOf(false, true).forEach { close ->
+            val session = RecordingSession()
+            val port = ActorRedstoneHostPort()
+            val host =
+                ProgramRuntimeHost(
+                    object : ProgramVmSessionFactory {
+                        override fun open(artifact: ByteArray) = session
+
+                        override fun boot() = session
+                    },
+                    redstoneHostPort = port,
+                )
+            val endpoint = VmActorEndpoint(ComputerId.fromLongs(829, if (close) 1 else 2), 1)
+            ProgramRuntimeActorService(schedulerConfig()).use { service ->
+                var commits = 0
+                val carrier =
+                    ActorProgramComputer(service, requireNotNull(service.attach(endpoint, host, port)), {
+                        commits++
+                        RedstoneCommitResult.Committed
+                    })
+                val boot = carrier.turnOn()
+                awaitQueuedResult(service)
+                service.pump(1)
+                assertTrue(boot.isDone)
+                session.nextOutcome =
+                    VmOutcome.HostRequestBatch(
+                        listOf(VmHostRequest(1, REDSTONE, 6, listOf(VmValue.I32(2), VmValue.I32(7)))),
+                    )
+                carrier.serverTick(1)
+                awaitQueuedResult(service)
+                if (close) {
+                    carrier.closeAsync().get(TIMEOUT_SECONDS, TimeUnit.SECONDS)
+                    service.pump(32)
+                    assertEquals(ProgramRuntimeState.Closed, carrier.state)
+                } else {
+                    val reboot = carrier.reboot()
+                    awaitQueuedResults(service, 2)
+                    service.pump(32)
+                    assertTrue(reboot.isDone)
+                    assertEquals(ProgramRuntimeState.Running, carrier.state)
+                    assertFalse(carrier.restoring)
+                    carrier.closeAsync().get(TIMEOUT_SECONDS, TimeUnit.SECONDS)
+                }
+                assertEquals(0, commits)
+                assertEquals(0, service.runtimeMetrics().pendingRequests)
+            }
+        }
+    }
+
+    @Test
     fun `mailbox refusal retains one boot stage until a later tick`() {
         val entered = CountDownLatch(1)
         val release = CountDownLatch(1)
