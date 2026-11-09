@@ -35,6 +35,8 @@ import ru.lazyhat.compukters.lang.runtime.vm.VmOutcome
 import ru.lazyhat.compukters.lang.runtime.vm.VmSession
 import ru.lazyhat.compukters.lang.runtime.vm.VmVerificationException
 import java.nio.file.Path
+import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
 import kotlin.io.path.readBytes
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -43,6 +45,33 @@ import kotlin.test.assertIs
 import kotlin.test.assertTrue
 
 class FfmBridgeIntegrationTest {
+    @Test
+    fun `parallel advances isolate retirement counts and recover their scratch after failure`() {
+        FfmBridge.open(Path.of(requiredProperty("compukter.ffi.library"))).use { bridge ->
+            val artifact = Path.of(requiredProperty("compukters.shell.artifact")).readBytes()
+            Executors.newFixedThreadPool(8).use { workers ->
+                val results =
+                    (1..8).map { allowance ->
+                        workers.submit<Long> {
+                            VmSession.open(artifact, bridge).use { session ->
+                                val initial = session.resourceSnapshot().executedInstructions
+                                assertFailsWith<VmBridgeException> { session.advance(1, 64, Int.MAX_VALUE) }
+                                repeat(10) {
+                                    val zero = session.advanceWithRetirementLimit(ShellProgram.GUEST_BUDGET, 64, Int.MAX_VALUE, 0)
+                                    assertEquals(0, zero.retiredInstructions)
+                                    val result =
+                                        session.advanceWithRetirementLimit(ShellProgram.GUEST_BUDGET, 64, Int.MAX_VALUE, allowance)
+                                    assertEquals(allowance.toLong(), result.retiredInstructions)
+                                }
+                                session.resourceSnapshot().executedInstructions - initial
+                            }
+                        }
+                    }
+                results.forEachIndexed { index, result -> assertEquals((index + 1L) * 10, result.get(30, TimeUnit.SECONDS)) }
+            }
+        }
+    }
+
     @Test
     fun `FFM preserves uncaught exception class message and source stack`() {
         FfmBridge.open(Path.of(requiredProperty("compukter.ffi.library"))).use { bridge ->

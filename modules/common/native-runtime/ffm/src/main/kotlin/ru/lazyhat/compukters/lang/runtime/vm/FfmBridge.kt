@@ -88,7 +88,8 @@ internal class FfmBridge private constructor(
             ?.toInt()
             ?: throw VmBridgeException("invalid maximum FFM outcome size")
 
-    private val terminalScratchPool = TerminalWireScratchPool(TerminalHistoryLimits.NATIVE_BUFFER_BYTES)
+    private val advanceScratchPool = VmWireScratchPool(maximumOutcomeBytes)
+    private val terminalScratchPool = VmWireScratchPool(TerminalHistoryLimits.NATIVE_BUFFER_BYTES)
 
     fun abiVersion(): Int = abiVersionHandle.invokeExact() as Int
 
@@ -569,10 +570,10 @@ internal class FfmBridge private constructor(
         maintenanceBudget: Int,
         hostRequestBudget: Int,
     ): ByteArray =
-        Arena.ofConfined().use { callArena ->
+        advanceScratchPool.withScratch { scratch ->
             val maximum = maximumOutcomeBytes
-            val output = callArena.allocate(maximum.toLong())
-            val written = callArena.allocate(ValueLayout.JAVA_LONG)
+            val output = scratch.output
+            val written = scratch.written.also { it.set(ValueLayout.JAVA_LONG, 0, 0) }
             val status =
                 advanceHandle.invokeExact(
                     handle,
@@ -594,11 +595,11 @@ internal class FfmBridge private constructor(
         hostRequestBudget: Int,
         retirementLimit: Int,
     ): NativeAdvanceResult =
-        Arena.ofConfined().use { callArena ->
+        advanceScratchPool.withScratch { scratch ->
             val maximum = maximumOutcomeBytes
-            val output = callArena.allocate(maximum.toLong())
-            val written = callArena.allocate(ValueLayout.JAVA_LONG)
-            val retired = callArena.allocate(ValueLayout.JAVA_LONG)
+            val output = scratch.output
+            val written = scratch.written.also { it.set(ValueLayout.JAVA_LONG, 0, 0) }
+            val retired = scratch.retired.also { it.set(ValueLayout.JAVA_LONG, 0, 0) }
             val status =
                 advanceWithRetirementLimitHandle.invokeExact(
                     handle,
@@ -781,7 +782,11 @@ internal class FfmBridge private constructor(
         try {
             terminalScratchPool.close()
         } finally {
-            arena.close()
+            try {
+                advanceScratchPool.close()
+            } finally {
+                arena.close()
+            }
         }
     }
 

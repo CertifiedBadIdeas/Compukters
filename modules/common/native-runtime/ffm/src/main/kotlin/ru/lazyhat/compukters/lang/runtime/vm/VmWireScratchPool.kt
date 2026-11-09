@@ -25,23 +25,23 @@ import java.nio.ByteBuffer
 import java.nio.ByteOrder
 
 /** Temporary transport bytes are shared across sessions, exclusively leased through decoding. */
-internal class TerminalWireScratchPool(
+internal class VmWireScratchPool(
     private val maximumBytes: Int,
     private val maximumRetainedBuffers: Int = 8,
 ) : AutoCloseable {
-    private val idle = ArrayDeque<TerminalWireScratch>(maximumRetainedBuffers)
+    private val idle = ArrayDeque<VmWireScratch>(maximumRetainedBuffers)
     private var closed = false
 
     init {
-        require(maximumBytes > 0) { "terminal FFM output capacity must be positive" }
-        require(maximumRetainedBuffers > 0) { "terminal scratch retention must be positive" }
+        require(maximumBytes > 0) { "FFM output capacity must be positive" }
+        require(maximumRetainedBuffers > 0) { "FFM scratch retention must be positive" }
     }
 
-    fun <T> withScratch(read: (TerminalWireScratch) -> T): T {
+    fun <T> withScratch(read: (VmWireScratch) -> T): T {
         val scratch =
             synchronized(idle) {
-                check(!closed) { "terminal scratch pool is closed" }
-                idle.removeLastOrNull() ?: TerminalWireScratch(maximumBytes)
+                check(!closed) { "FFM scratch pool is closed" }
+                idle.removeLastOrNull() ?: VmWireScratch(maximumBytes)
             }
         try {
             return read(scratch)
@@ -66,22 +66,24 @@ internal class TerminalWireScratchPool(
                 closed = true
                 idle.toList().also { idle.clear() }
             }
-        released.forEach(TerminalWireScratch::close)
+        released.forEach(VmWireScratch::close)
     }
 }
 
-internal class TerminalWireScratch(
+internal class VmWireScratch(
     maximumBytes: Int,
 ) : AutoCloseable {
     private val arena = Arena.ofShared()
     val output: MemorySegment
     val written: MemorySegment
+    val retired: MemorySegment
     val buffer: ByteBuffer
 
     init {
         try {
             output = arena.allocate(maximumBytes.toLong())
             written = arena.allocate(ValueLayout.JAVA_LONG)
+            retired = arena.allocate(ValueLayout.JAVA_LONG)
             buffer = output.asByteBuffer().order(ByteOrder.LITTLE_ENDIAN)
         } catch (failure: Throwable) {
             arena.close()

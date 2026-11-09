@@ -37,8 +37,8 @@ class ReusableTerminalWireTransportTest {
         val secondAddresses = mutableListOf<Pair<Long, Long>>()
         val full = fullStateWire(revision = 4)
         val unchanged = unchangedWire(revision = 4)
-        val firstPool = TerminalWireScratchPool(8 * 1024)
-        val secondPool = TerminalWireScratchPool(8 * 1024)
+        val firstPool = VmWireScratchPool(8 * 1024)
+        val secondPool = VmWireScratchPool(8 * 1024)
         val first = transport(firstPool, firstAddresses, full, unchanged)
         val second = transport(secondPool, secondAddresses, full, unchanged)
 
@@ -62,7 +62,7 @@ class ReusableTerminalWireTransportTest {
 
     @Test
     fun `shared scratch preserves decoded results and closing one session leaves others usable`() {
-        TerminalWireScratchPool(TerminalHistoryLimits.NATIVE_BUFFER_BYTES).use { pool ->
+        VmWireScratchPool(TerminalHistoryLimits.NATIVE_BUFFER_BYTES).use { pool ->
             val addresses = mutableListOf<Pair<Long, Long>>()
             val first = transport(pool, addresses, fullStateWire(4, 512), unchangedWire(4))
             val second = transport(pool, addresses, fullStateWire(8), unchangedWire(8))
@@ -81,7 +81,7 @@ class ReusableTerminalWireTransportTest {
 
     @Test
     fun `parallel readers exclusively lease scratch through decoding`() {
-        TerminalWireScratchPool(8 * 1024, maximumRetainedBuffers = 2).use { pool ->
+        VmWireScratchPool(8 * 1024, maximumRetainedBuffers = 2).use { pool ->
             Executors.newFixedThreadPool(8).use { workers ->
                 val barrier = CyclicBarrier(8)
                 val calls =
@@ -111,7 +111,7 @@ class ReusableTerminalWireTransportTest {
 
     @Test
     fun `failed reads return their lease and pool close releases retained native memory`() {
-        val pool = TerminalWireScratchPool(8 * 1024)
+        val pool = VmWireScratchPool(8 * 1024)
         var retained: MemorySegment? = null
         var failing = true
         val bytes = fullStateWire(9)
@@ -143,7 +143,7 @@ class ReusableTerminalWireTransportTest {
 
     @Test
     fun `excess concurrent scratch closes instead of expanding idle retention`() {
-        TerminalWireScratchPool(8 * 1024, maximumRetainedBuffers = 2).use { pool ->
+        VmWireScratchPool(8 * 1024, maximumRetainedBuffers = 2).use { pool ->
             val loans = mutableListOf<MemorySegment>()
             pool.withScratch { first ->
                 loans += first.output
@@ -158,7 +158,7 @@ class ReusableTerminalWireTransportTest {
 
     @Test
     fun `pool shutdown preserves an outstanding loan until the reader returns it`() {
-        val pool = TerminalWireScratchPool(8 * 1024)
+        val pool = VmWireScratchPool(8 * 1024)
         lateinit var loan: MemorySegment
         pool.withScratch { scratch ->
             loan = scratch.output
@@ -170,7 +170,7 @@ class ReusableTerminalWireTransportTest {
     }
 
     private fun transport(
-        pool: TerminalWireScratchPool,
+        pool: VmWireScratchPool,
         addresses: MutableList<Pair<Long, Long>>,
         full: ByteArray,
         unchanged: ByteArray,

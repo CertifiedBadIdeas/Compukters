@@ -94,6 +94,14 @@ instructions at once; suspension on a host request or `Task.join()` transfers ex
 FIFO order. Pending requests retain their `(TaskId, RequestId)` owner, so independent reads and writes may remain in
 flight and complete out of order without running Guest code re-entrantly. Returning from the root task ends the process
 and cancels its remaining task work.
+
+The FFM adapter leases temporary output storage from bridge-owned pools shared across sessions.
+Execution outcomes and terminal data use separate pools, each retaining at most eight idle buffers;
+the execution pool uses the native advertised outcome capacity (currently 64 KiB), not a buffer per VM.
+One call exclusively owns its output and scalar slots until decoding or copying completes. Returned outcome
+byte arrays own their contents independently of later calls. Excess concurrent buffers are released when
+returned, and bridge shutdown closes idle storage while outstanding leases release on return. This transport
+storage does not change Guest quotas or the native wire contract.
 The built-in `compukter:timer` capability at ABI 1.0 backs `Tasks.sleepTicks`: the loader-independent runtime retains
 the bounded request and resumes its owning task at the requested server-tick boundary. It does not introduce a VM
 clock, background timer, wall-clock dependency, or work while the computer is not receiving tick permits.

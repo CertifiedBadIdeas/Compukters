@@ -41,7 +41,7 @@ internal fun interface TerminalChangesSinceCall {
 }
 
 internal class ReusableTerminalWireTransport(
-    private val scratchPool: TerminalWireScratchPool,
+    private val scratchPool: VmWireScratchPool,
     private val fullStateCall: TerminalFullStateCall,
     private val changesSinceCall: TerminalChangesSinceCall,
 ) : TerminalWireTransport {
@@ -74,7 +74,7 @@ internal class ReusableTerminalWireTransport(
 
     private fun <T> read(
         operation: String,
-        call: (TerminalWireScratch) -> Int,
+        call: (VmWireScratch) -> Int,
         decode: (TerminalWireDecoder) -> T,
     ): T =
         synchronized(lock) {
