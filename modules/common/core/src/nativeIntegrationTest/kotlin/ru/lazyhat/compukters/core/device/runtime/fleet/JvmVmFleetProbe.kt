@@ -52,12 +52,15 @@ object JvmVmFleetProbe {
         val output = Path.of(args[4]).toAbsolutePath().normalize()
         check(!Files.exists(output)) { "Output must be a fresh disposable directory" }
         Files.createDirectories(output)
+        JvmFleetDiagnostics.initialize(output)
         check(clock.isThreadCpuTimeSupported)
         clock.isThreadCpuTimeEnabled = true
         warmup(image, output.resolve("warmup"), workers)
+        JvmFleetDiagnostics.beginPopulation()
         memoryPhase("baseline", null, args.last() == "self-gc")
         runFleet(population, workers, image, output, args.last() == "self-gc")
         memoryPhase("closed", null, args.last() == "self-gc")
+        if (JvmFleetDiagnostics.trimAllocator()) memoryPhase("trimmed", null, args.last() == "self-gc")
         println("COMPLETE\t$population\t$workers")
     }
 
@@ -107,6 +110,7 @@ object JvmVmFleetProbe {
         }
         val heap = ManagementFactory.getMemoryMXBean().heapMemoryUsage
         println("HEAP\t$name\t${heap.used}\t${heap.committed}")
+        JvmFleetDiagnostics.memory(name)
         System.out.flush()
     }
 
@@ -157,7 +161,7 @@ object JvmVmFleetProbe {
             val beforeCompile = compile.totalCompilationTime
             val cpu = processClock.processCpuTime
             val wall = System.nanoTime()
-            block()
+            JvmFleetDiagnostics.measure(mode, workerIds, block)
             phases += "$mode\t${System.nanoTime() - wall}\t${processClock.processCpuTime - cpu}\t" +
                 "${gc.sumOf { it.collectionCount } - beforeCollections}\t${gc.sumOf { it.collectionTime } - beforeGcTime}\t" +
                 "${compile.totalCompilationTime - beforeCompile}"

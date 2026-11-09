@@ -12,12 +12,42 @@ import json
 import os
 from pathlib import Path
 import re
+import select
 import shutil
+import signal
 import subprocess
 import threading
 import time
 
 from jvm_memory_metrics import histogram_footprint
+
+
+class NativeProfile:
+    """Launch the disposable JVM under perf; never attach to an unrelated process."""
+    def __init__(self, output):
+        self.output = output
+        self.descriptors = []
+
+    def command(self, command):
+        os.write(self.control, (command + '\n').encode())
+        assert select.select([self.ack], [], [], 20)[0], 'perf acknowledgement timed out'
+        acknowledgement = os.read(self.ack, 64)
+        # perf versions may include the terminating C NUL after the newline.
+        assert acknowledgement.rstrip(b'\n\0') == b'ack', repr(acknowledgement)
+
+    def launch_arguments(self, child):
+        control_read, self.control = os.pipe()
+        self.ack, ack_write = os.pipe()
+        self.descriptors = [control_read, self.control, self.ack, ack_write]
+        argv = ['perf', 'record', '-e', 'cycles:u', '-F', '499', '--user-callchains', '--call-graph', 'dwarf,8192',
+                '--delay=-1', '--control', f'fd:{control_read},{ack_write}',
+                '-o', str(self.output), '--', *child]
+        self.output.with_suffix('.command.json').write_text(json.dumps(argv, indent=2) + '\n')
+        return argv, [control_read, ack_write]
+
+    def close(self):
+        for fd in self.descriptors:
+            os.close(fd)
 
 
 def table(path):
@@ -84,26 +114,65 @@ def trial(args, population, workers, execution, phase):
             '-cp', args.classpath.read_text().strip(),
             'ru.lazyhat.compukters.core.device.runtime.fleet.JvmVmFleetProbe', str(population),
             str(workers), str(args.library), str(args.image), str(output)]
+    if args.diagnostics:
+        options = [f'-Dcompukters.fleet.diagnostics={args.diagnostics}',
+                   f'-Dcompukters.fleet.profilePhase={args.profile_phase}']
+        if args.diagnostics == 'memory':
+            options.append('-XX:NativeMemoryTracking=detail')
+        argv[4:4] = options
     rows = []
+    allocations = []
+    native_profile = None
     started = time.time()
     with (execution / 'stderr.log').open('w') as errors, (execution / 'stdout.log').open('w', buffering=1) as log:
-        process = subprocess.Popen(argv, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=errors, text=True)
-        watchdog = threading.Timer(300, process.terminate)
+        descriptors = []
+        if args.diagnostics == 'perf':
+            native_profile = NativeProfile(execution / f'{args.profile_phase}-perf.data')
+            argv, descriptors = native_profile.launch_arguments(argv)
+        process = subprocess.Popen(argv, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=errors, text=True, pass_fds=descriptors)
+        probe_pid = process.pid
+
+        def terminate_owned_processes():
+            if native_profile and probe_pid != process.pid:
+                try:
+                    stat = Path(f'/proc/{probe_pid}/stat').read_text()
+                    parent = int(stat[stat.rfind(')') + 2:].split()[1])
+                    command = Path(f'/proc/{probe_pid}/cmdline').read_bytes().split(b'\0')
+                    if parent == process.pid and str(output).encode() in command:
+                        os.kill(probe_pid, signal.SIGTERM)
+                except (OSError, ValueError):
+                    pass
+            if process.poll() is None:
+                process.terminate()
+
+        watchdog = threading.Timer(300, terminate_owned_processes)
         watchdog.start()
         complete = False
         try:
             for line in process.stdout:
                 log.write(line)
                 words = line.rstrip().split('\t')
-                if words[0] == 'PHASE':
+                if words[0] == 'PROBE_PID':
+                    assert native_profile is not None and probe_pid == process.pid
+                    probe_pid = int(words[1])
+                    stat = Path(f'/proc/{probe_pid}/stat').read_text()
+                    assert int(stat[stat.rfind(')') + 2:].split()[1]) == process.pid
+                elif words[0] == 'PHASE':
                     name = words[1]
                     phase[0] = f'population-{population}/workers-{workers}/memory-{name}'
-                    jcmd = [str(args.jdk / 'bin/jcmd'), str(process.pid), 'GC.class_histogram']
+                    jcmd = [str(args.jdk / 'bin/jcmd'), str(probe_pid), 'GC.class_histogram']
                     result = subprocess.run(jcmd, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=90)
                     assert result.returncode == 0, result.stdout
                     (execution / f'{name}-histogram.txt').write_text(result.stdout)
                     footprint = histogram_footprint(result.stdout)
-                    smaps = Path(f'/proc/{process.pid}/smaps_rollup').read_text()
+                    if args.diagnostics == 'memory':
+                        native = subprocess.run([str(args.jdk / 'bin/jcmd'), str(probe_pid),
+                            'VM.native_memory', 'detail', 'scale=KB'], text=True,
+                            stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=90)
+                        assert native.returncode == 0 and 'Native Memory Tracking:' in native.stdout, native.stdout
+                        (execution / f'{name}-native-memory.txt').write_text(native.stdout)
+                        (execution / f'{name}-smaps-full.txt').write_text(Path(f'/proc/{probe_pid}/smaps').read_text())
+                    smaps = Path(f'/proc/{probe_pid}/smaps_rollup').read_text()
                     (execution / f'{name}-smaps.txt').write_text(smaps)
                     resident = {key: int(value) * 1024 for key, value in re.findall(
                         r'^(Rss|Pss|Private_Clean|Private_Dirty):\s+(\d+) kB', smaps, re.M)}
@@ -111,7 +180,7 @@ def trial(args, population, workers, execution, phase):
                         r'^\s*\d+:\s+(\d+)\s+\d+\s+(\S+)', result.stdout, re.M)}
                     carriers = classes.get('ru.lazyhat.compukters.core.device.computer.ActorProgramComputer', 0)
                     hosts = classes.get('ru.lazyhat.compukters.core.device.runtime.program.ProgramRuntimeHost', 0)
-                    expected = 0 if name in ['baseline', 'closed'] else population
+                    expected = 0 if name in ['baseline', 'closed', 'trimmed'] else population
                     assert carriers == hosts == expected, (name, carriers, hosts, expected)
                     counters = dict(zip(['hosts', 'guest_heap_used', 'guest_heap_quota',
                                          'admitted_storage_charge', 'filesystem_logical_bytes', 'instructions'],
@@ -129,20 +198,48 @@ def trial(args, population, workers, execution, phase):
                 elif words[0] == 'HEAP':
                     assert rows[-1]['phase'] == words[1]
                     rows[-1].update(heap_used=int(words[2]), heap_committed=int(words[3]))
+                elif words[0] == 'MALLOC':
+                    assert rows[-1]['phase'] == words[1]
+                    rows[-1].update(zip(['malloc_arena', 'malloc_mmap', 'malloc_used', 'malloc_free'],
+                                       map(int, words[2:]), strict=True))
+                elif words[0] == 'ALLOCATED':
+                    assert words[1] == args.profile_phase
+                    allocations.append(dict(phase=words[1], owner_bytes=int(words[2]), worker_bytes=int(words[3])))
+                elif words[0] in ['PROFILE_BEGIN', 'PROFILE_END']:
+                    assert args.diagnostics == 'perf' and words[1] == args.profile_phase
+                    assert native_profile is not None
+                    native_profile.command('enable' if words[0] == 'PROFILE_BEGIN' else 'disable')
+                    process.stdin.write('continue\n')
+                    process.stdin.flush()
+                elif words[0] == 'MALLOC_TRIM':
+                    assert args.diagnostics == 'memory' and int(words[1]) in [0, 1]
                 elif words[0] == 'COMPLETE':
                     assert list(map(int, words[1:])) == [population, workers]
                     complete = True
             assert process.wait(timeout=30) == 0, (execution / 'stderr.log').read_text()[-4000:]
-            assert complete and [r['phase'] for r in rows] == ['baseline', 'prompt', 'compute', 'mixed', 'resumed', 'closed']
+            expected_phases = ['baseline', 'prompt', 'compute', 'mixed', 'resumed', 'closed']
+            if args.diagnostics == 'memory':
+                expected_phases.append('trimmed')
+            assert complete and [r['phase'] for r in rows] == expected_phases
             validate_trial(output, population)
+            if args.diagnostics:
+                assert len(allocations) == 1 and all(v >= 0 for k, v in allocations[0].items() if k != 'phase')
+                if args.diagnostics == 'memory':
+                    assert all(r['malloc_arena'] == r['malloc_used'] + r['malloc_free'] for r in rows)
+                elif args.diagnostics == 'perf':
+                    assert native_profile.output.stat().st_size > 0
+                else:
+                    assert (output / f'{args.profile_phase}-{args.diagnostics}.jfr').stat().st_size > 0
             (execution / 'memory.json').write_text(json.dumps(rows, indent=2) + '\n')
-            return dict(argv=argv, pid=process.pid, started=started, ended=time.time(),
-                        population=population, workers=workers, memory=rows, exit_code=process.returncode)
+            return dict(argv=argv, pid=probe_pid, launcher_pid=process.pid, started=started, ended=time.time(),
+                        population=population, workers=workers, memory=rows, allocations=allocations, exit_code=process.returncode)
         finally:
             watchdog.cancel()
             if process.poll() is None:
-                process.terminate()
+                terminate_owned_processes()
                 process.wait(timeout=30)
+            if native_profile:
+                native_profile.close()
 
 
 def main():
@@ -157,6 +254,8 @@ def main():
     parser.add_argument('--rounds', type=int, default=3)
     parser.add_argument('--affinity', default='0-15')
     parser.add_argument('--store-template', type=Path, help='Closed disposable preinstalled store copied before Fleet creation')
+    parser.add_argument('--diagnostics', choices=['cpu', 'allocation', 'memory', 'perf'], help='Perturbed profiling; never use as throughput evidence')
+    parser.add_argument('--profile-phase', choices=['idle', 'burst', 'compute', 'mixed'], default='compute')
     parser.add_argument('--lock', type=Path, action='append', default=[])
     args = parser.parse_args()
     for name in ['classpath', 'library', 'image', 'output', 'jdk']:
