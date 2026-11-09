@@ -210,12 +210,8 @@ object JvmVmFleetProbe {
                 val delivered = service.pump(1024, before + 2_000_000)
                 pumpWall += System.nanoTime() - before
                 pumpCpu += clock.currentThreadCpuTime - beforeCpu
-                val metrics = service.runtimeMetrics()
-                if (metrics.pendingRequests == 0 && metrics.scheduler.scheduledActors == 0 && metrics.scheduler.busyWorkers == 0) {
-                    check(metrics.scheduler.queuedResults == 0)
-                    return pumpCpu to pumpWall
-                }
-                check(System.nanoTime() < deadline) { "Actor population did not quiesce: $metrics" }
+                if (service.isQuiescent()) return pumpCpu to pumpWall
+                check(System.nanoTime() < deadline) { "Actor population did not quiesce: ${service.runtimeMetrics()}" }
                 if (delivered == 0) LockSupport.parkNanos(100_000)
             }
         }
@@ -239,7 +235,7 @@ object JvmVmFleetProbe {
             mode: String? = null,
             sample: Int = 0,
         ) {
-            val before = service.runtimeMetrics()
+            val before = service.retiredInstructionCount()
             val active = carriers.count { it.state == ProgramRuntimeState.Running }
             val workerStart = workerCpu()
             val ownerStart = clock.currentThreadCpuTime
@@ -254,8 +250,7 @@ object JvmVmFleetProbe {
             val wall = System.nanoTime() - started
             val ownerCpu = clock.currentThreadCpuTime - ownerStart
             val workersCpu = workerCpu() - workerStart
-            val after = service.runtimeMetrics()
-            val retired = after.retiredInstructionsTotal - before.retiredInstructionsTotal
+            val retired = service.retiredInstructionCount() - before
             if (mode != null) {
                 frames +=
                     "$mode\t$sample\t$active\t$wall\t$submitWall\t$submitCpu\t${pump.second}\t${pump.first}\t$ownerCpu\t$workersCpu\t$retired"

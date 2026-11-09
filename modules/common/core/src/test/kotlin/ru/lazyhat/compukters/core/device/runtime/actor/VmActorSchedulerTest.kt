@@ -32,6 +32,53 @@ import kotlin.test.assertTrue
 
 class VmActorSchedulerTest {
     @Test
+    fun `quiescence includes deferred permits executing work and undelivered results`() {
+        val entered = CountDownLatch(1)
+        val release = CountDownLatch(1)
+        val endpoint = endpoint(902)
+        scheduler(workerCount = 1, messagesPerTurn = 1).use { scheduler ->
+            assertTrue(
+                scheduler.register(
+                    endpoint,
+                    object : VmActorProcessor<Int, Int, Int> {
+                        override fun process(command: Int): Int = command
+
+                        override fun advance(permit: Int): Int {
+                            entered.countDown()
+                            check(release.await(TIMEOUT_SECONDS, TimeUnit.SECONDS))
+                            return permit
+                        }
+                    },
+                ),
+            )
+            try {
+                assertTrue(scheduler.isQuiescent())
+                assertEquals(VmActorSubmission.ACCEPTED, scheduler.submitWithDeferredPermit(endpoint, emptyList(), 7))
+                val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(TIMEOUT_SECONDS)
+                while (scheduler.metrics().scheduledActors != 0 && System.nanoTime() < deadline) Thread.onSpinWait()
+                assertEquals(0, scheduler.metrics().scheduledActors)
+                assertFalse(scheduler.isQuiescent())
+                assertTrue(scheduler.releaseDeferredPermit(endpoint, 7))
+                assertTrue(entered.await(TIMEOUT_SECONDS, TimeUnit.SECONDS))
+                assertFalse(scheduler.isQuiescent())
+                release.countDown()
+                while ((scheduler.metrics().scheduledActors != 0 || scheduler.metrics().busyWorkers != 0) &&
+                    System.nanoTime() < deadline
+                ) {
+                    Thread.onSpinWait()
+                }
+                assertEquals(0, scheduler.metrics().scheduledActors)
+                assertEquals(0, scheduler.metrics().busyWorkers)
+                assertFalse(scheduler.isQuiescent())
+                assertEquals(7, assertIs<VmActorEvent.Result<Int>>(scheduler.drainEvents(1).single()).value)
+                assertTrue(scheduler.isQuiescent())
+            } finally {
+                release.countDown()
+            }
+        }
+    }
+
+    @Test
     fun `result readiness is notified by worker only after enqueue`() {
         val owner = Thread.currentThread()
         val ready = CountDownLatch(1)

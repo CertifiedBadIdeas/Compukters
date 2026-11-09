@@ -441,6 +441,11 @@ class ProgramRuntimeActorService(
         return count
     }
 
+    /** Cheap observation for standalone waiters that serialize admission and pumping. */
+    internal fun isQuiescent(): Boolean = pending.isEmpty() && scheduler.isQuiescent()
+
+    internal fun retiredInstructionCount(): Long = totalRetiredInstructions.get()
+
     fun metrics(): VmActorSchedulerMetrics = scheduler.metrics()
 
     fun calibratedCapacity(): Long = capacityGovernor.calibratedCapacity

@@ -267,6 +267,11 @@ class VmActorScheduler<C : Any, P : Any, R : Any>(
         return drained
     }
 
+    /** Observation for callers that have stopped admission, not a barrier against concurrent submissions. */
+    internal fun isQuiescent(): Boolean =
+        scheduledActors.get() == 0 && busyWorkers.get() == 0 &&
+            pendingPermits.get() == 0 && queuedMessages.get() == 0 && resultLanes.all { it.isEmpty() }
+
     fun metrics(): VmActorSchedulerMetrics {
         val queueLatency = queueLatencyHistogram.snapshot()
         val executionLatency = executionLatencyHistogram.snapshot()
