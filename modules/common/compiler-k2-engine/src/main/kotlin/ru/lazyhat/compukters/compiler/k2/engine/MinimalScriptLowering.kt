@@ -59,7 +59,7 @@ internal object MinimalScriptLowering {
         pluginContext: IrPluginContext,
         session: CompilationSession,
     ): Artifact? {
-        val declarations = SourceDeclarationCollector().also { module.accept(it, null) }
+        val declarations = SourceDeclarationCollector(GuestSourceLibraryDemand(module, session)::includes).also { module.accept(it, null) }
         val functions = declarations.functions
         val guestTypes = GuestTypeRegistry(pluginContext)
         functions.firstOrNull(IrSimpleFunction::isSuspend)?.let { function ->
@@ -99,7 +99,10 @@ internal object MinimalScriptLowering {
             }
             try {
                 GuestInlineNormalization.lower(module, pluginContext, session)
-                val normalized = SourceDeclarationCollector().also { module.accept(it, null) }
+                val normalized =
+                    SourceDeclarationCollector(
+                        GuestSourceLibraryDemand(module, session)::includes,
+                    ).also { module.accept(it, null) }
                 return KotlinProjectLowering.lower(
                     normalized.functions,
                     normalized.properties,
@@ -107,6 +110,8 @@ internal object MinimalScriptLowering {
                     entry,
                     pluginContext,
                     session,
+                    declarationFunctions = normalized.functionDeclarations,
+                    declarationClasses = normalized.classDeclarations,
                 )
             } catch (unsupported: UnsupportedKotlinIr) {
                 session.diagnosticSink(unsupported(session, unsupported.element, unsupported.message, entry))
@@ -193,27 +198,37 @@ internal object MinimalScriptLowering {
         )
 }
 
-private class SourceDeclarationCollector : IrVisitorVoid() {
+private class SourceDeclarationCollector(
+    private val admitted: (org.jetbrains.kotlin.ir.declarations.IrDeclaration) -> Boolean,
+) : IrVisitorVoid() {
     val functions = mutableListOf<IrSimpleFunction>()
+    val functionDeclarations = mutableListOf<IrSimpleFunction>()
     val properties = mutableListOf<IrProperty>()
     val classes = mutableListOf<IrClass>()
+    val classDeclarations = mutableListOf<IrClass>()
 
     override fun visitElement(element: IrElement) {
         element.acceptChildren(this, null)
     }
 
     override fun visitSimpleFunction(declaration: IrSimpleFunction) {
-        if (declaration.startOffset >= 0) functions += declaration
+        if (declaration.startOffset >= 0) {
+            functionDeclarations += declaration
+            if (admitted(declaration)) functions += declaration
+        }
         super.visitSimpleFunction(declaration)
     }
 
     override fun visitClass(declaration: IrClass) {
-        if (declaration.startOffset >= 0) classes += declaration
+        if (declaration.startOffset >= 0) {
+            classDeclarations += declaration
+            if (admitted(declaration)) classes += declaration
+        }
         super.visitClass(declaration)
     }
 
     override fun visitProperty(declaration: IrProperty) {
-        if (declaration.startOffset >= 0 && declaration.parent is IrFile) properties += declaration
+        if (declaration.startOffset >= 0 && declaration.parent is IrFile && admitted(declaration)) properties += declaration
         super.visitProperty(declaration)
     }
 }

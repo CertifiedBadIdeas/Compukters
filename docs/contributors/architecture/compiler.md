@@ -116,18 +116,16 @@ the canonical managed Unit singleton or null, while direct Unit calls retain the
 an older alias live across 200 allocations of 12 KiB captured arrays with mutable capture cells. No artifact
 encoding, instruction or GC protocol change is introduced.
 
-`CovariantInterfaceBridges` derives canonical concrete read views for supported declaration-site
-`out` interfaces during class discovery. The set depends on the specialization and its bounds,
-rather than consumer demand, preserving identical layouts when a trusted library owner is reused.
-Interface parent edges express reference and nested result covariance. Concrete implementations
-receive synthetic result-adapting methods for scalar, Unit and value-class results; managed value-class
-method tables share these generated methods. Interface results widened to `Any` receive
-reference forwarding methods because artifact interfaces cannot have a class parent. These methods
-reuse the normal function compiler and managed boxing/cast instructions. The original object, fields
-and direct methods retain their layouts. Parameters and callable result signatures must remain unchanged.
-Existing trusted collection bridges remain canonical. Depth/combination/method limits
-bound expansion, and library specialization validation retains one nominal owner. Sequence and
-generic-library conformance exercise this path through the unchanged artifact/VM contract.
+`CovariantInterfaceBridges` selects compatible read views between concrete instances discovered in the
+combined program and source-library IR. It checks declaration-site `out` bounds and substituted method
+signatures without enumerating unused nullable, supertype or Cartesian argument combinations. Type arguments,
+type-operator operands and actual linked-library signatures participate in discovery. Interface parent edges
+express reference and nested result covariance. Concrete implementations receive result-adapting methods
+for scalar, Unit and value-class results; managed value-class method tables share those methods. Results
+widened to `Any` use reference forwarding because artifact interfaces cannot have a class parent.
+Bridges reuse normal function lowering and managed boxing/casts, retaining the original object identity.
+Parameters and callable result signatures must remain unchanged. The existing class/function budgets and
+4096 generated-method bound remain enforced. Sequence and generic-library conformance exercise these paths.
 
 Canonical `IntRange` and `IntProgression` declarations let K2 resolve ascending, descending, and stepped `Int` loops.
 The compiler recognizes only their canonical `for` shape and evaluates start, end, and step once into scalar registers;
@@ -137,7 +135,7 @@ no range or iterator object enters the VM. It validates a positive step before i
 Text iteration uses the ordinary managed `CharSequence.iterator` / `CharIterator` library path, including
 String, StringBuilder and Guest implementations. It traverses UTF-16 units and allocates an iterator;
 there is no direct text-loop allocation optimization. The generated canonical runtime owns CharSequence
-and String's interface methods; stdlib exports the canonical CharIterator base class once.
+and String's interface methods; final specialization emits one canonical CharIterator base class.
 
 Direct primitive and reference-array `for` loops follow the same canonical-shape rule: the compiler snapshots the array reference, loads
 its length, and reads each element with existing array instructions at the current index. The loop header retains its
@@ -291,7 +289,7 @@ Function and class specializations are discovered together until no further depe
 members whose bodies introduce other generic classes. The VM receives ordinary
 concrete function and class records, with typed scalar or reference fields and calls. Platform ABI 3 records the
 symbol and signature of each declaration requiring source compilation: generic implementations, classes with generic
-supertypes, members of those classes, and inline bodies. One module can retain an ordinary precompiled library fragment
+supertypes, members of those classes, inline bodies, and their specialization-dependent callers. One module can retain an ordinary precompiled library fragment
 alongside those source bodies. The compiler resolves each source library as a separate Kotlin module over one shared
 metadata session, preserving `internal` and `private` boundaries. It includes canonical sources for resolution and
 specialization but binds ordinary implementations, including private helpers, to their compiled fragment instead of
@@ -310,7 +308,7 @@ array or exception root retains superclass methods; deleted method bodies cannot
 
 Tooling normalizes dependency module indexes into symbolic identities before linking so a shared library retains one owner across
 fragment containers. The final executable restores concrete indexes. Generic binary templates are not part of the
-platform bundle or VM artifact contract. Bundle format 9 and standalone module format 5 reject older representations.
+platform bundle or VM artifact contract. Bundle format 10 and standalone module format 6 reject packages built before final specialization.
 Selected addon modules can provide source templates through the same verified source-library path. Their metadata
 carrier retains template declaration identities while the separate source carrier supplies the matching files;
 sources are reattached before template validation. Standalone module decoding still rejects detached templates.
@@ -345,17 +343,24 @@ the owning library, not regenerated or bypassed by the consumer.
 The standard library has one owner, `stdlib:core`: core helpers, inline scope functions, `repeat`, ranges, collections and portable `kotlin.math`.
 Its generic and inline source bodies coexist with ordinary precompiled implementations.
 
-Ordinary library implementations may materialize concrete generic classes and structural collection interfaces,
-including `ArrayList<String>` and `List<String>`. These variants have canonical internal type, constructor, method
-and field exports in the owning library artifact. Linking redirects matching trusted template materializations to
-that owner and removes the superseded local records; variants absent from dependencies continue to specialize from
-source. Source provenance, rather than a user class's spelling, controls eligibility. Ambiguous owners, incompatible
-layouts and missing members are rejected. Internal linking exports do not change Kotlin source visibility. The
-representation uses the existing artifact import/export format, without new VM instructions or binary generic
-templates. Only concrete variants are shared; inline and generic top-level source bodies retain their normal
-consumer specialization behavior. K2 still materializes a consumer variant transiently for type and layout checking;
-this linking contract does not yet skip that lowering work. Trusted collection variants include their supported
-read-view interfaces regardless of consumer usage, so covariance cannot change a specialization's nominal layout.
+Before library fragments are emitted, `PlatformSpecializationPlan` walks typed IR dependencies in reverse
+from specialization-dependent declarations. Their top-level function/property or whole class/object owner,
+and callers depending on it, remain admitted source declarations. Independent ordinary implementations and
+value-class layouts stay precompiled. This partition uses canonical source provenance and metadata ranges;
+KDoc does not change ownership. Fixed nongeneric collection read protocols retain canonical library owners.
+The precompiler rejects remaining concrete generic specialization owners.
+
+At final compilation, `GuestSourceLibraryDemand` follows dependencies from all project declarations through
+the admitted library source owners. The shared graph includes signatures, body references, type operators,
+defaults, initializers, generated collection factories/read helpers and enum-entry implementation dependencies.
+Reached classes retain their complete initialization and dispatch surface; this is not method-level dead-code
+elimination. Only reached source owners enter executable lowering. Other library symbols and value-class layouts remain available to
+K2 resolution, constructor/component lowering and bridge lookup, while ordinary bodies bind to their precompiled fragments. Consequently, a
+concrete generic owner receives one layout after program and library demand are known. Strict nominal-owner,
+layout and member validation remains in place. Source visibility is unchanged; no VM generics or binary IR
+templates are introduced. FIR validates packaged source modules; target lowering of deferred bodies occurs
+in the final consumer. Library changes require rebuilding packages against the new format contract.
+
 Collection value semantics add internal read-only nominal protocols after frontend analysis. Generated bridges
 use the concrete receiver's typed size, iterator and entry reads, boxing only returned values; trusted hash
 containers use internal Any-key lookups, while custom reference implementations scan typed elements/entries.

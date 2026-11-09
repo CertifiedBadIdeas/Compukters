@@ -55,13 +55,14 @@ import ru.lazyhat.compukters.compiler.artifact.model.TypeRef
 import ru.lazyhat.compukters.compiler.artifact.model.ValueType
 import ru.lazyhat.compukters.compiler.artifact.write.ArtifactWriteResult
 import ru.lazyhat.compukters.compiler.artifact.write.ArtifactWriter
+import ru.lazyhat.compukters.compiler.k2.engine.CollectionValueBridges
 import ru.lazyhat.compukters.compiler.k2.engine.CompilationSession
 import ru.lazyhat.compukters.compiler.k2.engine.KotlinProjectLowering
 import ru.lazyhat.compukters.compiler.k2.engine.PlatformCapabilityShape
 import ru.lazyhat.compukters.compiler.k2.engine.UnsupportedKotlinIr
-import ru.lazyhat.compukters.compiler.k2.engine.hasParameterizedSupertype
 import ru.lazyhat.compukters.compiler.k2.engine.intrinsic.PlatformCapabilityId
 import ru.lazyhat.compukters.compiler.k2.engine.intrinsic.TrustedIntrinsicRegistry
+import ru.lazyhat.compukters.platform.bundle.PlatformDeclarationIdentity
 import ru.lazyhat.compukters.platform.bundle.PlatformModule
 import ru.lazyhat.compukters.platform.bundle.PlatformModuleId
 import ru.lazyhat.compukters.platform.k2.build.PlatformLibraryDeclaration
@@ -89,37 +90,30 @@ class PlatformLibraryCompiler {
         intrinsicRegistry: TrustedIntrinsicRegistry,
         capabilityShapes: Map<PlatformCapabilityId, PlatformCapabilityShape> = emptyMap(),
         dependencies: List<PlatformModule> = emptyList(),
+        deferredDeclarations: Set<PlatformDeclarationIdentity> = emptySet(),
     ): ImmutableBytes? {
-        val filesByPath = ir.files.associateBy { file -> matchSourcePath(file.fileEntry.name, sourceModules.keys) }
+        val filesByPath = ir.files.associateBy { file -> matchPlatformSourcePath(file.fileEntry.name, sourceModules.keys) }
         val currentFiles = currentSourcePaths.mapNotNull(filesByPath::get).toSet()
         require(currentFiles.isNotEmpty()) { "FIR-to-IR produced no files for platform module $module" }
-        val collected = LibraryDeclarationCollector(currentFiles).also { ir.accept(it, null) }
+        val collected = LibraryDeclarationCollector(currentFiles)
+        val deferredOwners = deferredDeclarations.mapTo(mutableSetOf(), PlatformDeclarationIdentity::symbol)
+        currentFiles.forEach { file ->
+            val path = matchPlatformSourcePath(file.fileEntry.name, sourceModules.keys)
+            file.declarations
+                .filter { root ->
+                    (root is IrClass && root.isValue && root.fqNameWhenAvailable?.asString() !in deferredOwners) ||
+                        declarations.any { declaration ->
+                            declaration.sourcePath == path && declaration.endUtf16 > root.startOffset &&
+                                declaration.endUtf16 <= root.endOffset
+                        }
+                }.forEach { it.accept(collected, null) }
+        }
         val valueClasses = collected.classes.filter { it.isValue }
         if (declarations.none { it.kind == PlatformLibraryDeclarationKind.FUNCTION } && valueClasses.isEmpty()) return null
         val dependencyIds = dependencies.mapTo(mutableSetOf(), PlatformModule::id)
         val dependencyFiles = filesByPath.filterKeys { sourceModules[it] in dependencyIds }.values.toSet()
         val dependencyDeclarations = LibraryDeclarationCollector(dependencyFiles).also { ir.accept(it, null) }
-        val dependencyTemplateSymbols = dependencies.flatMap { it.sourceDeclarations }.mapTo(mutableSetOf()) { it.symbol }
-        val dependencyTemplateClasses =
-            dependencyDeclarations.classes.filter {
-                it.fqNameWhenAvailable?.asString() in
-                    dependencyTemplateSymbols
-            }
-        val enumEntries =
-            ru.lazyhat.compukters.compiler.k2.engine.GuestEnumEntries.lower(
-                collected.classes + dependencyTemplateClasses,
-                pluginContext,
-                collected.classes,
-            )
-        collected.classes += enumEntries.classes
-        collected.functions += enumEntries.functions
-        val dependencyTemplateFunctions =
-            dependencyDeclarations.functions.filter { function ->
-                !function.isInline && (
-                    function.fqNameWhenAvailable?.asString() in dependencyTemplateSymbols ||
-                        (function.parent as? IrClass) in dependencyTemplateClasses
-                )
-            }
+        val deferredSymbols = dependencies.flatMap { it.sourceDeclarations }.mapTo(mutableSetOf()) { it.symbol }
         val ordinarySymbols =
             declarations.filter { it.kind == PlatformLibraryDeclarationKind.FUNCTION }.mapTo(mutableSetOf()) { it.symbol }
         val ordinaryFunctions =
@@ -149,15 +143,6 @@ class PlatformLibraryCompiler {
                             body = pluginContext.irFactory.createBlockBody(-1, -1)
                         }
                 }
-        val templateFunctions =
-            collected.functions.filter { function ->
-                !function.isInline &&
-                    (
-                        function.typeParameters.isNotEmpty() || (function.parent as? IrClass)?.let { owner ->
-                            owner.typeParameters.isNotEmpty() || owner.hasParameterizedSupertype()
-                        } == true
-                    )
-            }
         val physicalModules =
             filesByPath.entries.associate { (path, file) -> file.fileEntry.name to sourceModules.getValue(path) }
         val libraries = loadPlatformLibraries(dependencies)
@@ -178,7 +163,7 @@ class PlatformLibraryCompiler {
             try {
                 KotlinProjectLowering.lower(
                     (
-                        listOf(entry) + ordinaryFunctions + templateFunctions + dependencyTemplateFunctions +
+                        listOf(entry) + ordinaryFunctions +
                             collected.functions.filter { function ->
                                 (function.parent as? IrClass)?.kind == ClassKind.INTERFACE &&
                                     function.body == null &&
@@ -186,8 +171,10 @@ class PlatformLibraryCompiler {
                             }
                     ).distinctBy { it.symbol },
                     emptyList(),
-                    (collected.classes + dependencyTemplateClasses + dependencyDeclarations.classes.filter { it.isValue })
-                        .distinctBy { it.symbol },
+                    (
+                        collected.classes +
+                            dependencyDeclarations.classes.filter { it.isValue && it.fqNameWhenAvailable?.asString() !in deferredSymbols }
+                    ).distinctBy { it.symbol },
                     entry,
                     pluginContext,
                     session,
@@ -199,6 +186,9 @@ class PlatformLibraryCompiler {
                     unsupported,
                 )
             }
+        require(session.materializedPlatformSpecializations.all { it in CollectionValueBridges.protocolNames }) {
+            "precompiled library $module retains specialization-dependent owners: ${session.materializedPlatformSpecializations}"
+        }
         val wrapper =
             LibraryModuleLinker.link(
                 artifact.withLibraryFragmentEntry(declarations, session.materializedPlatformSpecializations),
@@ -239,15 +229,6 @@ class PlatformLibraryCompiler {
                 }
             }
         return PlatformLibraryFragmentCodec.encode(PlatformLibraryFragment(module, ImmutableBytes.of(bytes)))
-    }
-
-    private fun matchSourcePath(
-        physicalPath: String,
-        sourcePaths: Set<String>,
-    ): String {
-        val normalized = physicalPath.replace('\\', '/')
-        val matches = sourcePaths.filter { path -> normalized.endsWith(path) || normalized.endsWith("/${path.substringAfterLast('/')}") }
-        return matches.singleOrNull() ?: error("cannot identify canonical platform source for $physicalPath: $matches")
     }
 }
 
@@ -497,4 +478,13 @@ private fun DataInputStream.string(): String {
     val bytes = readNBytes(length)
     require(bytes.size == length) { "truncated platform library fragment" }
     return bytes.decodeToString(throwOnInvalidSequence = true)
+}
+
+internal fun matchPlatformSourcePath(
+    physicalPath: String,
+    sourcePaths: Set<String>,
+): String {
+    val normalized = physicalPath.replace('\\', '/')
+    val matches = sourcePaths.filter { path -> normalized.endsWith(path) || normalized.endsWith("/${path.substringAfterLast('/')}") }
+    return matches.singleOrNull() ?: error("cannot identify canonical platform source for $physicalPath: $matches")
 }

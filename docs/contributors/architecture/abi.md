@@ -563,7 +563,7 @@ Protocol 17 workers are rejected at handshake; compiler, platform, artifact and 
 | --- | --- | --- |
 | Executable container | Format 3; covariant method results require Runtime ABI 1.18 | `modules/common/compiler-artifact` and `host/compukter-vm/src/artifact/format.rs` |
 | Native session transport | C ABI 28, checked by both FFM and JNI | `host/compukter-vm/ffi/src/lib.rs` and `modules/common/native-runtime` |
-| Base platform | Bundle format 9, standalone module format 5, platform ABI 3 | `PlatformBundleCodec` in `modules/common/platform-bundle` |
+| Base platform | Bundle format 10, standalone module format 6, platform ABI 3 | `PlatformBundleCodec` in `modules/common/platform-bundle` |
 | Kotlin metadata carrier | Private format 6 | `platform-k2` |
 | Compiler worker | Protocol 5; explicit source-free library preparation | `compiler-client` and `compiler-k2` |
 | IDE analysis | Protocol 19 | `ide-analysis-client` and `ide-analysis-k2` |
@@ -1305,3 +1305,12 @@ or a removed surface UUID. Viewer state is transient and server-thread owned; on
 Clients use the existing image barrier and texture cache. Recovery requests name one already visible surface and
 are limited to one/player/tick. Pixel work and tile sync share the existing world budgets. Rendering projects
 storage coordinates through the installed construction projection before camera subtraction.
+
+## Final library specialization
+
+Bundle format 10 and standalone module format 6 require specialization-dependent library owners and
+callers to remain admitted source declarations until final program compilation. Older packages may
+contain prematurely materialized generic owners and are rejected, including standalone addon metadata.
+Producers and consumers use the same existing declaration-identity/source-carrier fields; private metadata
+format 6, platform ABI 3, CPKT 3 and native transport contracts do not change. Independent ordinary code
+remains precompiled. Rebuild base and addon packages together with the compiler.

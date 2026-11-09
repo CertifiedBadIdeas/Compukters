@@ -237,6 +237,8 @@ private val specializedStorageFactories =
         "kotlin.sequences.sequenceCache" to SpecializedStorageFactory("kotlin.sequences", "SequenceCache"),
     )
 
+private val listCollectionFactories = setOf("kotlin.collections.listOf", "kotlin.collections.emptyList")
+
 private val hashCollectionFactories =
     mapOf(
         "kotlin.collections.mapOf" to "kotlin.collections.HashMap",
@@ -244,6 +246,19 @@ private val hashCollectionFactories =
         "kotlin.collections.setOf" to "kotlin.collections.HashSet",
         "kotlin.collections.mutableSetOf" to "kotlin.collections.HashSet",
     )
+
+/** Source owners selected by compiler factories rather than explicit IR constructor calls. */
+internal fun compilerSourceDependencies(call: IrCall): List<String> {
+    val target = call.symbol.owner
+    if (!target.isExternal) return emptyList()
+    val name = target.fqNameWhenAvailable?.asString()
+    if (name in listCollectionFactories) return listOf("kotlin.collections.ArrayList")
+    hashCollectionFactories[name]?.let { return listOf(it) }
+    specializedStorageFactories[name]?.let { factory ->
+        return GuestPrimitive.entries.map(factory::primitiveName) + factory.referenceName
+    }
+    return emptyList()
+}
 
 internal data class GuestClassInstance(
     val declaration: IrClass,
@@ -299,6 +314,7 @@ private fun collectGuestClassInstances(
     pluginContext: IrPluginContext,
     isPlatformClass: (IrClass) -> Boolean,
     initializationRoots: List<IrElement> = emptyList(),
+    signatureTypes: List<IrType> = emptyList(),
 ): List<GuestClassInstance> {
     val bySymbol = classes.associateBy { it.symbol }
     val byName = classes.associateBy { it.fqNameWhenAvailable?.asString() }
@@ -332,12 +348,18 @@ private fun collectGuestClassInstances(
         }
     }
 
+    val consideredTypes = mutableSetOf<String>()
+
     fun consider(
         type: IrType,
         substitution: (IrType) -> IrType = { it },
     ) {
         val resolved = substitution(type)
         if (resolved.containsTypeParameter()) return
+        if (!consideredTypes.add(resolved.specializationTypeIdentity())) return
+        (resolved as? IrSimpleType)?.arguments?.forEach { argument ->
+            (argument as? IrTypeProjection)?.type?.let { consider(it) }
+        }
         val local = resolved.classInstance(bySymbol)
         if (local != null) {
             add(local)
@@ -360,9 +382,14 @@ private fun collectGuestClassInstances(
         element.accept(
             object : IrVisitorVoid() {
                 override fun visitCall(expression: IrCall) {
+                    // Imported calls retain their declared ABI even when K2 narrows the expression type.
+                    val target = expression.symbol.owner.resolveFakeOverrideMaybeAbstract() ?: expression.symbol.owner
+                    consider(target.returnType)
+                    target.parameters.forEach { consider(it.type) }
+
                     if (expression.symbol.owner.fqNameWhenAvailable
                             ?.asString() in
-                        setOf("kotlin.collections.listOf", "kotlin.collections.emptyList")
+                        listCollectionFactories
                     ) {
                         val elementType = expression.typeArguments.singleOrNull()?.let(substitution)
                         if (elementType != null && !elementType.containsTypeParameter()) {
@@ -396,6 +423,7 @@ private fun collectGuestClassInstances(
                 }
 
                 override fun visitElement(element: IrElement) {
+                    if (element is IrTypeOperatorCall) consider(element.typeOperand, substitution)
                     when (element) {
                         is IrExpression -> consider(element.type, substitution)
                         is IrValueDeclaration -> consider(element.type, substitution)
@@ -407,6 +435,7 @@ private fun collectGuestClassInstances(
             null,
         )
     }
+    signatureTypes.forEach { consider(it) }
     functions.forEach { instance -> scan(instance.concreteDeclaration, instance::substitute) }
     properties.forEach { property -> scan(property.declaration, { it }) }
     initializationRoots.forEach { scan(it, { type -> type }) }
@@ -418,7 +447,6 @@ private fun collectGuestClassInstances(
             .forEach { (name, argument) ->
                 byName[name]?.let { add(GuestClassInstance(it, listOf(argument))) }
             }
-        CovariantInterfaceBridges.views(instance, pluginContext).forEach(::add)
         instance.declaration.superTypes.forEach { consider(it, instance::substitute) }
         // Nested classes own independent type parameters and are scanned through their own instances.
         instance.declaration.declarations.filterNot { it is IrClass }.forEach { declaration ->
@@ -701,6 +729,7 @@ private fun prepareGuestFunctionBodies(
     pluginContext: IrPluginContext,
     lexicalSpecialization: GuestLocalSpecialization,
     isPlatformClass: (IrClass) -> Boolean,
+    signatureTypes: List<IrType>,
 ): PreparedGuestFunctionBodies {
     val ordinaryInitializationRoots =
         sourceClasses.filter { it.typeParameters.isEmpty() }.flatMap { declaration ->
@@ -745,6 +774,7 @@ private fun prepareGuestFunctionBodies(
             topLevelProperties,
             pluginContext,
             isPlatformClass,
+            signatureTypes = signatureTypes,
         )
     var classInstances = allClassInstances.filterNot { inlineValueClasses.contains(it.declaration.symbol) }
     // Generic member bodies can call helpers whose signatures/body introduce further class instances.
@@ -816,6 +846,7 @@ private fun prepareGuestFunctionBodies(
                 pluginContext,
                 isPlatformClass,
                 initializationRoots,
+                signatureTypes,
             )
         val stable = discoveredClasses.toSet() == allClassInstances.toSet() && discoveredFunctions == userFunctions
         localFunctions = discoveredLocals
@@ -1559,11 +1590,13 @@ internal object KotlinProjectLowering {
         pluginContext: IrPluginContext,
         session: CompilationSession,
         includeTrustedPlatformBodies: Boolean = false,
+        declarationFunctions: List<IrSimpleFunction> = functions,
+        declarationClasses: List<IrClass> = classes,
     ): Artifact {
         val protocolClasses = CollectionValueBridges.protocolClasses(pluginContext, classes)
         val bridgeClasses = (classes + protocolClasses).distinctBy { it.symbol }
         val protocolMethods = protocolClasses.flatMap { it.declarations.filterIsInstance<IrSimpleFunction>() }
-        val valueBridges = CollectionValueBridges.lower(bridgeClasses, functions, pluginContext)
+        val valueBridges = CollectionValueBridges.lower(bridgeClasses, declarationFunctions, pluginContext)
         val enumEntries = GuestEnumEntries.lower(classes, pluginContext)
         return lowerPrepared(
             functions + valueBridges + protocolMethods + enumEntries.functions,
@@ -1573,6 +1606,7 @@ internal object KotlinProjectLowering {
             pluginContext,
             session,
             includeTrustedPlatformBodies,
+            declarationClasses,
         )
     }
 
@@ -1584,6 +1618,7 @@ internal object KotlinProjectLowering {
         pluginContext: IrPluginContext,
         session: CompilationSession,
         includeTrustedPlatformBodies: Boolean,
+        declarationClasses: List<IrClass>,
     ): Artifact {
         val guestTypes = GuestTypeRegistry(pluginContext)
         val platformScalars = PlatformScalarRegistry(session.platformScalarTypes, session.platformScalarConstants)
@@ -1596,6 +1631,11 @@ internal object KotlinProjectLowering {
             return file.packageFqName == FqName("kotlin.collections") &&
                 session.virtualSourcePath(file.fileEntry.name) in session.sourcePlatformPaths
         }
+
+        fun sourceOwner(declaration: IrClass): Boolean =
+            generateSequence(declaration) { it.parent as? IrClass }.any {
+                it.fqNameWhenAvailable?.asString() in session.sourcePlatformSymbols
+            }
         val scannedCollectionHelpers = mutableSetOf<IrSimpleFunctionSymbol>()
         val collectionUsage =
             object : IrVisitorVoid() {
@@ -1624,7 +1664,15 @@ internal object KotlinProjectLowering {
                 }
             }
         (functions + properties).filterNot(::isCollectionSource).forEach { it.accept(collectionUsage, null) }
-        val collectionInterfaceClasses = canonicalPlatformBaseClasses(pluginContext, session)
+        val collectionInterfaceClasses =
+            if (includeTrustedPlatformBodies) {
+                emptyList()
+            } else {
+                canonicalPlatformBaseClasses(
+                    pluginContext,
+                    session,
+                )
+            }
         val platformTypeSymbols =
             if (includeTrustedPlatformBodies) emptySet() else session.platformTypes.mapTo(hashSetOf()) { it.symbol }
         val sourceClasses =
@@ -1632,7 +1680,10 @@ internal object KotlinProjectLowering {
                 .distinctBy { it.symbol }
                 .filterNot { declaration ->
                     declaration.runtimeExceptionType() != null ||
-                        (includeTrustedPlatformBodies && declaration.kind == ClassKind.OBJECT && !declaration.isManagedPlatformObject()) ||
+                        (
+                            declaration.kind == ClassKind.OBJECT && !declaration.isManagedPlatformObject() &&
+                                session.trustedPlatformModule(declaration.file.fileEntry.name) != null
+                        ) ||
                         (
                             !includeTrustedPlatformBodies && !usesListFactory &&
                                 declaration !in collectionInterfaceClasses && isCollectionSource(declaration)
@@ -1640,7 +1691,7 @@ internal object KotlinProjectLowering {
                         (
                             !includeTrustedPlatformBodies &&
                                 declaration.fqNameWhenAvailable?.asString() !in specializedPlatformBaseTypes &&
-                                declaration.fqNameWhenAvailable?.asString() !in session.sourcePlatformSymbols &&
+                                !sourceOwner(declaration) &&
                                 session.trustedPlatformModule(declaration.file.fileEntry.name) != null
                         ) ||
                         (
@@ -1651,7 +1702,7 @@ internal object KotlinProjectLowering {
                             !includeTrustedPlatformBodies && declaration !in collectionInterfaceClasses &&
                                 declaration.fqNameWhenAvailable?.asString() !in specializedPlatformBaseTypes &&
                                 session.virtualSourcePath(declaration.file.fileEntry.name) in session.sourcePlatformPaths &&
-                                declaration.fqNameWhenAvailable?.asString() !in session.sourcePlatformSymbols
+                                !sourceOwner(declaration)
                         )
                 }.sortedBy { it.fqNameWhenAvailable?.asString().orEmpty() }
         sourceClasses
@@ -1681,7 +1732,8 @@ internal object KotlinProjectLowering {
                         { it.name.asString() },
                     ),
                 ).map(::topLevelProperty)
-        val inlineValueClasses = InlineValueClassRegistry.build(classes, pluginContext)
+        // Layout knowledge remains available for precompiled types without selecting their bodies.
+        val inlineValueClasses = InlineValueClassRegistry.build(declarationClasses, pluginContext)
         val sourceClassSymbols = sourceClasses.mapTo(mutableSetOf()) { it.symbol }
         val playerFunctions =
             (
@@ -1708,6 +1760,10 @@ internal object KotlinProjectLowering {
                             includeTrustedPlatformBodies ||
                                 function.parent is IrFile ||
                                 (
+                                    owner?.kind == ClassKind.OBJECT && !owner.isManagedPlatformObject() &&
+                                        session.trustedPlatformModule(function.file.fileEntry.name) != null
+                                ) ||
+                                (
                                     inlineValueClasses.contains(owner?.symbol) &&
                                         function.origin == IrDeclarationOrigin.DEFINED
                                 ) ||
@@ -1726,6 +1782,7 @@ internal object KotlinProjectLowering {
                             !includeTrustedPlatformBodies &&
                                 !CollectionValueBridges.isBridge(function) &&
                                 owner?.fqNameWhenAvailable?.asString() !in specializedPlatformBaseTypes &&
+                                owner?.let(::sourceOwner) != true &&
                                 function.fqNameWhenAvailable?.asString() !in session.sourcePlatformSymbols &&
                                 function.correspondingPropertySymbol
                                     ?.owner
@@ -1767,6 +1824,7 @@ internal object KotlinProjectLowering {
                 topLevelProperties,
                 pluginContext,
                 lexicalSpecialization,
+                signatureTypes = linkedPlatformSignatureTypes(rootFunctions + sourceClasses, session),
                 // Library specializations must not consume the project's independent 256-variant budget.
                 isPlatformClass = { declaration ->
                     var parent = declaration.parent
@@ -2352,6 +2410,8 @@ internal object KotlinProjectLowering {
 
         fun resolveInlineComponents(box: GuestValueClassBox): List<ValueType> {
             if (box.componentTypes.isNotEmpty()) return box.componentTypes
+            // Imported scalar layouts are leaves even when first reached through an aggregate.
+            if (box.inlineType == null) return listOf(box.scalar).also { box.componentTypes = it }
             if (!resolvingInline.add(box.name)) throw UnsupportedKotlinIr(box.symbol.owner, "recursive value-class layout")
             box.componentTypes =
                 box.propertyTypes.flatMap { source ->
@@ -6165,7 +6225,10 @@ private class FunctionCompiler(
                 } else {
                     val field =
                         topLevelFieldsByBacking[expression.symbol]
-                            ?: throw UnsupportedKotlinIr(expression, "unknown field")
+                            ?: throw UnsupportedKotlinIr(
+                                expression,
+                                "unknown field ${expression.symbol.owner.fqNameWhenAvailable} in ${function.fqNameWhenAvailable}",
+                            )
                     allocate(field.type).also { destination ->
                         emit(Instruction.StaticGet(destination, FieldRef.Local(field.fieldId)))
                     }
@@ -7199,7 +7262,7 @@ private class FunctionCompiler(
                 }
             return allocate(ValueType.Bool).also { destination -> emit(Instruction.RefEqual(destination, references[0], references[1])) }
         }
-        if (target.isExternal && targetName in setOf("kotlin.collections.listOf", "kotlin.collections.emptyList")) {
+        if (target.isExternal && targetName in listCollectionFactories) {
             return compileListFactory(call, targetName == "kotlin.collections.listOf")
         }
         if (target.isExternal && targetName in hashCollectionFactories) {
@@ -7995,13 +8058,17 @@ private class FunctionCompiler(
         signature: String = target.canonicalPlatformSignature(),
     ): List<ResolvedCallArgument> {
         val platformDefaults =
-            session.platformDefaults[PlatformDeclarationIdentity(target.fqNameWhenAvailable?.asString().orEmpty(), signature)]
-                ?: session.platformFunctions
-                    .singleOrNull { link ->
-                        link.symbol == target.fqNameWhenAvailable?.asString() &&
-                            link.signature == signature
-                    }?.defaultArguments
-                    .orEmpty()
+            if (target.fqNameWhenAvailable?.asString() in session.sourcePlatformSymbols) {
+                emptyList()
+            } else {
+                session.platformDefaults[PlatformDeclarationIdentity(target.fqNameWhenAvailable?.asString().orEmpty(), signature)]
+                    ?: session.platformFunctions
+                        .singleOrNull { link ->
+                            link.symbol == target.fqNameWhenAvailable?.asString() &&
+                                link.signature == signature
+                        }?.defaultArguments
+                        .orEmpty()
+            }
         return loweredParameters(target, session).mapIndexed { loweredIndex, parameter ->
             val index = target.parameters.indexOf(parameter)
             call.arguments.getOrNull(index)?.let(ResolvedCallArgument::Expression)
@@ -8858,15 +8925,28 @@ private class FunctionCompiler(
             return compileBooleanCompareTo(call, arguments)
         }
         comparison(call, name, argumentExpressions, arguments)?.let { return it }
-        if (arguments.size == 1 && argumentExpressions[0].type == kotlinStringType && name == "<get-length>") {
-            return result(ValueType.I32) { Instruction.StringLength(it, arguments[0]) }
+        val stringReceiver =
+            arguments
+                .firstOrNull()
+                ?.takeIf {
+                    argumentExpressions[0].type == kotlinStringType ||
+                        (target.parent as? IrClass)?.fqNameWhenAvailable?.asString() == "kotlin.String"
+                }?.let { receiver ->
+                    if (registerValueType(receiver) == stringType) {
+                        receiver
+                    } else {
+                        allocate(stringType).also { emit(Instruction.CheckedCast(it, receiver, (stringType as ValueType.Ref).type)) }
+                    }
+                }
+        if (arguments.size == 1 && stringReceiver != null && name == "<get-length>") {
+            return result(ValueType.I32) { Instruction.StringLength(it, stringReceiver) }
         }
-        if (arguments.size == 2 && argumentExpressions[0].type == kotlinStringType && name == "get") {
-            return result(ValueType.Char) { Instruction.StringGet(it, arguments[0], arguments[1]) }
+        if (arguments.size == 2 && stringReceiver != null && name == "get") {
+            return result(ValueType.Char) { Instruction.StringGet(it, stringReceiver, arguments[1]) }
         }
-        if (arguments.size == 3 && argumentExpressions[0].type == kotlinStringType && name in setOf("substring", "subSequence")) {
+        if (arguments.size == 3 && stringReceiver != null && name in setOf("substring", "subSequence")) {
             prepareAllocationBlock()
-            return result(stringType) { Instruction.StringSubstring(it, arguments[0], arguments[1], arguments[2]) }
+            return result(stringType) { Instruction.StringSubstring(it, stringReceiver, arguments[1], arguments[2]) }
         }
         if (arguments.size == 3 &&
             guestTypes.isStringArray(argumentExpressions[0].type) &&
@@ -10885,7 +10965,7 @@ private fun canonicalPlatformBaseClasses(
             pluginContext.referenceClass(classId)?.owner
         }
 
-private val specializedPlatformBaseTypes =
+internal val specializedPlatformBaseTypes =
     setOf(
         "kotlin.collections.CharIterator",
         "kotlin.collections.Iterable",

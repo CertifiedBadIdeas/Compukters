@@ -42,6 +42,8 @@ import org.jetbrains.kotlin.name.Name
 internal object GuestEnumEntries {
     private val holderOrigin = IrDeclarationOriginImpl("COMPUKTERS_ENUM_ENTRIES_HOLDER")
 
+    const val IMPLEMENTATION_NAME = "kotlin.enums.EnumEntriesList"
+
     fun isHolder(declaration: IrClass): Boolean = declaration.origin == holderOrigin
 
     data class Generated(
@@ -55,7 +57,7 @@ internal object GuestEnumEntries {
         enums: List<IrClass> = classes,
     ): Generated {
         val implementation =
-            classes.firstOrNull { it.fqNameWhenAvailable?.asString() == "kotlin.enums.EnumEntriesList" }
+            classes.firstOrNull { it.fqNameWhenAvailable?.asString() == IMPLEMENTATION_NAME }
                 ?: return Generated(emptyList(), emptyList())
         val holders = mutableListOf<IrClass>()
         val getters = mutableListOf<IrSimpleFunction>()

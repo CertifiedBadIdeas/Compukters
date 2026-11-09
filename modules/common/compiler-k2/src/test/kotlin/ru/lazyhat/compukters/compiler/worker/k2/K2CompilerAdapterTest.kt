@@ -143,6 +143,9 @@ class K2CompilerAdapterTest {
                     class LibrarySingle<T>(private val value: T): LibraryProducer<T> {
                         override fun produce(): T = value
                     }
+                    @Suppress("NOTHING_TO_INLINE")
+                    inline fun scalarInline(): Int = 3
+                    fun inlineCaller(): Int = scalarInline()
                     fun producer(): LibraryProducer<Int> = LibrarySingle<Int>(42)
                     fun <T> identity(value: T): T = value
                     inline fun <T, R> transform(value: T, block: (T) -> R): R = block(value)
@@ -224,6 +227,7 @@ class K2CompilerAdapterTest {
             assertNull(classOnlyLibrary.libraryFragment)
             assertTrue(library.sourceDeclarations.any { it.symbol == "sample.describe" })
             assertTrue(library.sourceDeclarations.none { it.symbol == "sample.describeSize" || it.symbol == "sample.label" })
+            assertTrue(library.sourceDeclarations.any { it.symbol == "sample.inlineCaller" })
             assertTrue(classLibrary.sourceDeclarations.isNotEmpty())
             assertTrue(classOnlyLibrary.sourceDeclarations.isNotEmpty())
             val core = platform.modules.single { it.id.toString() == "stdlib:core" }
@@ -307,6 +311,7 @@ class K2CompilerAdapterTest {
                         require(derived.value == 9)
                         val cellAlias: Cell<Int> = derived
                         require(cellAlias === derived && cellAlias.keep(13L) == 13L)
+                        require(sample.inlineCaller() == 3)
                         val produced = sample.producer()
                         val producedNullable: sample.LibraryProducer<Int?> = produced
                         val producedObjects: sample.LibraryProducer<Any> = produced

@@ -20,11 +20,9 @@ package ru.lazyhat.compukters.compiler.k2.engine
 
 import org.jetbrains.kotlin.descriptors.MultiFieldValueClassRepresentation
 import org.jetbrains.kotlin.ir.declarations.IrClass
-import org.jetbrains.kotlin.ir.declarations.IrSimpleFunction
 import org.jetbrains.kotlin.ir.symbols.IrClassSymbol
 import org.jetbrains.kotlin.ir.symbols.UnsafeDuringIrConstructionAPI
 import org.jetbrains.kotlin.ir.util.fqNameWhenAvailable
-import ru.lazyhat.compukters.compiler.artifact.model.Instruction
 import ru.lazyhat.compukters.compiler.artifact.model.ModuleKind
 import ru.lazyhat.compukters.compiler.artifact.model.NominalType
 import ru.lazyhat.compukters.compiler.artifact.model.SymbolKind
@@ -32,13 +30,13 @@ import ru.lazyhat.compukters.compiler.artifact.read.ArtifactReader
 import ru.lazyhat.compukters.compiler.k2.engine.intrinsic.CanonicalTrustedIntrinsics
 import ru.lazyhat.compukters.compiler.k2.engine.library.PlatformLibraryCompiler
 import ru.lazyhat.compukters.compiler.k2.engine.library.PlatformLibraryFragmentCodec
+import ru.lazyhat.compukters.compiler.k2.engine.library.PlatformSpecializationPlan
 import ru.lazyhat.compukters.platform.bundle.PlatformDeclarationIdentity
 import ru.lazyhat.compukters.platform.bundle.PlatformModule
 import ru.lazyhat.compukters.platform.bundle.PlatformModuleId
 import ru.lazyhat.compukters.platform.bundle.PlatformSource
 import ru.lazyhat.compukters.platform.k2.build.CompuktersFirBuildEnvironment
-import ru.lazyhat.compukters.platform.k2.build.PlatformLibraryDeclaration
-import ru.lazyhat.compukters.platform.k2.build.PlatformLibraryDeclarationKind
+import ru.lazyhat.compukters.platform.k2.build.PlatformMetadataCompiler
 import ru.lazyhat.compukters.worker.value.ImmutableBytes
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -97,212 +95,128 @@ class CompuktersFir2IrPipelineTest {
                 },
             )
 
-            val library =
-                environment.compile(
-                    PlatformModuleId("stdlib", "core"),
-                    listOf(
-                        source(
-                            "Answer.kt",
-                            """
-                            package sample
-
-                            interface Result
-
-                            class Ok(val code: Int) : Result
-
-                            enum class Reason {
-                                MISSING,
-                            }
-
-                            fun answer(): Int = 42
-                            class Box<T>(val value: T)
-                            fun boxed(): Box<Int> = Box(42)
-                            """.trimIndent(),
-                        ),
+            val libraryId = PlatformModuleId("stdlib", "core")
+            val dependentId = PlatformModuleId("sample", "dependent")
+            val builtinsId = PlatformModuleId("kotlin", "builtins")
+            val librarySources =
+                listOf(
+                    source(
+                        "Answer.kt",
+                        """
+                        package sample
+                        interface Result
+                        class Ok(val code: Int) : Result
+                        /** Independent code stays precompiled, including declarations with KDoc. */
+                        fun answer(): Int = 42
+                        class Box<T>(val value: T)
+                        fun boxed(): Box<Int> = Box(42)
+                        @Suppress("NOTHING_TO_INLINE")
+                        inline fun scalarInline(): Int = 3
+                        fun inlineCaller(): Int = scalarInline()
+                        """.trimIndent(),
                     ),
-                    listOf(builtins),
                 )
-
-            val dependent =
-                environment.compile(
-                    PlatformModuleId("sample", "dependent"),
-                    listOf(
-                        source(
-                            "Dependent.kt",
-                            "package dependent\nimport sample.Box\nfun create(): Box<Int> = Box(7)\nfun read(box: Box<Int>): Int = box.value",
-                        ),
+            val dependentSources =
+                listOf(
+                    source(
+                        "Dependent.kt",
+                        """
+                        package dependent
+                        import sample.Box
+                        fun create(): Box<Int> = Box(7)
+                        fun read(box: Box<Int>): Int = box.value
+                        fun independent(): Int = 7
+                        """.trimIndent(),
                     ),
-                    listOf(builtins, library),
                 )
+            val library = environment.compile(libraryId, librarySources, listOf(builtins))
+            val dependent = environment.compile(dependentId, dependentSources, listOf(builtins, library))
             val result = CompuktersFir2IrPipeline.convert(listOf(builtins, library, dependent))
-            val answer =
-                result.irModuleFragment.files
-                    .flatMap { it.declarations }
-                    .filterIsInstance<IrSimpleFunction>()
-                    .single { it.fqNameWhenAvailable?.asString() == "sample.answer" }
+            val sourceModules =
+                mapOf(
+                    "Builtins.kt" to builtinsId,
+                    "Collections.kt" to builtinsId,
+                    "Reflection.kt" to builtinsId,
+                    "Answer.kt" to libraryId,
+                    "Dependent.kt" to dependentId,
+                )
+            val metadataCompiler = PlatformMetadataCompiler()
+            val planned =
+                PlatformSpecializationPlan.defer(
+                    result.irModuleFragment,
+                    sourceModules,
+                    builtinsId,
+                    mapOf(
+                        libraryId to metadataCompiler.compile(libraryId, librarySources),
+                        dependentId to metadataCompiler.compile(dependentId, dependentSources),
+                    ),
+                )
+            val libraryMetadata = planned.getValue(libraryId)
+            val dependentMetadata = planned.getValue(dependentId)
+            val deferred = libraryMetadata.sourceDeclarations.map { it.symbol }.toSet()
+            assertTrue("sample.Box" in deferred)
+            assertTrue("sample.boxed" in deferred)
+            assertTrue("sample.scalarInline" in deferred)
+            assertTrue("sample.inlineCaller" in deferred)
+            assertFalse("sample.answer" in deferred)
+            assertFalse("sample.Ok" in deferred)
+            assertEquals(setOf("dependent.create", "dependent.read"), dependentMetadata.sourceDeclarations.map { it.symbol }.toSet())
 
-            assertNotNull(answer.body)
-            val fragment =
-                requireNotNull(
+            fun compileFragment(
+                id: PlatformModuleId,
+                dependencies: List<PlatformModule> = emptyList(),
+            ): ImmutableBytes {
+                val metadata = planned.getValue(id)
+                val sourceIdentities = metadata.sourceDeclarations.toSet()
+                return assertNotNull(
                     PlatformLibraryCompiler().compile(
-                        PlatformModuleId("stdlib", "core"),
-                        listOf(
-                            PlatformLibraryDeclaration(
-                                "sample.answer",
-                                "fun():Int",
-                                "Answer.kt",
-                                0,
-                                39,
-                                PlatformLibraryDeclarationKind.FUNCTION,
-                            ),
-                            PlatformLibraryDeclaration(
-                                "sample.boxed",
-                                "fun():Box<Int>",
-                                "Answer.kt",
-                                0,
-                                1,
-                                PlatformLibraryDeclarationKind.FUNCTION,
-                            ),
-                            PlatformLibraryDeclaration(
-                                "sample.Result",
-                                "interface()",
-                                "Answer.kt",
-                                0,
-                                1,
-                                PlatformLibraryDeclarationKind.TYPE,
-                            ),
-                            PlatformLibraryDeclaration(
-                                "sample.Ok",
-                                "class(Int)",
-                                "Answer.kt",
-                                0,
-                                1,
-                                PlatformLibraryDeclarationKind.TYPE,
-                            ),
-                            PlatformLibraryDeclaration(
-                                "sample.Ok.code",
-                                "val():Int",
-                                "Answer.kt",
-                                0,
-                                1,
-                                PlatformLibraryDeclarationKind.FIELD,
-                            ),
-                            PlatformLibraryDeclaration(
-                                "sample.Reason",
-                                "enum()",
-                                "Answer.kt",
-                                0,
-                                1,
-                                PlatformLibraryDeclarationKind.TYPE,
-                            ),
-                            PlatformLibraryDeclaration(
-                                "sample.Reason.MISSING",
-                                "enum-entry",
-                                "Answer.kt",
-                                0,
-                                1,
-                                PlatformLibraryDeclarationKind.FIELD,
-                            ),
-                        ),
+                        id,
+                        metadata.libraryDeclarations.filter { PlatformDeclarationIdentity(it.symbol, it.signature) !in sourceIdentities },
                         result.irModuleFragment,
                         result.pluginContext,
-                        setOf("Answer.kt"),
-                        mapOf(
-                            "Builtins.kt" to PlatformModuleId("kotlin", "builtins"),
-                            "Collections.kt" to PlatformModuleId("kotlin", "builtins"),
-                            "Reflection.kt" to PlatformModuleId("kotlin", "builtins"),
-                            "Answer.kt" to PlatformModuleId("stdlib", "core"),
-                            "Dependent.kt" to PlatformModuleId("sample", "dependent"),
-                        ),
+                        sourceModules.filterValues { it == id }.keys,
+                        sourceModules,
                         CanonicalTrustedIntrinsics.registry,
+                        dependencies = dependencies,
+                        deferredDeclarations = sourceIdentities,
                     ),
                 )
+            }
+            val fragment = compileFragment(libraryId)
             val artifact = PlatformLibraryFragmentCodec.decode(fragment).artifact.toByteArray()
             assertEquals("CPKT", artifact.copyOfRange(0, 4).decodeToString())
-            kotlin.test.assertFalse(artifact.decodeToString().contains("fun answer"))
             val decoded = ArtifactReader.read(artifact)
-            val libraryModule =
-                decoded.modules.single { module ->
-                    module.kind == ModuleKind.LIBRARY &&
-                        module.exports.any { export ->
-                            export.kind == SymbolKind.FUNCTION &&
-                                module.strings[export.name.value.toInt()].toString() == "sample.answer#fun():Int"
-                        }
-                }
-            val exports = libraryModule.exports.associateBy { libraryModule.strings[it.name.value.toInt()].toString() }
-            val reasonType =
-                libraryModule.types.filterIsInstance<NominalType.Class>().single { type ->
-                    libraryModule.strings[type.name.value.toInt()].toString() == "sample.Reason"
-                }
-            val initializer = libraryModule.functions[assertNotNull(reasonType.initializer).value.toInt()]
-            val initializerInstructions =
-                libraryModule.blocks
-                    .subList(
-                        initializer.firstBlock.value.toInt(),
-                        (initializer.firstBlock.value + initializer.blockCount).toInt(),
-                    ).flatMap { it.instructions }
-            assertEquals(SymbolKind.TYPE, exports.getValue("sample.Ok").kind)
-            assertEquals(SymbolKind.FIELD, exports.getValue("sample.Ok.code").kind)
-            assertEquals(SymbolKind.FIELD, exports.getValue("sample.Reason.MISSING").kind)
-            assertEquals(1, initializerInstructions.count { it is Instruction.StaticSet })
-            assertFalse(exports.containsKey("code"))
-            assertTrue(exports.keys.any { it == "@specialization:type:sample.Box<Int>" })
-            val dependentIr = result
+            val exports =
+                decoded.modules
+                    .flatMap { module ->
+                        module.exports.map { module.strings[it.name.value.toInt()].toString() to it.kind }
+                    }.toMap()
+            assertEquals(SymbolKind.FUNCTION, exports["sample.answer#fun():Int"])
+            assertEquals(SymbolKind.TYPE, exports["sample.Ok"])
+            assertEquals(SymbolKind.FIELD, exports["sample.Ok.code"])
+            assertFalse(exports.keys.any { it.startsWith("@specialization:type:sample.Box<") })
             val dependency =
                 PlatformModule(
-                    PlatformModuleId("stdlib", "core"),
-                    "1",
-                    emptyList(),
-                    ImmutableBytes.of(byteArrayOf()),
-                    fragment,
-                    emptyList(),
-                    emptyList(),
-                    emptyList(),
-                    sourceDeclarations = listOf(PlatformDeclarationIdentity("sample.Box", "class()")),
+                    id = libraryId,
+                    version = "1",
+                    dependencies = emptyList(),
+                    metadata = libraryMetadata.metadata,
+                    libraryFragment = fragment,
+                    sources = librarySources,
+                    declarations = libraryMetadata.declarations,
+                    completionDeclarations = libraryMetadata.completionDeclarations,
+                    sourceDeclarations = libraryMetadata.sourceDeclarations,
                 )
-            val dependentFragment =
-                assertNotNull(
-                    PlatformLibraryCompiler().compile(
-                        PlatformModuleId("sample", "dependent"),
-                        listOf(
-                            PlatformLibraryDeclaration(
-                                "dependent.create",
-                                "fun():Box<Int>",
-                                "Dependent.kt",
-                                0,
-                                1,
-                                PlatformLibraryDeclarationKind.FUNCTION,
-                            ),
-                            PlatformLibraryDeclaration(
-                                "dependent.read",
-                                "fun(Box<Int>):Int",
-                                "Dependent.kt",
-                                0,
-                                1,
-                                PlatformLibraryDeclarationKind.FUNCTION,
-                            ),
-                        ),
-                        dependentIr.irModuleFragment,
-                        dependentIr.pluginContext,
-                        setOf("Dependent.kt"),
-                        mapOf(
-                            "Builtins.kt" to PlatformModuleId("kotlin", "builtins"),
-                            "Collections.kt" to PlatformModuleId("kotlin", "builtins"),
-                            "Reflection.kt" to PlatformModuleId("kotlin", "builtins"),
-                            "Answer.kt" to PlatformModuleId("stdlib", "core"),
-                            "Dependent.kt" to PlatformModuleId("sample", "dependent"),
-                        ),
-                        CanonicalTrustedIntrinsics.registry,
-                        dependencies = listOf(dependency),
-                    ),
+            val dependentArtifact =
+                ArtifactReader.read(
+                    PlatformLibraryFragmentCodec.decode(compileFragment(dependentId, listOf(dependency))).artifact.toByteArray(),
                 )
-            val dependentArtifact = ArtifactReader.read(PlatformLibraryFragmentCodec.decode(dependentFragment).artifact.toByteArray())
             assertEquals(
-                1,
-                dependentArtifact.modules.sumOf { module ->
-                    module.types.count { module.strings[it.name.value.toInt()].toString() == "sample.Box<Int>" }
+                0,
+                (decoded.modules + dependentArtifact.modules).sumOf { module ->
+                    module.types.count { module.strings[it.name.value.toInt()].toString().startsWith("sample.Box<") }
                 },
-                "dependent ordinary factories and parameters must reuse the original specialization",
+                "concrete generic owners must be emitted only in the final consumer",
             )
             assertEquals(64u, decoded.manifest.maximumCallDepth)
             val largestFrameBytes =
@@ -320,30 +234,27 @@ class CompuktersFir2IrPipelineTest {
     fun `multi field value classes resolve on Guest platform and retain their IR representation`() {
         CompuktersFirBuildEnvironment.create().use { environment ->
             val builtins = compileBuiltins(environment)
-            val mfvc =
-                environment.compile(
-                    PlatformModuleId("sample", "mfvc-probe"),
-                    listOf(
-                        source(
-                            "Mfvc.kt",
-                            """
-                            package sample.mfvc
-                            interface Position { fun coordinate(): Double }
-                            value class Vec3(val x: Double, val y: Double, val z: Double) : Position {
-                                override fun coordinate(): Double = x
-                            }
-                            value class Mixed(val count: Int, val wide: Long, val flag: Boolean)
-                            value class Nested(val vector: Vec3, val label: Int)
-                            fun make(): Vec3 = Vec3(1.0, 2.0, 3.0)
-                            fun read(value: Vec3): Double = value.y
-                            fun boxed(value: Vec3): Any = value
-                            fun nullable(value: Vec3): Vec3? = value
-                            fun iface(value: Vec3): Position = value
-                            """.trimIndent(),
-                        ),
+            val mfvcSources =
+                listOf(
+                    source(
+                        "Mfvc.kt",
+                        """
+                        package sample.mfvc
+                        interface Position { fun coordinate(): Double }
+                        value class Vec3(val x: Double, val y: Double, val z: Double) : Position {
+                            override fun coordinate(): Double = x
+                        }
+                        value class Mixed(val count: Int, val wide: Long, val flag: Boolean)
+                        value class Nested(val vector: Vec3, val label: Int)
+                        fun make(): Vec3 = Vec3(1.0, 2.0, 3.0)
+                        fun read(value: Vec3): Double = value.y
+                        fun boxed(value: Vec3): Any = value
+                        fun nullable(value: Vec3): Vec3? = value
+                        fun iface(value: Vec3): Position = value
+                        """.trimIndent(),
                     ),
-                    listOf(builtins),
                 )
+            val mfvc = environment.compile(PlatformModuleId("sample", "mfvc-probe"), mfvcSources, listOf(builtins))
             assertFalse(mfvc.diagnostics.hasErrors, mfvc.diagnostics.diagnostics.joinToString { it.factoryName })
             val ir = CompuktersFir2IrPipeline.convert(listOf(builtins, mfvc))
             val classes =
@@ -383,7 +294,7 @@ class CompuktersFir2IrPipelineTest {
                 assertNotNull(
                     PlatformLibraryCompiler().compile(
                         PlatformModuleId("sample", "mfvc-probe"),
-                        emptyList(),
+                        PlatformMetadataCompiler().compile(PlatformModuleId("sample", "mfvc-probe"), mfvcSources).libraryDeclarations,
                         ir.irModuleFragment,
                         ir.pluginContext,
                         setOf("Mfvc.kt"),

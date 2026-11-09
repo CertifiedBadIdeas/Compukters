@@ -27,6 +27,7 @@ import ru.lazyhat.compukters.compiler.k2.engine.intrinsic.PlatformCapabilityId
 import ru.lazyhat.compukters.compiler.k2.engine.intrinsic.TrustedIntrinsicContract
 import ru.lazyhat.compukters.compiler.k2.engine.intrinsic.TrustedIntrinsicRegistry
 import ru.lazyhat.compukters.compiler.k2.engine.library.PlatformLibraryCompiler
+import ru.lazyhat.compukters.compiler.k2.engine.library.PlatformSpecializationPlan
 import ru.lazyhat.compukters.platform.bundle.PlatformBundle
 import ru.lazyhat.compukters.platform.bundle.PlatformBundleCodec
 import ru.lazyhat.compukters.platform.bundle.PlatformMetadataCodec
@@ -116,6 +117,11 @@ class PlatformBundleBuilder(
                     .let { hasLibraries ->
                         if (hasLibraries) CompuktersFir2IrPipeline.convert(firOutputs.values.toList()) else null
                     }
+            if (ir != null) {
+                metadataByModule.putAll(
+                    PlatformSpecializationPlan.defer(ir.irModuleFragment, sourceModules, builtinsId, metadataByModule),
+                )
+            }
             ordered.forEach { descriptorModule ->
                 val sources = sourceByModule.getValue(descriptorModule.id)
                 val metadata = metadataByModule.getValue(descriptorModule.id)
@@ -138,6 +144,7 @@ class PlatformBundleBuilder(
                             intrinsicRegistry,
                             capabilityShapes,
                             catalog.transitiveDependencies(descriptorModule.id).map(modules::getValue),
+                            deferredDeclarations = metadata.sourceDeclarations.toSet(),
                         )
                     }
                 modules[descriptorModule.id] =

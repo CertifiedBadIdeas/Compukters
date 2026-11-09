@@ -27,6 +27,7 @@ import ru.lazyhat.compukters.compiler.worker.protocol.BinaryValue
 import ru.lazyhat.compukters.compiler.worker.protocol.VirtualSourcePath
 import ru.lazyhat.compukters.compiler.worker.protocol.WorkerDiagnostic
 import ru.lazyhat.compukters.compiler.worker.protocol.WorkerLimits
+import ru.lazyhat.compukters.platform.bundle.PlatformDeclaration
 import ru.lazyhat.compukters.platform.bundle.PlatformDeclarationIdentity
 import ru.lazyhat.compukters.platform.bundle.PlatformDefaultArgument
 import ru.lazyhat.compukters.platform.bundle.PlatformModuleId
@@ -59,9 +60,10 @@ class CompilationSession(
     val platformScalarTypes: List<PlatformScalarType> = emptyList(),
     val platformScalarConstants: List<PlatformScalarConstant> = emptyList(),
     val sourcePlatformPaths: Set<VirtualSourcePath> = emptySet(),
-    val sourcePlatformSymbols: Set<String> = emptySet(),
+    val sourcePlatformDeclarations: List<PlatformDeclaration> = emptyList(),
     val limits: WorkerLimits = WorkerLimits(),
 ) {
+    val sourcePlatformSymbols: Set<String> = sourcePlatformDeclarations.mapTo(linkedSetOf(), PlatformDeclaration::symbol)
     val platformFunctions: List<PlatformFunctionLink> = platformFunctions.toList()
     private val platformFunctionsBySymbol = this.platformFunctions.groupBy(PlatformFunctionLink::symbol)
 

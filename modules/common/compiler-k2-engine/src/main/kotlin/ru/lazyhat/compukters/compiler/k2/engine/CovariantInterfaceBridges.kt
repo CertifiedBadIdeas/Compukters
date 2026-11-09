@@ -36,9 +36,6 @@ import org.jetbrains.kotlin.ir.types.IrSimpleType
 import org.jetbrains.kotlin.ir.types.IrType
 import org.jetbrains.kotlin.ir.types.IrTypeProjection
 import org.jetbrains.kotlin.ir.types.IrTypeSystemContextImpl
-import org.jetbrains.kotlin.ir.types.makeNotNull
-import org.jetbrains.kotlin.ir.types.makeNullable
-import org.jetbrains.kotlin.ir.types.starProjectedType
 import org.jetbrains.kotlin.ir.types.typeWith
 import org.jetbrains.kotlin.ir.util.fqNameWhenAvailable
 import org.jetbrains.kotlin.ir.util.isNullable
@@ -46,7 +43,7 @@ import org.jetbrains.kotlin.ir.util.isSubtypeOf
 import org.jetbrains.kotlin.ir.util.patchDeclarationParents
 import org.jetbrains.kotlin.types.Variance
 
-/** Canonical nominal read views, independent of consumer demand. Storage and the source object's identity never change. */
+/** Nominal read views between discovered concrete types. Storage and the source object's identity never change. */
 @OptIn(UnsafeDuringIrConstructionAPI::class)
 internal class CovariantInterfaceBridges private constructor(
     val interfaces: Map<GuestClassInstance, List<GuestClassInstance>>,
@@ -92,7 +89,7 @@ internal class CovariantInterfaceBridges private constructor(
                 if (owner == declaration && source != targetInstance && !stableParameters(source, targetInstance)) {
                     throw UnsupportedKotlinIr(location, "covariant interface views requiring parameter adaptation are not supported")
                 }
-                if (owner == declaration && source != targetInstance && targetInstance !in views(source, context)) {
+                if (owner == declaration && source != targetInstance && !supportsView(source, targetInstance, context)) {
                     throw UnsupportedKotlinIr(
                         location,
                         "covariant interface view ${source.name} to ${targetInstance.name} is outside the supported result representations",
@@ -129,6 +126,12 @@ internal class CovariantInterfaceBridges private constructor(
             ): Boolean {
                 if (depth > 64) throw UnsupportedKotlinIr(from.declaration, "covariant result adaptation exceeds depth 64")
                 if (!visited.add(from.name to to.name)) return true
+                // These results use the established collection argument/read bridges.
+                if (from.declaration.fqNameWhenAvailable?.asString() in
+                    setOf("kotlin.collections.List", "kotlin.collections.Collection")
+                ) {
+                    return true
+                }
                 if (!stableParameters(from, to)) return false
                 return methods(from.declaration).all { method ->
                     val actual = from.substitute(method.returnType)
@@ -159,96 +162,25 @@ internal class CovariantInterfaceBridges private constructor(
             return admit(source, target, 0)
         }
 
-        fun views(
+        private fun supportsView(
             source: GuestClassInstance,
+            target: GuestClassInstance,
             context: IrPluginContext,
-            depth: Int = 0,
-        ): List<GuestClassInstance> {
+        ): Boolean {
             val declaration = source.declaration
-            if (depth > 64) throw UnsupportedKotlinIr(declaration, "covariant interface view expansion exceeds depth 64")
-            if (declaration.kind != ClassKind.INTERFACE ||
+            if (target.declaration != declaration || source == target || declaration.kind != ClassKind.INTERFACE ||
                 declaration.typeParameters.none { it.variance == Variance.OUT_VARIANCE }
             ) {
-                return emptyList()
+                return false
             }
             val typeSystem = IrTypeSystemContextImpl(context.irBuiltIns)
-            val anyType = context.irBuiltIns.anyType
-
-            fun widen(
-                argument: IrType,
-                depth: Int,
-            ): List<IrType> {
-                if (depth > 64) throw UnsupportedKotlinIr(declaration, "covariant interface view expansion exceeds depth 64")
-                val result = linkedMapOf<String, IrType>()
-
-                fun add(type: IrType) {
-                    result.putIfAbsent(type.specializationTypeIdentity(), type)
-                }
-                add(argument)
-                val sourceOwner = ((argument as? IrSimpleType)?.classifier as? IrClassSymbol)?.owner
-                if (sourceOwner?.fqNameWhenAvailable?.asString() == COMPARABLE_NAME) {
-                    val erased = sourceOwner.symbol.starProjectedType
-                    add(if (argument.isNullable()) erased.makeNullable() else erased)
-                }
-                add(argument.makeNullable())
-                add(anyType.makeNullable())
-                if (!argument.isNullable()) add(anyType)
-                val simple = argument.makeNotNull() as? IrSimpleType
-                val owner = (simple?.classifier as? IrClassSymbol)?.owner
-                if (owner != null && argument.guestFunctionShape() == null) {
-                    val arguments = simple.arguments.map { (it as? IrTypeProjection)?.type ?: return result.values.toList() }
-                    val current = GuestClassInstance(owner, arguments)
-                    for (wide in views(current, context, depth + 1)) {
-                        add(
-                            if (argument.isNullable()) {
-                                wide.declaration.symbol
-                                    .typeWith(
-                                        wide.arguments,
-                                    ).makeNullable()
-                            } else {
-                                wide.declaration.symbol.typeWith(wide.arguments)
-                            },
-                        )
-                    }
-                    // Compiler-only read adapters are not source-level covariance targets.
-                    for (parent in owner.superTypes.filterNot {
-                        ((it as? IrSimpleType)?.classifier as? IrClassSymbol)?.owner?.fqNameWhenAvailable?.asString() in
-                            CollectionValueBridges.protocolNames
-                    }) {
-                        for (wide in widen(current.substitute(parent), depth + 1)) {
-                            add(if (argument.isNullable()) wide.makeNullable() else wide)
-                        }
+            return declaration.symbol.typeWith(source.arguments).isSubtypeOf(declaration.symbol.typeWith(target.arguments), typeSystem) &&
+                stableParameters(source, target) && compatibleResults(source, target, context) &&
+                target.arguments.withIndex().all { (index, argument) ->
+                    declaration.typeParameters[index].superTypes.all { bound ->
+                        argument.isSubtypeOf(target.substitute(bound), typeSystem)
                     }
                 }
-                return result.values.toList()
-            }
-            var combinations = listOf(emptyList<IrType>())
-            for ((index, parameter) in declaration.typeParameters.withIndex()) {
-                val options =
-                    if (parameter.variance ==
-                        Variance.OUT_VARIANCE
-                    ) {
-                        widen(source.arguments[index], depth + 1)
-                    } else {
-                        listOf(source.arguments[index])
-                    }
-                if (combinations.size.toLong() * options.size >
-                    1024
-                ) {
-                    throw UnsupportedKotlinIr(declaration, "covariant interface view expansion exceeds 1024 variants")
-                }
-                combinations = combinations.flatMap { prefix -> options.map { prefix + it } }
-            }
-            return combinations
-                .map { GuestClassInstance(declaration, it) }
-                .filter { target ->
-                    target != source && stableParameters(source, target) && compatibleResults(source, target, context) &&
-                        target.arguments.withIndex().all { (index, argument) ->
-                            declaration.typeParameters[index].superTypes.all { bound ->
-                                argument.isSubtypeOf(target.substitute(bound), typeSystem)
-                            }
-                        }
-                }.sortedBy { it.name }
         }
 
         fun discover(
@@ -258,7 +190,16 @@ internal class CovariantInterfaceBridges private constructor(
             val bySymbol = classes.map { it.declaration }.associateBy { it.symbol }
 
             fun type(instance: GuestClassInstance): IrType = instance.declaration.symbol.typeWith(instance.arguments)
-            val views = classes.associateWith { source -> views(source, context) }.filterValues { it.isNotEmpty() }
+            val byDeclaration = classes.groupBy { it.declaration }
+            val views =
+                classes
+                    .associateWith { source ->
+                        byDeclaration
+                            .getValue(source.declaration)
+                            .filter { target ->
+                                supportsView(source, target, context)
+                            }.sortedBy { it.name }
+                    }.filterValues { it.isNotEmpty() }
 
             fun parents(instance: GuestClassInstance): List<GuestClassInstance> =
                 instance.declaration.superTypes.mapNotNull { parent ->
@@ -328,17 +269,22 @@ internal class CovariantInterfaceBridges private constructor(
                         for (method in methods(source.declaration)) {
                             val actual = source.substitute(method.returnType)
                             val expected = target.substitute(method.returnType)
-                            // Nominal reference covariance handles declared parents. Interface
-                            // result types need a forwarding bridge to Any, since artifact interfaces have no class parent.
+                            // Interface results may use explicit collection views rather than nominal
+                            // parent edges. Forward the original reference through the normal conversion.
                             val actualDeclaration = ((actual as? IrSimpleType)?.classifier as? IrClassSymbol)?.owner
                             val expectedDeclaration = ((expected as? IrSimpleType)?.classifier as? IrClassSymbol)?.owner
-                            val referenceErasure =
-                                actualDeclaration?.kind == ClassKind.INTERFACE &&
-                                    expectedDeclaration?.fqNameWhenAvailable?.asString() == "kotlin.Any"
+                            val referenceForwarding =
+                                actualDeclaration?.kind == ClassKind.INTERFACE && (
+                                    expectedDeclaration?.fqNameWhenAvailable?.asString() == "kotlin.Any" ||
+                                        (
+                                            actualDeclaration == expectedDeclaration && actualDeclaration.fqNameWhenAvailable?.asString() in
+                                                setOf("kotlin.collections.List", "kotlin.collections.Collection")
+                                        )
+                                )
                             val scalarResult =
                                 GuestPrimitive.scalar(actual) != null || actual == context.irBuiltIns.unitType ||
                                     actualDeclaration?.isValue == true
-                            if ((!referenceErasure && (actual.isNullable() || !scalarResult)) || actual == expected ||
+                            if ((!referenceForwarding && (actual.isNullable() || !scalarResult)) || actual == expected ||
                                 (!expected.isNullable() && GuestPrimitive.scalar(expected) != null)
                             ) {
                                 continue

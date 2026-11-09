@@ -54,6 +54,9 @@ headings so this page has one stable URL that can be shared outside the reposito
 - Guest Kotlin compilation removes proven redundant register copies, can use smaller stack frames,
   automatically inlines small scalar and value-class leaf functions, and replaces eligible interface calls
   with direct calls when immutable local references prove the concrete implementation.
+  Library generic implementations specialize with the final program, and covariance discovery avoids
+  generating unused type combinations that could exhaust the specialization limit in collection programs.
+  Base and addon library packages must be rebuilt for the updated package format.
   Existing compiled programs receive these improvements after recompilation.
 
 - Display RGB encoding and delta calculation run in a bounded background worker pool. Ordinary display blocks
@@ -657,8 +660,8 @@ listed in [Kotlin support](developers/kotlin-support.md) and [standard library s
   and case-sensitive replacement. Splitting retains empty parts; replacement checks output-length overflow.
   `String.toIntOrNull()` parses optional-sign decimal input and returns null for invalid or overflowing values.
 - Guest libraries combine precompiled ordinary implementations with generic/inline source bodies while preserving
-  visibility. Programs and dependent libraries reuse canonical concrete specializations, including those appearing
-  in addon dependency fragments; conflicting owners are rejected. Helpers, ranges and collections belong to
+  visibility. Specialization-dependent implementations from programs and addon dependencies compile together
+  into one concrete owner; independent ordinary library code remains precompiled. Conflicting owners are rejected. Helpers, ranges and collections belong to
   `stdlib:core`; computer environment APIs belong to `compukter:core`, with Kotlin packages and imports retained.
 
 <a id="addons-create-and-sable"></a>

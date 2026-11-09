@@ -406,7 +406,9 @@ A direct self element prints `(this Collection)`; a map directly used as its own
 `(this Map)`. Arbitrary indirect cycles in equality, hashing or text are not detected.
 Element equality, hash and text callbacks retain effects and propagate exceptions. Text uses a
 managed StringBuilder; traversal, boxing and text allocation consume normal heap/instruction budgets.
-Nested generic collection types remain subject to the compiler’s specialization limits.
+Nested generic collection types remain subject to the compiler’s specialization limits. Library generic
+owners specialize with the final program; unused widening combinations are not generated. This avoids
+exhausting the platform class budget solely through hypothetical nested iterator/entry views.
 
 **Evidence:** `MinimalScriptLoweringTest`, tests `collection value semantics compare specializations
 entries and live views` and `collection value semantics preserve all scalar families and floating boxes`,

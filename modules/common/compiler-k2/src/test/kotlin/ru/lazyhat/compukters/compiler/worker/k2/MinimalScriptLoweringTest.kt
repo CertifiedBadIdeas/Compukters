@@ -541,7 +541,7 @@ class MinimalScriptLoweringTest {
         }
 
     @Test
-    fun `covariant interfaces bound canonical view expansion`() =
+    fun `covariant interfaces do not expand unused widening combinations`() =
         withAdapter { adapter ->
             val source =
                 """
@@ -550,11 +550,7 @@ class MinimalScriptLoweringTest {
                 fun main() {}
                 """.trimIndent()
             val result = adapter.compile(request(source))
-            assertNull(result.artifact)
-            assertTrue(
-                result.diagnostics.any { it.code == "UNSUPPORTED_IR" && "1024 variants" in it.message },
-                result.diagnostics.toString(),
-            )
+            assertNotNull(result.artifact, result.diagnostics.joinToString())
         }
 
     @Test
@@ -1542,7 +1538,10 @@ class MinimalScriptLoweringTest {
                 adapter.compile(
                     request(
                         """
-                        fun less(value: Int, limit: Int): Boolean = false
+                        fun less(value: Int, limit: Int): Boolean {
+                            println(value)
+                            return false
+                        }
 
                         fun main() {
                             println(less(1.compareTo(2), 0))
@@ -5047,12 +5046,13 @@ class MinimalScriptLoweringTest {
                 class Cell<T>(val value: T) : Reader<T> {
                     override fun read(): T = value
                 }
+                fun readNumber(reader: Reader<Int>): Int = reader.read()
                 fun main() {
                     val number: Reader<Int> = Cell(7)
                     require(number.read() == 7)
                     val text: Reader<String> = Cell("hello")
                     require(text.read() == "hello")
-                    println(number.read())
+                    println(readNumber(number))
                     println(text.read())
                 }
                 """.trimIndent()
@@ -9446,9 +9446,16 @@ class MinimalScriptLoweringTest {
                 )
 
             val artifactBytes = assertNotNull(result.artifact, result.diagnostics.joinToString()).toByteArray()
-            val application = ArtifactReader.read(artifactBytes).modules.single { it.kind == ModuleKind.APPLICATION }
+            val decoded = ArtifactReader.read(artifactBytes)
+            val application = decoded.modules.single { it.kind == ModuleKind.APPLICATION }
+            val entry =
+                application.functions[
+                    decoded.entry.function.value
+                        .toInt(),
+                ]
             val conversions =
                 application.blocks
+                    .subList(entry.firstBlock.value.toInt(), (entry.firstBlock.value + entry.blockCount).toInt())
                     .flatMap(Block::instructions)
                     .filterIsInstance<Instruction.StringValueOf>()
 
@@ -11093,17 +11100,30 @@ class MinimalScriptLoweringTest {
 
             assertContentEquals(artifact, assertNotNull(second.artifact).toByteArray())
             assertTrue(first.diagnostics.none { it.severity.name == "ERROR" }, first.diagnostics.toString())
-            val application = ArtifactReader.read(artifact).modules.single { it.kind == ModuleKind.APPLICATION }
-            val imports =
-                application.imports.groupBy { it.kind }.mapValues { (_, values) ->
-                    values.map { application.strings[it.targetName.value.toInt()].toString() }.toSet()
-                }
-            assertTrue("compukter.process.ProcessResult" in imports.getValue(SymbolKind.TYPE))
-            assertTrue("compukter.process.ProcessResult.Exited" in imports.getValue(SymbolKind.TYPE))
-            assertTrue("compukter.process.ProcessResult.Exited.<boxed-value>" in imports.getValue(SymbolKind.FIELD))
-            assertTrue("compukter.process.ProcessResult.Failed.<boxed-value>" in imports.getValue(SymbolKind.FIELD))
-            assertTrue("compukter.process.ProcessResult.Failed.<boxed-value-1>" in imports.getValue(SymbolKind.FIELD))
-            assertTrue("compukter.process.ProcessFailureReason.NOT_FOUND" in imports.getValue(SymbolKind.FIELD))
+            val decoded = ArtifactReader.read(artifact)
+            val owners = decoded.modules.flatMap { module -> module.types.map { module to it } }
+            listOf("ProcessResult", "ProcessResult.Exited", "ProcessResult.Failed", "ProcessFailureReason").forEach { name ->
+                assertEquals(
+                    1,
+                    owners.count { (module, type) ->
+                        module.strings[type.name.value.toInt()].toString() == "compukter.process.$name"
+                    },
+                    "one nominal owner for $name",
+                )
+            }
+            listOf("Exited" to 1u, "Failed" to 2u).forEach { (name, fields) ->
+                val (_, type) =
+                    owners.single { (module, type) ->
+                        type is NominalType.Class &&
+                            module.strings[type.name.value.toInt()].toString() == "compukter.process.ProcessResult.$name"
+                    }
+                assertEquals(fields, (type as NominalType.Class).fieldCount)
+            }
+            assertTrue(
+                decoded.modules.any { module ->
+                    module.fields.any { field -> field.static && module.strings[field.name.value.toInt()].toString() == "NOT_FOUND" }
+                },
+            )
 
             listOf(
                 "import compukter.process.Process\nfun main() { Process.run(\"/bin/tool\") }",

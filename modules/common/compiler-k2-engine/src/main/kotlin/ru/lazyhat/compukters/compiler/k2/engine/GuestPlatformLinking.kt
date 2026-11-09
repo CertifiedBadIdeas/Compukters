@@ -70,6 +70,15 @@ internal fun discoverGuestPlatformLinks(
         linkedPlatformSymbols(symbolRoots, session, resolvedTypes),
     )
 
+/** ABI signature dependencies of the same imported call targets used by emission. */
+internal fun linkedPlatformSignatureTypes(
+    roots: List<IrElement>,
+    session: CompilationSession,
+): List<IrType> =
+    linkedPlatformFunctions(roots, session).keys.flatMap { symbol ->
+        listOf(symbol.owner.returnType) + symbol.owner.parameters.map { it.type }
+    }
+
 /** The library dependencies used by emission; per-function register and block state stays in the emitter. */
 internal data class GuestFunctionImports(
     val classTypes: Map<IrClassSymbol, TypeRef.Imported>,
@@ -256,6 +265,7 @@ private fun linkedPlatformSymbols(
     val singletons = linkedMapOf<IrClassSymbol, ExternalFieldTarget>()
     val classSymbols = linkedMapOf<String, IrClassSymbol>()
     val neededDefaultArguments = mutableListOf<PlatformDefaultArgument>()
+    val importedFunctions = linkedPlatformFunctions(elements, session).keys
 
     fun considerTypeSymbol(symbol: IrClassSymbol) {
         val fqName = symbol.owner.fqNameWhenAvailable?.asString() ?: return
@@ -319,17 +329,19 @@ private fun linkedPlatformSymbols(
                 target.parameters.forEach { considerType(it.type) }
                 val targetSymbol = target.fqNameWhenAvailable?.asString()
                 val targetSignature = target.canonicalPlatformSignature()
-                (
-                    session.platformDefaults[
-                        PlatformDeclarationIdentity(
-                            targetSymbol.orEmpty(),
-                            targetSignature,
-                        ),
-                    ] ?: session.platformFunctions
-                        .singleOrNull { link -> link.symbol == targetSymbol && link.signature == targetSignature }
-                        ?.defaultArguments
-                )?.filterNotNull()
-                    ?.let(neededDefaultArguments::addAll)
+                if ((target.resolveFakeOverrideMaybeAbstract() ?: target).symbol in importedFunctions) {
+                    (
+                        session.platformDefaults[
+                            PlatformDeclarationIdentity(
+                                targetSymbol.orEmpty(),
+                                targetSignature,
+                            ),
+                        ] ?: session.platformFunctions
+                            .singleOrNull { link -> link.symbol == targetSymbol && link.signature == targetSignature }
+                            ?.defaultArguments
+                    )?.filterNotNull()
+                        ?.let(neededDefaultArguments::addAll)
+                }
                 val property = target.correspondingPropertySymbol?.owner ?: target.parent as? IrProperty
                 val owner = property?.parent as? IrClass
                 val fieldSymbol = property?.fqNameWhenAvailable?.asString()

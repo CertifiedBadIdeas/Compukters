@@ -449,7 +449,19 @@ class InheritedProducer : DerivedProducer<Int> {
 class CustomSequence(private val probe: Probe) : Sequence<Int> {
     override fun iterator(): Iterator<Int> = probe.iterator()
 }
+interface CastOnlyProducer<out T> { fun produce(): T }
+class CastOnlyInt : CastOnlyProducer<Int> { override fun produce(): Int = 37 }
+interface TypeTestProducer<out T> { fun produce(): T }
+class TypeTestInt : TypeTestProducer<Int> { override fun produce(): Int = 41 }
+
 fun checkCustomCovariance() {
+    // These widening targets appear only in type operators, independently of the other producer views.
+    val opaque: Any = CastOnlyInt()
+    val cast = opaque as CastOnlyProducer<Any?>
+    check(cast === opaque && cast.produce() == 37)
+    val testOnly: Any = TypeTestInt()
+    check(testOnly is TypeTestProducer<Any?>)
+
     val defaultProducer: Producer<Int> = DefaultValueProducer(1)
     DefaultProducerProbe.receiver = defaultProducer
     val defaultObjects: Producer<Any> = defaultProducer

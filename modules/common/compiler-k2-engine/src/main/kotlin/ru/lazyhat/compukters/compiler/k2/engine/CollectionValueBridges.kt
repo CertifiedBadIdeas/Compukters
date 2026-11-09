@@ -91,6 +91,47 @@ internal object CollectionValueBridges {
             null
         }
 
+    private const val SET_CONTAINS_HELPER = "collectionReadContains"
+    private const val MAP_CONTAINS_HELPER = "collectionMapReadContainsKey"
+    private const val MAP_GET_HELPER = "collectionMapReadGet"
+
+    private fun optimizedSet(owner: IrClass): Boolean =
+        owner.fqNameWhenAvailable?.asString() in
+            setOf("kotlin.collections.HashSet", "kotlin.collections.HashMapKeys", "kotlin.collections.HashMapEntries")
+
+    private fun supertype(
+        type: IrType,
+        name: String,
+        visited: Set<IrClassSymbol> = emptySet(),
+    ): IrSimpleType? {
+        val simple = type as? IrSimpleType ?: return null
+        val declaration = (simple.classifier as? IrClassSymbol)?.owner ?: return null
+        if (declaration.fqNameWhenAvailable?.asString() == "kotlin.collections.$name") return simple
+        if (declaration.symbol in visited) return null
+        // Local declarations may carry enclosing generic arguments in defaultType. They
+        // do not form a concrete collection specialization for this bridge probe.
+        if (simple.arguments.size != declaration.typeParameters.size) return null
+        val substitution = IrTypeSubstitutor(declaration.typeParameters.map { it.symbol }, simple.arguments, true)
+        return declaration.superTypes.firstNotNullOfOrNull {
+            supertype(
+                substitution.substitute(it),
+                name,
+                visited + declaration.symbol,
+            )
+        }
+    }
+
+    /** Dependencies introduced by generated protocol bridges rather than explicit source calls. */
+    fun sourceDependencies(owner: IrClass): List<String> =
+        buildList {
+            if (owner.kind == ClassKind.INTERFACE || owner.isValue) return@buildList
+            if (!optimizedSet(owner) && supertype(owner.defaultType, "Set") != null) add(SET_CONTAINS_HELPER)
+            if (owner.fqNameWhenAvailable?.asString() != "kotlin.collections.HashMap" && supertype(owner.defaultType, "Map") != null) {
+                add(MAP_CONTAINS_HELPER)
+                add(MAP_GET_HELPER)
+            }
+        }.map { "kotlin.collections.$it" }
+
     fun lower(
         classes: List<IrClass>,
         functions: List<IrSimpleFunction>,
@@ -103,27 +144,6 @@ internal object CollectionValueBridges {
         val result =
             classes.flatMap { owner -> owner.declarations.filterIsInstance<IrSimpleFunction>().filter(::isBridge) }.toMutableList()
 
-        fun supertype(
-            type: IrType,
-            name: String,
-            visited: Set<IrClassSymbol> = emptySet(),
-        ): IrSimpleType? {
-            val simple = type as? IrSimpleType ?: return null
-            val declaration = (simple.classifier as? IrClassSymbol)?.owner ?: return null
-            if (declaration.fqNameWhenAvailable?.asString() == "kotlin.collections.$name") return simple
-            if (declaration.symbol in visited) return null
-            // Local declarations may carry enclosing generic arguments in defaultType. They
-            // do not form a concrete collection specialization for this bridge probe.
-            if (simple.arguments.size != declaration.typeParameters.size) return null
-            val substitution = IrTypeSubstitutor(declaration.typeParameters.map { it.symbol }, simple.arguments, true)
-            return declaration.superTypes.firstNotNullOfOrNull {
-                supertype(
-                    substitution.substitute(it),
-                    name,
-                    visited + declaration.symbol,
-                )
-            }
-        }
         for (owner in classes.filter { it.kind != ClassKind.INTERFACE && !it.isValue }) {
             fun add(
                 protocolName: String,
@@ -240,15 +260,12 @@ internal object CollectionValueBridges {
                 }
             }
             add("ListRead", "List", mapOf("readSize" to "@Collection:<get-size>", "readIterator" to "@Iterable:iterator"))
-            val optimizedSet =
-                owner.fqNameWhenAvailable?.asString() in
-                    setOf("kotlin.collections.HashSet", "kotlin.collections.HashMapKeys", "kotlin.collections.HashMapEntries")
             add(
                 "SetRead",
                 "Set",
                 mapOf(
                     "readSize" to "@Collection:<get-size>",
-                    "readContains" to if (optimizedSet) ".containsAnyElement" else "collectionReadContains",
+                    "readContains" to if (optimizedSet(owner)) ".containsAnyElement" else SET_CONTAINS_HELPER,
                 ),
             )
             val optimizedMap = owner.fqNameWhenAvailable?.asString() == "kotlin.collections.HashMap"
@@ -257,8 +274,8 @@ internal object CollectionValueBridges {
                 "Map",
                 mapOf(
                     "readSize" to "@Map:<get-size>",
-                    "readContainsKey" to if (optimizedMap) ".containsAnyKey" else "collectionMapReadContainsKey",
-                    "readGet" to if (optimizedMap) ".getAnyKey" else "collectionMapReadGet",
+                    "readContainsKey" to if (optimizedMap) ".containsAnyKey" else MAP_CONTAINS_HELPER,
+                    "readGet" to if (optimizedMap) ".getAnyKey" else MAP_GET_HELPER,
                 ),
             )
             add("EntryRead", "Map.Entry", mapOf("readKey" to "@Map.Entry:<get-key>", "readValue" to "@Map.Entry:<get-value>"))

@@ -259,6 +259,14 @@ class PlatformBundleCodecTest {
     }
 
     @Test
+    fun `decoder rejects packages compiled before final specialization`() {
+        val previousBundle = PlatformBundleCodec.encode(fixture()).also { it[4] = 9 }
+        val previousModule = PlatformBundleCodec.encodeModule(builtins()).also { it[4] = 5 }
+        assertFailsWith<IllegalArgumentException> { PlatformBundleCodec.decode(previousBundle) }
+        assertFailsWith<IllegalArgumentException> { PlatformBundleCodec.decodeModule(previousModule) }
+    }
+
+    @Test
     fun `decoder rejects oversized counts before allocation`() {
         val encoded =
             PlatformBundleCodec.encode(

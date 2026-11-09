@@ -234,7 +234,9 @@ Captured owners and values remain live under ordinary managed GC. Each materiali
 the existing metered heap allocations; initialization adds no special runtime storage or VM instruction.
 Concrete dependencies retain the 256-variant function bounds and lexical expansion depth limit. Generic class
 specializations have independent budgets: 256 for Guest declarations and 1024 for admitted platform/library
-classes, including their collection interfaces. Library dependencies do not consume the Guest class budget;
+classes, including their collection interfaces. Concrete generic library owners are selected with the final
+program; unused covariance combinations do not consume these budgets. Independent library code stays
+precompiled. Library dependencies do not consume the Guest class budget;
 classification uses admitted source provenance and canonical platform declarations, not Guest package names.
 `MinimalScriptLoweringTest` covers this with `platform dependencies do not consume guest class specialization
 budget`, `class specialization remains bounded for guest projects`, and `platform class specialization has its

@@ -244,9 +244,10 @@ parameter signatures and have compatible results. This includes custom `Producer
 `Iterator<T>`, property getters and nested `Sequence<T>` iterator results. Several `out` arguments can
 widen independently; invariant type arguments stay unchanged.
 
-The compiler derives a canonical set of nullable, `Any`/`Any?`, supported declared supertype and
-nested covariant views from each specialization, subject to its type parameter bounds. Libraries
-and consumers derive identical nominal layouts regardless of which views the consumer uses.
+The compiler connects compatible concrete views found in the program and its reached source libraries,
+subject to type parameter bounds. It discovers nested argument types, casts and linked API signatures,
+then creates required read bridges. It does not enumerate every unused widening combination. Library
+implementations depending on generic types specialize with the final program, giving each owner one layout.
 Generated bridges participate in platform dependency discovery, including imported result interfaces
 such as `Peripheral` that the original source does not mention.
 Widening preserves the source object and its identity; it does not copy values or allocate a wrapper.
@@ -263,27 +264,28 @@ with source diagnostics. Primitive `Number`/`Comparable` views are supported, in
 results; see [primitive supertypes](primitives.md#number-and-comparable-views). General user-defined generic
 declaration-site `in` remains outside this contract; the trusted `Comparable<in T>` boundary retains its
 ordinary Kotlin argument checks. Trusted List/Collection views retain their existing explicit bridges.
-View expansion is bounded to depth 64 and 1024 combinations per specialization; generated result
-bridges have a compilation-wide limit of 4096 methods, alongside the existing class/function budgets.
+Generated result bridges have a compilation-wide limit of 4096 methods, alongside the existing
+class/function budgets and recursive type-depth checks.
 
 **Evidence:** `sequences preserve lazy demand iterator state and nullable values`, executed by
 `testKotlinSequencesVmConformance`, covers all twelve primitive families, custom and inherited
-producers, iterator/source identity, nested covariant results, nulls, reference identity, Unit,
+producers, iterator/source identity, nested covariant results, cast/type-test-only views, nulls, reference identity, Unit,
 value-class results and scalar/aggregate/generic value-class implementations, property getters,
 mixed invariant/covariant arguments, early stopping and exception propagation.
 Default interface bodies also check receiver identity and exact call counts for a value-class implementation.
 Its artifact assertions protect scalar
 producer fields/direct reads and exactly one allocation per widened primitive read.
 `source library generic functions and classes specialize in consumer`, executed by
-`testKotlinGenericLibraryVmConformance`, covers precompiled producer reuse with one nominal owner.
+`testKotlinGenericLibraryVmConformance`, covers final library specialization with one nominal owner.
 `peripheral collections retain platform types introduced by covariant bridges` protects compilation of
 built-in device lists without explicit base-interface imports; `boiler SCADA example compiles against the
 actual addon bundles` covers the complete dashboard. `testKotlinPeripheralQueriesVmConformance` executes
 typed, `Peripheral` and nullable `Peripheral` iterator views with shared iterator state.
 `covariant interfaces reject changed callback parameter signatures`, `covariant interfaces reject changed callable results`
-and `covariant interfaces bound canonical view expansion` protect the unsupported boundaries and budget;
+protect the unsupported boundaries; `covariant interfaces do not expand unused widening combinations`
+protects demand-based discovery;
 IDE test `lazy sequences resolve with source and metadata inputs` checks both platform input modes.
-**Related work:** [#789](https://github.com/CertifiedBadIdeas/Compukters/issues/789).
+**Related work:** [#827](https://github.com/CertifiedBadIdeas/Compukters/issues/827), [#789](https://github.com/CertifiedBadIdeas/Compukters/issues/789).
 
 ### Direct generic methods
 
@@ -333,7 +335,7 @@ Inherited calls and generic class inheritance: [#794](https://github.com/Certifi
 ### Generic value classes and limits
 
 Concrete generic value-class fields and member methods specialize
-through the same bounded model; generic interface bridges and precompiled producer/consumer layouts retain
+through the same bounded model; generic interface bridges and final producer/consumer specialization layouts retain
 their nominal identity.
 
 **Evidence:** `multi field value classes preserve direct layouts nested calls and managed boundaries` and

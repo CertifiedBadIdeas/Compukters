@@ -283,11 +283,10 @@ class K2CompilerAdapter(
                                             VirtualSourcePath.of("platform/${library.id.namespace}/${library.id.name}/${source.path}")
                                         }
                                     }.toSet(),
-                            sourcePlatformSymbols =
-                                sourceLibraries
-                                    .flatMap(
-                                        PlatformModule::sourceDeclarations,
-                                    ).mapTo(mutableSetOf(), PlatformDeclarationIdentity::symbol),
+                            sourcePlatformDeclarations =
+                                sourceLibraries.flatMap { library ->
+                                    library.declarations.filter { it.identity in library.sourceDeclarations }
+                                },
                             limits = request.limits,
                         )
                     CompuktersFir2IrPipeline.lowerGuest(output, session, sourceOutputs)?.let { lowered ->
