@@ -161,3 +161,9 @@ tasks.register("prepareJvmMemoryProbe") {
         }
     }
 }
+
+tasks.register("prepareJvmFleetProbe") {
+    description = "Prepares the opt-in production-carrier fleet probe; measurements run in standalone JVMs."
+    group = "verification"
+    dependsOn("prepareJvmMemoryProbe")
+}
