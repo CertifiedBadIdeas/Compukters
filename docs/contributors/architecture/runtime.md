@@ -163,6 +163,12 @@ Shared copy/field plans and sparse lifecycle descriptors occupy separate program
 The dispatcher borrows a checked operation to select its handler, then copies its operands at the handler
 boundary. Fetch does not materialize a complete operation before inspecting the opcode or add per-machine storage.
 
+Consecutive numeric and frame-only operations execute through a general scoped run. It validates the current frame
+reservation once and uses checked relative accesses within that borrowed window. Logical PC and attempt counts stay
+local during the run and are published before a branch, trap, instruction limit or return to heap/lifecycle handling.
+Runs do not cross blocks, allocate, collect, call out or retain pointers. No code spans, new per-machine fields or
+second prepared stream are stored.
+
 Numeric operations carry concrete kinds and checked physical frame offsets. Preparation also resolves scalar
 constants, moves, inline component copies, jumps/Boolean branches, and scalar/reference field and array accesses.
 Heap accesses retain dynamic null/type/assignability/bounds checks and use the admitted heap layout. Lifecycle
