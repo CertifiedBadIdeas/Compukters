@@ -55,7 +55,7 @@ def table(path):
         return list(csv.DictReader(stream, delimiter='\t'))
 
 
-def validate_trial(path, population):
+def validate_trial(path, population, checksum=9999999):
     frames = table(path / 'frames.tsv')
     checks = {r['check']: (int(r['computers']), int(r['value'])) for r in table(path / 'checks.tsv')}
     mixed = (population + 9) // 10
@@ -68,7 +68,7 @@ def validate_trial(path, population):
         assert all(int(r['active']) == active and int(r['retired']) == active * 4096 for r in selected)
         if active:
             assert checks[mode + '-equal-progress'] == (active, 409600)
-            assert checks[mode + '-checksum'] == (active, 9999999)
+            assert checks[mode + '-checksum'] == (active, checksum)
     wakes = table(path / 'wakes.tsv')
     assert len(wakes) == 10 * population
     for wave in range(10):
@@ -114,6 +114,8 @@ def trial(args, population, workers, execution, phase):
             '-cp', args.classpath.read_text().strip(),
             'ru.lazyhat.compukters.core.device.runtime.fleet.JvmVmFleetProbe', str(population),
             str(workers), str(args.library), str(args.image), str(output)]
+    if args.program != '/bin/fleet-pid' or args.checksum != 9999999:
+        argv += [args.program, str(args.checksum)]
     if args.diagnostics:
         options = [f'-Dcompukters.fleet.diagnostics={args.diagnostics}',
                    f'-Dcompukters.fleet.profilePhase={args.profile_phase}']
@@ -221,7 +223,7 @@ def trial(args, population, workers, execution, phase):
             if args.diagnostics == 'memory':
                 expected_phases.append('trimmed')
             assert complete and [r['phase'] for r in rows] == expected_phases
-            validate_trial(output, population)
+            validate_trial(output, population, args.checksum)
             if args.diagnostics:
                 assert len(allocations) == 1 and all(v >= 0 for k, v in allocations[0].items() if k != 'phase')
                 if args.diagnostics == 'memory':
@@ -256,6 +258,8 @@ def main():
     parser.add_argument('--store-template', type=Path, help='Closed disposable preinstalled store copied before Fleet creation')
     parser.add_argument('--diagnostics', choices=['cpu', 'allocation', 'memory', 'perf'], help='Perturbed profiling; never use as throughput evidence')
     parser.add_argument('--profile-phase', choices=['idle', 'burst', 'compute', 'mixed'], default='compute')
+    parser.add_argument('--program', default='/bin/fleet-pid', help='Installed /bin executable for compute/mixed phases')
+    parser.add_argument('--checksum', type=int, default=9999999, help='Expected final integer checksum from the compute executable')
     parser.add_argument('--lock', type=Path, action='append', default=[])
     args = parser.parse_args()
     for name in ['classpath', 'library', 'image', 'output', 'jdk']:
@@ -263,6 +267,7 @@ def main():
     if args.store_template:
         args.store_template = args.store_template.resolve()
         assert args.store_template.is_dir()
+    assert re.fullmatch(r'/bin/[A-Za-z0-9_-]+', args.program) and -(1 << 63) <= args.checksum < (1 << 63)
     populations = [int(x) for x in args.populations.split(',')]
     workers = [int(x) for x in args.workers.split(',')]
     assert 1 <= args.rounds <= 20 and all(1 <= n <= 4096 for n in populations) and all(1 <= n <= 64 for n in workers)

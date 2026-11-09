@@ -42,7 +42,14 @@ object JvmVmFleetProbe {
 
     @JvmStatic
     fun main(args: Array<String>) {
-        require(args.size in 5..6) { "Expected: population workers library image fresh-output [self-gc]" }
+        require(args.size in 5..8) { "Expected: population workers library image fresh-output [self-gc] [program checksum]" }
+        val options = args.drop(5)
+        require(options.count { it == "self-gc" } <= 1)
+        val compute = options.filterNot { it == "self-gc" }
+        require(compute.isEmpty() || compute.size == 2)
+        val workload = if (compute.isEmpty()) ComputeWorkload() else ComputeWorkload(compute[0], compute[1].toLong())
+        require(workload.program.matches(Regex("/bin/[A-Za-z0-9_-]+")))
+        val selfGc = "self-gc" in options
         val population = args[0].toInt().also { require(it in 1..4096) }
         val workers = args[1].toInt().also { require(it in 1..64) }
         val backend = Class.forName("ru.lazyhat.compukters.lang.runtime.vm.FfmRuntimeBackend").getField("INSTANCE").get(null)
@@ -55,12 +62,12 @@ object JvmVmFleetProbe {
         JvmFleetDiagnostics.initialize(output)
         check(clock.isThreadCpuTimeSupported)
         clock.isThreadCpuTimeEnabled = true
-        warmup(image, output.resolve("warmup"), workers)
+        warmup(image, output.resolve("warmup"), workers, workload)
         JvmFleetDiagnostics.beginPopulation()
-        memoryPhase("baseline", null, args.last() == "self-gc")
-        runFleet(population, workers, image, output, args.last() == "self-gc")
-        memoryPhase("closed", null, args.last() == "self-gc")
-        if (JvmFleetDiagnostics.trimAllocator()) memoryPhase("trimmed", null, args.last() == "self-gc")
+        memoryPhase("baseline", null, selfGc)
+        runFleet(population, workers, image, output, selfGc, workload)
+        memoryPhase("closed", null, selfGc)
+        if (JvmFleetDiagnostics.trimAllocator()) memoryPhase("trimmed", null, selfGc)
         println("COMPLETE\t$population\t$workers")
     }
 
@@ -70,8 +77,9 @@ object JvmVmFleetProbe {
         image: VmSystemImage,
         output: Path,
         selfGc: Boolean,
+        workload: ComputeWorkload,
     ) {
-        Fleet(population, workers, image, output.resolve("fleet")).use { fleet ->
+        Fleet(population, workers, image, output.resolve("fleet"), workload).use { fleet ->
             fleet.boot()
             memoryPhase("prompt", fleet, selfGc)
             fleet.measureIdle()
@@ -87,8 +95,9 @@ object JvmVmFleetProbe {
         image: VmSystemImage,
         root: Path,
         workers: Int,
+        workload: ComputeWorkload,
     ) {
-        Fleet(16, workers, image, root).use { fleet ->
+        Fleet(16, workers, image, root, workload).use { fleet ->
             fleet.boot()
             fleet.measureIdle()
             fleet.measureBurst()
@@ -126,11 +135,17 @@ object JvmVmFleetProbe {
         ).joinToString("\t")
     }
 
+    private data class ComputeWorkload(
+        val program: String = "/bin/fleet-pid",
+        val checksum: Long = 9999999,
+    )
+
     private class Fleet(
         population: Int,
         workers: Int,
         image: VmSystemImage,
         root: Path,
+        private val workload: ComputeWorkload,
     ) : AutoCloseable {
         private val owner = Thread.currentThread()
         private val store = WorldFileSystemStore.open(Files.createDirectories(root))
@@ -329,14 +344,14 @@ object JvmVmFleetProbe {
             memory: () -> Unit,
         ) {
             val indices = (0 until count).toList()
-            lines(indices) { "/bin/fleet-pid" }
+            lines(indices) { workload.program }
             repeat(WARMUP_FRAMES) { sweep() }
             check(indices.all { carriers[it].state == ProgramRuntimeState.Running })
             measureComputeFrames(count, mode)
             memory()
             settle()
-            terminalTexts(indices).forEach { check("9999999" in it) { "Missing PID checksum" } }
-            checks += "$mode-checksum\t$count\t9999999"
+            terminalTexts(indices).forEach { check(workload.checksum.toString() in it) { "Missing ${workload.program} checksum" } }
+            checks += "$mode-checksum\t$count\t${workload.checksum}"
         }
 
         private fun measureComputeFrames(

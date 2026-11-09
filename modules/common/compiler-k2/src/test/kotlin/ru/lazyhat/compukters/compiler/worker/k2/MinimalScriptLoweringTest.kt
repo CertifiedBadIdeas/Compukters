@@ -11810,6 +11810,20 @@ class MinimalScriptLoweringTest {
             output.resolve("manifest.tsv").writeText(manifest.joinToString("\n", postfix = "\n"))
         }
 
+    @Test
+    @org.junit.jupiter.api.condition.EnabledIfSystemProperty(named = "compukter.bench.fleetOutput", matches = ".+")
+    fun `collection fleet benchmark artifact compiles`() =
+        withAdapter { adapter ->
+            val source = repositoryFile("tools/benchmarks/guest/fleet-collections.kt").readText()
+            val result = adapter.compile(request(source))
+            val bytes = assertNotNull(result.artifact, result.diagnostics.joinToString()).toByteArray()
+            ArtifactReader.read(bytes)
+            val output = Path.of(checkNotNull(System.getProperty("compukter.bench.fleetOutput"))).createDirectories()
+            output.resolve("fleet-collections.cpkt").writeBytes(bytes)
+            output.resolve("fleet-collections.kt").writeText(source)
+            output.resolve("manifest.tsv").writeText("id\tchecksum\tartifact_bytes\nfleet-collections\t-1947596288\t${bytes.size}\n")
+        }
+
     private fun withAdapter(block: (K2CompilerAdapter) -> Unit) {
         val root = createTempDirectory("compukters-minimal-lowering-test-")
         try {

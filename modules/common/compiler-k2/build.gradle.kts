@@ -2438,6 +2438,23 @@ tasks.register<Test>("generateExecutionBenchmarkArtifacts") {
     systemProperty("compukter.bench.executionOutput", executionBenchmarkArtifacts.get().asFile.absolutePath)
 }
 
+val fleetCollectionArtifact = layout.buildDirectory.dir("generated/benchmarks/fleet-collections")
+
+tasks.register<Test>("generateFleetCollectionArtifact") {
+    description = "Compiles the opt-in mutable-object, ArrayList and IntArray fleet workload."
+    group = "benchmark"
+    dependsOn(tasks.jar)
+    useJUnitPlatform()
+    testClassesDirs = sourceSets.test.get().output.classesDirs
+    classpath = sourceSets.test.get().runtimeClasspath
+    filter.includeTestsMatching("*collection fleet benchmark artifact compiles*")
+    inputs.file(workerJar)
+    inputs.file(rootProject.file("tools/benchmarks/guest/fleet-collections.kt"))
+    outputs.dir(fleetCollectionArtifact)
+    systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
+    systemProperty("compukter.bench.fleetOutput", fleetCollectionArtifact.get().asFile.absolutePath)
+}
+
 val generateGuestLibraryPrototype = tasks.register<Test>("generateGuestLibraryPrototype") {
     description = "Compiles the IntelliJ prototype's executable addon MFVC library and its separate consumer."
     group = "verification"
