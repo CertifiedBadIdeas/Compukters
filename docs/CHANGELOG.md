@@ -40,7 +40,8 @@ headings so this page has one stable URL that can be shared outside the reposito
   records also grow on demand; cooperative task switches transfer stack buffers without copying them. The VM prepares typed
   operations and direct-call argument transfers before execution to reduce repeated operand-layout work
   in numeric code, data access and function calls, and reads prepared opcodes directly before handing operands
-  to their handlers. The Java 25 FFM transport shares temporary terminal
+  to their handlers. Arithmetic and field/array operations also run with less dispatch overhead
+  while preserving instruction limits. The Java 25 FFM transport shares temporary terminal
   read buffers instead of reserving a maximum-size buffer for every computer.
 
 - Computers have a fully writable persistent root: `/boot/init`, system utilities in `/bin`, and user files
