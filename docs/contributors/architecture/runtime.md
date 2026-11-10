@@ -301,8 +301,13 @@ reference, type, bounds and null checks; each callout selects its verified opcod
 time, specializing that same implementation rather than defining separate heap semantics. Temporary frame reborrows and generated accesses run
 sequentially, and a failed callout immediately exits with its Rust-owned fault/trap. No frame resize,
 Guest allocation, collection or suspension can occur inside a native region.
-The optional `jit-diagnostics` feature counts exit categories in a separate diagnostic build; it is
-excluded from timing and memory measurements.
+Hot hit/native-attempt counters are separately opt-in through `jit-telemetry`. Ordinary experimental
+JIT execution does not update those shared counters at native exits; the private statistics snapshot
+marks them disabled and reports zero. Cold module, mapping, compiler-time and pending-job observations
+remain available. This avoids serializing independent worker threads on one program's telemetry cache
+line and adds no per-session state. The optional `jit-diagnostics` feature includes `jit-telemetry`
+and counts exit categories and calls in a separate diagnostic build; it is excluded from ordinary
+timing and memory measurements.
 Unsupported code, capacity exhaustion or compilation
 failure keeps interpretation. This first tier does not inline functions, hoist heap checks across
 calls or promise automatic SIMD.

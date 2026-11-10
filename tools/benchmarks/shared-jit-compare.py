@@ -42,7 +42,11 @@ def summarize(root):
                 assert before[name] == after[name], (run, row["id"], name, "tier changed during timing")
             assert int(after["pending"]) == int(after["failures"]) == 0
             if run["label"].startswith("on") or protocol.get("off_mode", "untraced") != "untraced":
-                assert int(after["compiled"]) > 0 and int(after["hits"]) > int(before["hits"])
+                assert int(after["compiled"]) > 0
+                if after.get("hot_telemetry", "true") == "true":
+                    assert int(after["hits"]) > int(before["hits"])
+                else:
+                    assert int(after["hits"]) == int(after["native_attempts"]) == 0
             else:
                 assert int(after["compiled"]) == int(after["hits"]) == 0
             observations.append(dict(run, id=row["id"], cpu_ns=cpu, work={k: v for k, v in row.items() if k.startswith("hot_") and (k.endswith("units") or k.endswith("instructions") or k.endswith("blocks") or k.endswith("requests") or k.endswith("responses"))}, telemetry=after))

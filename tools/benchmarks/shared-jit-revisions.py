@@ -47,7 +47,11 @@ def summarize(root):
                     assert before[name] == after[name], (run, row["id"], name, "tier changed")
                 assert int(after["pending"]) == int(after["failures"]) == 0
                 if protocol.get("mode", "jit-untraced") == "jit-untraced":
-                    assert int(after["compiled"]) > 0 and int(after["hits"]) > int(before["hits"])
+                    assert int(after["compiled"]) > 0
+                    if after.get("hot_telemetry", "true") == "true":
+                        assert int(after["hits"]) > int(before["hits"])
+                    else:
+                        assert int(after["hits"]) == int(after["native_attempts"]) == 0
                 else:
                     assert int(after["compiled"]) == int(after["hits"]) == 0
             else:
