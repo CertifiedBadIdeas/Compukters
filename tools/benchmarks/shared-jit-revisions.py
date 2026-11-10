@@ -40,12 +40,22 @@ def summarize(root):
             assert len(samples) == protocol["samples"]
             cpu = statistics.median(int(x["hot_cpu_ns"]) for x in samples)
             assert cpu == int(row["hot_cpu_median_ns"])
-            before, after = [x for x in rows(directory / "jit.tsv") if x["id"] == row["id"]]
-            assert (before["phase"], after["phase"]) == ("warmup", "measured")
-            for name in ["compile_ns", "compiled", "code_bytes", "mapped_bytes_upper_bound", "state_bytes"]:
-                assert before[name] == after[name], (run, row["id"], name, "tier changed")
-            assert int(after["pending"]) == int(after["failures"]) == 0
-            assert int(after["compiled"]) > 0 and int(after["hits"]) > int(before["hits"])
+            if protocol.get("telemetry", True):
+                before, after = [x for x in rows(directory / "jit.tsv") if x["id"] == row["id"]]
+                assert (before["phase"], after["phase"]) == ("warmup", "measured")
+                for name in ["compile_ns", "compiled", "code_bytes", "mapped_bytes_upper_bound", "state_bytes"]:
+                    assert before[name] == after[name], (run, row["id"], name, "tier changed")
+                assert int(after["pending"]) == int(after["failures"]) == 0
+                if protocol.get("mode", "jit-untraced") == "jit-untraced":
+                    assert int(after["compiled"]) > 0 and int(after["hits"]) > int(before["hits"])
+                else:
+                    assert int(after["compiled"]) == int(after["hits"]) == 0
+            else:
+                # A build without baseline-jit has no telemetry file. Do not
+                # invent zero-valued observations for that independent baseline.
+                assert protocol.get("mode", "jit-untraced") == "untraced"
+                assert not (directory / "jit.tsv").exists()
+                before = after = None
             work = {k: v for k, v in row.items() if k.startswith("hot_") and k.endswith(("units", "instructions", "blocks", "requests", "responses"))}
             assert len(work) == 8
             observations.append(dict(run, id=row["id"], cpu_ns=cpu, work=work, before=before, after=after))
@@ -82,6 +92,9 @@ def main():
     parser.add_argument("--rounds", type=int, default=3)
     parser.add_argument("--samples", type=int, default=21)
     parser.add_argument("--cpu", type=int, default=6)
+    parser.add_argument("--mode", choices=["jit-untraced", "untraced"], default="jit-untraced")
+    parser.add_argument("--without-jit-telemetry", action="store_true",
+                        help="both executables were built without baseline-jit; only valid for untraced")
     parser.add_argument("--check", action="store_true")
     args = parser.parse_args()
     if args.check:
@@ -89,6 +102,7 @@ def main():
         print("PASS: fixed inode/argv, input revisions, samples, work, stable tiers and AA gates")
         return
     assert args.old and args.new and args.numeric and args.collections
+    assert not args.without_jit_telemetry or args.mode == "untraced"
     assert args.rounds >= 3 and args.samples >= 3 and args.samples % 2 == 1
     args.output.mkdir(parents=True, exist_ok=False)
     locks = []
@@ -99,7 +113,7 @@ def main():
     inputs = {"numeric": args.numeric.resolve(), "collections": args.collections.resolve()}
     binaries = {"old": args.old.resolve(), "new": args.new.resolve()}
     images = {name: path.read_bytes() for name, path in binaries.items()}
-    protocol = dict(rounds=args.rounds, samples=args.samples, cpu=args.cpu,
+    protocol = dict(rounds=args.rounds, samples=args.samples, cpu=args.cpu, mode=args.mode, telemetry=not args.without_jit_telemetry,
         inputs={k: str(v) for k, v in inputs.items()}, locks=[str(x.resolve()) for x in args.lock],
         binaries={k: dict(path=str(v), sha256=sha(v)) for k, v in binaries.items()},
         artifacts={str(p): sha(p) for directory in inputs.values() for p in [directory / "manifest.tsv", *sorted(directory.glob("*.cpkt"))]}, runs=[])
@@ -139,7 +153,7 @@ def main():
                     relative = f"round-{index+1}/{label}/{kind}"
                     destination = args.output / relative
                     destination.parent.mkdir(parents=True, exist_ok=True)
-                    command = ["taskset", "-c", str(args.cpu), str(binary.resolve()), str(directory), str(output.resolve()), str(args.samples), "65536", "jit-untraced"]
+                    command = ["taskset", "-c", str(args.cpu), str(binary.resolve()), str(directory), str(output.resolve()), str(args.samples), "65536", args.mode]
                     start = time.time()
                     with destination.with_suffix(".log").open("w") as log:
                         subprocess.run(command, stdout=log, stderr=subprocess.STDOUT, check=True)

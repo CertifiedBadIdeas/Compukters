@@ -41,7 +41,7 @@ def summarize(root):
             for name in ["compile_ns", "compiled", "code_bytes", "mapped_bytes_upper_bound", "state_bytes"]:
                 assert before[name] == after[name], (run, row["id"], name, "tier changed during timing")
             assert int(after["pending"]) == int(after["failures"]) == 0
-            if run["label"].startswith("on"):
+            if run["label"].startswith("on") or protocol.get("off_mode", "untraced") != "untraced":
                 assert int(after["compiled"]) > 0 and int(after["hits"]) > int(before["hits"])
             else:
                 assert int(after["compiled"]) == int(after["hits"]) == 0
@@ -76,6 +76,8 @@ def main():
     parser.add_argument("--rounds", type=int, default=3)
     parser.add_argument("--samples", type=int, default=21)
     parser.add_argument("--cpu", type=int, default=6)
+    parser.add_argument("--off-mode", choices=["untraced", "jit-no-inline-untraced"], default="untraced",
+                        help="reference arm: interpreter, or JIT with cold leaf admission disabled")
     parser.add_argument("--check", action="store_true")
     args = parser.parse_args()
     if args.check:
@@ -94,7 +96,7 @@ def main():
         locks.append(stream)
     inputs = {"numeric": args.numeric.resolve(), "collections": args.collections.resolve()}
     protocol = dict(binary=str(args.binary.resolve()), binary_sha256=sha(args.binary),
-        rounds=args.rounds, samples=args.samples, cpu=args.cpu, locks=[str(p.resolve()) for p in args.lock],
+        rounds=args.rounds, samples=args.samples, cpu=args.cpu, off_mode=args.off_mode, locks=[str(p.resolve()) for p in args.lock],
         platform=platform.platform(), runs=[], artifacts={str(path): sha(path) for directory in inputs.values() for path in directory.glob("*.cpkt")})
     (args.output / "host-before.txt").write_text(subprocess.check_output(["ps", "-eo", "pid,pcpu,comm", "--sort=-pcpu"], text=True))
     def monitor():
@@ -115,7 +117,7 @@ def main():
                 relative = f"round-{round_index + 1}/{label}/{kind}"
                 destination = args.output / relative
                 destination.parent.mkdir(parents=True, exist_ok=True)
-                command = ["taskset", "-c", str(args.cpu), str(args.binary.resolve()), str(directory), str(destination.resolve()), str(args.samples), "65536", "jit-untraced" if label.startswith("on") else "untraced"]
+                command = ["taskset", "-c", str(args.cpu), str(args.binary.resolve()), str(directory), str(destination.resolve()), str(args.samples), "65536", "jit-untraced" if label.startswith("on") else args.off_mode]
                 start = time.time()
                 with destination.with_suffix(".log").open("w") as log:
                     subprocess.run(command, stdout=log, stderr=subprocess.STDOUT, check=True)
