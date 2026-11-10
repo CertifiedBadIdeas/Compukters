@@ -280,7 +280,13 @@ exit; unsupported successor blocks remain unpaid. Diagnostic block traces retain
 trace-preserving path. Both kinds of code use the same slots, compiler and executable limits. Generated
 failure exits retain exact fault PC/attempts and previous writes; NaN canonicalization and integer
 wrapping/division follow the interpreter. Frame bytes are materialized at every exit, with no
-native registers or addresses in checkpoints. Heap callouts use an invocation-only context borrowing
+native registers or addresses in checkpoints. Numeric regions without heap callouts promote at most
+64 exact typed frame ranges to invocation-local SSA variables. Arithmetic and checked values are
+candidates; copy-only temporaries stay in memory to bound side-exit register pressure. All partially
+overlapping ranges stay memory-backed, while exact-width aliases use lossless bitcasts. A shared
+exit epilogue restores every promoted written range, including dead values and earlier writes before
+a fault. Prefixes and heap regions retain direct frame access. Promotion adds no retained per-session
+cache, checkpoint state or instance pointer to shared code. Heap callouts use an invocation-only context borrowing
 that frame and the current admission's heap/image; generated code never embeds a heap pointer,
 header packing, instance reference or capability. The ordinary prepared heap executor owns all
 reference, type, bounds and null checks; each callout selects its verified opcode at compilation
