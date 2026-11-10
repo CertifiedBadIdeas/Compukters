@@ -277,8 +277,16 @@ Untraced connected regions check limits inside generated control flow, charging 
 preserving attempted-instruction, fixed-cost and entered-block overflow order. An invocation-local
 stack record publishes exact original block/instruction, remaining budget and accounting on every
 exit; unsupported successor blocks remain unpaid. Diagnostic block traces retain the ordinary
-trace-preserving path. Both kinds of code use the same slots, compiler and executable limits. Generated
-failure exits retain exact fault PC/attempts and previous writes; NaN canonicalization and integer
+trace-preserving path. Both kinds of code use the same slots, compiler and executable limits.
+Regions prove the complete planned block segment fits the attempt/headroom budget before executing
+its instructions. Short budgets materialize the frame and counters through a shared exit, then use
+the authoritative prepared interpreter for that already-paid block's precise tail. This adds no
+per-session cache, second block charge or duplicate native body. Native-attempt telemetry excludes
+interpreted tail instructions. The JIT owner completes a short tail after the thin native entry
+returns, through a cold helper. The existing heap/frame/numeric interpreter dispatch stays inlined
+so this extra caller does not outline the ordinary hot loop. Semantic fault guards still publish
+the exact faulting instruction.
+Failure exits retain exact fault PC/attempts and previous writes; NaN canonicalization and integer
 wrapping/division follow the interpreter. Frame bytes are materialized at every exit, with no
 native registers or addresses in checkpoints. Numeric regions without heap callouts promote at most
 64 exact typed frame ranges to invocation-local SSA variables. Arithmetic and checked values are

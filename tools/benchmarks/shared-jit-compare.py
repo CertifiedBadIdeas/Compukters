@@ -76,8 +76,8 @@ def main():
     parser.add_argument("--rounds", type=int, default=3)
     parser.add_argument("--samples", type=int, default=21)
     parser.add_argument("--cpu", type=int, default=6)
-    parser.add_argument("--off-mode", choices=["untraced", "jit-no-inline-untraced", "jit-no-ssa-untraced"], default="untraced",
-                        help="reference arm: interpreter, or JIT with cold leaf/SSA admission disabled")
+    parser.add_argument("--off-mode", choices=["untraced", "jit-no-inline-untraced", "jit-no-ssa-untraced", "jit-no-block-budget-untraced"], default="untraced",
+                        help="reference arm: interpreter, or JIT with cold leaf/SSA/block-budget optimization disabled")
     parser.add_argument("--check", action="store_true")
     args = parser.parse_args()
     if args.check:
