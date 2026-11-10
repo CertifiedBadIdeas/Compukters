@@ -252,7 +252,8 @@ The native `baseline-jit` Cargo feature adds private opt-in tier selection for e
 normal sessions and the Minecraft carrier retain the prepared interpreter. It does not change
 Guest Kotlin, portable artifacts, Runtime/host ABI, logical accounting or checkpoint bytes.
 The current tier compiles bounded numeric/frame prefixes and terminal branches through Cranelift.
-Heap operations, calls, allocation, initialization, host requests and safepoints stay in the interpreter.
+Mixed prefixes can include non-allocating field and array operations through checked Rust callouts.
+Calls, allocation, initialization, host requests and safepoints remain interpreter boundaries.
 
 Each prepared program lazily owns 256 fixed hot-entry slots. Hotness and finalized modules are
 shared by all admitted instances; direct-map collisions fall back. A process-wide single worker
@@ -268,7 +269,14 @@ Native entry proves frame access ranges and requires enough remaining attempts a
 headroom for the entire prefix. Smaller budgets fall back at the same instruction. Generated
 failure exits retain exact fault PC/attempts and previous writes; NaN canonicalization and integer
 wrapping/division follow the interpreter. Frame bytes are materialized at every exit, with no
-native registers or addresses in checkpoints. Unsupported code, capacity exhaustion or compilation
+native registers or addresses in checkpoints. Heap callouts use an invocation-only context borrowing
+that frame and the current admission's heap/image; generated code never embeds a heap pointer,
+header packing, instance reference or capability. The ordinary prepared heap executor owns all
+reference, type, bounds and null checks; each callout selects its verified opcode at compilation
+time, specializing that same implementation rather than defining separate heap semantics. Temporary frame reborrows and generated accesses run
+sequentially, and a failed callout immediately exits with its Rust-owned fault/trap. No frame resize,
+Guest allocation, collection or suspension can occur inside such a prefix.
+Unsupported code, capacity exhaustion or compilation
 failure keeps interpretation. This first tier does not inline functions, hoist heap checks across
 calls or promise automatic SIMD.
 
