@@ -255,7 +255,9 @@ The current tier compiles bounded numeric/frame prefixes and connected same-func
 Cranelift. Regions include branches and loops, with at most 16 blocks and 128 operations per plan.
 Admission requires a reachable native cycle or at least two removed dispatcher transitions on every
 acyclic path to an exit. Short bridges before lifecycle operations retain the prefix tier. Region
-lookup precedes frame-window preparation; programs without regions use one shared flag check.
+selection shares the existing prepared JIT lookup with prefixes; it adds no separate per-block probe.
+Machine pays the first block before entry, generated headers pay later entries including backedges,
+and invocation-local state is constructed only when a ready region is selected.
 Mixed prefixes can include non-allocating field and array operations through checked Rust callouts.
 Calls, allocation, initialization, host requests and safepoints remain interpreter boundaries.
 
