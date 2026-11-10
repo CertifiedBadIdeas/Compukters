@@ -156,7 +156,8 @@ Shared immutable storage is separate from each VM's admitted mutable execution-r
 ## Prepared execution
 
 The compiler still emits one portable `.cpkt` executable. After verification, `PreparedProgram` derives the
-ordinary execution stream once for its live owners. No second distributable binary or native JIT is involved.
+ordinary execution stream once for its live owners. Default execution uses the interpreter; the experimental
+baseline JIT described below derives additional process-local code without a second distributable binary.
 A program-wide dense allocation contains 16-byte operations; only its allocation boundary is aligned to 64 bytes.
 Blocks retain ranges, fixed costs and function ownership. Short blocks do not each allocate or pad a cache line.
 Shared copy/field plans and sparse lifecycle descriptors occupy separate program-owned arrays.
@@ -245,10 +246,36 @@ creates addon hosts lazily per program, closes only the exiting program's hosts,
 Suspended parents retain their resources. Computer shutdown resets every scope. This makes peripheral ownership
 follow the program lifetime without inferring it from terminal output or changing world/physics cadence.
 
+## Experimental baseline JIT
+
+The native `baseline-jit` Cargo feature adds private opt-in tier selection for experiments;
+normal sessions and the Minecraft carrier retain the prepared interpreter. It does not change
+Guest Kotlin, portable artifacts, Runtime/host ABI, logical accounting or checkpoint bytes.
+The current tier compiles bounded numeric/frame prefixes and terminal branches through Cranelift.
+Heap operations, calls, allocation, initialization, host requests and safepoints stay in the interpreter.
+
+Each prepared program lazily owns 256 fixed hot-entry slots. Hotness and finalized modules are
+shared by all admitted instances; direct-map collisions fall back. A process-wide single worker
+accepts at most eight queued jobs, with exponentially spaced bounded retries for queue bursts.
+Jobs carry bounded copied plans and weak program owners, with no instance pointer or host binding.
+At most 256 queued/compiling/live modules each reserve a 64 KiB page-rounded mapping envelope,
+including code and any readonly/data requests. This conservative 16 MiB cap excludes program
+metadata, compiler transient allocations and the single persistent compiler worker/stack.
+No cache eviction can invalidate an executing function; the final module owner explicitly frees
+its executable mappings. The feature is absent from production dependency/code paths by default.
+
+Native entry proves frame access ranges and requires enough remaining attempts and accounting
+headroom for the entire prefix. Smaller budgets fall back at the same instruction. Generated
+failure exits retain exact fault PC/attempts and previous writes; NaN canonicalization and integer
+wrapping/division follow the interpreter. Frame bytes are materialized at every exit, with no
+native registers or addresses in checkpoints. Unsupported code, capacity exhaustion or compilation
+failure keeps interpretation. This first tier does not inline functions, hoist heap checks across
+calls or promise automatic SIMD.
+
 ## Managed memory
 
 The Rust VM owns verification, the Tier 0 interpreter, managed memory and collection, quotas, traps and faults,
-capability suspension, and host-neutral sessions. Future JIT or AOT tiers must remain behind the same verified artifact
+capability suspension, and host-neutral sessions. The experimental JIT and future execution tiers remain behind the same verified artifact
 and session contract.
 
 Managed blocks normally use one eight-byte header with allocated/marked/live flags, aligned block size,
