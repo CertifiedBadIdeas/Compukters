@@ -251,7 +251,8 @@ follow the program lifetime without inferring it from terminal output or changin
 The native `baseline-jit` Cargo feature adds private opt-in tier selection for experiments;
 normal sessions and the Minecraft carrier retain the prepared interpreter. It does not change
 Guest Kotlin, portable artifacts, Runtime/host ABI, logical accounting or checkpoint bytes.
-The current tier compiles bounded numeric/frame prefixes and terminal branches through Cranelift.
+The current tier compiles bounded numeric/frame prefixes and connected same-function regions through
+Cranelift. Regions include branches and loops, with at most 16 blocks and 128 operations per plan.
 Mixed prefixes can include non-allocating field and array operations through checked Rust callouts.
 Calls, allocation, initialization, host requests and safepoints remain interpreter boundaries.
 
@@ -266,7 +267,12 @@ No cache eviction can invalidate an executing function; the final module owner e
 its executable mappings. The feature is absent from production dependency/code paths by default.
 
 Native entry proves frame access ranges and requires enough remaining attempts and accounting
-headroom for the entire prefix. Smaller budgets fall back at the same instruction. Generated
+headroom for the entire single-block prefix. Smaller prefix budgets fall back at the same instruction.
+Untraced connected regions check limits inside generated control flow, charging each block once and
+preserving attempted-instruction, fixed-cost and entered-block overflow order. An invocation-local
+stack record publishes exact original block/instruction, remaining budget and accounting on every
+exit; unsupported successor blocks remain unpaid. Diagnostic block traces retain the ordinary
+trace-preserving path. Both kinds of code use the same slots, compiler and executable limits. Generated
 failure exits retain exact fault PC/attempts and previous writes; NaN canonicalization and integer
 wrapping/division follow the interpreter. Frame bytes are materialized at every exit, with no
 native registers or addresses in checkpoints. Heap callouts use an invocation-only context borrowing
@@ -275,7 +281,9 @@ header packing, instance reference or capability. The ordinary prepared heap exe
 reference, type, bounds and null checks; each callout selects its verified opcode at compilation
 time, specializing that same implementation rather than defining separate heap semantics. Temporary frame reborrows and generated accesses run
 sequentially, and a failed callout immediately exits with its Rust-owned fault/trap. No frame resize,
-Guest allocation, collection or suspension can occur inside such a prefix.
+Guest allocation, collection or suspension can occur inside a native region.
+The optional `jit-diagnostics` feature counts exit categories in a separate diagnostic build; it is
+excluded from timing and memory measurements.
 Unsupported code, capacity exhaustion or compilation
 failure keeps interpretation. This first tier does not inline functions, hoist heap checks across
 calls or promise automatic SIMD.
