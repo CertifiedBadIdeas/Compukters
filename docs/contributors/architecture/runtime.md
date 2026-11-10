@@ -253,6 +253,9 @@ normal sessions and the Minecraft carrier retain the prepared interpreter. It do
 Guest Kotlin, portable artifacts, Runtime/host ABI, logical accounting or checkpoint bytes.
 The current tier compiles bounded numeric/frame prefixes and connected same-function regions through
 Cranelift. Regions include branches and loops, with at most 16 blocks and 128 operations per plan.
+Admission requires a reachable native cycle or at least two removed dispatcher transitions on every
+acyclic path to an exit. Short bridges before lifecycle operations retain the prefix tier. Region
+lookup precedes frame-window preparation; programs without regions use one shared flag check.
 Mixed prefixes can include non-allocating field and array operations through checked Rust callouts.
 Calls, allocation, initialization, host requests and safepoints remain interpreter boundaries.
 
