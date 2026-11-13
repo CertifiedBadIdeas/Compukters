@@ -15,7 +15,7 @@ headings so this page has one stable URL that can be shared outside the reposito
 
 - Guest Kotlin tooling can be prepared for independent compilation and execution without rebuilding the mod.
 
-- The Java 21 runtime reuses temporary buffers when advancing computers, reducing garbage collection pressure.
+- The Java 21 runtime and JNI transport reuse temporary buffers when advancing computers, reducing allocation pressure.
 
 - Added `Process.exec` to replace the current Guest program without retaining its suspended heap.
   Boot now replaces itself with the shell; failed replacement returns a typed diagnostic.

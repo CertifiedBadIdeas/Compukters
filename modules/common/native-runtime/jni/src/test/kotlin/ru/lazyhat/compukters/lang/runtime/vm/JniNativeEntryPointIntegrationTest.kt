@@ -18,14 +18,46 @@
 
 package ru.lazyhat.compukters.lang.runtime.vm
 
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
 import java.nio.file.Path
 import kotlin.io.path.readBytes
 import kotlin.test.Test
+import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
 import kotlin.test.assertTrue
 
 class JniNativeEntryPointIntegrationTest {
+    @Test
+    fun `advance preserves bounded output and errors across reused native buffers`() {
+        val bridge = JniBridge.open(Path.of(requiredProperty("compukter.jni.library")))
+        val artifact = Path.of(requiredProperty("compukters.shell.artifact")).readBytes()
+        val created = bridge.create(artifact, byteArrayOf(1, 0))
+        assertEquals(0, created[0].toInt())
+        val handle = ByteBuffer.wrap(created, 1, 8).order(ByteOrder.LITTLE_ENDIAN).long
+        val maximum = JniNative.maximumOutcomeBytes().toInt()
+        val output = ByteArray(maximum) { 0x55 }
+        val written = LongArray(1)
+        val retired = LongArray(1)
+        try {
+            val small = byteArrayOf(0x55)
+            assertEquals(10, JniNative.advance(handle, 128, 64, Int.MAX_VALUE, small, written))
+            assertEquals(maximum.toLong(), written[0])
+            assertContentEquals(byteArrayOf(0x55), small)
+
+            assertTrue(JniNative.advance(0, 128, 64, Int.MAX_VALUE, output, written) != 0)
+            assertTrue(output.all { it == 0x55.toByte() })
+            assertEquals(0, JniNative.advanceWithRetirementLimit(handle, 128, 64, Int.MAX_VALUE, 0, output, written, retired))
+            assertEquals(1L, written[0])
+            assertEquals(0L, retired[0])
+            assertEquals(0, output[0].toInt())
+            assertTrue(output.drop(1).all { it == 0x55.toByte() })
+        } finally {
+            bridge.close(handle)
+        }
+    }
+
     @Test
     fun `JNI preserves uncaught exception class message and source stack`() {
         val bridge = JniBridge.open(Path.of(requiredProperty("compukter.jni.library")))
