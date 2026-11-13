@@ -318,7 +318,22 @@ marks them disabled and reports zero. Cold module, mapping, compiler-time and pe
 remain available. This avoids serializing independent worker threads on one program's telemetry cache
 line and adds no per-session state. The optional `jit-diagnostics` feature includes `jit-telemetry`
 and counts exit categories and calls in a separate diagnostic build; it is excluded from ordinary
-timing and memory measurements.
+timing and memory measurements. The separate `jit-admission-diagnostics` feature records
+cold admission reasons, queue/request latency and Linux compiler-thread CPU without enabling
+hot native-exit counters; its extra program/slot metadata is absent from ordinary timing and
+allocation-control builds. A full-queue rejection waits on the queue's capacity-release epoch, sampled
+before admission to avoid lost progress. The next execution visit after a release can retry
+without exponential reheating. A shared AtomicU64 per prepared program records a full-queue
+epoch so other hot entries defer before reserving memory or constructing plans. A second check
+under the program's pending reservation closes concurrent producer races; Full publishes this
+shared pressure before releasing the rejected reservation. Resource denials retain their separate release epochs and
+hotness thresholds. The queue still holds at most eight jobs, with one compiler and at most
+one pending compilation per program. A position is reserved before constructing a plan,
+so both builders and queued jobs share that eight-position envelope. The receiver
+returns the position before compiling; abandoned plans and canceled jobs return it
+through the same RAII permit. Plan construction/submission is outlined behind the
+hotness claim, keeping the ready-native dispatch path thin. This is bounded admission, not strict FIFO fairness
+between programs waiting to submit. No waiting-plan registry or per-session state is added.
 Unsupported code, capacity exhaustion or compilation
 failure keeps interpretation. This first tier does not inline functions, hoist heap checks across
 calls or promise automatic SIMD.
