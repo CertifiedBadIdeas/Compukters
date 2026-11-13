@@ -20,10 +20,17 @@ package ru.lazyhat.compukters.playground
 
 import java.nio.file.Path
 
+enum class PlaygroundCommand {
+    RUN,
+    COMPILE,
+    EXEC,
+}
+
 data class PlaygroundOptions(
     val project: Path,
     val emit: Path?,
     val debug: Boolean,
+    val command: PlaygroundCommand = PlaygroundCommand.RUN,
 ) {
     companion object {
         fun parse(arguments: List<String>): PlaygroundOptions {
@@ -31,6 +38,13 @@ data class PlaygroundOptions(
             var emit: Path? = null
             var debug = false
             var index = 0
+            val command =
+                when (arguments.firstOrNull()) {
+                    "run" -> PlaygroundCommand.RUN.also { index++ }
+                    "compile" -> PlaygroundCommand.COMPILE.also { index++ }
+                    "exec" -> PlaygroundCommand.EXEC.also { index++ }
+                    else -> PlaygroundCommand.RUN
+                }
             while (index < arguments.size) {
                 when (val argument = arguments[index]) {
                     "--debug" -> {
@@ -38,7 +52,7 @@ data class PlaygroundOptions(
                         debug = true
                     }
 
-                    "--emit" -> {
+                    "--emit", "-o" -> {
                         if (emit != null) usage("--emit may be specified only once")
                         val value = arguments.getOrNull(++index) ?: usage("--emit requires a path")
                         if (value.startsWith("--")) usage("--emit requires a path")
@@ -47,13 +61,15 @@ data class PlaygroundOptions(
 
                     else -> {
                         if (argument.startsWith("--")) usage("unknown option: $argument")
-                        if (project != null) usage("exactly one project directory is required")
+                        if (project != null) usage("exactly one input is required")
                         project = path(argument)
                     }
                 }
                 index++
             }
-            return PlaygroundOptions(project ?: usage("project directory is required"), emit, debug)
+            if (command == PlaygroundCommand.COMPILE && emit == null) usage("compile requires -o <artifact.cpkt>")
+            if (command == PlaygroundCommand.EXEC && emit != null) usage("exec does not accept an output path")
+            return PlaygroundOptions(project ?: usage("input path is required"), emit, debug, command)
         }
 
         private fun usage(message: String): Nothing = throw PlaygroundUsageException(message)

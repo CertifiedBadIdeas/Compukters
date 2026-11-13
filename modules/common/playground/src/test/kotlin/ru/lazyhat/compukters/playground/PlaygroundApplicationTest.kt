@@ -51,6 +51,52 @@ import kotlin.test.assertTrue
 
 class PlaygroundApplicationTest {
     @Test
+    fun `compile command writes an artifact without entering the VM`() =
+        runBlocking {
+            val artifact = byteArrayOf(4, 5, 6)
+            val compiler = FakeCompiler(success(artifact))
+            val executor = FakeExecutor(failure = IllegalStateException("native runtime is unavailable"))
+            val directory = createTempDirectory("guest-kotlin-compile-")
+            try {
+                val emitted = directory.resolve("program.cpkt")
+                val exit = application(compiler, executor, Streams()).run(listOf("compile", "project", "-o", emitted.toString()))
+                assertEquals(PlaygroundExit.SUCCESS, exit)
+                assertContentEquals(artifact, emitted.readBytes())
+                assertFalse(executor.called)
+                assertTrue(compiler.closed)
+            } finally {
+                directory.toFile().deleteRecursively()
+            }
+        }
+
+    @Test
+    fun `exec command runs exact artifact bytes without constructing a compiler`() =
+        runBlocking {
+            val directory = createTempDirectory("guest-kotlin-exec-")
+            val executor = FakeExecutor()
+            val artifact = byteArrayOf(7, 8, 9)
+            try {
+                val input = directory.resolve("program.cpkt")
+                java.nio.file.Files
+                    .write(input, artifact)
+                val application = PlaygroundApplication({ error("compiler must not start") }, executor, Streams().err)
+                assertEquals(PlaygroundExit.SUCCESS, application.run(listOf("exec", input.toString())))
+                assertContentEquals(artifact, executor.artifact)
+            } finally {
+                directory.toFile().deleteRecursively()
+            }
+        }
+
+    @Test
+    fun `exec rejects a missing input without entering the VM`() =
+        runBlocking {
+            val executor = FakeExecutor()
+            val application = PlaygroundApplication({ error("compiler must not start") }, executor, Streams().err)
+            assertEquals(PlaygroundExit.INPUT, application.run(listOf("exec", "missing-directory/program.cpkt")))
+            assertFalse(executor.called)
+        }
+
+    @Test
     fun `successful compilation emits exact artifact executes it and closes compiler`() =
         runBlocking {
             val artifact = byteArrayOf(1, 2, 3)

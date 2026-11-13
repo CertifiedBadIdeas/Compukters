@@ -24,6 +24,7 @@ import ru.lazyhat.compukters.compiler.worker.protocol.CompileSuccess
 import ru.lazyhat.compukters.compiler.worker.protocol.CompilerFailure
 import ru.lazyhat.compukters.compiler.worker.protocol.PlatformFailure
 import ru.lazyhat.compukters.compiler.worker.protocol.WorkerDiagnostic
+import ru.lazyhat.compukters.compiler.worker.protocol.WorkerLimits
 import java.io.PrintStream
 import java.nio.file.Files
 
@@ -53,12 +54,26 @@ class PlaygroundApplication(
             try {
                 PlaygroundOptions.parse(arguments)
             } catch (exception: PlaygroundUsageException) {
-                stderr.println("usage: <project-directory> [--emit <artifact.cpkt>] [--debug]")
+                stderr.println(
+                    "usage: run <project> [--emit <artifact.cpkt>] | compile <project> -o <artifact.cpkt> | exec <artifact.cpkt>",
+                )
                 stderr.println("error: ${exception.message}")
                 return PlaygroundExit.USAGE
             }
         return try {
-            compilerFactory().use { compiler -> handleCompilation(compiler.compile(options.project), options) }
+            if (options.command == PlaygroundCommand.EXEC) {
+                val limit = WorkerLimits().artifactBytes
+                val artifact =
+                    try {
+                        Files.newInputStream(options.project).use { it.readNBytes(limit + 1) }
+                    } catch (exception: java.io.IOException) {
+                        return failure(PlaygroundExit.INPUT, "artifact input: ${exception.message}", exception, options.debug)
+                    }
+                if (artifact.size > limit) return report(PlaygroundExit.INPUT, "artifact input exceeds $limit bytes")
+                handleExecution(executor.execute(artifact))
+            } else {
+                compilerFactory().use { compiler -> handleCompilation(compiler.compile(options.project), options) }
+            }
         } catch (exception: ProjectSnapshotException) {
             failure(PlaygroundExit.INPUT, "project input: ${exception.message}", exception, options.debug)
         } catch (exception: CancellationException) {
@@ -81,7 +96,7 @@ class PlaygroundApplication(
                     Files.createDirectories(absolute.parent)
                     Files.write(absolute, artifact)
                 }
-                handleExecution(executor.execute(artifact))
+                if (options.command == PlaygroundCommand.COMPILE) PlaygroundExit.SUCCESS else handleExecution(executor.execute(artifact))
             }
 
             is CompilerFailure -> {
