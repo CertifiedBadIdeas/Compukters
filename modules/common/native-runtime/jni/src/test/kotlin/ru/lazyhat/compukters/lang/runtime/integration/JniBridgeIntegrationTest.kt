@@ -27,17 +27,64 @@ import ru.lazyhat.compukters.lang.runtime.vm.VmBridgeException
 import ru.lazyhat.compukters.lang.runtime.vm.VmOutcome
 import ru.lazyhat.compukters.lang.runtime.vm.VmSession
 import ru.lazyhat.compukters.lang.runtime.vm.VmVerificationException
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
 import java.nio.file.Path
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
 import kotlin.io.path.readBytes
 import kotlin.test.Test
+import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertNotSame
 import kotlin.test.assertTrue
 
 // The compiled shell currently requires at least 66 guest units per slice.
 internal const val SHELL_GUEST_BUDGET = 128
 
 class JniBridgeIntegrationTest {
+    @Test
+    fun `concurrent JNI advances keep owned responses and independent retirement counts`() {
+        val bridge = JniBridge.open(Path.of(requiredProperty("compukter.jni.library")))
+        val artifact = Path.of(requiredProperty("compukters.shell.artifact")).readBytes()
+        val executor = Executors.newFixedThreadPool(12)
+        val start = CountDownLatch(1)
+        try {
+            val tasks =
+                List(12) {
+                    executor.submit {
+                        val created = bridge.create(artifact, byteArrayOf(1, 0))
+                        assertEquals(0, created[0].toInt())
+                        val handle = ByteBuffer.wrap(created, 1, 8).order(ByteOrder.LITTLE_ENDIAN).long
+                        try {
+                            start.await()
+                            repeat(100) {
+                                val first = bridge.advanceWithRetirementLimit(handle, SHELL_GUEST_BUDGET, 64, Int.MAX_VALUE, 0)
+                                assertEquals(0L, first.retiredInstructions)
+                                assertContentEquals(byteArrayOf(0), first.outcomeWire)
+                                val second = bridge.advanceWithRetirementLimit(handle, SHELL_GUEST_BUDGET, 64, Int.MAX_VALUE, 0)
+                                assertNotSame(first.outcomeWire, second.outcomeWire)
+                                first.outcomeWire[0] = 99
+                                assertContentEquals(byteArrayOf(0), second.outcomeWire)
+                            }
+                            val one = bridge.advanceWithRetirementLimit(handle, SHELL_GUEST_BUDGET, 64, Int.MAX_VALUE, 1)
+                            assertEquals(1L, one.retiredInstructions)
+                        } finally {
+                            bridge.close(handle)
+                        }
+                    }
+                }
+            start.countDown()
+            tasks.forEach { it.get(30, TimeUnit.SECONDS) }
+        } finally {
+            start.countDown()
+            executor.shutdownNow()
+            assertTrue(executor.awaitTermination(30, TimeUnit.SECONDS))
+        }
+    }
+
     @Test
     fun `JNI retirement limit reports exact work without executing at zero allowance`() {
         val bridge = JniBridge.open(Path.of(requiredProperty("compukter.jni.library")))

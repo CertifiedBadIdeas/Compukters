@@ -29,6 +29,7 @@ internal class JniBridge private constructor() : LowLevelVmBridge {
             .takeIf { it in 1..MAXIMUM_OUTCOME_BYTES }
             ?.toInt()
             ?: throw VmBridgeException("invalid maximum JNI outcome size")
+    private val advanceScratchPool = JniAdvanceScratchPool(maximumOutcomeBytes)
 
     override fun storeOpen(
         rootUtf8: ByteArray,
@@ -296,8 +297,10 @@ internal class JniBridge private constructor() : LowLevelVmBridge {
         maintenanceBudget: Int,
         hostRequestBudget: Int,
     ): ByteArray =
-        fixedOutput("advance", maximumOutcomeBytes) { output, written ->
-            JniNative.advance(handle, guestBudget, maintenanceBudget, hostRequestBudget, output, written)
+        advanceScratchPool.withScratch { scratch ->
+            val status = JniNative.advance(handle, guestBudget, maintenanceBudget, hostRequestBudget, scratch.output, scratch.written)
+            requireSuccess("advance", status)
+            copyResult("advance", scratch.output, scratch.written[0], maximumOutcomeBytes)
         }
 
     override fun advanceWithRetirementLimit(
@@ -306,23 +309,25 @@ internal class JniBridge private constructor() : LowLevelVmBridge {
         maintenanceBudget: Int,
         hostRequestBudget: Int,
         retirementLimit: Int,
-    ): NativeAdvanceResult {
-        val retired = LongArray(1)
-        val outcome =
-            fixedOutput("advance with retirement limit", maximumOutcomeBytes) { output, written ->
+    ): NativeAdvanceResult =
+        advanceScratchPool.withScratch { scratch ->
+            val status =
                 JniNative.advanceWithRetirementLimit(
                     handle,
                     guestBudget,
                     maintenanceBudget,
                     hostRequestBudget,
                     retirementLimit,
-                    output,
-                    written,
-                    retired,
+                    scratch.output,
+                    scratch.written,
+                    scratch.retired,
                 )
-            }
-        return NativeAdvanceResult(outcome, retired[0])
-    }
+            requireSuccess("advance with retirement limit", status)
+            NativeAdvanceResult(
+                copyResult("advance with retirement limit", scratch.output, scratch.written[0], maximumOutcomeBytes),
+                scratch.retired[0],
+            )
+        }
 
     override fun compilationRequest(
         handle: Long,
