@@ -263,11 +263,22 @@ Calls, allocation, initialization, host requests and safepoints remain interpret
 
 Each prepared program lazily owns 256 fixed hot-entry slots. Hotness and finalized modules are
 shared by all admitted instances; direct-map collisions fall back. A process-wide single worker
-accepts at most eight queued jobs, with exponentially spaced bounded retries for queue bursts.
+accepts at most eight queued jobs. Queue bursts retry after exponentially spaced visits, capped
+at 16384 visits per retry without permanently rejecting an entry.
 Jobs carry bounded copied plans and weak program owners, with no instance pointer or host binding.
-At most 256 queued/compiling/live modules each reserve a 64 KiB page-rounded mapping envelope,
-including code and any readonly/data requests. This conservative 16 MiB cap excludes program
-metadata, compiler transient allocations and the single persistent compiler worker/stack.
+A process-wide 16 MiB budget charges finalized page-rounded code/readonly/data mappings and
+64 KiB worst-case reservations for queued or compiling modules. Lowering enforces that per-module
+bound, refunds unused headroom on success and returns the whole reservation on failure or cancellation.
+A separate 2048-module guard bounds module metadata. Each prepared program admits at most 64 modules,
+512 KiB and one pending compilation; this prevents a single program from occupying the global budget,
+without promising equal coverage or ordering among arbitrarily many programs. Global-before-program
+locks run only on admission, settlement and release. Native execution retains its ordinary shared lookup.
+Slots denied capacity wait for a relevant budget release epoch before reheating, rather than permanently
+finishing. One atomic progress word couples hotness/state/backoff/epoch to prevent late visitors from
+corrupting a deferred slot; the slot table has no additional retained fields. Program budget ownership
+is independent of JitState, so reservations cannot keep dead prepared programs alive or form a cycle.
+The byte limit excludes program/module metadata, compiler transient allocations and the single
+persistent compiler worker/stack. No per-VM state is added.
 No cache eviction can invalidate an executing function; the final module owner explicitly frees
 its executable mappings. The feature is absent from production dependency/code paths by default.
 
