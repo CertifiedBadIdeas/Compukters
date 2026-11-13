@@ -13,6 +13,8 @@ headings so this page has one stable URL that can be shared outside the reposito
 
 ## 0.7.0 — In development
 
+- Guest Kotlin tooling can be prepared for independent compilation and execution without rebuilding the mod.
+
 - Added `Process.exec` to replace the current Guest program without retaining its suspended heap.
   Boot now replaces itself with the shell; failed replacement returns a typed diagnostic.
 

@@ -29,8 +29,18 @@ fun main(arguments: Array<String>) {
     val debug = "--debug" in arguments
     val exit =
         try {
-            val payload = Path.of(requiredProperty("compukters.worker.payload"))
-            val library = Path.of(requiredProperty("compukters.ffi.library"))
+            val location =
+                PlaygroundApplication::class.java.protectionDomain.codeSource.location
+                    .toURI()
+            val installRoot = Path.of(location).parent.parent
+            val payload = Path.of(System.getProperty("compukters.worker.payload", installRoot.resolve("worker").toString()))
+            val library =
+                Path.of(
+                    System.getProperty(
+                        "compukters.ffi.library",
+                        installRoot.resolve("native").resolve(System.mapLibraryName("compukter_ffi")).toString(),
+                    ),
+                )
             val java =
                 Path.of(
                     System.getProperty("java.home"),
@@ -51,5 +61,3 @@ fun main(arguments: Array<String>) {
         }
     exitProcess(exit)
 }
-
-private fun requiredProperty(name: String): String = requireNotNull(System.getProperty(name)) { "missing system property $name" }

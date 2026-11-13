@@ -46,13 +46,28 @@ dependencies {
 }
 
 application {
+    applicationName = "guest-kotlin"
     mainClass = "ru.lazyhat.compukters.playground.PlaygroundMainKt"
+    applicationDefaultJvmArgs = listOf("--enable-native-access=ALL-UNNAMED", "--illegal-native-access=deny")
 }
 
 val workerPayload = project(":tooling-runtime").layout.buildDirectory.dir("tooling-bundle/content")
 val compukterFfiLibrary =
     rootProject.file(".toolchain/build/cargo/compukter-ffi/release/${System.mapLibraryName("compukter_ffi")}")
 val repositoryRoot = rootProject.layout.projectDirectory
+
+distributions {
+    main {
+        contents {
+            from(workerPayload) { into("worker") }
+            from(compukterFfiLibrary) { into("native") }
+        }
+    }
+}
+
+tasks.matching { it.name in setOf("installDist", "distTar", "distZip") }.configureEach {
+    dependsOn(":tooling-runtime:prepareToolingRuntimeBundle", rootProject.tasks.named("cargoBuildCompukterFfi"))
+}
 
 tasks.test {
     filter.excludeTestsMatching("ru.lazyhat.compukters.playground.integration.*")
