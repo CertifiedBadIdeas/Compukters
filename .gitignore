@@ -41,3 +41,17 @@ versions.properties
 /.obsidian/
 /docs/guest-source/
 /docs/guest-api/
+
+# Generated archives and recovery bundles belong in external artifact storage.
+*.gz
+*.zip
+*.tar
+*.xz
+*.zst
+*.bz2
+*.7z
+*.bundle
+
+# Performance reports and datasets are maintained outside the repository.
+/docs/benchmarks/
+/docs/contributors/performance/

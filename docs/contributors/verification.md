@@ -154,14 +154,7 @@ repeat the affected checks before re-running the release gate.
 The long rocket-landing conformance simulation uses Rust dev-profile optimization level 2. It retains
 debug assertions and overflow checks; only host execution is optimized, with the same Guest artifact and assertions.
 
-The strict IDE visible-latency SLO test runs as `:v1_21_1-neoforge:visibleIdeLatencyPerformanceTest`
-after `verifyLocalFunctional` completes in `verifyLocalFull`. It retains its median/p95, worker reuse,
-incremental-update and memory assertions, but does not compete with parallel compilation, archive transformation
-or GameTest servers. Ordinary module `check` does not run this machine-sensitive measurement;
-the complete verification gate still requires it. For a focused measurement, run the task directly on an idle host.
-Dedicated latency measurement tasks always execute rather than reusing cached results from another host or run.
-The visible completion budget is 200 ms median and 350 ms p95; semantic presentation has a 450 ms median
-and 800 ms p95 budget. Both include analysis, client tick observation and the first rendered frame.
+`verifyLocalFull` also includes the dedicated IDE latency checks.
 
 Mod CI tests are temporarily disabled: the tag-only release workflow builds and validates archive composition
 and inventory, excluding both packaged native integration test tasks. A successful workflow is packaging and

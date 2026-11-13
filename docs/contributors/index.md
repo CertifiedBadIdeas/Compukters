@@ -1,7 +1,7 @@
 ---
 layout: default
 title: Contributor guides
-description: Build, understand, test and profile the Compukters implementation.
+description: Build, understand and test the Compukters implementation.
 section: contributors
 permalink: /CONTRIBUTORS/
 ---

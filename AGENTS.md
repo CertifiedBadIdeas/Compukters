@@ -202,3 +202,5 @@ For GitHub operations in this repository, do not use the GitHub MCP server or Gi
 All `gh` commands and Git commands which access a remote repository must run outside the sandbox. If an SSH remote
 cannot use an SSH agent, use the authenticated GitHub CLI HTTPS credential helper for that command instead of retrying
 SSH; do not change the stored remote merely to work around the sandbox.
+
+Keep performance reports, benchmark run instructions, raw measurements, compressed profiling logs and recovery bundles outside Git and outside source checkouts. Do not add these materials to documentation.

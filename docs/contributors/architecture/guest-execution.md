@@ -136,10 +136,3 @@ Ctrl+X exits directly when clean or opens a Y/N/Escape save prompt when dirty. T
 belong to the computer filesystem, while terminal state belongs only to the current VM lifetime. The playable
 in-computer loop is `edit demo.kt` -> `kotlinc demo.kt` -> `demo`; source and artifact survive machine reload and remain
 isolated by `ComputerId`.
-
-
-`/bin/vmbench cpu <rounds>` runs the documented deterministic, allocation-free integer/branch workload through the
-ordinary foreground process and VM quota path. `/bin/vmbench redstone <rounds>` normalizes the local top output to zero
-and then emits one acknowledged weak-power `15 -> 0` pulse per round; every transition suspends through the ordinary
-Guest redstone API until its physical server-thread commit is confirmed. These workloads exist to measure aggregate
-in-world runtime cost and do not own a timing capability, privileged execution budget, or benchmark-only host path.

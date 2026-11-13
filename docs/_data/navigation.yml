@@ -1,1 +1,162 @@
-
+- id: players
+  title: Players
+  url: /PLAYERS/
+  description: Install the mod, program a computer, and connect it to your world.
+  groups:
+    - title: Start here
+      items:
+        - title: About Compukters
+          url: /ABOUT/
+          description: What the mod does and which Minecraft versions it supports.
+        - title: Getting started
+          url: /GETTING-STARTED/
+          description: Installation, your first computer, and your first program.
+        - title: IDE projects and Git
+          url: /IDE/
+          description: Create, open, clone and version client projects.
+        - title: Changelog
+          url: /CHANGELOG/
+          description: Released features and the current development version.
+    - title: Connect your world
+      items:
+        - title: Peripherals and cables
+          url: /PERIPHERALS/
+          description: Local sides, named devices, connections, and handles.
+        - title: Redstone
+          url: /REDSTONE/
+          description: Read signals, wait for changes, and control outputs.
+        - title: Displays
+          url: /DISPLAY/
+          description: Assemble screens and draw persistent text and RGB graphics.
+    - title: Optional addons
+      items:
+        - title: Addon overview
+          url: /ADDONS/
+          description: Choose an integration and understand compatibility.
+        - title: Create
+          url: /CREATE/
+          description: Kinetics, warehouse logistics, and steam boilers.
+          children:
+            - title: Kinetics
+              url: /CREATE-KINETICS/
+            - title: Logistics
+              url: /CREATE-LOGISTICS/
+            - title: Boilers
+              url: /CREATE-BOILERS/
+        - title: Sable
+          url: /SABLE/
+          description: Read a construction's pose and velocity.
+        - title: Propulsion
+          url: /PROPULSION/
+          description: Control creative engines and vector thrust.
+- id: developers
+  title: Developers
+  url: /DEVELOPERS/
+  description: Write Guest Kotlin programs or expose your own addon API.
+  groups:
+    - title: Write programs
+      items:
+        - title: Programming guide
+          url: /PROGRAMMING/
+          description: Projects, compilation, execution, waits, and debugging.
+        - title: Kotlin support
+          url: /KOTLIN-SUPPORT/
+          description: Supported language features and their exact boundaries.
+          children:
+            - title: Projects
+              url: /KOTLIN-SUPPORT/projects/
+            - title: Primitives
+              url: /KOTLIN-SUPPORT/primitives/
+            - title: Control flow
+              url: /KOTLIN-SUPPORT/control-flow/
+            - title: Functions and generics
+              url: /KOTLIN-SUPPORT/functions/
+            - title: Objects and MFVC
+              url: /KOTLIN-SUPPORT/objects/
+            - title: Nullability and exceptions
+              url: /KOTLIN-SUPPORT/nullability/
+            - title: Tasks
+              url: /KOTLIN-SUPPORT/tasks/
+        - title: Standard library
+          url: /STDLIB-SUPPORT/
+          description: Available Kotlin library functions and collections.
+          children:
+            - title: Core and text
+              url: /STDLIB-SUPPORT/core-text/
+            - title: Mathematics and geometry
+              url: /STDLIB-SUPPORT/math/
+            - title: Random numbers
+              url: /STDLIB-SUPPORT/random/
+            - title: Arrays and ranges
+              url: /STDLIB-SUPPORT/arrays-ranges/
+            - title: Collections
+              url: /STDLIB-SUPPORT/collections/
+            - title: Console I/O
+              url: /STDLIB-SUPPORT/io/
+        - title: IDE support
+          url: /IDE-SUPPORT/
+          description: Diagnostics, completion, navigation and project tooling.
+    - title: APIs and extensions
+      items:
+        - title: Guest platform support
+          url: /GUEST-PLATFORM-SUPPORT/
+          description: Executable core and device contracts with their evidence.
+        - title: Guest filesystem
+          url: /FILESYSTEM/
+          description: Portable paths, binary I/O, snapshots and atomic writes.
+        - title: API reference
+          url: /API/
+          description: Browse generated signatures for core and every addon.
+        - title: Build an addon
+          url: /ADDON-DEVELOPMENT/
+          description: Publish typed Guest Kotlin from an independent NeoForge mod.
+- id: contributors
+  title: Contributors
+  url: /CONTRIBUTORS/
+  description: Build the checkout, understand its boundaries, and verify changes.
+  groups:
+    - title: Work on the project
+      items:
+        - title: Build and run
+          url: /DEVELOPMENT/
+          description: Toolchains, Minecraft targets, and the standalone playground.
+        - title: All-addon dev stand
+          url: /DEV-STAND/
+          description: Run Create, Sable, Propulsion, and Aeronautics together.
+        - title: Maintain addons
+          url: /ADDON-CONTRIBUTING/
+          description: Standalone builds, integration boundaries, and lifecycle tests.
+        - title: Publish releases
+          url: /RELEASES/
+          description: Validate tagged artifacts and publish or recover a release.
+        - title: Verification
+          url: /VERIFICATION/
+          description: Choose focused checks and understand release gates.
+    - title: Understand the internals
+      items:
+        - title: Architecture
+          url: /ARCHITECTURE/
+          description: Compiler, native runtime, actor host, and ownership.
+          children:
+            - title: Compiler and platform
+              url: /ARCHITECTURE/compiler/
+            - title: Tooling and IDE
+              url: /ARCHITECTURE/tooling/
+            - title: Runtime ownership
+              url: /ARCHITECTURE/runtime/
+            - title: Filesystem and lifetime
+              url: /ARCHITECTURE/persistence/
+            - title: Minecraft and addons
+              url: /ARCHITECTURE/world-integration/
+            - title: Guest execution
+              url: /ARCHITECTURE/guest-execution/
+            - title: Module ownership
+              url: /ARCHITECTURE/modules/
+            - title: ABI reference
+              url: /ARCHITECTURE/abi/
+        - title: Module and package guide
+          url: /PACKAGE-GUIDELINE/
+          description: Put changes in the layer that owns their behavior.
+        - title: Native test coverage
+          url: /NATIVE-TEST-COVERAGE/
+          description: Find evidence at Rust, FFI, JVM, and game boundaries.
