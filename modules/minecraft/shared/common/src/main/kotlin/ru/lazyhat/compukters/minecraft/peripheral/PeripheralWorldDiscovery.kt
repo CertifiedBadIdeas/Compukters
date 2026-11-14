@@ -78,6 +78,17 @@ object PeripheralCableTopologyCache {
 }
 
 internal object PeripheralDeviceNames {
+    fun hasContact(level: ServerLevel, position: BlockPos, face: Direction, expected: PeripheralDeviceIdentity): Boolean {
+        check(level.server.isSameThread) { "peripheral names must be changed on the server thread" }
+        if (expected.dimension != level.dimension().toString()) return false
+        if (ru.lazyhat.compukters.minecraft.display.AttachedDisplaySurfaces.at(level, position, face) != null) {
+            return expected.providerId == "compukters-display" && expected.anchor == position && expected.deviceKey == "text"
+        }
+        return ComputerAddonHosts.hasPeripheralContact(
+            level, position, face, ComputerPeripheralIdentity(expected.providerId, expected.anchor, expected.deviceKey),
+        )
+    }
+
     fun resolveContact(
         level: ServerLevel,
         position: BlockPos,
@@ -192,7 +203,7 @@ object ComputerPeripheralLookup {
         val direct =
             Direction.entries.any { direction ->
                 val adjacent = computerPosition.relative(direction)
-                level.hasChunkAt(adjacent) && expected in PeripheralDeviceNames.resolveContact(level, adjacent, direction.opposite)
+                level.hasChunkAt(adjacent) && PeripheralDeviceNames.hasContact(level, adjacent, direction.opposite, expected)
             }
         if (direct) return true
         return PeripheralNetworkAccess.network(level, computerPosition)?.members.orEmpty().any { member ->

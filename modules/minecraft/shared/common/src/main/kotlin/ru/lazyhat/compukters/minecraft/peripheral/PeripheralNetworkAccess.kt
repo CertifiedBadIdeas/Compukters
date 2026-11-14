@@ -201,7 +201,7 @@ object PeripheralNetworkAccess {
                     (
                         level.hasChunkAt(contact) &&
                             net.minecraft.core.Direction.entries
-                                .any { identity in PeripheralDeviceNames.resolveContact(level, contact, it) }
+                                .any { PeripheralDeviceNames.hasContact(level, contact, it, identity) }
                     )
             ) &&
                 available(level, computer, member)
@@ -234,7 +234,7 @@ object PeripheralNetworkAccess {
         if (instance(entity) != member.instance) return PeripheralNetworkAvailability.REPLACED
         if (member.isComputer) return PeripheralNetworkAvailability.COMPUTER
         return if (net.minecraft.core.Direction.entries.any { face ->
-                member.identity in PeripheralDeviceNames.resolveContact(level, position, face)
+                PeripheralDeviceNames.hasContact(level, position, face, member.identity)
             }
         ) {
             PeripheralNetworkAvailability.AVAILABLE

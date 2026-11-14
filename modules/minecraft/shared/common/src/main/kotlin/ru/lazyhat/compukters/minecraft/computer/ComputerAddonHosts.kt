@@ -160,6 +160,26 @@ object ComputerAddonHosts {
         }
     }
 
+    internal fun hasPeripheralContact(
+        level: ServerLevel,
+        position: BlockPos,
+        contactedFace: Direction,
+        expected: ComputerPeripheralIdentity,
+    ): Boolean {
+        check(level.server.isSameThread) { "peripheral contacts must be resolved on the server thread" }
+        var found = false
+        for (registration in registrations) {
+            val provider = registration.peripheralProvider ?: continue
+            val identity = try {
+                provider.resolve(level, position, contactedFace)
+            } catch (_: Exception) {
+                null
+            }
+            if (identity == expected) found = true
+        }
+        return found
+    }
+
     internal fun resolvePeripheralGeometry(
         level: ServerLevel,
         position: BlockPos,

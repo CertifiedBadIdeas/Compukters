@@ -304,6 +304,12 @@ internal object PeripheralCableGameTestScenario {
                 ComputerPeripheralLookup.isReachable(level, helper.absolutePos(computer), identity),
                 "direct device on $direction was not reachable",
             )
+            for (other in listOf(identity.copy(providerId = "other"), identity.copy(deviceKey = "other"), identity.copy(anchor = identity.anchor.above()))) {
+                helper.assertTrue(
+                    !ComputerPeripheralLookup.isReachable(level, helper.absolutePos(computer), other),
+                    "direct contact matched a different identity on $direction: $other",
+                )
+            }
             helper.setBlock(position, Blocks.AIR)
             assertStatus(helper, computer, name, ComputerPeripheralLookupStatus.MISSING)
             helper.assertTrue(
