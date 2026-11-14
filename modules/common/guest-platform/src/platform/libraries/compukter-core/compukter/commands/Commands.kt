@@ -190,7 +190,8 @@ internal class CommandWriter {
     }
     fun raw(value: ByteArray) {
         if (value.size > bytes.size - offset) throw IllegalArgumentException("Command packet exceeds 4096 bytes")
-        for (item in value) bytes[offset++] = item
+        value.copyInto(bytes, offset)
+        offset += value.size
     }
     fun finish(): ByteArray = bytes.copyOf(offset)
 }
@@ -263,7 +264,8 @@ public class CommandReply internal constructor(private val bytes: ByteArray) {
         val size = short()
         if (!(size <= bytes.size - offset)) throw IllegalStateException("Truncated command bytes")
         val result = ByteArray(size)
-        for (index in 0 until size) result[index] = bytes[offset++]
+        bytes.copyInto(result, 0, offset, offset + size)
+        offset += size
         return result
     }
     internal fun finished(): Boolean = offset == bytes.size
