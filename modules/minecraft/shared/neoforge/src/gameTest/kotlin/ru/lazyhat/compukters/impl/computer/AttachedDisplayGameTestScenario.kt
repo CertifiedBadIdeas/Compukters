@@ -76,6 +76,16 @@ internal object AttachedDisplayGameTestScenario {
         }
         ComputerPeripheralNames.setName(helper.level, ComputerPeripheralIdentity("compukters-display", first, "text"), "panel")
         val computerWorld = helper.absolutePos(computerPos)
+        for (panel in rectangle.positions) {
+            helper.assertTrue(
+                ru.lazyhat.compukters.minecraft.peripheral.ComputerPeripheralLookup.isReachable(
+                    helper.level,
+                    computerWorld,
+                    ComputerPeripheralIdentity("compukters-display", panel, "text"),
+                ),
+                "bound composite display panel was not reachable: $panel",
+            )
+        }
         val mainNetwork = requireNotNull(item.selectedNetwork(stack))
         val overlay = AttachedDisplaySurfaces.create(helper.level, computerWorld, computerWorld, Direction.SOUTH)
         item.selectNetwork(stack, null)

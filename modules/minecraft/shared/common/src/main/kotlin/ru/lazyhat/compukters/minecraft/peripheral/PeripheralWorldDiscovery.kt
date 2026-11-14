@@ -196,7 +196,15 @@ object ComputerPeripheralLookup {
             }
         if (direct) return true
         return PeripheralNetworkAccess.network(level, computerPosition)?.members.orEmpty().any { member ->
-            PeripheralNetworkAccess.reachableIdentity(level, computerPosition, member, expected.anchor) == expected
+            // A display member represents a surface and may resolve to any of its panels.
+            // Other members always resolve to their exact stored identity.
+            val candidate =
+                if (expected.providerId == "compukters-display") {
+                    member.identity.providerId == expected.providerId
+                } else {
+                    member.identity == expected
+                }
+            candidate && PeripheralNetworkAccess.reachableIdentity(level, computerPosition, member, expected.anchor) == expected
         }
     }
 }

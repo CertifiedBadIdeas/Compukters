@@ -39,6 +39,7 @@ import ru.lazyhat.compukters.minecraft.peripheral.PeripheralConfiguratorServer
 
 internal object PeripheralCableGameTestScenario {
     private var providerRegistered = false
+    private val providerCalls = mutableMapOf<BlockPos, Int>()
 
     fun run(helper: GameTestHelper) {
         registerProvider()
@@ -73,6 +74,32 @@ internal object PeripheralCableGameTestScenario {
                 PeripheralNetworkGameTestFixtures.bind(helper, computer, firstDevice, secondDevice)
                 assertFound(helper, computer, "input", firstIdentity.anchor)
                 assertFound(helper, computer, "output", secondIdentity.anchor)
+                providerCalls.clear()
+                helper.assertTrue(
+                    ComputerPeripheralLookup.isReachable(level, helper.absolutePos(computer), secondIdentity),
+                    "bound second device was not reachable",
+                )
+                helper.assertTrue(
+                    providerCalls[firstIdentity.anchor] == null,
+                    "checking one remote device resolved an unrelated network member",
+                )
+                helper.assertTrue(
+                    (providerCalls[secondIdentity.anchor] ?: 0) == 1,
+                    "target device should be validated once, got ${providerCalls[secondIdentity.anchor]}",
+                )
+                providerCalls.clear()
+                helper.assertTrue(
+                    ComputerPeripheralLookup.isReachable(level, helper.absolutePos(computer), firstIdentity),
+                    "bound first device was not reachable",
+                )
+                helper.assertTrue(
+                    providerCalls[secondIdentity.anchor] == null,
+                    "checking first remote device resolved the unrelated second member",
+                )
+                helper.assertTrue(
+                    (providerCalls[firstIdentity.anchor] ?: 0) == 1,
+                    "first target should be validated once, got ${providerCalls[firstIdentity.anchor]}",
+                )
                 val peripherals =
                     ru.lazyhat.compukters.minecraft.peripheral.IdePeripheralDiscovery.snapshot(
                         level,
@@ -128,6 +155,10 @@ internal object PeripheralCableGameTestScenario {
                 assertFound(helper, computer, "input", firstIdentity.anchor)
                 PeripheralNetworkGameTestFixtures.unbind(helper, firstDevice)
                 assertStatus(helper, computer, "input", ComputerPeripheralLookupStatus.MISSING)
+                helper.assertTrue(
+                    !ComputerPeripheralLookup.isReachable(level, helper.absolutePos(computer), firstIdentity),
+                    "unbound device remained reachable",
+                )
                 val afterUnbind =
                     ru.lazyhat.compukters.minecraft.peripheral.IdePeripheralDiscovery.snapshot(
                         level,
@@ -145,6 +176,10 @@ internal object PeripheralCableGameTestScenario {
                 helper.setBlock(firstDevice, Blocks.AIR)
                 helper.setBlock(firstDevice, Blocks.BARREL)
                 assertStatus(helper, computer, "input", ComputerPeripheralLookupStatus.MISSING)
+                helper.assertTrue(
+                    !ComputerPeripheralLookup.isReachable(level, helper.absolutePos(computer), firstIdentity),
+                    "replacement block inherited old reachability",
+                )
                 helper.assertTrue(
                     ru.lazyhat.compukters.minecraft.peripheral.IdePeripheralDiscovery.rename(
                         level,
@@ -383,6 +418,7 @@ internal object PeripheralCableGameTestScenario {
             registrationIdentity = PeripheralCableGameTestScenario,
             peripheralProvider =
                 ComputerPeripheralProvider { level, position, contactedFace ->
+                    providerCalls[position.immutable()] = (providerCalls[position] ?: 0) + 1
                     if (level.getBlockEntity(position) == null) {
                         null
                     } else {
