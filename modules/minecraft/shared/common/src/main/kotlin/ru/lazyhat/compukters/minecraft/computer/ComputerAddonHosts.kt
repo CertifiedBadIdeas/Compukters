@@ -170,11 +170,12 @@ object ComputerAddonHosts {
         var found = false
         for (registration in registrations) {
             val provider = registration.peripheralProvider ?: continue
-            val identity = try {
-                provider.resolve(level, position, contactedFace)
-            } catch (_: Exception) {
-                null
-            }
+            val identity =
+                try {
+                    provider.resolve(level, position, contactedFace)
+                } catch (_: Exception) {
+                    null
+                }
             if (identity == expected) found = true
         }
         return found
