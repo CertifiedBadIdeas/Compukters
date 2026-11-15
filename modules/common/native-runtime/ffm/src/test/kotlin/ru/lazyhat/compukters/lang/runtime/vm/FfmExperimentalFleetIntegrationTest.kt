@@ -26,6 +26,19 @@ import kotlin.test.assertTrue
 class FfmExperimentalFleetIntegrationTest {
 
     @Test
+    fun `closing an empty fleet releases an event waiter`() {
+        val library = Path.of(requireNotNull(System.getProperty("compukter.ffi.library")))
+        val bridge = FfmBridge.open(library)
+        val fleet = bridge.openExperimentalFleet(ExperimentalFleetConfig(1, 32, 32, 128, 64, 64, 32))
+        val generation = fleet.eventGeneration()
+        val wait = java.util.concurrent.CompletableFuture.supplyAsync { fleet.waitEvents(generation, 5_000) }
+        kotlin.test.assertFailsWith<java.util.concurrent.TimeoutException> { wait.get(100, java.util.concurrent.TimeUnit.MILLISECONDS) }
+        fleet.close()
+        assertTrue(!wait.get(5, java.util.concurrent.TimeUnit.SECONDS))
+        bridge.close()
+    }
+
+    @Test
     fun `event waiting wakes for work and does not block command submission`() {
         val library = Path.of(requireNotNull(System.getProperty("compukter.ffi.library")))
         val artifact = Path.of(requireNotNull(System.getProperty("compukters.fleet.terminal.fixture"))).readBytes()
