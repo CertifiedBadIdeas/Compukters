@@ -128,9 +128,75 @@ internal class NativeFleetOutbox(
     private val ready = ArrayDeque<Long>()
     private val closing = mutableMapOf<Long, Command.Lifecycle>()
     private val awaitingLifecycle = ArrayDeque<Long>()
-    private var count = 0
-    internal var retainedBytes = 0L
-        private set
+    private val budget = Budget(maximumCommands, byteLimits.totalBytes)
+    internal val retainedBytes: Long get() = budget.bytes
+
+    /** Shared across an ownership handoff; no native call holds this admission lock. */
+    internal class Budget(
+        private val maximumEntries: Int,
+        private val maximumBytes: Long,
+    ) {
+        private var entries = 0
+        var bytes = 0L
+            @Synchronized get
+            private set
+
+        @Synchronized fun reserve(
+            count: Int,
+            charge: Long,
+        ): Boolean {
+            if (count > maximumEntries - entries || charge > maximumBytes - bytes) return false
+            entries += count
+            bytes += charge
+            return true
+        }
+
+        @Synchronized fun release(
+            count: Int,
+            charge: Long,
+        ) {
+            check(count <= entries && charge <= bytes)
+            entries -= count
+            bytes -= charge
+        }
+    }
+
+    /** Exclusive ownership of unsent commands, retaining the original shared reservation. */
+    internal class Handoff internal constructor(
+        private val commands: ArrayDeque<Command>,
+        private val budget: Budget,
+    ) {
+        fun sendNext(
+            fleet: ExperimentalFleet,
+            machine: Long,
+        ): Boolean {
+            val command = commands.peekFirst() ?: return false
+            command.send(fleet, machine)
+            commands.removeFirst()
+            budget.release(1, command.retainedBytes)
+            return true
+        }
+    }
+
+    /** The caller fences the actor before transferring this batch to its lifecycle worker. */
+    fun handoffForStop(machine: Long): Handoff {
+        checkOwner()
+        check(machine !in closing) { "native lifecycle already submitted" }
+        val queue = queues.remove(machine)
+        if (queue != null) {
+            check(ready.remove(machine))
+            // A terminal fence cancels unsent execution credit, but preserves acknowledged effects.
+            val iterator = queue.commands.iterator()
+            while (iterator.hasNext()) {
+                val command = iterator.next()
+                if (command is Command.Grant) {
+                    iterator.remove()
+                    budget.release(1, command.retainedBytes)
+                }
+            }
+        }
+        return Handoff(queue?.commands ?: ArrayDeque(), budget)
+    }
 
     /** Either retain the entire batch in order, or retain none of it. */
     fun offer(
@@ -144,9 +210,7 @@ internal class NativeFleetOutbox(
         require(lifecycleIndex == -1 || lifecycleIndex == commands.lastIndex) { "lifecycle command must be last" }
         if (lifecycleIndex >= 0 && closing.size >= maximumCommands) return false
         val existing = queues[machine]
-        if (commands.size > maximumCommands - count ||
-            commands.size > maximumCommandsPerMachine - (existing?.commands?.size ?: 0)
-        ) {
+        if (commands.size > maximumCommandsPerMachine - (existing?.commands?.size ?: 0)) {
             return false
         }
         var bytes = 0L
@@ -159,7 +223,7 @@ internal class NativeFleetOutbox(
             }
             bytes += command.retainedBytes
         }
-        if (bytes > byteLimits.totalBytes - retainedBytes || bytes > byteLimits.perMachineBytes - (existing?.bytes ?: 0L)) return false
+        if (bytes > byteLimits.perMachineBytes - (existing?.bytes ?: 0L) || !budget.reserve(commands.size, bytes)) return false
         val queue =
             existing ?: Queue().also {
                 queues[machine] = it
@@ -167,8 +231,6 @@ internal class NativeFleetOutbox(
             }
         queue.commands.addAll(commands)
         queue.bytes += bytes
-        retainedBytes += bytes
-        count += commands.size
         if (lifecycleIndex >= 0) closing[machine] = commands[lifecycleIndex] as Command.Lifecycle
         return true
     }
@@ -198,8 +260,7 @@ internal class NativeFleetOutbox(
                 val accepted = commands.removeFirst()
                 if (accepted is Command.Lifecycle) awaitingLifecycle.addLast(machine)
                 queue.bytes -= accepted.retainedBytes
-                retainedBytes -= accepted.retainedBytes
-                count--
+                budget.release(1, accepted.retainedBytes)
                 sent++
             } catch (_: VmFleetBusyException) {
                 // The operation was not accepted, so it remains at the head.
@@ -222,8 +283,7 @@ internal class NativeFleetOutbox(
         closing.remove(machine)
         val queue = queues.remove(machine) ?: return emptyList()
         check(ready.remove(machine))
-        count -= queue.commands.size
-        retainedBytes -= queue.bytes
+        budget.release(queue.commands.size, queue.bytes)
         return queue.commands.toList()
     }
 

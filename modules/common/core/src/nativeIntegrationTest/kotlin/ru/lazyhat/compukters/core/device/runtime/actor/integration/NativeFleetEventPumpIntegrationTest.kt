@@ -69,6 +69,60 @@ import kotlin.test.assertTrue
 
 class NativeFleetEventPumpIntegrationTest {
     @Test
+    fun `actor stop drains accepted commands and closes without owner pumping while ordinary output is full`() {
+        installFfmRuntime()
+        VmRuntime.loadNativeLibrary(Path.of(requireNotNull(System.getProperty("compukters.ffi.library"))))
+        val artifact = Path.of(requireNotNull(System.getProperty("compukters.fleet.timer.fixture"))).readBytes()
+        val host = ProgramRuntimeHost(NativeProgramVmSessionFactory())
+        assertEquals(ProgramStartResult.Started, host.start(artifact))
+        val owner = Thread.currentThread()
+        VmRuntime.openExperimentalFleet(ExperimentalFleetConfig(1, 32, 1, 128, 64, 64, 32, coordinatedTurns = true)).use { fleet ->
+            val machine = host.transferToFleet(fleet, 0)
+            VmSession.open(artifact).use { observer ->
+                val other = observer.transferToFleet(fleet)
+                val generation = fleet.eventGeneration()
+                fleet.resourceSnapshot(other, 42)
+                assertTrue(fleet.waitEvents(generation, 5_000))
+                val endpoint = VmActorEndpoint(ComputerId.fromLongs(41, 42), 1)
+                var canceled = false
+                NativeFleetActorRuntimeService(
+                    fleet,
+                    2,
+                    1,
+                    1,
+                    { check(Thread.currentThread() === owner) },
+                    {},
+                    { _, _ -> error("ordinary output must not be pumped") },
+                    onActorClosing = { address ->
+                        check(Thread.currentThread() === owner)
+                        assertEquals(endpoint, address)
+                        canceled = true
+                    },
+                ).use { service ->
+                    assertTrue(service.register(endpoint, machine, host))
+                    val query = service.request(endpoint, ProgramRuntimeActorCommand::FileSystemGeneration)
+                    // No pump at all: even the accepted query has not reached Rust yet.
+                    val stopped = checkNotNull(service.stop(endpoint))
+                    assertTrue(canceled && query.isCompletedExceptionally)
+                    assertEquals(0L, stopped.get(5, TimeUnit.SECONDS))
+                    assertEquals(ProgramRuntimeState.Closed, host.state)
+                    val preserved = assertIs<ExperimentalFleetEvent.Resources>(fleet.poll())
+                    assertEquals(other, preserved.machine)
+                    assertEquals(42L, preserved.request)
+                    fleet.stop(other, independent = true)
+                    val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5)
+                    while (true) {
+                        check(System.nanoTime() < deadline)
+                        val event = fleet.pollLifecycle(other)
+                        if (event is ExperimentalFleetEvent.Stopped) break
+                        Thread.yield()
+                    }
+                }
+            }
+        }
+    }
+
+    @Test
     fun `host releases ownership only after native stop and retains filesystem generation`() {
         installFfmRuntime()
         VmRuntime.loadNativeLibrary(Path.of(requireNotNull(System.getProperty("compukters.ffi.library"))))
@@ -372,7 +426,16 @@ class NativeFleetEventPumpIntegrationTest {
         VmRuntime.openExperimentalFleet(ExperimentalFleetConfig(1, 32, 32, 128, 64, 64, 32, coordinatedTurns = true)).use { fleet ->
             val machine = host.transferToFleet(fleet, 0)
             val endpoint = VmActorEndpoint(ComputerId.fromLongs(31, 32), 1)
-            NativeFleetActorRuntimeService(fleet, 4, 16, 16, { check(Thread.currentThread() === owner) }, {}, { _, _ -> }).use { service ->
+            NativeFleetActorRuntimeService(
+                fleet,
+                4,
+                16,
+                16,
+                { check(Thread.currentThread() === owner) },
+                {},
+                { _, _ -> },
+                onActorClosing = {},
+            ).use { service ->
                 assertTrue(service.register(endpoint, machine, host))
                 val runtime: ActorRuntimeService = service
 
@@ -445,7 +508,7 @@ class NativeFleetEventPumpIntegrationTest {
                     val outcome = event.outcome
                     check(outcome !is VmOutcome.HostRequestBatch) { "managed addon request delivered twice" }
                 }
-            }).use { service ->
+            }, onActorClosing = {}).use { service ->
                 assertTrue(service.register(endpoint, machine, host))
 
                 fun <T> await(future: CompletableFuture<T>): T {
@@ -520,7 +583,7 @@ class NativeFleetEventPumpIntegrationTest {
                 val endpoint = VmActorEndpoint(ComputerId.fromLongs(35, 36), 1)
                 val owner = Thread.currentThread()
                 val checkOwner = { check(Thread.currentThread() === owner) }
-                NativeFleetActorRuntimeService(fleet, 4, 16, 16, checkOwner, {}, { _, _ -> }).use { service ->
+                NativeFleetActorRuntimeService(fleet, 4, 16, 16, checkOwner, {}, { _, _ -> }, onActorClosing = {}).use { service ->
                     assertTrue(service.register(endpoint, machine, host))
                     val runtime: ActorRuntimeService = service
 
@@ -648,7 +711,7 @@ class NativeFleetEventPumpIntegrationTest {
                 VmRuntime.openExperimentalFleet(ExperimentalFleetConfig(1, 32, 32, 128, 64, 64, 32, coordinatedTurns = true)).use { fleet ->
                     val machine = host.transferToFleet(fleet, 0)
                     val endpoint = VmActorEndpoint(id, 1)
-                    NativeFleetActorRuntimeService(fleet, 4, 16, 16, {}, {}, { _, _ -> }).use { service ->
+                    NativeFleetActorRuntimeService(fleet, 4, 16, 16, {}, {}, { _, _ -> }, onActorClosing = {}).use { service ->
                         assertTrue(service.register(endpoint, machine, host))
 
                         fun <T> await(future: CompletableFuture<T>): T {

@@ -20,6 +20,33 @@ import kotlin.test.assertTrue
 
 class NativeFleetOutboxTest {
     @Test
+    fun `handoff keeps entry and byte reservations until native acceptance without copying its batch`() {
+        var busy = true
+        val sent = mutableListOf<Long>()
+        val bridge =
+            fleet { machine, _ ->
+                if (busy) throw VmFleetBusyException("full")
+                sent += machine
+            }
+        val outbox = NativeFleetOutbox(bridge, 2, 2, {}, byteLimits = NativeFleetOutboxLimits(128, 128))
+        assertTrue(outbox.offer(1, listOf(input(1), input(2))))
+        val handoff = outbox.handoffForStop(1)
+        assertEquals(128L, outbox.retainedBytes)
+        assertFalse(outbox.offer(2, listOf(input(3))))
+        assertFailsWith<VmFleetBusyException> { handoff.sendNext(bridge, 1) }
+        assertEquals(128L, outbox.retainedBytes)
+        busy = false
+        assertTrue(handoff.sendNext(bridge, 1))
+        assertEquals(64L, outbox.retainedBytes)
+        assertTrue(outbox.offer(2, listOf(input(3))))
+        assertTrue(handoff.sendNext(bridge, 1))
+        assertFalse(handoff.sendNext(bridge, 1))
+        assertEquals(listOf(1L, 1L), sent)
+        outbox.remove(2)
+        assertEquals(0L, outbox.retainedBytes)
+    }
+
+    @Test
     fun `global and local byte admission are atomic and removal returns payload capacity`() {
         val reply = NativeFleetOutbox.Command.Reply(VmHostRequestIdentity(1, 1), HostResponse.StringSuccess("x".repeat(64)))
         val bytes = reply.retainedBytes

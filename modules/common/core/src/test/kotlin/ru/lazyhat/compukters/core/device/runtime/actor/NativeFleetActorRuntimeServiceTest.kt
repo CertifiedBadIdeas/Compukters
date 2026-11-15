@@ -30,8 +30,11 @@ import ru.lazyhat.compukters.lang.runtime.vm.VmHostRequest
 import ru.lazyhat.compukters.lang.runtime.vm.VmHostRequestIdentity
 import ru.lazyhat.compukters.lang.runtime.vm.VmOutcome
 import java.lang.reflect.Proxy
-import java.util.ArrayDeque
 import java.util.concurrent.CompletableFuture
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.ConcurrentLinkedQueue
+import java.util.concurrent.CopyOnWriteArrayList
+import java.util.concurrent.ExecutionException
 import java.util.concurrent.TimeUnit
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
@@ -157,28 +160,21 @@ class NativeFleetActorRuntimeServiceTest {
         }
 
     @Test
-    fun `refused turn leaves its frame available and stop retries without losing accepted queries`() =
+    fun `stop drains a full outbox without owner pumping and cancellation cannot cancel its barrier`() {
         Harness(maximumRequests = 1).use { h ->
             val endpoint = h.register(1)
             assertTrue(h.service.grantFrame(endpoint, 1, 10))
             val query = h.service.request(endpoint, ProgramRuntimeActorCommand::FileSystemGeneration)
             assertEquals(VmActorSubmission.MAILBOX_FULL, h.service.submitTurn(endpoint, 1, emptyList()) { _, _ -> error("rejected") })
-            assertEquals(null, h.service.stop(endpoint))
-            h.service.pump(0, 1)
-            var canceled = false
-            assertEquals(
-                VmActorSubmission.ACCEPTED,
-                h.service.submitTurn(endpoint, 1, emptyList()) { _, failure -> canceled = failure != null },
-            )
-            h.service.pump(0, 1)
             val first = checkNotNull(h.service.stop(endpoint))
             first.cancel(false)
             val second = checkNotNull(h.service.stop(endpoint))
-            h.service.pump(0, 1)
-            h.service.pump(1, 1)
-            assertEquals(7L, second.join())
-            assertTrue(first.isCancelled && query.isCompletedExceptionally && canceled)
+            assertEquals(7L, second.get(5, TimeUnit.SECONDS))
+            assertTrue(first.isCancelled && query.isCompletedExceptionally)
+            assertEquals(1, h.queries.size)
+            assertEquals(listOf(1L), h.closedMachines)
         }
+    }
 
     @Test
     fun `failed host cleanup fails its barrier and releases pending requests without blocking another stop`() =
@@ -190,8 +186,9 @@ class NativeFleetActorRuntimeServiceTest {
             val succeeded = checkNotNull(h.service.stop(b))
             h.service.pump(0, 16)
             h.service.pump(16, 16)
-            assertTrue(failed.isCompletedExceptionally && query.isCompletedExceptionally)
-            assertEquals(7L, succeeded.join())
+            assertFailsWith<ExecutionException> { failed.get(5, TimeUnit.SECONDS) }
+            assertTrue(query.isCompletedExceptionally)
+            assertEquals(7L, succeeded.get(5, TimeUnit.SECONDS))
         }
 
     @Test
@@ -224,7 +221,7 @@ class NativeFleetActorRuntimeServiceTest {
             val stopped = checkNotNull(h.service.stop(endpoint))
             h.service.pump(0, 8)
             h.service.pump(8, 8)
-            assertTrue(stopped.isCompletedExceptionally)
+            assertFailsWith<ExecutionException> { stopped.get(5, TimeUnit.SECONDS) }
             assertEquals(listOf(1L), h.closedMachines)
         }
 
@@ -262,7 +259,7 @@ class NativeFleetActorRuntimeServiceTest {
     }
 
     @Test
-    fun `stop keeps accepted addon replies ordered while cancelling the unfinished turn`() {
+    fun `busy close preserves acknowledged replies without blocking another close or sending unsent execution credit`() {
         Harness().use { h ->
             val endpoint = h.register(1)
             val identity = VmHostRequestIdentity(1, 1)
@@ -276,16 +273,21 @@ class NativeFleetActorRuntimeServiceTest {
                     if (failure == null) turn.complete(reply) else turn.completeExceptionally(failure)
                 },
             )
+            val other = h.register(2)
             h.busyReplies = true
             val stopped = checkNotNull(h.service.stop(endpoint))
             h.service.pump(8, 8)
-            assertTrue(!stopped.isDone && !turn.isDone && h.replies.isEmpty())
+            assertTrue(!stopped.isDone && turn.isCompletedExceptionally && h.replies.isEmpty())
+            val otherStopped = checkNotNull(h.service.stop(other))
+            assertEquals(7L, otherStopped.get(5, TimeUnit.SECONDS))
+            assertTrue(!stopped.isDone)
             h.busyReplies = false
             h.service.pump(8, 8)
             h.service.pump(8, 8)
+            assertEquals(7L, stopped.get(5, TimeUnit.SECONDS))
             assertEquals(listOf(identity), h.replies)
-            assertEquals(7L, stopped.join())
             assertTrue(turn.isCompletedExceptionally)
+            assertTrue(h.grants.isEmpty())
         }
     }
 
@@ -328,7 +330,7 @@ class NativeFleetActorRuntimeServiceTest {
                 false
             } as ExperimentalFleet
         assertFailsWith<IllegalArgumentException> {
-            NativeFleetActorRuntimeService(uncoordinated, 4, 16, 16, {}, {}, { _, _ -> })
+            NativeFleetActorRuntimeService(uncoordinated, 4, 16, 16, {}, {}, { _, _ -> }, onActorClosing = {})
         }
     }
 
@@ -506,6 +508,7 @@ class NativeFleetActorRuntimeServiceTest {
                     override fun addonAction(action: ProgramAddonAction) {
                         deliveries++
                         checkNotNull(h.service.stop(endpoint))
+                        assertTrue(h.closedMachines.isEmpty())
                     }
 
                     override fun complete(
@@ -632,6 +635,7 @@ class NativeFleetActorRuntimeServiceTest {
                     override fun addonAction(action: ProgramAddonAction) {
                         actions += action
                         checkNotNull(h.service.stop(endpoint))
+                        assertTrue(h.closedMachines.isEmpty())
                     }
 
                     override fun complete(
@@ -647,22 +651,36 @@ class NativeFleetActorRuntimeServiceTest {
         }
     }
 
+    @Test
+    fun `reentrant service shutdown includes the reserved close and needs no result pumping`() {
+        var shutdown: CompletableFuture<Unit>? = null
+        Harness(onClosing = { service -> shutdown = service.closeAsync() }).use { h ->
+            val endpoint = h.register(1)
+            val stopped = checkNotNull(h.service.stop(endpoint))
+            assertEquals(7L, stopped.get(5, TimeUnit.SECONDS))
+            checkNotNull(shutdown).get(5, TimeUnit.SECONDS)
+            assertEquals(listOf(1L), h.closedMachines)
+        }
+    }
+
     private class Harness(
         maximumRequests: Int = 16,
         private val closeFailureFor: Long? = null,
         private val cancellationFailureFor: Long? = null,
         byteLimits: NativeFleetOutboxLimits = NativeFleetOutboxLimits(),
+        private val onClosing: (NativeFleetActorRuntimeService) -> Unit = {},
     ) : AutoCloseable {
-        val events = ArrayDeque<ExperimentalFleetEvent>()
-        val grants = mutableListOf<Pair<Long, Int>>()
-        val queries = mutableListOf<Long>()
+        val events = ConcurrentLinkedQueue<ExperimentalFleetEvent>()
+        val grants = CopyOnWriteArrayList<Pair<Long, Int>>()
+        val queries = CopyOnWriteArrayList<Long>()
         val observed = mutableListOf<VmActorEndpoint>()
         val observedEvents = mutableListOf<ExperimentalFleetEvent>()
-        val closedMachines = mutableListOf<Long>()
-        val replies = mutableListOf<VmHostRequestIdentity>()
-        var busyReplies = false
+        val closedMachines = CopyOnWriteArrayList<Long>()
+        val replies = CopyOnWriteArrayList<VmHostRequestIdentity>()
+
+        @Volatile var busyReplies = false
         private val endpoints = mutableListOf<VmActorEndpoint>()
-        private val stops = mutableMapOf<Long, ExperimentalFleetEvent>()
+        private val stops = ConcurrentHashMap<Long, ExperimentalFleetEvent>()
         private val owner = Thread.currentThread()
         private val fleet =
             Proxy.newProxyInstance(ExperimentalFleet::class.java.classLoader, arrayOf(ExperimentalFleet::class.java)) { _, method, args ->
@@ -694,7 +712,7 @@ class NativeFleetActorRuntimeServiceTest {
                     }
 
                     "poll" -> {
-                        events.pollFirst()
+                        events.poll()
                     }
 
                     "grant" -> {
@@ -744,8 +762,15 @@ class NativeFleetActorRuntimeServiceTest {
             }, {}, { endpoint, event ->
                 observed += endpoint
                 observedEvents += event
-                check(event !is ExperimentalFleetEvent.Stopped || event.machine != cancellationFailureFor) { "cancellation failed" }
-            }, { 100 }, byteLimits)
+            }, { 100 }, byteLimits, { endpoint ->
+                handleClosing()
+                check(endpoint.computerId != cancellationFailureFor?.let { ComputerId.fromLongs(0, it) }) { "cancellation failed" }
+            })
+
+        private fun handleClosing() {
+            check(Thread.currentThread() === owner)
+            onClosing(service)
+        }
 
         fun register(
             machine: Long,
@@ -794,7 +819,6 @@ class NativeFleetActorRuntimeServiceTest {
 
         override fun close() {
             endpoints.forEach { service.stop(it) }
-            repeat(8) { service.pump(32, 32) }
             service.close()
         }
     }

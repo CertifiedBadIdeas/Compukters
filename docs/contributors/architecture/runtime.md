@@ -79,8 +79,9 @@ callers. Production diagnostic snapshots retain their full histograms and loggin
 restored and transferred to a coordinated native fleet. Rust workers own execution and timers; the owner grants
 frame credit and delivers observations. Same-tick continuations consume the original reservation and deadline.
 Uncoordinated fleets are rejected before dispatch starts, so external replies cannot resume execution without a grant.
-The owner retains bounded actor and request registries; query maps are allocated only while needed, and cancellation
-does not release admission until the native response or stop arrives. One fleet waiter serves the service.
+The owner retains bounded actor and request registries; query maps are allocated only while needed, and future
+cancellation does not release admission until the native response arrives or the actor is fenced for stop.
+One fleet waiter serves the service.
 
 This experimental implementation accepts redstone input, terminal snapshots/deltas, acknowledged terminal input and
 canonical lines, filesystem-generation queries and bounded file stat/list/read queries. A dedicated request adapter
@@ -107,10 +108,21 @@ overhead is separately bounded by entry limits; these charges are not a measurem
 Validation and sizing allocate no encoded response. Busy and failed sends retain the payload and its charge until
 native acceptance or explicit removal. Atomic batch refusal retains no prefix and consumes no frame credit.
 
-Independent native stop delivery invalidates the machine identity, cancels pending work and closes
-host metadata using the final filesystem generation. Its future currently requires owner pumping, unlike the
-production close barrier. Bootstrap, restoration, redstone/sound completion translation, broader command parity and independent
-shutdown still need integration; production backend selection remains unchanged.
+Stop invalidates the machine identity and cancels outstanding owner work synchronously. An endpoint cancellation
+callback, required explicitly when constructing the service, releases external resources on that thread; the native list of canceled requests is not queued back to the
+owner. The unsent outbox deque then moves exclusively to one lazy lifecycle worker shared by the fleet. Its original
+entry/byte reservations remain charged until native acceptance; unsent execution grants are canceled while ordered
+acknowledged effects drain before stop. A reserved, not-yet-enabled close also belongs to a reentrant service shutdown;
+callback-triggered host transfers are enabled only after the observation unwinds. A busy machine rotates behind the
+others. Idle workers sleep, and a full blocked round backs off without delaying accepted command progress.
+
+Stop barriers complete after native destruction, final filesystem generation reconciliation and host cleanup, without
+owner result pumping. Canceling a returned future does not cancel the close. Closing metadata and one control operation
+are bounded by the actor admission limit, with no per-idle-machine reservation. Ordinary output from other machines
+remains untouched. Shutdown waits for both the event waiter and the lifecycle worker before allowing fleet destruction.
+Transport errors retain the charged head for retry; cleanup errors fail the individual barrier. Bootstrap, restoration,
+redstone/sound completion translation, broader command parity, checkpoint detach/capture and production lease wiring
+still need integration; production backend selection remains unchanged.
 
 ## Addon host boundary
 

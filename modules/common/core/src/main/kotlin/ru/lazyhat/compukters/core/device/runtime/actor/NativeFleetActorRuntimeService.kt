@@ -29,9 +29,10 @@ import java.util.concurrent.CompletableFuture
  * Addon requests and program lifecycle actions stream to a turn observer on the owner thread;
  * final-only callers and unsupported host/compilation events use [onExternalEvent]. Neither path
  * accumulates a second result backlog. Only the final Quiescent report settles turn credit.
- * Stop is asynchronous but currently requires this service's owner pump; it is not yet a
- * replacement for the production lease's independent shutdown barrier.
- * The caller owns the fleet and closes this service only after all stops have completed.
+ * Stop fences owner work and transfers the host and charged unsent commands to one shared
+ * lifecycle worker. Its native cleanup barrier completes without owner result pumping.
+ * The caller owns the fleet. Service shutdown requires all actors fenced for stop and waits
+ * for host cleanup and both shared threads before the caller may close the fleet.
  */
 internal class NativeFleetActorRuntimeService(
     private val fleet: ExperimentalFleet,
@@ -43,6 +44,7 @@ internal class NativeFleetActorRuntimeService(
     private val onExternalEvent: (VmActorEndpoint, ExperimentalFleetEvent) -> Unit,
     private val nanoTime: () -> Long = System::nanoTime,
     byteLimits: NativeFleetOutboxLimits = NativeFleetOutboxLimits(),
+    private val onActorClosing: (VmActorEndpoint) -> Unit,
 ) : ActorRuntimeService,
     AutoCloseable {
     init {
@@ -55,6 +57,10 @@ internal class NativeFleetActorRuntimeService(
     private val actors = mutableMapOf<VmActorEndpoint, Actor>()
     private val machines = mutableMapOf<Long, Actor>()
     private var closed = false
+    private val closing = mutableMapOf<VmActorEndpoint, CompletableFuture<Long>>()
+    private val closer = NativeFleetCloser(fleet)
+    private var observationDepth = 0
+    private var deferredCloseStarts: MutableList<() -> Unit>? = null
     private var nextRequest = 0L
     private var pendingQueries = 0
     internal var hostContinuationSamples = 0L
@@ -85,7 +91,16 @@ internal class NativeFleetActorRuntimeService(
         checkOwner()
         check(!closed) { "native actor service is closed" }
         host.requireFleetOwnership(fleet, machine)
-        if (actors.size >= maximumActors || machine in machines || actors.keys.any { it.computerId == endpoint.computerId }) return false
+        closer.checkHealthy()
+        closing.entries.removeAll { it.value.isDone }
+        if (actors.size + closing.size >= maximumActors || machine in machines ||
+            actors.keys.any {
+                it.computerId == endpoint.computerId
+            } ||
+            closing.keys.any { it.computerId == endpoint.computerId }
+        ) {
+            return false
+        }
         val actor = Actor(endpoint, machine, host)
         actors[endpoint] = actor
         machines[machine] = actor
@@ -104,7 +119,7 @@ internal class NativeFleetActorRuntimeService(
         if (closed) return false
         val actor = actors[endpoint] ?: return false
         val previous = actor.credit
-        if (actor.stopping != null || (previous != null && (previous.inFlight || tick <= previous.worldTick))) return false
+        if (previous != null && (previous.inFlight || tick <= previous.worldTick)) return false
         actor.credit = ProgramRuntimeFrameCredit(tick, retirements.toLong(), deadlineNanos, false)
         return true
     }
@@ -136,8 +151,8 @@ internal class NativeFleetActorRuntimeService(
         require(effects.all { it is ProgramRuntimeActorEffect.RedstoneInput || it is ProgramRuntimeActorEffect.CompleteAddons }) {
             "native redstone/sound completion translation is not wired yet"
         }
+        if (endpoint in closing) return VmActorSubmission.CLOSED
         val actor = actors[endpoint] ?: return VmActorSubmission.STALE_ENDPOINT
-        if (actor.stopping != null) return VmActorSubmission.CLOSED
         val credit = actor.credit ?: return VmActorSubmission.MAILBOX_FULL
         if (actor.turn != null || credit.inFlight) return VmActorSubmission.PERMIT_PENDING
         if (credit.worldTick != worldTick || (credit.deadlineNanos != Long.MAX_VALUE && nanoTime() - credit.deadlineNanos >= 0)) {
@@ -191,7 +206,7 @@ internal class NativeFleetActorRuntimeService(
                 )
             }
         }
-        actor.turn = Turn(id, allowance, completion) { machines[actor.machine] === actor && actor.stopping == null && actor.turn?.id == id }
+        actor.turn = Turn(id, allowance, completion) { machines[actor.machine] === actor && actor.turn?.id == id }
         credit.inFlight = true
         if (continuation) credit.continuations++
         actor.lastTurnTick = worldTick
@@ -207,10 +222,10 @@ internal class NativeFleetActorRuntimeService(
         val id = requestId()
         val prepared = command(id)
         require(prepared.requestId == id) { "runtime command factory returned a mismatched request id" }
+        if (endpoint in closing) return CompletableFuture.failedFuture(ProgramRuntimeActorRequestException(VmActorSubmission.CLOSED))
         val actor =
             actors[endpoint]
                 ?: return CompletableFuture.failedFuture(ProgramRuntimeActorRequestException(VmActorSubmission.STALE_ENDPOINT))
-        if (actor.stopping != null) return CompletableFuture.failedFuture(ProgramRuntimeActorRequestException(VmActorSubmission.CLOSED))
         if (pendingQueries >= maximumRequests || (actor.queries?.size ?: 0) >= maximumRequestsPerActor) {
             return CompletableFuture.failedFuture(ProgramRuntimeActorRequestException(VmActorSubmission.MAILBOX_FULL))
         }
@@ -251,15 +266,63 @@ internal class NativeFleetActorRuntimeService(
         return result
     }
 
+    /**
+     * Fence and cancel owner work before handing the host to the shared close worker. External
+     * resources are canceled by endpoint, not by retaining the native list of pending identities.
+     * The returned barrier needs no owner pumping and cannot be canceled by canceling its copy.
+     */
     fun stop(endpoint: VmActorEndpoint): CompletableFuture<Long>? {
         checkOwner()
-        val actor = actors[endpoint] ?: return null
-        actor.stopping?.let { return it.copy() }
-        if (!dispatcher.outbox.offer(actor.machine, listOf(NativeFleetOutbox.Command.Stop))) return null
-        return CompletableFuture<Long>().also { actor.stopping = it }.copy()
+        closer.checkHealthy()
+        closing[endpoint]?.let { return it.copy() }
+        val actor = actors.remove(endpoint) ?: return null
+        machines.remove(actor.machine)
+        val result = CompletableFuture<Long>()
+        closing[endpoint] = result
+        val commands = dispatcher.outbox.handoffForStop(actor.machine)
+        var cancellationFailure: Throwable? = null
+        val native = CompletableFuture<Long>()
+        native.whenComplete { generation, closeFailure ->
+            val canceled = cancellationFailure
+            if (canceled != null) {
+                if (closeFailure != null) canceled.addSuppressed(closeFailure)
+                result.completeExceptionally(canceled)
+            } else if (closeFailure != null) {
+                result.completeExceptionally(closeFailure)
+            } else {
+                result.complete(generation)
+            }
+        }
+        // Reserve before invoking callbacks: a reentrant service close must include this host.
+        val start = closer.reserve(actor.machine, actor.host, commands, native)
+        try {
+            cancellationFailure = runCatching { onActorClosing(endpoint) }.exceptionOrNull()
+            val failure = cancellationFailure ?: CancellationException("native actor stopped")
+            actor.turn?.let {
+                val callbackFailure = runCatching { complete(it.completion, null, failure) }.exceptionOrNull()
+                if (callbackFailure != null) {
+                    val canceled = cancellationFailure
+                    if (canceled == null) cancellationFailure = callbackFailure else canceled.addSuppressed(callbackFailure)
+                }
+            }
+            actor.turn = null
+            val queries = actor.queries
+            actor.queries = null
+            pendingQueries -= queries?.size ?: 0
+            queries?.values?.forEach { it.future.completeExceptionally(failure) }
+        } finally {
+            // A callback may stop the host while its lifecycle observer is still on the stack.
+            // Do not publish exclusive worker ownership until the entire observation unwinds.
+            if (observationDepth == 0) {
+                start()
+            } else {
+                (deferredCloseStarts ?: mutableListOf<() -> Unit>().also { deferredCloseStarts = it }).add(start)
+            }
+        }
+        return result.copy()
     }
 
-    /** Both channels share this time/event allowance; control is serviced before ordinary output. */
+    /** Ordinary observations still run only on their owner; close progress is independent. */
     fun pump(
         maximumEvents: Int,
         maximumAttempts: Int,
@@ -267,21 +330,34 @@ internal class NativeFleetActorRuntimeService(
     ): Int {
         checkOwner()
         require(maximumEvents >= 0 && maximumAttempts >= 0)
-        val control = dispatcher.pumpLifecycle(maximumEvents, maximumAttempts, deadlineNanos, ::observeStop)
-        return control + dispatcher.pump(maximumEvents - control, maximumAttempts, deadlineNanos)
+        closing.entries.removeAll { it.value.isDone }
+        return dispatcher.pump(maximumEvents, maximumAttempts, deadlineNanos)
     }
 
     private fun observe(event: ExperimentalFleetEvent) {
+        observationDepth++
+        try {
+            observeEvent(event)
+        } finally {
+            observationDepth--
+            if (observationDepth == 0) {
+                val starts = deferredCloseStarts
+                deferredCloseStarts = null
+                starts?.forEach { it() }
+            }
+        }
+    }
+
+    private fun observeEvent(event: ExperimentalFleetEvent) {
         when (event) {
             is ExperimentalFleetEvent.Outcome -> {
                 val actor = machines[event.machine] ?: return
-                if (actor.stopping != null) return
                 observeOutcome(actor, event)
             }
 
             is ExperimentalFleetEvent.Quiescent -> {
                 val actor = machines[event.machine] ?: return
-                if (actor.stopping == null) finishTurn(actor, event)
+                finishTurn(actor, event)
             }
 
             is ExperimentalFleetEvent.FilesystemGeneration -> {
@@ -318,12 +394,11 @@ internal class NativeFleetActorRuntimeService(
             // The integration owner settles these typed events. It must not execute Guest code.
             is ExperimentalFleetEvent.Inspection -> {
                 val actor = machines[event.machine] ?: return
-                if (actor.stopping == null) onExternalEvent(actor.endpoint, event)
+                onExternalEvent(actor.endpoint, event)
             }
 
             is ExperimentalFleetEvent.Compilation -> {
                 val actor = machines[event.machine] ?: return
-                if (actor.stopping != null) return
                 actor.host.observeFleetOutcome(fleet, actor.machine, VmOutcome.CompilationRequested(event.request))
                 onExternalEvent(actor.endpoint, event)
             }
@@ -335,8 +410,7 @@ internal class NativeFleetActorRuntimeService(
             is ExperimentalFleetEvent.Error -> {
                 val machine = event.machine
                 if (machine != null) {
-                    val actor = machines[machine] ?: return
-                    if (actor.stopping != null) return
+                    if (machine !in machines) return
                 }
                 error("native fleet failed: ${event.message}")
             }
@@ -396,7 +470,7 @@ internal class NativeFleetActorRuntimeService(
     private fun isCurrent(
         actor: Actor,
         turn: Turn?,
-    ): Boolean = machines[actor.machine] === actor && actor.stopping == null && actor.turn === turn
+    ): Boolean = machines[actor.machine] === actor && actor.turn === turn
 
     private fun finishTurn(
         actor: Actor,
@@ -440,44 +514,6 @@ internal class NativeFleetActorRuntimeService(
         query.future.complete(ProgramRuntimeActorReply(ProgramRuntimeRequestId(request), actor.host.state, value, actor.generation))
     }
 
-    private fun observeStop(event: ExperimentalFleetEvent) {
-        when (event) {
-            is ExperimentalFleetEvent.Quiescent -> {
-                // Stop cancels the outstanding turn; its report cannot create another grant.
-            }
-
-            is ExperimentalFleetEvent.Stopped -> {
-                val actor = checkNotNull(machines.remove(event.machine))
-                val cancellationFailure = runCatching { onExternalEvent(actor.endpoint, event) }.exceptionOrNull()
-                val hostCloseFailure =
-                    runCatching {
-                        actor.host.acknowledgeFleetStop(
-                            fleet,
-                            event,
-                            ProgramRuntimeState.Closed,
-                        )
-                    }.exceptionOrNull()
-                val closeFailure =
-                    cancellationFailure?.also { if (hostCloseFailure != null) it.addSuppressed(hostCloseFailure) } ?: hostCloseFailure
-                actors.remove(actor.endpoint)
-                val failure = closeFailure ?: CancellationException("native actor stopped")
-                actor.turn?.let { complete(it.completion, null, failure) }
-                actor.turn = null
-                val queries = actor.queries
-                actor.queries = null
-                pendingQueries -= queries?.size ?: 0
-                queries?.values?.forEach { it.future.completeExceptionally(failure) }
-                val stopped = checkNotNull(actor.stopping)
-                if (closeFailure == null) stopped.complete(event.filesystemGeneration) else stopped.completeExceptionally(closeFailure)
-                if (closeFailure is Error) throw closeFailure
-            }
-
-            else -> {
-                error("unexpected native stop output: $event")
-            }
-        }
-    }
-
     private fun requestId(): ProgramRuntimeRequestId = ProgramRuntimeRequestId(Math.incrementExact(nextRequest).also { nextRequest = it })
 
     override fun recordHostContinuationDelay(delayTicks: Long) {
@@ -495,8 +531,9 @@ internal class NativeFleetActorRuntimeService(
 
     fun closeAsync(): CompletableFuture<Unit> {
         checkOwner()
-        check(actors.isEmpty()) { "native actor stops must complete before closing dispatch" }
-        return dispatcher.closeAsync().also { closed = true }
+        check(actors.isEmpty()) { "native actors must be fenced for stop before closing dispatch" }
+        closed = true
+        return CompletableFuture.allOf(dispatcher.closeAsync(), closer.closeAsync()).thenApply { Unit }
     }
 
     override fun close() {
@@ -527,7 +564,6 @@ internal class NativeFleetActorRuntimeService(
         var turn: Turn? = null
         var generation: Long? = null
         var queries: MutableMap<Long, Query>? = null
-        var stopping: CompletableFuture<Long>? = null
     }
 
     private class Turn(
