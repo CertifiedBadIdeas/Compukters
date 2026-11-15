@@ -19,7 +19,7 @@ fencing the machine: kind 0 stops, kind 1 detaches, kind 2 detaches with timers 
 and kind 3 prepares execution for checkpoint capture at that tick. Kind 3 drains accepted commands,
 settles unacknowledged external waits with Unavailable without running Guest, preserves timers and the
 exact pending compiler transaction, and discards uninstalled deployment candidates. Invalid earlier ticks
-are rejected before settlement. Its timer state uses the existing Detached encoding.
+are rejected before settlement. Its result includes authoritative process scopes and confirmed redstone output from the detached machine.
 `compukter_experimental_fleet_poll_lifecycle` reads one observation at a time through the existing event
 encoding, followed by Stopped, Detached or DetachRejected. Ordinary polling cannot consume this stream.
 Previously published ordinary observations remain in the ordinary queue.
@@ -29,9 +29,18 @@ retain the delivery for retry. Native memory reservations and the ownership fenc
 terminal acknowledgement; recovery is refused while a lifecycle event is awaiting delivery. JNI and
 FFM expose the same contract through `independent = true` on stop/detach and `pollLifecycle(machine)`;
 `detachForCheckpoint(machine, tick)` always selects independent delivery. This adds an experimental
-selector without changing event layouts, the released C ABI version, artifact format or checkpoint schema.
-It requires matching experimental native and JVM builds. Lifecycle prefixes are reconciliation input,
+selector; the current detach event uses experimental tag 18 without changing the released C ABI version,
+artifact format or checkpoint schema. It requires matching experimental native and JVM builds. Lifecycle prefixes are reconciliation input,
 including requests already settled by kind 3; they must not be dispatched as fresh world effects.
+
+Detach event tag 18 contains machine (`u64`), confirmed redstone output (`u32`), scope count (`u32`),
+ordered scope IDs (`u64`), timer count (`u32`), and timer entries (task `u32`, request `u64`, scope `u64`,
+duration `u32`, remaining `u64`), all little-endian. Native captures this state after accepted commands drain;
+it is independent of previously published process and input observations. At most 32 scopes and 256 timers
+fit in 8469 encoded bytes. Kotlin validates scope order, output bits, timer ownership, identities, lengths
+and duration bounds. Native emits tag 18 for all successful detaches; the decoder still accepts historical
+tags 6 and 16 with absent metadata, which cannot authorize host checkpoint capture. Copy retries retain
+both the same encoded state and the existing ownership fence.
 
 Stop event tag 2 now contains machine (`u64`), final filesystem generation (`u64`), pending
 identity count (`u32`), then task/request pairs (`u32`, `u64`), all little-endian. Rust captures the

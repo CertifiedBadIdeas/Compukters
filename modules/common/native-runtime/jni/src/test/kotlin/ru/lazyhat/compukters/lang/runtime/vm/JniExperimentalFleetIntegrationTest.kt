@@ -65,6 +65,7 @@ class JniExperimentalFleetIntegrationTest {
                     var event = next(machine)
                     while (event !is ExperimentalFleetEvent.Detached) event = next(machine)
                     assertTrue(event.timers.isEmpty())
+                    assertEquals(ExperimentalFleetDetachedState(listOf(0), 0), event.state)
                     VmSession.restoreFromFleet(fleet, machine).use { restored ->
                         assertEquals(before.retired, restored.resourceSnapshot().executedInstructions)
                         var outcome = restored.advance(512, 512, 64)
@@ -159,15 +160,15 @@ class JniExperimentalFleetIntegrationTest {
             check(System.nanoTime() < deadline)
             Thread.yield()
         }
-        assertEquals(9L, written[0])
+        assertEquals(29L, written[0])
         assertEquals(1, JniExperimentalFleet.pollLifecycle(fleet[0], machine[0], none, LongArray(0)))
         assertEquals(10, JniExperimentalFleet.pollLifecycle(fleet[0], machine[0], none, written))
-        assertEquals(9L, written[0])
+        assertEquals(29L, written[0])
         assertEquals(7, JniExperimentalFleet.restoreSession(fleet[0], machine[0], LongArray(1)))
         assertEquals(7, JniExperimentalFleet.close(fleet[0]))
-        val bytes = ByteArray(9)
+        val bytes = ByteArray(29)
         assertEquals(0, JniExperimentalFleet.pollLifecycle(fleet[0], machine[0], bytes, written))
-        assertEquals(ExperimentalFleetEvent.Detached(machine[0]), ExperimentalFleetEventWire.decode(bytes))
+        assertEquals(ExperimentalFleetEvent.Detached(machine[0], state = ExperimentalFleetDetachedState(listOf(0), 0)), ExperimentalFleetEventWire.decode(bytes))
         val restored = LongArray(1)
         assertEquals(0, JniExperimentalFleet.restoreSession(fleet[0], machine[0], restored))
         assertEquals(1, JniExperimentalFleet.restoreSession(fleet[0], machine[0], LongArray(1)))
@@ -618,7 +619,7 @@ class JniExperimentalFleetIntegrationTest {
                         fleet.completeCompilationArtifact(machine, request.request.token, resultArtifact)
                         assertEquals(VmOutcome.Halted(VmValue.I32(0)), (next() as ExperimentalFleetEvent.Outcome).outcome)
                         fleet.detach(machine)
-                        assertEquals(ExperimentalFleetEvent.Detached(machine), next())
+                        assertEquals(ExperimentalFleetEvent.Detached(machine, state = ExperimentalFleetDetachedState(listOf(0), 0)), next())
                         detached = true
                         VmSession.restoreFromFleet(fleet, machine).use { restored ->
                             assertTrue(restored.fileStat(VmVirtualPath.of("/home/main")).metadata.executable)
@@ -744,7 +745,7 @@ class JniExperimentalFleetIntegrationTest {
             fleet.reply(machine, inspection.request.identity, HostResponse.UnitSuccess)
             assertEquals(VmOutcome.Halted(null), (nextEvent() as ExperimentalFleetEvent.Outcome).outcome)
             fleet.detach(machine)
-            assertEquals(ExperimentalFleetEvent.Detached(machine), nextEvent())
+            assertEquals(ExperimentalFleetEvent.Detached(machine, state = ExperimentalFleetDetachedState(listOf(0), 0)), nextEvent())
             detached = true
             VmSession.restoreFromFleet(fleet, machine).close()
         } finally {
@@ -853,7 +854,7 @@ class JniExperimentalFleetIntegrationTest {
                 if (written[0] == 0L) Thread.yield()
                 assertTrue(System.nanoTime() < deadline)
             } while (written[0] == 0L)
-            assertEquals(ExperimentalFleetEvent.Detached(machine[0]), ExperimentalFleetEventWire.decode(bytes.copyOf(written[0].toInt())))
+            assertEquals(ExperimentalFleetEvent.Detached(machine[0], state = ExperimentalFleetDetachedState(listOf(0), 0)), ExperimentalFleetEventWire.decode(bytes.copyOf(written[0].toInt())))
             val result = LongArray(1)
             assertEquals(0, JniExperimentalFleet.restoreSession(fleet[0], machine[0], result))
             restored = result[0]
@@ -920,7 +921,7 @@ class JniExperimentalFleetIntegrationTest {
                 if (event == null) Thread.yield()
                 assertTrue(System.nanoTime() < deadline)
             } while (event == null)
-            assertEquals(ExperimentalFleetEvent.Detached(machine), event)
+            assertEquals(ExperimentalFleetEvent.Detached(machine, state = ExperimentalFleetDetachedState(listOf(0), 0)), event)
             VmSession.restoreFromFleet(fleet, machine).use { restored ->
                 assertEquals(VmOutcome.SliceExhausted, restored.advanceWithRetirementLimit(128, 64, Int.MAX_VALUE, 0).outcome)
             }
@@ -946,7 +947,7 @@ class JniExperimentalFleetIntegrationTest {
                     if (event == null) Thread.yield()
                     assertTrue(System.nanoTime() < deadline)
                 } while (event == null)
-                assertEquals(ExperimentalFleetEvent.Detached(machine), event)
+                assertEquals(ExperimentalFleetEvent.Detached(machine, state = ExperimentalFleetDetachedState(listOf(0), 0)), event)
                 VmSession.restoreFromFleet(fleet, machine).use { restored ->
                     assertEquals(before, restored.resourceSnapshot().executedInstructions)
                 }

@@ -185,6 +185,7 @@ sealed interface ExperimentalFleetEvent {
     data class Detached(
         val machine: Long,
         val timers: List<ExperimentalFleetTimer> = emptyList(),
+        val state: ExperimentalFleetDetachedState? = null,
     ) : ExperimentalFleetEvent
 
     data class DetachRejected(
@@ -408,6 +409,24 @@ object ExperimentalFleetEventWire {
                 ExperimentalFleetEvent.ScopeStopped(long(), long(), identities())
             }
 
+            18 -> {
+                require(input.remaining() >= 20) { "truncated fleet detach state" }
+                val machine = long()
+                val redstone = input.int
+                val scopeCount = input.int
+                require(scopeCount in 1..32 && input.remaining() >= scopeCount * 8 + 4) { "invalid fleet scope length" }
+                val state = ExperimentalFleetDetachedState(List(scopeCount) { long() }, redstone)
+                val count = input.int
+                require(count in 0..256 && input.remaining() == count * 32) { "invalid fleet timer length" }
+                val timers =
+                    List(count) {
+                        ExperimentalFleetTimer(VmHostRequestIdentity(input.int, input.long), long(), input.int, long())
+                    }
+                require(timers.map { it.identity }.toSet().size == timers.size) { "duplicate fleet timer" }
+                require(timers.all { it.scope in state.programScopes }) { "unknown fleet timer scope" }
+                ExperimentalFleetEvent.Detached(machine, timers, state)
+            }
+
             16 -> {
                 val machine = long()
                 val count = input.int
@@ -441,6 +460,18 @@ object ExperimentalFleetEventWire {
                 throw IllegalArgumentException("invalid fleet event tag")
             }
         }
+    }
+}
+
+/** Authoritative state captured from the detached native machine after accepted commands drain. */
+data class ExperimentalFleetDetachedState(
+    val programScopes: List<Long>,
+    val confirmedRedstoneOutput: Int,
+) {
+    init {
+        require(programScopes.size in 1..32 && programScopes.first() >= 0)
+        require(programScopes.zipWithNext().all { (parent, child) -> child > parent })
+        RedstoneWire.requireOutputRegister(confirmedRedstoneOutput)
     }
 }
 

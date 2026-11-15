@@ -63,6 +63,7 @@ class FfmExperimentalFleetIntegrationTest {
                     var event = next(machine)
                     while (event !is ExperimentalFleetEvent.Detached) event = next(machine)
                     assertTrue(event.timers.isEmpty())
+                    assertEquals(ExperimentalFleetDetachedState(listOf(0), 0), event.state)
                     VmSession.restoreFromFleet(fleet, machine).use { restored ->
                         assertEquals(before.retired, restored.resourceSnapshot().executedInstructions)
                         var outcome = restored.advance(512, 512, 64)
@@ -459,7 +460,7 @@ class FfmExperimentalFleetIntegrationTest {
                         fleet.completeCompilationArtifact(machine, request.request.token, fixture("compukters.shell.artifact"))
                         assertEquals(VmOutcome.Halted(VmValue.I32(0)), (next() as ExperimentalFleetEvent.Outcome).outcome)
                         fleet.detach(machine)
-                        assertEquals(ExperimentalFleetEvent.Detached(machine), next())
+                        assertEquals(ExperimentalFleetEvent.Detached(machine, state = ExperimentalFleetDetachedState(listOf(0), 0)), next())
                         VmSession.restoreFromFleet(fleet, machine).use { recovered ->
                             assertTrue(recovered.fileStat(VmVirtualPath.of("/home/main")).metadata.executable)
                         }

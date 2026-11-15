@@ -128,9 +128,13 @@ The native checkpoint-detach primitive is available through both experimental tr
 commands, validates the capture tick, settles remaining external routes with Unavailable without advancing Guest,
 and returns the machine with its tracked timers and exact pending compilation input. Settlement walks native route
 indexes directly; no host request mirror or per-idle-machine buffer is added. Uninstalled deployment candidates are
-discarded. The returned machine can then be serialized by its new owner. This primitive does not yet implement carrier
-checkpoint capture: authoritative process/scope metadata, persistence handoff and production lease integration remain
-required. Lifecycle-prefix observations must be reconciled without dispatching new world effects.
+discarded. The detach completion carries authoritative process scopes and confirmed redstone output from that machine.
+The host checkpoint adapter replaces its potentially stale metadata before rebinding timers and serializing execution;
+it does not dispatch queued lifecycle prefixes as new world effects. Recovery resets the host's scheduling hint to
+Running so the next grant can reevaluate terminal or compiler waits, including input whose observation was never
+pumped. Capture failure retains the recovered session for retry or explicit close. No new state is reserved per idle
+machine. This adapter is not yet connected to the shared lifecycle worker or production lease; byte admission for
+retained addon checkpoint payloads, persistence handoff and backend integration remain required.
 
 ## Addon host boundary
 

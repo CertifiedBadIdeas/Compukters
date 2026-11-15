@@ -13,6 +13,40 @@ import kotlin.test.assertFails
 
 class ExperimentalFleetEventTest {
     @Test
+    fun `detach state validates scopes output and timer ownership`() {
+        fun wire(
+            scopes: List<Long> = listOf(0, 7),
+            redstone: Int = 9,
+            timerScope: Long = 7,
+        ): ByteArray =
+            ByteBuffer
+                .allocate(21 + scopes.size * 8 + 32)
+                .order(ByteOrder.LITTLE_ENDIAN)
+                .put(18)
+                .putLong(3)
+                .putInt(redstone)
+                .putInt(scopes.size)
+                .apply { scopes.forEach(::putLong) }
+                .putInt(1)
+                .putInt(1)
+                .putLong(2)
+                .putLong(timerScope)
+                .putInt(8)
+                .putLong(4)
+                .array()
+        val event = ExperimentalFleetEventWire.decode(wire()) as ExperimentalFleetEvent.Detached
+        assertEquals(ExperimentalFleetDetachedState(listOf(0, 7), 9), event.state)
+        assertEquals(7L, event.timers.single().scope)
+        for (size in wire().indices) assertFails { ExperimentalFleetEventWire.decode(wire().copyOf(size)) }
+        assertFails { ExperimentalFleetEventWire.decode(wire() + 0) }
+        for (scopes in listOf(emptyList(), listOf(-1L), listOf(0L, 0L), listOf(1L, 0L), (0L..32).toList())) {
+            assertFails { ExperimentalFleetEventWire.decode(wire(scopes)) }
+        }
+        assertFails { ExperimentalFleetEventWire.decode(wire(redstone = -1)) }
+        assertFails { ExperimentalFleetEventWire.decode(wire(timerScope = 8)) }
+    }
+
+    @Test
     fun `quiescent report validates pending timer flag`() {
         fun wire(flag: Int) =
             ByteBuffer

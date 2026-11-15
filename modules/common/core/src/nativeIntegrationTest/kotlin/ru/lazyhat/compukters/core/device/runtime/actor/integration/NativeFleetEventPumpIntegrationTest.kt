@@ -69,6 +69,77 @@ import kotlin.test.assertTrue
 
 class NativeFleetEventPumpIntegrationTest {
     @Test
+    fun `checkpoint capture uses native output and preserves timers without dispatching observations`() {
+        installFfmRuntime()
+        VmRuntime.loadNativeLibrary(Path.of(requireNotNull(System.getProperty("compukters.ffi.library"))))
+        val artifact = Path.of(requireNotNull(System.getProperty("compukters.fleet.timer.fixture"))).readBytes()
+        val header =
+            ByteBuffer
+                .allocate(16)
+                .order(ByteOrder.LITTLE_ENDIAN)
+                .put("CPKTSYS\u0000".encodeToByteArray())
+                .putShort(1)
+                .putShort(0)
+                .putInt(0)
+                .array()
+        val image = VmSystemImage.of(header + MessageDigest.getInstance("SHA-256").digest(header))
+        val root = Files.createTempDirectory("fleet-host-checkpoint-").toRealPath()
+        try {
+            WorldFileSystemStore.open(root).use { store ->
+                val id = ComputerId.fromLongs(191, 192)
+                val factory = NativeProgramVmSessionFactory(ProgramFileSystemLaunchContext(store, id, image))
+                val host = ProgramRuntimeHost(factory)
+                assertEquals(ProgramStartResult.Started, host.start(artifact))
+                VmRuntime.openExperimentalFleet(ExperimentalFleetConfig(1, 32, 1, 128, 64, 64, 32, coordinatedTurns = true)).use { fleet ->
+                    val machine = host.transferToFleet(fleet, 0)
+                    val observer = VmSession.open(artifact)
+                    val other = observer.transferToFleet(fleet)
+                    val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5)
+
+                    fun next(target: Long? = null): ExperimentalFleetEvent {
+                        while (System.nanoTime() < deadline) {
+                            (if (target == null) fleet.poll() else fleet.pollLifecycle(target))?.let { return it }
+                            Thread.yield()
+                        }
+                        error("checkpoint event timed out")
+                    }
+                    fleet.grant(machine, 1, 512)
+                    assertTrue(assertIs<ExperimentalFleetEvent.Quiescent>(next()).timersPending)
+                    val generation = fleet.eventGeneration()
+                    fleet.resourceSnapshot(other, 41)
+                    assertTrue(fleet.waitEvents(generation, 5_000))
+                    // The JVM host never observes this accepted output confirmation.
+                    fleet.confirmRedstoneOutput(machine, 0x123456)
+                    fleet.detachForCheckpoint(machine, 2)
+                    var event = next(machine)
+                    while (event !is ExperimentalFleetEvent.Detached) event = next(machine)
+                    val addon = byteArrayOf(3, 4)
+                    assertTrue(host.hibernateFromFleet(fleet, event, 2, addon))
+                    assertEquals(ProgramRuntimeState.Closed, host.state)
+                    val preserved = assertIs<ExperimentalFleetEvent.Resources>(next())
+                    assertEquals(other, preserved.machine)
+                    assertEquals(41L, preserved.request)
+                    val restored = ProgramRuntimeHost(factory)
+                    val checkpoint = checkNotNull(restored.prepareRestoreBoot(100))
+                    assertEquals(0x123456, checkpoint.confirmedRedstoneOutput)
+                    assertEquals(listOf(0L), checkpoint.programScopes)
+                    assertEquals(1L, checkpoint.timers.single().remainingTicks)
+                    assertContentEquals(addon, checkpoint.addonState)
+                    restored.completeRestoration(100)
+                    assertEquals(ProgramRuntimeState.Running, restored.serverTick(100))
+                    assertIs<ProgramRuntimeState.Halted>(restored.serverTick(101))
+                    restored.close()
+                    fleet.stop(other, independent = true)
+                    while (next(other) !is ExperimentalFleetEvent.Stopped) { }
+                    observer.close()
+                }
+            }
+        } finally {
+            root.toFile().deleteRecursively()
+        }
+    }
+
+    @Test
     fun `actor stop drains accepted commands and closes without owner pumping while ordinary output is full`() {
         installFfmRuntime()
         VmRuntime.loadNativeLibrary(Path.of(requireNotNull(System.getProperty("compukters.ffi.library"))))

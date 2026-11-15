@@ -30,6 +30,7 @@ import ru.lazyhat.compukters.lang.runtime.capability.HostResponse
 import ru.lazyhat.compukters.lang.runtime.fs.ComputerId
 import ru.lazyhat.compukters.lang.runtime.fs.VmSystemImage
 import ru.lazyhat.compukters.lang.runtime.fs.WorldFileSystemStore
+import ru.lazyhat.compukters.lang.runtime.vm.ExperimentalFleetDetachedState
 import ru.lazyhat.compukters.lang.runtime.vm.ExperimentalFleetEvent
 import ru.lazyhat.compukters.lang.runtime.vm.ExperimentalFleetSessionOwner
 import ru.lazyhat.compukters.lang.runtime.vm.ExperimentalFleetTimer
@@ -338,11 +339,13 @@ class ProgramRuntimeHost internal constructor(
         machine: Long,
         worldTick: Long,
         timers: List<ExperimentalFleetTimer>,
+        detachedState: ExperimentalFleetDetachedState? = null,
     ) {
         require(worldTick >= 0 && worldTick >= lastObservedTick) { "fleet recovery tick must not move backwards" }
         check(fleetOwnership?.let { it.first === fleet && it.second == machine } == true) { "fleet does not own this host" }
         require(timers.size <= MAXIMUM_PENDING_TIMER_REQUESTS && timers.map { it.identity }.toSet().size == timers.size)
-        require(timers.all { it.scope in programScopes }) { "timer references an unknown program scope" }
+        val scopes = detachedState?.programScopes ?: programScopes
+        require(timers.all { it.scope in scopes }) { "timer references an unknown program scope" }
         val active = requireNotNull(session)
         val restored =
             timers.associate { timer ->
@@ -357,6 +360,14 @@ class ProgramRuntimeHost internal constructor(
                 timer.identity to PendingTimerRequest(active, request, worldTick.saturatingAdd(timer.remaining), timer.scope)
             }
         active.recoverFromFleet(fleet, machine)
+        if (detachedState != null) {
+            programScopes.clear()
+            programScopes.addAll(detachedState.programScopes)
+            confirmedRedstoneOutput = detachedState.confirmedRedstoneOutput
+            // Scheduling is reevaluated on the first later grant. A terminal/input observation
+            // may still be queued in the fleet; its old waiting hint must not park this machine.
+            state = ProgramRuntimeState.Running
+        }
         pendingTimerRequests.putAll(restored)
         fleetOwnership = null
         // A returned machine may have spent this tick's allowance in the fleet.
@@ -365,6 +376,22 @@ class ProgramRuntimeHost internal constructor(
         remainingHostRequests = 0
         lastObservedTick = worldTick
         if (state == ProgramRuntimeState.WaitingForInput && timers.isNotEmpty()) state = ProgramRuntimeState.Running
+    }
+
+    /**
+     * Worker-only capture after checkpoint detach. Native state replaces potentially undelivered
+     * lifecycle observations; no prefix is dispatched as a fresh external world action.
+     * On capture failure this host retains the recovered session for retry or explicit close.
+     */
+    internal fun hibernateFromFleet(
+        fleet: ExperimentalFleetSessionOwner,
+        detached: ExperimentalFleetEvent.Detached,
+        worldTick: Long,
+        addonState: ByteArray,
+    ): Boolean {
+        val detachedState = requireNotNull(detached.state) { "checkpoint detach requires authoritative native state" }
+        recoverFromFleet(fleet, detached.machine, worldTick, detached.timers, detachedState)
+        return hibernate(worldTick, addonState)
     }
 
     /**
