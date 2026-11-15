@@ -44,7 +44,7 @@ internal class ReusableTerminalWireTransport(
     private val scratchPool: VmWireScratchPool,
     private val fullStateCall: TerminalFullStateCall,
     private val changesSinceCall: TerminalChangesSinceCall,
-) : TerminalWireTransport {
+) : FleetTransferableTerminalWireTransport {
     private val lock = Any()
     private var closed = false
 

@@ -11,17 +11,11 @@ import java.nio.file.Path
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 
-data class ExperimentalRequestInspection(
-    val capability: CapabilityIdentity,
-    val operation: Int,
-    val overBudgetDetail: String,
-)
-
 /** Opt-in transport. Call creation and close outside the server thread. */
 class ExperimentalJniFleet private constructor(
     private val bridge: JniBridge,
     private var handle: Long,
-) : ExperimentalFleetSessionOwner, AutoCloseable {
+) : ExperimentalFleet {
     private val output = ByteArray(1_048_576)
     private val written = LongArray(1)
     private val sessionBridges = mutableMapOf<Long, LowLevelVmBridge>()
@@ -61,13 +55,13 @@ class ExperimentalJniFleet private constructor(
 
     /** [deadlineNanos] uses the same System.nanoTime clock as the server scheduler. */
     @Synchronized
-    fun grant(machine: Long, tick: Long, retirements: Int, deadlineNanos: Long = Long.MAX_VALUE) {
+    override fun grant(machine: Long, tick: Long, retirements: Int, deadlineNanos: Long) {
         val remainingNanos = if (deadlineNanos == Long.MAX_VALUE) -1 else (deadlineNanos - System.nanoTime()).coerceAtLeast(0)
         success("grant", JniExperimentalFleet.grant(active(), machine, tick, retirements, remainingNanos))
     }
 
     @Synchronized
-    fun reply(machine: Long, identity: VmHostRequestIdentity, response: HostResponse) {
+    override fun reply(machine: Long, identity: VmHostRequestIdentity, response: HostResponse) {
         val status = when (response) {
             is HostResponse.Failure -> JniExperimentalFleet.replyFailure(active(), machine, identity.taskId, identity.requestId, ExperimentalFleetResponseWire.failureKind(response.kind), ExperimentalFleetResponseWire.failureDetail(response.detail))
             else -> JniExperimentalFleet.replyWire(active(), machine, identity.taskId, identity.requestId, ExperimentalFleetResponseWire.success(response))
@@ -76,44 +70,44 @@ class ExperimentalJniFleet private constructor(
     }
 
     @Synchronized
-    fun resolveCost(machine: Long, identity: VmHostRequestIdentity, units: Int) =
+    override fun resolveCost(machine: Long, identity: VmHostRequestIdentity, units: Int) =
         success("resolve cost", JniExperimentalFleet.resolveCost(active(), machine, identity.taskId, identity.requestId, units))
 
     @Synchronized
-    fun completeCompilationArtifact(machine: Long, token: Long, artifact: ByteArray) =
+    override fun completeCompilationArtifact(machine: Long, token: Long, artifact: ByteArray) =
         success("compilation completion", JniExperimentalFleet.completeCompilation(active(), machine, token, 0, artifact))
 
     @Synchronized
-    fun completeCompilationFailure(machine: Long, token: Long, diagnostics: String) =
+    override fun completeCompilationFailure(machine: Long, token: Long, diagnostics: String) =
         success("compilation completion", JniExperimentalFleet.completeCompilation(active(), machine, token, 1, diagnostics.encodeToByteArray()))
 
     @Synchronized
-    fun terminalKey(machine: Long, key: TerminalKey, action: TerminalKeyAction, modifiers: Set<TerminalModifier>, request: Long = -1) =
+    override fun terminalKey(machine: Long, key: TerminalKey, action: TerminalKeyAction, modifiers: Set<TerminalModifier>, request: Long) =
         success("terminal key", JniExperimentalFleet.terminalKey(active(), machine, key.wireCode, action.wireCode, modifiers.fold(0) { bits, modifier -> bits or modifier.mask }, request))
 
     @Synchronized
-    fun terminalUpdate(machine: Long, request: Long, revision: Long) =
+    override fun terminalUpdate(machine: Long, request: Long, revision: Long) =
         success("terminal update", JniExperimentalFleet.terminalUpdate(active(), machine, request, revision))
 
     @Synchronized
-    fun resourceSnapshot(machine: Long, request: Long) =
+    override fun resourceSnapshot(machine: Long, request: Long) =
         success("resource snapshot", JniExperimentalFleet.resourceSnapshot(active(), machine, request))
 
     @Synchronized
-    fun filesystemGeneration(machine: Long, request: Long) =
+    override fun filesystemGeneration(machine: Long, request: Long) =
         success("filesystem generation", JniExperimentalFleet.filesystemGeneration(active(), machine, request))
 
     /** Results are delivered as Deployment events; prepared candidates remain owned by this machine. */
     @Synchronized
-    fun prepareDeployment(machine: Long, request: Long, artifact: ByteArray) =
+    override fun prepareDeployment(machine: Long, request: Long, artifact: ByteArray) =
         success("prepare deployment", JniExperimentalFleet.deployment(active(), machine, request, 0, artifact, 0, 0))
 
     @Synchronized
-    fun deploymentRevision(machine: Long, request: Long, path: VmVirtualPath) =
+    override fun deploymentRevision(machine: Long, request: Long, path: VmVirtualPath) =
         success("deployment revision", JniExperimentalFleet.deployment(active(), machine, request, 1, path.value.encodeToByteArray(), 0, 0))
 
     @Synchronized
-    fun installDeployment(machine: Long, request: Long, path: VmVirtualPath, candidate: Long, expected: VmExecutableRevision) {
+    override fun installDeployment(machine: Long, request: Long, path: VmVirtualPath, candidate: Long, expected: VmExecutableRevision) {
         val revision = when (expected) {
             VmExecutableRevision.Absent -> 0L
             is VmExecutableRevision.Present -> expected.generation.also { require(it > 0) }
@@ -122,54 +116,54 @@ class ExperimentalJniFleet private constructor(
     }
 
     @Synchronized
-    fun discardDeployment(machine: Long, request: Long, candidate: Long) =
+    override fun discardDeployment(machine: Long, request: Long, candidate: Long) =
         success("discard deployment", JniExperimentalFleet.deployment(active(), machine, request, 3, byteArrayOf(), candidate, 0))
 
     @Synchronized
-    fun fileStat(machine: Long, request: Long, path: VmVirtualPath) =
+    override fun fileStat(machine: Long, request: Long, path: VmVirtualPath) =
         success("file stat", JniExperimentalFleet.filesystemQuery(active(), machine, request, 0, path.value.encodeToByteArray(), byteArrayOf(), 0, 0, 0))
 
     @Synchronized
-    fun fileList(machine: Long, request: Long, path: VmVirtualPath, cursor: String? = null, maximum: Int = 128) {
+    override fun fileList(machine: Long, request: Long, path: VmVirtualPath, cursor: String?, maximum: Int) {
         require(cursor == null || cursor.isNotEmpty()) { "filesystem cursor is empty" }
         require(maximum in 1..256) { "filesystem list page must contain 1..256 entries" }
         success("file list", JniExperimentalFleet.filesystemQuery(active(), machine, request, 1, path.value.encodeToByteArray(), cursor?.encodeToByteArray() ?: byteArrayOf(), 0, maximum, 0))
     }
 
     @Synchronized
-    fun fileRead(machine: Long, request: Long, path: VmVirtualPath, offset: Long, maximum: Int, generation: Long) {
+    override fun fileRead(machine: Long, request: Long, path: VmVirtualPath, offset: Long, maximum: Int, generation: Long) {
         require(offset >= 0 && generation >= 0 && maximum in 1..32768) { "invalid filesystem read range" }
         success("file read", JniExperimentalFleet.filesystemQuery(active(), machine, request, 2, path.value.encodeToByteArray(), byteArrayOf(), offset, maximum, generation))
     }
 
     @Synchronized
-    fun redstoneInput(machine: Long, packet: Int) =
+    override fun redstoneInput(machine: Long, packet: Int) =
         success("redstone input", JniExperimentalFleet.redstoneInput(active(), machine, packet))
 
     @Synchronized
-    fun confirmRedstoneOutput(machine: Long, packed: Int) =
+    override fun confirmRedstoneOutput(machine: Long, packed: Int) =
         success("redstone output", JniExperimentalFleet.confirmRedstoneOutput(active(), machine, packed))
 
     @Synchronized
-    fun terminalText(machine: Long, text: String, request: Long = -1) =
+    override fun terminalText(machine: Long, text: String, request: Long) =
         success("terminal text", JniExperimentalFleet.terminalText(active(), machine, text.codePoints().toArray(), request))
 
     @Synchronized
-    fun canonicalLine(machine: Long, line: CharArray, request: Long = -1) =
+    override fun canonicalLine(machine: Long, line: CharArray, request: Long) =
         success("canonical line", JniExperimentalFleet.canonicalLine(active(), machine, line, request))
 
     @Synchronized
-    fun stop(machine: Long) = success("stop", JniExperimentalFleet.stop(active(), machine))
+    override fun stop(machine: Long) = success("stop", JniExperimentalFleet.stop(active(), machine))
 
     @Synchronized
-    fun detach(machine: Long) = success("detach", JniExperimentalFleet.detach(active(), machine))
+    override fun detach(machine: Long) = success("detach", JniExperimentalFleet.detach(active(), machine))
 
     @Synchronized
-    fun detachWithTimers(machine: Long, tick: Long) =
+    override fun detachWithTimers(machine: Long, tick: Long) =
         success("detach", JniExperimentalFleet.detachWithTimers(active(), machine, tick))
 
     @Synchronized
-    fun poll(): ExperimentalFleetEvent? {
+    override fun poll(): ExperimentalFleetEvent? {
         success("poll", JniExperimentalFleet.poll(active(), output, written))
         require(written[0] in 0..output.size.toLong()) { "invalid native fleet event length" }
         if (written[0] == 0L) return null
@@ -202,19 +196,23 @@ class ExperimentalJniFleet private constructor(
             inspection: ExperimentalRequestInspection? = null,
             coordinatedTurns: Boolean = false,
         ): ExperimentalJniFleet {
-            val bridge = JniBridge.open(library)
+            return openWithBridge(JniBridge.open(library), ExperimentalFleetConfig(workers, mailboxCapacity, eventCapacity,
+                guestBudget, maintenanceBudget, hostBudget, advancesPerTick, inspection, coordinatedTurns))
+        }
+
+        internal fun openWithBridge(bridge: JniBridge, config: ExperimentalFleetConfig): ExperimentalJniFleet {
             val output = LongArray(1)
             val empty = byteArrayOf()
-            val capability = inspection?.capability
-            val detail = inspection?.let { ExperimentalFleetResponseWire.failureDetail(it.overBudgetDetail) } ?: empty
+            val capability = config.inspection?.capability
+            val detail = config.inspection?.let { ExperimentalFleetResponseWire.failureDetail(it.overBudgetDetail) } ?: empty
             success(
                 "create",
                 JniExperimentalFleet.create(
                     empty, byteArrayOf(1, 0), 0,
-                    intArrayOf(workers, mailboxCapacity, eventCapacity, guestBudget, maintenanceBudget, hostBudget, advancesPerTick, if (coordinatedTurns) 1 else 0),
+                    intArrayOf(config.workers, config.mailboxCapacity, config.eventCapacity, config.guestBudget, config.maintenanceBudget, config.hostBudget, config.advancesPerTick, if (config.coordinatedTurns) 1 else 0),
                     capability?.namespace?.encodeToByteArray() ?: empty,
                     capability?.name?.encodeToByteArray() ?: empty,
-                    detail, capability?.abiMajor ?: 0, capability?.abiMinor ?: 0, inspection?.operation ?: 0, output,
+                    detail, capability?.abiMajor ?: 0, capability?.abiMinor ?: 0, config.inspection?.operation ?: 0, output,
                 ),
             )
             return ExperimentalJniFleet(bridge, output[0])

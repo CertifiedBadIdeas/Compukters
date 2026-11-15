@@ -15,6 +15,12 @@ import ru.lazyhat.compukters.lang.runtime.fs.VmDirectoryListing
 import ru.lazyhat.compukters.lang.runtime.fs.VmFileChunk
 import ru.lazyhat.compukters.lang.runtime.fs.VmFileSystemReadFailure
 
+data class ExperimentalRequestInspection(
+    val capability: CapabilityIdentity,
+    val operation: Int,
+    val overBudgetDetail: String,
+)
+
 sealed interface ExperimentalFleetInputResult {
     data object Accepted : ExperimentalFleetInputResult
     data object TerminalRejected : ExperimentalFleetInputResult

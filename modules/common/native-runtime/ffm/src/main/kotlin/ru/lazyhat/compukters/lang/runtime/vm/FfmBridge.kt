@@ -30,6 +30,7 @@ import java.nio.file.Path
 
 internal class FfmBridge private constructor(
     private val arena: Arena,
+    private val lookup: SymbolLookup,
     private val abiVersionHandle: MethodHandle,
     private val maximumCreateBytesHandle: MethodHandle,
     private val maximumOutcomeBytesHandle: MethodHandle,
@@ -82,6 +83,27 @@ internal class FfmBridge private constructor(
     private val terminalTextHandle: MethodHandle,
 ) : LowLevelVmBridge,
     AutoCloseable {
+    override fun openExperimentalFleet(config: ExperimentalFleetConfig): ExperimentalFleet =
+        ExperimentalFfmFleet.open(this, config.workers, config.mailboxCapacity, config.eventCapacity,
+            config.guestBudget, config.maintenanceBudget, config.hostBudget, config.advancesPerTick,
+            config.inspection, config.coordinatedTurns)
+
+    private var fleetUsers = 0
+    private var closed = false
+
+    @Synchronized
+    internal fun retainFleet(): SymbolLookup {
+        check(!closed) { "FFM bridge is closed" }
+        fleetUsers++
+        return lookup
+    }
+
+    @Synchronized
+    internal fun releaseFleet() {
+        check(fleetUsers > 0)
+        fleetUsers--
+    }
+
     private val maximumOutcomeBytes: Int =
         (maximumOutcomeBytesHandle.invokeExact() as Long)
             .takeIf { it in 1..MAXIMUM_OUTCOME_BYTES }
@@ -778,7 +800,11 @@ internal class FfmBridge private constructor(
         }
     }
 
+    @Synchronized
     override fun close() {
+        check(fleetUsers == 0) { "FFM bridge still owns an experimental fleet" }
+        if (closed) return
+        closed = true
         try {
             terminalScratchPool.close()
         } finally {
@@ -1054,6 +1080,7 @@ internal class FfmBridge private constructor(
 
                 return FfmBridge(
                     arena = arena,
+                    lookup = lookup,
                     abiVersionHandle = downcall(FfmAbiFunction.ABI_VERSION),
                     maximumCreateBytesHandle =
                         downcall(FfmAbiFunction.MAXIMUM_CREATE_BYTES),

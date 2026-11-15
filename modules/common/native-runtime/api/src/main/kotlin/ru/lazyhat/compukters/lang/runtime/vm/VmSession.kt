@@ -338,7 +338,7 @@ class VmSession private constructor(
     /** Transfer a quiescent session to an experimental fleet. This invalidates this session on success. */
     @Synchronized
     fun transferToFleet(fleet: ExperimentalFleetSessionOwner): Long {
-        require(terminalTransport is ByteArrayTerminalWireTransport) { "fleet transfer requires a byte-array terminal transport" }
+        require(terminalTransport is FleetTransferableTerminalWireTransport) { "fleet transfer requires a transferable terminal transport" }
         val active = requireHandle()
         val machine = fleet.adopt(bridge, active)
         handle.set(CLOSED)
@@ -349,7 +349,7 @@ class VmSession private constructor(
     /** Transfers a restored session together with its pending timer state. */
     @Synchronized
     fun transferToFleet(fleet: ExperimentalFleetSessionOwner, tick: Long, timers: List<ExperimentalFleetTimer>): Long {
-        require(terminalTransport is ByteArrayTerminalWireTransport) { "fleet transfer requires a byte-array terminal transport" }
+        require(terminalTransport is FleetTransferableTerminalWireTransport) { "fleet transfer requires a transferable terminal transport" }
         val active = requireHandle()
         val machine = fleet.adoptWithTimers(bridge, active, tick, timers)
         handle.set(CLOSED)

@@ -23,6 +23,8 @@ import ru.lazyhat.compukters.lang.runtime.fs.VmFileSystemReadFailure
 import java.nio.file.Path
 
 internal class JniBridge private constructor() : LowLevelVmBridge {
+    override fun openExperimentalFleet(config: ExperimentalFleetConfig): ExperimentalFleet = ExperimentalJniFleet.openWithBridge(this, config)
+
     private val maximumOutcomeBytes =
         JniNative
             .maximumOutcomeBytes()

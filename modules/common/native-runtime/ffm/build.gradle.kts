@@ -48,6 +48,7 @@ java {
 
 tasks.test {
     filter.excludeTestsMatching("ru.lazyhat.compukters.lang.runtime.integration.*")
+    filter.excludeTestsMatching("ru.lazyhat.compukters.lang.runtime.vm.FfmExperimentalFleetIntegrationTest")
 }
 
 val nativeOs =
@@ -211,4 +212,46 @@ tasks.register("verifyNativeRuntime") {
     description = "Runs JVM, explicit FFM, packaged FFM, and native resource verification."
     group = "verification"
     dependsOn(tasks.test, nativeIntegrationTest, packagedNativeIntegrationTest, verifyNativeRuntimeJarResource)
+}
+
+val experimentalFfiDirectory = rootProject.file(".toolchain/build/cargo/compukter-ffi-experimental")
+val experimentalFfiLibrary = experimentalFfiDirectory.resolve("release/$nativeFilename")
+val buildExperimentalFleetFfi = tasks.register<Exec>("buildExperimentalFleetFfi") {
+    workingDir(compukterVmRoot)
+    environment("CARGO_TARGET_DIR", experimentalFfiDirectory.absolutePath)
+    commandLine("cargo", "build", "--locked", "--offline", "--release", "-p", "compukter-ffi", "--features", "experimental-fleet-scheduler")
+}
+tasks.register<Test>("experimentalFleetIntegrationTest") {
+    group = "verification"
+    dependsOn(buildExperimentalFleetFfi, ":compiler-k2:generateShellArtifact")
+    useJUnitPlatform()
+    testClassesDirs = sourceSets.test.get().output.classesDirs
+    classpath = sourceSets.test.get().runtimeClasspath
+    filter.includeTestsMatching("ru.lazyhat.compukters.lang.runtime.vm.FfmExperimentalFleetIntegrationTest")
+    val timerFixture = compukterVmRoot.resolve("tests/fixtures/fleet-timer.cpkt")
+    val hostFixture = compukterVmRoot.resolve("tests/fixtures/fleet-host-request.cpkt")
+    val terminalFixture = compukterVmRoot.resolve("tests/fixtures/fleet-terminal.cpkt")
+    val redstoneInputFixture = compukterVmRoot.resolve("tests/fixtures/fleet-redstone-input.cpkt")
+    val redstoneOutputFixture = compukterVmRoot.resolve("tests/fixtures/fleet-redstone-output.cpkt")
+    inputs.file(redstoneInputFixture)
+    inputs.file(redstoneOutputFixture)
+    inputs.file(terminalFixture)
+    val compilerFixture = compukterVmRoot.resolve("tests/fixtures/fleet-compiler.cpkt")
+    val compilerSourceFixture = compukterVmRoot.resolve("tests/fixtures/fleet-compiler-source.cpkt")
+    inputs.file(compilerFixture)
+    inputs.file(compilerSourceFixture)
+    inputs.file(shellArtifact)
+    inputs.file(hostFixture)
+    inputs.file(experimentalFfiLibrary)
+    inputs.file(timerFixture)
+    jvmArgs("--enable-native-access=ALL-UNNAMED", "--illegal-native-access=deny")
+    systemProperty("compukter.ffi.library", experimentalFfiLibrary.absolutePath)
+    systemProperty("compukters.fleet.timer.fixture", timerFixture.absolutePath)
+    systemProperty("compukters.fleet.host.fixture", hostFixture.absolutePath)
+    systemProperty("compukters.fleet.terminal.fixture", terminalFixture.absolutePath)
+    systemProperty("compukters.fleet.redstone.input.fixture", redstoneInputFixture.absolutePath)
+    systemProperty("compukters.fleet.redstone.output.fixture", redstoneOutputFixture.absolutePath)
+    systemProperty("compukters.fleet.compiler.fixture", compilerFixture.absolutePath)
+    systemProperty("compukters.fleet.compiler.source.fixture", compilerSourceFixture.absolutePath)
+    systemProperty("compukters.shell.artifact", shellArtifact.get().asFile.absolutePath)
 }

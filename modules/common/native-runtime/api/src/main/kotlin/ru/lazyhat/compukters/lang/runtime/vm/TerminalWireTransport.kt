@@ -27,9 +27,12 @@ interface TerminalWireTransport : AutoCloseable {
     ): TerminalUpdate
 }
 
+/** A terminal transport whose close operation cannot fail during session transfer. */
+interface FleetTransferableTerminalWireTransport : TerminalWireTransport
+
 class ByteArrayTerminalWireTransport(
     private val bridge: LowLevelVmBridge,
-) : TerminalWireTransport {
+) : FleetTransferableTerminalWireTransport {
     override fun fullState(handle: Long): TerminalState = TerminalWireDecoder(bridge.terminalFullState(handle)).fullState()
 
     override fun changesSince(

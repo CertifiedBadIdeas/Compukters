@@ -24,6 +24,8 @@ data class NativeAdvanceResult(
 )
 
 interface LowLevelVmBridge {
+    fun openExperimentalFleet(config: ExperimentalFleetConfig): ExperimentalFleet = error("experimental fleet is unavailable")
+
     fun openTerminalTransport(): TerminalWireTransport = ByteArrayTerminalWireTransport(this)
 
     fun storeOpen(

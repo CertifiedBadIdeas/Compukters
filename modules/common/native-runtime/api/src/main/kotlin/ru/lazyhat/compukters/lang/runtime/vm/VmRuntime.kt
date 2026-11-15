@@ -36,6 +36,8 @@ object VmRuntime {
         requireSuccess(runtimeLoader().ensureExplicitLoaded(library))
     }
 
+    fun openExperimentalFleet(config: ExperimentalFleetConfig): ExperimentalFleet = bridge().openExperimentalFleet(config)
+
     internal fun bridge(): LowLevelVmBridge {
         requireLoaded()
         return runtimeLoader().requireBridge()

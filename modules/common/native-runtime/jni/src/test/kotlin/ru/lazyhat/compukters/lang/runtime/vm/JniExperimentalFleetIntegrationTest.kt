@@ -401,8 +401,9 @@ class JniExperimentalFleetIntegrationTest {
         val artifact = Path.of(requireNotNull(System.getProperty("compukters.fleet.host.fixture"))).readBytes()
         val capability = CapabilityIdentity("app", "entry", 1, 2)
         val schema = HostCapabilitySchema(capability, listOf(HostOperationSchema(emptyList(), HostValueType.UNIT, true)))
-        val fleet = ExperimentalJniFleet.open(library, 1, 32, 32, 128, 64, 64, 32, ExperimentalRequestInspection(capability, 0, "request exceeds budget"))
-        val session = VmSession.open(artifact, listOf(schema), JniBridge.open(library))
+        val bridge = JniBridge.open(library)
+        val fleet = bridge.openExperimentalFleet(ExperimentalFleetConfig(1, 32, 32, 128, 64, 64, 32, ExperimentalRequestInspection(capability, 0, "request exceeds budget")))
+        val session = VmSession.open(artifact, listOf(schema), bridge)
         val machine = session.transferToFleet(fleet)
         val deadline = System.nanoTime() + 5_000_000_000L
         fun nextEvent(): ExperimentalFleetEvent {
