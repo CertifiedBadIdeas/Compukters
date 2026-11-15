@@ -5,57 +5,99 @@
  */
 package ru.lazyhat.compukters.core.device.runtime.actor.integration
 
-import ru.lazyhat.compukters.core.device.runtime.program.integration.installFfmRuntime
-import ru.lazyhat.compukters.core.device.runtime.program.NativeProgramVmSessionFactory
 import ru.lazyhat.compukters.api.addon.ProgramAddonAction
+import ru.lazyhat.compukters.core.device.runtime.actor.NativeFleetDispatcher
+import ru.lazyhat.compukters.core.device.runtime.actor.NativeFleetEventPump
+import ru.lazyhat.compukters.core.device.runtime.actor.NativeFleetOutbox
+import ru.lazyhat.compukters.core.device.runtime.actor.ProgramRuntimeFrameCredit
+import ru.lazyhat.compukters.core.device.runtime.program.NativeProgramVmSessionFactory
+import ru.lazyhat.compukters.core.device.runtime.program.ProgramFileSystemLaunchContext
 import ru.lazyhat.compukters.core.device.runtime.program.ProgramRuntimeHost
 import ru.lazyhat.compukters.core.device.runtime.program.ProgramRuntimeState
 import ru.lazyhat.compukters.core.device.runtime.program.ProgramStartResult
-import ru.lazyhat.compukters.core.device.runtime.program.ProgramFileSystemLaunchContext
-import ru.lazyhat.compukters.lang.runtime.fs.ComputerId
-import ru.lazyhat.compukters.lang.runtime.fs.VmSystemImage
-import ru.lazyhat.compukters.lang.runtime.fs.WorldFileSystemStore
-import java.nio.file.Files
-import java.nio.ByteBuffer
-import java.nio.ByteOrder
-import java.security.MessageDigest
-import kotlin.test.assertContentEquals
-import kotlin.test.assertFailsWith
-import kotlin.test.assertTrue
-
-import ru.lazyhat.compukters.core.device.runtime.actor.NativeFleetEventPump
-import ru.lazyhat.compukters.core.device.runtime.actor.NativeFleetDispatcher
-import ru.lazyhat.compukters.core.device.runtime.actor.NativeFleetOutbox
-import ru.lazyhat.compukters.core.device.runtime.actor.ProgramRuntimeFrameCredit
+import ru.lazyhat.compukters.core.device.runtime.program.integration.installFfmRuntime
 import ru.lazyhat.compukters.lang.runtime.capability.HostCapabilitySchema
 import ru.lazyhat.compukters.lang.runtime.capability.HostOperationSchema
 import ru.lazyhat.compukters.lang.runtime.capability.HostResponse
 import ru.lazyhat.compukters.lang.runtime.capability.HostValueType
+import ru.lazyhat.compukters.lang.runtime.fs.ComputerId
+import ru.lazyhat.compukters.lang.runtime.fs.VmSystemImage
+import ru.lazyhat.compukters.lang.runtime.fs.WorldFileSystemStore
 import ru.lazyhat.compukters.lang.runtime.vm.CapabilityIdentity
-import ru.lazyhat.compukters.lang.runtime.vm.VmOutcome
 import ru.lazyhat.compukters.lang.runtime.vm.ExperimentalFleetConfig
-import ru.lazyhat.compukters.lang.runtime.vm.ExperimentalFleetTimer
-import ru.lazyhat.compukters.lang.runtime.vm.VmHostRequestIdentity
-import ru.lazyhat.compukters.lang.runtime.vm.VmBridgeException
 import ru.lazyhat.compukters.lang.runtime.vm.ExperimentalFleetEvent
+import ru.lazyhat.compukters.lang.runtime.vm.ExperimentalFleetTimer
+import ru.lazyhat.compukters.lang.runtime.vm.VmBridgeException
+import ru.lazyhat.compukters.lang.runtime.vm.VmHostRequestIdentity
+import ru.lazyhat.compukters.lang.runtime.vm.VmOutcome
 import ru.lazyhat.compukters.lang.runtime.vm.VmRuntime
 import ru.lazyhat.compukters.lang.runtime.vm.VmSession
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
+import java.nio.file.Files
 import java.nio.file.Path
+import java.security.MessageDigest
 import java.util.concurrent.LinkedBlockingQueue
 import java.util.concurrent.TimeUnit
 import kotlin.io.path.readBytes
 import kotlin.test.Test
+import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertNotNull
+import kotlin.test.assertTrue
 
 class NativeFleetEventPumpIntegrationTest {
+    @Test
+    fun `host releases ownership only after native stop and retains filesystem generation`() {
+        installFfmRuntime()
+        VmRuntime.loadNativeLibrary(Path.of(requireNotNull(System.getProperty("compukters.ffi.library"))))
+        val artifact = Path.of(requireNotNull(System.getProperty("compukters.fleet.timer.fixture"))).readBytes()
+        val host = ProgramRuntimeHost(NativeProgramVmSessionFactory())
+        assertEquals(ProgramStartResult.Started, host.start(artifact))
+        VmRuntime.openExperimentalFleet(ExperimentalFleetConfig(1, 32, 32, 128, 64, 64, 32)).use { fleet ->
+            val machine = host.transferToFleet(fleet, 0)
+
+            fun next(): ExperimentalFleetEvent {
+                val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5)
+                while (System.nanoTime() < deadline) {
+                    fleet.poll()?.let { return it }
+                    Thread.yield()
+                }
+                error("timed out waiting for fleet event")
+            }
+            fleet.filesystemGeneration(machine, 1)
+            val generation = (next() as ExperimentalFleetEvent.FilesystemGeneration).generation
+            assertFailsWith<IllegalStateException> {
+                host.acknowledgeFleetStop(
+                    fleet,
+                    ExperimentalFleetEvent.Stopped(machine + 1, emptyList()),
+                    ProgramRuntimeState.Idle,
+                    generation,
+                )
+            }
+            assertFailsWith<IllegalStateException> { host.close() }
+            fleet.stop(machine)
+            val stopped = next() as ExperimentalFleetEvent.Stopped
+            host.acknowledgeFleetStop(fleet, stopped, ProgramRuntimeState.Idle, generation)
+            assertEquals(ProgramRuntimeState.Idle, host.state)
+            assertEquals(generation, host.lastClosedFileSystemGeneration)
+            assertEquals(ProgramStartResult.Started, host.start(artifact))
+            host.close()
+        }
+    }
+
     @Test
     fun `live host transfers its timer to rust and resumes it after recovery`() {
         installFfmRuntime()
         VmRuntime.loadNativeLibrary(Path.of(requireNotNull(System.getProperty("compukters.ffi.library"))))
         val artifact = Path.of(requireNotNull(System.getProperty("compukters.fleet.timer.fixture"))).readBytes()
         val actions = mutableListOf<ProgramAddonAction>()
-        val host = ProgramRuntimeHost(NativeProgramVmSessionFactory(), addonLifecyclePort = { actions.add(it); true })
+        val host =
+            ProgramRuntimeHost(NativeProgramVmSessionFactory(), addonLifecyclePort = {
+                actions.add(it)
+                true
+            })
         assertEquals(ProgramStartResult.Started, host.start(artifact))
         assertEquals(ProgramRuntimeState.Running, host.serverTick(1))
         VmRuntime.openExperimentalFleet(ExperimentalFleetConfig(1, 32, 32, 128, 64, 64, 32, coordinatedTurns = true)).use { fleet ->
@@ -87,8 +129,15 @@ class NativeFleetEventPumpIntegrationTest {
         installFfmRuntime()
         VmRuntime.loadNativeLibrary(Path.of(requireNotNull(System.getProperty("compukters.ffi.library"))))
         val artifact = Path.of(requireNotNull(System.getProperty("compukters.fleet.timer.fixture"))).readBytes()
-        val header = ByteBuffer.allocate(16).order(ByteOrder.LITTLE_ENDIAN)
-            .put("CPKTSYS\u0000".encodeToByteArray()).putShort(1).putShort(0).putInt(0).array()
+        val header =
+            ByteBuffer
+                .allocate(16)
+                .order(ByteOrder.LITTLE_ENDIAN)
+                .put("CPKTSYS\u0000".encodeToByteArray())
+                .putShort(1)
+                .putShort(0)
+                .putInt(0)
+                .array()
         val image = VmSystemImage.of(header + MessageDigest.getInstance("SHA-256").digest(header))
         val root = Files.createTempDirectory("fleet-session-integration-").toRealPath()
         try {
@@ -136,7 +185,9 @@ class NativeFleetEventPumpIntegrationTest {
                     restored.session.close()
                 }
             }
-        } finally { root.toFile().deleteRecursively() }
+        } finally {
+            root.toFile().deleteRecursively()
+        }
     }
 
     @Test
@@ -144,8 +195,11 @@ class NativeFleetEventPumpIntegrationTest {
         installFfmRuntime()
         VmRuntime.loadNativeLibrary(Path.of(requireNotNull(System.getProperty("compukters.ffi.library"))))
         val artifact = Path.of(requireNotNull(System.getProperty("compukters.fleet.host.fixture"))).readBytes()
-        val schema = HostCapabilitySchema(CapabilityIdentity("app", "entry", 1, 2),
-            listOf(HostOperationSchema(emptyList(), HostValueType.UNIT, true)))
+        val schema =
+            HostCapabilitySchema(
+                CapabilityIdentity("app", "entry", 1, 2),
+                listOf(HostOperationSchema(emptyList(), HostValueType.UNIT, true)),
+            )
         val notifications = LinkedBlockingQueue<Unit>()
         val events = mutableListOf<ExperimentalFleetEvent>()
         val owner = Thread.currentThread()
@@ -153,7 +207,14 @@ class NativeFleetEventPumpIntegrationTest {
             val session = VmSession.open(artifact, listOf(schema))
             val machine = session.transferToFleet(fleet)
             val credit = ProgramRuntimeFrameCredit(4, 256, Long.MAX_VALUE, true)
-            NativeFleetDispatcher(fleet, 8, 8, { check(Thread.currentThread() === owner) }, { notifications.offer(Unit) }, events::add).use { pump ->
+            NativeFleetDispatcher(
+                fleet,
+                8,
+                8,
+                { check(Thread.currentThread() === owner) },
+                { notifications.offer(Unit) },
+                events::add,
+            ).use { pump ->
                 fun await(predicate: (ExperimentalFleetEvent) -> Boolean): ExperimentalFleetEvent {
                     val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5)
                     while (true) {
@@ -166,7 +227,14 @@ class NativeFleetEventPumpIntegrationTest {
                     }
                 }
                 fleet.grant(machine, 4, 256)
-                val request = ((await { it is ExperimentalFleetEvent.Outcome } as ExperimentalFleetEvent.Outcome).outcome as VmOutcome.HostRequestBatch).requests.single()
+                val request =
+                    (
+                        (
+                            await {
+                                it is ExperimentalFleetEvent.Outcome
+                            } as ExperimentalFleetEvent.Outcome
+                        ).outcome as VmOutcome.HostRequestBatch
+                    ).requests.single()
                 val first = await { it is ExperimentalFleetEvent.Quiescent } as ExperimentalFleetEvent.Quiescent
                 val firstDelta = credit.finishCumulative(first.retired, 256)
                 val remaining = credit.remaining
@@ -175,10 +243,15 @@ class NativeFleetEventPumpIntegrationTest {
                 assertTrue(pump.outbox.offer(machine, listOf(NativeFleetOutbox.Command.DetachWithTimers(4))))
                 pump.pump(0, 1)
                 await { it is ExperimentalFleetEvent.DetachRejected }
-                assertTrue(pump.outbox.offer(machine, listOf(
-                    NativeFleetOutbox.Command.Reply(request.identity, HostResponse.UnitSuccess),
-                    NativeFleetOutbox.Command.Grant(4, remaining.toInt(), Long.MAX_VALUE),
-                )))
+                assertTrue(
+                    pump.outbox.offer(
+                        machine,
+                        listOf(
+                            NativeFleetOutbox.Command.Reply(request.identity, HostResponse.UnitSuccess),
+                            NativeFleetOutbox.Command.Grant(4, remaining.toInt(), Long.MAX_VALUE),
+                        ),
+                    ),
+                )
                 credit.inFlight = true
                 pump.pump(0, 2)
                 val halted = await { it is ExperimentalFleetEvent.Outcome } as ExperimentalFleetEvent.Outcome
@@ -206,7 +279,12 @@ class NativeFleetEventPumpIntegrationTest {
         VmRuntime.openExperimentalFleet(ExperimentalFleetConfig(1, 32, 32, 128, 64, 64, 32)).use { fleet ->
             val session = VmSession.open(artifact)
             val machine = session.transferToFleet(fleet)
-            NativeFleetEventPump(fleet, { check(Thread.currentThread() === owner) }, { notifications.offer(Unit) }, events::add).use { pump ->
+            NativeFleetEventPump(
+                fleet,
+                { check(Thread.currentThread() === owner) },
+                { notifications.offer(Unit) },
+                events::add,
+            ).use { pump ->
                 fun await(predicate: (ExperimentalFleetEvent) -> Boolean) {
                     val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5)
                     while (events.none(predicate)) {

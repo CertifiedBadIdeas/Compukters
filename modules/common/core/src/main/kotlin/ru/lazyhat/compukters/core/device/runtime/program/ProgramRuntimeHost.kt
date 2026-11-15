@@ -30,6 +30,7 @@ import ru.lazyhat.compukters.lang.runtime.capability.HostResponse
 import ru.lazyhat.compukters.lang.runtime.fs.ComputerId
 import ru.lazyhat.compukters.lang.runtime.fs.VmSystemImage
 import ru.lazyhat.compukters.lang.runtime.fs.WorldFileSystemStore
+import ru.lazyhat.compukters.lang.runtime.vm.ExperimentalFleetEvent
 import ru.lazyhat.compukters.lang.runtime.vm.ExperimentalFleetSessionOwner
 import ru.lazyhat.compukters.lang.runtime.vm.ExperimentalFleetTimer
 import ru.lazyhat.compukters.lang.runtime.vm.HostFailureKind
@@ -307,7 +308,10 @@ class ProgramRuntimeHost internal constructor(
     }
 
     /** Transfers a quiescent host and its pending timers without duplicating ownership. */
-    internal fun transferToFleet(fleet: ExperimentalFleetSessionOwner, worldTick: Long): Long {
+    internal fun transferToFleet(
+        fleet: ExperimentalFleetSessionOwner,
+        worldTick: Long,
+    ): Long {
         require(worldTick >= 0 && worldTick >= lastObservedTick) { "fleet transfer tick must not move backwards" }
         check(fleetOwnership == null && preparedRestoration == null) { "host is not available for fleet transfer" }
         check(state == ProgramRuntimeState.Running || state == ProgramRuntimeState.WaitingForInput) { "host is not running" }
@@ -315,11 +319,12 @@ class ProgramRuntimeHost internal constructor(
             "external requests must be settled before fleet transfer"
         }
         val active = requireNotNull(session)
-        val timers = pendingTimerRequests.values.map { timer ->
-            check(timer.session === active) { "timer belongs to a different session" }
-            val duration = (timer.request.arguments.single() as VmValue.I32).value
-            ExperimentalFleetTimer(timer.request.identity, timer.programId, duration, (timer.wakeTick - worldTick).coerceAtLeast(0))
-        }
+        val timers =
+            pendingTimerRequests.values.map { timer ->
+                check(timer.session === active) { "timer belongs to a different session" }
+                val duration = (timer.request.arguments.single() as VmValue.I32).value
+                ExperimentalFleetTimer(timer.request.identity, timer.programId, duration, (timer.wakeTick - worldTick).coerceAtLeast(0))
+            }
         val machine = active.transferToFleet(fleet, worldTick, timers)
         fleetOwnership = fleet to machine
         pendingTimerRequests.clear()
@@ -339,10 +344,18 @@ class ProgramRuntimeHost internal constructor(
         require(timers.size <= MAXIMUM_PENDING_TIMER_REQUESTS && timers.map { it.identity }.toSet().size == timers.size)
         require(timers.all { it.scope in programScopes }) { "timer references an unknown program scope" }
         val active = requireNotNull(session)
-        val restored = timers.associate { timer ->
-            val request = VmHostRequest(timer.identity.requestId, HostRequestRoutes.timer, 0, listOf(VmValue.I32(timer.duration)), timer.identity.taskId)
-            timer.identity to PendingTimerRequest(active, request, worldTick.saturatingAdd(timer.remaining), timer.scope)
-        }
+        val restored =
+            timers.associate { timer ->
+                val request =
+                    VmHostRequest(
+                        timer.identity.requestId,
+                        HostRequestRoutes.timer,
+                        0,
+                        listOf(VmValue.I32(timer.duration)),
+                        timer.identity.taskId,
+                    )
+                timer.identity to PendingTimerRequest(active, request, worldTick.saturatingAdd(timer.remaining), timer.scope)
+            }
         active.recoverFromFleet(fleet, machine)
         pendingTimerRequests.putAll(restored)
         fleetOwnership = null
@@ -352,6 +365,35 @@ class ProgramRuntimeHost internal constructor(
         remainingHostRequests = 0
         lastObservedTick = worldTick
         if (state == ProgramRuntimeState.WaitingForInput && timers.isNotEmpty()) state = ProgramRuntimeState.Running
+    }
+
+    /**
+     * Release host-side state after the fleet reports that it destroyed the machine.
+     * The caller must cancel the external requests named by [event] before acknowledging it.
+     * For a persistent session the generation must be captured from the fleet before stopping.
+     */
+    internal fun acknowledgeFleetStop(
+        fleet: ExperimentalFleetSessionOwner,
+        event: ExperimentalFleetEvent.Stopped,
+        finalState: ProgramRuntimeState,
+        filesystemGeneration: Long?,
+    ) {
+        check(fleetOwnership?.let { it.first === fleet && it.second == event.machine } == true) { "fleet does not own this host" }
+        require(
+            finalState == ProgramRuntimeState.Idle || finalState == ProgramRuntimeState.Closed || finalState is ProgramRuntimeState.Failed,
+        )
+        require(filesystemGeneration == null || filesystemGeneration >= 0)
+        val active = requireNotNull(session)
+        active.acknowledgeFleetStop(fleet, event.machine)
+        fleetOwnership = null
+        session = null
+        if (filesystemGeneration != null) lastClosedFileSystemGeneration = filesystemGeneration
+        try {
+            active.close()
+        } finally {
+            releaseSession()
+            state = finalState
+        }
     }
 
     fun serverTick(): ProgramRuntimeState = serverTick(if (lastObservedTick == Long.MAX_VALUE) Long.MAX_VALUE else lastObservedTick + 1)
@@ -441,7 +483,9 @@ class ProgramRuntimeHost internal constructor(
                     return
                 }
             when (outcome) {
-                is VmOutcome.ProcessEntered, is VmOutcome.ProcessExited, is VmOutcome.ProcessReplaced -> applyProcessLifecycle(outcome)
+                is VmOutcome.ProcessEntered, is VmOutcome.ProcessExited, is VmOutcome.ProcessReplaced -> {
+                    applyProcessLifecycle(outcome)
+                }
 
                 VmOutcome.SliceExhausted -> {
                     if (retirementAllowance != Int.MAX_VALUE && retiredInstructionsLastTick >= retirementAllowance) return
@@ -611,7 +655,11 @@ class ProgramRuntimeHost internal constructor(
     }
 
     /** Applies process events delivered by the fleet on the owner thread. */
-    internal fun observeFleetLifecycle(fleet: ExperimentalFleetSessionOwner, machine: Long, outcome: VmOutcome) {
+    internal fun observeFleetLifecycle(
+        fleet: ExperimentalFleetSessionOwner,
+        machine: Long,
+        outcome: VmOutcome,
+    ) {
         check(fleetOwnership?.let { it.first === fleet && it.second == machine } == true) { "fleet does not own this host" }
         applyProcessLifecycle(outcome)
     }
@@ -623,6 +671,7 @@ class ProgramRuntimeHost internal constructor(
                 programScopes.addLast(outcome.programId)
                 check(addonLifecyclePort.submit(ProgramAddonAction.Started(outcome.programId))) { "addon lifecycle action limit exceeded" }
             }
+
             is VmOutcome.ProcessExited -> {
                 check(programScopes.size > 1 && programScopes.last() == outcome.programId) { "native program scope mismatch" }
                 programScopes.removeLast()
@@ -630,6 +679,7 @@ class ProgramRuntimeHost internal constructor(
                 pendingTimerRequests.entries.removeAll { it.value.programId == outcome.programId }
                 check(addonLifecyclePort.submit(ProgramAddonAction.Stopped(outcome.programId))) { "addon lifecycle action limit exceeded" }
             }
+
             is VmOutcome.ProcessReplaced -> {
                 check(programScopes.last() == outcome.previousProgramId) { "native replacement scope mismatch" }
                 check(outcome.programId > programScopes.last()) { "native replacement identity must increase" }
@@ -637,10 +687,15 @@ class ProgramRuntimeHost internal constructor(
                 programScopes.addLast(outcome.programId)
                 pendingAddonRequests.entries.removeAll { it.value.programId == outcome.previousProgramId }
                 pendingTimerRequests.entries.removeAll { it.value.programId == outcome.previousProgramId }
-                check(addonLifecyclePort.submit(ProgramAddonAction.Stopped(outcome.previousProgramId))) { "addon lifecycle action limit exceeded" }
+                check(
+                    addonLifecyclePort.submit(ProgramAddonAction.Stopped(outcome.previousProgramId)),
+                ) { "addon lifecycle action limit exceeded" }
                 check(addonLifecyclePort.submit(ProgramAddonAction.Started(outcome.programId))) { "addon lifecycle action limit exceeded" }
             }
-            else -> throw IllegalArgumentException("outcome is not a process lifecycle event")
+
+            else -> {
+                throw IllegalArgumentException("outcome is not a process lifecycle event")
+            }
         }
     }
 
@@ -1071,7 +1126,6 @@ class ProgramRuntimeHost internal constructor(
         val UNAVAILABLE_ADDON_PORT = ProgramAddonRequestPort { false }
         const val MAXIMUM_PENDING_ADDON_REQUESTS = 256
         const val MAXIMUM_PENDING_TIMER_REQUESTS = 256
-
     }
 
     private fun deferAddonRequest(
