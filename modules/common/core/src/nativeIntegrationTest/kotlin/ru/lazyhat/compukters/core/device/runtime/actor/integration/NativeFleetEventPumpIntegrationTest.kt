@@ -7,6 +7,7 @@ package ru.lazyhat.compukters.core.device.runtime.actor.integration
 
 import ru.lazyhat.compukters.core.device.runtime.program.integration.installFfmRuntime
 import ru.lazyhat.compukters.core.device.runtime.program.NativeProgramVmSessionFactory
+import ru.lazyhat.compukters.api.addon.ProgramAddonAction
 import ru.lazyhat.compukters.core.device.runtime.program.ProgramRuntimeHost
 import ru.lazyhat.compukters.core.device.runtime.program.ProgramRuntimeState
 import ru.lazyhat.compukters.core.device.runtime.program.ProgramStartResult
@@ -51,11 +52,16 @@ class NativeFleetEventPumpIntegrationTest {
         installFfmRuntime()
         VmRuntime.loadNativeLibrary(Path.of(requireNotNull(System.getProperty("compukters.ffi.library"))))
         val artifact = Path.of(requireNotNull(System.getProperty("compukters.fleet.timer.fixture"))).readBytes()
-        val host = ProgramRuntimeHost(NativeProgramVmSessionFactory())
+        val actions = mutableListOf<ProgramAddonAction>()
+        val host = ProgramRuntimeHost(NativeProgramVmSessionFactory(), addonLifecyclePort = { actions.add(it); true })
         assertEquals(ProgramStartResult.Started, host.start(artifact))
         assertEquals(ProgramRuntimeState.Running, host.serverTick(1))
         VmRuntime.openExperimentalFleet(ExperimentalFleetConfig(1, 32, 32, 128, 64, 64, 32, coordinatedTurns = true)).use { fleet ->
             val machine = host.transferToFleet(fleet, 1)
+            assertFailsWith<IllegalStateException> { host.observeFleetLifecycle(fleet, machine + 1, VmOutcome.ProcessEntered(1)) }
+            host.observeFleetLifecycle(fleet, machine, VmOutcome.ProcessEntered(1))
+            host.observeFleetLifecycle(fleet, machine, VmOutcome.ProcessExited(1))
+            assertEquals(listOf(ProgramAddonAction.Started(1), ProgramAddonAction.Stopped(1)), actions)
             assertFailsWith<IllegalStateException> { host.serverTick(2) }
             assertFailsWith<IllegalStateException> { host.shutdown() }
             fleet.detachWithTimers(machine, 2)

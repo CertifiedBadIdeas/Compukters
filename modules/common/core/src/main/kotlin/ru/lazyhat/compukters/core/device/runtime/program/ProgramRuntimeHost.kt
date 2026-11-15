@@ -441,47 +441,7 @@ class ProgramRuntimeHost internal constructor(
                     return
                 }
             when (outcome) {
-                is VmOutcome.ProcessEntered -> {
-                    check(!programScopes.contains(outcome.programId)) { "duplicate native program id" }
-                    programScopes.addLast(outcome.programId)
-                    check(
-                        addonLifecyclePort.submit(
-                            ProgramAddonAction
-                                .Started(outcome.programId),
-                        ),
-                    ) {
-                        "addon lifecycle action limit exceeded"
-                    }
-                }
-
-                is VmOutcome.ProcessExited -> {
-                    check(programScopes.size > 1 && programScopes.removeLast() == outcome.programId) { "native program scope mismatch" }
-                    pendingAddonRequests.entries.removeAll { it.value.programId == outcome.programId }
-                    pendingTimerRequests.entries.removeAll { it.value.programId == outcome.programId }
-                    check(
-                        addonLifecyclePort.submit(
-                            ProgramAddonAction
-                                .Stopped(outcome.programId),
-                        ),
-                    ) {
-                        "addon lifecycle action limit exceeded"
-                    }
-                }
-
-                is VmOutcome.ProcessReplaced -> {
-                    check(programScopes.last() == outcome.previousProgramId) { "native replacement scope mismatch" }
-                    check(outcome.programId > programScopes.last()) { "native replacement identity must increase" }
-                    programScopes.removeLast()
-                    programScopes.addLast(outcome.programId)
-                    pendingAddonRequests.entries.removeAll { it.value.programId == outcome.previousProgramId }
-                    pendingTimerRequests.entries.removeAll { it.value.programId == outcome.previousProgramId }
-                    check(addonLifecyclePort.submit(ProgramAddonAction.Stopped(outcome.previousProgramId))) {
-                        "addon lifecycle action limit exceeded"
-                    }
-                    check(addonLifecyclePort.submit(ProgramAddonAction.Started(outcome.programId))) {
-                        "addon lifecycle action limit exceeded"
-                    }
-                }
+                is VmOutcome.ProcessEntered, is VmOutcome.ProcessExited, is VmOutcome.ProcessReplaced -> applyProcessLifecycle(outcome)
 
                 VmOutcome.SliceExhausted -> {
                     if (retirementAllowance != Int.MAX_VALUE && retiredInstructionsLastTick >= retirementAllowance) return
@@ -647,6 +607,40 @@ class ProgramRuntimeHost internal constructor(
                     return
                 }
             }
+        }
+    }
+
+    /** Applies process events delivered by the fleet on the owner thread. */
+    internal fun observeFleetLifecycle(fleet: ExperimentalFleetSessionOwner, machine: Long, outcome: VmOutcome) {
+        check(fleetOwnership?.let { it.first === fleet && it.second == machine } == true) { "fleet does not own this host" }
+        applyProcessLifecycle(outcome)
+    }
+
+    private fun applyProcessLifecycle(outcome: VmOutcome) {
+        when (outcome) {
+            is VmOutcome.ProcessEntered -> {
+                check(!programScopes.contains(outcome.programId)) { "duplicate native program id" }
+                programScopes.addLast(outcome.programId)
+                check(addonLifecyclePort.submit(ProgramAddonAction.Started(outcome.programId))) { "addon lifecycle action limit exceeded" }
+            }
+            is VmOutcome.ProcessExited -> {
+                check(programScopes.size > 1 && programScopes.last() == outcome.programId) { "native program scope mismatch" }
+                programScopes.removeLast()
+                pendingAddonRequests.entries.removeAll { it.value.programId == outcome.programId }
+                pendingTimerRequests.entries.removeAll { it.value.programId == outcome.programId }
+                check(addonLifecyclePort.submit(ProgramAddonAction.Stopped(outcome.programId))) { "addon lifecycle action limit exceeded" }
+            }
+            is VmOutcome.ProcessReplaced -> {
+                check(programScopes.last() == outcome.previousProgramId) { "native replacement scope mismatch" }
+                check(outcome.programId > programScopes.last()) { "native replacement identity must increase" }
+                programScopes.removeLast()
+                programScopes.addLast(outcome.programId)
+                pendingAddonRequests.entries.removeAll { it.value.programId == outcome.previousProgramId }
+                pendingTimerRequests.entries.removeAll { it.value.programId == outcome.previousProgramId }
+                check(addonLifecyclePort.submit(ProgramAddonAction.Stopped(outcome.previousProgramId))) { "addon lifecycle action limit exceeded" }
+                check(addonLifecyclePort.submit(ProgramAddonAction.Started(outcome.programId))) { "addon lifecycle action limit exceeded" }
+            }
+            else -> throw IllegalArgumentException("outcome is not a process lifecycle event")
         }
     }
 
