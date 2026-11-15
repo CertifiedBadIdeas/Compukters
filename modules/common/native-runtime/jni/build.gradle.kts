@@ -207,6 +207,9 @@ tasks.register<Test>("experimentalFleetIntegrationTest") {
     filter.includeTestsMatching("ru.lazyhat.compukters.lang.runtime.vm.JniExperimentalFleetIntegrationTest")
     inputs.file(experimentalJniLibrary)
     inputs.file(shellArtifact)
+    val hostRequestFixture = compukterVmRoot.resolve("tests/fixtures/fleet-host-request.cpkt")
+    inputs.file(hostRequestFixture)
     systemProperty("compukter.jni.library", experimentalJniLibrary.absolutePath)
     systemProperty("compukters.shell.artifact", shellArtifact.get().asFile.absolutePath)
+    systemProperty("compukters.fleet.host.fixture", hostRequestFixture.absolutePath)
 }

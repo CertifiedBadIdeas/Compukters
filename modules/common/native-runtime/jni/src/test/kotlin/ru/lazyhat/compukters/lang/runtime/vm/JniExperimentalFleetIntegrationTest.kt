@@ -13,8 +13,54 @@ import kotlin.io.path.readBytes
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
+import ru.lazyhat.compukters.lang.runtime.capability.HostCapabilitySchema
+import ru.lazyhat.compukters.lang.runtime.capability.HostOperationSchema
+import ru.lazyhat.compukters.lang.runtime.capability.HostResponse
+import ru.lazyhat.compukters.lang.runtime.capability.HostValueType
 
 class JniExperimentalFleetIntegrationTest {
+    @Test
+    fun `host inspection and response resume a real guest through JNI`() {
+        val library = Path.of(requireNotNull(System.getProperty("compukter.jni.library")))
+        val artifact = Path.of(requireNotNull(System.getProperty("compukters.fleet.host.fixture"))).readBytes()
+        val capability = CapabilityIdentity("app", "entry", 1, 2)
+        val schema = HostCapabilitySchema(capability, listOf(HostOperationSchema(emptyList(), HostValueType.UNIT, true)))
+        val fleet = ExperimentalJniFleet.open(library, 1, 32, 32, 128, 64, 64, 32, ExperimentalRequestInspection(capability, 0, "request exceeds budget"))
+        val session = VmSession.open(artifact, listOf(schema), JniBridge.open(library))
+        val machine = session.transferToFleet(fleet)
+        val deadline = System.nanoTime() + 5_000_000_000L
+        fun nextEvent(): ExperimentalFleetEvent {
+            while (System.nanoTime() < deadline) {
+                fleet.poll()?.let { return it }
+                Thread.yield()
+            }
+            error("timed out waiting for fleet event")
+        }
+        var detached = false
+        try {
+            fleet.grant(machine, 1, 256)
+            val inspection = nextEvent() as ExperimentalFleetEvent.Inspection
+            assertEquals(machine, inspection.machine)
+            assertEquals(capability, inspection.request.capability)
+            assertEquals(0, inspection.request.operation)
+            fleet.resolveCost(machine, inspection.request.identity, 1)
+            val request = (nextEvent() as ExperimentalFleetEvent.Outcome).outcome as VmOutcome.HostRequestBatch
+            assertEquals(inspection.request.identity, request.requests.single().identity)
+            fleet.reply(machine, inspection.request.identity, HostResponse.UnitSuccess)
+            assertEquals(VmOutcome.Halted(null), (nextEvent() as ExperimentalFleetEvent.Outcome).outcome)
+            fleet.detach(machine)
+            assertEquals(ExperimentalFleetEvent.Detached(machine), nextEvent())
+            detached = true
+            VmSession.restoreFromFleet(fleet, machine).close()
+        } finally {
+            if (!detached) {
+                fleet.stop(machine)
+                while (nextEvent() !is ExperimentalFleetEvent.Stopped) { }
+            }
+            session.close()
+            fleet.close()
+        }
+    }
     @Test
     fun `stop event survives a short output buffer and handles are isolated`() {
         JniBridge.open(Path.of(requireNotNull(System.getProperty("compukter.jni.library"))))
