@@ -90,7 +90,7 @@ internal class NativeFleetOutbox(
             override fun send(
                 fleet: ExperimentalFleet,
                 machine: Long,
-            ) = fleet.stop(machine)
+            ) = fleet.stop(machine, independent = true)
         }
 
         data class DetachWithTimers(
@@ -99,13 +99,14 @@ internal class NativeFleetOutbox(
             override fun send(
                 fleet: ExperimentalFleet,
                 machine: Long,
-            ) = fleet.detachWithTimers(machine, tick)
+            ) = fleet.detachWithTimers(machine, tick, independent = true)
         }
     }
 
     private val queues = mutableMapOf<Long, ArrayDeque<Command>>()
     private val ready = ArrayDeque<Long>()
     private val closing = mutableMapOf<Long, Command.Lifecycle>()
+    private val awaitingLifecycle = ArrayDeque<Long>()
     private var count = 0
 
     /** Either retain the entire batch in order, or retain none of it. */
@@ -157,7 +158,7 @@ internal class NativeFleetOutbox(
             attempts++
             try {
                 queue.first.send(fleet, machine)
-                queue.removeFirst()
+                if (queue.removeFirst() is Command.Lifecycle) awaitingLifecycle.addLast(machine)
                 count--
                 sent++
             } catch (_: VmFleetBusyException) {
@@ -177,6 +178,7 @@ internal class NativeFleetOutbox(
     /** Discard only after the owner has dealt with the machine's pending operations. */
     fun remove(machine: Long): List<Command> {
         checkOwner()
+        check(machine !in closing || machine in queues) { "native lifecycle must complete before removal" }
         closing.remove(machine)
         val queue = queues.remove(machine) ?: return emptyList()
         check(ready.remove(machine))
@@ -184,10 +186,62 @@ internal class NativeFleetOutbox(
         return queue.toList()
     }
 
-    /** A lifecycle result may only arrive after its command and all earlier work were submitted. */
-    fun acknowledgeLifecycle(event: ExperimentalFleetEvent) {
+    /**
+     * Probe at most [maximumAttempts] submitted closes, stopping after a full empty round.
+     * Slots rotate after each probe so one large detach cannot monopolize delivery, while
+     * a lone machine can drain more than one prefix event within the caller's allowance.
+     * This never polls ordinary output. Prefixes belong to lifecycle reconciliation, not world
+     * execution: already-published ordinary observations can still be waiting in that queue.
+     */
+    fun pumpLifecycle(
+        maximumEvents: Int,
+        maximumAttempts: Int,
+        deadlineNanos: Long = Long.MAX_VALUE,
+        deliver: (ExperimentalFleetEvent) -> Unit,
+    ): Int {
         checkOwner()
-        val machine =
+        require(maximumEvents >= 0 && maximumAttempts >= 0)
+        var attempted = 0
+        var delivered = 0
+        var emptyProbes = 0
+        while (attempted < maximumAttempts && delivered < maximumEvents && awaitingLifecycle.isNotEmpty() &&
+            (deadlineNanos == Long.MAX_VALUE || nanoTime() - deadlineNanos < 0)
+        ) {
+            val machine = awaitingLifecycle.removeFirst()
+            val event =
+                try {
+                    fleet.pollLifecycle(machine)
+                } catch (error: Throwable) {
+                    awaitingLifecycle.addFirst(machine)
+                    throw error
+                }
+            attempted++
+            when (event) {
+                is ExperimentalFleetEvent.Stopped, is ExperimentalFleetEvent.Detached,
+                is ExperimentalFleetEvent.DetachRejected,
+                -> acknowledgeLifecycle(machine, event)
+
+                // Rotate before invoking owner code, which can synchronously close another machine.
+                else -> awaitingLifecycle.addLast(machine)
+            }
+            if (event == null) {
+                emptyProbes++
+                if (emptyProbes >= awaitingLifecycle.size) break
+                continue
+            }
+            emptyProbes = 0
+            delivered++
+            deliver(event)
+        }
+        return delivered
+    }
+
+    /** A lifecycle result may only arrive after its command and all earlier work were submitted. */
+    private fun acknowledgeLifecycle(
+        machine: Long,
+        event: ExperimentalFleetEvent,
+    ) {
+        val eventMachine =
             when (event) {
                 is ExperimentalFleetEvent.Stopped -> event.machine
                 is ExperimentalFleetEvent.Detached -> event.machine
@@ -196,7 +250,7 @@ internal class NativeFleetOutbox(
             }
         val expected = closing[machine]
         check(
-            machine !in queues &&
+            machine == eventMachine && machine !in queues &&
                 when (event) {
                     is ExperimentalFleetEvent.Stopped -> expected == Command.Stop
                     is ExperimentalFleetEvent.Detached, is ExperimentalFleetEvent.DetachRejected -> expected is Command.DetachWithTimers

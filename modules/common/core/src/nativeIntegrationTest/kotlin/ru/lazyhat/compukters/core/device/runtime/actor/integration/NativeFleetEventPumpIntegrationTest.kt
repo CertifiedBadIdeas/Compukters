@@ -218,6 +218,7 @@ class NativeFleetEventPumpIntegrationTest {
                 fun await(predicate: (ExperimentalFleetEvent) -> Boolean): ExperimentalFleetEvent {
                     val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5)
                     while (true) {
+                        pump.pumpLifecycle(32, 32, deliver = events::add)
                         pump.pump(32, 32)
                         val index = events.indexOfFirst(predicate)
                         if (index >= 0) return events.removeAt(index)
@@ -265,6 +266,69 @@ class NativeFleetEventPumpIntegrationTest {
                 await { it is ExperimentalFleetEvent.Stopped }
             }
             session.close()
+        }
+    }
+
+    @Test
+    fun `dispatcher stops and detaches without delivering another machines queued output`() {
+        installFfmRuntime()
+        VmRuntime.loadNativeLibrary(Path.of(requireNotNull(System.getProperty("compukters.ffi.library"))))
+        val artifact = Path.of(requireNotNull(System.getProperty("compukters.fleet.timer.fixture"))).readBytes()
+        val owner = Thread.currentThread()
+        VmRuntime.openExperimentalFleet(ExperimentalFleetConfig(1, 32, 1, 128, 64, 64, 32)).use { fleet ->
+            val stoppedSession = VmSession.open(artifact)
+            val detachedSession = VmSession.open(artifact)
+            val observer = VmSession.open(artifact)
+            val stoppedMachine = stoppedSession.transferToFleet(fleet)
+            val detachedMachine = detachedSession.transferToFleet(fleet)
+            val observerMachine = observer.transferToFleet(fleet)
+            val initialGeneration = fleet.eventGeneration()
+            fleet.resourceSnapshot(observerMachine, 42)
+            assertTrue(fleet.waitEvents(initialGeneration, 5_000))
+            NativeFleetDispatcher(
+                fleet,
+                8,
+                8,
+                { check(Thread.currentThread() === owner) },
+                {},
+                { error("ordinary output must remain queued") },
+            ).use { dispatcher ->
+                assertTrue(dispatcher.outbox.offer(stoppedMachine, listOf(NativeFleetOutbox.Command.Stop)))
+                assertTrue(dispatcher.outbox.offer(detachedMachine, listOf(NativeFleetOutbox.Command.DetachWithTimers(0))))
+                assertEquals(0, dispatcher.pump(0, 2))
+                val completed = mutableListOf<ExperimentalFleetEvent>()
+                val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5)
+                while (completed.size < 2) {
+                    check(System.nanoTime() < deadline) { "independent lifecycle stalled behind ordinary output" }
+                    dispatcher.pumpLifecycle(2, 2) {
+                        check(Thread.currentThread() === owner)
+                        completed += it
+                    }
+                    Thread.yield()
+                }
+                assertTrue(completed.any { it is ExperimentalFleetEvent.Stopped && it.machine == stoppedMachine })
+                assertTrue(completed.any { it is ExperimentalFleetEvent.Detached && it.machine == detachedMachine })
+                VmSession.restoreFromFleet(fleet, detachedMachine).close()
+                // Nothing from the unrelated VM was discarded or delivered as part of close.
+                val pending = fleet.poll() as ExperimentalFleetEvent.Resources
+                assertEquals(observerMachine, pending.machine)
+                assertEquals(42L, pending.request)
+                assertEquals(null, fleet.poll())
+                assertTrue(dispatcher.outbox.offer(observerMachine, listOf(NativeFleetOutbox.Command.Stop)))
+                dispatcher.pump(0, 1)
+                var observerStopped = false
+                while (!observerStopped) {
+                    check(System.nanoTime() < deadline)
+                    dispatcher.pumpLifecycle(1, 1) {
+                        assertTrue(it is ExperimentalFleetEvent.Stopped && it.machine == observerMachine)
+                        observerStopped = true
+                    }
+                    Thread.yield()
+                }
+            }
+            stoppedSession.close()
+            detachedSession.close()
+            observer.close()
         }
     }
 
