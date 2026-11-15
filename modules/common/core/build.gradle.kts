@@ -167,3 +167,20 @@ tasks.register("prepareJvmFleetProbe") {
     group = "verification"
     dependsOn("prepareJvmMemoryProbe")
 }
+
+// Exercises owner-thread event delivery against the opt-in native scheduler.
+tasks.register<Test>("experimentalFleetEventIntegrationTest") {
+    group = "verification"
+    dependsOn(":native-runtime-ffm:buildExperimentalFleetFfi", ":native-runtime-ffm:jar")
+    useJUnitPlatform()
+    testClassesDirs = nativeIntegrationTest.output.classesDirs
+    classpath = nativeIntegrationTest.runtimeClasspath
+    filter.includeTestsMatching("ru.lazyhat.compukters.core.device.runtime.program.integration.NativeFleetEventPumpIntegrationTest")
+    jvmArgs("--enable-native-access=ALL-UNNAMED", "--illegal-native-access=deny")
+    javaLauncher.set(javaToolchains.launcherFor { languageVersion.set(JavaLanguageVersion.of(25)) })
+    val library = rootProject.file(".toolchain/build/cargo/compukter-ffi-experimental/release/${System.mapLibraryName("compukter_ffi")}")
+    val fixture = rootProject.file("host/compukter-vm/tests/fixtures/fleet-terminal.cpkt")
+    inputs.files(library, fixture)
+    systemProperty("compukters.ffi.library", library.absolutePath)
+    systemProperty("compukters.fleet.terminal.fixture", fixture.absolutePath)
+}
