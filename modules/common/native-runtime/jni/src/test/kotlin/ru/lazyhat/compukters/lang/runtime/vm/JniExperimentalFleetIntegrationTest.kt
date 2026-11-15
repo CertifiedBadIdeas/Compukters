@@ -97,7 +97,7 @@ class JniExperimentalFleetIntegrationTest {
         val original = ByteBuffer.wrap(created, 1, 8).order(ByteOrder.LITTLE_ENDIAN).long
         val fleet = LongArray(1)
         val none = byteArrayOf()
-        assertEquals(0, JniExperimentalFleet.create(artifact, byteArrayOf(1, 0), 1, intArrayOf(1, 32, 32, 64, 64, 64, 16), none, none, none, 0, 0, 0, fleet))
+        assertEquals(0, JniExperimentalFleet.create(none, byteArrayOf(1, 0), 0, intArrayOf(1, 32, 32, 64, 64, 64, 16), none, none, none, 0, 0, 0, fleet))
         var restored = 0L
         try {
             val machine = LongArray(1)
