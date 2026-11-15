@@ -67,8 +67,8 @@ class ExperimentalJniFleet private constructor(
         success("compilation completion", JniExperimentalFleet.completeCompilation(active(), machine, token, 1, diagnostics.encodeToByteArray()))
 
     @Synchronized
-    fun terminalKey(machine: Long, key: TerminalKey, action: TerminalKeyAction, modifiers: Set<TerminalModifier>) =
-        success("terminal key", JniExperimentalFleet.terminalKey(active(), machine, key.wireCode, action.wireCode, modifiers.fold(0) { bits, modifier -> bits or modifier.mask }))
+    fun terminalKey(machine: Long, key: TerminalKey, action: TerminalKeyAction, modifiers: Set<TerminalModifier>, request: Long = -1) =
+        success("terminal key", JniExperimentalFleet.terminalKey(active(), machine, key.wireCode, action.wireCode, modifiers.fold(0) { bits, modifier -> bits or modifier.mask }, request))
 
     @Synchronized
     fun terminalUpdate(machine: Long, request: Long, revision: Long) =
@@ -108,12 +108,12 @@ class ExperimentalJniFleet private constructor(
         success("redstone output", JniExperimentalFleet.confirmRedstoneOutput(active(), machine, packed))
 
     @Synchronized
-    fun terminalText(machine: Long, text: String) =
-        success("terminal text", JniExperimentalFleet.terminalText(active(), machine, text.codePoints().toArray()))
+    fun terminalText(machine: Long, text: String, request: Long = -1) =
+        success("terminal text", JniExperimentalFleet.terminalText(active(), machine, text.codePoints().toArray(), request))
 
     @Synchronized
-    fun canonicalLine(machine: Long, line: CharArray) =
-        success("canonical line", JniExperimentalFleet.canonicalLine(active(), machine, line))
+    fun canonicalLine(machine: Long, line: CharArray, request: Long = -1) =
+        success("canonical line", JniExperimentalFleet.canonicalLine(active(), machine, line, request))
 
     @Synchronized
     fun stop(machine: Long) = success("stop", JniExperimentalFleet.stop(active(), machine))

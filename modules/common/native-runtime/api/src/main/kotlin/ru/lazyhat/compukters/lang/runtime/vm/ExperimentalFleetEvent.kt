@@ -15,8 +15,15 @@ import ru.lazyhat.compukters.lang.runtime.fs.VmDirectoryListing
 import ru.lazyhat.compukters.lang.runtime.fs.VmFileChunk
 import ru.lazyhat.compukters.lang.runtime.fs.VmFileSystemReadFailure
 
+sealed interface ExperimentalFleetInputResult {
+    data object Accepted : ExperimentalFleetInputResult
+    data object TerminalRejected : ExperimentalFleetInputResult
+    data class CanonicalRejected(val failure: VmCanonicalLineFailure) : ExperimentalFleetInputResult
+}
+
 /** Events from the opt-in native fleet transport. Machine identities are local to a fleet. */
 sealed interface ExperimentalFleetEvent {
+    data class InputResult(val machine: Long, val request: Long, val result: ExperimentalFleetInputResult) : ExperimentalFleetEvent
     data class FileStat(val machine: Long, val request: Long, val stat: VmFileStat) : ExperimentalFleetEvent
     data class FileList(val machine: Long, val request: Long, val listing: VmDirectoryListing) : ExperimentalFleetEvent
     data class FileRead(val machine: Long, val request: Long, val chunk: VmFileChunk) : ExperimentalFleetEvent
@@ -50,6 +57,24 @@ object ExperimentalFleetEventWire {
             return items
         }
         return when (input.get().toInt() and 0xff) {
+            14 -> {
+                val machine = long()
+                val request = long()
+                val result = when (input.int) {
+                    0 -> ExperimentalFleetInputResult.Accepted
+                    1 -> ExperimentalFleetInputResult.TerminalRejected
+                    23 -> ExperimentalFleetInputResult.CanonicalRejected(VmCanonicalLineFailure.NO_PENDING_READ)
+                    24 -> ExperimentalFleetInputResult.CanonicalRejected(VmCanonicalLineFailure.INPUT_BUSY)
+                    25 -> ExperimentalFleetInputResult.CanonicalRejected(VmCanonicalLineFailure.PARTIAL_INPUT)
+                    26 -> ExperimentalFleetInputResult.CanonicalRejected(VmCanonicalLineFailure.UNSUPPORTED_CODE_UNIT)
+                    27 -> ExperimentalFleetInputResult.CanonicalRejected(VmCanonicalLineFailure.LINE_TOO_LONG)
+                    28 -> ExperimentalFleetInputResult.CanonicalRejected(VmCanonicalLineFailure.TERMINAL)
+                    29 -> ExperimentalFleetInputResult.CanonicalRejected(VmCanonicalLineFailure.RESUME)
+                    else -> throw IllegalArgumentException("invalid input result status")
+                }
+                require(!input.hasRemaining()) { "trailing input result bytes" }
+                ExperimentalFleetEvent.InputResult(machine, request, result)
+            }
             13 -> {
                 val machine = long()
                 val request = long()

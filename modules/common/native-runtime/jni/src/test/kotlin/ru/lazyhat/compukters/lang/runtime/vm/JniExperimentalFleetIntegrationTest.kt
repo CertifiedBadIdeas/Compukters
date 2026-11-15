@@ -89,9 +89,16 @@ class JniExperimentalFleetIntegrationTest {
                     error("timed out waiting for fleet event")
                 }
                 try {
+                    if (!canonical) {
+                        fleet.canonicalLine(machine, charArrayOf(), request = 80)
+                        assertEquals(ExperimentalFleetEvent.InputResult(machine, 80, ExperimentalFleetInputResult.CanonicalRejected(VmCanonicalLineFailure.NO_PENDING_READ)), next())
+                    }
                     fleet.grant(machine, 1, 512)
                     assertEquals(VmOutcome.WaitingForTerminalEvent, (next() as ExperimentalFleetEvent.Outcome).outcome)
-                    if (canonical) fleet.canonicalLine(machine, "hello".toCharArray()) else {
+                    if (canonical) {
+                        fleet.canonicalLine(machine, "hello".toCharArray(), request = 81)
+                        assertEquals(ExperimentalFleetEvent.InputResult(machine, 81, ExperimentalFleetInputResult.Accepted), next())
+                    } else {
                         fleet.terminalText(machine, "hello")
                         fleet.terminalKey(machine, TerminalKey.ENTER, TerminalKeyAction.PRESS, emptySet())
                     }
@@ -346,8 +353,8 @@ class JniExperimentalFleetIntegrationTest {
             assertEquals(ExperimentalFleetEvent.Stopped(0, emptyList()), ExperimentalFleetEventWire.decode(event))
             assertEquals(0, JniExperimentalFleet.close(first))
             assertEquals(6, JniExperimentalFleet.stop(first, 0))
-            assertEquals(6, JniExperimentalFleet.terminalKey(first, 0, 67, 0, 2))
-            assertEquals(1, JniExperimentalFleet.terminalKey(first, 0, 999, 0, 2))
+            assertEquals(6, JniExperimentalFleet.terminalKey(first, 0, 67, 0, 2, -1))
+            assertEquals(1, JniExperimentalFleet.terminalKey(first, 0, 999, 0, 2, -1))
             assertEquals(6, JniExperimentalFleet.replyWire(first, 0, 1, 1, byteArrayOf(1, 0)))
             assertEquals(1, JniExperimentalFleet.replyWire(first, 0, 1, 1, byteArrayOf(1, 99)))
             assertEquals(6, JniExperimentalFleet.replyFailure(first, 0, 1, 1, 4, byteArrayOf(65)))
@@ -371,7 +378,7 @@ class JniExperimentalFleetIntegrationTest {
             repeat(257) {
                 var status: Int
                 do {
-                    status = JniExperimentalFleet.terminalKey(handle[0], 0, 13, 0, 0)
+                    status = JniExperimentalFleet.terminalKey(handle[0], 0, 13, 0, 0, -1)
                     if (status == 7) Thread.yield()
                     assertTrue(System.nanoTime() < deadline, "terminal queue submission timed out")
                 } while (status == 7)
