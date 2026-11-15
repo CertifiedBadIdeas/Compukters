@@ -147,7 +147,10 @@ class JniExperimentalFleetIntegrationTest {
         val library = Path.of(requireNotNull(System.getProperty("compukter.jni.library")))
         val artifact = Path.of(requireNotNull(System.getProperty("compukters.shell.artifact"))).readBytes()
         val bridge = JniBridge.open(library)
-        ExperimentalJniFleet.open(library, 1, 32, 32, 128, 64, 64, 16).use { fleet ->
+        ExperimentalJniFleet.open(
+            library, 1, 32, 32, 128, 64, 64, 16,
+            ExperimentalRequestInspection(CapabilityIdentity("app", "entry", 1, 0), 0, "request exceeds budget"),
+        ).use { fleet ->
             val original = VmSession.open(artifact, bridge)
             val machine = original.transferToFleet(fleet)
             kotlin.test.assertFailsWith<VmBridgeException> { fleet.close() }

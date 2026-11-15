@@ -71,3 +71,13 @@ interface ExperimentalFleetSessionOwner {
 }
 
 data class ExperimentalRestoredSession(val bridge: LowLevelVmBridge, val handle: Long)
+
+/** Uses the same checked host-response encoding as ordinary VM sessions. */
+object ExperimentalFleetResponseWire {
+    fun success(response: ru.lazyhat.compukters.lang.runtime.capability.HostResponse): ByteArray =
+        ru.lazyhat.compukters.lang.runtime.capability.HostResponseWire.encode(response)
+
+    fun failureKind(kind: HostFailureKind): Int = kind.wireCode
+
+    fun failureDetail(detail: String): ByteArray = encodeHostFailureDetail(detail)
+}

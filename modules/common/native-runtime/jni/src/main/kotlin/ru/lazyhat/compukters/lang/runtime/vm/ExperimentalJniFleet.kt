@@ -5,7 +5,14 @@
  */
 package ru.lazyhat.compukters.lang.runtime.vm
 
+import ru.lazyhat.compukters.lang.runtime.capability.HostResponse
 import java.nio.file.Path
+
+data class ExperimentalRequestInspection(
+    val capability: CapabilityIdentity,
+    val operation: Int,
+    val overBudgetDetail: String,
+)
 
 /** Opt-in transport. Call creation and close outside the server thread. */
 class ExperimentalJniFleet private constructor(
@@ -35,6 +42,26 @@ class ExperimentalJniFleet private constructor(
         success("grant", JniExperimentalFleet.grant(active(), machine, tick, retirements, deadlineNanos))
 
     @Synchronized
+    fun reply(machine: Long, identity: VmHostRequestIdentity, response: HostResponse) {
+        val status = when (response) {
+            is HostResponse.Failure -> JniExperimentalFleet.replyFailure(active(), machine, identity.taskId, identity.requestId, ExperimentalFleetResponseWire.failureKind(response.kind), ExperimentalFleetResponseWire.failureDetail(response.detail))
+            else -> JniExperimentalFleet.replyWire(active(), machine, identity.taskId, identity.requestId, ExperimentalFleetResponseWire.success(response))
+        }
+        success("reply", status)
+    }
+
+    @Synchronized
+    fun resolveCost(machine: Long, identity: VmHostRequestIdentity, units: Int) =
+        success("resolve cost", JniExperimentalFleet.resolveCost(active(), machine, identity.taskId, identity.requestId, units))
+
+    @Synchronized
+    fun terminalKey(machine: Long, key: TerminalKey, action: TerminalKeyAction, modifiers: Set<TerminalModifier>) =
+        success("terminal key", JniExperimentalFleet.terminalKey(active(), machine, key.wireCode, action.wireCode, modifiers.fold(0) { bits, modifier -> bits or modifier.mask }))
+
+    @Synchronized
+    fun stop(machine: Long) = success("stop", JniExperimentalFleet.stop(active(), machine))
+
+    @Synchronized
     fun detach(machine: Long) = success("detach", JniExperimentalFleet.detach(active(), machine))
 
     @Synchronized
@@ -55,11 +82,32 @@ class ExperimentalJniFleet private constructor(
     private fun active(): Long = handle.takeIf { it != 0L } ?: error("fleet is closed")
 
     companion object {
-        fun open(library: Path, workers: Int, mailboxCapacity: Int, eventCapacity: Int, guestBudget: Int, maintenanceBudget: Int, hostBudget: Int, advancesPerTick: Int): ExperimentalJniFleet {
+        fun open(
+            library: Path,
+            workers: Int,
+            mailboxCapacity: Int,
+            eventCapacity: Int,
+            guestBudget: Int,
+            maintenanceBudget: Int,
+            hostBudget: Int,
+            advancesPerTick: Int,
+            inspection: ExperimentalRequestInspection? = null,
+        ): ExperimentalJniFleet {
             val bridge = JniBridge.open(library)
             val output = LongArray(1)
             val empty = byteArrayOf()
-            success("create", JniExperimentalFleet.create(empty, byteArrayOf(1, 0), 0, intArrayOf(workers, mailboxCapacity, eventCapacity, guestBudget, maintenanceBudget, hostBudget, advancesPerTick), empty, empty, empty, 0, 0, 0, output))
+            val capability = inspection?.capability
+            val detail = inspection?.let { ExperimentalFleetResponseWire.failureDetail(it.overBudgetDetail) } ?: empty
+            success(
+                "create",
+                JniExperimentalFleet.create(
+                    empty, byteArrayOf(1, 0), 0,
+                    intArrayOf(workers, mailboxCapacity, eventCapacity, guestBudget, maintenanceBudget, hostBudget, advancesPerTick),
+                    capability?.namespace?.encodeToByteArray() ?: empty,
+                    capability?.name?.encodeToByteArray() ?: empty,
+                    detail, capability?.abiMajor ?: 0, capability?.abiMinor ?: 0, inspection?.operation ?: 0, output,
+                ),
+            )
             return ExperimentalJniFleet(bridge, output[0])
         }
 
