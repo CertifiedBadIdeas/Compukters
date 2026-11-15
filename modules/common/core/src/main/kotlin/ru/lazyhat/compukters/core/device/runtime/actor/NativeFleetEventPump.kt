@@ -8,6 +8,7 @@ package ru.lazyhat.compukters.core.device.runtime.actor
 import ru.lazyhat.compukters.core.LOGGER
 import ru.lazyhat.compukters.lang.runtime.vm.ExperimentalFleet
 import ru.lazyhat.compukters.lang.runtime.vm.ExperimentalFleetEvent
+import java.util.concurrent.CompletableFuture
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicReference
 
@@ -25,6 +26,7 @@ internal class NativeFleetEventPump(
 ) : AutoCloseable {
     private val closed = AtomicBoolean()
     private val failure = AtomicReference<Throwable?>()
+    private val waiterStopped = CompletableFuture<Unit>()
     private val initialGeneration = fleet.eventGeneration()
     private val waiter =
         Thread
@@ -81,13 +83,20 @@ internal class NativeFleetEventPump(
                 failure.set(error)
                 notifyOwner()
             }
+        } finally {
+            waiterStopped.complete(Unit)
         }
     }
 
-    override fun close() {
+    /** Complete only after the waiter has stopped using the fleet; safe to call on the owner. */
+    fun closeAsync(): CompletableFuture<Unit> {
         checkOwner()
-        if (!closed.compareAndSet(false, true)) return
-        if (Thread.currentThread() !== waiter) waiter.join()
+        closed.set(true)
+        return waiterStopped.copy()
+    }
+
+    override fun close() {
+        closeAsync().join()
     }
 
     private companion object {

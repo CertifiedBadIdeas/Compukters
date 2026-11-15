@@ -9,14 +9,57 @@ import ru.lazyhat.compukters.lang.runtime.vm.ExperimentalFleet
 import ru.lazyhat.compukters.lang.runtime.vm.ExperimentalFleetEvent
 import java.lang.reflect.Proxy
 import java.util.ArrayDeque
+import java.util.concurrent.CountDownLatch
 import java.util.concurrent.LinkedBlockingQueue
 import java.util.concurrent.TimeUnit
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
+import kotlin.test.assertTrue
 
 class NativeFleetEventPumpTest {
+    @Test
+    fun `asynchronous close waits for native wait to end without blocking owner`() {
+        val entered = CountDownLatch(1)
+        val release = CountDownLatch(1)
+        val fleet =
+            Proxy.newProxyInstance(
+                ExperimentalFleet::class.java.classLoader,
+                arrayOf(ExperimentalFleet::class.java),
+            ) { _, method, _ ->
+                when (method.name) {
+                    "eventGeneration" -> {
+                        0L
+                    }
+
+                    "waitEvents" -> {
+                        entered.countDown()
+                        check(release.await(5, TimeUnit.SECONDS))
+                        false
+                    }
+
+                    else -> {
+                        error("unexpected method ${method.name}")
+                    }
+                }
+            } as ExperimentalFleet
+        val pump = NativeFleetEventPump(fleet, {}, {}, {})
+        try {
+            assertTrue(entered.await(5, TimeUnit.SECONDS))
+            val completion = pump.closeAsync()
+            assertFalse(completion.isDone)
+            assertFailsWith<IllegalStateException> { pump.pump(1) }
+            release.countDown()
+            completion.get(5, TimeUnit.SECONDS)
+            assertTrue(pump.closeAsync().isDone)
+        } finally {
+            release.countDown()
+            pump.close()
+        }
+    }
+
     @Test
     fun `notifications wake owner while event delivery obeys its budget`() {
         val source = FleetSource()

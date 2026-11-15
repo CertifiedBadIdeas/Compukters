@@ -7,6 +7,7 @@ package ru.lazyhat.compukters.core.device.runtime.actor
 
 import ru.lazyhat.compukters.lang.runtime.vm.ExperimentalFleet
 import ru.lazyhat.compukters.lang.runtime.vm.ExperimentalFleetEvent
+import java.util.concurrent.CompletableFuture
 
 /** Owner-thread entry point for native event delivery and ordered command retries. */
 internal class NativeFleetDispatcher(
@@ -40,6 +41,8 @@ internal class NativeFleetDispatcher(
         outbox.flush(maximumCommandAttempts, deadlineNanos)
         return delivered
     }
+
+    fun closeAsync(): CompletableFuture<Unit> = events.closeAsync()
 
     override fun close() = events.close()
 }
