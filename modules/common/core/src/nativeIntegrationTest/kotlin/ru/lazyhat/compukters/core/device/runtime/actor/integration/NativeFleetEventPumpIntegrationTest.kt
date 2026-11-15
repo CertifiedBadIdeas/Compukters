@@ -110,11 +110,25 @@ class NativeFleetEventPumpIntegrationTest {
                     assertTrue(fleet.waitEvents(generation, 5_000))
                     // The JVM host never observes this accepted output confirmation.
                     fleet.confirmRedstoneOutput(machine, 0x123456)
-                    fleet.detachForCheckpoint(machine, 2)
-                    var event = next(machine)
-                    while (event !is ExperimentalFleetEvent.Detached) event = next(machine)
                     val addon = byteArrayOf(3, 4)
-                    assertTrue(host.hibernateFromFleet(fleet, event, 2, addon))
+                    val owner = Thread.currentThread()
+                    NativeFleetActorRuntimeService(
+                        fleet,
+                        2,
+                        4,
+                        4,
+                        { check(Thread.currentThread() === owner) },
+                        {},
+                        { _, _ -> error("checkpoint must not pump ordinary world output") },
+                        onActorClosing = {},
+                    ).use { service ->
+                        val endpoint = VmActorEndpoint(id, 1)
+                        assertTrue(service.register(endpoint, machine, host))
+                        val saved = checkNotNull(service.hibernate(endpoint, 2, addon))
+                        addon[0] = 99
+                        val savedGeneration = saved.get(5, TimeUnit.SECONDS)
+                        assertEquals(host.lastClosedFileSystemGeneration, savedGeneration)
+                    }
                     assertEquals(ProgramRuntimeState.Closed, host.state)
                     val preserved = assertIs<ExperimentalFleetEvent.Resources>(next())
                     assertEquals(other, preserved.machine)
@@ -124,7 +138,7 @@ class NativeFleetEventPumpIntegrationTest {
                     assertEquals(0x123456, checkpoint.confirmedRedstoneOutput)
                     assertEquals(listOf(0L), checkpoint.programScopes)
                     assertEquals(1L, checkpoint.timers.single().remainingTicks)
-                    assertContentEquals(addon, checkpoint.addonState)
+                    assertContentEquals(byteArrayOf(3, 4), checkpoint.addonState)
                     restored.completeRestoration(100)
                     assertEquals(ProgramRuntimeState.Running, restored.serverTick(100))
                     assertIs<ProgramRuntimeState.Halted>(restored.serverTick(101))

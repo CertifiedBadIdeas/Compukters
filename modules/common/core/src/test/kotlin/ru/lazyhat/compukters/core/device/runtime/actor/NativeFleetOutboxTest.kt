@@ -20,6 +20,27 @@ import kotlin.test.assertTrue
 
 class NativeFleetOutboxTest {
     @Test
+    fun `checkpoint payload shares byte admission until explicitly released`() {
+        val outbox = NativeFleetOutbox(fleet { _, _ -> }, 4, 4, {}, byteLimits = NativeFleetOutboxLimits(8682, 8618))
+        assertTrue(outbox.offer(1, listOf(input(1))))
+        assertEquals(null, outbox.reserveCheckpointPayload(1, ByteArray(1)))
+        val bytes = byteArrayOf(7)
+        val reserved = checkNotNull(outbox.reserveCheckpointPayload(2, bytes))
+        bytes[0] = 9
+        assertEquals(7, reserved.bytes[0].toInt())
+        assertEquals(8619L, outbox.retainedBytes)
+        assertFalse(outbox.offer(3, listOf(input(1))))
+        outbox.remove(1)
+        assertEquals(8555L, outbox.retainedBytes)
+        reserved.replaceWithHostState(ByteArray(16))
+        assertEquals(80L, outbox.retainedBytes)
+        reserved.close()
+        reserved.close()
+        assertEquals(0L, outbox.retainedBytes)
+        assertTrue(outbox.offer(3, listOf(input(1))))
+    }
+
+    @Test
     fun `handoff keeps entry and byte reservations until native acceptance without copying its batch`() {
         var busy = true
         val sent = mutableListOf<Long>()
@@ -30,7 +51,7 @@ class NativeFleetOutboxTest {
             }
         val outbox = NativeFleetOutbox(bridge, 2, 2, {}, byteLimits = NativeFleetOutboxLimits(128, 128))
         assertTrue(outbox.offer(1, listOf(input(1), input(2))))
-        val handoff = outbox.handoffForStop(1)
+        val handoff = outbox.handoffForClose(1)
         assertEquals(128L, outbox.retainedBytes)
         assertFalse(outbox.offer(2, listOf(input(3))))
         assertFailsWith<VmFleetBusyException> { handoff.sendNext(bridge, 1) }

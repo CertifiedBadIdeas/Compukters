@@ -169,13 +169,23 @@ class ProgramRuntimeHost internal constructor(
         worldTick: Long,
         addonState: ByteArray,
     ): Boolean {
+        val encoded = prepareHibernation(worldTick, addonState) ?: return false
+        capturePreparedHibernation(encoded)
+        return true
+    }
+
+    /** Called once after exclusive recovery, so Busy retries retain one encoded host payload. */
+    internal fun prepareHibernation(
+        worldTick: Long,
+        addonState: ByteArray,
+    ): ByteArray? {
         check(fleetOwnership == null) { "fleet owns the VM session" }
         require(worldTick >= 0)
-        if (preparedRestoration != null) return false // Keep the unconsumed durable snapshot.
+        if (preparedRestoration != null) return null // Keep the unconsumed durable snapshot.
         check(pendingRedstoneCommit == null && pendingSoundCommit == null && pendingAddonRequests.isEmpty()) {
             "external requests must be settled before hibernation"
         }
-        val active = session ?: return false
+        if (session == null) return null
         val checkpoint =
             ProgramHostCheckpoint(
                 state == ProgramRuntimeState.WaitingForInput,
@@ -196,10 +206,14 @@ class ProgramRuntimeHost internal constructor(
                 },
                 addonState.copyOf(),
             )
-        active.checkpoint(checkpoint.encode())
+        return checkpoint.encode()
+    }
+
+    internal fun capturePreparedHibernation(encoded: ByteArray) {
+        check(fleetOwnership == null && preparedRestoration == null)
+        requireNotNull(session).checkpoint(encoded)
         releaseSession()
         state = ProgramRuntimeState.Closed
-        return true
     }
 
     /** Native admission runs no Guest code. Resource rebinding must precede completeRestoration. */
@@ -389,9 +403,21 @@ class ProgramRuntimeHost internal constructor(
         worldTick: Long,
         addonState: ByteArray,
     ): Boolean {
+        recoverCheckpointFromFleet(fleet, detached, worldTick)
+        return hibernate(worldTick, addonState)
+    }
+
+    internal fun validateFleetCheckpointTick(worldTick: Long) {
+        require(worldTick >= 0 && worldTick >= lastObservedTick) { "checkpoint tick must not move backwards" }
+    }
+
+    internal fun recoverCheckpointFromFleet(
+        fleet: ExperimentalFleetSessionOwner,
+        detached: ExperimentalFleetEvent.Detached,
+        worldTick: Long,
+    ) {
         val detachedState = requireNotNull(detached.state) { "checkpoint detach requires authoritative native state" }
         recoverFromFleet(fleet, detached.machine, worldTick, detached.timers, detachedState)
-        return hibernate(worldTick, addonState)
     }
 
     /**

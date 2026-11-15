@@ -75,7 +75,8 @@ internal data class ProgramHostCheckpoint(
         private const val HEADER_BYTES = 42
         private const val TIMER_BYTES = 32
         private const val MAXIMUM_ADDON_BYTES = 1024 * 1024
-        private const val MAXIMUM_BYTES = HEADER_BYTES + 32 * 8 + 256 * TIMER_BYTES + MAXIMUM_ADDON_BYTES
+        internal const val MAXIMUM_METADATA_BYTES = HEADER_BYTES + 32 * 8 + 256 * TIMER_BYTES
+        private const val MAXIMUM_BYTES = MAXIMUM_METADATA_BYTES + MAXIMUM_ADDON_BYTES
 
         fun decode(encoded: ByteArray): ProgramHostCheckpoint {
             require(encoded.size in HEADER_BYTES..MAXIMUM_BYTES) { "invalid host checkpoint size" }

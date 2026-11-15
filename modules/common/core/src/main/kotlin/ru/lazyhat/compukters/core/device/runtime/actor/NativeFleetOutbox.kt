@@ -5,6 +5,7 @@
  */
 package ru.lazyhat.compukters.core.device.runtime.actor
 
+import ru.lazyhat.compukters.core.device.runtime.program.ProgramHostCheckpoint
 import ru.lazyhat.compukters.lang.runtime.capability.HostResponse
 import ru.lazyhat.compukters.lang.runtime.vm.ExperimentalFleet
 import ru.lazyhat.compukters.lang.runtime.vm.ExperimentalFleetEvent
@@ -161,6 +162,49 @@ internal class NativeFleetOutbox(
         }
     }
 
+    /** A closing machine's copied addon state shares the ordinary outbox byte budget. */
+    internal class CheckpointPayload(
+        bytes: ByteArray,
+        private val budget: Budget,
+        private var charge: Long,
+    ) : AutoCloseable {
+        var bytes = bytes
+            private set
+        private var released = false
+
+        /** Swap addon bytes for their encoded envelope, releasing the conservative metadata slack. */
+        fun replaceWithHostState(encoded: ByteArray) {
+            check(!released && encoded.size + 64L <= charge)
+            budget.release(0, charge - encoded.size - 64L)
+            charge = encoded.size + 64L
+            bytes = encoded
+        }
+
+        @Synchronized override fun close() {
+            if (!released) {
+                released = true
+                budget.release(0, charge)
+            }
+        }
+    }
+
+    /** Admission precedes actor fencing and copying; refusal leaves the live actor untouched. */
+    fun reserveCheckpointPayload(
+        machine: Long,
+        bytes: ByteArray,
+    ): CheckpointPayload? {
+        checkOwner()
+        require(bytes.size <= 1024 * 1024)
+        val charge = 64L + ProgramHostCheckpoint.MAXIMUM_METADATA_BYTES + bytes.size
+        if (charge > byteLimits.perMachineBytes - (queues[machine]?.bytes ?: 0L) || !budget.reserve(0, charge)) return null
+        return try {
+            CheckpointPayload(bytes.copyOf(), budget, charge)
+        } catch (failure: Throwable) {
+            budget.release(0, charge)
+            throw failure
+        }
+    }
+
     /** Exclusive ownership of unsent commands, retaining the original shared reservation. */
     internal class Handoff internal constructor(
         private val commands: ArrayDeque<Command>,
@@ -179,7 +223,7 @@ internal class NativeFleetOutbox(
     }
 
     /** The caller fences the actor before transferring this batch to its lifecycle worker. */
-    fun handoffForStop(machine: Long): Handoff {
+    fun handoffForClose(machine: Long): Handoff {
         checkOwner()
         check(machine !in closing) { "native lifecycle already submitted" }
         val queue = queues.remove(machine)

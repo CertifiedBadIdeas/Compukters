@@ -133,8 +133,17 @@ The host checkpoint adapter replaces its potentially stale metadata before rebin
 it does not dispatch queued lifecycle prefixes as new world effects. Recovery resets the host's scheduling hint to
 Running so the next grant can reevaluate terminal or compiler waits, including input whose observation was never
 pumped. Capture failure retains the recovered session for retry or explicit close. No new state is reserved per idle
-machine. This adapter is not yet connected to the shared lifecycle worker or production lease; byte admission for
-retained addon checkpoint payloads, persistence handoff and backend integration remain required.
+machine. The same shared lifecycle worker now handles checkpoint detach, session recovery, host-state encoding and
+capture in explicit phases; it never dispatches lifecycle prefixes as new effects. Accepted effects drain before the
+checkpoint fence, and unsent grants are canceled. Byte admission precedes fencing and copying addon state: each payload
+reserves its bytes plus the bounded maximum host metadata against the outbox's shared and per-machine byte limits.
+After recovery, encoding replaces the addon copy and releases unused metadata allowance. StoreBusy retains that one
+encoded payload and rotates to another machine; retries neither recover the session twice nor reencode host state.
+Successful capture reconciles the final filesystem generation and closes the host before completing its barrier;
+checkpoint failure discards stale saved execution, closes the recovered host and fails that barrier. Payload charges
+are returned on either terminal path. Actor/query cancellation and reentrant ownership handoff follow the same rules
+as stop. No owner pumping is required. Production lease wiring, boot/restore backend selection and broader builtin
+completion parity still need integration.
 
 ## Addon host boundary
 

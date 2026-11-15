@@ -271,15 +271,46 @@ internal class NativeFleetActorRuntimeService(
      * resources are canceled by endpoint, not by retaining the native list of pending identities.
      * The returned barrier needs no owner pumping and cannot be canceled by canceling its copy.
      */
-    fun stop(endpoint: VmActorEndpoint): CompletableFuture<Long>? {
+    fun stop(endpoint: VmActorEndpoint): CompletableFuture<Long>? = finish(endpoint, null, null)
+
+    /** Accepted effects must already be queued. Refusal leaves this actor running and retryable. */
+    fun hibernate(
+        endpoint: VmActorEndpoint,
+        worldTick: Long,
+        addonState: ByteArray,
+    ): CompletableFuture<Long>? {
         checkOwner()
         closer.checkHealthy()
         closing[endpoint]?.let { return it.copy() }
-        val actor = actors.remove(endpoint) ?: return null
+        val actor = actors[endpoint] ?: return null
+        actor.host.validateFleetCheckpointTick(worldTick)
+        require(worldTick >= (actor.credit?.worldTick ?: 0)) { "checkpoint tick precedes frame credit" }
+        val payload =
+            dispatcher.outbox.reserveCheckpointPayload(actor.machine, addonState)
+                ?: return CompletableFuture.failedFuture(ProgramRuntimeActorRequestException(VmActorSubmission.MAILBOX_FULL))
+        return finish(endpoint, worldTick, payload)
+    }
+
+    private fun finish(
+        endpoint: VmActorEndpoint,
+        checkpointTick: Long?,
+        payload: NativeFleetOutbox.CheckpointPayload?,
+    ): CompletableFuture<Long>? {
+        checkOwner()
+        closer.checkHealthy()
+        closing[endpoint]?.let {
+            payload?.close()
+            return it.copy()
+        }
+        val actor =
+            actors.remove(endpoint) ?: run {
+                payload?.close()
+                return null
+            }
         machines.remove(actor.machine)
         val result = CompletableFuture<Long>()
         closing[endpoint] = result
-        val commands = dispatcher.outbox.handoffForStop(actor.machine)
+        val commands = dispatcher.outbox.handoffForClose(actor.machine)
         var cancellationFailure: Throwable? = null
         val native = CompletableFuture<Long>()
         native.whenComplete { generation, closeFailure ->
@@ -294,7 +325,7 @@ internal class NativeFleetActorRuntimeService(
             }
         }
         // Reserve before invoking callbacks: a reentrant service close must include this host.
-        val start = closer.reserve(actor.machine, actor.host, commands, native)
+        val start = closer.reserve(actor.machine, actor.host, commands, native, checkpointTick, payload)
         try {
             cancellationFailure = runCatching { onActorClosing(endpoint) }.exceptionOrNull()
             val failure = cancellationFailure ?: CancellationException("native actor stopped")

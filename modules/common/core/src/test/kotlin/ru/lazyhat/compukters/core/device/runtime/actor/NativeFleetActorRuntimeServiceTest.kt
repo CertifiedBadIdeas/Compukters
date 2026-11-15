@@ -21,6 +21,7 @@ import ru.lazyhat.compukters.lang.runtime.fs.VmFileSystemReadFailure
 import ru.lazyhat.compukters.lang.runtime.fs.VmVirtualPath
 import ru.lazyhat.compukters.lang.runtime.vm.CapabilityIdentity
 import ru.lazyhat.compukters.lang.runtime.vm.ExperimentalFleet
+import ru.lazyhat.compukters.lang.runtime.vm.ExperimentalFleetDetachedState
 import ru.lazyhat.compukters.lang.runtime.vm.ExperimentalFleetEvent
 import ru.lazyhat.compukters.lang.runtime.vm.ExperimentalFleetInputResult
 import ru.lazyhat.compukters.lang.runtime.vm.TerminalKey
@@ -45,6 +46,64 @@ import kotlin.test.assertIs
 import kotlin.test.assertTrue
 
 class NativeFleetActorRuntimeServiceTest {
+    @Test
+    fun `checkpoint worker copies addon state and closes without owner pumping`() =
+        Harness().use { h ->
+            val endpoint = h.register(1)
+            val addon = byteArrayOf(3, 4)
+            val pending = checkNotNull(h.service.hibernate(endpoint, 10, addon))
+            addon[0] = 99
+            pending.cancel(false)
+            assertEquals(7L, checkNotNull(h.service.stop(endpoint)).get(5, TimeUnit.SECONDS))
+            val checkpoint =
+                ru.lazyhat.compukters.core.device.runtime.program.ProgramHostCheckpoint
+                    .decode(checkNotNull(h.captured[1]))
+            assertContentEquals(byteArrayOf(3, 4), checkpoint.addonState)
+            assertEquals(listOf(1L), h.recoveredMachines)
+            assertEquals(listOf(1L), h.closedMachines)
+            assertEquals(emptyList(), h.observed)
+        }
+
+    @Test
+    fun `checkpoint admission refusal preserves actor and stale ticks refuse before fencing`() =
+        Harness(byteLimits = NativeFleetOutboxLimits(128, 128)).use { h ->
+            val endpoint = h.register(1)
+            assertTrue(h.service.grantFrame(endpoint, 10, 8))
+            assertFailsWith<IllegalArgumentException> { h.service.hibernate(endpoint, 9, byteArrayOf()) }
+            val refused = checkNotNull(h.service.hibernate(endpoint, 10, ByteArray(128)))
+            assertFailsWith<ExecutionException> { refused.get(5, TimeUnit.SECONDS) }
+            assertTrue(h.service.grantFrame(endpoint, 11, 8))
+            assertEquals(7L, checkNotNull(h.service.stop(endpoint)).get(5, TimeUnit.SECONDS))
+            assertTrue(h.captured.isEmpty())
+        }
+
+    @Test
+    fun `busy checkpoint rotates so another closing machine completes`() =
+        Harness().use { h ->
+            val first = h.register(1)
+            val second = h.register(2)
+            h.busyCaptureFor = 1
+            val waiting = checkNotNull(h.service.hibernate(first, 10, byteArrayOf()))
+            assertEquals(7L, checkNotNull(h.service.hibernate(second, 10, byteArrayOf())).get(5, TimeUnit.SECONDS))
+            assertFalse(waiting.isDone)
+            assertEquals(listOf(1L, 2L), h.recoveredMachines.sorted())
+            h.busyCaptureFor = null
+            assertEquals(7L, waiting.get(5, TimeUnit.SECONDS))
+            assertEquals(listOf(1L, 2L), h.recoveredMachines.sorted())
+        }
+
+    @Test
+    fun `checkpoint failure closes recovered session and returns byte admission`() =
+        Harness(byteLimits = NativeFleetOutboxLimits(8554, 8554)).use { h ->
+            h.failedCaptureFor = 1
+            val first = h.register(1)
+            val failed = checkNotNull(h.service.hibernate(first, 10, byteArrayOf()))
+            assertFailsWith<ExecutionException> { failed.get(5, TimeUnit.SECONDS) }
+            assertEquals(listOf(1L), h.closedMachines)
+            val second = h.register(2)
+            assertEquals(7L, checkNotNull(h.service.hibernate(second, 10, byteArrayOf())).get(5, TimeUnit.SECONDS))
+        }
+
     @Test
     fun `frame is not refilled and continuation reports only newly retired instructions`() =
         Harness().use { h ->
@@ -678,9 +737,17 @@ class NativeFleetActorRuntimeServiceTest {
         val closedMachines = CopyOnWriteArrayList<Long>()
         val replies = CopyOnWriteArrayList<VmHostRequestIdentity>()
 
+        val captured = ConcurrentHashMap<Long, ByteArray>()
+        val recoveredMachines = CopyOnWriteArrayList<Long>()
+
+        @Volatile var busyCaptureFor: Long? = null
+
+        @Volatile var failedCaptureFor: Long? = null
+
         @Volatile var busyReplies = false
         private val endpoints = mutableListOf<VmActorEndpoint>()
         private val stops = ConcurrentHashMap<Long, ExperimentalFleetEvent>()
+        private val checkpointPrefixes = ConcurrentHashMap<Long, ExperimentalFleetEvent>()
         private val owner = Thread.currentThread()
         private val fleet =
             Proxy.newProxyInstance(ExperimentalFleet::class.java.classLoader, arrayOf(ExperimentalFleet::class.java)) { _, method, args ->
@@ -745,8 +812,22 @@ class NativeFleetActorRuntimeServiceTest {
                         null
                     }
 
+                    "detachForCheckpoint" -> {
+                        val machine = args!![0] as Long
+                        checkpointPrefixes[machine] =
+                            ExperimentalFleetEvent.Outcome(
+                                machine,
+                                args[1] as Long,
+                                VmOutcome.HostRequestBatch(
+                                    listOf(VmHostRequest(1, CapabilityIdentity("app", "entry", 1, 2), 0, emptyList())),
+                                ),
+                            )
+                        stops[machine] = ExperimentalFleetEvent.Detached(machine, state = ExperimentalFleetDetachedState(listOf(0), 0))
+                        null
+                    }
+
                     "pollLifecycle" -> {
-                        stops.remove(args!![0] as Long)
+                        checkpointPrefixes.remove(args!![0] as Long) ?: stops.remove(args[0] as Long)
                     }
 
                     else -> {
@@ -779,10 +860,30 @@ class NativeFleetActorRuntimeServiceTest {
             schemas: List<HostCapabilitySchema> = emptyList(),
         ): VmActorEndpoint {
             val session =
-                Proxy.newProxyInstance(ProgramVmSession::class.java.classLoader, arrayOf(ProgramVmSession::class.java)) { _, method, _ ->
+                Proxy.newProxyInstance(ProgramVmSession::class.java.classLoader, arrayOf(ProgramVmSession::class.java)) { _, method, args ->
                     when (method.name) {
                         "transferToFleet" -> {
                             machine
+                        }
+
+                        "recoverFromFleet" -> {
+                            check(Thread.currentThread() !== owner)
+                            recoveredMachines += machine
+                            null
+                        }
+
+                        "checkpoint" -> {
+                            check(Thread.currentThread() !== owner)
+                            if (machine == busyCaptureFor) {
+                                throw ru.lazyhat.compukters.lang.runtime.vm
+                                    .VmStoreBusyException("busy")
+                            }
+                            if (machine == failedCaptureFor) {
+                                throw ru.lazyhat.compukters.lang.runtime.vm
+                                    .VmBridgeException("capture failed")
+                            }
+                            captured[machine] = args!![0] as ByteArray
+                            null
                         }
 
                         "filesystemGeneration" -> {

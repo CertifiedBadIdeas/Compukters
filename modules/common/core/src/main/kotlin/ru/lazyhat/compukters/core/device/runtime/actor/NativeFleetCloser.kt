@@ -11,11 +11,12 @@ import ru.lazyhat.compukters.core.device.runtime.program.ProgramRuntimeState
 import ru.lazyhat.compukters.lang.runtime.vm.ExperimentalFleet
 import ru.lazyhat.compukters.lang.runtime.vm.ExperimentalFleetEvent
 import ru.lazyhat.compukters.lang.runtime.vm.VmFleetBusyException
+import ru.lazyhat.compukters.lang.runtime.vm.VmStoreBusyException
 import java.util.ArrayDeque
 import java.util.concurrent.CompletableFuture
 
 /**
- * One lazy control worker per fleet, never a worker per machine. It owns closing hosts and
+ * One lazy control worker per fleet, never a worker per machine. It owns stopping/checkpointing hosts and
  * their unsent command batches exclusively. Ordinary output and world callbacks stay on the owner.
  * Only the final generation escapes; canceled request payloads are not queued back to the JVM owner.
  */
@@ -37,8 +38,12 @@ internal class NativeFleetCloser(
         host: ProgramRuntimeHost,
         commands: NativeFleetOutbox.Handoff,
         result: CompletableFuture<Long>,
+        checkpointTick: Long? = null,
+        payload: NativeFleetOutbox.CheckpointPayload? = null,
     ): () -> Unit {
-        val task = Close(machine, host, commands, result)
+        require((checkpointTick == null) == (payload == null))
+        val checkpoint = checkpointTick?.let { Checkpoint(it, checkNotNull(payload)) }
+        val task = Close(machine, host, commands, result, checkpoint)
         synchronized(monitor) {
             checkHealthy()
             check(!closing)
@@ -106,15 +111,25 @@ internal class NativeFleetCloser(
 
     private fun progress(task: Close): Progress {
         if (!task.ready) return Progress.BLOCKED
+        val checkpoint = task.checkpoint
+        if (checkpoint != null &&
+            (checkpoint.phase == CapturePhase.Recovered || checkpoint.phase == CapturePhase.Prepared)
+        ) {
+            return capture(task, checkpoint)
+        }
         val event =
             try {
                 if (task.commands.sendNext(fleet, task.machine)) return Progress.MORE
                 if (!task.submitted) {
-                    fleet.stop(task.machine, independent = true)
+                    if (checkpoint == null) {
+                        fleet.stop(task.machine, independent = true)
+                    } else {
+                        fleet.detachForCheckpoint(task.machine, checkpoint.tick)
+                    }
                     task.submitted = true
                     return Progress.MORE
                 }
-                fleet.pollLifecycle(task.machine) ?: return Progress.BLOCKED
+                (checkpoint?.phase as? CapturePhase.Detached)?.event ?: fleet.pollLifecycle(task.machine) ?: return Progress.BLOCKED
             } catch (_: VmFleetBusyException) {
                 return Progress.BLOCKED
             } catch (failure: Exception) {
@@ -126,6 +141,7 @@ internal class NativeFleetCloser(
                 }
                 return Progress.BLOCKED
             }
+        if (checkpoint != null) return recoverCheckpoint(task, checkpoint, event)
         if (event is ExperimentalFleetEvent.Quiescent) return Progress.MORE
         try {
             check(event is ExperimentalFleetEvent.Stopped && event.machine == task.machine) { "unexpected native stop output: $event" }
@@ -137,6 +153,88 @@ internal class NativeFleetCloser(
         return Progress.DONE
     }
 
+    private fun recoverCheckpoint(
+        task: Close,
+        checkpoint: Checkpoint,
+        event: ExperimentalFleetEvent,
+    ): Progress =
+        when (event) {
+            is ExperimentalFleetEvent.Detached -> {
+                check(event.machine == task.machine)
+                // Retain the final observation across recovery refusal, without detaching twice.
+                checkpoint.phase = CapturePhase.Detached(event)
+                try {
+                    task.host.recoverCheckpointFromFleet(fleet, event, checkpoint.tick)
+                    checkpoint.phase = CapturePhase.Recovered
+                    Progress.MORE
+                } catch (_: VmFleetBusyException) {
+                    Progress.BLOCKED
+                } catch (failure: Exception) {
+                    if (!task.reportedFailure) {
+                        task.reportedFailure = true
+                        LOGGER.warn(failure) { "Native checkpoint recovery failed; retaining detached ownership" }
+                    }
+                    Progress.BLOCKED
+                }
+            }
+
+            is ExperimentalFleetEvent.DetachRejected -> {
+                task.submitted = false
+                Progress.BLOCKED
+            }
+
+            // Prefixes are reconciled by authoritative detach state, never dispatched.
+            else -> {
+                Progress.MORE
+            }
+        }
+
+    private fun capture(
+        task: Close,
+        checkpoint: Checkpoint,
+    ): Progress {
+        try {
+            if (checkpoint.phase == CapturePhase.Recovered) {
+                val encoded = checkNotNull(task.host.prepareHibernation(checkpoint.tick, checkpoint.payload.bytes))
+                checkpoint.payload.replaceWithHostState(encoded)
+                checkpoint.phase = CapturePhase.Prepared
+            }
+            task.host.capturePreparedHibernation(checkpoint.payload.bytes)
+        } catch (_: VmStoreBusyException) {
+            return Progress.BLOCKED
+        } catch (failure: Throwable) {
+            // Recovery already transferred the session to this worker. Capture failure must not
+            // strand that live wrapper or let a later restore consume an older checkpoint.
+            runCatching { task.host.discardCheckpoint() }.exceptionOrNull()?.let(failure::addSuppressed)
+            runCatching { task.host.close() }.exceptionOrNull()?.let(failure::addSuppressed)
+            checkpoint.payload.close()
+            task.result.completeExceptionally(failure)
+            return Progress.DONE
+        }
+        checkpoint.payload.close()
+        task.result.complete(checkNotNull(task.host.lastClosedFileSystemGeneration))
+        return Progress.DONE
+    }
+
+    private sealed interface CapturePhase {
+        data object Detaching : CapturePhase
+
+        data class Detached(
+            val event: ExperimentalFleetEvent.Detached,
+        ) : CapturePhase
+
+        data object Recovered : CapturePhase
+
+        data object Prepared : CapturePhase
+    }
+
+    private class Checkpoint(
+        val tick: Long,
+        val payload: NativeFleetOutbox.CheckpointPayload,
+    ) {
+        var phase: CapturePhase = CapturePhase.Detaching
+    }
+
     private enum class Progress { MORE, BLOCKED, DONE }
 
     private class Close(
@@ -144,6 +242,7 @@ internal class NativeFleetCloser(
         val host: ProgramRuntimeHost,
         val commands: NativeFleetOutbox.Handoff,
         val result: CompletableFuture<Long>,
+        val checkpoint: Checkpoint?,
     ) {
         @Volatile var ready = false
         var submitted = false
