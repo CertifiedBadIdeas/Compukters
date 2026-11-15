@@ -215,7 +215,8 @@ class DeclarativeNativeIntegrationTest {
                 val character = Values.characterCommand()
                 val text = Values.textCommand()
                 val bytes = Values.bytesCommand()
-                val values = batch(listOf(integer, long, decimal, boolean, character, text, bytes))
+                val otherBytes = Values.bytesCommand()
+                val values = batch(listOf(integer, long, decimal, boolean, character, text, bytes, otherBytes))
                 check(values[integer].getOrThrow() == Int.MIN_VALUE)
                 check(values[long].getOrThrow() == Long.MAX_VALUE)
                 check(1.0 / values[decimal].getOrThrow() == Double.NEGATIVE_INFINITY)
@@ -224,6 +225,15 @@ class DeclarativeNativeIntegrationTest {
                 check(values[text].getOrThrow() == "λ😀")
                 val array: ByteArray = values[bytes].getOrThrow()
                 check(array.size == 3 && array[0] == (-1).toByte() && array[2] == 7.toByte())
+                array[0] = 42.toByte()
+                check(values[otherBytes].getOrThrow()[0] == (-1).toByte())
+                val boundedReader = createCommand<Int>("declarative.ValuesBindings.valuesInteger", emptyList()) {
+                    it.int()
+                    try { it.char(); 1 } catch (expected: IllegalStateException) { 0 }
+                }
+                val boundedResults = batch(listOf(boundedReader, integer))
+                check(boundedResults[boundedReader].getOrThrow() == 0)
+                check(boundedResults[integer].getOrThrow() == Int.MIN_VALUE)
                 val numeric = batch(listOf(integer, long, decimal))
                 var numericTotal = 0.0
                 for (result in numeric) numericTotal += result.getOrThrow().toDouble()
@@ -318,7 +328,7 @@ class DeclarativeNativeIntegrationTest {
                 }
                 check(halted) { "Generated Guest program did not finish" }
                 assertEquals(1, lookups)
-                assertEquals(10, batchRequests)
+                assertEquals(11, batchRequests)
             }
         }
         assertEquals(listOf(Vector3d(1.0, 2.0, 3.0), Vector3d(7.0, 8.0, 9.0)), directions)

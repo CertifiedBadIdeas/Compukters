@@ -22,7 +22,7 @@ public fun <T> createCommand(binding: String, arguments: List<CommandArgument>, 
 
 private interface EncodedCommand {
     fun encoded(): ByteArray
-    fun result(bytes: ByteArray): CommandResult<Any?>
+    fun result(input: CommandReply): CommandResult<Any?>
 }
 
 private class CapturedCommand<T>(
@@ -31,8 +31,7 @@ private class CapturedCommand<T>(
 ) : Command<T>, EncodedCommand {
     public override fun encoded(): ByteArray = packet
 
-    public override fun result(bytes: ByteArray): CommandResult<T> {
-        val input = CommandReply(bytes)
+    public override fun result(input: CommandReply): CommandResult<T> {
         val status = input.byte()
         if (status in 1..5) {
             val detail = input.text()
@@ -174,7 +173,8 @@ public fun <T> batch(commands: List<Command<T>>): BatchResults<T> {
     output.byte(2)
     output.byte(captured.size)
     for (command in captured) output.raw((command as EncodedCommand).encoded())
-    val input = CommandReply(CommandBindings.submit(output.finish()))
+    val response = CommandBindings.submit(output.finish())
+    val input = CommandReply(response, 0, response.size)
     if (!(input.byte() == 2 && input.byte() == captured.size)) throw IllegalStateException("Invalid command batch response")
     val results = ArrayList<CommandResult<T>>()
     for (command in captured) results.add((command as EncodedCommand).result(input.frame()) as CommandResult<T>)
@@ -192,8 +192,14 @@ internal class CommandWriter(size: Int) {
     fun short(value: Int) { require(value in 0..65535); byte(value); byte(value ushr 8) }
     fun text(value: String) {
         if (value.length > 2048) throw IllegalArgumentException("Command text exceeds packet limit")
-        short(value.length)
-        for (index in 0 until value.length) short(value[index].code)
+        if (2 + value.length * 2 > bytes.size - offset) throw IllegalArgumentException("Command packet exceeds 4096 bytes")
+        bytes[offset++] = value.length.toByte()
+        bytes[offset++] = (value.length ushr 8).toByte()
+        for (index in 0 until value.length) {
+            val code = value[index].code
+            bytes[offset++] = code.toByte()
+            bytes[offset++] = (code ushr 8).toByte()
+        }
     }
     fun raw(value: ByteArray) {
         if (value.size > bytes.size - offset) throw IllegalArgumentException("Command packet exceeds 4096 bytes")
@@ -204,13 +210,12 @@ internal class CommandWriter(size: Int) {
 }
 
 /** Bounded result reader used by SDK-generated decoders, including nested records. */
-public class CommandReply internal constructor(private val bytes: ByteArray) {
-    private var offset = 0
-    internal fun byte(): Int { if (!(offset < bytes.size)) throw IllegalStateException("Truncated command result"); return bytes[offset++].toInt() and 255 }
+public class CommandReply internal constructor(private val bytes: ByteArray, private var offset: Int, private val limit: Int) {
+    internal fun byte(): Int { if (!(offset < limit)) throw IllegalStateException("Truncated command result"); return bytes[offset++].toInt() and 255 }
     private fun short(): Int = byte() or (byte() shl 8)
     internal fun text(): String {
         val size = short()
-        if (!(size <= (bytes.size - offset) / 2)) throw IllegalStateException("Truncated command text")
+        if (!(size <= (limit - offset) / 2)) throw IllegalStateException("Truncated command text")
         val chars = CharArray(size)
         for (index in 0 until size) chars[index] = short().toChar()
         return chars.concatToString(0, chars.size)
@@ -266,16 +271,22 @@ public class CommandReply internal constructor(private val bytes: ByteArray) {
         expect(9)
         if (!(short() == fields)) throw IllegalStateException("Unexpected command record shape")
     }
-    internal fun frame(): ByteArray = rawBytes()
+    internal fun frame(): CommandReply {
+        val size = short()
+        if (!(size <= limit - offset)) throw IllegalStateException("Truncated command bytes")
+        val frame = CommandReply(bytes, offset, offset + size)
+        offset += size
+        return frame
+    }
     private fun rawBytes(): ByteArray {
         val size = short()
-        if (!(size <= bytes.size - offset)) throw IllegalStateException("Truncated command bytes")
+        if (!(size <= limit - offset)) throw IllegalStateException("Truncated command bytes")
         val result = ByteArray(size)
         bytes.copyInto(result, 0, offset, offset + size)
         offset += size
         return result
     }
-    internal fun finished(): Boolean = offset == bytes.size
+    internal fun finished(): Boolean = offset == limit
 }
 
 private object CommandBindings {
