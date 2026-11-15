@@ -82,8 +82,13 @@ Uncoordinated fleets are rejected before dispatch starts, so external replies ca
 The owner retains bounded actor and request registries; query maps are allocated only while needed, and cancellation
 does not release admission until the native response or stop arrives. One fleet waiter serves the service.
 
-This experimental implementation accepts redstone input, filesystem-generation queries and terminal-delta queries.
-Other effects and requests are rejected before admission. External events go to an owner callback without another
+This experimental implementation accepts redstone input, terminal snapshots/deltas, acknowledged terminal input and
+canonical lines, filesystem-generation queries and bounded file stat/list/read queries. A dedicated request adapter
+validates payload bounds before admission and checks the response kind before completing a request. The queued command
+owns the input payload; the response registry retains only its kind and future. Accepted input updates host observations
+even if its caller canceled the future; rejected input does not wake a parked host. File errors retain their typed
+failure values, and duplicate or obsolete responses cannot change observations. Other effects and requests are rejected
+before admission. External events go to an owner callback without another
 result backlog. Independent native stop delivery invalidates the machine identity, cancels pending work and closes
 host metadata using the final filesystem generation. Its future currently requires owner pumping, unlike the
 production close barrier. Bootstrap, restoration, world-completion translation, broader command parity and independent

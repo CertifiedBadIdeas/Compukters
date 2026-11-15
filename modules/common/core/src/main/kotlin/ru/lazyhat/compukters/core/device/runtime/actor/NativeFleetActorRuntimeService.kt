@@ -179,24 +179,40 @@ internal class NativeFleetActorRuntimeService(
             actors[endpoint]
                 ?: return CompletableFuture.failedFuture(ProgramRuntimeActorRequestException(VmActorSubmission.STALE_ENDPOINT))
         if (actor.stopping != null) return CompletableFuture.failedFuture(ProgramRuntimeActorRequestException(VmActorSubmission.CLOSED))
+        if (pendingQueries >= maximumRequests || (actor.queries?.size ?: 0) >= maximumRequestsPerActor) {
+            return CompletableFuture.failedFuture(ProgramRuntimeActorRequestException(VmActorSubmission.MAILBOX_FULL))
+        }
         val outgoing =
-            when (prepared) {
-                is ProgramRuntimeActorCommand.FileSystemGeneration -> NativeFleetOutbox.Command.FilesystemGeneration(id.value)
-
-                is ProgramRuntimeActorCommand.TerminalChangesSince -> NativeFleetOutbox.Command.TerminalUpdate(id.value, prepared.revision)
-
-                else -> return CompletableFuture.failedFuture(
-                    UnsupportedOperationException("native request is not wired: ${prepared.javaClass.simpleName}"),
+            try {
+                NativeFleetRequest.prepare(prepared)
+                    ?: return CompletableFuture.failedFuture(
+                        UnsupportedOperationException("native request is not wired: ${prepared.javaClass.simpleName}"),
+                    )
+            } catch (error: IllegalArgumentException) {
+                return CompletableFuture.completedFuture(
+                    ProgramRuntimeActorReply(
+                        id,
+                        actor.host.state,
+                        ProgramRuntimeActorValue.Rejected(
+                            ProgramRuntimeActorFailure.InvalidRequest(error.message ?: "invalid native request"),
+                        ),
+                    ),
                 )
             }
-        if (pendingQueries >= maximumRequests || (actor.queries?.size ?: 0) >= maximumRequestsPerActor ||
-            !dispatcher.outbox.offer(actor.machine, listOf(outgoing))
+        if ((prepared is ProgramRuntimeActorCommand.SendTerminalKey || prepared is ProgramRuntimeActorCommand.SendTerminalText) &&
+            actor.host.state != ProgramRuntimeState.Running && actor.host.state != ProgramRuntimeState.WaitingForInput &&
+            actor.host.state != ProgramRuntimeState.WaitingForCompiler
         ) {
+            return CompletableFuture.completedFuture(
+                ProgramRuntimeActorReply(id, actor.host.state, ProgramRuntimeActorValue.Accepted(false)),
+            )
+        }
+        if (!dispatcher.outbox.offer(actor.machine, listOf(outgoing))) {
             return CompletableFuture.failedFuture(ProgramRuntimeActorRequestException(VmActorSubmission.MAILBOX_FULL))
         }
         val result = CompletableFuture<ProgramRuntimeActorReply>()
-        val queries = actor.queries ?: mutableMapOf<Long, CompletableFuture<ProgramRuntimeActorReply>>().also { actor.queries = it }
-        queries[id.value] = result
+        val queries = actor.queries ?: mutableMapOf<Long, Query>().also { actor.queries = it }
+        queries[id.value] = Query(outgoing.response, result)
         pendingQueries++
         // Cancellation does not release admission until the native response arrives. Otherwise
         // canceled futures could bypass the bound while their commands/responses are still retained.
@@ -239,14 +255,33 @@ internal class NativeFleetActorRuntimeService(
 
             is ExperimentalFleetEvent.FilesystemGeneration -> {
                 val actor = machines[event.machine] ?: return
-                actor.generation = event.generation
-                finishQuery(actor, event.request, ProgramRuntimeActorValue.FileSystemGeneration(event.generation))
+                finishQuery(actor, event.request, event)
             }
 
             is ExperimentalFleetEvent.Terminal -> {
                 machines[event.machine]?.let {
-                    finishQuery(it, event.request, ProgramRuntimeActorValue.TerminalUpdateValue(event.update))
+                    finishQuery(it, event.request, event)
                 }
+            }
+
+            is ExperimentalFleetEvent.InputResult -> {
+                machines[event.machine]?.let { finishQuery(it, event.request, event) }
+            }
+
+            is ExperimentalFleetEvent.FileStat -> {
+                machines[event.machine]?.let { finishQuery(it, event.request, event) }
+            }
+
+            is ExperimentalFleetEvent.FileList -> {
+                machines[event.machine]?.let { finishQuery(it, event.request, event) }
+            }
+
+            is ExperimentalFleetEvent.FileRead -> {
+                machines[event.machine]?.let { finishQuery(it, event.request, event) }
+            }
+
+            is ExperimentalFleetEvent.FileFailure -> {
+                machines[event.machine]?.let { finishQuery(it, event.request, event) }
             }
 
             // The integration owner settles these typed events. It must not execute Guest code.
@@ -298,12 +333,28 @@ internal class NativeFleetActorRuntimeService(
     private fun finishQuery(
         actor: Actor,
         request: Long,
-        value: ProgramRuntimeActorValue,
+        event: ExperimentalFleetEvent,
     ) {
-        val future = actor.queries?.remove(request) ?: return
+        val query = actor.queries?.remove(request) ?: return
         pendingQueries--
         if (actor.queries?.isEmpty() == true) actor.queries = null
-        future.complete(ProgramRuntimeActorReply(ProgramRuntimeRequestId(request), actor.host.state, value, actor.generation))
+        val value =
+            try {
+                query.response.decode(event).also { value ->
+                    if (value is ProgramRuntimeActorValue.FileSystemGeneration) actor.generation = value.generation
+                    if (value is ProgramRuntimeActorValue.Accepted && value.accepted) {
+                        actor.host.observeFleetTerminalInput(
+                            fleet,
+                            actor.machine,
+                            query.response == NativeFleetRequest.Response.INTERRUPT_INPUT,
+                        )
+                    }
+                }
+            } catch (error: Exception) {
+                query.future.completeExceptionally(error)
+                return
+            }
+        query.future.complete(ProgramRuntimeActorReply(ProgramRuntimeRequestId(request), actor.host.state, value, actor.generation))
     }
 
     private fun observeStop(event: ExperimentalFleetEvent) {
@@ -332,7 +383,7 @@ internal class NativeFleetActorRuntimeService(
                 val queries = actor.queries
                 actor.queries = null
                 pendingQueries -= queries?.size ?: 0
-                queries?.values?.forEach { it.completeExceptionally(failure) }
+                queries?.values?.forEach { it.future.completeExceptionally(failure) }
                 val stopped = checkNotNull(actor.stopping)
                 if (closeFailure == null) stopped.complete(event.filesystemGeneration) else stopped.completeExceptionally(closeFailure)
                 if (closeFailure is Error) throw closeFailure
@@ -392,7 +443,7 @@ internal class NativeFleetActorRuntimeService(
         var lastTurnTick = -1L
         var turn: Turn? = null
         var generation: Long? = null
-        var queries: MutableMap<Long, CompletableFuture<ProgramRuntimeActorReply>>? = null
+        var queries: MutableMap<Long, Query>? = null
         var stopping: CompletableFuture<Long>? = null
     }
 
@@ -400,5 +451,10 @@ internal class NativeFleetActorRuntimeService(
         val id: ProgramRuntimeRequestId,
         val allowance: Long,
         val completion: ProgramRuntimeTurnCompletion,
+    )
+
+    private class Query(
+        val response: NativeFleetRequest.Response,
+        val future: CompletableFuture<ProgramRuntimeActorReply>,
     )
 }

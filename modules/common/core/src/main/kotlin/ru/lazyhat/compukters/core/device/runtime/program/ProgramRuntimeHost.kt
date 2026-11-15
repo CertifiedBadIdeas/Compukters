@@ -639,6 +639,22 @@ class ProgramRuntimeHost internal constructor(
         if (state == ProgramRuntimeState.WaitingForInput) state = ProgramRuntimeState.Running
     }
 
+    /** Acknowledges accepted terminal input without accessing the transferred native session. */
+    internal fun observeFleetTerminalInput(
+        fleet: ExperimentalFleetSessionOwner,
+        machine: Long,
+        interruptNestedProgram: Boolean,
+    ) {
+        requireFleetOwnership(fleet, machine)
+        if (state == ProgramRuntimeState.WaitingForInput) state = ProgramRuntimeState.Running
+        if (interruptNestedProgram && programScopes.size > 1) {
+            preparedRestoration = null
+            pendingCompilation?.let { compilerRouter?.cancel(it) }
+            pendingCompilation = null
+            state = ProgramRuntimeState.Running
+        }
+    }
+
     /** Updates only host observations; native execution and timers remain fleet-owned. */
     internal fun observeFleetOutcome(
         fleet: ExperimentalFleetSessionOwner,

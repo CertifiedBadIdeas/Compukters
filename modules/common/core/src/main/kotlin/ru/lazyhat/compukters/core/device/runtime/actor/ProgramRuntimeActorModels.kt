@@ -190,6 +190,8 @@ sealed interface ProgramRuntimeActorCommand : ProgramRuntimeActorMessage {
     ) : ProgramRuntimeActorCommand {
         private val line = line.copyOf()
 
+        internal val lineLength: Int get() = line.size
+
         internal fun lineChars(): CharArray = line.copyOf()
     }
 

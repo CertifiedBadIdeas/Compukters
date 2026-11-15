@@ -12,7 +12,9 @@ import ru.lazyhat.compukters.core.device.runtime.actor.NativeFleetDispatcher
 import ru.lazyhat.compukters.core.device.runtime.actor.NativeFleetEventPump
 import ru.lazyhat.compukters.core.device.runtime.actor.NativeFleetOutbox
 import ru.lazyhat.compukters.core.device.runtime.actor.ProgramRuntimeActorCommand
+import ru.lazyhat.compukters.core.device.runtime.actor.ProgramRuntimeActorFailure
 import ru.lazyhat.compukters.core.device.runtime.actor.ProgramRuntimeActorReply
+import ru.lazyhat.compukters.core.device.runtime.actor.ProgramRuntimeActorValue
 import ru.lazyhat.compukters.core.device.runtime.actor.ProgramRuntimeFrameCredit
 import ru.lazyhat.compukters.core.device.runtime.actor.VmActorEndpoint
 import ru.lazyhat.compukters.core.device.runtime.actor.VmActorSubmission
@@ -27,17 +29,24 @@ import ru.lazyhat.compukters.lang.runtime.capability.HostOperationSchema
 import ru.lazyhat.compukters.lang.runtime.capability.HostResponse
 import ru.lazyhat.compukters.lang.runtime.capability.HostValueType
 import ru.lazyhat.compukters.lang.runtime.fs.ComputerId
+import ru.lazyhat.compukters.lang.runtime.fs.VmFileSystemReadFailure
 import ru.lazyhat.compukters.lang.runtime.fs.VmSystemImage
+import ru.lazyhat.compukters.lang.runtime.fs.VmVirtualPath
 import ru.lazyhat.compukters.lang.runtime.fs.WorldFileSystemStore
 import ru.lazyhat.compukters.lang.runtime.vm.CapabilityIdentity
 import ru.lazyhat.compukters.lang.runtime.vm.ExperimentalFleetConfig
 import ru.lazyhat.compukters.lang.runtime.vm.ExperimentalFleetEvent
 import ru.lazyhat.compukters.lang.runtime.vm.ExperimentalFleetTimer
+import ru.lazyhat.compukters.lang.runtime.vm.TerminalKey
+import ru.lazyhat.compukters.lang.runtime.vm.TerminalKeyAction
+import ru.lazyhat.compukters.lang.runtime.vm.TerminalUpdate
 import ru.lazyhat.compukters.lang.runtime.vm.VmBridgeException
+import ru.lazyhat.compukters.lang.runtime.vm.VmCanonicalLineFailure
 import ru.lazyhat.compukters.lang.runtime.vm.VmHostRequestIdentity
 import ru.lazyhat.compukters.lang.runtime.vm.VmOutcome
 import ru.lazyhat.compukters.lang.runtime.vm.VmRuntime
 import ru.lazyhat.compukters.lang.runtime.vm.VmSession
+import ru.lazyhat.compukters.lang.runtime.vm.VmValue
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.nio.file.Files
@@ -51,6 +60,7 @@ import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
@@ -468,6 +478,206 @@ class NativeFleetEventPumpIntegrationTest {
                 assertTrue(before.retiredInstructions + after.retiredInstructions <= 256)
                 await(checkNotNull(service.stop(endpoint)))
             }
+        }
+    }
+
+    @Test
+    fun `native actor terminal requests report actual acceptance before the next grant`() {
+        installFfmRuntime()
+        VmRuntime.loadNativeLibrary(Path.of(requireNotNull(System.getProperty("compukters.ffi.library"))))
+        val artifact = Path.of(requireNotNull(System.getProperty("compukters.fleet.terminal.fixture"))).readBytes()
+        for (canonical in listOf(false, true)) {
+            val host = ProgramRuntimeHost(NativeProgramVmSessionFactory())
+            assertEquals(ProgramStartResult.Started, host.start(artifact))
+            VmRuntime.openExperimentalFleet(ExperimentalFleetConfig(1, 32, 32, 1024, 64, 64, 32, coordinatedTurns = true)).use { fleet ->
+                val machine = host.transferToFleet(fleet, 0)
+                val endpoint = VmActorEndpoint(ComputerId.fromLongs(35, 36), 1)
+                val owner = Thread.currentThread()
+                val checkOwner = { check(Thread.currentThread() === owner) }
+                NativeFleetActorRuntimeService(fleet, 4, 16, 16, checkOwner, {}, { _, _ -> }).use { service ->
+                    assertTrue(service.register(endpoint, machine, host))
+                    val runtime: ActorRuntimeService = service
+
+                    fun <T> await(future: CompletableFuture<T>): T {
+                        val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5)
+                        while (!future.isDone) {
+                            check(System.nanoTime() < deadline) { "terminal request stalled" }
+                            service.pump(32, 32)
+                            Thread.yield()
+                        }
+                        return future.join()
+                    }
+
+                    fun turn(tick: Long): ProgramRuntimeActorReply {
+                        assertTrue(service.grantFrame(endpoint, tick, 512))
+                        val result = CompletableFuture<ProgramRuntimeActorReply>()
+                        assertEquals(
+                            VmActorSubmission.ACCEPTED,
+                            runtime.submitTurn(endpoint, tick, emptyList()) { reply, failure ->
+                                if (failure == null) result.complete(checkNotNull(reply)) else result.completeExceptionally(failure)
+                            },
+                        )
+                        return await(result)
+                    }
+                    val premature =
+                        await(runtime.request(endpoint) { ProgramRuntimeActorCommand.SubmitCanonicalLine(it, "hello".toCharArray()) })
+                    assertEquals(
+                        ProgramRuntimeActorValue.Rejected(ProgramRuntimeActorFailure.CanonicalLine(VmCanonicalLineFailure.NO_PENDING_READ)),
+                        premature.value,
+                    )
+                    assertEquals(ProgramRuntimeState.WaitingForInput, turn(1).state)
+                    val full =
+                        assertIs<ProgramRuntimeActorValue.TerminalStateValue>(
+                            await(runtime.request(endpoint, ProgramRuntimeActorCommand::TerminalFullState)).value,
+                        ).state!!
+                    assertEquals(
+                        TerminalUpdate.Unchanged(full.revision),
+                        assertIs<ProgramRuntimeActorValue.TerminalUpdateValue>(
+                            await(runtime.request(endpoint) { ProgramRuntimeActorCommand.TerminalChangesSince(it, full.revision) }).value,
+                        ).update,
+                    )
+                    if (canonical) {
+                        val accepted =
+                            await(runtime.request(endpoint) { ProgramRuntimeActorCommand.SubmitCanonicalLine(it, "hello".toCharArray()) })
+                        assertEquals(ProgramRuntimeActorValue.Accepted(true), accepted.value)
+                        assertEquals(ProgramRuntimeState.Running, accepted.state)
+                    } else {
+                        assertEquals(
+                            ProgramRuntimeActorValue.Accepted(true),
+                            await(
+                                runtime.request(endpoint) {
+                                    ProgramRuntimeActorCommand.SendTerminalText(it, "hello")
+                                },
+                            ).value,
+                        )
+                        assertEquals(
+                            ProgramRuntimeActorValue.Accepted(true),
+                            await(
+                                runtime.request(endpoint) {
+                                    ProgramRuntimeActorCommand.SendTerminalKey(it, TerminalKey.ENTER, TerminalKeyAction.PRESS, emptySet())
+                                },
+                            ).value,
+                        )
+                    }
+                    // Input acknowledgements update observations but coordinated mode does not
+                    // execute the resumed Guest task until another capacity-owner grant arrives.
+                    assertEquals(
+                        ProgramRuntimeState.Running,
+                        await(runtime.request(endpoint, ProgramRuntimeActorCommand::FileSystemGeneration)).state,
+                    )
+                    var state: ProgramRuntimeState = host.state
+                    for (tick in 2L..128L) {
+                        state = turn(tick).state
+                        if (state is ProgramRuntimeState.Halted) break
+                    }
+                    assertEquals(ProgramRuntimeState.Halted(VmValue.I32("hello".hashCode())), state)
+                    assertEquals(
+                        ProgramRuntimeActorValue.Accepted(false),
+                        await(
+                            runtime.request(endpoint) {
+                                ProgramRuntimeActorCommand.SendTerminalText(it, "after halt")
+                            },
+                        ).value,
+                    )
+                    await(checkNotNull(service.stop(endpoint)))
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `native actor filesystem queries match the original session and preserve typed failures`() {
+        installFfmRuntime()
+        VmRuntime.loadNativeLibrary(Path.of(requireNotNull(System.getProperty("compukters.ffi.library"))))
+        val artifact = Path.of(requireNotNull(System.getProperty("compukters.fleet.timer.fixture"))).readBytes()
+        val path = VmVirtualPath.of("/bin/sample")
+        val encodedPath = path.value.encodeToByteArray()
+        val payload =
+            ByteBuffer
+                .allocate(32 + encodedPath.size + artifact.size)
+                .order(ByteOrder.LITTLE_ENDIAN)
+                .put("CPKTSYS\u0000".encodeToByteArray())
+                .putShort(1)
+                .putShort(0)
+                .putInt(1)
+                .putInt(
+                    encodedPath.size,
+                ).put(encodedPath)
+                .put(2.toByte())
+                .put(1.toByte())
+                .putShort(0)
+                .putLong(artifact.size.toLong())
+                .put(artifact)
+                .array()
+        val image = VmSystemImage.of(payload + MessageDigest.getInstance("SHA-256").digest(payload))
+        val root = Files.createTempDirectory("fleet-carrier-files-").toRealPath()
+        try {
+            WorldFileSystemStore.open(root).use { store ->
+                val id = ComputerId.fromLongs(37, 38)
+                val host = ProgramRuntimeHost(NativeProgramVmSessionFactory(ProgramFileSystemLaunchContext(store, id, image)))
+                assertEquals(ProgramStartResult.Started, host.start(artifact))
+                val stat = host.fileStat(path)!!
+                val listing = host.fileList(VmVirtualPath.of("/bin"), null, 256)!!
+                val chunk = host.fileRead(path, 0, 32, stat.metadata.generation)!!
+                VmRuntime.openExperimentalFleet(ExperimentalFleetConfig(1, 32, 32, 128, 64, 64, 32, coordinatedTurns = true)).use { fleet ->
+                    val machine = host.transferToFleet(fleet, 0)
+                    val endpoint = VmActorEndpoint(id, 1)
+                    NativeFleetActorRuntimeService(fleet, 4, 16, 16, {}, {}, { _, _ -> }).use { service ->
+                        assertTrue(service.register(endpoint, machine, host))
+
+                        fun <T> await(future: CompletableFuture<T>): T {
+                            val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5)
+                            while (!future.isDone) {
+                                check(System.nanoTime() < deadline) { "filesystem request stalled" }
+                                service.pump(32, 32)
+                                Thread.yield()
+                            }
+                            return future.join()
+                        }
+                        val runtime: ActorRuntimeService = service
+                        val statReply = runtime.request(endpoint) { ProgramRuntimeActorCommand.FileStat(it, path) }
+                        val listReply =
+                            runtime.request(
+                                endpoint,
+                            ) { ProgramRuntimeActorCommand.FileList(it, VmVirtualPath.of("/bin"), null, 256) }
+                        val readReply =
+                            runtime.request(
+                                endpoint,
+                            ) { ProgramRuntimeActorCommand.FileRead(it, path, 0, 32, stat.metadata.generation) }
+                        val stale =
+                            runtime.request(endpoint) {
+                                ProgramRuntimeActorCommand.FileRead(
+                                    it,
+                                    path,
+                                    0,
+                                    32,
+                                    stat.metadata.generation + 1,
+                                )
+                            }
+                        val missing =
+                            runtime.request(
+                                endpoint,
+                            ) { ProgramRuntimeActorCommand.FileStat(it, VmVirtualPath.of("/home/missing")) }
+                        assertEquals(stat, assertIs<ProgramRuntimeActorValue.FileStatValue>(await(statReply).value).stat)
+                        assertEquals(listing, assertIs<ProgramRuntimeActorValue.FileListValue>(await(listReply).value).listing)
+                        assertEquals(chunk, assertIs<ProgramRuntimeActorValue.FileChunkValue>(await(readReply).value).chunk)
+                        assertEquals(
+                            ProgramRuntimeActorValue.Rejected(
+                                ProgramRuntimeActorFailure.FileSystem(VmFileSystemReadFailure.STALE_GENERATION),
+                            ),
+                            await(stale).value,
+                        )
+                        assertEquals(
+                            ProgramRuntimeActorValue.Rejected(ProgramRuntimeActorFailure.FileSystem(VmFileSystemReadFailure.NOT_FOUND)),
+                            await(missing).value,
+                        )
+                        assertEquals(ProgramRuntimeState.Running, host.state)
+                        await(checkNotNull(service.stop(endpoint)))
+                    }
+                }
+            }
+        } finally {
+            root.toFile().deleteRecursively()
         }
     }
 

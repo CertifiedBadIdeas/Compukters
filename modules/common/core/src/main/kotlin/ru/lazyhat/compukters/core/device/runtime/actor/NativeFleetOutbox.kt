@@ -86,25 +86,6 @@ internal class NativeFleetOutbox(
             ) = fleet.grant(machine, tick, retirements, deadlineNanos)
         }
 
-        data class FilesystemGeneration(
-            val request: Long,
-        ) : Command {
-            override fun send(
-                fleet: ExperimentalFleet,
-                machine: Long,
-            ) = fleet.filesystemGeneration(machine, request)
-        }
-
-        data class TerminalUpdate(
-            val request: Long,
-            val revision: Long,
-        ) : Command {
-            override fun send(
-                fleet: ExperimentalFleet,
-                machine: Long,
-            ) = fleet.terminalUpdate(machine, request, revision)
-        }
-
         data object Stop : Lifecycle {
             override fun send(
                 fleet: ExperimentalFleet,

@@ -10,17 +10,26 @@ import ru.lazyhat.compukters.core.device.runtime.program.ProgramRuntimeState
 import ru.lazyhat.compukters.core.device.runtime.program.ProgramVmSession
 import ru.lazyhat.compukters.core.device.runtime.program.ProgramVmSessionFactory
 import ru.lazyhat.compukters.lang.runtime.fs.ComputerId
+import ru.lazyhat.compukters.lang.runtime.fs.VmFileChunk
+import ru.lazyhat.compukters.lang.runtime.fs.VmFileSystemReadFailure
+import ru.lazyhat.compukters.lang.runtime.fs.VmVirtualPath
 import ru.lazyhat.compukters.lang.runtime.vm.ExperimentalFleet
 import ru.lazyhat.compukters.lang.runtime.vm.ExperimentalFleetEvent
+import ru.lazyhat.compukters.lang.runtime.vm.ExperimentalFleetInputResult
+import ru.lazyhat.compukters.lang.runtime.vm.TerminalKey
+import ru.lazyhat.compukters.lang.runtime.vm.TerminalKeyAction
+import ru.lazyhat.compukters.lang.runtime.vm.TerminalUpdate
 import ru.lazyhat.compukters.lang.runtime.vm.VmOutcome
 import java.lang.reflect.Proxy
 import java.util.ArrayDeque
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.TimeUnit
 import kotlin.test.Test
+import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
+import kotlin.test.assertIs
 import kotlin.test.assertTrue
 
 class NativeFleetActorRuntimeServiceTest {
@@ -222,6 +231,111 @@ class NativeFleetActorRuntimeServiceTest {
         }
     }
 
+    @Test
+    fun `invalid payloads are rejected before admission without consuming query capacity`() {
+        Harness(maximumRequests = 1).use { h ->
+            val endpoint = h.register(1)
+            val path = VmVirtualPath.of("/home")
+            val invalid: List<(ProgramRuntimeRequestId) -> ProgramRuntimeActorCommand> =
+                listOf(
+                    { ProgramRuntimeActorCommand.SendTerminalText(it, "a".repeat(4097)) },
+                    { ProgramRuntimeActorCommand.SendTerminalText(it, "\ud800") },
+                    { ProgramRuntimeActorCommand.SubmitCanonicalLine(it, CharArray(4097)) },
+                    { ProgramRuntimeActorCommand.FileList(it, path, null, 257) },
+                    { ProgramRuntimeActorCommand.FileList(it, path, "", 1) },
+                    { ProgramRuntimeActorCommand.FileList(it, path, "é".repeat(2049), 1) },
+                    { ProgramRuntimeActorCommand.FileRead(it, path, 0, 32769, 0) },
+                )
+            invalid.forEach { command ->
+                val result = h.service.request(endpoint, command).join()
+                assertIs<ProgramRuntimeActorFailure.InvalidRequest>(assertIs<ProgramRuntimeActorValue.Rejected>(result.value).failure)
+            }
+            val accepted = h.service.request(endpoint) { ProgramRuntimeActorCommand.SendTerminalText(it, "\ud83d\ude00".repeat(4096)) }
+            h.service.pump(0, 8)
+            assertEquals(1, h.queries.size)
+            h.events += ExperimentalFleetEvent.InputResult(1, h.queries.single(), ExperimentalFleetInputResult.Accepted)
+            h.service.pump(8, 8)
+            assertEquals(ProgramRuntimeActorValue.Accepted(true), accepted.join().value)
+        }
+    }
+
+    @Test
+    fun `only acknowledged terminal input wakes host and cancelled input still reconciles state`() {
+        Harness().use { h ->
+            val endpoint = h.register(1)
+            assertTrue(h.service.grantFrame(endpoint, 1, 10))
+            assertEquals(VmActorSubmission.ACCEPTED, h.service.submitTurn(endpoint, 1, emptyList()) { _, _ -> })
+            h.service.pump(0, 8)
+            h.events += ExperimentalFleetEvent.Outcome(1, 1, VmOutcome.WaitingForTerminalEvent)
+            h.events += ExperimentalFleetEvent.Quiescent(1, 1, 0, false)
+            h.service.pump(8, 8)
+            val refused = h.service.request(endpoint) { ProgramRuntimeActorCommand.SendTerminalText(it, "hello") }
+            val accepted =
+                h.service.request(endpoint) {
+                    ProgramRuntimeActorCommand.SendTerminalKey(it, TerminalKey.ENTER, TerminalKeyAction.PRESS, emptySet())
+                }
+            accepted.cancel(false)
+            h.service.pump(0, 8)
+            h.events += ExperimentalFleetEvent.InputResult(1, h.queries[0], ExperimentalFleetInputResult.TerminalRejected)
+            h.service.pump(1, 0)
+            assertEquals(ProgramRuntimeState.WaitingForInput, refused.join().state)
+            assertEquals(ProgramRuntimeActorValue.Accepted(false), refused.join().value)
+            h.events += ExperimentalFleetEvent.InputResult(1, h.queries[1], ExperimentalFleetInputResult.Accepted)
+            h.service.pump(1, 0)
+            val state = h.service.request(endpoint, ProgramRuntimeActorCommand::FileSystemGeneration)
+            h.service.pump(0, 8)
+            h.events += ExperimentalFleetEvent.FilesystemGeneration(1, h.queries.last(), 7)
+            h.service.pump(1, 0)
+            assertEquals(ProgramRuntimeState.Running, state.join().state)
+            assertTrue(accepted.isCancelled)
+        }
+    }
+
+    @Test
+    fun `typed reply mismatch releases admission and late duplicates do not update host generation`() {
+        Harness(maximumRequests = 1).use { h ->
+            val endpoint = h.register(1)
+            val terminal = h.service.request(endpoint, ProgramRuntimeActorCommand::TerminalFullState)
+            h.service.pump(0, 8)
+            val old = h.queries.single()
+            h.events += ExperimentalFleetEvent.FilesystemGeneration(1, old, 999)
+            h.service.pump(1, 0)
+            assertTrue(terminal.isCompletedExceptionally)
+            val generation = h.service.request(endpoint, ProgramRuntimeActorCommand::FileSystemGeneration)
+            h.service.pump(0, 8)
+            h.events += ExperimentalFleetEvent.FilesystemGeneration(1, h.queries.last(), 7)
+            h.events += ExperimentalFleetEvent.FilesystemGeneration(1, old, 1000)
+            h.service.pump(8, 0)
+            assertEquals(7L, generation.join().fileSystemGeneration)
+            val next = h.service.request(endpoint) { ProgramRuntimeActorCommand.TerminalChangesSince(it, 0) }
+            h.service.pump(0, 8)
+            h.events += ExperimentalFleetEvent.Terminal(1, h.queries.last(), TerminalUpdate.Unchanged(0))
+            h.service.pump(1, 0)
+            assertEquals(7L, next.join().fileSystemGeneration)
+        }
+    }
+
+    @Test
+    fun `file failure is typed and file chunk owns its returned bytes`() {
+        Harness().use { h ->
+            val endpoint = h.register(1)
+            val path = VmVirtualPath.of("/home/file")
+            val absent = h.service.request(endpoint) { ProgramRuntimeActorCommand.FileStat(it, path) }
+            val read = h.service.request(endpoint) { ProgramRuntimeActorCommand.FileRead(it, path, 0, 32, 7) }
+            h.service.pump(0, 8)
+            val bytes = byteArrayOf(1, 2, 3)
+            h.events += ExperimentalFleetEvent.FileFailure(1, h.queries[0], VmFileSystemReadFailure.NOT_FOUND)
+            h.events += ExperimentalFleetEvent.FileRead(1, h.queries[1], VmFileChunk(7, 3, true, bytes))
+            h.service.pump(8, 0)
+            assertEquals(
+                ProgramRuntimeActorValue.Rejected(ProgramRuntimeActorFailure.FileSystem(VmFileSystemReadFailure.NOT_FOUND)),
+                absent.join().value,
+            )
+            bytes.fill(9)
+            assertContentEquals(byteArrayOf(1, 2, 3), assertIs<ProgramRuntimeActorValue.FileChunkValue>(read.join().value).chunk!!.bytes)
+        }
+    }
+
     private class Harness(
         maximumRequests: Int = 16,
         private val closeFailureFor: Long? = null,
@@ -237,7 +351,7 @@ class NativeFleetActorRuntimeServiceTest {
         private val owner = Thread.currentThread()
         private val fleet =
             Proxy.newProxyInstance(ExperimentalFleet::class.java.classLoader, arrayOf(ExperimentalFleet::class.java)) { _, method, args ->
-                when (method.name) {
+                when (method.name.substringBefore('-')) {
                     "getCoordinatedTurns" -> {
                         true
                     }
@@ -266,6 +380,21 @@ class NativeFleetActorRuntimeServiceTest {
 
                     "filesystemGeneration" -> {
                         queries += args!![1] as Long
+                        null
+                    }
+
+                    "terminalUpdate", "fileStat", "fileList", "fileRead" -> {
+                        queries += args!![1] as Long
+                        null
+                    }
+
+                    "terminalText", "canonicalLine" -> {
+                        queries += args!![2] as Long
+                        null
+                    }
+
+                    "terminalKey" -> {
+                        queries += args!![4] as Long
                         null
                     }
 
