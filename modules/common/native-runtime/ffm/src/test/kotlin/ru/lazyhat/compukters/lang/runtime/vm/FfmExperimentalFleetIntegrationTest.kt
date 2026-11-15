@@ -24,6 +24,35 @@ import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
 
 class FfmExperimentalFleetIntegrationTest {
+
+    @Test
+    fun `event waiting wakes for work and does not block command submission`() {
+        val library = Path.of(requireNotNull(System.getProperty("compukter.ffi.library")))
+        val artifact = Path.of(requireNotNull(System.getProperty("compukters.fleet.terminal.fixture"))).readBytes()
+        val bridge = FfmBridge.open(library)
+        val fleet = bridge.openExperimentalFleet(ExperimentalFleetConfig(1, 32, 32, 128, 64, 64, 32))
+        val session = VmSession.open(artifact, bridge)
+        val machine = session.transferToFleet(fleet)
+        val generation = fleet.eventGeneration()
+        assertEquals(null, fleet.poll())
+        val wait = java.util.concurrent.CompletableFuture.supplyAsync { fleet.waitEvents(generation, 5_000) }
+        kotlin.test.assertFailsWith<java.util.concurrent.TimeoutException> { wait.get(100, java.util.concurrent.TimeUnit.MILLISECONDS) }
+        fleet.resourceSnapshot(machine, 42)
+        assertTrue(wait.get(5, java.util.concurrent.TimeUnit.SECONDS))
+        assertEquals(42L, (fleet.poll() as ExperimentalFleetEvent.Resources).request)
+        val nextGeneration = fleet.eventGeneration()
+        assertTrue(!fleet.waitEvents(nextGeneration, 0))
+        fleet.stop(machine)
+        val deadline = System.nanoTime() + 5_000_000_000L
+        while (fleet.poll() !is ExperimentalFleetEvent.Stopped) {
+            check(System.nanoTime() < deadline)
+            Thread.yield()
+        }
+        session.close()
+        fleet.close()
+        bridge.close()
+    }
+
     @Test
     fun `FFM redstone reaches the correct machines`() {
         fun fixture(name: String) = Path.of(requireNotNull(System.getProperty(name))).readBytes()

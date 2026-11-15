@@ -35,6 +35,8 @@ final class JniExperimentalFleet {
     static native int reply(long handle, long machine, int task, long request, int tag, long bits, byte[] payload);
     static native int replyWire(long handle, long machine, int task, long request, byte[] payload);
     static native int replyFailure(long handle, long machine, int task, long request, int kind, byte[] detail);
+    static native int eventGeneration(long handle, long[] output);
+    static native int waitEvents(long handle, long generation, int timeoutMillis, long[] output);
     static native int poll(long handle, byte[] output, long[] written);
     static native int close(long handle);
 }

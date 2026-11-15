@@ -234,6 +234,31 @@ class ExperimentalFfmFleet private constructor(
     }
 
     @Synchronized
+    override fun eventGeneration(): Long = Arena.ofConfined().use { temporary ->
+        val value = temporary.allocate(ValueLayout.JAVA_LONG)
+        success("event generation", calls.generation.invokeExact(active(), value) as Int)
+        value.get(ValueLayout.JAVA_LONG, 0)
+    }
+
+    override fun waitEvents(generation: Long, timeoutMillis: Int): Boolean {
+        require(timeoutMillis in 0..60_000)
+        val fleetHandle = synchronized(this) {
+            val current = active()
+            bridge.retainFleet()
+            current
+        }
+        try {
+            return Arena.ofConfined().use { temporary ->
+                val value = temporary.allocate(ValueLayout.JAVA_INT)
+                success("wait events", calls.waitEvents.invokeExact(fleetHandle, generation, timeoutMillis, value) as Int)
+                value.get(ValueLayout.JAVA_INT, 0) != 0
+            }
+        } finally {
+            bridge.releaseFleet()
+        }
+    }
+
+    @Synchronized
     override fun poll(): ExperimentalFleetEvent? {
         written.set(ValueLayout.JAVA_LONG, 0, 0)
         success("poll", calls.poll.invokeExact(active(), output, output.byteSize(), written) as Int)
@@ -258,6 +283,7 @@ class ExperimentalFfmFleet private constructor(
     private class Calls(val attach: MethodHandle, val attachTimers: MethodHandle, val recover: MethodHandle,
         val grant: MethodHandle, val detach: MethodHandle, val detachTimers: MethodHandle,
         val stop: MethodHandle, val poll: MethodHandle, val close: MethodHandle,
+        val generation: MethodHandle, val waitEvents: MethodHandle,
         val reply: MethodHandle, val replyFailure: MethodHandle, val resolveCost: MethodHandle, val compilation: MethodHandle,
         val observe: MethodHandle, val redstone: MethodHandle, val terminalKey: MethodHandle,
         val terminalText: MethodHandle, val canonicalLine: MethodHandle,
@@ -288,6 +314,7 @@ class ExperimentalFfmFleet private constructor(
                 val calls = Calls(call("attach", l, l, p), call("attach_timers", l, l, l, p, l, p),
                     call("recover", l, l, p), call("grant", l, l, l, i, l), call("detach", l, l),
                     call("detach_timers", l, l, l), call("stop", l, l), call("poll", l, p, l, p), call("close", l),
+                    call("event_generation", l, p), call("wait_events", l, l, i, p),
                     call("reply", l, l, i, l, p, l), call("reply_failure", l, l, i, l, i, p, l),
                     call("resolve_cost", l, l, i, l, i), call("compilation", l, l, l, i, p, l),
                     call("observe", l, l, l, i, l), call("redstone", l, l, i, i), call("terminal_key", l, l, i, i, i, l),

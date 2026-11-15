@@ -45,5 +45,9 @@ interface ExperimentalFleet : ExperimentalFleetSessionOwner, AutoCloseable {
     fun stop(machine: Long)
     fun detach(machine: Long)
     fun detachWithTimers(machine: Long, tick: Long)
+    /** Capture before draining poll(); a later publication changes the generation. */
+    fun eventGeneration(): Long
+    /** Wait independently of command submission; false means timeout or fleet closure. */
+    fun waitEvents(generation: Long, timeoutMillis: Int): Boolean
     fun poll(): ExperimentalFleetEvent?
 }

@@ -14,7 +14,7 @@ import java.nio.ByteOrder
 /** Opt-in transport. Call creation and close outside the server thread. */
 class ExperimentalJniFleet private constructor(
     private val bridge: JniBridge,
-    private var handle: Long,
+    @Volatile private var handle: Long,
 ) : ExperimentalFleet {
     private val output = ByteArray(1_048_576)
     private val written = LongArray(1)
@@ -161,6 +161,20 @@ class ExperimentalJniFleet private constructor(
     @Synchronized
     override fun detachWithTimers(machine: Long, tick: Long) =
         success("detach", JniExperimentalFleet.detachWithTimers(active(), machine, tick))
+
+    @Synchronized
+    override fun eventGeneration(): Long {
+        val value = LongArray(1)
+        success("event generation", JniExperimentalFleet.eventGeneration(active(), value))
+        return value[0]
+    }
+
+    override fun waitEvents(generation: Long, timeoutMillis: Int): Boolean {
+        require(timeoutMillis in 0..60_000)
+        val value = LongArray(1)
+        success("wait events", JniExperimentalFleet.waitEvents(active(), generation, timeoutMillis, value))
+        return value[0] != 0L
+    }
 
     @Synchronized
     override fun poll(): ExperimentalFleetEvent? {
