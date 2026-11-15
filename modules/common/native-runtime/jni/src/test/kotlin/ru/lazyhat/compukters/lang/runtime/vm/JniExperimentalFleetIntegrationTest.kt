@@ -26,6 +26,63 @@ import ru.lazyhat.compukters.lang.runtime.fs.VmFileSystemReadFailure
 
 class JniExperimentalFleetIntegrationTest {
     @Test
+    fun `deployment candidates are isolated and survive a revision conflict over JNI`() {
+        val library = Path.of(requireNotNull(System.getProperty("compukter.jni.library")))
+        val artifact = Path.of(requireNotNull(System.getProperty("compukters.fleet.timer.fixture"))).readBytes()
+        val bridge = JniBridge.open(library)
+        val header = ByteBuffer.allocate(16).order(ByteOrder.LITTLE_ENDIAN)
+            .put("CPKTSYS\u0000".encodeToByteArray()).putShort(1).putShort(0).putInt(0).array()
+        val image = header + MessageDigest.getInstance("SHA-256").digest(header)
+        val root = Files.createTempDirectory("fleet-deployment-").toRealPath()
+        try {
+            WorldFileSystemStore.open(root, bridge).use { store ->
+                ExperimentalJniFleet.open(library, 2, 32, 32, 128, 64, 64, 32).use { fleet ->
+                    val first = VmSession.openInStore(artifact, store, ComputerId.fromLongs(95, 96), image)
+                    val second = VmSession.openInStore(artifact, store, ComputerId.fromLongs(97, 98), image)
+                    val a = first.transferToFleet(fleet)
+                    val b = second.transferToFleet(fleet)
+                    val deadline = System.nanoTime() + 10_000_000_000L
+                    fun next(): ExperimentalFleetEvent {
+                        while (System.nanoTime() < deadline) {
+                            fleet.poll()?.let { return it }
+                            Thread.yield()
+                        }
+                        error("timed out waiting for fleet event")
+                    }
+                    val path = VmVirtualPath.of("/home/demo")
+                    fleet.prepareDeployment(a, 1, artifact)
+                    val candidateA = ((next() as ExperimentalFleetEvent.Deployment).result as ExperimentalFleetDeploymentResult.Prepared).candidate
+                    fleet.prepareDeployment(b, 2, artifact)
+                    val candidateB = ((next() as ExperimentalFleetEvent.Deployment).result as ExperimentalFleetDeploymentResult.Prepared).candidate
+                    kotlin.test.assertNotEquals(candidateA, candidateB)
+                    fleet.installDeployment(b, 3, path, candidateA, VmExecutableRevision.Absent)
+                    assertEquals(ExperimentalFleetEvent.Deployment(b, 3, ExperimentalFleetDeploymentResult.Failed(ExperimentalFleetDeploymentFailure.INVALID_CANDIDATE)), next())
+                    fleet.installDeployment(a, 4, path, candidateA, VmExecutableRevision.Absent)
+                    assertTrue((next() as ExperimentalFleetEvent.Deployment).result is ExperimentalFleetDeploymentResult.Installed)
+                    fleet.prepareDeployment(a, 5, artifact)
+                    val retry = ((next() as ExperimentalFleetEvent.Deployment).result as ExperimentalFleetDeploymentResult.Prepared).candidate
+                    fleet.installDeployment(a, 6, path, retry, VmExecutableRevision.Absent)
+                    assertEquals(ExperimentalFleetEvent.Deployment(a, 6, ExperimentalFleetDeploymentResult.Failed(ExperimentalFleetDeploymentFailure.BUSY)), next())
+                    fleet.deploymentRevision(a, 7, path)
+                    val revision = ((next() as ExperimentalFleetEvent.Deployment).result as ExperimentalFleetDeploymentResult.Revision).revision
+                    fleet.installDeployment(a, 8, path, retry, revision)
+                    assertTrue((next() as ExperimentalFleetEvent.Deployment).result is ExperimentalFleetDeploymentResult.Installed)
+                    fleet.discardDeployment(b, 9, candidateB)
+                    assertEquals(ExperimentalFleetEvent.Deployment(b, 9, ExperimentalFleetDeploymentResult.Discarded), next())
+                    fleet.stop(a)
+                    fleet.stop(b)
+                    var stopped = 0
+                    while (stopped < 2) if (next() is ExperimentalFleetEvent.Stopped) stopped++
+                    first.close()
+                    second.close()
+                }
+            }
+        } finally {
+            root.toFile().deleteRecursively()
+        }
+    }
+
+    @Test
     fun `timer survives checkpoint and resumes on the restored tick`() {
         val library = Path.of(requireNotNull(System.getProperty("compukter.jni.library")))
         val artifact = Path.of(requireNotNull(System.getProperty("compukters.fleet.timer.fixture"))).readBytes()

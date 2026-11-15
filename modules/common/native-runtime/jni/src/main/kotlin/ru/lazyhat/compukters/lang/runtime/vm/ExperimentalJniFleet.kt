@@ -103,6 +103,28 @@ class ExperimentalJniFleet private constructor(
     fun filesystemGeneration(machine: Long, request: Long) =
         success("filesystem generation", JniExperimentalFleet.filesystemGeneration(active(), machine, request))
 
+    /** Results are delivered as Deployment events; prepared candidates remain owned by this machine. */
+    @Synchronized
+    fun prepareDeployment(machine: Long, request: Long, artifact: ByteArray) =
+        success("prepare deployment", JniExperimentalFleet.deployment(active(), machine, request, 0, artifact, 0, 0))
+
+    @Synchronized
+    fun deploymentRevision(machine: Long, request: Long, path: VmVirtualPath) =
+        success("deployment revision", JniExperimentalFleet.deployment(active(), machine, request, 1, path.value.encodeToByteArray(), 0, 0))
+
+    @Synchronized
+    fun installDeployment(machine: Long, request: Long, path: VmVirtualPath, candidate: Long, expected: VmExecutableRevision) {
+        val revision = when (expected) {
+            VmExecutableRevision.Absent -> 0L
+            is VmExecutableRevision.Present -> expected.generation.also { require(it > 0) }
+        }
+        success("install deployment", JniExperimentalFleet.deployment(active(), machine, request, 2, path.value.encodeToByteArray(), candidate, revision))
+    }
+
+    @Synchronized
+    fun discardDeployment(machine: Long, request: Long, candidate: Long) =
+        success("discard deployment", JniExperimentalFleet.deployment(active(), machine, request, 3, byteArrayOf(), candidate, 0))
+
     @Synchronized
     fun fileStat(machine: Long, request: Long, path: VmVirtualPath) =
         success("file stat", JniExperimentalFleet.filesystemQuery(active(), machine, request, 0, path.value.encodeToByteArray(), byteArrayOf(), 0, 0, 0))

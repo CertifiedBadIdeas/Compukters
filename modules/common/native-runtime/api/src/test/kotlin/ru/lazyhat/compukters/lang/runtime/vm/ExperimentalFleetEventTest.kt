@@ -29,6 +29,22 @@ class ExperimentalFleetEventTest {
         assertFails { ExperimentalFleetEventWire.decode(wire + 0) }
     }
     @Test
+    fun `deployment events validate results and preserve failures`() {
+        fun wire(kind: Int, status: Int, value: Long): ByteArray =
+            ByteBuffer.allocate(30).order(ByteOrder.LITTLE_ENDIAN)
+                .put(17).putLong(7).putLong(8).put(kind.toByte()).putInt(status).putLong(value).array()
+        val prepared = wire(0, 0, 9)
+        assertEquals(ExperimentalFleetEvent.Deployment(7, 8, ExperimentalFleetDeploymentResult.Prepared(9)), ExperimentalFleetEventWire.decode(prepared))
+        assertEquals(ExperimentalFleetEvent.Deployment(7, 8, ExperimentalFleetDeploymentResult.Revision(VmExecutableRevision.Absent)), ExperimentalFleetEventWire.decode(wire(1, 0, 0)))
+        assertEquals(ExperimentalFleetEvent.Deployment(7, 8, ExperimentalFleetDeploymentResult.Failed(ExperimentalFleetDeploymentFailure.BUSY)), ExperimentalFleetEventWire.decode(wire(4, 38, 0)))
+        for (size in 0 until prepared.size) assertFails { ExperimentalFleetEventWire.decode(prepared.copyOf(size)) }
+        assertFails { ExperimentalFleetEventWire.decode(prepared + 0) }
+        assertFails { ExperimentalFleetEventWire.decode(wire(0, 0, 0)) }
+        assertFails { ExperimentalFleetEventWire.decode(wire(4, 38, 9)) }
+        assertFails { ExperimentalFleetEventWire.decode(wire(4, 0, 0)) }
+    }
+
+    @Test
     fun `detached timer event validates lengths identities and remaining duration`() {
         fun wire(remaining: Long = 1, duplicate: Boolean = false): ByteArray {
             val count = if (duplicate) 2 else 1

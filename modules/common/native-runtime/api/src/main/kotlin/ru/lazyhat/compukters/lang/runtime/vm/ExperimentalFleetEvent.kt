@@ -21,6 +21,20 @@ sealed interface ExperimentalFleetInputResult {
     data class CanonicalRejected(val failure: VmCanonicalLineFailure) : ExperimentalFleetInputResult
 }
 
+sealed interface ExperimentalFleetDeploymentResult {
+    data class Prepared(val candidate: Long) : ExperimentalFleetDeploymentResult
+    data class Revision(val revision: VmExecutableRevision) : ExperimentalFleetDeploymentResult
+    data class Installed(val revision: VmExecutableRevision.Present) : ExperimentalFleetDeploymentResult
+    data object Discarded : ExperimentalFleetDeploymentResult
+    data class Failed(val failure: ExperimentalFleetDeploymentFailure) : ExperimentalFleetDeploymentResult
+}
+
+enum class ExperimentalFleetDeploymentFailure {
+    VERIFICATION, ADMISSION, INVALID_CANDIDATE, CAPACITY, WRONG_MACHINE, PROFILE_CHANGED,
+    INVALID_PATH, NOT_FOUND, NOT_DIRECTORY, IS_DIRECTORY, READ_ONLY, PERMISSION,
+    LIMIT, BUSY, STORAGE, CLOSED, FILESYSTEM,
+}
+
 data class ExperimentalFleetTimer(
     val identity: VmHostRequestIdentity,
     val scope: Long,
@@ -35,6 +49,7 @@ data class ExperimentalFleetTimer(
 
 /** Events from the opt-in native fleet transport. Machine identities are local to a fleet. */
 sealed interface ExperimentalFleetEvent {
+    data class Deployment(val machine: Long, val request: Long, val result: ExperimentalFleetDeploymentResult) : ExperimentalFleetEvent
     data class InputResult(val machine: Long, val request: Long, val result: ExperimentalFleetInputResult) : ExperimentalFleetEvent
     data class FileStat(val machine: Long, val request: Long, val stat: VmFileStat) : ExperimentalFleetEvent
     data class FileList(val machine: Long, val request: Long, val listing: VmDirectoryListing) : ExperimentalFleetEvent
@@ -69,6 +84,46 @@ object ExperimentalFleetEventWire {
             return items
         }
         return when (input.get().toInt() and 0xff) {
+            17 -> {
+                val machine = long()
+                val request = long()
+                val kind = input.get().toInt() and 0xff
+                val status = input.int
+                val value = long()
+                require(!input.hasRemaining()) { "trailing fleet deployment bytes" }
+                val result = when (kind) {
+                    0 -> { require(status == 0 && value > 0); ExperimentalFleetDeploymentResult.Prepared(value) }
+                    1 -> { require(status == 0); ExperimentalFleetDeploymentResult.Revision(if (value == 0L) VmExecutableRevision.Absent else VmExecutableRevision.Present(value)) }
+                    2 -> { require(status == 0 && value > 0); ExperimentalFleetDeploymentResult.Installed(VmExecutableRevision.Present(value)) }
+                    3 -> { require(status == 0 && value == 0L); ExperimentalFleetDeploymentResult.Discarded }
+                    4 -> {
+                        require(value == 0L)
+                        val failure = when (status) {
+                            2 -> ExperimentalFleetDeploymentFailure.VERIFICATION
+                            3 -> ExperimentalFleetDeploymentFailure.ADMISSION
+                            6 -> ExperimentalFleetDeploymentFailure.INVALID_CANDIDATE
+                            7 -> ExperimentalFleetDeploymentFailure.CAPACITY
+                            20 -> ExperimentalFleetDeploymentFailure.WRONG_MACHINE
+                            21 -> ExperimentalFleetDeploymentFailure.PROFILE_CHANGED
+                            30 -> ExperimentalFleetDeploymentFailure.INVALID_PATH
+                            31 -> ExperimentalFleetDeploymentFailure.NOT_FOUND
+                            32 -> ExperimentalFleetDeploymentFailure.NOT_DIRECTORY
+                            33 -> ExperimentalFleetDeploymentFailure.IS_DIRECTORY
+                            34 -> ExperimentalFleetDeploymentFailure.READ_ONLY
+                            35 -> ExperimentalFleetDeploymentFailure.PERMISSION
+                            37 -> ExperimentalFleetDeploymentFailure.LIMIT
+                            38 -> ExperimentalFleetDeploymentFailure.BUSY
+                            39 -> ExperimentalFleetDeploymentFailure.STORAGE
+                            40 -> ExperimentalFleetDeploymentFailure.CLOSED
+                            41 -> ExperimentalFleetDeploymentFailure.FILESYSTEM
+                            else -> throw IllegalArgumentException("invalid fleet deployment failure")
+                        }
+                        ExperimentalFleetDeploymentResult.Failed(failure)
+                    }
+                    else -> throw IllegalArgumentException("invalid fleet deployment result")
+                }
+                ExperimentalFleetEvent.Deployment(machine, request, result)
+            }
             14 -> {
                 val machine = long()
                 val request = long()
