@@ -73,6 +73,22 @@ queue state, and reads the existing retirement counter for frame progress. These
 histograms and are valid for its serialized admission/pump loop; they are not an admission barrier for concurrent
 callers. Production diagnostic snapshots retain their full histograms and logging cadence.
 
+## Experimental native actor backend
+
+`NativeFleetActorRuntimeService` implements active turns of `ActorRuntimeService` for hosts already started or
+restored and transferred to a coordinated native fleet. Rust workers own execution and timers; the owner grants
+frame credit and delivers observations. Same-tick continuations consume the original reservation and deadline.
+Uncoordinated fleets are rejected before dispatch starts, so external replies cannot resume execution without a grant.
+The owner retains bounded actor and request registries; query maps are allocated only while needed, and cancellation
+does not release admission until the native response or stop arrives. One fleet waiter serves the service.
+
+This experimental implementation accepts redstone input, filesystem-generation queries and terminal-delta queries.
+Other effects and requests are rejected before admission. External events go to an owner callback without another
+result backlog. Independent native stop delivery invalidates the machine identity, cancels pending work and closes
+host metadata using the final filesystem generation. Its future currently requires owner pumping, unlike the
+production close barrier. Bootstrap, restoration, world-completion translation, broader command parity and independent
+shutdown still need integration; production backend selection remains unchanged.
+
 ## Addon host boundary
 
 Third-party world capabilities use the same continuation boundary. Loader integrations register bounded

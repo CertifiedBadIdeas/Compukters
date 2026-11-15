@@ -22,6 +22,7 @@ import ru.lazyhat.compukters.lang.runtime.vm.GuestTrap
 import ru.lazyhat.compukters.lang.runtime.vm.HostFailureKind
 import ru.lazyhat.compukters.lang.runtime.vm.QuotaKind
 import ru.lazyhat.compukters.lang.runtime.vm.VmFault
+import ru.lazyhat.compukters.lang.runtime.vm.VmOutcome
 import ru.lazyhat.compukters.lang.runtime.vm.VmValue
 
 data class ProgramTickBudget(
@@ -183,3 +184,15 @@ sealed interface ProgramFailure {
         val detail: String,
     ) : ProgramFailure
 }
+
+/** One failure mapping for both direct advancement and fleet observations. */
+internal fun VmOutcome.programFailure(): ProgramFailure? =
+    when (this) {
+        is VmOutcome.AllocationExhausted -> ProgramFailure.Allocation(collectionAttempted, diagnostic)
+        is VmOutcome.QuotaExhausted -> ProgramFailure.Quota(kind, limit, consumed)
+        is VmOutcome.Crashed -> ProgramFailure.Trap(trap, diagnostic)
+        is VmOutcome.UncaughtException -> ProgramFailure.UncaughtException(diagnostic)
+        is VmOutcome.Faulted -> ProgramFailure.Fault(fault, diagnostic)
+        is VmOutcome.HostFailed -> ProgramFailure.Host(kind, detail)
+        else -> null
+    }

@@ -5,6 +5,8 @@
  */
 package ru.lazyhat.compukters.core.device.runtime.actor
 
+internal const val MAXIMUM_CONTINUATIONS_PER_FRAME = 16
+
 /** A single computer's share of one server frame. Access is serialized by the owner. */
 internal class ProgramRuntimeFrameCredit(
     val worldTick: Long,

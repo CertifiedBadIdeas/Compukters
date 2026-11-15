@@ -507,41 +507,10 @@ class ProgramRuntimeHost internal constructor(
                     return
                 }
 
-                is VmOutcome.AllocationExhausted -> {
-                    finish(
-                        ProgramRuntimeState.Failed(ProgramFailure.Allocation(outcome.collectionAttempted, outcome.diagnostic)),
-                    )
-                    return
-                }
-
-                is VmOutcome.QuotaExhausted -> {
-                    finish(
-                        ProgramRuntimeState.Failed(
-                            ProgramFailure.Quota(outcome.kind, outcome.limit, outcome.consumed),
-                        ),
-                    )
-                    return
-                }
-
-                is VmOutcome.Crashed -> {
-                    finish(ProgramRuntimeState.Failed(ProgramFailure.Trap(outcome.trap, outcome.diagnostic)))
-                    return
-                }
-
-                is VmOutcome.UncaughtException -> {
-                    finish(ProgramRuntimeState.Failed(ProgramFailure.UncaughtException(outcome.diagnostic)))
-                    return
-                }
-
-                is VmOutcome.Faulted -> {
-                    finish(ProgramRuntimeState.Failed(ProgramFailure.Fault(outcome.fault, outcome.diagnostic)))
-                    return
-                }
-
-                is VmOutcome.HostFailed -> {
-                    finish(
-                        ProgramRuntimeState.Failed(ProgramFailure.Host(outcome.kind, outcome.detail)),
-                    )
+                is VmOutcome.AllocationExhausted, is VmOutcome.QuotaExhausted, is VmOutcome.Crashed,
+                is VmOutcome.UncaughtException, is VmOutcome.Faulted, is VmOutcome.HostFailed,
+                -> {
+                    finish(ProgramRuntimeState.Failed(requireNotNull(outcome.programFailure())))
                     return
                 }
 
@@ -650,6 +619,50 @@ class ProgramRuntimeHost internal constructor(
                 }
             }
         }
+    }
+
+    internal fun requireFleetOwnership(
+        fleet: ExperimentalFleetSessionOwner,
+        machine: Long,
+    ) {
+        check(fleetOwnership?.let { it.first === fleet && it.second == machine } == true) { "fleet does not own this host" }
+    }
+
+    /** Records input accepted by the ordered fleet mailbox; never touches the transferred session. */
+    internal fun observeFleetRedstoneInput(
+        fleet: ExperimentalFleetSessionOwner,
+        machine: Long,
+        packet: Int,
+    ) {
+        requireFleetOwnership(fleet, machine)
+        lastRedstoneInput = RedstoneWire.requireInputPacket(packet)
+        if (state == ProgramRuntimeState.WaitingForInput) state = ProgramRuntimeState.Running
+    }
+
+    /** Updates only host observations; native execution and timers remain fleet-owned. */
+    internal fun observeFleetOutcome(
+        fleet: ExperimentalFleetSessionOwner,
+        machine: Long,
+        outcome: VmOutcome,
+    ) {
+        requireFleetOwnership(fleet, machine)
+        when (outcome) {
+            is VmOutcome.ProcessEntered, is VmOutcome.ProcessExited, is VmOutcome.ProcessReplaced -> applyProcessLifecycle(outcome)
+            VmOutcome.WaitingForTerminalEvent -> state = ProgramRuntimeState.WaitingForInput
+            is VmOutcome.Halted -> state = ProgramRuntimeState.Halted(outcome.value)
+            is VmOutcome.CompilationRequested -> state = ProgramRuntimeState.WaitingForCompiler
+            else -> outcome.programFailure()?.let { state = ProgramRuntimeState.Failed(it) }
+        }
+    }
+
+    internal fun observeFleetQuiescent(
+        fleet: ExperimentalFleetSessionOwner,
+        event: ExperimentalFleetEvent.Quiescent,
+    ) {
+        requireFleetOwnership(fleet, event.machine)
+        require(event.tick >= lastObservedTick) { "fleet observation tick moved backwards" }
+        lastObservedTick = event.tick
+        if (state == ProgramRuntimeState.WaitingForInput && event.timersPending) state = ProgramRuntimeState.Running
     }
 
     /** Applies process events delivered by the fleet on the owner thread. */

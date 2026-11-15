@@ -22,6 +22,7 @@ class ExperimentalFfmFleet private constructor(
     private val arena: Arena,
     private var handle: Long,
     private val calls: Calls,
+    override val coordinatedTurns: Boolean,
 ) : ExperimentalFleet {
     private val output = arena.allocate(1_048_576)
     private val written = arena.allocate(ValueLayout.JAVA_LONG)
@@ -355,7 +356,7 @@ class ExperimentalFfmFleet private constructor(
                 }
                 success("create", status)
                 createdHandle = result.get(ValueLayout.JAVA_LONG, 0)
-                return ExperimentalFfmFleet(bridge, arena, createdHandle, calls)
+                return ExperimentalFfmFleet(bridge, arena, createdHandle, calls, coordinatedTurns)
             } catch (failure: Throwable) {
                 if (createdHandle != 0L) {
                     try { closeCall!!.invokeExact(createdHandle) as Int } catch (closeFailure: Throwable) { failure.addSuppressed(closeFailure) }

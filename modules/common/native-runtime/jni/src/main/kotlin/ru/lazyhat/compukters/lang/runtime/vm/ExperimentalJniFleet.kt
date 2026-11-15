@@ -15,6 +15,7 @@ import java.nio.ByteOrder
 class ExperimentalJniFleet private constructor(
     private val bridge: JniBridge,
     @Volatile private var handle: Long,
+    override val coordinatedTurns: Boolean,
 ) : ExperimentalFleet {
     private val output = ByteArray(1_048_576)
     private val written = LongArray(1)
@@ -244,7 +245,7 @@ class ExperimentalJniFleet private constructor(
                     detail, capability?.abiMajor ?: 0, capability?.abiMinor ?: 0, config.inspection?.operation ?: 0, output,
                 ),
             )
-            return ExperimentalJniFleet(bridge, output[0])
+            return ExperimentalJniFleet(bridge, output[0], config.coordinatedTurns)
         }
 
         private fun success(operation: String, status: Int) = requireFleetSuccess(operation, status)

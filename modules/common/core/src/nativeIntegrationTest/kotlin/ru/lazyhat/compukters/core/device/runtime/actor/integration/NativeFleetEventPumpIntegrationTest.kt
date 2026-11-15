@@ -6,10 +6,16 @@
 package ru.lazyhat.compukters.core.device.runtime.actor.integration
 
 import ru.lazyhat.compukters.api.addon.ProgramAddonAction
+import ru.lazyhat.compukters.core.device.runtime.actor.ActorRuntimeService
+import ru.lazyhat.compukters.core.device.runtime.actor.NativeFleetActorRuntimeService
 import ru.lazyhat.compukters.core.device.runtime.actor.NativeFleetDispatcher
 import ru.lazyhat.compukters.core.device.runtime.actor.NativeFleetEventPump
 import ru.lazyhat.compukters.core.device.runtime.actor.NativeFleetOutbox
+import ru.lazyhat.compukters.core.device.runtime.actor.ProgramRuntimeActorCommand
+import ru.lazyhat.compukters.core.device.runtime.actor.ProgramRuntimeActorReply
 import ru.lazyhat.compukters.core.device.runtime.actor.ProgramRuntimeFrameCredit
+import ru.lazyhat.compukters.core.device.runtime.actor.VmActorEndpoint
+import ru.lazyhat.compukters.core.device.runtime.actor.VmActorSubmission
 import ru.lazyhat.compukters.core.device.runtime.program.NativeProgramVmSessionFactory
 import ru.lazyhat.compukters.core.device.runtime.program.ProgramFileSystemLaunchContext
 import ru.lazyhat.compukters.core.device.runtime.program.ProgramRuntimeHost
@@ -37,6 +43,7 @@ import java.nio.ByteOrder
 import java.nio.file.Files
 import java.nio.file.Path
 import java.security.MessageDigest
+import java.util.concurrent.CompletableFuture
 import java.util.concurrent.LinkedBlockingQueue
 import java.util.concurrent.TimeUnit
 import kotlin.io.path.readBytes
@@ -338,6 +345,129 @@ class NativeFleetEventPumpIntegrationTest {
             stoppedSession.close()
             detachedSession.close()
             observer.close()
+        }
+    }
+
+    @Test
+    fun `native actor service runs timer turns through the carrier contract and stops its host`() {
+        installFfmRuntime()
+        VmRuntime.loadNativeLibrary(Path.of(requireNotNull(System.getProperty("compukters.ffi.library"))))
+        val artifact = Path.of(requireNotNull(System.getProperty("compukters.fleet.timer.fixture"))).readBytes()
+        val host = ProgramRuntimeHost(NativeProgramVmSessionFactory())
+        assertEquals(ProgramStartResult.Started, host.start(artifact))
+        val owner = Thread.currentThread()
+        VmRuntime.openExperimentalFleet(ExperimentalFleetConfig(1, 32, 32, 128, 64, 64, 32, coordinatedTurns = true)).use { fleet ->
+            val machine = host.transferToFleet(fleet, 0)
+            val endpoint = VmActorEndpoint(ComputerId.fromLongs(31, 32), 1)
+            NativeFleetActorRuntimeService(fleet, 4, 16, 16, { check(Thread.currentThread() === owner) }, {}, { _, _ -> }).use { service ->
+                assertTrue(service.register(endpoint, machine, host))
+                val runtime: ActorRuntimeService = service
+
+                fun <T> await(future: CompletableFuture<T>): T {
+                    val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5)
+                    while (!future.isDone) {
+                        check(System.nanoTime() < deadline) { "native actor turn stalled" }
+                        service.pump(32, 32)
+                        Thread.yield()
+                    }
+                    return future.join()
+                }
+                val replies =
+                    (1L..3L).map { tick ->
+                        assertTrue(service.grantFrame(endpoint, tick, 512))
+                        val result = CompletableFuture<ProgramRuntimeActorReply>()
+                        assertEquals(
+                            VmActorSubmission.ACCEPTED,
+                            runtime.submitTurn(endpoint, tick, emptyList()) { reply, failure ->
+                                check(Thread.currentThread() === owner)
+                                if (failure == null) result.complete(checkNotNull(reply)) else result.completeExceptionally(failure)
+                            },
+                        )
+                        await(result).also { assertTrue(!service.grantFrame(endpoint, tick, 512)) }
+                    }
+                assertEquals(ProgramRuntimeState.Running, replies[0].state)
+                assertEquals(0L, replies[1].retiredInstructions)
+                assertEquals(ProgramRuntimeState.Halted(null), replies[2].state)
+                // The same artifact and tick sequence produce the same retirement count on
+                // the existing host path, although only Rust workers execute in this service.
+                ProgramRuntimeHost(NativeProgramVmSessionFactory()).use { baseline ->
+                    assertEquals(ProgramStartResult.Started, baseline.start(artifact))
+                    var retired = 0L
+                    for (tick in 1L..3L) {
+                        baseline.serverTick(tick, 512)
+                        retired += baseline.retiredInstructionsLastTick
+                    }
+                    assertEquals(replies.sumOf { it.retiredInstructions }, retired)
+                    assertEquals(baseline.state, host.state)
+                }
+                val generation = await(runtime.request(endpoint, ProgramRuntimeActorCommand::FileSystemGeneration))
+                val stopped = await(checkNotNull(service.stop(endpoint)))
+                assertEquals(generation.fileSystemGeneration, stopped)
+                assertEquals(stopped, host.lastClosedFileSystemGeneration)
+                assertEquals(ProgramRuntimeState.Closed, host.state)
+            }
+        }
+    }
+
+    @Test
+    fun `native actor continuation uses the original frame after an external host reply`() {
+        installFfmRuntime()
+        VmRuntime.loadNativeLibrary(Path.of(requireNotNull(System.getProperty("compukters.ffi.library"))))
+        val artifact = Path.of(requireNotNull(System.getProperty("compukters.fleet.host.fixture"))).readBytes()
+        val schema =
+            HostCapabilitySchema(
+                CapabilityIdentity("app", "entry", 1, 2),
+                listOf(HostOperationSchema(emptyList(), HostValueType.UNIT, true)),
+            )
+        val host =
+            ProgramRuntimeHost(NativeProgramVmSessionFactory(capabilitySchemas = listOf(schema)), addonCapabilitySchemas = listOf(schema))
+        assertEquals(ProgramStartResult.Started, host.start(artifact))
+        VmRuntime.openExperimentalFleet(ExperimentalFleetConfig(1, 32, 32, 128, 64, 64, 32, coordinatedTurns = true)).use { fleet ->
+            val machine = host.transferToFleet(fleet, 0)
+            val endpoint = VmActorEndpoint(ComputerId.fromLongs(33, 34), 1)
+            var request: VmHostRequestIdentity? = null
+            NativeFleetActorRuntimeService(fleet, 4, 16, 16, {}, {}, { address, event ->
+                assertEquals(endpoint, address)
+                if (event is ExperimentalFleetEvent.Outcome) {
+                    val outcome = event.outcome
+                    if (outcome is VmOutcome.HostRequestBatch) request = outcome.requests.single().identity
+                }
+            }).use { service ->
+                assertTrue(service.register(endpoint, machine, host))
+
+                fun <T> await(future: CompletableFuture<T>): T {
+                    val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5)
+                    while (!future.isDone) {
+                        check(System.nanoTime() < deadline)
+                        service.pump(32, 32)
+                        Thread.yield()
+                    }
+                    return future.join()
+                }
+                assertTrue(service.grantFrame(endpoint, 4, 256))
+                val first = CompletableFuture<ProgramRuntimeActorReply>()
+                assertEquals(
+                    VmActorSubmission.ACCEPTED,
+                    service.submitTurn(endpoint, 4, emptyList()) { reply, failure ->
+                        if (failure == null) first.complete(checkNotNull(reply)) else first.completeExceptionally(failure)
+                    },
+                )
+                val before = await(first)
+                // The external host adapter accepts the native reply, then asks for a continuation.
+                // Translating carrier world effects into this reply is a remaining integration step.
+                fleet.reply(machine, checkNotNull(request), HostResponse.UnitSuccess)
+                val second = CompletableFuture<ProgramRuntimeActorReply>()
+                assertTrue(
+                    service.continueTurn(endpoint, 4, emptyList()) { reply, failure ->
+                        if (failure == null) second.complete(checkNotNull(reply)) else second.completeExceptionally(failure)
+                    },
+                )
+                val after = await(second)
+                assertEquals(ProgramRuntimeState.Halted(null), after.state)
+                assertTrue(before.retiredInstructions > 0 && after.retiredInstructions > 0)
+                assertTrue(before.retiredInstructions + after.retiredInstructions <= 256)
+                await(checkNotNull(service.stop(endpoint)))
+            }
         }
     }
 

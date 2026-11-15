@@ -669,8 +669,6 @@ class ProgramRuntimeActorService(
     }
 
     private companion object {
-        const val MAXIMUM_CONTINUATIONS_PER_FRAME = 16
-
         fun incrementRequestId(previous: Long): Long = if (previous == Long.MAX_VALUE) 1 else previous + 1
 
         fun ProgramRuntimeActorCommand.isInput(): Boolean =

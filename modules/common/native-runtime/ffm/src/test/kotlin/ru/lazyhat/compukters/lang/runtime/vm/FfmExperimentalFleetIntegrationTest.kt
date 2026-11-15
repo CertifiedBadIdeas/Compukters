@@ -39,6 +39,7 @@ class FfmExperimentalFleetIntegrationTest {
             FfmBridge.open(library).use { bridge ->
                 WorldFileSystemStore.open(root, bridge).use { store ->
                     bridge.openExperimentalFleet(ExperimentalFleetConfig(1, 32, 1, 128, 64, 64, 32)).use { fleet ->
+                        assertTrue(!fleet.coordinatedTurns)
                         val id = ComputerId.fromLongs(171, 172)
                         val session = VmSession.openInStore(artifact, store, id, image)
                         val before = session.filesystemGeneration()
@@ -83,6 +84,7 @@ class FfmExperimentalFleetIntegrationTest {
         val bridge = FfmBridge.open(Path.of(requireNotNull(System.getProperty("compukter.ffi.library"))))
         val artifact = Path.of(requireNotNull(System.getProperty("compukters.fleet.timer.fixture"))).readBytes()
         val fleet = bridge.openExperimentalFleet(ExperimentalFleetConfig(1, 32, 1, 128, 64, 64, 32, coordinatedTurns = true))
+        assertTrue(fleet.coordinatedTurns)
         val session = VmSession.open(artifact, bridge)
         val machine = session.transferToFleet(fleet)
         val deadline = System.nanoTime() + 10_000_000_000L

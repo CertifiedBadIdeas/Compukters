@@ -22,6 +22,9 @@ data class ExperimentalFleetConfig(
 
 /** Common asynchronous transport for the experimental native scheduler. */
 interface ExperimentalFleet : ExperimentalFleetSessionOwner, AutoCloseable {
+    /** When true, external replies cannot resume Guest execution before the next grant. */
+    val coordinatedTurns: Boolean
+
     fun grant(machine: Long, tick: Long, retirements: Int, deadlineNanos: Long = Long.MAX_VALUE)
     fun reply(machine: Long, identity: VmHostRequestIdentity, response: HostResponse)
     fun resolveCost(machine: Long, identity: VmHostRequestIdentity, units: Int)
