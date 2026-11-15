@@ -21,7 +21,6 @@ package ru.lazyhat.compukters.core.device.runtime.program
 import ru.lazyhat.compukters.api.addon.ProgramAddonAction
 import ru.lazyhat.compukters.api.addon.ProgramAddonCompletion
 import ru.lazyhat.compukters.api.addon.ProgramAddonRequest
-import ru.lazyhat.compukters.api.commands.CommandBatchCodec
 import ru.lazyhat.compukters.compiler.runtime.CompilerSubmissionResult
 import ru.lazyhat.compukters.core.device.runtime.compiler.CompilerCompletionRouter
 import ru.lazyhat.compukters.core.device.runtime.compiler.ComputerCompilationAddress
@@ -515,7 +514,7 @@ class ProgramRuntimeHost internal constructor(
                             deliverable += request
                             continue
                         }
-                        val prepared = prepareCommandRequest(request)
+                        val prepared = prepareCommandRequest(request, programId)
                         val cost = commandRequestCost(prepared)
                         if (cost > tickBudget.hostRequestsPerTick) {
                             if (remainingHostRequests == 0) {
@@ -601,22 +600,6 @@ class ProgramRuntimeHost internal constructor(
                     return
                 }
             }
-        }
-    }
-
-    private fun prepareCommandRequest(request: VmHostRequest): ProgramAddonRequest? {
-        if (request.capability != CommandBatchProgramHost.SCHEMA.identity || request.operation != 0) return null
-        return ProgramAddonRequest(request.identity, request.capability, request.operation, request.arguments, programScopes.last())
-    }
-
-    private fun commandRequestCost(request: ProgramAddonRequest?): Int {
-        if (request == null) return 1
-        return try {
-            CommandBatchCodec.decode(request).size
-        } catch (_: IllegalArgumentException) {
-            1 // The server rejects malformed input without dispatching a command.
-        } catch (_: ClassCastException) {
-            1
         }
     }
 
