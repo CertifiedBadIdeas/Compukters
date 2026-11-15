@@ -7,6 +7,7 @@ package ru.lazyhat.compukters.core.device.runtime.actor
 
 import ru.lazyhat.compukters.lang.runtime.capability.HostResponse
 import ru.lazyhat.compukters.lang.runtime.vm.ExperimentalFleet
+import ru.lazyhat.compukters.lang.runtime.vm.ExperimentalFleetEvent
 import ru.lazyhat.compukters.lang.runtime.vm.VmFleetBusyException
 import ru.lazyhat.compukters.lang.runtime.vm.VmHostRequestIdentity
 import java.util.ArrayDeque
@@ -104,7 +105,7 @@ internal class NativeFleetOutbox(
 
     private val queues = mutableMapOf<Long, ArrayDeque<Command>>()
     private val ready = ArrayDeque<Long>()
-    private val closing = mutableSetOf<Long>()
+    private val closing = mutableMapOf<Long, Command.Lifecycle>()
     private var count = 0
 
     /** Either retain the entire batch in order, or retain none of it. */
@@ -131,7 +132,7 @@ internal class NativeFleetOutbox(
             }
         queue.addAll(commands)
         count += commands.size
-        if (lifecycleIndex >= 0) closing.add(machine)
+        if (lifecycleIndex >= 0) closing[machine] = commands[lifecycleIndex] as Command.Lifecycle
         return true
     }
 
@@ -184,9 +185,24 @@ internal class NativeFleetOutbox(
     }
 
     /** A lifecycle result may only arrive after its command and all earlier work were submitted. */
-    fun acknowledgeLifecycle(machine: Long) {
+    fun acknowledgeLifecycle(event: ExperimentalFleetEvent) {
         checkOwner()
-        check(machine in closing && machine !in queues) { "unexpected native lifecycle result" }
+        val machine =
+            when (event) {
+                is ExperimentalFleetEvent.Stopped -> event.machine
+                is ExperimentalFleetEvent.Detached -> event.machine
+                is ExperimentalFleetEvent.DetachRejected -> event.machine
+                else -> error("not a native lifecycle result")
+            }
+        val expected = closing[machine]
+        check(
+            machine !in queues &&
+                when (event) {
+                    is ExperimentalFleetEvent.Stopped -> expected == Command.Stop
+                    is ExperimentalFleetEvent.Detached, is ExperimentalFleetEvent.DetachRejected -> expected is Command.DetachWithTimers
+                    else -> false
+                },
+        ) { "unexpected native lifecycle result" }
         closing.remove(machine)
     }
 }

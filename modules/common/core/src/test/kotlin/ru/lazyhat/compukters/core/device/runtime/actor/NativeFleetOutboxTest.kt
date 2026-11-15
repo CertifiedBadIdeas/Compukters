@@ -6,6 +6,7 @@
 package ru.lazyhat.compukters.core.device.runtime.actor
 
 import ru.lazyhat.compukters.lang.runtime.vm.ExperimentalFleet
+import ru.lazyhat.compukters.lang.runtime.vm.ExperimentalFleetEvent
 import ru.lazyhat.compukters.lang.runtime.vm.VmFleetBusyException
 import ru.lazyhat.compukters.lang.runtime.vm.VmFleetStaleException
 import java.lang.reflect.Proxy
@@ -90,11 +91,13 @@ class NativeFleetOutboxTest {
         }
         assertTrue(outbox.offer(1, listOf(input(1), NativeFleetOutbox.Command.Stop)))
         assertFailsWith<IllegalStateException> { outbox.offer(1, listOf(input(2))) }
-        assertFailsWith<IllegalStateException> { outbox.acknowledgeLifecycle(1) }
+        val stopped = ExperimentalFleetEvent.Stopped(1, emptyList())
+        assertFailsWith<IllegalStateException> { outbox.acknowledgeLifecycle(stopped) }
         assertEquals(2, outbox.flush(2))
         assertEquals(listOf("redstoneInput", "stop"), sent)
         assertFailsWith<IllegalStateException> { outbox.offer(1, listOf(input(3))) }
-        outbox.acknowledgeLifecycle(1)
+        assertFailsWith<IllegalStateException> { outbox.acknowledgeLifecycle(ExperimentalFleetEvent.DetachRejected(1)) }
+        outbox.acknowledgeLifecycle(stopped)
         assertTrue(outbox.offer(1, listOf(input(3))))
     }
 

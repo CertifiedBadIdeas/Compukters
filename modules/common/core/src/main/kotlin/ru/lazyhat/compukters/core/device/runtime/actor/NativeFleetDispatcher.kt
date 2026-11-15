@@ -22,9 +22,10 @@ internal class NativeFleetDispatcher(
     private val events =
         NativeFleetEventPump(fleet, checkOwner, onResultsReady, { event ->
             when (event) {
-                is ExperimentalFleetEvent.Stopped -> outbox.acknowledgeLifecycle(event.machine)
-                is ExperimentalFleetEvent.Detached -> outbox.acknowledgeLifecycle(event.machine)
-                is ExperimentalFleetEvent.DetachRejected -> outbox.acknowledgeLifecycle(event.machine)
+                is ExperimentalFleetEvent.Stopped, is ExperimentalFleetEvent.Detached,
+                is ExperimentalFleetEvent.DetachRejected,
+                -> outbox.acknowledgeLifecycle(event)
+
                 else -> Unit
             }
             deliver(event)
