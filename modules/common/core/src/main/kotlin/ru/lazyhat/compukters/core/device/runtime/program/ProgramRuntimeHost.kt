@@ -30,6 +30,8 @@ import ru.lazyhat.compukters.lang.runtime.capability.HostResponse
 import ru.lazyhat.compukters.lang.runtime.fs.ComputerId
 import ru.lazyhat.compukters.lang.runtime.fs.VmSystemImage
 import ru.lazyhat.compukters.lang.runtime.fs.WorldFileSystemStore
+import ru.lazyhat.compukters.lang.runtime.vm.ExperimentalFleetSessionOwner
+import ru.lazyhat.compukters.lang.runtime.vm.ExperimentalFleetTimer
 import ru.lazyhat.compukters.lang.runtime.vm.HostFailureKind
 import ru.lazyhat.compukters.lang.runtime.vm.RedstoneWire
 import ru.lazyhat.compukters.lang.runtime.vm.TerminalKey
@@ -97,6 +99,7 @@ class ProgramRuntimeHost internal constructor(
 
     private val programScopes = ArrayDeque<Long>().apply { addLast(0) }
     private var session: ProgramVmSession? = null
+    private var fleetOwnership: Pair<ExperimentalFleetSessionOwner, Long>? = null
     private var preparedRestoration: ProgramHostCheckpoint? = null
     private var activeVmEpoch = 0L
     private var pendingCompilation: ComputerCompilationAddress? = null
@@ -164,6 +167,7 @@ class ProgramRuntimeHost internal constructor(
         worldTick: Long,
         addonState: ByteArray,
     ): Boolean {
+        check(fleetOwnership == null) { "fleet owns the VM session" }
         require(worldTick >= 0)
         if (preparedRestoration != null) return false // Keep the unconsumed durable snapshot.
         check(pendingRedstoneCommit == null && pendingSoundCommit == null && pendingAddonRequests.isEmpty()) {
@@ -302,6 +306,54 @@ class ProgramRuntimeHost internal constructor(
         }
     }
 
+    /** Transfers a quiescent host and its pending timers without duplicating ownership. */
+    internal fun transferToFleet(fleet: ExperimentalFleetSessionOwner, worldTick: Long): Long {
+        require(worldTick >= 0 && worldTick >= lastObservedTick) { "fleet transfer tick must not move backwards" }
+        check(fleetOwnership == null && preparedRestoration == null) { "host is not available for fleet transfer" }
+        check(state == ProgramRuntimeState.Running || state == ProgramRuntimeState.WaitingForInput) { "host is not running" }
+        check(pendingCompilation == null && pendingRedstoneCommit == null && pendingSoundCommit == null && pendingAddonRequests.isEmpty()) {
+            "external requests must be settled before fleet transfer"
+        }
+        val active = requireNotNull(session)
+        val timers = pendingTimerRequests.values.map { timer ->
+            check(timer.session === active) { "timer belongs to a different session" }
+            val duration = (timer.request.arguments.single() as VmValue.I32).value
+            ExperimentalFleetTimer(timer.request.identity, timer.programId, duration, (timer.wakeTick - worldTick).coerceAtLeast(0))
+        }
+        val machine = active.transferToFleet(fleet, worldTick, timers)
+        fleetOwnership = fleet to machine
+        pendingTimerRequests.clear()
+        lastObservedTick = worldTick
+        return machine
+    }
+
+    /** Rebinds detached timer state before the host is allowed to advance again. */
+    internal fun recoverFromFleet(
+        fleet: ExperimentalFleetSessionOwner,
+        machine: Long,
+        worldTick: Long,
+        timers: List<ExperimentalFleetTimer>,
+    ) {
+        require(worldTick >= 0 && worldTick >= lastObservedTick) { "fleet recovery tick must not move backwards" }
+        check(fleetOwnership?.let { it.first === fleet && it.second == machine } == true) { "fleet does not own this host" }
+        require(timers.size <= MAXIMUM_PENDING_TIMER_REQUESTS && timers.map { it.identity }.toSet().size == timers.size)
+        require(timers.all { it.scope in programScopes }) { "timer references an unknown program scope" }
+        val active = requireNotNull(session)
+        val restored = timers.associate { timer ->
+            val request = VmHostRequest(timer.identity.requestId, HostRequestRoutes.timer, 0, listOf(VmValue.I32(timer.duration)), timer.identity.taskId)
+            timer.identity to PendingTimerRequest(active, request, worldTick.saturatingAdd(timer.remaining), timer.scope)
+        }
+        active.recoverFromFleet(fleet, machine)
+        pendingTimerRequests.putAll(restored)
+        fleetOwnership = null
+        // A returned machine may have spent this tick's allowance in the fleet.
+        // Do not mint another allowance until a later server tick.
+        remainingAdvances = 0
+        remainingHostRequests = 0
+        lastObservedTick = worldTick
+        if (state == ProgramRuntimeState.WaitingForInput && timers.isNotEmpty()) state = ProgramRuntimeState.Running
+    }
+
     fun serverTick(): ProgramRuntimeState = serverTick(if (lastObservedTick == Long.MAX_VALUE) Long.MAX_VALUE else lastObservedTick + 1)
 
     fun serverTick(
@@ -309,6 +361,7 @@ class ProgramRuntimeHost internal constructor(
         retirementAllowance: Int = Int.MAX_VALUE,
         deadlineNanos: Long = Long.MAX_VALUE,
     ): ProgramRuntimeState {
+        check(fleetOwnership == null) { "fleet owns the VM session" }
         require(worldTick >= 0) { "world tick must not be negative" }
         require(worldTick >= lastObservedTick) { "world tick must not move backwards" }
         require(retirementAllowance >= 0) { "retirement allowance must not be negative" }
@@ -986,6 +1039,7 @@ class ProgramRuntimeHost internal constructor(
     }
 
     private fun releaseSession() {
+        check(fleetOwnership == null) { "fleet owns the VM session" }
         preparedRestoration = null
         pendingCompilation?.let { compilerRouter?.cancel(it) }
         pendingCompilation = null

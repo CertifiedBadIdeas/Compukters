@@ -7,6 +7,9 @@ package ru.lazyhat.compukters.core.device.runtime.actor.integration
 
 import ru.lazyhat.compukters.core.device.runtime.program.integration.installFfmRuntime
 import ru.lazyhat.compukters.core.device.runtime.program.NativeProgramVmSessionFactory
+import ru.lazyhat.compukters.core.device.runtime.program.ProgramRuntimeHost
+import ru.lazyhat.compukters.core.device.runtime.program.ProgramRuntimeState
+import ru.lazyhat.compukters.core.device.runtime.program.ProgramStartResult
 import ru.lazyhat.compukters.core.device.runtime.program.ProgramFileSystemLaunchContext
 import ru.lazyhat.compukters.lang.runtime.fs.ComputerId
 import ru.lazyhat.compukters.lang.runtime.fs.VmSystemImage
@@ -43,6 +46,34 @@ import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 
 class NativeFleetEventPumpIntegrationTest {
+    @Test
+    fun `live host transfers its timer to rust and resumes it after recovery`() {
+        installFfmRuntime()
+        VmRuntime.loadNativeLibrary(Path.of(requireNotNull(System.getProperty("compukters.ffi.library"))))
+        val artifact = Path.of(requireNotNull(System.getProperty("compukters.fleet.timer.fixture"))).readBytes()
+        val host = ProgramRuntimeHost(NativeProgramVmSessionFactory())
+        assertEquals(ProgramStartResult.Started, host.start(artifact))
+        assertEquals(ProgramRuntimeState.Running, host.serverTick(1))
+        VmRuntime.openExperimentalFleet(ExperimentalFleetConfig(1, 32, 32, 128, 64, 64, 32, coordinatedTurns = true)).use { fleet ->
+            val machine = host.transferToFleet(fleet, 1)
+            assertFailsWith<IllegalStateException> { host.serverTick(2) }
+            assertFailsWith<IllegalStateException> { host.shutdown() }
+            fleet.detachWithTimers(machine, 2)
+            val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5)
+            var detached: ExperimentalFleetEvent.Detached? = null
+            while (detached == null) {
+                check(System.nanoTime() < deadline)
+                detached = fleet.poll() as? ExperimentalFleetEvent.Detached
+                if (detached == null) Thread.yield()
+            }
+            assertEquals(1L, detached.timers.single().remaining)
+            host.recoverFromFleet(fleet, machine, 2, detached.timers)
+            assertEquals(ProgramRuntimeState.Running, host.serverTick(2))
+            assertTrue(host.serverTick(3) is ProgramRuntimeState.Halted)
+        }
+        host.close()
+    }
+
     @Test
     fun `filesystem session transfers recovers and checkpoints with its timer`() {
         installFfmRuntime()

@@ -443,6 +443,12 @@ class ProgramRuntimeHostTest {
         assertEquals(4, session.advances.size)
         assertEquals(emptyList(), session.responses)
 
+        val fleet = java.lang.reflect.Proxy.newProxyInstance(
+            ru.lazyhat.compukters.lang.runtime.vm.ExperimentalFleetSessionOwner::class.java.classLoader,
+            arrayOf(ru.lazyhat.compukters.lang.runtime.vm.ExperimentalFleetSessionOwner::class.java),
+        ) { _, _, _ -> error("fleet must not receive a session with outstanding world requests") }
+            as ru.lazyhat.compukters.lang.runtime.vm.ExperimentalFleetSessionOwner
+        assertFailsWith<IllegalStateException> { host.transferToFleet(fleet, 1) }
         assertTrue(host.completeAddon(ProgramAddonCompletion(second.identity, HostResponse.FloatSuccess(2.5f))))
         assertEquals(listOf(response(3, 12, HostResponse.FloatSuccess(2.5f))), session.responses)
         host.shutdown()
