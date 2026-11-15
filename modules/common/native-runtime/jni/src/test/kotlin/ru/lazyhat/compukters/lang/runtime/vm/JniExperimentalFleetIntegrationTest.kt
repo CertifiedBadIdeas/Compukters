@@ -186,4 +186,12 @@ class JniExperimentalFleetIntegrationTest {
         }
     }
 
+    @Test
+    fun `a second native library cannot supply handles to the fleet`() {
+        val library = Path.of(requireNotNull(System.getProperty("compukter.jni.library"))).toAbsolutePath()
+        JniBridge.open(library)
+        val different = library.resolveSibling("different-native-library")
+        kotlin.test.assertFailsWith<VmBridgeException> { JniBridge.open(different) }
+    }
+
 }

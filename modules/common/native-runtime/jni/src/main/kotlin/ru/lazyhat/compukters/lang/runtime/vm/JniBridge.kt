@@ -628,8 +628,17 @@ internal class JniBridge private constructor() : LowLevelVmBridge {
         private const val COMPILATION_ARTIFACT = 0
         private const val COMPILATION_FAILURE = 1
 
+        private var loadedLibrary: Path? = null
+
+        @Synchronized
         fun open(library: Path): JniBridge {
-            System.load(library.toAbsolutePath().normalize().toString())
+            val path = library.toAbsolutePath().normalize()
+            val loaded = loadedLibrary
+            if (loaded != null && loaded != path) throw VmBridgeException("a different Compukter JNI library is already loaded")
+            if (loaded == null) {
+                System.load(path.toString())
+                loadedLibrary = path
+            }
             if (JniNative.abiVersion() != 28) throw VmBridgeException("unsupported Compukter JNI ABI")
             return JniBridge()
         }
