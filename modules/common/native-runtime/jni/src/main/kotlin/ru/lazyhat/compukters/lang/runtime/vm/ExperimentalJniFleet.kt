@@ -37,9 +37,12 @@ class ExperimentalJniFleet private constructor(
         return ExperimentalRestoredSession(bridge, session[0])
     }
 
+    /** [deadlineNanos] uses the same System.nanoTime clock as the server scheduler. */
     @Synchronized
-    fun grant(machine: Long, tick: Long, retirements: Int, deadlineNanos: Long = -1) =
-        success("grant", JniExperimentalFleet.grant(active(), machine, tick, retirements, deadlineNanos))
+    fun grant(machine: Long, tick: Long, retirements: Int, deadlineNanos: Long = Long.MAX_VALUE) {
+        val remainingNanos = if (deadlineNanos == Long.MAX_VALUE) -1 else (deadlineNanos - System.nanoTime()).coerceAtLeast(0)
+        success("grant", JniExperimentalFleet.grant(active(), machine, tick, retirements, remainingNanos))
+    }
 
     @Synchronized
     fun reply(machine: Long, identity: VmHostRequestIdentity, response: HostResponse) {

@@ -20,6 +20,41 @@ import ru.lazyhat.compukters.lang.runtime.capability.HostValueType
 
 class JniExperimentalFleetIntegrationTest {
     @Test
+    fun `expired absolute deadline does not grant execution time`() {
+        val library = Path.of(requireNotNull(System.getProperty("compukter.jni.library")))
+        val artifact = Path.of(requireNotNull(System.getProperty("compukters.fleet.host.fixture"))).readBytes()
+        val capability = CapabilityIdentity("app", "entry", 1, 2)
+        val schema = HostCapabilitySchema(capability, listOf(HostOperationSchema(emptyList(), HostValueType.UNIT, true)))
+        ExperimentalJniFleet.open(library, 1, 32, 32, 128, 64, 64, 32).use { fleet ->
+            val session = VmSession.open(artifact, listOf(schema), JniBridge.open(library))
+            val machine = session.transferToFleet(fleet)
+            try {
+                fleet.grant(machine, 1, 256, System.nanoTime() - 1_000_000_000L)
+                Thread.sleep(20)
+                assertEquals(null, fleet.poll())
+                fleet.grant(machine, 2, 256)
+                val deadline = System.nanoTime() + 5_000_000_000L
+                var event: ExperimentalFleetEvent?
+                do {
+                    event = fleet.poll()
+                    if (event == null) Thread.yield()
+                    assertTrue(System.nanoTime() < deadline)
+                } while (event == null)
+                assertEquals(2L, (event as ExperimentalFleetEvent.Outcome).tick)
+                assertTrue(event.outcome is VmOutcome.HostRequestBatch)
+            } finally {
+                fleet.stop(machine)
+                val deadline = System.nanoTime() + 5_000_000_000L
+                while (fleet.poll() !is ExperimentalFleetEvent.Stopped) {
+                    assertTrue(System.nanoTime() < deadline)
+                    Thread.yield()
+                }
+                session.close()
+            }
+        }
+    }
+
+    @Test
     fun `host inspection and response resume a real guest through JNI`() {
         val library = Path.of(requireNotNull(System.getProperty("compukter.jni.library")))
         val artifact = Path.of(requireNotNull(System.getProperty("compukters.fleet.host.fixture"))).readBytes()
