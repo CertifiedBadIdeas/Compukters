@@ -6,6 +6,8 @@
 
 package ru.lazyhat.compukters.lang.runtime.vm
 
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
 import java.nio.file.Path
 import kotlin.io.path.readBytes
 import kotlin.test.Test
@@ -83,6 +85,43 @@ class JniExperimentalFleetIntegrationTest {
             assertEquals(ExperimentalFleetEvent.Error(0, "terminal key: QueueFull"), ExperimentalFleetEventWire.decode(output.copyOf(written[0].toInt())))
         } finally {
             JniExperimentalFleet.close(handle[0])
+        }
+    }
+
+    @Test
+    fun `existing JNI session transfers to fleet and back without two owners`() {
+        val bridge = JniBridge.open(Path.of(requireNotNull(System.getProperty("compukter.jni.library"))))
+        val artifact = Path.of(requireNotNull(System.getProperty("compukters.shell.artifact"))).readBytes()
+        val created = bridge.create(artifact, byteArrayOf(1, 0))
+        assertEquals(0, created[0].toInt())
+        val original = ByteBuffer.wrap(created, 1, 8).order(ByteOrder.LITTLE_ENDIAN).long
+        val fleet = LongArray(1)
+        val none = byteArrayOf()
+        assertEquals(0, JniExperimentalFleet.create(artifact, byteArrayOf(1, 0), 1, intArrayOf(1, 32, 32, 64, 64, 64, 16), none, none, none, 0, 0, 0, fleet))
+        var restored = 0L
+        try {
+            val machine = LongArray(1)
+            assertEquals(0, JniExperimentalFleet.attachSession(fleet[0], original, machine))
+            assertEquals(6, JniNative.close(original))
+            assertEquals(0, JniExperimentalFleet.detach(fleet[0], machine[0]))
+            val deadline = System.nanoTime() + 5_000_000_000L
+            val bytes = ByteArray(64)
+            val written = LongArray(1)
+            do {
+                assertEquals(0, JniExperimentalFleet.poll(fleet[0], bytes, written))
+                if (written[0] == 0L) Thread.yield()
+                assertTrue(System.nanoTime() < deadline)
+            } while (written[0] == 0L)
+            assertEquals(ExperimentalFleetEvent.Detached(machine[0]), ExperimentalFleetEventWire.decode(bytes.copyOf(written[0].toInt())))
+            val result = LongArray(1)
+            assertEquals(0, JniExperimentalFleet.restoreSession(fleet[0], machine[0], result))
+            restored = result[0]
+            assertTrue(restored != original)
+            assertEquals(1, JniExperimentalFleet.restoreSession(fleet[0], machine[0], LongArray(1)))
+            assertEquals(0, JniNative.advance(restored, 64, 64, 64, ByteArray(JniNative.maximumOutcomeBytes().toInt()), LongArray(1)))
+        } finally {
+            if (restored != 0L) bridge.close(restored)
+            JniExperimentalFleet.close(fleet[0])
         }
     }
 

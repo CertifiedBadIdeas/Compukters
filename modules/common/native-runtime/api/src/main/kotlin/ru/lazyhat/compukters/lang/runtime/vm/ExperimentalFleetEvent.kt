@@ -17,6 +17,8 @@ sealed interface ExperimentalFleetEvent {
     data class Inspection(val machine: Long, val tick: Long, val request: VmHostRequest) : ExperimentalFleetEvent
     data class Stopped(val machine: Long, val pending: List<VmHostRequestIdentity>) : ExperimentalFleetEvent
     data class ScopeStopped(val machine: Long, val scope: Long, val pending: List<VmHostRequestIdentity>) : ExperimentalFleetEvent
+    data class Detached(val machine: Long) : ExperimentalFleetEvent
+    data class DetachRejected(val machine: Long) : ExperimentalFleetEvent
     data class Error(val machine: Long?, val message: String) : ExperimentalFleetEvent
 }
 
@@ -47,6 +49,11 @@ object ExperimentalFleetEventWire {
             }
             2 -> ExperimentalFleetEvent.Stopped(long(), identities())
             4 -> ExperimentalFleetEvent.ScopeStopped(long(), long(), identities())
+            6, 7 -> {
+                val machine = long()
+                require(!input.hasRemaining()) { "trailing fleet detach bytes" }
+                if (bytes[0].toInt() == 6) ExperimentalFleetEvent.Detached(machine) else ExperimentalFleetEvent.DetachRejected(machine)
+            }
             3, 5 -> {
                 val machine = if (bytes[0].toInt() == 3) long() else null
                 val decoder = StandardCharsets.UTF_8.newDecoder().onMalformedInput(CodingErrorAction.REPORT).onUnmappableCharacter(CodingErrorAction.REPORT)
