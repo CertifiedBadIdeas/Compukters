@@ -346,6 +346,17 @@ class VmSession private constructor(
         return machine
     }
 
+    /** Transfers a restored session together with its pending timer state. */
+    @Synchronized
+    fun transferToFleet(fleet: ExperimentalFleetSessionOwner, tick: Long, timers: List<ExperimentalFleetTimer>): Long {
+        require(terminalTransport is ByteArrayTerminalWireTransport) { "fleet transfer requires a byte-array terminal transport" }
+        val active = requireHandle()
+        val machine = fleet.adoptWithTimers(bridge, active, tick, timers)
+        handle.set(CLOSED)
+        terminalTransport.close()
+        return machine
+    }
+
     @Synchronized
     override fun close() {
         val closing = handle.getAndSet(CLOSED)

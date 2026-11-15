@@ -26,6 +26,62 @@ import ru.lazyhat.compukters.lang.runtime.fs.VmFileSystemReadFailure
 
 class JniExperimentalFleetIntegrationTest {
     @Test
+    fun `timer survives checkpoint and resumes on the restored tick`() {
+        val library = Path.of(requireNotNull(System.getProperty("compukter.jni.library")))
+        val artifact = Path.of(requireNotNull(System.getProperty("compukters.fleet.timer.fixture"))).readBytes()
+        val bridge = JniBridge.open(library)
+        val header = ByteBuffer.allocate(16).order(ByteOrder.LITTLE_ENDIAN)
+            .put("CPKTSYS\u0000".encodeToByteArray()).putShort(1).putShort(0).putInt(0).array()
+        val image = header + MessageDigest.getInstance("SHA-256").digest(header)
+        val root = Files.createTempDirectory("fleet-timer-").toRealPath()
+        try {
+            WorldFileSystemStore.open(root, bridge).use { store ->
+                val id = ComputerId.fromLongs(93, 94)
+                ExperimentalJniFleet.open(library, 1, 32, 32, 128, 64, 64, 32, coordinatedTurns = true).use { fleet ->
+                    val deadline = System.nanoTime() + 10_000_000_000L
+                    fun next(): ExperimentalFleetEvent {
+                        while (System.nanoTime() < deadline) {
+                            fleet.poll()?.let { return it }
+                            Thread.yield()
+                        }
+                        error("timed out waiting for fleet event")
+                    }
+                    val session = VmSession.openInStore(artifact, store, id, image)
+                    val machine = session.transferToFleet(fleet)
+                    fleet.grant(machine, 1, 512)
+                    assertTrue(next() is ExperimentalFleetEvent.Quiescent)
+                    fleet.detachWithTimers(machine, 2)
+                    val detached = next() as ExperimentalFleetEvent.Detached
+                    assertEquals(1, detached.timers.size)
+                    assertEquals(1L, detached.timers.single().remaining)
+                    val timer = detached.timers.single()
+                    val host = ByteBuffer.allocate(32).order(ByteOrder.LITTLE_ENDIAN)
+                        .putInt(timer.identity.taskId).putLong(timer.identity.requestId).putLong(timer.scope)
+                        .putInt(timer.duration).putLong(timer.remaining).array()
+                    VmSession.restoreFromFleet(fleet, machine).use { it.checkpoint(store, id, host) }
+                    val restored = requireNotNull(VmSession.restoreInStore(store, id, image))
+                    val encoded = ByteBuffer.wrap(restored.hostStateBytes()).order(ByteOrder.LITTLE_ENDIAN)
+                    val persisted = ExperimentalFleetTimer(VmHostRequestIdentity(encoded.int, encoded.long), encoded.long, encoded.int, encoded.long)
+                    assertEquals(timer, persisted)
+                    store.discardCheckpoint(id)
+                    val restoredMachine = restored.session.transferToFleet(fleet, 100, listOf(persisted))
+                    fleet.grant(restoredMachine, 100, 512)
+                    assertTrue(next() is ExperimentalFleetEvent.Quiescent)
+                    fleet.grant(restoredMachine, 101, 512)
+                    val outcome = next() as ExperimentalFleetEvent.Outcome
+                    assertTrue(outcome.outcome is VmOutcome.Halted)
+                    fleet.stop(restoredMachine)
+                    while (next() !is ExperimentalFleetEvent.Stopped) { }
+                    session.close()
+                    restored.session.close()
+                }
+            }
+        } finally {
+            root.toFile().deleteRecursively()
+        }
+    }
+
+    @Test
     fun `redstone input and confirmed output reach the correct machine over JNI`() {
         val library = Path.of(requireNotNull(System.getProperty("compukter.jni.library")))
         val bridge = JniBridge.open(library)

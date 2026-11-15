@@ -21,6 +21,18 @@ sealed interface ExperimentalFleetInputResult {
     data class CanonicalRejected(val failure: VmCanonicalLineFailure) : ExperimentalFleetInputResult
 }
 
+data class ExperimentalFleetTimer(
+    val identity: VmHostRequestIdentity,
+    val scope: Long,
+    val duration: Int,
+    val remaining: Long,
+) {
+    init {
+        require(identity.taskId > 0 && identity.requestId > 0 && scope >= 0 && duration >= 0)
+        require(remaining in 0..maxOf(duration.toLong(), 1))
+    }
+}
+
 /** Events from the opt-in native fleet transport. Machine identities are local to a fleet. */
 sealed interface ExperimentalFleetEvent {
     data class InputResult(val machine: Long, val request: Long, val result: ExperimentalFleetInputResult) : ExperimentalFleetEvent
@@ -38,7 +50,7 @@ sealed interface ExperimentalFleetEvent {
     data class Inspection(val machine: Long, val tick: Long, val request: VmHostRequest) : ExperimentalFleetEvent
     data class Stopped(val machine: Long, val pending: List<VmHostRequestIdentity>) : ExperimentalFleetEvent
     data class ScopeStopped(val machine: Long, val scope: Long, val pending: List<VmHostRequestIdentity>) : ExperimentalFleetEvent
-    data class Detached(val machine: Long) : ExperimentalFleetEvent
+    data class Detached(val machine: Long, val timers: List<ExperimentalFleetTimer> = emptyList()) : ExperimentalFleetEvent
     data class DetachRejected(val machine: Long) : ExperimentalFleetEvent
     data class Error(val machine: Long?, val message: String) : ExperimentalFleetEvent
 }
@@ -145,6 +157,16 @@ object ExperimentalFleetEventWire {
             }
             2 -> ExperimentalFleetEvent.Stopped(long(), identities())
             4 -> ExperimentalFleetEvent.ScopeStopped(long(), long(), identities())
+            16 -> {
+                val machine = long()
+                val count = input.int
+                require(count in 1..256 && input.remaining() == count * 32) { "invalid fleet timer length" }
+                val timers = List(count) {
+                    ExperimentalFleetTimer(VmHostRequestIdentity(input.int, input.long), long(), input.int, long())
+                }
+                require(timers.map { it.identity }.toSet().size == timers.size) { "duplicate fleet timer" }
+                ExperimentalFleetEvent.Detached(machine, timers)
+            }
             6, 7 -> {
                 val machine = long()
                 require(!input.hasRemaining()) { "trailing fleet detach bytes" }
@@ -163,6 +185,7 @@ object ExperimentalFleetEventWire {
 /** The transfer operations exchange opaque handles; the native machine has exactly one owner. */
 interface ExperimentalFleetSessionOwner {
     fun adopt(bridge: LowLevelVmBridge, session: Long): Long
+    fun adoptWithTimers(bridge: LowLevelVmBridge, session: Long, tick: Long, timers: List<ExperimentalFleetTimer>): Long
     fun recover(machine: Long): ExperimentalRestoredSession
 }
 

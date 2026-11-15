@@ -29,6 +29,26 @@ class ExperimentalFleetEventTest {
         assertFails { ExperimentalFleetEventWire.decode(wire + 0) }
     }
     @Test
+    fun `detached timer event validates lengths identities and remaining duration`() {
+        fun wire(remaining: Long = 1, duplicate: Boolean = false): ByteArray {
+            val count = if (duplicate) 2 else 1
+            val buffer = ByteBuffer.allocate(13 + count * 32).order(ByteOrder.LITTLE_ENDIAN)
+                .put(16).putLong(7).putInt(count)
+            repeat(count) { buffer.putInt(2).putLong(19).putLong(3).putInt(2).putLong(remaining) }
+            return buffer.array()
+        }
+        val encoded = wire()
+        assertEquals(
+            ExperimentalFleetEvent.Detached(7, listOf(ExperimentalFleetTimer(VmHostRequestIdentity(2, 19), 3, 2, 1))),
+            ExperimentalFleetEventWire.decode(encoded),
+        )
+        for (size in 0 until encoded.size) assertFails { ExperimentalFleetEventWire.decode(encoded.copyOf(size)) }
+        assertFails { ExperimentalFleetEventWire.decode(encoded + 0) }
+        assertFails { ExperimentalFleetEventWire.decode(wire(remaining = 3)) }
+        assertFails { ExperimentalFleetEventWire.decode(wire(duplicate = true)) }
+    }
+
+    @Test
     fun `scope cancellation preserves machine scope and identities and rejects malformed messages`() {
         val wire = ByteBuffer.allocate(33).order(ByteOrder.LITTLE_ENDIAN)
             .put(4).putLong(7).putLong(3).putInt(1).putInt(2).putLong(19).array()

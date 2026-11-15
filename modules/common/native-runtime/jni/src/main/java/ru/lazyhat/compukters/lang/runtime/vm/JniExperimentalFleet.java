@@ -17,7 +17,9 @@ final class JniExperimentalFleet {
     static native int stop(long handle, long machine);
     static native int completeCompilation(long handle, long machine, long token, int kind, byte[] payload);
     static native int attachSession(long handle, long session, long[] machine);
+    static native int attachSessionWithTimers(long handle, long session, long tick, byte[] timers, long[] machine);
     static native int detach(long handle, long machine);
+    static native int detachWithTimers(long handle, long machine, long tick);
     static native int restoreSession(long handle, long machine, long[] session);
     static native int terminalKey(long handle, long machine, int key, int action, int modifiers, long request);
     static native int terminalUpdate(long handle, long machine, long request, long revision);

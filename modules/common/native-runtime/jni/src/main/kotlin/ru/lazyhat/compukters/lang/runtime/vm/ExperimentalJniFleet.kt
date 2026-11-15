@@ -8,6 +8,8 @@ package ru.lazyhat.compukters.lang.runtime.vm
 import ru.lazyhat.compukters.lang.runtime.capability.HostResponse
 import ru.lazyhat.compukters.lang.runtime.fs.VmVirtualPath
 import java.nio.file.Path
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
 
 data class ExperimentalRequestInspection(
     val capability: CapabilityIdentity,
@@ -22,20 +24,39 @@ class ExperimentalJniFleet private constructor(
 ) : ExperimentalFleetSessionOwner, AutoCloseable {
     private val output = ByteArray(1_048_576)
     private val written = LongArray(1)
+    private val sessionBridges = mutableMapOf<Long, LowLevelVmBridge>()
 
     @Synchronized
     override fun adopt(bridge: LowLevelVmBridge, session: Long): Long {
         require(bridge is JniBridge) { "fleet and session must use JNI" }
         val machine = LongArray(1)
         success("attach", JniExperimentalFleet.attachSession(active(), session, machine))
+        sessionBridges[machine[0]] = bridge
+        return machine[0]
+    }
+
+    @Synchronized
+    override fun adoptWithTimers(bridge: LowLevelVmBridge, session: Long, tick: Long, timers: List<ExperimentalFleetTimer>): Long {
+        require(bridge is JniBridge) { "fleet and session must use JNI" }
+        require(tick >= 0 && timers.size <= 256)
+        val packed = ByteBuffer.allocate(timers.size * 32).order(ByteOrder.LITTLE_ENDIAN)
+        timers.forEach {
+            packed.putInt(it.identity.taskId).putLong(it.identity.requestId).putLong(it.scope)
+                .putInt(it.duration).putLong(it.remaining)
+        }
+        val machine = LongArray(1)
+        success("attach", JniExperimentalFleet.attachSessionWithTimers(active(), session, tick, packed.array(), machine))
+        sessionBridges[machine[0]] = bridge
         return machine[0]
     }
 
     @Synchronized
     override fun recover(machine: Long): ExperimentalRestoredSession {
+        val originalBridge = requireNotNull(sessionBridges[machine]) { "unknown fleet session" }
         val session = LongArray(1)
         success("restore", JniExperimentalFleet.restoreSession(active(), machine, session))
-        return ExperimentalRestoredSession(bridge, session[0])
+        sessionBridges.remove(machine)
+        return ExperimentalRestoredSession(originalBridge, session[0])
     }
 
     /** [deadlineNanos] uses the same System.nanoTime clock as the server scheduler. */
@@ -122,10 +143,17 @@ class ExperimentalJniFleet private constructor(
     fun detach(machine: Long) = success("detach", JniExperimentalFleet.detach(active(), machine))
 
     @Synchronized
+    fun detachWithTimers(machine: Long, tick: Long) =
+        success("detach", JniExperimentalFleet.detachWithTimers(active(), machine, tick))
+
+    @Synchronized
     fun poll(): ExperimentalFleetEvent? {
         success("poll", JniExperimentalFleet.poll(active(), output, written))
         require(written[0] in 0..output.size.toLong()) { "invalid native fleet event length" }
-        return if (written[0] == 0L) null else ExperimentalFleetEventWire.decode(output.copyOf(written[0].toInt()))
+        if (written[0] == 0L) return null
+        val event = ExperimentalFleetEventWire.decode(output.copyOf(written[0].toInt()))
+        if (event is ExperimentalFleetEvent.Stopped) sessionBridges.remove(event.machine)
+        return event
     }
 
     @Synchronized
