@@ -71,7 +71,11 @@ class ProgramAddonRequest
         arguments: List<VmValue>,
         val programId: Long = 0,
     ) {
-        val arguments: List<VmValue> = arguments.toList()
+        val arguments: List<VmValue> = java.util.Collections.unmodifiableList(arguments.toList())
+
+        // Only CommandBatchCodec accesses this under this request's monitor. The request owns the
+        // immutable packet snapshot throughout its handoff from the VM worker to the server.
+        internal var decodedCommandBatch: List<ru.lazyhat.compukters.api.commands.CommandBatchCodec.Command>? = null
 
         init {
             require(programId >= 0) { "addon program id must not be negative" }

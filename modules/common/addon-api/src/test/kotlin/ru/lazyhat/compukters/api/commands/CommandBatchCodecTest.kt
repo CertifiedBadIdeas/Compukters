@@ -6,16 +6,39 @@
 
 package ru.lazyhat.compukters.api.commands
 
+import ru.lazyhat.compukters.api.addon.ProgramAddonRequest
 import ru.lazyhat.compukters.lang.runtime.capability.HostResponse
+import ru.lazyhat.compukters.lang.runtime.vm.CapabilityIdentity
 import ru.lazyhat.compukters.lang.runtime.vm.HostFailureKind
+import ru.lazyhat.compukters.lang.runtime.vm.VmHostRequestIdentity
 import ru.lazyhat.compukters.lang.runtime.vm.VmValue
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertSame
 import kotlin.test.assertTrue
 
 class CommandBatchCodecTest {
+    @Test
+    fun `validated request is shared across threads and cannot be changed after admission`() {
+        val source = CommandBatchCodec.encode(listOf(CommandBatchCodec.Command("fixture.Binding.write", listOf(VmValue.I32(7)))))
+        val arguments = mutableListOf<VmValue>(VmValue.ByteArrayValue(source))
+        val request = ProgramAddonRequest(VmHostRequestIdentity(1, 1), CapabilityIdentity("compukters", "commands", 2, 0), 0, arguments)
+        val decoded = CommandBatchCodec.decode(request)
+        source.fill(0)
+        arguments.clear()
+        assertFailsWith<UnsupportedOperationException> { (request.arguments as MutableList).clear() }
+        assertFailsWith<UnsupportedOperationException> { (decoded as MutableList).clear() }
+        assertFailsWith<UnsupportedOperationException> { (decoded.single().arguments as MutableList).clear() }
+        val other =
+            java.util.concurrent.CompletableFuture
+                .supplyAsync { CommandBatchCodec.decode(request) }
+                .join()
+        assertSame(decoded, other)
+        assertEquals(listOf(VmValue.I32(7)), other.single().arguments)
+    }
+
     @Test
     fun `all scalar types and bytes round trip without changing argument order`() {
         val values =

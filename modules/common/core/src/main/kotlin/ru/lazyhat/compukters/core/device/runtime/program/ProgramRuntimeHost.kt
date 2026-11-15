@@ -47,6 +47,7 @@ import ru.lazyhat.compukters.lang.runtime.vm.VmCheckpointFailure
 import ru.lazyhat.compukters.lang.runtime.vm.VmCompilationRequest
 import ru.lazyhat.compukters.lang.runtime.vm.VmExecutableRevision
 import ru.lazyhat.compukters.lang.runtime.vm.VmHostRequest
+import ru.lazyhat.compukters.lang.runtime.vm.VmHostRequestIdentity
 import ru.lazyhat.compukters.lang.runtime.vm.VmOutcome
 import ru.lazyhat.compukters.lang.runtime.vm.VmResourceSnapshot
 import ru.lazyhat.compukters.lang.runtime.vm.VmStartException
@@ -501,6 +502,7 @@ class ProgramRuntimeHost internal constructor(
                         }
                     check(newlyReported <= remainingHostRequests) { "native VM exceeded supplied new host request budget" }
                     val deliverable = ArrayList<VmHostRequest>()
+                    var preparedBatches: MutableMap<VmHostRequestIdentity, ProgramAddonRequest>? = null
                     var fresh = 0
                     var deferredGroup = false
                     for (request in outcome.requests) {
@@ -513,7 +515,8 @@ class ProgramRuntimeHost internal constructor(
                             deliverable += request
                             continue
                         }
-                        val cost = commandRequestCost(request)
+                        val prepared = prepareCommandRequest(request)
+                        val cost = commandRequestCost(prepared)
                         if (cost > tickBudget.hostRequestsPerTick) {
                             if (remainingHostRequests == 0) {
                                 deferredGroup = true
@@ -537,6 +540,10 @@ class ProgramRuntimeHost internal constructor(
                             fresh++
                             chargedHostRequests += charge
                             deliverable += request
+                            if (prepared != null) {
+                                if (preparedBatches == null) preparedBatches = HashMap()
+                                preparedBatches[request.identity] = prepared
+                            }
                         }
                     }
                     val redstone = deliverable.filter(::isRedstoneOutputRequest)
@@ -559,7 +566,7 @@ class ProgramRuntimeHost internal constructor(
                             }
                         }
                     addon.forEach { request ->
-                        if (!deferAddonRequest(activeSession, request)) return
+                        if (!deferAddonRequest(activeSession, request, preparedBatches?.get(request.identity))) return
                     }
                     timers.forEach { request ->
                         if (!deferTimerRequest(activeSession, request, lastObservedTick)) return
@@ -597,13 +604,19 @@ class ProgramRuntimeHost internal constructor(
         }
     }
 
-    private fun commandRequestCost(request: VmHostRequest): Int {
-        if (request.capability != CommandBatchProgramHost.SCHEMA.identity || request.operation != 0) return 1
-        val bytes = (request.arguments.singleOrNull() as? VmValue.ByteArrayValue)?.value ?: return 1
+    private fun prepareCommandRequest(request: VmHostRequest): ProgramAddonRequest? {
+        if (request.capability != CommandBatchProgramHost.SCHEMA.identity || request.operation != 0) return null
+        return ProgramAddonRequest(request.identity, request.capability, request.operation, request.arguments, programScopes.last())
+    }
+
+    private fun commandRequestCost(request: ProgramAddonRequest?): Int {
+        if (request == null) return 1
         return try {
-            CommandBatchCodec.decode(bytes).size
+            CommandBatchCodec.decode(request).size
         } catch (_: IllegalArgumentException) {
             1 // The server rejects malformed input without dispatching a command.
+        } catch (_: ClassCastException) {
+            1
         }
     }
 
@@ -1056,6 +1069,7 @@ class ProgramRuntimeHost internal constructor(
     private fun deferAddonRequest(
         activeSession: ProgramVmSession,
         request: VmHostRequest,
+        prepared: ProgramAddonRequest? = null,
     ): Boolean {
         val existing = pendingAddonRequests[request.identity]
         if (existing != null) {
@@ -1069,7 +1083,14 @@ class ProgramRuntimeHost internal constructor(
         }
         val submitted =
             addonRequestPort.submit(
-                ProgramAddonRequest(request.identity, request.capability, request.operation, request.arguments, programScopes.last()),
+                prepared
+                    ?: ProgramAddonRequest(
+                        request.identity,
+                        request.capability,
+                        request.operation,
+                        request.arguments,
+                        programScopes.last(),
+                    ),
             )
         if (!submitted) return resume(request, HostResponse.Failure(HostFailureKind.UNAVAILABLE, "Addon request was not accepted"))
         pendingAddonRequests[request.identity] = PendingAddonRequest(activeSession, request, programScopes.last())

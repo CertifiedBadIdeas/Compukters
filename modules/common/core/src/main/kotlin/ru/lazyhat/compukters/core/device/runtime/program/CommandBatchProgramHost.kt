@@ -17,7 +17,6 @@ import ru.lazyhat.compukters.lang.runtime.capability.HostResponse
 import ru.lazyhat.compukters.lang.runtime.capability.HostValueType
 import ru.lazyhat.compukters.lang.runtime.vm.CapabilityIdentity
 import ru.lazyhat.compukters.lang.runtime.vm.HostFailureKind
-import ru.lazyhat.compukters.lang.runtime.vm.VmValue
 
 /** Install inside a program's addon scope. Each packet is one immediate server-thread delivery. */
 fun withCommandBatches(delegate: ProgramAddonHost): ProgramAddonHost = CommandBatchProgramHost(delegate)
@@ -46,7 +45,7 @@ class CommandBatchProgramHost internal constructor(
         val commands =
             try {
                 require(request.operation == 0 && request.arguments.size == 1)
-                CommandBatchCodec.decode((request.arguments.single() as VmValue.ByteArrayValue).value)
+                CommandBatchCodec.decode(request)
             } catch (_: IllegalArgumentException) {
                 return failure("Malformed command batch")
             } catch (_: ClassCastException) {

@@ -6,11 +6,13 @@
 
 package ru.lazyhat.compukters.api.commands
 
+import ru.lazyhat.compukters.api.addon.ProgramAddonRequest
 import ru.lazyhat.compukters.lang.runtime.capability.HostResponse
 import ru.lazyhat.compukters.lang.runtime.capability.HostValueType
 import ru.lazyhat.compukters.lang.runtime.vm.HostFailureKind
 import ru.lazyhat.compukters.lang.runtime.vm.VmValue
 import java.io.ByteArrayOutputStream
+import java.util.Collections
 
 /** Canonical compukters:commands ABI 2 payload. All text is length-prefixed little-endian UTF-16. */
 object CommandBatchCodec {
@@ -22,8 +24,18 @@ object CommandBatchCodec {
         val symbol: String,
         arguments: List<VmValue>,
     ) {
-        val arguments: List<VmValue> = arguments.toList()
+        val arguments: List<VmValue> = Collections.unmodifiableList(arguments.toList())
     }
+
+    /** Decode and retain the immutable request snapshot across its worker-to-server handoff. */
+    fun decode(request: ProgramAddonRequest): List<Command> =
+        synchronized(request) {
+            request.decodedCommandBatch ?: run {
+                require(request.arguments.size == 1)
+                val packet = (request.arguments.single() as VmValue.ByteArrayValue).value
+                Collections.unmodifiableList(decode(packet)).also { request.decodedCommandBatch = it }
+            }
+        }
 
     fun decode(bytes: ByteArray): List<Command> {
         require(bytes.size in 2..MAXIMUM_BYTES) { "Invalid command packet size" }

@@ -282,6 +282,30 @@ class ProgramRuntimeHostTest {
         assertIs<HostResponse.Failure>(session.responses.single().second)
     }
 
+    @Test
+    fun `malformed command group consumes one credit and does not block a following request`() {
+        val malformed = VmHostRequest(1, CommandBatchProgramHost.SCHEMA.identity, 0, listOf(VmValue.ByteArrayValue(byteArrayOf(2, 32))))
+        val ordinary = VmHostRequest(2, TEST_ADDON_CAPABILITY, 1, listOf(VmValue.I32(3)))
+        val session =
+            ScriptedSession(
+                listOf(VmOutcome.HostRequestBatch(listOf(malformed, ordinary)), VmOutcome.WaitingForHostQuota),
+            )
+        val submitted = mutableListOf<Long>()
+        val host =
+            ProgramRuntimeHost(
+                sessionFactory = ProgramVmSessionFactory { session },
+                tickBudget = ProgramTickBudget(hostRequestsPerTick = 2),
+                addonCapabilitySchemas = listOf(TEST_ADDON_SCHEMA, CommandBatchProgramHost.SCHEMA),
+                addonRequestPort = {
+                    submitted += it.identity.requestId
+                    true
+                },
+            )
+        host.start(byteArrayOf(1))
+        host.serverTick(10)
+        assertEquals(listOf(1L, 2L), submitted)
+    }
+
     private fun commandGroup(
         id: Long,
         count: Int,
