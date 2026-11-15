@@ -175,7 +175,7 @@ tasks.register<Test>("experimentalFleetEventIntegrationTest") {
     useJUnitPlatform()
     testClassesDirs = nativeIntegrationTest.output.classesDirs
     classpath = nativeIntegrationTest.runtimeClasspath
-    filter.includeTestsMatching("ru.lazyhat.compukters.core.device.runtime.program.integration.NativeFleetEventPumpIntegrationTest")
+    filter.includeTestsMatching("ru.lazyhat.compukters.core.device.runtime.actor.integration.NativeFleetEventPumpIntegrationTest")
     jvmArgs("--enable-native-access=ALL-UNNAMED", "--illegal-native-access=deny")
     javaLauncher.set(javaToolchains.launcherFor { languageVersion.set(JavaLanguageVersion.of(25)) })
     val library = rootProject.file(".toolchain/build/cargo/compukter-ffi-experimental/release/${System.mapLibraryName("compukter_ffi")}")

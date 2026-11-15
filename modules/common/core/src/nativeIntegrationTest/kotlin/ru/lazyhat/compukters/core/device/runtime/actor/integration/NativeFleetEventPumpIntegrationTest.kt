@@ -3,7 +3,9 @@
  * Copyright 2026 Vsevolod Petrov (lazyhat)
  * Licensed under the Apache License, Version 2.0.
  */
-package ru.lazyhat.compukters.core.device.runtime.program.integration
+package ru.lazyhat.compukters.core.device.runtime.actor.integration
+
+import ru.lazyhat.compukters.core.device.runtime.program.integration.installFfmRuntime
 
 import ru.lazyhat.compukters.core.device.runtime.actor.NativeFleetEventPump
 import ru.lazyhat.compukters.core.device.runtime.actor.ProgramRuntimeFrameCredit
