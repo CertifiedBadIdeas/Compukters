@@ -116,6 +116,7 @@ tasks.processResources {
 tasks.test {
     filter.excludeTestsMatching("ru.lazyhat.compukters.lang.runtime.integration.*")
     filter.excludeTestsMatching("ru.lazyhat.compukters.lang.runtime.vm.JniNativeEntryPointIntegrationTest")
+    filter.excludeTestsMatching("ru.lazyhat.compukters.lang.runtime.vm.JniExperimentalFleetIntegrationTest")
 }
 
 val nativeIntegrationTest =
@@ -187,4 +188,24 @@ tasks.register("verifyNativeRuntime") {
     description = "Runs JVM, explicit JNI, packaged JNI, and native resource verification."
     group = "verification"
     dependsOn(tasks.test, nativeIntegrationTest, packagedNativeIntegrationTest, verifyNativeRuntimeJarResource)
+}
+
+
+val experimentalJniDirectory = rootProject.file(".toolchain/build/cargo/compukter-jni-experimental")
+val experimentalJniLibrary = experimentalJniDirectory.resolve("release/$nativeFilename")
+val buildExperimentalFleetJni = tasks.register<Exec>("buildExperimentalFleetJni") {
+    workingDir(compukterVmRoot)
+    environment("CARGO_TARGET_DIR", experimentalJniDirectory.absolutePath)
+    commandLine("cargo", "build", "--locked", "--offline", "--release", "-p", "compukter-jni", "--features", "experimental-fleet-scheduler")
+}
+tasks.register<Test>("experimentalFleetIntegrationTest") {
+    group = "verification"
+    dependsOn(buildExperimentalFleetJni, ":compiler-k2:generateShellArtifact")
+    useJUnitPlatform()
+    testClassesDirs = sourceSets.test.get().output.classesDirs
+    classpath = sourceSets.test.get().runtimeClasspath
+    filter.includeTestsMatching("ru.lazyhat.compukters.lang.runtime.vm.JniExperimentalFleetIntegrationTest")
+    inputs.file(shellArtifact)
+    systemProperty("compukter.jni.library", experimentalJniLibrary.absolutePath)
+    systemProperty("compukters.shell.artifact", shellArtifact.get().asFile.absolutePath)
 }
