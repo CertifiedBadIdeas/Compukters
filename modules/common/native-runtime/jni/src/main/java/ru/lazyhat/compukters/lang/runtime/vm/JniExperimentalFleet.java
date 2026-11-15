@@ -17,6 +17,8 @@ final class JniExperimentalFleet {
     static native int stop(long handle, long machine);
     static native int resolveCost(long handle, long machine, int task, long request, int units);
     static native int reply(long handle, long machine, int task, long request, int tag, long bits, byte[] payload);
+    static native int replyWire(long handle, long machine, int task, long request, byte[] payload);
+    static native int replyFailure(long handle, long machine, int task, long request, int kind, byte[] detail);
     static native int poll(long handle, byte[] output, long[] written);
     static native int close(long handle);
 }

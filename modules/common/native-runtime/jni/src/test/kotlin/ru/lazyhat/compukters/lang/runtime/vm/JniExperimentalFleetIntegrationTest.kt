@@ -47,6 +47,10 @@ class JniExperimentalFleetIntegrationTest {
             assertEquals(0, decoded.int)
             assertEquals(0, JniExperimentalFleet.close(first))
             assertEquals(6, JniExperimentalFleet.stop(first, 0))
+            assertEquals(6, JniExperimentalFleet.replyWire(first, 0, 1, 1, byteArrayOf(1, 0)))
+            assertEquals(1, JniExperimentalFleet.replyWire(first, 0, 1, 1, byteArrayOf(1, 99)))
+            assertEquals(6, JniExperimentalFleet.replyFailure(first, 0, 1, 1, 4, byteArrayOf(65)))
+            assertEquals(1, JniExperimentalFleet.replyFailure(first, 0, 1, 1, 4, none))
             assertEquals(0, JniExperimentalFleet.stop(second, 0))
             assertTrue(JniExperimentalFleet.poll(second, none, LongArray(0)) != 0)
         } finally {
