@@ -205,6 +205,7 @@ tasks.register<Test>("experimentalFleetIntegrationTest") {
     testClassesDirs = sourceSets.test.get().output.classesDirs
     classpath = sourceSets.test.get().runtimeClasspath
     filter.includeTestsMatching("ru.lazyhat.compukters.lang.runtime.vm.JniExperimentalFleetIntegrationTest")
+    inputs.file(experimentalJniLibrary)
     inputs.file(shellArtifact)
     systemProperty("compukter.jni.library", experimentalJniLibrary.absolutePath)
     systemProperty("compukters.shell.artifact", shellArtifact.get().asFile.absolutePath)
