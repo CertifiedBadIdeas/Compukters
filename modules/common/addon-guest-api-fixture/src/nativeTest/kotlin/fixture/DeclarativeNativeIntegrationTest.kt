@@ -151,6 +151,11 @@ class DeclarativeNativeIntegrationTest {
             import compukter.peripheral.Side
             import kotlin.math.Vector3d
             fun main() {
+                val maximumArgument = CommandArgument.bytes(ByteArray(4093))
+                try { CommandArgument.bytes(ByteArray(4094)); error("oversized argument accepted") }
+                catch (expected: IllegalArgumentException) {}
+                try { Command.unit("x", listOf(maximumArgument)); error("oversized command accepted") }
+                catch (expected: IllegalArgumentException) {}
                 val engine = Engine.at(Side.front)
                 val state = engine.state()
                 check(state.orientation.quaternion.w == 1.0)

@@ -52,7 +52,9 @@ private class CapturedCommand<T>(
 
 private fun encodeCommand(binding: String, arguments: List<CommandArgument>): ByteArray {
     require(binding.length in 1..256 && arguments.size <= 32)
-    val output = CommandWriter()
+    var size = 2 + binding.length * 2 + 1
+    for (argument in arguments) size += argument.encodedSize()
+    val output = CommandWriter(size)
     output.text(binding)
     output.byte(arguments.size)
     for (argument in arguments) argument.writeTo(output)
@@ -62,10 +64,12 @@ private fun encodeCommand(binding: String, arguments: List<CommandArgument>): By
 /** A value snapshot for an SDK command binding. Byte arrays are copied at construction. */
 public class CommandArgument private constructor(private val packet: ByteArray) {
     internal fun writeTo(output: CommandWriter) { output.raw(packet) }
+    internal fun encodedSize(): Int = packet.size
 
     public companion object {
         private fun text(kind: Int, value: String): CommandArgument {
-            val output = CommandWriter()
+            if (value.length > 2048) throw IllegalArgumentException("Command text exceeds packet limit")
+            val output = CommandWriter(3 + value.length * 2)
             output.byte(kind)
             output.text(value)
             return CommandArgument(output.finish())
@@ -78,7 +82,8 @@ public class CommandArgument private constructor(private val packet: ByteArray) 
         public fun char(value: Char): CommandArgument = text(6, value.toString())
         public fun string(value: String): CommandArgument = text(7, value)
         public fun bytes(value: ByteArray): CommandArgument {
-            val output = CommandWriter()
+            require(value.size <= 4093) { "Command packet exceeds 4096 bytes" }
+            val output = CommandWriter(3 + value.size)
             output.byte(8)
             output.short(value.size)
             output.raw(value)
@@ -163,7 +168,9 @@ public fun <T> batch(commands: List<Command<T>>): BatchResults<T> {
     val captured = ArrayList<Command<T>>(commands.size)
     for (command in commands) captured.add(command)
     if (captured.isEmpty()) return BatchResults(captured, emptyList())
-    val output = CommandWriter()
+    var size = 2
+    for (command in captured) size += (command as EncodedCommand).encoded().size
+    val output = CommandWriter(size)
     output.byte(2)
     output.byte(captured.size)
     for (command in captured) output.raw((command as EncodedCommand).encoded())
@@ -175,8 +182,8 @@ public fun <T> batch(commands: List<Command<T>>): BatchResults<T> {
     return BatchResults(captured, results)
 }
 
-internal class CommandWriter {
-    private val bytes = ByteArray(4096)
+internal class CommandWriter(size: Int) {
+    private val bytes = ByteArray(size.also { require(it in 0..4096) { "Command packet exceeds 4096 bytes" } })
     private var offset = 0
     fun byte(value: Int) {
         if (offset >= bytes.size) throw IllegalArgumentException("Command packet exceeds 4096 bytes")
@@ -193,7 +200,7 @@ internal class CommandWriter {
         value.copyInto(bytes, offset)
         offset += value.size
     }
-    fun finish(): ByteArray = bytes.copyOf(offset)
+    fun finish(): ByteArray = if (offset == bytes.size) bytes else bytes.copyOf(offset)
 }
 
 /** Bounded result reader used by SDK-generated decoders, including nested records. */

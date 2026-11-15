@@ -68,10 +68,12 @@ internal object HostResponseWire {
 
             is HostResponse.RecordSuccess -> {
                 val record = response.value
-                4 + record.schema.typeName.length +
-                    record.schema.fields.zip(record.values).sumOf { (field, value) ->
-                        1 + field.name.length + encodedSize(value)
-                    }
+                var size = 4 + record.schema.typeName.length
+                for (index in record.values.indices) {
+                    val field = record.schema.fields[index]
+                    size += 1 + field.name.length + encodedSize(record.values[index])
+                }
+                size
             }
 
             is HostResponse.Failure -> {
@@ -132,10 +134,11 @@ internal object HostResponseWire {
                 )
                 record.schema.typeName.forEach { buffer.put(it.code.toByte()) }
                 buffer.put(record.values.size.toByte())
-                record.schema.fields.zip(record.values).forEach { (field, value) ->
+                for (index in record.values.indices) {
+                    val field = record.schema.fields[index]
                     buffer.put(field.name.length.toByte())
                     field.name.forEach { buffer.put(it.code.toByte()) }
-                    write(buffer, value)
+                    write(buffer, record.values[index])
                 }
             }
 
