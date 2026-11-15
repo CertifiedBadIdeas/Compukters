@@ -70,6 +70,26 @@ class ExperimentalJniFleet private constructor(
         success("terminal key", JniExperimentalFleet.terminalKey(active(), machine, key.wireCode, action.wireCode, modifiers.fold(0) { bits, modifier -> bits or modifier.mask }))
 
     @Synchronized
+    fun terminalUpdate(machine: Long, request: Long, revision: Long) =
+        success("terminal update", JniExperimentalFleet.terminalUpdate(active(), machine, request, revision))
+
+    @Synchronized
+    fun redstoneInput(machine: Long, packet: Int) =
+        success("redstone input", JniExperimentalFleet.redstoneInput(active(), machine, packet))
+
+    @Synchronized
+    fun confirmRedstoneOutput(machine: Long, packed: Int) =
+        success("redstone output", JniExperimentalFleet.confirmRedstoneOutput(active(), machine, packed))
+
+    @Synchronized
+    fun terminalText(machine: Long, text: String) =
+        success("terminal text", JniExperimentalFleet.terminalText(active(), machine, text.codePoints().toArray()))
+
+    @Synchronized
+    fun canonicalLine(machine: Long, line: CharArray) =
+        success("canonical line", JniExperimentalFleet.canonicalLine(active(), machine, line))
+
+    @Synchronized
     fun stop(machine: Long) = success("stop", JniExperimentalFleet.stop(active(), machine))
 
     @Synchronized

@@ -25,6 +25,100 @@ import ru.lazyhat.compukters.lang.runtime.fs.WorldFileSystemStore
 
 class JniExperimentalFleetIntegrationTest {
     @Test
+    fun `redstone input and confirmed output reach the correct machine over JNI`() {
+        val library = Path.of(requireNotNull(System.getProperty("compukter.jni.library")))
+        val bridge = JniBridge.open(library)
+        fun fixture(name: String) = Path.of(requireNotNull(System.getProperty(name))).readBytes()
+        ExperimentalJniFleet.open(library, 2, 32, 32, 128, 64, 64, 32).use { fleet ->
+            val input = VmSession.open(fixture("compukters.fleet.redstone.input.fixture"), bridge)
+            val output = VmSession.open(fixture("compukters.fleet.redstone.output.fixture"), bridge)
+            val inputId = input.transferToFleet(fleet)
+            val outputId = output.transferToFleet(fleet)
+            val deadline = System.nanoTime() + 5_000_000_000L
+            fun next(): ExperimentalFleetEvent {
+                while (System.nanoTime() < deadline) {
+                    fleet.poll()?.let { return it }
+                    Thread.yield()
+                }
+                error("timed out waiting for fleet event")
+            }
+            try {
+                kotlin.test.assertFailsWith<VmBridgeException> { fleet.redstoneInput(inputId, 1 shl 30) }
+                fleet.redstoneInput(inputId, (1 shl 2) or (11 shl 14))
+                fleet.confirmRedstoneOutput(outputId, 0x12345678)
+                fleet.grant(inputId, 1, 512)
+                fleet.grant(outputId, 1, 512)
+                val outcomes = (0..1).associate {
+                    val event = next() as ExperimentalFleetEvent.Outcome
+                    event.machine to event.outcome
+                }
+                assertEquals(VmOutcome.Halted(VmValue.I32(11)), outcomes[inputId])
+                assertEquals(VmOutcome.Halted(VmValue.I32(0x12345678)), outcomes[outputId])
+            } finally {
+                fleet.stop(inputId)
+                fleet.stop(outputId)
+                var stopped = 0
+                while (stopped < 2) if (next() is ExperimentalFleetEvent.Stopped) stopped++
+                input.close()
+                output.close()
+            }
+        }
+    }
+
+    @Test
+    fun `text and complete line reach waiting guest through JNI`() {
+        val library = Path.of(requireNotNull(System.getProperty("compukter.jni.library")))
+        val artifact = Path.of(requireNotNull(System.getProperty("compukters.fleet.terminal.fixture"))).readBytes()
+        val bridge = JniBridge.open(library)
+        ExperimentalJniFleet.open(library, 1, 32, 32, 1024, 64, 64, 32).use { fleet ->
+            for (canonical in listOf(false, true)) {
+                val session = VmSession.open(artifact, bridge)
+                val machine = session.transferToFleet(fleet)
+                val deadline = System.nanoTime() + 5_000_000_000L
+                fun next(): ExperimentalFleetEvent {
+                    while (System.nanoTime() < deadline) {
+                        fleet.poll()?.let { return it }
+                        Thread.yield()
+                    }
+                    error("timed out waiting for fleet event")
+                }
+                try {
+                    fleet.grant(machine, 1, 512)
+                    assertEquals(VmOutcome.WaitingForTerminalEvent, (next() as ExperimentalFleetEvent.Outcome).outcome)
+                    if (canonical) fleet.canonicalLine(machine, "hello".toCharArray()) else {
+                        fleet.terminalText(machine, "hello")
+                        fleet.terminalKey(machine, TerminalKey.ENTER, TerminalKeyAction.PRESS, emptySet())
+                    }
+                    var outcome: VmOutcome? = null
+                    for (tick in 2L..300L) {
+                        fleet.grant(machine, tick, 512)
+                        Thread.sleep(1)
+                        val event = fleet.poll()
+                        if (event is ExperimentalFleetEvent.Outcome && event.outcome is VmOutcome.Halted) {
+                            outcome = event.outcome
+                            break
+                        }
+                        if (event is ExperimentalFleetEvent.Error) error(event.message)
+                    }
+                    assertEquals(VmOutcome.Halted(VmValue.I32("hello".hashCode())), outcome)
+                    fleet.terminalUpdate(machine, 11, Long.MAX_VALUE)
+                    val full = next() as ExperimentalFleetEvent.Terminal
+                    assertEquals(machine, full.machine)
+                    assertEquals(11L, full.request)
+                    val state = (full.update as TerminalUpdate.Full).state
+                    assertEquals("hello", state.cells.take(5).map { it.codePoint.toChar() }.joinToString(""))
+                    fleet.terminalUpdate(machine, 12, state.revision)
+                    assertEquals(ExperimentalFleetEvent.Terminal(machine, 12, TerminalUpdate.Unchanged(state.revision)), next())
+                } finally {
+                    fleet.stop(machine)
+                    while (next() !is ExperimentalFleetEvent.Stopped) { }
+                    session.close()
+                }
+            }
+        }
+    }
+
+    @Test
     fun `compilation request and result cross JNI and install into stored filesystem`() {
         val library = Path.of(requireNotNull(System.getProperty("compukter.jni.library")))
         fun fixture(name: String) = Path.of(requireNotNull(System.getProperty(name))).readBytes()
