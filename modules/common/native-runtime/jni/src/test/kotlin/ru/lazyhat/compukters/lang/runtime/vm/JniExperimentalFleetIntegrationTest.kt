@@ -184,7 +184,7 @@ class JniExperimentalFleetIntegrationTest {
         val artifact = Path.of(requireNotNull(System.getProperty("compukters.fleet.host.fixture"))).readBytes()
         val capability = CapabilityIdentity("app", "entry", 1, 2)
         val schema = HostCapabilitySchema(capability, listOf(HostOperationSchema(emptyList(), HostValueType.UNIT, true)))
-        ExperimentalJniFleet.open(library, 1, 32, 32, 128, 64, 64, 32, reportTurns = true).use { fleet ->
+        ExperimentalJniFleet.open(library, 1, 32, 32, 128, 64, 64, 32, coordinatedTurns = true).use { fleet ->
             val session = VmSession.open(artifact, listOf(schema), JniBridge.open(library))
             val machine = session.transferToFleet(fleet)
             val deadline = System.nanoTime() + 5_000_000_000L
@@ -202,6 +202,9 @@ class JniExperimentalFleetIntegrationTest {
                 assertEquals(machine, before.machine)
                 assertEquals(4L, before.tick)
                 fleet.reply(machine, request.identity, HostResponse.UnitSuccess)
+                fleet.terminalUpdate(machine, 7, Long.MAX_VALUE)
+                assertTrue(next() is ExperimentalFleetEvent.Terminal)
+                fleet.grant(machine, 4, 256)
                 assertEquals(VmOutcome.Halted(null), (next() as ExperimentalFleetEvent.Outcome).outcome)
                 val after = next() as ExperimentalFleetEvent.Quiescent
                 assertEquals(before.machine, after.machine)
