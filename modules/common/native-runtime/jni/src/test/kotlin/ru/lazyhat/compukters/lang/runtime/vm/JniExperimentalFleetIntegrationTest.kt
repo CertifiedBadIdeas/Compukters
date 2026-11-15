@@ -172,7 +172,7 @@ class JniExperimentalFleetIntegrationTest {
     }
 
     @Test
-    fun `refused transfer leaves the original session usable`() {
+    fun `executed quiescent session transfers without losing its progress`() {
         val library = Path.of(requireNotNull(System.getProperty("compukter.jni.library")))
         val artifact = Path.of(requireNotNull(System.getProperty("compukters.shell.artifact"))).readBytes()
         val bridge = JniBridge.open(library)
@@ -180,8 +180,20 @@ class JniExperimentalFleetIntegrationTest {
             VmSession.open(artifact, bridge).use { session ->
                 val progress = session.advanceWithRetirementLimit(128, 64, Int.MAX_VALUE, 1)
                 assertTrue(progress.retiredInstructions > 0)
-                kotlin.test.assertFailsWith<VmBridgeException> { session.transferToFleet(fleet) }
-                assertEquals(VmOutcome.SliceExhausted, session.advanceWithRetirementLimit(128, 64, Int.MAX_VALUE, 0).outcome)
+                val before = session.resourceSnapshot().executedInstructions
+                val machine = session.transferToFleet(fleet)
+                fleet.detach(machine)
+                val deadline = System.nanoTime() + 5_000_000_000L
+                var event: ExperimentalFleetEvent?
+                do {
+                    event = fleet.poll()
+                    if (event == null) Thread.yield()
+                    assertTrue(System.nanoTime() < deadline)
+                } while (event == null)
+                assertEquals(ExperimentalFleetEvent.Detached(machine), event)
+                VmSession.restoreFromFleet(fleet, machine).use { restored ->
+                    assertEquals(before, restored.resourceSnapshot().executedInstructions)
+                }
             }
         }
     }
