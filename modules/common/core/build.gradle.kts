@@ -180,7 +180,9 @@ tasks.register<Test>("experimentalFleetEventIntegrationTest") {
     javaLauncher.set(javaToolchains.launcherFor { languageVersion.set(JavaLanguageVersion.of(25)) })
     val library = rootProject.file(".toolchain/build/cargo/compukter-ffi-experimental/release/${System.mapLibraryName("compukter_ffi")}")
     val fixture = rootProject.file("host/compukter-vm/tests/fixtures/fleet-terminal.cpkt")
-    inputs.files(library, fixture)
+    val hostFixture = rootProject.file("host/compukter-vm/tests/fixtures/fleet-host-request.cpkt")
+    inputs.files(library, fixture, hostFixture)
+    systemProperty("compukters.fleet.host.fixture", hostFixture.absolutePath)
     systemProperty("compukters.ffi.library", library.absolutePath)
     systemProperty("compukters.fleet.terminal.fixture", fixture.absolutePath)
 }

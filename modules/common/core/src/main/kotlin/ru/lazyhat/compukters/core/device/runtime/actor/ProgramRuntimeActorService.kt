@@ -62,7 +62,7 @@ class ProgramRuntimeActorService(
     private val frameLock = Any()
     private var capacityFrame: CapacityFrame? = null
     private var latestCapacityTick = -1L
-    private val frameCredits = mutableMapOf<VmActorEndpoint, FrameCredit>()
+    private val frameCredits = mutableMapOf<VmActorEndpoint, ProgramRuntimeFrameCredit>()
     private val awaitingCapacity = mutableListOf<PendingTurn>()
     private val closed = AtomicBoolean()
     internal var lastCapacityAllocation = PerComputerCapacityAllocation(emptyList(), 0, 0)
@@ -351,7 +351,7 @@ class ProgramRuntimeActorService(
             val deadlineNanos = capacityDeadlineNanos()
             frame.turns.forEach { turn ->
                 val allowance = grants[turn.endpoint]?.retiredInstructionLimit?.toInt() ?: 0
-                val credit = FrameCredit(frame.worldTick, allowance.toLong(), deadlineNanos, inFlight = allowance > 0)
+                val credit = ProgramRuntimeFrameCredit(frame.worldTick, allowance.toLong(), deadlineNanos, inFlight = allowance > 0)
                 if (allowance > 0) {
                     check(frameCredits.put(turn.endpoint, credit) == null) { "computer received duplicate frame grants" }
                     reservations[turn.address] = ReservedTurn(allowance.toLong(), credit)
@@ -425,12 +425,10 @@ class ProgramRuntimeActorService(
                     val address = RequestAddress(event.endpoint, reply.requestId)
                     val reserved = reservations.remove(address)
                     if (reserved != null) {
-                        check(reply.retiredInstructions in 0..reserved.allowance) { "actor exceeded its instruction reservation" }
-                        addSaturating(totalRetiredInstructions, reply.retiredInstructions)
                         synchronized(frameLock) {
                             val credit = reserved.credit
-                            credit.inFlight = false
-                            credit.remaining -= reply.retiredInstructions
+                            credit.finishTurn(reply.retiredInstructions, reserved.allowance)
+                            addSaturating(totalRetiredInstructions, reply.retiredInstructions)
                             if (frameCredits[event.endpoint] !== credit) {
                                 addSaturating(totalUnusedReservations, credit.remaining)
                                 credit.remaining = 0
@@ -558,17 +556,9 @@ class ProgramRuntimeActorService(
         knownRunnable.clear()
     }
 
-    private data class FrameCredit(
-        val worldTick: Long,
-        var remaining: Long,
-        val deadlineNanos: Long,
-        var inFlight: Boolean,
-        var continuations: Int = 0,
-    )
-
     private data class ReservedTurn(
         val allowance: Long,
-        val credit: FrameCredit,
+        val credit: ProgramRuntimeFrameCredit,
     )
 
     private data class RequestAddress(
