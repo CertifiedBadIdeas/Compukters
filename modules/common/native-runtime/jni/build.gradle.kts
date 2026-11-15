@@ -209,7 +209,13 @@ tasks.register<Test>("experimentalFleetIntegrationTest") {
     inputs.file(shellArtifact)
     val hostRequestFixture = compukterVmRoot.resolve("tests/fixtures/fleet-host-request.cpkt")
     inputs.file(hostRequestFixture)
+    val compilerSourceFixture = compukterVmRoot.resolve("tests/fixtures/fleet-compiler-source.cpkt")
+    val compilerFixture = compukterVmRoot.resolve("tests/fixtures/fleet-compiler.cpkt")
+    inputs.file(compilerSourceFixture)
+    inputs.file(compilerFixture)
     systemProperty("compukter.jni.library", experimentalJniLibrary.absolutePath)
     systemProperty("compukters.shell.artifact", shellArtifact.get().asFile.absolutePath)
     systemProperty("compukters.fleet.host.fixture", hostRequestFixture.absolutePath)
+    systemProperty("compukters.fleet.compiler.source.fixture", compilerSourceFixture.absolutePath)
+    systemProperty("compukters.fleet.compiler.fixture", compilerFixture.absolutePath)
 }

@@ -58,6 +58,14 @@ class ExperimentalJniFleet private constructor(
         success("resolve cost", JniExperimentalFleet.resolveCost(active(), machine, identity.taskId, identity.requestId, units))
 
     @Synchronized
+    fun completeCompilationArtifact(machine: Long, token: Long, artifact: ByteArray) =
+        success("compilation completion", JniExperimentalFleet.completeCompilation(active(), machine, token, 0, artifact))
+
+    @Synchronized
+    fun completeCompilationFailure(machine: Long, token: Long, diagnostics: String) =
+        success("compilation completion", JniExperimentalFleet.completeCompilation(active(), machine, token, 1, diagnostics.encodeToByteArray()))
+
+    @Synchronized
     fun terminalKey(machine: Long, key: TerminalKey, action: TerminalKeyAction, modifiers: Set<TerminalModifier>) =
         success("terminal key", JniExperimentalFleet.terminalKey(active(), machine, key.wireCode, action.wireCode, modifiers.fold(0) { bits, modifier -> bits or modifier.mask }))
 

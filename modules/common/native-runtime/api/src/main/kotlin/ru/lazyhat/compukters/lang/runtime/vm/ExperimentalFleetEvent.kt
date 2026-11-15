@@ -15,6 +15,7 @@ import java.nio.charset.StandardCharsets
 sealed interface ExperimentalFleetEvent {
     /** Retired instructions accumulated within the tick; later reports may increase this value. */
     data class Quiescent(val machine: Long, val tick: Long, val retired: Long) : ExperimentalFleetEvent
+    data class Compilation(val machine: Long, val tick: Long, val request: VmCompilationRequest) : ExperimentalFleetEvent
     data class Outcome(val machine: Long, val tick: Long, val outcome: VmOutcome) : ExperimentalFleetEvent
     data class Inspection(val machine: Long, val tick: Long, val request: VmHostRequest) : ExperimentalFleetEvent
     data class Stopped(val machine: Long, val pending: List<VmHostRequestIdentity>) : ExperimentalFleetEvent
@@ -38,6 +39,12 @@ object ExperimentalFleetEventWire {
             return items
         }
         return when (input.get().toInt() and 0xff) {
+            9 -> {
+                val machine = long()
+                val tick = long()
+                val request = CompilationWireDecoder(ByteArray(input.remaining()).also(input::get)).request()
+                ExperimentalFleetEvent.Compilation(machine, tick, request)
+            }
             8 -> {
                 val result = ExperimentalFleetEvent.Quiescent(long(), long(), long())
                 require(!input.hasRemaining()) { "trailing fleet accounting bytes" }

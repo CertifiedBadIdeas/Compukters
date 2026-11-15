@@ -870,7 +870,7 @@ private class WireDecoder(
     private fun invalid(): Nothing = throw IllegalArgumentException("invalid native VM result")
 }
 
-private class CompilationWireDecoder(
+internal class CompilationWireDecoder(
     private val bytes: ByteArray,
 ) {
     private val buffer = ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN)

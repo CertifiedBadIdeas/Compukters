@@ -9,6 +9,8 @@ package ru.lazyhat.compukters.lang.runtime.vm
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.nio.file.Path
+import java.nio.file.Files
+import java.security.MessageDigest
 import kotlin.io.path.readBytes
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -17,8 +19,71 @@ import ru.lazyhat.compukters.lang.runtime.capability.HostCapabilitySchema
 import ru.lazyhat.compukters.lang.runtime.capability.HostOperationSchema
 import ru.lazyhat.compukters.lang.runtime.capability.HostResponse
 import ru.lazyhat.compukters.lang.runtime.capability.HostValueType
+import ru.lazyhat.compukters.lang.runtime.fs.ComputerId
+import ru.lazyhat.compukters.lang.runtime.fs.VmVirtualPath
+import ru.lazyhat.compukters.lang.runtime.fs.WorldFileSystemStore
 
 class JniExperimentalFleetIntegrationTest {
+    @Test
+    fun `compilation request and result cross JNI and install into stored filesystem`() {
+        val library = Path.of(requireNotNull(System.getProperty("compukter.jni.library")))
+        fun fixture(name: String) = Path.of(requireNotNull(System.getProperty(name))).readBytes()
+        val sourceWriter = fixture("compukters.fleet.compiler.source.fixture")
+        val compiler = fixture("compukters.fleet.compiler.fixture")
+        val resultArtifact = fixture("compukters.shell.artifact")
+        val bridge = JniBridge.open(library)
+        val header = ByteBuffer.allocate(16).order(ByteOrder.LITTLE_ENDIAN)
+            .put("CPKTSYS\u0000".encodeToByteArray()).putShort(1).putShort(0).putInt(0).array()
+        val image = header + MessageDigest.getInstance("SHA-256").digest(header)
+        val root = Files.createTempDirectory("fleet-compiler-").toRealPath()
+        try {
+            WorldFileSystemStore.open(root, bridge).use { store ->
+                val id = ComputerId.fromLongs(91, 92)
+                VmSession.openInStore(sourceWriter, store, id, image).use { writer ->
+                    var result: VmOutcome
+                    do { result = writer.advance(128, 64, 64) } while (result == VmOutcome.SliceExhausted)
+                    assertTrue(result is VmOutcome.Halted)
+                }
+                ExperimentalJniFleet.open(library, 1, 32, 32, 128, 64, 64, 32).use { fleet ->
+                    val session = VmSession.openInStore(compiler, store, id, image)
+                    val machine = session.transferToFleet(fleet)
+                    val deadline = System.nanoTime() + 5_000_000_000L
+                    fun next(): ExperimentalFleetEvent {
+                        while (System.nanoTime() < deadline) {
+                            fleet.poll()?.let { return it }
+                            Thread.yield()
+                        }
+                        error("timed out waiting for fleet event")
+                    }
+                    var detached = false
+                    try {
+                        fleet.grant(machine, 1, 1024)
+                        val request = next() as ExperimentalFleetEvent.Compilation
+                        assertEquals(machine, request.machine)
+                        assertEquals("/home/main.kt", request.request.sources.single().path)
+                        assertEquals("fun main() = 42", request.request.sources.single().utf8Bytes().decodeToString())
+                        fleet.completeCompilationArtifact(machine, request.request.token, resultArtifact)
+                        assertEquals(VmOutcome.Halted(VmValue.I32(0)), (next() as ExperimentalFleetEvent.Outcome).outcome)
+                        fleet.detach(machine)
+                        assertEquals(ExperimentalFleetEvent.Detached(machine), next())
+                        detached = true
+                        VmSession.restoreFromFleet(fleet, machine).use { restored ->
+                            assertTrue(restored.fileStat(VmVirtualPath.of("/home/main")).metadata.executable)
+                        }
+                    } finally {
+                        if (!detached) {
+                            fleet.stop(machine)
+                            while (next() !is ExperimentalFleetEvent.Stopped) { }
+                        }
+                        session.close()
+                    }
+                }
+            }
+        } finally {
+            root.toFile().deleteRecursively()
+        }
+    }
+
     @Test
     fun `tick retirement reports survive a host continuation over JNI`() {
         val library = Path.of(requireNotNull(System.getProperty("compukter.jni.library")))
