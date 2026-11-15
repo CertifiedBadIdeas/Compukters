@@ -231,6 +231,12 @@ class ExperimentalFfmFleet private constructor(
     }
 
     @Synchronized
+    override fun detachForCheckpoint(machine: Long, tick: Long) {
+        require(machine >= 0 && tick >= 0)
+        success("checkpoint detach", calls.requestLifecycle.invokeExact(active(), machine, 3, tick) as Int)
+    }
+
+    @Synchronized
     override fun stop(machine: Long, independent: Boolean) {
         require(machine >= 0)
         success("stop", if (independent) calls.requestLifecycle.invokeExact(active(), machine, 0, 0L) as Int

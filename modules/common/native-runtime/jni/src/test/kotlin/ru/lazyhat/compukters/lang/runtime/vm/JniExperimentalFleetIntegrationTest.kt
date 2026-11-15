@@ -30,6 +30,62 @@ class JniExperimentalFleetIntegrationTest {
 
 
     @Test
+    fun `checkpoint detach settles ordinary and inspected requests without polling unrelated output`() {
+        val artifact = Path.of(requireNotNull(System.getProperty("compukters.fleet.host.fixture"))).readBytes()
+        val timer = Path.of(requireNotNull(System.getProperty("compukters.fleet.timer.fixture"))).readBytes()
+        val capability = CapabilityIdentity("app", "entry", 1, 2)
+        val schema = HostCapabilitySchema(capability, listOf(HostOperationSchema(emptyList(), HostValueType.UNIT, true)))
+        for (inspect in listOf(false, true)) {
+            JniBridge.open(Path.of(requireNotNull(System.getProperty("compukter.jni.library")))).let { bridge ->
+                bridge.openExperimentalFleet(ExperimentalFleetConfig(1, 32, 1, 128, 64, 64, 32,
+                    if (inspect) ExperimentalRequestInspection(capability, 0, "over budget") else null,
+                    coordinatedTurns = true,
+                )).use { fleet ->
+                    val session = VmSession.open(artifact, listOf(schema), bridge)
+                    val observer = VmSession.open(timer, bridge)
+                    val machine = session.transferToFleet(fleet)
+                    val other = observer.transferToFleet(fleet)
+                    val deadline = System.nanoTime() + 10_000_000_000L
+                    fun next(lifecycle: Long? = null): ExperimentalFleetEvent {
+                        while (System.nanoTime() < deadline) {
+                            (if (lifecycle == null) fleet.poll() else fleet.pollLifecycle(lifecycle))?.let { return it }
+                            Thread.yield()
+                        }
+                        error("timed out waiting for checkpoint lifecycle")
+                    }
+                    kotlin.test.assertFailsWith<IllegalArgumentException> { fleet.detachForCheckpoint(machine, -1) }
+                    fleet.grant(machine, 1, 512)
+                    val request = next()
+                    assertTrue(if (inspect) request is ExperimentalFleetEvent.Inspection else request is ExperimentalFleetEvent.Outcome && request.outcome is VmOutcome.HostRequestBatch)
+                    val before = next() as ExperimentalFleetEvent.Quiescent
+                    val generation = fleet.eventGeneration()
+                    fleet.resourceSnapshot(other, 42)
+                    assertTrue(fleet.waitEvents(generation, 5_000))
+                    fleet.detachForCheckpoint(machine, 1)
+                    var event = next(machine)
+                    while (event !is ExperimentalFleetEvent.Detached) event = next(machine)
+                    assertTrue(event.timers.isEmpty())
+                    VmSession.restoreFromFleet(fleet, machine).use { restored ->
+                        assertEquals(before.retired, restored.resourceSnapshot().executedInstructions)
+                        var outcome = restored.advance(512, 512, 64)
+                        repeat(16) {
+                            if (outcome is VmOutcome.SliceExhausted) outcome = restored.advance(512, 512, 64)
+                        }
+                        assertTrue(outcome is VmOutcome.UncaughtException)
+                    }
+                    val preserved = next() as ExperimentalFleetEvent.Resources
+                    assertEquals(other, preserved.machine)
+                    assertEquals(42L, preserved.request)
+                    fleet.stop(other, independent = true)
+                    while (next(other) !is ExperimentalFleetEvent.Stopped) { }
+                    observer.close()
+                    session.close()
+                }
+            }
+        }
+    }
+
+    @Test
     fun `independent stop returns generation after accepted deployment with ordinary output full`() {
         val library = Path.of(requireNotNull(System.getProperty("compukter.jni.library")))
         val artifact = Path.of(requireNotNull(System.getProperty("compukters.fleet.timer.fixture"))).readBytes()

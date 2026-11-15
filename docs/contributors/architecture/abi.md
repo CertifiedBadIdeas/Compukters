@@ -15,7 +15,11 @@ This reference groups versioned representation boundaries by the version that in
 
 The opt-in `experimental-fleet-scheduler` build adds independent lifecycle delivery. C
 `compukter_experimental_fleet_request_lifecycle(handle, machine, kind, tick)` atomically selects it while
-fencing the machine: kind 0 stops, kind 1 detaches, and kind 2 detaches with timers at the supplied tick.
+fencing the machine: kind 0 stops, kind 1 detaches, kind 2 detaches with timers at the supplied tick,
+and kind 3 prepares execution for checkpoint capture at that tick. Kind 3 drains accepted commands,
+settles unacknowledged external waits with Unavailable without running Guest, preserves timers and the
+exact pending compiler transaction, and discards uninstalled deployment candidates. Invalid earlier ticks
+are rejected before settlement. Its timer state uses the existing Detached encoding.
 `compukter_experimental_fleet_poll_lifecycle` reads one observation at a time through the existing event
 encoding, followed by Stopped, Detached or DetachRejected. Ordinary polling cannot consume this stream.
 Previously published ordinary observations remain in the ordinary queue.
@@ -23,7 +27,11 @@ Previously published ordinary observations remain in the ordinary queue.
 Successful output copying acknowledges one event. BufferTooSmall, invalid output and JNI copy errors
 retain the delivery for retry. Native memory reservations and the ownership fence remain until the
 terminal acknowledgement; recovery is refused while a lifecycle event is awaiting delivery. JNI and
-FFM expose the same contract through `independent = true` on stop/detach and `pollLifecycle(machine)`.
+FFM expose the same contract through `independent = true` on stop/detach and `pollLifecycle(machine)`;
+`detachForCheckpoint(machine, tick)` always selects independent delivery. This adds an experimental
+selector without changing event layouts, the released C ABI version, artifact format or checkpoint schema.
+It requires matching experimental native and JVM builds. Lifecycle prefixes are reconciliation input,
+including requests already settled by kind 3; they must not be dispatched as fresh world effects.
 
 Stop event tag 2 now contains machine (`u64`), final filesystem generation (`u64`), pending
 identity count (`u32`), then task/request pairs (`u32`, `u64`), all little-endian. Rust captures the

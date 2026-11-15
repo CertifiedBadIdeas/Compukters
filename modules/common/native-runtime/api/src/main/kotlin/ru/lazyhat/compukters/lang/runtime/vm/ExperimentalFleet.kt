@@ -49,6 +49,13 @@ interface ExperimentalFleet : ExperimentalFleetSessionOwner, AutoCloseable {
     fun stop(machine: Long, independent: Boolean = false)
     fun detach(machine: Long, independent: Boolean = false)
     fun detachWithTimers(machine: Long, tick: Long, independent: Boolean = false)
+    /**
+     * Independent detach for checkpoint capture. Drains accepted effects, settles remaining external
+     * waits with Unavailable, and preserves timers/compiler input without executing Guest.
+     * Lifecycle prefixes are observations to reconcile, never fresh world actions to dispatch.
+     */
+    fun detachForCheckpoint(machine: Long, tick: Long)
+
     /** Capture before draining poll(); a later publication changes the generation. */
     fun eventGeneration(): Long
     /** Wait independently of command submission; false means timeout or fleet closure. */

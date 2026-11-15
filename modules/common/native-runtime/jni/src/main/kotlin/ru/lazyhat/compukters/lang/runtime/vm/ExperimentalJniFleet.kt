@@ -169,6 +169,12 @@ class ExperimentalJniFleet private constructor(
         else JniExperimentalFleet.detachWithTimers(active(), machine, tick))
 
     @Synchronized
+    override fun detachForCheckpoint(machine: Long, tick: Long) {
+        require(machine >= 0 && tick >= 0)
+        success("checkpoint detach", JniExperimentalFleet.requestLifecycle(active(), machine, 3, tick))
+    }
+
+    @Synchronized
     override fun eventGeneration(): Long {
         val value = LongArray(1)
         success("event generation", JniExperimentalFleet.eventGeneration(active(), value))

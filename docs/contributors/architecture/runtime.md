@@ -124,6 +124,14 @@ Transport errors retain the charged head for retry; cleanup errors fail the indi
 redstone/sound completion translation, broader command parity, checkpoint detach/capture and production lease wiring
 still need integration; production backend selection remains unchanged.
 
+The native checkpoint-detach primitive is available through both experimental transports. It drains accepted
+commands, validates the capture tick, settles remaining external routes with Unavailable without advancing Guest,
+and returns the machine with its tracked timers and exact pending compilation input. Settlement walks native route
+indexes directly; no host request mirror or per-idle-machine buffer is added. Uninstalled deployment candidates are
+discarded. The returned machine can then be serialized by its new owner. This primitive does not yet implement carrier
+checkpoint capture: authoritative process/scope metadata, persistence handoff and production lease integration remain
+required. Lifecycle-prefix observations must be reconciled without dispatching new world effects.
+
 ## Addon host boundary
 
 Third-party world capabilities use the same continuation boundary. Loader integrations register bounded
