@@ -118,7 +118,24 @@ class JniExperimentalFleetIntegrationTest {
             restored = result[0]
             assertTrue(restored != original)
             assertEquals(1, JniExperimentalFleet.restoreSession(fleet[0], machine[0], LongArray(1)))
-            assertEquals(0, JniNative.advance(restored, 64, 64, 64, ByteArray(JniNative.maximumOutcomeBytes().toInt()), LongArray(1)))
+            val output = ByteArray(JniNative.maximumOutcomeBytes().toInt())
+            val advanceWritten = LongArray(1)
+            assertEquals(0, JniNative.advanceWithRetirementLimit(restored, 128, 64, Int.MAX_VALUE, 0, output, advanceWritten, LongArray(1)))
+            val controlBytes = bridge.create(artifact, byteArrayOf(1, 0))
+            val control = ByteBuffer.wrap(controlBytes, 1, 8).order(ByteOrder.LITTLE_ENDIAN).long
+            try {
+                val controlOutput = ByteArray(output.size)
+                val controlWritten = LongArray(1)
+                val expected = JniNative.advance(control, 128, 64, Int.MAX_VALUE, controlOutput, controlWritten)
+                val actual = JniNative.advance(restored, 128, 64, Int.MAX_VALUE, output, advanceWritten)
+                assertEquals(expected, actual)
+                if (actual == 0) {
+                    assertEquals(controlWritten[0], advanceWritten[0])
+                    kotlin.test.assertContentEquals(controlOutput.copyOf(controlWritten[0].toInt()), output.copyOf(advanceWritten[0].toInt()))
+                }
+            } finally {
+                bridge.close(control)
+            }
         } finally {
             if (restored != 0L) bridge.close(restored)
             JniExperimentalFleet.close(fleet[0])
