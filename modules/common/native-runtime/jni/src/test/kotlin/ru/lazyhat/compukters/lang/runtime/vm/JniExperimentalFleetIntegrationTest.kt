@@ -142,4 +142,30 @@ class JniExperimentalFleetIntegrationTest {
         }
     }
 
+    @Test
+    fun `typed session moves into fleet and returns as a usable session`() {
+        val library = Path.of(requireNotNull(System.getProperty("compukter.jni.library")))
+        val artifact = Path.of(requireNotNull(System.getProperty("compukters.shell.artifact"))).readBytes()
+        val bridge = JniBridge.open(library)
+        ExperimentalJniFleet.open(library, 1, 32, 32, 128, 64, 64, 16).use { fleet ->
+            val original = VmSession.open(artifact, bridge)
+            val machine = original.transferToFleet(fleet)
+            kotlin.test.assertFailsWith<VmBridgeException> { fleet.close() }
+            kotlin.test.assertFailsWith<IllegalStateException> { original.advance(128, 64, 64) }
+            original.close()
+            fleet.detach(machine)
+            val deadline = System.nanoTime() + 5_000_000_000L
+            var event: ExperimentalFleetEvent?
+            do {
+                event = fleet.poll()
+                if (event == null) Thread.yield()
+                assertTrue(System.nanoTime() < deadline)
+            } while (event == null)
+            assertEquals(ExperimentalFleetEvent.Detached(machine), event)
+            VmSession.restoreFromFleet(fleet, machine).use { restored ->
+                assertEquals(VmOutcome.SliceExhausted, restored.advanceWithRetirementLimit(128, 64, Int.MAX_VALUE, 0).outcome)
+            }
+        }
+    }
+
 }

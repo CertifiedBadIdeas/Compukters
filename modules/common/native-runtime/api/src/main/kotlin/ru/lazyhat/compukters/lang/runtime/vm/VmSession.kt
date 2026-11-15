@@ -335,6 +335,18 @@ class VmSession private constructor(
         store.saveCheckpoint(requireHandle(), bridge, id, hostState.copyOf())
     }
 
+    /** Transfer a quiescent session to an experimental fleet. This invalidates this session on success. */
+    @Synchronized
+    fun transferToFleet(fleet: ExperimentalFleetSessionOwner): Long {
+        require(terminalTransport is ByteArrayTerminalWireTransport) { "fleet transfer requires a byte-array terminal transport" }
+        val active = requireHandle()
+        val machine = fleet.adopt(bridge, active)
+        handle.set(CLOSED)
+        terminalTransport.close()
+        return machine
+    }
+
+    @Synchronized
     override fun close() {
         val closing = handle.getAndSet(CLOSED)
         if (closing != CLOSED) {
@@ -358,6 +370,11 @@ class VmSession private constructor(
 
     companion object {
         private const val CLOSED = 0L
+
+        fun restoreFromFleet(fleet: ExperimentalFleetSessionOwner, machine: Long): VmSession {
+            val restored = fleet.recover(machine)
+            return admitted(restored.handle, restored.bridge)
+        }
 
         fun open(
             artifact: ByteArray,

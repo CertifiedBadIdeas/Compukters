@@ -63,3 +63,11 @@ object ExperimentalFleetEventWire {
         }
     }
 }
+
+/** The transfer operations exchange opaque handles; the native machine has exactly one owner. */
+interface ExperimentalFleetSessionOwner {
+    fun adopt(bridge: LowLevelVmBridge, session: Long): Long
+    fun recover(machine: Long): ExperimentalRestoredSession
+}
+
+data class ExperimentalRestoredSession(val bridge: LowLevelVmBridge, val handle: Long)
