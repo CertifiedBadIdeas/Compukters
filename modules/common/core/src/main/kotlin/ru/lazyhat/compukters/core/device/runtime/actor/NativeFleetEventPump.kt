@@ -26,14 +26,22 @@ internal class NativeFleetEventPump(
     private val closed = AtomicBoolean()
     private val failure = AtomicReference<Throwable?>()
     private val initialGeneration = fleet.eventGeneration()
-    private val waiter = Thread.ofPlatform().daemon(true).name("compukters-native-fleet-events").unstarted(::waitForEvents)
+    private val waiter =
+        Thread
+            .ofPlatform()
+            .daemon(true)
+            .name("compukters-native-fleet-events")
+            .unstarted(::waitForEvents)
 
     init {
         checkOwner()
         waiter.start()
     }
 
-    fun pump(maximumEvents: Int, deadlineNanos: Long = Long.MAX_VALUE): Int {
+    fun pump(
+        maximumEvents: Int,
+        deadlineNanos: Long = Long.MAX_VALUE,
+    ): Int {
         checkOwner()
         require(maximumEvents >= 0)
         check(!closed.get()) { "native fleet event pump is closed" }

@@ -16,7 +16,10 @@ internal class ProgramRuntimeFrameCredit(
     private var retired = 0L
 
     /** JVM workers report the retirements for this turn. */
-    fun finishTurn(delta: Long, allowance: Long): Long {
+    fun finishTurn(
+        delta: Long,
+        allowance: Long,
+    ): Long {
         check(inFlight) { "computer has no instruction reservation in flight" }
         check(delta in 0..allowance && delta <= remaining) { "actor exceeded its instruction reservation" }
         retired = Math.addExact(retired, delta)
@@ -26,7 +29,10 @@ internal class ProgramRuntimeFrameCredit(
     }
 
     /** Native fleet reports the cumulative retirements in this tick, including previous turns. */
-    fun finishCumulative(total: Long, allowance: Long): Long {
+    fun finishCumulative(
+        total: Long,
+        allowance: Long,
+    ): Long {
         check(total >= retired) { "native retirement count moved backwards" }
         return finishTurn(total - retired, allowance)
     }

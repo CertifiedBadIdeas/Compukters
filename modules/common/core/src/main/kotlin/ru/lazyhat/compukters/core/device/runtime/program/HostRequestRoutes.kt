@@ -17,7 +17,10 @@ internal object HostRequestRoutes {
 
     fun isSound(request: VmHostRequest): Boolean = request.capability == sound && request.operation == 0
 
-    fun partition(requests: List<VmHostRequest>, addonSchemas: List<HostCapabilitySchema>): HostRequestBatch {
+    fun partition(
+        requests: List<VmHostRequest>,
+        addonSchemas: List<HostCapabilitySchema>,
+    ): HostRequestBatch {
         val redstoneRequests = ArrayList<VmHostRequest>()
         val soundRequests = ArrayList<VmHostRequest>()
         val timerRequests = ArrayList<VmHostRequest>()
@@ -26,14 +29,18 @@ internal object HostRequestRoutes {
         for (request in requests) {
             when {
                 request.capability == redstone && request.operation in 6..7 -> redstoneRequests.add(request)
+
                 isSound(request) -> soundRequests.add(request)
+
                 request.capability == timer && request.operation == 0 -> timerRequests.add(request)
+
                 addonSchemas.any { schema ->
                     schema.identity.namespace == request.capability.namespace &&
                         schema.identity.name == request.capability.name &&
                         schema.identity.abiMajor == request.capability.abiMajor &&
                         schema.identity.abiMinor >= request.capability.abiMinor
                 } -> addonRequests.add(request)
+
                 else -> unavailable.add(request)
             }
         }

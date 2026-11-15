@@ -5,25 +5,31 @@
  */
 package ru.lazyhat.compukters.core.device.runtime.actor
 
+import ru.lazyhat.compukters.lang.runtime.vm.ExperimentalFleet
+import ru.lazyhat.compukters.lang.runtime.vm.VmFleetBusyException
+import ru.lazyhat.compukters.lang.runtime.vm.VmFleetStaleException
 import java.lang.reflect.Proxy
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
-import ru.lazyhat.compukters.lang.runtime.vm.ExperimentalFleet
-import ru.lazyhat.compukters.lang.runtime.vm.VmFleetBusyException
-import ru.lazyhat.compukters.lang.runtime.vm.VmFleetStaleException
 
 class NativeFleetOutboxTest {
     @Test
     fun `busy machine keeps its order while another machine progresses`() {
         val sent = mutableListOf<Pair<Long, Int>>()
         var busy = true
-        val outbox = NativeFleetOutbox(fleet { machine, packet ->
-            if (machine == 1L && busy) throw VmFleetBusyException("full")
-            sent += machine to packet
-        }, 8, 4, {})
+        val outbox =
+            NativeFleetOutbox(
+                fleet { machine, packet ->
+                    if (machine == 1L && busy) throw VmFleetBusyException("full")
+                    sent += machine to packet
+                },
+                8,
+                4,
+                {},
+            )
         assertTrue(outbox.offer(1, listOf(input(1), input(2))))
         assertTrue(outbox.offer(2, listOf(input(3))))
         assertEquals(1, outbox.flush(3))
@@ -70,10 +76,14 @@ class NativeFleetOutboxTest {
     @Test
     fun `stop waits behind accepted commands and rejects subsequent work until cleanup`() {
         val sent = mutableListOf<String>()
-        val fleet = Proxy.newProxyInstance(
-            ExperimentalFleet::class.java.classLoader,
-            arrayOf(ExperimentalFleet::class.java),
-        ) { _, method, _ -> sent += method.name; null } as ExperimentalFleet
+        val fleet =
+            Proxy.newProxyInstance(
+                ExperimentalFleet::class.java.classLoader,
+                arrayOf(ExperimentalFleet::class.java),
+            ) { _, method, _ ->
+                sent += method.name
+                null
+            } as ExperimentalFleet
         val outbox = NativeFleetOutbox(fleet, 4, 4, {})
         assertFailsWith<IllegalArgumentException> {
             outbox.offer(1, listOf(NativeFleetOutbox.Command.Stop, input(1)))
@@ -90,12 +100,13 @@ class NativeFleetOutboxTest {
 
     private fun input(packet: Int) = NativeFleetOutbox.Command.RedstoneInput(packet)
 
-    private fun fleet(send: (Long, Int) -> Unit): ExperimentalFleet = Proxy.newProxyInstance(
-        ExperimentalFleet::class.java.classLoader,
-        arrayOf(ExperimentalFleet::class.java),
-    ) { _, method, args ->
-        check(method.name == "redstoneInput")
-        send(args!![0] as Long, args[1] as Int)
-        null
-    } as ExperimentalFleet
+    private fun fleet(send: (Long, Int) -> Unit): ExperimentalFleet =
+        Proxy.newProxyInstance(
+            ExperimentalFleet::class.java.classLoader,
+            arrayOf(ExperimentalFleet::class.java),
+        ) { _, method, args ->
+            check(method.name == "redstoneInput")
+            send(args!![0] as Long, args[1] as Int)
+            null
+        } as ExperimentalFleet
 }

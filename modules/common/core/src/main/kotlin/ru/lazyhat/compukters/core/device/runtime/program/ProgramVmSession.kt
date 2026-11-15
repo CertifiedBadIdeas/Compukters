@@ -124,14 +124,23 @@ internal interface ProgramVmSession : AutoCloseable {
     fun checkpoint(hostState: ByteArray): Unit = error("checkpoint capture is unavailable")
 
     /** Transfers exclusive ownership; on refusal this session remains usable. */
-    fun transferToFleet(fleet: ExperimentalFleetSessionOwner, tick: Long, timers: List<ExperimentalFleetTimer>): Long =
-        error("fleet transfer is unavailable")
+    fun transferToFleet(
+        fleet: ExperimentalFleetSessionOwner,
+        tick: Long,
+        timers: List<ExperimentalFleetTimer>,
+    ): Long = error("fleet transfer is unavailable")
 
     /** Recovers an already detached machine into this same filesystem-bound session. */
-    fun recoverFromFleet(fleet: ExperimentalFleetSessionOwner, machine: Long): Unit = error("fleet recovery is unavailable")
+    fun recoverFromFleet(
+        fleet: ExperimentalFleetSessionOwner,
+        machine: Long,
+    ): Unit = error("fleet recovery is unavailable")
 
     /** Releases the wrapper only after the fleet reports that it stopped the machine. */
-    fun acknowledgeFleetStop(fleet: ExperimentalFleetSessionOwner, machine: Long): Unit = error("fleet stop is unavailable")
+    fun acknowledgeFleetStop(
+        fleet: ExperimentalFleetSessionOwner,
+        machine: Long,
+    ): Unit = error("fleet stop is unavailable")
 }
 
 interface ProgramDeploymentCandidate : AutoCloseable
@@ -223,21 +232,31 @@ private class NativeProgramVmSession(
     private var transferred: Pair<ExperimentalFleetSessionOwner, Long>? = null
     private var stopped = false
 
-    override fun transferToFleet(fleet: ExperimentalFleetSessionOwner, tick: Long, timers: List<ExperimentalFleetTimer>): Long {
+    override fun transferToFleet(
+        fleet: ExperimentalFleetSessionOwner,
+        tick: Long,
+        timers: List<ExperimentalFleetTimer>,
+    ): Long {
         check(!stopped && transferred == null) { "session is not owned by the host" }
         val machine = session.transferToFleet(fleet, tick, timers)
         transferred = fleet to machine
         return machine
     }
 
-    override fun recoverFromFleet(fleet: ExperimentalFleetSessionOwner, machine: Long) {
+    override fun recoverFromFleet(
+        fleet: ExperimentalFleetSessionOwner,
+        machine: Long,
+    ) {
         check(transferred?.let { it.first === fleet && it.second == machine } == true) { "fleet does not own this session" }
         val restored = VmSession.restoreFromFleet(fleet, machine)
         session = restored
         transferred = null
     }
 
-    override fun acknowledgeFleetStop(fleet: ExperimentalFleetSessionOwner, machine: Long) {
+    override fun acknowledgeFleetStop(
+        fleet: ExperimentalFleetSessionOwner,
+        machine: Long,
+    ) {
         check(transferred?.let { it.first === fleet && it.second == machine } == true) { "fleet does not own this session" }
         transferred = null
         stopped = true

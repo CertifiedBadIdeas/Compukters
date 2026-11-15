@@ -5,14 +5,16 @@
  */
 package ru.lazyhat.compukters.core.device.runtime.actor
 
-import java.util.ArrayDeque
 import ru.lazyhat.compukters.lang.runtime.capability.HostResponse
 import ru.lazyhat.compukters.lang.runtime.vm.ExperimentalFleet
 import ru.lazyhat.compukters.lang.runtime.vm.VmFleetBusyException
 import ru.lazyhat.compukters.lang.runtime.vm.VmHostRequestIdentity
+import java.util.ArrayDeque
 
-internal class NativeFleetCommandException(val machine: Long, cause: Exception) :
-    IllegalStateException("native fleet command failed for machine $machine", cause)
+internal class NativeFleetCommandException(
+    val machine: Long,
+    cause: Exception,
+) : IllegalStateException("native fleet command failed for machine $machine", cause)
 
 /** Owner-thread queue between world effects and the bounded native worker mailboxes. */
 internal class NativeFleetOutbox(
@@ -27,36 +29,76 @@ internal class NativeFleetOutbox(
     }
 
     internal sealed interface Command {
-        fun send(fleet: ExperimentalFleet, machine: Long)
+        fun send(
+            fleet: ExperimentalFleet,
+            machine: Long,
+        )
 
         sealed interface Lifecycle : Command
 
-        data class Reply(val identity: VmHostRequestIdentity, val response: HostResponse) : Command {
-            override fun send(fleet: ExperimentalFleet, machine: Long) = fleet.reply(machine, identity, response)
+        data class Reply(
+            val identity: VmHostRequestIdentity,
+            val response: HostResponse,
+        ) : Command {
+            override fun send(
+                fleet: ExperimentalFleet,
+                machine: Long,
+            ) = fleet.reply(machine, identity, response)
         }
 
-        data class ResolveCost(val identity: VmHostRequestIdentity, val units: Int) : Command {
-            override fun send(fleet: ExperimentalFleet, machine: Long) = fleet.resolveCost(machine, identity, units)
+        data class ResolveCost(
+            val identity: VmHostRequestIdentity,
+            val units: Int,
+        ) : Command {
+            override fun send(
+                fleet: ExperimentalFleet,
+                machine: Long,
+            ) = fleet.resolveCost(machine, identity, units)
         }
 
-        data class RedstoneInput(val packet: Int) : Command {
-            override fun send(fleet: ExperimentalFleet, machine: Long) = fleet.redstoneInput(machine, packet)
+        data class RedstoneInput(
+            val packet: Int,
+        ) : Command {
+            override fun send(
+                fleet: ExperimentalFleet,
+                machine: Long,
+            ) = fleet.redstoneInput(machine, packet)
         }
 
-        data class ConfirmRedstoneOutput(val packed: Int) : Command {
-            override fun send(fleet: ExperimentalFleet, machine: Long) = fleet.confirmRedstoneOutput(machine, packed)
+        data class ConfirmRedstoneOutput(
+            val packed: Int,
+        ) : Command {
+            override fun send(
+                fleet: ExperimentalFleet,
+                machine: Long,
+            ) = fleet.confirmRedstoneOutput(machine, packed)
         }
 
-        data class Grant(val tick: Long, val retirements: Int, val deadlineNanos: Long) : Command {
-            override fun send(fleet: ExperimentalFleet, machine: Long) = fleet.grant(machine, tick, retirements, deadlineNanos)
+        data class Grant(
+            val tick: Long,
+            val retirements: Int,
+            val deadlineNanos: Long,
+        ) : Command {
+            override fun send(
+                fleet: ExperimentalFleet,
+                machine: Long,
+            ) = fleet.grant(machine, tick, retirements, deadlineNanos)
         }
 
         data object Stop : Lifecycle {
-            override fun send(fleet: ExperimentalFleet, machine: Long) = fleet.stop(machine)
+            override fun send(
+                fleet: ExperimentalFleet,
+                machine: Long,
+            ) = fleet.stop(machine)
         }
 
-        data class DetachWithTimers(val tick: Long) : Lifecycle {
-            override fun send(fleet: ExperimentalFleet, machine: Long) = fleet.detachWithTimers(machine, tick)
+        data class DetachWithTimers(
+            val tick: Long,
+        ) : Lifecycle {
+            override fun send(
+                fleet: ExperimentalFleet,
+                machine: Long,
+            ) = fleet.detachWithTimers(machine, tick)
         }
     }
 
@@ -66,7 +108,10 @@ internal class NativeFleetOutbox(
     private var count = 0
 
     /** Either retain the entire batch in order, or retain none of it. */
-    fun offer(machine: Long, commands: List<Command>): Boolean {
+    fun offer(
+        machine: Long,
+        commands: List<Command>,
+    ): Boolean {
         checkOwner()
         if (commands.isEmpty()) return true
         check(machine !in closing) { "machine is closing" }
@@ -76,11 +121,14 @@ internal class NativeFleetOutbox(
         val existing = queues[machine]
         if (commands.size > maximumCommands - count ||
             commands.size > maximumCommandsPerMachine - (existing?.size ?: 0)
-        ) return false
-        val queue = existing ?: ArrayDeque<Command>().also {
-            queues[machine] = it
-            ready.addLast(machine)
+        ) {
+            return false
         }
+        val queue =
+            existing ?: ArrayDeque<Command>().also {
+                queues[machine] = it
+                ready.addLast(machine)
+            }
         queue.addAll(commands)
         count += commands.size
         if (lifecycleIndex >= 0) closing.add(machine)
@@ -92,7 +140,10 @@ internal class NativeFleetOutbox(
      * while other machines still get a chance. Other failures propagate with the head intact.
      * Call again on the next owner tick as command consumption need not publish an event.
      */
-    fun flush(maximumAttempts: Int, deadlineNanos: Long = Long.MAX_VALUE): Int {
+    fun flush(
+        maximumAttempts: Int,
+        deadlineNanos: Long = Long.MAX_VALUE,
+    ): Int {
         checkOwner()
         require(maximumAttempts >= 0)
         var attempts = 0

@@ -26,7 +26,12 @@ class NativeFleetEventPumpTest {
         val first = ExperimentalFleetEvent.Quiescent(1, 2, 3, false)
         val second = ExperimentalFleetEvent.Quiescent(2, 2, 4, false)
         source.publish(first)
-        NativeFleetEventPump(source.fleet, { check(Thread.currentThread() === owner) }, { notifications.offer(Unit) }, delivered::add).use { pump ->
+        NativeFleetEventPump(
+            source.fleet,
+            { check(Thread.currentThread() === owner) },
+            { notifications.offer(Unit) },
+            delivered::add,
+        ).use { pump ->
             assertNotNull(notifications.poll(5, TimeUnit.SECONDS))
             assertEquals(1, pump.pump(1))
             source.publish(second)
@@ -42,7 +47,9 @@ class NativeFleetEventPumpTest {
         val source = FleetSource()
         val owner = Thread.currentThread()
         NativeFleetEventPump(source.fleet, { check(Thread.currentThread() === owner) }, {}, {}).use { pump ->
-            val result = java.util.concurrent.CompletableFuture.supplyAsync { runCatching { pump.pump(1) }.exceptionOrNull() }
+            val result =
+                java.util.concurrent.CompletableFuture
+                    .supplyAsync { runCatching { pump.pump(1) }.exceptionOrNull() }
             assertEquals(IllegalStateException::class, result.get(5, TimeUnit.SECONDS)!!::class)
         }
     }
@@ -59,26 +66,39 @@ class NativeFleetEventPumpTest {
         private val lock = Object()
         private val events = ArrayDeque<ExperimentalFleetEvent>()
         private var generation = 0L
-        val fleet: ExperimentalFleet = Proxy.newProxyInstance(
-            ExperimentalFleet::class.java.classLoader,
-            arrayOf(ExperimentalFleet::class.java),
-        ) { _, method, arguments ->
-            when (method.name) {
-                "eventGeneration" -> synchronized(lock) { generation }
-                "poll" -> synchronized(lock) { events.pollFirst() }
-                "waitEvents" -> synchronized(lock) {
-                    val expected = arguments!![0] as Long
-                    if (generation == expected) lock.wait((arguments[1] as Int).toLong())
-                    generation != expected
-                }
-                else -> error("unexpected method ${method.name}")
-            }
-        } as ExperimentalFleet
+        val fleet: ExperimentalFleet =
+            Proxy.newProxyInstance(
+                ExperimentalFleet::class.java.classLoader,
+                arrayOf(ExperimentalFleet::class.java),
+            ) { _, method, arguments ->
+                when (method.name) {
+                    "eventGeneration" -> {
+                        synchronized(lock) { generation }
+                    }
 
-        fun publish(event: ExperimentalFleetEvent) = synchronized(lock) {
-            events.addLast(event)
-            generation++
-            lock.notifyAll()
-        }
+                    "poll" -> {
+                        synchronized(lock) { events.pollFirst() }
+                    }
+
+                    "waitEvents" -> {
+                        synchronized(lock) {
+                            val expected = arguments!![0] as Long
+                            if (generation == expected) lock.wait((arguments[1] as Int).toLong())
+                            generation != expected
+                        }
+                    }
+
+                    else -> {
+                        error("unexpected method ${method.name}")
+                    }
+                }
+            } as ExperimentalFleet
+
+        fun publish(event: ExperimentalFleetEvent) =
+            synchronized(lock) {
+                events.addLast(event)
+                generation++
+                lock.notifyAll()
+            }
     }
 }
