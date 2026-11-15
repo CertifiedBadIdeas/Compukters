@@ -170,6 +170,11 @@ class NativeFleetEventPumpIntegrationTest {
                 val first = await { it is ExperimentalFleetEvent.Quiescent } as ExperimentalFleetEvent.Quiescent
                 val firstDelta = credit.finishCumulative(first.retired, 256)
                 val remaining = credit.remaining
+                // The unresolved host request prevents detachment. The machine must become
+                // available for commands again once the rejection reaches the owner.
+                assertTrue(pump.outbox.offer(machine, listOf(NativeFleetOutbox.Command.DetachWithTimers(4))))
+                pump.pump(0, 1)
+                await { it is ExperimentalFleetEvent.DetachRejected }
                 assertTrue(pump.outbox.offer(machine, listOf(
                     NativeFleetOutbox.Command.Reply(request.identity, HostResponse.UnitSuccess),
                     NativeFleetOutbox.Command.Grant(4, remaining.toInt(), Long.MAX_VALUE),
