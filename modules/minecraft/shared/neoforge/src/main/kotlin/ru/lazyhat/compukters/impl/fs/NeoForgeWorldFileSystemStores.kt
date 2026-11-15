@@ -24,9 +24,10 @@ import net.minecraft.world.level.storage.LevelResource
 import net.neoforged.neoforge.event.level.LevelEvent
 import net.neoforged.neoforge.event.server.ServerStartingEvent
 import net.neoforged.neoforge.event.server.ServerStoppingEvent
+import net.neoforged.neoforge.event.tick.ServerTickEvent
 import ru.lazyhat.compukters.impl.compiler.NeoForgeCompilerServices
-import ru.lazyhat.compukters.lang.runtime.fs.VmSystemImage
 import ru.lazyhat.compukters.lang.runtime.fs.ComputerId
+import ru.lazyhat.compukters.lang.runtime.fs.VmSystemImage
 import ru.lazyhat.compukters.lang.runtime.fs.WorldFileSystemStore
 import ru.lazyhat.compukters.minecraft.computer.ComputerFileSystemContext
 import ru.lazyhat.compukters.minecraft.computer.ComputerFileSystemContextSource
@@ -50,8 +51,13 @@ internal class WorldFileSystemStoreRegistry<S : Any>(
     private val maximumComputers: () -> Int = { 1024 },
     private val executorFactory: (Int) -> java.util.concurrent.ExecutorService = ::persistenceExecutor,
     private val reportFailure: (Throwable) -> Unit = {},
+    private val maximumCloseAttemptsPerPass: Int = 16,
 ) {
     private val entries = mutableMapOf<Path, Entry<S>>()
+
+    init {
+        require(maximumCloseAttemptsPerPass > 0)
+    }
 
     @Synchronized
     fun store(worldRoot: Path): S = entry(worldRoot).store
@@ -134,7 +140,7 @@ internal class WorldFileSystemStoreRegistry<S : Any>(
         key: Path,
         computerId: ComputerId,
         generation: () -> Long?,
-        drain: () -> CompletableFuture<Long?>,
+        drain: () -> CompletableFuture<Long?>?,
     ): ComputerFileSystemLease {
         val current = entries[key] ?: error("filesystem store has not been opened for $key")
         checkAvailable(current)
@@ -142,7 +148,7 @@ internal class WorldFileSystemStoreRegistry<S : Any>(
         val computer = reserve(current, computerId)
         computer.generation = generation
         computer.drain = drain
-        return ComputerFileSystemLease { closed -> release(current, computer) { closed } }
+        return ComputerFileSystemLease { close -> release(current, computer, close) }
     }
 
     private fun reserve(
@@ -157,17 +163,45 @@ internal class WorldFileSystemStoreRegistry<S : Any>(
     private fun release(
         current: Entry<S>,
         computer: Computer,
-        close: () -> CompletableFuture<Long?>,
+        close: () -> CompletableFuture<Long?>?,
     ): CompletableFuture<Void> {
         computer.released?.let { return it.copy() }
         val released = CompletableFuture<Void>()
         computer.released = released
+        computer.drain = close
+        attemptClose(current, computer)
+        return released.copy()
+    }
+
+    /** Owner-thread only: workers complete barriers, but never inspect or capture world resources. */
+    @Synchronized
+    fun retryCloses(worldRoot: Path) {
+        val current = entries[canonicalWorldRoot(worldRoot)] ?: return
+        if (current.failure != null) return
+        repeat(minOf(current.closeRetries.size, maximumCloseAttemptsPerPass)) {
+            if (current.failure != null) return
+            attemptClose(current, current.closeRetries.removeFirst())
+        }
+    }
+
+    private fun attemptClose(
+        current: Entry<S>,
+        computer: Computer,
+    ) {
+        val close = checkNotNull(computer.drain)
         val closed =
             try {
                 close()
             } catch (error: Throwable) {
                 CompletableFuture.failedFuture(error)
             }
+        if (closed == null) {
+            val failure = current.failure
+            if (failure == null) current.closeRetries.addLast(computer) else fail(current, computer, failure)
+            return
+        }
+        computer.drain = null
+        computer.generation = null
         closed.whenComplete { generation, failure ->
             synchronized(this) {
                 computer.closed = true
@@ -182,7 +216,6 @@ internal class WorldFileSystemStoreRegistry<S : Any>(
                 finishStop(current)
             }
         }
-        return released.copy()
     }
 
     private fun requestFlush(
@@ -375,6 +408,7 @@ internal class WorldFileSystemStoreRegistry<S : Any>(
         val maximumComputers: Int,
     ) {
         val computers = mutableMapOf<ComputerId, Computer>()
+        val closeRetries = ArrayDeque<Computer>()
         var stopping: CompletableFuture<Void>? = null
         var closeScheduled = false
         var failure: Throwable? = null
@@ -384,7 +418,7 @@ internal class WorldFileSystemStoreRegistry<S : Any>(
         val id: ComputerId,
     ) {
         var generation: (() -> Long?)? = null
-        var drain: (() -> CompletableFuture<Long?>)? = null
+        var drain: (() -> CompletableFuture<Long?>?)? = null
         var released: CompletableFuture<Void>? = null
         var tombstoned: CompletableFuture<Void>? = null
         var recovering: CompletableFuture<Void>? = null
@@ -479,6 +513,8 @@ object NeoForgeWorldFileSystemStores {
         computerId: ComputerId,
     ) = registry.recover(worldRoot(level.server), computerId)
 
+    fun beforeServerTick(event: ServerTickEvent.Pre) = registry.retryCloses(worldRoot(event.server))
+
     fun onLevelSave(event: LevelEvent.Save) {
         val level = event.level as? ServerLevel ?: return
         registry.save(worldRoot(level.server))
@@ -491,7 +527,20 @@ object NeoForgeWorldFileSystemStores {
 
     fun onServerStopping(event: ServerStoppingEvent) {
         // Shutdown only: actor close barriers do not depend on server tick/result pumping.
-        registry.stop(worldRoot(event.server)).get(10, TimeUnit.SECONDS)
+        val root = worldRoot(event.server)
+        val stopped = registry.stop(root)
+        val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10)
+        while (!stopped.isDone) {
+            registry.retryCloses(root)
+            val remaining = deadline - System.nanoTime()
+            if (remaining <= 0) throw java.util.concurrent.TimeoutException("computer filesystem shutdown timed out")
+            try {
+                stopped.get(minOf(remaining, TimeUnit.MILLISECONDS.toNanos(2)), TimeUnit.NANOSECONDS)
+            } catch (_: java.util.concurrent.TimeoutException) {
+                // Only shutdown waits. Native close/capture makes progress without ordinary result pumping.
+            }
+        }
+        stopped.join()
     }
 
     private fun worldRoot(server: MinecraftServer): Path = server.getWorldPath(LevelResource.ROOT)

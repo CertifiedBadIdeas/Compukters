@@ -22,6 +22,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class ActorProgramComputerStreamingTest {
@@ -43,7 +44,7 @@ class ActorProgramComputerStreamingTest {
         val endpoint = VmActorEndpoint(ComputerId.fromLongs(0, 1), 1)
         val lease =
             ProgramRuntimeActorLease(endpoint) { request ->
-                if (busy) throw ProgramRuntimeActorRequestException(VmActorSubmission.MAILBOX_FULL)
+                if (busy) throw ProgramActorCloseDeferredException()
                 accepted = request
                 ProgramActorCloseReservation {
                     commits++
@@ -55,6 +56,7 @@ class ActorProgramComputerStreamingTest {
         carrier.serverTick(4)
         val observer = assertIs<ProgramRuntimeTurnObserver>(service.completion)
         observer.addonAction(request(1))
+        assertNull(carrier.tryHibernateAsync(4))
         val refused = carrier.hibernateAsync(4)
         assertTrue(refused.isCompletedExceptionally)
         assertEquals(ProgramRuntimeState.Running, carrier.state)
@@ -68,6 +70,27 @@ class ActorProgramComputerStreamingTest {
         assertTrue(service.continuations.isEmpty())
         assertEquals(ProgramRuntimeState.Closed, carrier.state)
         assertEquals(1, addonClosed)
+        assertEquals(1, commits)
+    }
+
+    @Test
+    fun `accepted close failing immediately is a terminal barrier rather than deferred admission`() {
+        val service = Service()
+        val endpoint = VmActorEndpoint(ComputerId.fromLongs(0, 1), 1)
+        var commits = 0
+        val lease =
+            ProgramRuntimeActorLease(endpoint) {
+                ProgramActorCloseReservation {
+                    commits++
+                    CompletableFuture.failedFuture(ProgramActorCloseDeferredException())
+                }
+            }
+        val carrier = ActorProgramComputer(service, lease, { RedstoneCommitResult.Committed })
+        carrier.turnOn().join()
+        val accepted = checkNotNull(carrier.tryHibernateAsync(4))
+        assertTrue(accepted.isCompletedExceptionally)
+        assertEquals(ProgramRuntimeState.Closed, carrier.state)
+        assertTrue(checkNotNull(carrier.tryHibernateAsync(5)).isCompletedExceptionally)
         assertEquals(1, commits)
     }
 

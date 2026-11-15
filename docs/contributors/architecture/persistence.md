@@ -68,7 +68,15 @@ capture and select cold boot.
 
 ## Close barriers and persistence work
 
-The Minecraft filesystem registry accepts asynchronous machine-close barriers. An unloading computer retains its
+The Minecraft filesystem registry accepts owner-thread close attempts. A null result explicitly means admission
+pressure before fencing, while a returned future is an accepted terminal barrier, including an immediately failed one.
+The registry retains one callback per pending identity and rotates deferred attempts, at most sixteen per pass on the
+server pre-tick; no unloaded block tick or worker-side resource capture is needed. It does not retain addon snapshots
+between refused attempts. Accepted operations are never retried. Server shutdown uses the same bounded retry pass
+inside its existing ten-second wait, without ordinary actor-result pumping. The runtime and peripheral leases remain
+owned while admission is pending.
+
+The Minecraft filesystem registry consumes asynchronous machine-close barriers. An unloading computer retains its
 attachment until the barrier completes and the final generation is flushed; destruction defers its tombstone until
 that point. Store shutdown starts every outstanding drain before waiting for the combined barrier. Ordinary release
 does not wait for VM completion; the server-stopping hook alone permits a bounded ten-second wait. A failed close

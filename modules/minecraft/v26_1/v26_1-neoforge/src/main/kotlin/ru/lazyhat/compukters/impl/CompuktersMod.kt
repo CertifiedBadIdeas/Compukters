@@ -92,6 +92,7 @@ class CompuktersMod(
         NeoForge.EVENT_BUS.addListener(ru.lazyhat.compukters.impl.network.ComputerCableLifecycle::onChunkUnload)
         NeoForge.EVENT_BUS.addListener(ru.lazyhat.compukters.impl.network.ComputerCableLifecycle::onLevelUnload)
         NeoForge.EVENT_BUS.addListener(NeoForgeWorldFileSystemStores::onLevelSave)
+        NeoForge.EVENT_BUS.addListener(NeoForgeWorldFileSystemStores::beforeServerTick)
         NeoForge.EVENT_BUS.addListener(VmBenchmarkCommands::register)
         NeoForge.EVENT_BUS.addListener(ComputerCommands::register)
         NeoForge.EVENT_BUS.addListener(NeoForgeVmActorServices::onServerStarting)

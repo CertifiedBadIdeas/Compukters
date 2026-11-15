@@ -691,9 +691,12 @@ internal interface ProgramRuntimeTurnObserver : ProgramRuntimeTurnCompletion {
     fun addonAction(action: ProgramAddonAction)
 }
 
-class ProgramRuntimeActorRequestException(
+open class ProgramRuntimeActorRequestException(
     val submission: VmActorSubmission,
 ) : IllegalStateException("runtime actor request was not accepted: $submission")
+
+/** Close was not admitted; the carrier still owns its live resources and may retry on its owner. */
+class ProgramActorCloseDeferredException : ProgramRuntimeActorRequestException(VmActorSubmission.MAILBOX_FULL)
 
 class ProgramRuntimeActorFailedException(
     val endpoint: VmActorEndpoint,

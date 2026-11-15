@@ -24,6 +24,7 @@ import ru.lazyhat.compukters.api.addon.ProgramAddonDispatch
 import ru.lazyhat.compukters.api.addon.ProgramAddonHost
 import ru.lazyhat.compukters.core.LOGGER
 import ru.lazyhat.compukters.core.device.runtime.actor.ActorRuntimeService
+import ru.lazyhat.compukters.core.device.runtime.actor.ProgramActorCloseDeferredException
 import ru.lazyhat.compukters.core.device.runtime.actor.ProgramActorHibernation
 import ru.lazyhat.compukters.core.device.runtime.actor.ProgramRuntimeActorCommand
 import ru.lazyhat.compukters.core.device.runtime.actor.ProgramRuntimeActorEffect
@@ -319,21 +320,25 @@ class ActorProgramComputer internal constructor(
         }
     }
 
-    fun hibernateAsync(worldTick: Long): CompletableFuture<Long?> {
+    fun hibernateAsync(worldTick: Long): CompletableFuture<Long?> =
+        tryHibernateAsync(worldTick) ?: CompletableFuture.failedFuture(ProgramActorCloseDeferredException())
+
+    /** Null means no close was admitted; the owner may retry without losing resources or replies. */
+    fun tryHibernateAsync(worldTick: Long): CompletableFuture<Long?>? {
         checkOwner()
         closeResult?.let { return it.copy() }
         require(worldTick >= 0)
         // Admission has run no Guest code; retain the original checkpoint and its resource descriptions.
-        if (restoring) return hibernateAsync(worldTick, byteArrayOf())
+        if (restoring) return tryHibernate(worldTick, byteArrayOf())
         val resources =
             try {
                 collectAddonCompletions()
                 addon.checkpoint().also { require(it.size <= 1024 * 1024) { "addon checkpoint is too large" } }
             } catch (failure: Exception) {
                 LOGGER.warn(failure) { "Computer addon hibernation failed; execution will cold boot on reload" }
-                return hibernateAsync(worldTick, byteArrayOf(), saveExecution = false)
+                return tryHibernate(worldTick, byteArrayOf(), saveExecution = false)
             }
-        return hibernateAsync(worldTick, resources)
+        return tryHibernate(worldTick, resources)
     }
 
     /** Final acknowledged world results enter the worker before capture; undelivered requests are cancelled. */
@@ -341,7 +346,14 @@ class ActorProgramComputer internal constructor(
         worldTick: Long,
         addonState: ByteArray,
         saveExecution: Boolean = true,
-    ): CompletableFuture<Long?> {
+    ): CompletableFuture<Long?> =
+        tryHibernate(worldTick, addonState, saveExecution) ?: CompletableFuture.failedFuture(ProgramActorCloseDeferredException())
+
+    private fun tryHibernate(
+        worldTick: Long,
+        addonState: ByteArray,
+        saveExecution: Boolean = true,
+    ): CompletableFuture<Long?>? {
         checkOwner()
         require(worldTick >= 0)
         closeResult?.let { return it.copy() }
@@ -352,20 +364,22 @@ class ActorProgramComputer internal constructor(
                 if (pendingAddonCompletions.isNotEmpty()) add(ProgramRuntimeActorEffect.CompleteAddons(pendingAddonCompletions.toList()))
             }
         val request = ProgramActorHibernation(worldTick, addonState, effects, saveExecution)
-        return closeWith(request)
+        return tryCloseWith(request)
     }
 
     /** The future completes after accepted work drains and native resources close, without requiring result pumping. */
     fun closeAsync(): CompletableFuture<Long?> {
         checkOwner()
         closeResult?.let { return it.copy() }
-        return closeWith(null)
+        return tryCloseWith(null) ?: CompletableFuture.failedFuture(ProgramActorCloseDeferredException())
     }
 
-    private fun closeWith(request: ProgramActorHibernation?): CompletableFuture<Long?> {
+    private fun tryCloseWith(request: ProgramActorHibernation?): CompletableFuture<Long?>? {
         val reservation =
             try {
                 lease.reserveClose(request)
+            } catch (_: ProgramActorCloseDeferredException) {
+                return null
             } catch (failure: Exception) {
                 return CompletableFuture.failedFuture(failure)
             }

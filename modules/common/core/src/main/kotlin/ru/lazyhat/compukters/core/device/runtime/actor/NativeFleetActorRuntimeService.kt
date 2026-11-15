@@ -344,10 +344,10 @@ internal class NativeFleetActorRuntimeService(
                 if (saveExecution) addonState else byteArrayOf(),
                 saveExecution,
                 commands,
-            ) ?: throw ProgramRuntimeActorRequestException(VmActorSubmission.MAILBOX_FULL)
+            ) ?: throw ProgramActorCloseDeferredException()
         try {
             if (!dispatcher.outbox.offer(actor.machine, commands)) {
-                throw ProgramRuntimeActorRequestException(VmActorSubmission.MAILBOX_FULL)
+                throw ProgramActorCloseDeferredException()
             }
         } catch (failure: Throwable) {
             payload.close()

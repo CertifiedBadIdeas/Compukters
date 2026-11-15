@@ -334,7 +334,7 @@ open class ComputerBlockEntity internal constructor(
             )
         if (created == null) return null
         terminalMachineId = machineId
-        filesystemLease = filesystem?.attach(created::filesystemGeneration, ::drainCarrier)
+        filesystemLease = filesystem?.attach(created::filesystemGeneration) { drainCarrier(created) }
         return created
     }
 
@@ -412,18 +412,21 @@ open class ComputerBlockEntity internal constructor(
 
     private fun closeCarrier(hibernate: Boolean = true): CompletableFuture<Void> {
         if (carrier == null && filesystemLease == null) return carrierClosed
-        val closed = closeRuntime(carrier, hibernate)
+        val current = carrier
+        val close = { closeRuntime(current, hibernate) }
         carrier = null
         carrierRetryTicks = 0
         level?.let { ComputerCableMessages.changed(it, blockPos, false) }
         terminalMachineId = null
-        carrierClosed = filesystemLease?.release(closed) ?: closed.thenAccept { }
+        carrierClosed =
+            filesystemLease?.release(close) ?: requireNotNull(close()) { "deferred close requires a filesystem lifecycle" }.thenAccept { }
         filesystemLease = null
         return carrierClosed
     }
 
-    private fun drainCarrier(): CompletableFuture<Long?> {
-        val closed = closeRuntime(carrier, hibernate = true)
+    private fun drainCarrier(current: ComputerCarrier): CompletableFuture<Long?>? {
+        val closed = closeRuntime(current, hibernate = true)
+        if (carrier !== current) return closed
         carrier = null
         carrierRetryTicks = 0
         level?.let { ComputerCableMessages.changed(it, blockPos, false) }
@@ -435,19 +438,25 @@ open class ComputerBlockEntity internal constructor(
     private fun closeRuntime(
         current: ComputerCarrier?,
         hibernate: Boolean,
-    ): CompletableFuture<Long?> {
+    ): CompletableFuture<Long?>? {
         if (current == null) return CompletableFuture.completedFuture(null)
         peripheralCheckpointPending = hibernate
-        val closed: CompletableFuture<Long?> =
+        val closed: CompletableFuture<Long?>? =
             try {
-                if (hibernate) current.hibernateAsync((level as? ServerLevel)?.server?.tickCount?.toLong() ?: 0L) else current.closeAsync()
+                if (hibernate) {
+                    current.tryHibernateAsync(
+                        (level as? ServerLevel)?.server?.tickCount?.toLong() ?: 0L,
+                    )
+                } else {
+                    current.closeAsync()
+                }
             } catch (failure: Exception) {
                 current.closeAsync().handle { _, closing ->
                     if (closing != null) failure.addSuppressed(closing)
                     throw java.util.concurrent.CompletionException(failure)
                 }
             }
-        return closed.whenComplete { _, _ -> peripheralCheckpointPending = false }
+        return closed?.whenComplete { _, _ -> peripheralCheckpointPending = false }
     }
 
     private fun ProgramComputerState.isPoweredOn(): Boolean =

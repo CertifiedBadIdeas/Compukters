@@ -61,7 +61,7 @@ class NativeFleetActorRuntimeServiceTest {
                     ),
                 )
             val lease = checkNotNull(h.leases[1])
-            repeat(2) { assertFailsWith<ProgramRuntimeActorRequestException> { lease.reserveClose(request) } }
+            repeat(2) { assertFailsWith<ProgramActorCloseDeferredException> { lease.reserveClose(request) } }
             assertTrue(h.replies.isEmpty())
             h.service.pump(0, 1)
             assertEquals(7L, lease.hibernateAsync(request).get(5, TimeUnit.SECONDS))
@@ -90,7 +90,7 @@ class NativeFleetActorRuntimeServiceTest {
             val effect = ProgramRuntimeActorEffect.CompleteAddons(listOf(ProgramAddonCompletion(identity, HostResponse.UnitSuccess)))
             val request = ProgramActorHibernation(10, byteArrayOf(), listOf(effect))
             val lease = checkNotNull(h.leases[1])
-            assertFailsWith<ProgramRuntimeActorRequestException> { lease.reserveClose(request) }
+            assertFailsWith<ProgramActorCloseDeferredException> { lease.reserveClose(request) }
             h.service.pump(0, 10)
             assertTrue(h.replies.isEmpty())
             assertTrue(h.service.grantFrame(endpoint, 10, 8))

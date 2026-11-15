@@ -156,8 +156,9 @@ If addon state cannot be saved, native lease close drains acknowledged replies, 
 then discards stored execution before closing. This path reserves only scalar control bytes and reports the filesystem
 generation after discard. StoreBusy keeps exclusive recovered ownership for retry. A later store reopen must not restore
 the discarded execution. Native final addon replies are supported; redstone/sound completions reject before admission
-until their translation is implemented. Production boot/restore selection, world-lifecycle admission retry and broader
-builtin completion parity remain required before selecting the native backend.
+until their translation is implemented. The carrier exposes pre-fence pressure as a null close attempt to the world
+lifecycle registry, which retains and retries that operation on the owner; accepted failures remain terminal barriers.
+Production boot/restore selection and broader builtin completion parity remain required before selecting the native backend.
 
 ## Addon host boundary
 

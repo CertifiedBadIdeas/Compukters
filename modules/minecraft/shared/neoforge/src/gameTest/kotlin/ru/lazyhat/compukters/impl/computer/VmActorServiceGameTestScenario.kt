@@ -50,7 +50,12 @@ internal object VmActorServiceGameTestScenario {
         val store = stores.store(root)
         val lease = requireNotNull(service.attachBootable(endpoint, store, VmSystemImage.of(rom)))
         val computer = ActorProgramComputer(service, lease, { RedstoneCommitResult.Committed })
-        stores.lifecycle(root).attach(endpoint.computerId, { computer.fileSystemGeneration }, computer::closeAsync)
+        var drainCalls = 0
+        stores.lifecycle(root).attach(endpoint.computerId, { computer.fileSystemGeneration }) {
+            check(server.isSameThread)
+            drainCalls++
+            if (drainCalls == 1) null else computer.closeAsync()
+        }
         val boot = computer.turnOn()
         var deliveredOnServer = false
         val observed = boot.thenAccept { deliveredOnServer = server.isSameThread }
@@ -77,7 +82,11 @@ internal object VmActorServiceGameTestScenario {
                 )
             }.thenExecute {
                 closed = stores.stop(root)
+                helper.assertTrue(drainCalls == 1 && !closed!!.isDone, "deferred close lost its pending barrier")
+                helper.assertTrue(computer.state == ProgramRuntimeState.WaitingForInput, "deferred admission closed a live carrier")
             }.thenWaitUntil {
+                stores.retryCloses(root)
+                helper.assertTrue(drainCalls == 2, "accepted drain was retried")
                 helper.assertTrue(closed!!.isDone, "actor did not close on its worker")
             }.thenExecute {
                 closed!!.getNow(null)

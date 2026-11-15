@@ -40,7 +40,7 @@ class ComputerFileSystemContext(
 
     internal fun attach(
         generation: () -> Long?,
-        drain: () -> CompletableFuture<Long?>,
+        drain: () -> CompletableFuture<Long?>?,
     ): ComputerFileSystemLease = lifecycle.attach(computerId, generation, drain)
 }
 
@@ -67,11 +67,13 @@ fun interface ComputerFileSystemLifecycle {
     fun attach(
         computerId: ComputerId,
         generation: () -> Long?,
-        drain: () -> CompletableFuture<Long?>,
+        drain: () -> CompletableFuture<Long?>?,
     ): ComputerFileSystemLease
 }
 
 fun interface ComputerFileSystemLease {
-    /** Retains ownership until the runtime has closed; completion may occur on a worker. */
-    fun release(closed: CompletableFuture<Long?>): CompletableFuture<Void>
+    /** Owner-thread admission: null retries later. Accepted futures retain ownership through completion on a worker. */
+    fun release(close: () -> CompletableFuture<Long?>?): CompletableFuture<Void>
+
+    fun release(closed: CompletableFuture<Long?>): CompletableFuture<Void> = release { closed }
 }

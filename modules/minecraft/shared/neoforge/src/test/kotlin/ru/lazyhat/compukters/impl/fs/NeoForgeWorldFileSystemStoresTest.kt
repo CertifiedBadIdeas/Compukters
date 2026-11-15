@@ -19,6 +19,7 @@
 package ru.lazyhat.compukters.impl.fs
 
 import org.junit.jupiter.api.io.TempDir
+import ru.lazyhat.compukters.core.device.runtime.actor.ProgramActorCloseDeferredException
 import ru.lazyhat.compukters.lang.runtime.fs.ComputerId
 import java.nio.file.Path
 import java.util.concurrent.AbstractExecutorService
@@ -121,6 +122,115 @@ class NeoForgeWorldFileSystemStoresTest {
     }
 
     @Test
+    fun `deferred unload retains identity and retries only on owner before final flush`() {
+        val fixture = Fixture()
+        val owner = Thread.currentThread()
+        var attempts = 0
+        val finalClose = CompletableFuture<Long?>()
+        val lease = fixture.attach(drain = { error("unload supplies its own close operation") })
+        val released =
+            lease.release {
+                assertTrue(Thread.currentThread() === owner)
+                attempts++
+                if (attempts < 3) null else finalClose
+            }
+        released.cancel(false)
+        val deleted = fixture.registry.tombstone(world, ID)
+        assertFalse(deleted.isDone)
+        assertFalse(fixture.registry.available(world, ID))
+        fixture.executor.runAll()
+        assertEquals(1, attempts)
+        fixture.registry.retryCloses(world)
+        assertEquals(2, attempts)
+        assertTrue(fixture.failures.isEmpty())
+        val stopped = fixture.registry.stop(world)
+        assertEquals(2, attempts) // Stop joins the existing drain, never invokes a second one.
+        fixture.registry.retryCloses(world)
+        repeat(5) { fixture.registry.retryCloses(world) }
+        assertEquals(3, attempts)
+        assertFalse(stopped.isDone)
+        finalClose.complete(17)
+        fixture.executor.runAll()
+        stopped.join()
+        deleted.join()
+        assertEquals(listOf("flush:17", "tombstone", "close"), fixture.events)
+    }
+
+    @Test
+    fun `shutdown retries captured drain without requiring a loaded block or result pump`() {
+        val fixture = Fixture()
+        var attempts = 0
+        fixture.attach(drain = {
+            attempts++
+            if (attempts == 1) null else completed(4)
+        })
+        val stopped = fixture.registry.stop(world)
+        assertFalse(stopped.isDone)
+        fixture.registry.retryCloses(world)
+        fixture.executor.runAll()
+        stopped.join()
+        assertEquals(2, attempts)
+        assertEquals(listOf("flush:4", "close"), fixture.events)
+    }
+
+    @Test
+    fun `retry queue is bounded per pass and rotates busy identities fairly`() {
+        val fixture = Fixture(retryBudget = 1)
+        val attempts = mutableListOf<ComputerId>()
+        var available = false
+        for (id in listOf(ID, SECOND)) {
+            fixture.attach(id, drain = {
+                attempts += id
+                if (!available) null else completed(null)
+            })
+        }
+        val stopped = fixture.registry.stop(world)
+        repeat(3) { fixture.registry.retryCloses(world) }
+        assertEquals(listOf(ID, SECOND, ID, SECOND, ID), attempts)
+        available = true
+        fixture.registry.retryCloses(world)
+        fixture.executor.runAll()
+        assertFalse(stopped.isDone)
+        fixture.registry.retryCloses(world)
+        fixture.executor.runAll()
+        stopped.join()
+        assertEquals(listOf("close"), fixture.events)
+    }
+
+    @Test
+    fun `failure after close acceptance is terminal and never retried`() {
+        val fixture = Fixture()
+        val accepted = CompletableFuture<Long?>()
+        var attempts = 0
+        fixture.attach(drain = {
+            attempts++
+            accepted
+        })
+        val stopped = fixture.registry.stop(world)
+        accepted.completeExceptionally(ProgramActorCloseDeferredException())
+        repeat(3) { fixture.registry.retryCloses(world) }
+        assertEquals(1, attempts)
+        assertTrue(stopped.isCompletedExceptionally)
+        assertEquals(1, fixture.failures.size)
+        assertTrue(fixture.events.isEmpty())
+    }
+
+    @Test
+    fun `late deferred release after persistence failure fails its barrier without abandoning ownership`() {
+        val fixture = Fixture(flush = { error("disk failed") })
+        val first = fixture.attach()
+        val second = fixture.attach(SECOND)
+        first.release(completed(3))
+        fixture.executor.runAll()
+        val released = second.release { null }
+        assertTrue(released.isCompletedExceptionally)
+        fixture.registry.retryCloses(world)
+        assertEquals(1, fixture.failures.size)
+        assertTrue(fixture.registry.stop(world).isCompletedExceptionally)
+        assertTrue(fixture.events.isEmpty())
+    }
+
+    @Test
     fun `failed native operation is reported and prevents unsafe close or reattachment`() {
         val fixture = Fixture(flush = { error("disk failed") })
         val lease = fixture.attach()
@@ -214,6 +324,7 @@ class NeoForgeWorldFileSystemStoresTest {
     }
 
     private inner class Fixture(
+        retryBudget: Int = 16,
         capacity: Int = 1024,
         capacitySource: () -> Int = { capacity },
         flush: ((Long) -> Unit)? = null,
@@ -238,6 +349,7 @@ class NeoForgeWorldFileSystemStoresTest {
                 maximumComputers = capacitySource,
                 executorFactory = { executor },
                 reportFailure = { failures += it },
+                maximumCloseAttemptsPerPass = retryBudget,
             )
 
         init {
@@ -247,7 +359,7 @@ class NeoForgeWorldFileSystemStoresTest {
         fun attach(
             id: ComputerId = ID,
             generation: () -> Long? = { null },
-            drain: () -> CompletableFuture<Long?> = { completed(null) },
+            drain: () -> CompletableFuture<Long?>? = { completed(null) },
         ) = registry.lifecycle(world).attach(id, generation, drain)
 
         fun stop() {

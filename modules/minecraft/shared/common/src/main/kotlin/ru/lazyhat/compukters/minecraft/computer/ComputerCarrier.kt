@@ -122,6 +122,9 @@ internal interface ComputerCarrier : AutoCloseable {
 
     fun hibernateAsync(worldTick: Long): CompletableFuture<Long?> = closeAsync()
 
+    /** Null means admission pressure before fencing; an accepted future is always a terminal barrier. */
+    fun tryHibernateAsync(worldTick: Long): CompletableFuture<Long?>? = hibernateAsync(worldTick)
+
     fun closeAsync(): CompletableFuture<Long?> {
         val generation = filesystemGeneration()
         close()
@@ -298,6 +301,9 @@ private class ActorComputerCarrier(
     override fun closeAsync(): CompletableFuture<Long?> = delegate.closeAsync().also { observeRuntime() }
 
     override fun hibernateAsync(worldTick: Long): CompletableFuture<Long?> = delegate.hibernateAsync(worldTick).also { observeRuntime() }
+
+    override fun tryHibernateAsync(worldTick: Long): CompletableFuture<Long?>? =
+        delegate.tryHibernateAsync(worldTick).also { observeRuntime() }
 
     private fun accepted(command: (ru.lazyhat.compukters.core.device.runtime.actor.ProgramRuntimeRequestId) -> ProgramRuntimeActorCommand) =
         request(command) { (it as ProgramRuntimeActorValue.Accepted).accepted }
