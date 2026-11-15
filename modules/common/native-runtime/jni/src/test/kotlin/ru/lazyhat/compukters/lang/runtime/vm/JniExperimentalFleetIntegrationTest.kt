@@ -171,4 +171,19 @@ class JniExperimentalFleetIntegrationTest {
         }
     }
 
+    @Test
+    fun `refused transfer leaves the original session usable`() {
+        val library = Path.of(requireNotNull(System.getProperty("compukter.jni.library")))
+        val artifact = Path.of(requireNotNull(System.getProperty("compukters.shell.artifact"))).readBytes()
+        val bridge = JniBridge.open(library)
+        ExperimentalJniFleet.open(library, 1, 32, 32, 128, 64, 64, 16).use { fleet ->
+            VmSession.open(artifact, bridge).use { session ->
+                val progress = session.advanceWithRetirementLimit(128, 64, Int.MAX_VALUE, 1)
+                assertTrue(progress.retiredInstructions > 0)
+                kotlin.test.assertFailsWith<VmBridgeException> { session.transferToFleet(fleet) }
+                assertEquals(VmOutcome.SliceExhausted, session.advanceWithRetirementLimit(128, 64, Int.MAX_VALUE, 0).outcome)
+            }
+        }
+    }
+
 }
