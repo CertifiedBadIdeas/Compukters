@@ -22,6 +22,17 @@ internal class NativeFleetRequest private constructor(
     private val command: ProgramRuntimeActorCommand,
     val response: Response,
 ) : NativeFleetOutbox.Command {
+    override val retainedBytes: Long =
+        64L +
+            when (command) {
+                is ProgramRuntimeActorCommand.SendTerminalText -> 2L * command.value.length
+                is ProgramRuntimeActorCommand.SubmitCanonicalLine -> 2L * command.lineLength
+                is ProgramRuntimeActorCommand.FileStat -> 2L * command.path.value.length
+                is ProgramRuntimeActorCommand.FileList -> 2L * (command.path.value.length + (command.startAfter?.length ?: 0))
+                is ProgramRuntimeActorCommand.FileRead -> 2L * command.path.value.length
+                else -> 0L
+            }
+
     override fun send(
         fleet: ExperimentalFleet,
         machine: Long,

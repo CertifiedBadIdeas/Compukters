@@ -27,13 +27,53 @@ internal object HostResponseWire {
     const val MAXIMUM_STRING_UNITS: Int = 4096
 
     fun encode(response: HostResponse): ByteArray {
-        val size = 1 + encodedSize(response)
-        require(size <= MAXIMUM_BYTES) { "host response exceeds byte limit" }
+        val size = checkedSize(response)
         val buffer = ByteBuffer.allocate(size).order(ByteOrder.LITTLE_ENDIAN)
         buffer.put(1)
         write(buffer, response)
         return buffer.array()
     }
+
+    /** Conservative queue charge, not a JVM heap measurement; shared schemas are charged in full. */
+    fun retainedBytes(response: HostResponse): Long {
+        if (response !is HostResponse.Failure) checkedSize(response)
+        return charge(response)
+    }
+
+    private fun checkedSize(response: HostResponse): Int =
+        (1 + encodedSize(response)).also {
+            require(it <= MAXIMUM_BYTES) { "host response exceeds byte limit" }
+        }
+
+    private fun charge(response: HostResponse): Long =
+        64L +
+            when (response) {
+                is HostResponse.StringSuccess -> {
+                    2L * response.value.length
+                }
+
+                is HostResponse.ByteArraySuccess -> {
+                    response.byteSize.toLong()
+                }
+
+                is HostResponse.Failure -> {
+                    2L * response.detail.length
+                }
+
+                is HostResponse.RecordSuccess -> {
+                    val record = response.value
+                    var bytes = 64L + 2L * record.schema.typeName.length
+                    for (index in record.values.indices) {
+                        val field = record.schema.fields[index]
+                        bytes += 64L + 2L * field.name.length + charge(record.values[index])
+                    }
+                    bytes
+                }
+
+                else -> {
+                    0L
+                }
+            }
 
     private fun encodedSize(response: HostResponse): Int =
         when (response) {
@@ -63,7 +103,7 @@ internal object HostResponseWire {
             }
 
             is HostResponse.ByteArraySuccess -> {
-                5 + response.value.size
+                5 + response.byteSize
             }
 
             is HostResponse.RecordSuccess -> {

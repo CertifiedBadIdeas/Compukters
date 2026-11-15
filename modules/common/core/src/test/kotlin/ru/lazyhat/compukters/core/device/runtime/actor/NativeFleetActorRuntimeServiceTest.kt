@@ -5,10 +5,12 @@
  */
 package ru.lazyhat.compukters.core.device.runtime.actor
 
+import ru.lazyhat.compukters.api.addon.ProgramAddonCompletion
 import ru.lazyhat.compukters.core.device.runtime.program.ProgramRuntimeHost
 import ru.lazyhat.compukters.core.device.runtime.program.ProgramRuntimeState
 import ru.lazyhat.compukters.core.device.runtime.program.ProgramVmSession
 import ru.lazyhat.compukters.core.device.runtime.program.ProgramVmSessionFactory
+import ru.lazyhat.compukters.lang.runtime.capability.HostResponse
 import ru.lazyhat.compukters.lang.runtime.fs.ComputerId
 import ru.lazyhat.compukters.lang.runtime.fs.VmFileChunk
 import ru.lazyhat.compukters.lang.runtime.fs.VmFileSystemReadFailure
@@ -19,6 +21,7 @@ import ru.lazyhat.compukters.lang.runtime.vm.ExperimentalFleetInputResult
 import ru.lazyhat.compukters.lang.runtime.vm.TerminalKey
 import ru.lazyhat.compukters.lang.runtime.vm.TerminalKeyAction
 import ru.lazyhat.compukters.lang.runtime.vm.TerminalUpdate
+import ru.lazyhat.compukters.lang.runtime.vm.VmHostRequestIdentity
 import ru.lazyhat.compukters.lang.runtime.vm.VmOutcome
 import java.lang.reflect.Proxy
 import java.util.ArrayDeque
@@ -220,6 +223,98 @@ class NativeFleetActorRuntimeServiceTest {
         }
 
     @Test
+    fun `refused addon completion keeps its grant and retries without duplicating an accepted native reply`() {
+        Harness(byteLimits = NativeFleetOutboxLimits(192, 192)).use { h ->
+            val endpoint = h.register(1)
+            val identity = VmHostRequestIdentity(1, 1)
+            val effects =
+                listOf(ProgramRuntimeActorEffect.CompleteAddons(listOf(ProgramAddonCompletion(identity, HostResponse.UnitSuccess))))
+            assertTrue(h.service.grantFrame(endpoint, 4, 20))
+            h.service.request(endpoint, ProgramRuntimeActorCommand::FileSystemGeneration)
+            val results = mutableListOf<ProgramRuntimeActorReply>()
+            val completion = ProgramRuntimeTurnCompletion { reply, failure -> if (failure == null) results += checkNotNull(reply) }
+            assertEquals(VmActorSubmission.MAILBOX_FULL, h.service.submitTurn(endpoint, 4, effects, completion))
+            assertTrue(h.replies.isEmpty() && h.grants.isEmpty())
+            h.service.pump(0, 8)
+            h.busyReplies = true
+            assertEquals(VmActorSubmission.ACCEPTED, h.service.submitTurn(endpoint, 4, effects, completion))
+            h.service.pump(0, 8)
+            assertTrue(h.replies.isEmpty() && h.grants.isEmpty())
+            h.busyReplies = false
+            h.service.pump(0, 1) // Accept the reply, but leave its grant queued.
+            assertEquals(listOf(identity), h.replies)
+            h.service.pump(0, 8)
+            assertEquals(listOf(identity), h.replies)
+            assertEquals(listOf(1L to 20), h.grants)
+            h.events += ExperimentalFleetEvent.Quiescent(1, 4, 6, false)
+            h.service.pump(8, 0)
+            assertEquals(6L, results.single().retiredInstructions)
+            assertTrue(h.service.continueTurn(endpoint, 4, emptyList(), completion))
+            h.service.pump(0, 8)
+            assertEquals(listOf(1L to 20, 1L to 14), h.grants)
+        }
+    }
+
+    @Test
+    fun `stop keeps accepted addon replies ordered while cancelling the unfinished turn`() {
+        Harness().use { h ->
+            val endpoint = h.register(1)
+            val identity = VmHostRequestIdentity(1, 1)
+            assertTrue(h.service.grantFrame(endpoint, 1, 10))
+            val turn = CompletableFuture<ProgramRuntimeActorReply>()
+            val effects =
+                listOf(ProgramRuntimeActorEffect.CompleteAddons(listOf(ProgramAddonCompletion(identity, HostResponse.UnitSuccess))))
+            assertEquals(
+                VmActorSubmission.ACCEPTED,
+                h.service.submitTurn(endpoint, 1, effects) { reply, failure ->
+                    if (failure == null) turn.complete(reply) else turn.completeExceptionally(failure)
+                },
+            )
+            h.busyReplies = true
+            val stopped = checkNotNull(h.service.stop(endpoint))
+            h.service.pump(8, 8)
+            assertTrue(!stopped.isDone && !turn.isDone && h.replies.isEmpty())
+            h.busyReplies = false
+            h.service.pump(8, 8)
+            h.service.pump(8, 8)
+            assertEquals(listOf(identity), h.replies)
+            assertEquals(7L, stopped.join())
+            assertTrue(turn.isCompletedExceptionally)
+        }
+    }
+
+    @Test
+    fun `flattened completion count and invalid payload cannot consume a frame on refusal`() {
+        Harness(maximumRequests = 2).use { h ->
+            val endpoint = h.register(1)
+            assertTrue(h.service.grantFrame(endpoint, 1, 10))
+            val tooMany =
+                listOf(
+                    ProgramRuntimeActorEffect.CompleteAddons(
+                        listOf(
+                            ProgramAddonCompletion(VmHostRequestIdentity(1, 1), HostResponse.UnitSuccess),
+                            ProgramAddonCompletion(VmHostRequestIdentity(1, 2), HostResponse.UnitSuccess),
+                        ),
+                    ),
+                )
+            assertEquals(VmActorSubmission.MAILBOX_FULL, h.service.submitTurn(endpoint, 1, tooMany) { _, _ -> error("rejected") })
+            val invalid =
+                listOf(
+                    ProgramRuntimeActorEffect.CompleteAddons(
+                        listOf(
+                            ProgramAddonCompletion(VmHostRequestIdentity(1, 1), HostResponse.StringSuccess("x".repeat(4097))),
+                        ),
+                    ),
+                )
+            assertFailsWith<IllegalArgumentException> { h.service.submitTurn(endpoint, 1, invalid) { _, _ -> error("invalid") } }
+            assertEquals(VmActorSubmission.ACCEPTED, h.service.submitTurn(endpoint, 1, emptyList()) { _, _ -> })
+            h.service.pump(0, 8)
+            assertTrue(h.replies.isEmpty())
+            assertEquals(listOf(1L to 10), h.grants)
+        }
+    }
+
+    @Test
     fun `automatic native execution is rejected before allocating a dispatcher`() {
         val uncoordinated =
             Proxy.newProxyInstance(ExperimentalFleet::class.java.classLoader, arrayOf(ExperimentalFleet::class.java)) { _, method, _ ->
@@ -340,12 +435,15 @@ class NativeFleetActorRuntimeServiceTest {
         maximumRequests: Int = 16,
         private val closeFailureFor: Long? = null,
         private val cancellationFailureFor: Long? = null,
+        byteLimits: NativeFleetOutboxLimits = NativeFleetOutboxLimits(),
     ) : AutoCloseable {
         val events = ArrayDeque<ExperimentalFleetEvent>()
         val grants = mutableListOf<Pair<Long, Int>>()
         val queries = mutableListOf<Long>()
         val observed = mutableListOf<VmActorEndpoint>()
         val closedMachines = mutableListOf<Long>()
+        val replies = mutableListOf<VmHostRequestIdentity>()
+        var busyReplies = false
         private val endpoints = mutableListOf<VmActorEndpoint>()
         private val stops = mutableMapOf<Long, ExperimentalFleetEvent>()
         private val owner = Thread.currentThread()
@@ -357,6 +455,15 @@ class NativeFleetActorRuntimeServiceTest {
                     }
 
                     "redstoneInput" -> {
+                        null
+                    }
+
+                    "reply" -> {
+                        if (busyReplies) {
+                            throw ru.lazyhat.compukters.lang.runtime.vm
+                                .VmFleetBusyException("full")
+                        }
+                        replies += args!![1] as VmHostRequestIdentity
                         null
                     }
 
@@ -420,7 +527,7 @@ class NativeFleetActorRuntimeServiceTest {
             }, {}, { endpoint, event ->
                 observed += endpoint
                 check(event !is ExperimentalFleetEvent.Stopped || event.machine != cancellationFailureFor) { "cancellation failed" }
-            }, { 100 })
+            }, { 100 }, byteLimits)
 
         fun register(
             machine: Long,

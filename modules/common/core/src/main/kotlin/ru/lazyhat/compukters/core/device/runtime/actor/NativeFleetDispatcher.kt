@@ -23,9 +23,10 @@ internal class NativeFleetDispatcher(
     private val checkOwner: () -> Unit,
     onResultsReady: () -> Unit,
     deliver: (ExperimentalFleetEvent) -> Unit,
+    byteLimits: NativeFleetOutboxLimits = NativeFleetOutboxLimits(),
 ) : AutoCloseable {
     private var closed = false
-    val outbox = NativeFleetOutbox(fleet, maximumCommands, maximumCommandsPerMachine, checkOwner)
+    val outbox = NativeFleetOutbox(fleet, maximumCommands, maximumCommandsPerMachine, checkOwner, byteLimits = byteLimits)
     private val events =
         NativeFleetEventPump(fleet, checkOwner, onResultsReady, deliver)
 

@@ -20,8 +20,9 @@ import java.util.concurrent.CompletableFuture
  * started/restored host before registration; Rust owns its session from then until stop.
  * No JVM worker advances Guest instructions. Frame grants come from the capacity owner.
  *
- * Boot, checkpoint restoration, world-effect completion translation and backend selection are
- * not wired here yet. Unsupported requests/effects are rejected before admission. External
+ * Boot, checkpoint restoration, redstone/sound completion translation and backend selection are
+ * not wired here yet. Addon completions are admitted with their continuation as an ordered batch.
+ * Unsupported requests/effects are rejected before admission. External
  * host/compilation events go to [onExternalEvent] on the owner, without a second result backlog.
  * Stop is asynchronous but currently requires this service's owner pump; it is not yet a
  * replacement for the production lease's independent shutdown barrier.
@@ -36,6 +37,7 @@ internal class NativeFleetActorRuntimeService(
     onResultsReady: () -> Unit,
     private val onExternalEvent: (VmActorEndpoint, ExperimentalFleetEvent) -> Unit,
     private val nanoTime: () -> Long = System::nanoTime,
+    byteLimits: NativeFleetOutboxLimits = NativeFleetOutboxLimits(),
 ) : ActorRuntimeService,
     AutoCloseable {
     init {
@@ -66,6 +68,7 @@ internal class NativeFleetActorRuntimeService(
             checkOwner,
             onResultsReady,
             ::observe,
+            byteLimits,
         )
 
     /** The caller retains ownership if admission fails; successful registration owns host metadata. */
@@ -125,7 +128,9 @@ internal class NativeFleetActorRuntimeService(
         checkOwner()
         require(worldTick >= 0)
         if (closed) return VmActorSubmission.CLOSED
-        require(effects.all { it is ProgramRuntimeActorEffect.RedstoneInput }) { "native world completion translation is not wired yet" }
+        require(effects.all { it is ProgramRuntimeActorEffect.RedstoneInput || it is ProgramRuntimeActorEffect.CompleteAddons }) {
+            "native redstone/sound completion translation is not wired yet"
+        }
         val actor = actors[endpoint] ?: return VmActorSubmission.STALE_ENDPOINT
         if (actor.stopping != null) return VmActorSubmission.CLOSED
         val credit = actor.credit ?: return VmActorSubmission.MAILBOX_FULL
@@ -142,22 +147,44 @@ internal class NativeFleetActorRuntimeService(
         } else if (actor.lastTurnTick == worldTick) {
             return VmActorSubmission.PERMIT_PENDING
         }
-        if (effects.size >= maximumRequestsPerActor) return VmActorSubmission.MAILBOX_FULL
-        val commands = ArrayList<NativeFleetOutbox.Command>(effects.size + 1)
-        effects.forEach {
-            val packet = RedstoneWire.requireInputPacket((it as ProgramRuntimeActorEffect.RedstoneInput).packet)
-            commands += NativeFleetOutbox.Command.RedstoneInput(packet)
+        var commandCount = 1
+        for (effect in effects) {
+            val count = if (effect is ProgramRuntimeActorEffect.CompleteAddons) effect.completions.size else 1
+            if (count > maximumRequestsPerActor - commandCount) return VmActorSubmission.MAILBOX_FULL
+            commandCount += count
+        }
+        val commands = ArrayList<NativeFleetOutbox.Command>(commandCount)
+        effects.forEach { effect ->
+            when (effect) {
+                is ProgramRuntimeActorEffect.RedstoneInput -> {
+                    commands +=
+                        NativeFleetOutbox.Command.RedstoneInput(RedstoneWire.requireInputPacket(effect.packet))
+                }
+
+                is ProgramRuntimeActorEffect.CompleteAddons -> {
+                    effect.completions.forEach {
+                        commands +=
+                            NativeFleetOutbox.Command.Reply(it.identity, it.response)
+                    }
+                }
+
+                else -> {
+                    error("unsupported native effect")
+                }
+            }
         }
         val allowance = credit.remaining
         commands += NativeFleetOutbox.Command.Grant(worldTick, allowance.toInt(), credit.deadlineNanos)
         val id = requestId()
         if (!dispatcher.outbox.offer(actor.machine, commands)) return VmActorSubmission.MAILBOX_FULL
-        effects.forEach {
-            actor.host.observeFleetRedstoneInput(
-                fleet,
-                actor.machine,
-                (it as ProgramRuntimeActorEffect.RedstoneInput).packet,
-            )
+        effects.forEach { effect ->
+            if (effect is ProgramRuntimeActorEffect.RedstoneInput) {
+                actor.host.observeFleetRedstoneInput(
+                    fleet,
+                    actor.machine,
+                    effect.packet,
+                )
+            }
         }
         actor.turn = Turn(id, allowance, completion)
         credit.inFlight = true

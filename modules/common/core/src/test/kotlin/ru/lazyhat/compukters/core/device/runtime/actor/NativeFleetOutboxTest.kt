@@ -5,10 +5,12 @@
  */
 package ru.lazyhat.compukters.core.device.runtime.actor
 
+import ru.lazyhat.compukters.lang.runtime.capability.HostResponse
 import ru.lazyhat.compukters.lang.runtime.vm.ExperimentalFleet
 import ru.lazyhat.compukters.lang.runtime.vm.ExperimentalFleetEvent
 import ru.lazyhat.compukters.lang.runtime.vm.VmFleetBusyException
 import ru.lazyhat.compukters.lang.runtime.vm.VmFleetStaleException
+import ru.lazyhat.compukters.lang.runtime.vm.VmHostRequestIdentity
 import java.lang.reflect.Proxy
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -17,6 +19,83 @@ import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class NativeFleetOutboxTest {
+    @Test
+    fun `global and local byte admission are atomic and removal returns payload capacity`() {
+        val reply = NativeFleetOutbox.Command.Reply(VmHostRequestIdentity(1, 1), HostResponse.StringSuccess("x".repeat(64)))
+        val bytes = reply.retainedBytes
+        val outbox = NativeFleetOutbox(fleet { _, _ -> }, 16, 16, {}, byteLimits = NativeFleetOutboxLimits(4 * bytes, 2 * bytes))
+        assertTrue(outbox.offer(1, listOf(reply, reply)))
+        assertFalse(outbox.offer(1, listOf(reply))) // Per-machine byte limit, despite free entry/global capacity.
+        assertTrue(outbox.offer(2, listOf(reply, reply)))
+        assertFalse(outbox.offer(3, listOf(input(1)))) // Shared byte limit.
+        assertEquals(4 * bytes, outbox.retainedBytes)
+        assertEquals(2, outbox.remove(1).size)
+        assertEquals(2 * bytes, outbox.retainedBytes)
+        assertTrue(outbox.offer(3, listOf(reply, reply)))
+        outbox.remove(2)
+        outbox.remove(3)
+        assertEquals(0L, outbox.retainedBytes)
+    }
+
+    @Test
+    fun `busy and failed sends retain their byte charge while other machines progress`() {
+        var busy = true
+        var failed = false
+        val sent = mutableListOf<Long>()
+        val bridge =
+            Proxy.newProxyInstance(ExperimentalFleet::class.java.classLoader, arrayOf(ExperimentalFleet::class.java)) { _, _, args ->
+                val machine = args!![0] as Long
+                if (machine == 1L && busy) throw VmFleetBusyException("full")
+                if (machine == 1L && failed) throw VmFleetStaleException("stale")
+                sent += machine
+                null
+            } as ExperimentalFleet
+        val reply = NativeFleetOutbox.Command.Reply(VmHostRequestIdentity(1, 1), HostResponse.StringSuccess("payload"))
+        val outbox =
+            NativeFleetOutbox(bridge, 8, 8, {}, byteLimits = NativeFleetOutboxLimits(reply.retainedBytes + 64, reply.retainedBytes))
+        assertTrue(outbox.offer(1, listOf(reply)))
+        assertTrue(outbox.offer(2, listOf(input(1))))
+        assertEquals(1, outbox.flush(2))
+        assertEquals(listOf(2L), sent)
+        assertEquals(reply.retainedBytes, outbox.retainedBytes)
+        busy = false
+        failed = true
+        assertFailsWith<NativeFleetCommandException> { outbox.flush(1) }
+        assertEquals(reply.retainedBytes, outbox.retainedBytes)
+        failed = false
+        assertEquals(1, outbox.flush(1))
+        assertEquals(0L, outbox.retainedBytes)
+        assertEquals(listOf(2L, 1L), sent)
+    }
+
+    @Test
+    fun `oversized batch retains no prefix and terminal payloads share the byte budget`() {
+        val text =
+            checkNotNull(
+                NativeFleetRequest.prepare(ProgramRuntimeActorCommand.SendTerminalText(ProgramRuntimeRequestId(1), "é".repeat(64))),
+            )
+        val outbox =
+            NativeFleetOutbox(
+                fleet {
+                    _,
+                    _,
+                    ->
+                },
+                8,
+                8,
+                {},
+                byteLimits = NativeFleetOutboxLimits(text.retainedBytes, text.retainedBytes),
+            )
+        assertFalse(outbox.offer(1, listOf(input(1), text)))
+        assertEquals(0L, outbox.retainedBytes)
+        assertTrue(outbox.offer(1, listOf(text)))
+        assertFalse(outbox.offer(2, listOf(input(1))))
+        assertEquals(1, outbox.remove(1).size)
+        assertTrue(outbox.offer(2, listOf(input(1))))
+        assertEquals(1, outbox.flush(1))
+        assertEquals(0L, outbox.retainedBytes)
+    }
+
     @Test
     fun `busy machine keeps its order while another machine progresses`() {
         val sent = mutableListOf<Pair<Long, Int>>()

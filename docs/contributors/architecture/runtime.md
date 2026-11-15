@@ -89,9 +89,21 @@ owns the input payload; the response registry retains only its kind and future. 
 even if its caller canceled the future; rejected input does not wake a parked host. File errors retain their typed
 failure values, and duplicate or obsolete responses cannot change observations. Other effects and requests are rejected
 before admission. External events go to an owner callback without another
-result backlog. Independent native stop delivery invalidates the machine identity, cancels pending work and closes
+result backlog. `CompleteAddons` replies and their grant are admitted to the ordered JVM outbox as one batch;
+refusal retains the caller's exact completion and frame reservation. Rust matches exact task/request identities and
+ignores obsolete or repeated completions, without a second JVM registry of native pending host requests. Dispatching
+new world requests still uses the external owner hook; translating those requests into carrier actions remains pending.
+
+The JVM outbox has entry limits plus shared and per-machine byte admission limits, both defaulting to 16 MiB.
+These are charged-byte budgets, with no per-idle-machine reservation. Charges cover input payloads and immutable host
+response trees, UTF-16 strings and an allowance per value/schema field; shared schemas are counted in full. Queue/map
+overhead is separately bounded by entry limits; these charges are not a measurement of JVM heap or native retention.
+Validation and sizing allocate no encoded response. Busy and failed sends retain the payload and its charge until
+native acceptance or explicit removal. Atomic batch refusal retains no prefix and consumes no frame credit.
+
+Independent native stop delivery invalidates the machine identity, cancels pending work and closes
 host metadata using the final filesystem generation. Its future currently requires owner pumping, unlike the
-production close barrier. Bootstrap, restoration, world-completion translation, broader command parity and independent
+production close barrier. Bootstrap, restoration, redstone/sound completion translation, broader command parity and independent
 shutdown still need integration; production backend selection remains unchanged.
 
 ## Addon host boundary

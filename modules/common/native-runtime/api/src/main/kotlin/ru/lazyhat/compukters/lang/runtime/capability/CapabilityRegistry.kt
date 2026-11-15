@@ -60,6 +60,7 @@ sealed interface HostResponse {
     ) : HostResponse {
         private val bytes = value.copyOf()
         val value: ByteArray get() = bytes.copyOf()
+        internal val byteSize: Int get() = bytes.size
 
         init {
             require(bytes.size <= ru.lazyhat.compukters.lang.runtime.capability.HostCapabilityLimits.MAXIMUM_BYTE_ARRAY_BYTES)

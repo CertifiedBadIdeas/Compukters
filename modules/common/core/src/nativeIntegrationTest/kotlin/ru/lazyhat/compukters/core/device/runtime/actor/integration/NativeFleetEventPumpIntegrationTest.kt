@@ -6,12 +6,14 @@
 package ru.lazyhat.compukters.core.device.runtime.actor.integration
 
 import ru.lazyhat.compukters.api.addon.ProgramAddonAction
+import ru.lazyhat.compukters.api.addon.ProgramAddonCompletion
 import ru.lazyhat.compukters.core.device.runtime.actor.ActorRuntimeService
 import ru.lazyhat.compukters.core.device.runtime.actor.NativeFleetActorRuntimeService
 import ru.lazyhat.compukters.core.device.runtime.actor.NativeFleetDispatcher
 import ru.lazyhat.compukters.core.device.runtime.actor.NativeFleetEventPump
 import ru.lazyhat.compukters.core.device.runtime.actor.NativeFleetOutbox
 import ru.lazyhat.compukters.core.device.runtime.actor.ProgramRuntimeActorCommand
+import ru.lazyhat.compukters.core.device.runtime.actor.ProgramRuntimeActorEffect
 import ru.lazyhat.compukters.core.device.runtime.actor.ProgramRuntimeActorFailure
 import ru.lazyhat.compukters.core.device.runtime.actor.ProgramRuntimeActorReply
 import ru.lazyhat.compukters.core.device.runtime.actor.ProgramRuntimeActorValue
@@ -463,12 +465,18 @@ class NativeFleetEventPumpIntegrationTest {
                     },
                 )
                 val before = await(first)
-                // The external host adapter accepts the native reply, then asks for a continuation.
-                // Translating carrier world effects into this reply is a remaining integration step.
-                fleet.reply(machine, checkNotNull(request), HostResponse.UnitSuccess)
+                val runtime: ActorRuntimeService = service
+                // External dispatch still uses the owner hook. Its typed completion now travels
+                // through the carrier contract and ordered outbox together with the original grant.
+                val completion =
+                    ProgramRuntimeActorEffect.CompleteAddons(
+                        listOf(
+                            ProgramAddonCompletion(checkNotNull(request), HostResponse.UnitSuccess),
+                        ),
+                    )
                 val second = CompletableFuture<ProgramRuntimeActorReply>()
                 assertTrue(
-                    service.continueTurn(endpoint, 4, emptyList()) { reply, failure ->
+                    runtime.continueTurn(endpoint, 4, listOf(completion, completion)) { reply, failure ->
                         if (failure == null) second.complete(checkNotNull(reply)) else second.completeExceptionally(failure)
                     },
                 )

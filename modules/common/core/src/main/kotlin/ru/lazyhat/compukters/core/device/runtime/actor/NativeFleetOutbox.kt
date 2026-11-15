@@ -8,6 +8,7 @@ package ru.lazyhat.compukters.core.device.runtime.actor
 import ru.lazyhat.compukters.lang.runtime.capability.HostResponse
 import ru.lazyhat.compukters.lang.runtime.vm.ExperimentalFleet
 import ru.lazyhat.compukters.lang.runtime.vm.ExperimentalFleetEvent
+import ru.lazyhat.compukters.lang.runtime.vm.ExperimentalFleetResponseMemory
 import ru.lazyhat.compukters.lang.runtime.vm.VmFleetBusyException
 import ru.lazyhat.compukters.lang.runtime.vm.VmHostRequestIdentity
 import java.util.ArrayDeque
@@ -17,6 +18,16 @@ internal class NativeFleetCommandException(
     cause: Exception,
 ) : IllegalStateException("native fleet command failed for machine $machine", cause)
 
+/** Shared admission limits; no storage is preallocated for an idle machine. */
+internal data class NativeFleetOutboxLimits(
+    val totalBytes: Long = 16L * 1024 * 1024,
+    val perMachineBytes: Long = 16L * 1024 * 1024,
+) {
+    init {
+        require(totalBytes >= 64 && perMachineBytes >= 64) { "native queue must fit a scalar command" }
+    }
+}
+
 /** Owner-thread queue between world effects and the bounded native worker mailboxes. */
 internal class NativeFleetOutbox(
     private val fleet: ExperimentalFleet,
@@ -24,12 +35,15 @@ internal class NativeFleetOutbox(
     private val maximumCommandsPerMachine: Int,
     private val checkOwner: () -> Unit,
     private val nanoTime: () -> Long = System::nanoTime,
+    private val byteLimits: NativeFleetOutboxLimits = NativeFleetOutboxLimits(),
 ) {
     init {
         require(maximumCommands > 0 && maximumCommandsPerMachine > 0)
     }
 
     internal sealed interface Command {
+        val retainedBytes: Long get() = 64L
+
         fun send(
             fleet: ExperimentalFleet,
             machine: Long,
@@ -41,6 +55,8 @@ internal class NativeFleetOutbox(
             val identity: VmHostRequestIdentity,
             val response: HostResponse,
         ) : Command {
+            override val retainedBytes: Long = 64L + ExperimentalFleetResponseMemory.retainedBytes(response)
+
             override fun send(
                 fleet: ExperimentalFleet,
                 machine: Long,
@@ -103,11 +119,18 @@ internal class NativeFleetOutbox(
         }
     }
 
-    private val queues = mutableMapOf<Long, ArrayDeque<Command>>()
+    private class Queue {
+        val commands = ArrayDeque<Command>()
+        var bytes = 0L
+    }
+
+    private val queues = mutableMapOf<Long, Queue>()
     private val ready = ArrayDeque<Long>()
     private val closing = mutableMapOf<Long, Command.Lifecycle>()
     private val awaitingLifecycle = ArrayDeque<Long>()
     private var count = 0
+    internal var retainedBytes = 0L
+        private set
 
     /** Either retain the entire batch in order, or retain none of it. */
     fun offer(
@@ -122,16 +145,29 @@ internal class NativeFleetOutbox(
         if (lifecycleIndex >= 0 && closing.size >= maximumCommands) return false
         val existing = queues[machine]
         if (commands.size > maximumCommands - count ||
-            commands.size > maximumCommandsPerMachine - (existing?.size ?: 0)
+            commands.size > maximumCommandsPerMachine - (existing?.commands?.size ?: 0)
         ) {
             return false
         }
+        var bytes = 0L
+        for (command in commands) {
+            require(command.retainedBytes >= 64L) { "invalid native command byte charge" }
+            if (command.retainedBytes > byteLimits.totalBytes - bytes ||
+                command.retainedBytes > byteLimits.perMachineBytes - bytes
+            ) {
+                return false
+            }
+            bytes += command.retainedBytes
+        }
+        if (bytes > byteLimits.totalBytes - retainedBytes || bytes > byteLimits.perMachineBytes - (existing?.bytes ?: 0L)) return false
         val queue =
-            existing ?: ArrayDeque<Command>().also {
+            existing ?: Queue().also {
                 queues[machine] = it
                 ready.addLast(machine)
             }
-        queue.addAll(commands)
+        queue.commands.addAll(commands)
+        queue.bytes += bytes
+        retainedBytes += bytes
         count += commands.size
         if (lifecycleIndex >= 0) closing[machine] = commands[lifecycleIndex] as Command.Lifecycle
         return true
@@ -155,10 +191,14 @@ internal class NativeFleetOutbox(
         ) {
             val machine = ready.removeFirst()
             val queue = checkNotNull(queues[machine])
+            val commands = queue.commands
             attempts++
             try {
-                queue.first.send(fleet, machine)
-                if (queue.removeFirst() is Command.Lifecycle) awaitingLifecycle.addLast(machine)
+                commands.first.send(fleet, machine)
+                val accepted = commands.removeFirst()
+                if (accepted is Command.Lifecycle) awaitingLifecycle.addLast(machine)
+                queue.bytes -= accepted.retainedBytes
+                retainedBytes -= accepted.retainedBytes
                 count--
                 sent++
             } catch (_: VmFleetBusyException) {
@@ -170,7 +210,7 @@ internal class NativeFleetOutbox(
                 ready.addFirst(machine)
                 throw error
             }
-            if (queue.isEmpty()) queues.remove(machine) else ready.addLast(machine)
+            if (commands.isEmpty()) queues.remove(machine) else ready.addLast(machine)
         }
         return sent
     }
@@ -182,8 +222,9 @@ internal class NativeFleetOutbox(
         closing.remove(machine)
         val queue = queues.remove(machine) ?: return emptyList()
         check(ready.remove(machine))
-        count -= queue.size
-        return queue.toList()
+        count -= queue.commands.size
+        retainedBytes -= queue.bytes
+        return queue.commands.toList()
     }
 
     /**
