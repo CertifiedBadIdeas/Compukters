@@ -680,6 +680,12 @@ private class ExecutableRevisionWireDecoder(
     }
 }
 
+/** Decode a complete outcome from the bounded native wire format. */
+object VmOutcomeWire {
+    fun decode(bytes: ByteArray): VmOutcome =
+        WireDecoder(bytes).outcome { throw IllegalArgumentException("compilation token requires a VM session") }
+}
+
 private class WireDecoder(
     bytes: ByteArray,
 ) {
