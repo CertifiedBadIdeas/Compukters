@@ -216,21 +216,24 @@ class ExperimentalFfmFleet private constructor(
     }
 
     @Synchronized
-    override fun detach(machine: Long) {
+    override fun detach(machine: Long, independent: Boolean) {
         require(machine >= 0)
-        success("detach", calls.detach.invokeExact(active(), machine) as Int)
+        success("detach", if (independent) calls.requestLifecycle.invokeExact(active(), machine, 1, 0L) as Int
+            else calls.detach.invokeExact(active(), machine) as Int)
     }
 
     @Synchronized
-    override fun detachWithTimers(machine: Long, tick: Long) {
+    override fun detachWithTimers(machine: Long, tick: Long, independent: Boolean) {
         require(machine >= 0 && tick >= 0)
-        success("detach", calls.detachTimers.invokeExact(active(), machine, tick) as Int)
+        success("detach", if (independent) calls.requestLifecycle.invokeExact(active(), machine, 2, tick) as Int
+            else calls.detachTimers.invokeExact(active(), machine, tick) as Int)
     }
 
     @Synchronized
-    override fun stop(machine: Long) {
+    override fun stop(machine: Long, independent: Boolean) {
         require(machine >= 0)
-        success("stop", calls.stop.invokeExact(active(), machine) as Int)
+        success("stop", if (independent) calls.requestLifecycle.invokeExact(active(), machine, 0, 0L) as Int
+            else calls.stop.invokeExact(active(), machine) as Int)
     }
 
     @Synchronized
@@ -262,6 +265,17 @@ class ExperimentalFfmFleet private constructor(
     override fun poll(): ExperimentalFleetEvent? {
         written.set(ValueLayout.JAVA_LONG, 0, 0)
         success("poll", calls.poll.invokeExact(active(), output, output.byteSize(), written) as Int)
+        return decodePolledEvent()
+    }
+
+    @Synchronized
+    override fun pollLifecycle(machine: Long): ExperimentalFleetEvent? {
+        written.set(ValueLayout.JAVA_LONG, 0, 0)
+        success("poll lifecycle", calls.pollLifecycle.invokeExact(active(), machine, output, output.byteSize(), written) as Int)
+        return decodePolledEvent()
+    }
+
+    private fun decodePolledEvent(): ExperimentalFleetEvent? {
         val length = written.get(ValueLayout.JAVA_LONG, 0)
         require(length in 0..output.byteSize()) { "invalid FFM fleet event length" }
         if (length == 0L) return null
@@ -282,7 +296,7 @@ class ExperimentalFfmFleet private constructor(
 
     private class Calls(val attach: MethodHandle, val attachTimers: MethodHandle, val recover: MethodHandle,
         val grant: MethodHandle, val detach: MethodHandle, val detachTimers: MethodHandle,
-        val stop: MethodHandle, val poll: MethodHandle, val close: MethodHandle,
+        val stop: MethodHandle, val requestLifecycle: MethodHandle, val poll: MethodHandle, val pollLifecycle: MethodHandle, val close: MethodHandle,
         val generation: MethodHandle, val waitEvents: MethodHandle,
         val reply: MethodHandle, val replyFailure: MethodHandle, val resolveCost: MethodHandle, val compilation: MethodHandle,
         val observe: MethodHandle, val redstone: MethodHandle, val terminalKey: MethodHandle,
@@ -313,7 +327,7 @@ class ExperimentalFfmFleet private constructor(
                 val createInspected = call("create_inspection", p, p, l, p, l, p, l, i, i, i, p)
                 val calls = Calls(call("attach", l, l, p), call("attach_timers", l, l, l, p, l, p),
                     call("recover", l, l, p), call("grant", l, l, l, i, l), call("detach", l, l),
-                    call("detach_timers", l, l, l), call("stop", l, l), call("poll", l, p, l, p), call("close", l),
+                    call("detach_timers", l, l, l), call("stop", l, l), call("request_lifecycle", l, l, i, l), call("poll", l, p, l, p), call("poll_lifecycle", l, l, p, l, p), call("close", l),
                     call("event_generation", l, p), call("wait_events", l, l, i, p),
                     call("reply", l, l, i, l, p, l), call("reply_failure", l, l, i, l, i, p, l),
                     call("resolve_cost", l, l, i, l, i), call("compilation", l, l, l, i, p, l),

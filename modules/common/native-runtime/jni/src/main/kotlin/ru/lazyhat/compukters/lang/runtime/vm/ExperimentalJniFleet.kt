@@ -153,14 +153,19 @@ class ExperimentalJniFleet private constructor(
         success("canonical line", JniExperimentalFleet.canonicalLine(active(), machine, line, request))
 
     @Synchronized
-    override fun stop(machine: Long) = success("stop", JniExperimentalFleet.stop(active(), machine))
+    override fun stop(machine: Long, independent: Boolean) = success("stop",
+        if (independent) JniExperimentalFleet.requestLifecycle(active(), machine, 0, 0)
+        else JniExperimentalFleet.stop(active(), machine))
 
     @Synchronized
-    override fun detach(machine: Long) = success("detach", JniExperimentalFleet.detach(active(), machine))
+    override fun detach(machine: Long, independent: Boolean) = success("detach",
+        if (independent) JniExperimentalFleet.requestLifecycle(active(), machine, 1, 0)
+        else JniExperimentalFleet.detach(active(), machine))
 
     @Synchronized
-    override fun detachWithTimers(machine: Long, tick: Long) =
-        success("detach", JniExperimentalFleet.detachWithTimers(active(), machine, tick))
+    override fun detachWithTimers(machine: Long, tick: Long, independent: Boolean) =
+        success("detach", if (independent) JniExperimentalFleet.requestLifecycle(active(), machine, 2, tick)
+        else JniExperimentalFleet.detachWithTimers(active(), machine, tick))
 
     @Synchronized
     override fun eventGeneration(): Long {
@@ -179,6 +184,16 @@ class ExperimentalJniFleet private constructor(
     @Synchronized
     override fun poll(): ExperimentalFleetEvent? {
         success("poll", JniExperimentalFleet.poll(active(), output, written))
+        return decodePolledEvent()
+    }
+
+    @Synchronized
+    override fun pollLifecycle(machine: Long): ExperimentalFleetEvent? {
+        success("poll lifecycle", JniExperimentalFleet.pollLifecycle(active(), machine, output, written))
+        return decodePolledEvent()
+    }
+
+    private fun decodePolledEvent(): ExperimentalFleetEvent? {
         require(written[0] in 0..output.size.toLong()) { "invalid native fleet event length" }
         if (written[0] == 0L) return null
         val event = ExperimentalFleetEventWire.decode(output.copyOf(written[0].toInt()))

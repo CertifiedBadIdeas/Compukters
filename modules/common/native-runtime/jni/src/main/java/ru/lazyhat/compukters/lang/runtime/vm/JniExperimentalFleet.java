@@ -15,6 +15,7 @@ final class JniExperimentalFleet {
         int major, int minor, int operation, long[] handle);
     static native int grant(long handle, long machine, long tick, int retirements, long deadlineNanos);
     static native int stop(long handle, long machine);
+    static native int requestLifecycle(long handle, long machine, int kind, long tick);
     static native int completeCompilation(long handle, long machine, long token, int kind, byte[] payload);
     static native int attachSession(long handle, long session, long[] machine);
     static native int attachSessionWithTimers(long handle, long session, long tick, byte[] timers, long[] machine);
@@ -38,5 +39,6 @@ final class JniExperimentalFleet {
     static native int eventGeneration(long handle, long[] output);
     static native int waitEvents(long handle, long generation, int timeoutMillis, long[] output);
     static native int poll(long handle, byte[] output, long[] written);
+    static native int pollLifecycle(long handle, long machine, byte[] output, long[] written);
     static native int close(long handle);
 }

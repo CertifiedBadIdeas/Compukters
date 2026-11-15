@@ -11,6 +11,22 @@ permalink: /ARCHITECTURE/abi/
 
 This reference groups versioned representation boundaries by the version that introduced them. Those versions are minimum feature requirements, not a claim that older Runtime distributions implement today’s platform. The source owners below define the active contract. Before changing a wire format, inspect each producer, consumer and verifier. Runtime release pins in `build-scripts/src/main/kotlin/RuntimeBundleSupport.kt` describe published bundles separately from the local VM checkout.
 
+## Experimental native fleet lifecycle
+
+The opt-in `experimental-fleet-scheduler` build adds independent lifecycle delivery. C
+`compukter_experimental_fleet_request_lifecycle(handle, machine, kind, tick)` atomically selects it while
+fencing the machine: kind 0 stops, kind 1 detaches, and kind 2 detaches with timers at the supplied tick.
+`compukter_experimental_fleet_poll_lifecycle` reads one observation at a time through the existing event
+encoding, followed by Stopped, Detached or DetachRejected. Ordinary polling cannot consume this stream.
+Previously published ordinary observations remain in the ordinary queue.
+
+Successful output copying acknowledges one event. BufferTooSmall, invalid output and JNI copy errors
+retain the delivery for retry. Native memory reservations and the ownership fence remain until the
+terminal acknowledgement; recovery is refused while a lifecycle event is awaiting delivery. JNI and
+FFM expose the same contract through `independent = true` on stop/detach and `pollLifecycle(machine)`.
+These are additive experimental entry points; the released native ABI version, artifact encoding and
+checkpoint formats are unchanged. The native fleet remains opt-in.
+
 ## Guest Gradle tooling model
 
 `GuestProjectModel` version 1 describes an addon's native source roots, platform files, compiled Guest

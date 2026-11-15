@@ -25,6 +25,94 @@ import kotlin.test.assertTrue
 
 class FfmExperimentalFleetIntegrationTest {
 
+
+
+    @Test
+    fun `independent timer detach preserves remaining ticks through readoption`() {
+        val bridge = FfmBridge.open(Path.of(requireNotNull(System.getProperty("compukter.ffi.library"))))
+        val artifact = Path.of(requireNotNull(System.getProperty("compukters.fleet.timer.fixture"))).readBytes()
+        val fleet = bridge.openExperimentalFleet(ExperimentalFleetConfig(1, 32, 1, 128, 64, 64, 32, coordinatedTurns = true))
+        val session = VmSession.open(artifact, bridge)
+        val machine = session.transferToFleet(fleet)
+        val deadline = System.nanoTime() + 10_000_000_000L
+        fun next(lifecycle: Long? = null): ExperimentalFleetEvent {
+            while (System.nanoTime() < deadline) {
+                (if (lifecycle == null) fleet.poll() else fleet.pollLifecycle(lifecycle))?.let { return it }
+                Thread.yield()
+            }
+            error("timed out waiting for timer lifecycle")
+        }
+        fleet.grant(machine, 1, 512)
+        assertTrue((next() as ExperimentalFleetEvent.Quiescent).timersPending)
+        fleet.detachWithTimers(machine, 2, independent = true)
+        val detached = next(machine) as ExperimentalFleetEvent.Detached
+        assertEquals(1L, detached.timers.single().remaining)
+        val restored = VmSession.restoreFromFleet(fleet, machine)
+        val adopted = restored.transferToFleet(fleet, 100, detached.timers)
+        fleet.grant(adopted, 100, 512)
+        assertTrue((next() as ExperimentalFleetEvent.Quiescent).timersPending)
+        fleet.grant(adopted, 101, 512)
+        assertTrue((next() as ExperimentalFleetEvent.Outcome).outcome is VmOutcome.Halted)
+        fleet.stop(adopted, independent = true)
+        while (next(adopted) !is ExperimentalFleetEvent.Stopped) { }
+        restored.close()
+        session.close()
+        fleet.close()
+        bridge.close()
+    }
+
+    @Test
+    fun `independent detach and stop bypass saturated ordinary output`() {
+        val library = Path.of(requireNotNull(System.getProperty("compukter.ffi.library")))
+        val artifact = Path.of(requireNotNull(System.getProperty("compukters.fleet.terminal.fixture"))).readBytes()
+        val bridge = FfmBridge.open(library)
+        val fleet = bridge.openExperimentalFleet(ExperimentalFleetConfig(1, 4, 1, 128, 64, 64, 32))
+        val first = VmSession.open(artifact, bridge)
+        val second = VmSession.open(artifact, bridge)
+        val a = first.transferToFleet(fleet)
+        val b = second.transferToFleet(fleet)
+        val deadline = System.nanoTime() + 10_000_000_000L
+        fleet.resourceSnapshot(a, 100)
+        fleet.resourceSnapshot(b, 200)
+        var accepted = 0
+        while (true) {
+            check(System.nanoTime() < deadline) { "native output did not saturate" }
+            try { fleet.resourceSnapshot(a, 300L + accepted); accepted++ }
+            catch (_: VmFleetBusyException) { if (accepted >= 4) break else Thread.yield() }
+        }
+        fleet.detach(b, independent = true)
+        var observedQuery = false
+        var detached = false
+        while (!detached) {
+            check(System.nanoTime() < deadline) { "detach depended on ordinary polling" }
+            when (val event = fleet.pollLifecycle(b)) {
+                null -> Thread.yield()
+                is ExperimentalFleetEvent.Resources -> {
+                    assertEquals(b, event.machine)
+                    assertEquals(200L, event.request)
+                    observedQuery = true
+                }
+                is ExperimentalFleetEvent.Detached -> {
+                    assertEquals(b, event.machine)
+                    detached = true
+                }
+                else -> error("unexpected lifecycle event $event")
+            }
+        }
+        assertTrue(observedQuery, "accepted query was lost on detach")
+        VmSession.restoreFromFleet(fleet, b).close()
+        fleet.stop(a, independent = true)
+        while (fleet.pollLifecycle(a) !is ExperimentalFleetEvent.Stopped) {
+            check(System.nanoTime() < deadline) { "stop depended on ordinary polling" }
+            Thread.yield()
+        }
+        assertEquals(100L, (fleet.poll() as ExperimentalFleetEvent.Resources).request)
+        first.close()
+        second.close()
+        fleet.close()
+        bridge.close()
+    }
+
     @Test
     fun `full native mailbox reports retryable contention`() {
         val library = Path.of(requireNotNull(System.getProperty("compukter.ffi.library")))

@@ -42,14 +42,21 @@ interface ExperimentalFleet : ExperimentalFleetSessionOwner, AutoCloseable {
     fun discardDeployment(machine: Long, request: Long, candidate: Long)
     fun redstoneInput(machine: Long, packet: Int)
     fun confirmRedstoneOutput(machine: Long, packed: Int)
-    fun stop(machine: Long)
-    fun detach(machine: Long)
-    fun detachWithTimers(machine: Long, tick: Long)
+    /** Select independent=true to reserve delivery through pollLifecycle at submission. */
+    fun stop(machine: Long, independent: Boolean = false)
+    fun detach(machine: Long, independent: Boolean = false)
+    fun detachWithTimers(machine: Long, tick: Long, independent: Boolean = false)
     /** Capture before draining poll(); a later publication changes the generation. */
     fun eventGeneration(): Long
     /** Wait independently of command submission; false means timeout or fleet closure. */
     fun waitEvents(generation: Long, timeoutMillis: Int): Boolean
     fun poll(): ExperimentalFleetEvent?
+    /**
+     * Claims one machine's stop/detach output independently of the ordinary queue.
+     * Keep polling this path through Stopped, Detached or DetachRejected. Older
+     * already-published ordinary observations remain available through poll().
+     */
+    fun pollLifecycle(machine: Long): ExperimentalFleetEvent?
 }
 
 /** Native fleet temporarily cannot accept an operation. The caller may retry when appropriate. */
