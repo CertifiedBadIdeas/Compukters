@@ -95,6 +95,7 @@ class ExperimentalJniFleet private constructor(
             hostBudget: Int,
             advancesPerTick: Int,
             inspection: ExperimentalRequestInspection? = null,
+            reportTurns: Boolean = false,
         ): ExperimentalJniFleet {
             val bridge = JniBridge.open(library)
             val output = LongArray(1)
@@ -105,7 +106,7 @@ class ExperimentalJniFleet private constructor(
                 "create",
                 JniExperimentalFleet.create(
                     empty, byteArrayOf(1, 0), 0,
-                    intArrayOf(workers, mailboxCapacity, eventCapacity, guestBudget, maintenanceBudget, hostBudget, advancesPerTick),
+                    intArrayOf(workers, mailboxCapacity, eventCapacity, guestBudget, maintenanceBudget, hostBudget, advancesPerTick, if (reportTurns) 1 else 0),
                     capability?.namespace?.encodeToByteArray() ?: empty,
                     capability?.name?.encodeToByteArray() ?: empty,
                     detail, capability?.abiMajor ?: 0, capability?.abiMinor ?: 0, inspection?.operation ?: 0, output,

@@ -13,6 +13,8 @@ import java.nio.charset.StandardCharsets
 
 /** Events from the opt-in native fleet transport. Machine identities are local to a fleet. */
 sealed interface ExperimentalFleetEvent {
+    /** Retired instructions accumulated within the tick; later reports may increase this value. */
+    data class Quiescent(val machine: Long, val tick: Long, val retired: Long) : ExperimentalFleetEvent
     data class Outcome(val machine: Long, val tick: Long, val outcome: VmOutcome) : ExperimentalFleetEvent
     data class Inspection(val machine: Long, val tick: Long, val request: VmHostRequest) : ExperimentalFleetEvent
     data class Stopped(val machine: Long, val pending: List<VmHostRequestIdentity>) : ExperimentalFleetEvent
@@ -36,6 +38,11 @@ object ExperimentalFleetEventWire {
             return items
         }
         return when (input.get().toInt() and 0xff) {
+            8 -> {
+                val result = ExperimentalFleetEvent.Quiescent(long(), long(), long())
+                require(!input.hasRemaining()) { "trailing fleet accounting bytes" }
+                result
+            }
             0, 1 -> {
                 val tag = bytes[0].toInt()
                 val machine = long()

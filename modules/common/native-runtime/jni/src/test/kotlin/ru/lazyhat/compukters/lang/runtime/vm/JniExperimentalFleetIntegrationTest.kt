@@ -20,6 +20,44 @@ import ru.lazyhat.compukters.lang.runtime.capability.HostValueType
 
 class JniExperimentalFleetIntegrationTest {
     @Test
+    fun `tick retirement reports survive a host continuation over JNI`() {
+        val library = Path.of(requireNotNull(System.getProperty("compukter.jni.library")))
+        val artifact = Path.of(requireNotNull(System.getProperty("compukters.fleet.host.fixture"))).readBytes()
+        val capability = CapabilityIdentity("app", "entry", 1, 2)
+        val schema = HostCapabilitySchema(capability, listOf(HostOperationSchema(emptyList(), HostValueType.UNIT, true)))
+        ExperimentalJniFleet.open(library, 1, 32, 32, 128, 64, 64, 32, reportTurns = true).use { fleet ->
+            val session = VmSession.open(artifact, listOf(schema), JniBridge.open(library))
+            val machine = session.transferToFleet(fleet)
+            val deadline = System.nanoTime() + 5_000_000_000L
+            fun next(): ExperimentalFleetEvent {
+                while (System.nanoTime() < deadline) {
+                    fleet.poll()?.let { return it }
+                    Thread.yield()
+                }
+                error("timed out waiting for fleet event")
+            }
+            try {
+                fleet.grant(machine, 4, 256)
+                val request = ((next() as ExperimentalFleetEvent.Outcome).outcome as VmOutcome.HostRequestBatch).requests.single()
+                val before = next() as ExperimentalFleetEvent.Quiescent
+                assertEquals(machine, before.machine)
+                assertEquals(4L, before.tick)
+                fleet.reply(machine, request.identity, HostResponse.UnitSuccess)
+                assertEquals(VmOutcome.Halted(null), (next() as ExperimentalFleetEvent.Outcome).outcome)
+                val after = next() as ExperimentalFleetEvent.Quiescent
+                assertEquals(before.machine, after.machine)
+                assertEquals(before.tick, after.tick)
+                assertTrue(after.retired > before.retired)
+                assertTrue(after.retired <= 256)
+            } finally {
+                fleet.stop(machine)
+                while (next() !is ExperimentalFleetEvent.Stopped) { }
+                session.close()
+            }
+        }
+    }
+
+    @Test
     fun `expired absolute deadline does not grant execution time`() {
         val library = Path.of(requireNotNull(System.getProperty("compukter.jni.library")))
         val artifact = Path.of(requireNotNull(System.getProperty("compukters.fleet.host.fixture"))).readBytes()
