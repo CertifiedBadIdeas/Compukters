@@ -91,8 +91,14 @@ failure values, and duplicate or obsolete responses cannot change observations. 
 before admission. External events go to an owner callback without another
 result backlog. `CompleteAddons` replies and their grant are admitted to the ordered JVM outbox as one batch;
 refusal retains the caller's exact completion and frame reservation. Rust matches exact task/request identities and
-ignores obsolete or repeated completions, without a second JVM registry of native pending host requests. Dispatching
-new world requests still uses the external owner hook; translating those requests into carrier actions remains pending.
+ignores obsolete or repeated completions, without a second JVM registry of native pending host requests.
+A turn observer streams registered addon requests and program start/stop actions to the carrier on its owner thread,
+without collecting a second payload queue until the final report. These actions do not settle instruction credit or
+start a continuation; only Quiescent does. Unhandled requests retain the external owner hook, and final-only callers
+retain raw event delivery. Mixed batches forward only unhandled requests. Scope changes reuse host metadata; stopping
+or replacing the carrier during a callback fences later actions and stale completions. Observer failure suppresses
+further actions and fails that turn after credit settlement, without stopping other machines. Command-cost inspection
+still uses the external hook; sharing its prepared batch with dispatch remains pending.
 
 The JVM outbox has entry limits plus shared and per-machine byte admission limits, both defaulting to 16 MiB.
 These are charged-byte budgets, with no per-idle-machine reservation. Charges cover input payloads and immutable host

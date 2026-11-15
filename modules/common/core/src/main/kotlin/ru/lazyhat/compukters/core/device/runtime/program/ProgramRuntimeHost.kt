@@ -660,15 +660,45 @@ class ProgramRuntimeHost internal constructor(
         fleet: ExperimentalFleetSessionOwner,
         machine: Long,
         outcome: VmOutcome,
+        lifecyclePort: ProgramAddonLifecyclePort = addonLifecyclePort,
     ) {
         requireFleetOwnership(fleet, machine)
         when (outcome) {
-            is VmOutcome.ProcessEntered, is VmOutcome.ProcessExited, is VmOutcome.ProcessReplaced -> applyProcessLifecycle(outcome)
-            VmOutcome.WaitingForTerminalEvent -> state = ProgramRuntimeState.WaitingForInput
-            is VmOutcome.Halted -> state = ProgramRuntimeState.Halted(outcome.value)
-            is VmOutcome.CompilationRequested -> state = ProgramRuntimeState.WaitingForCompiler
-            else -> outcome.programFailure()?.let { state = ProgramRuntimeState.Failed(it) }
+            is VmOutcome.ProcessEntered, is VmOutcome.ProcessExited, is VmOutcome.ProcessReplaced -> {
+                applyProcessLifecycle(
+                    outcome,
+                    lifecyclePort,
+                )
+            }
+
+            VmOutcome.WaitingForTerminalEvent -> {
+                state = ProgramRuntimeState.WaitingForInput
+            }
+
+            is VmOutcome.Halted -> {
+                state = ProgramRuntimeState.Halted(outcome.value)
+            }
+
+            is VmOutcome.CompilationRequested -> {
+                state = ProgramRuntimeState.WaitingForCompiler
+            }
+
+            else -> {
+                outcome.programFailure()?.let { state = ProgramRuntimeState.Failed(it) }
+            }
         }
+    }
+
+    /** Host schema/scope metadata only; the fleet remains the sole owner of pending native requests. */
+    internal fun prepareFleetAddonRequest(
+        fleet: ExperimentalFleetSessionOwner,
+        machine: Long,
+        request: VmHostRequest,
+    ): ProgramAddonRequest? {
+        requireFleetOwnership(fleet, machine)
+        if (!HostRequestRoutes.isAddon(request, addonCapabilitySchemas)) return null
+        return prepareCommandRequest(request, programScopes.last())
+            ?: ProgramAddonRequest(request.identity, request.capability, request.operation, request.arguments, programScopes.last())
     }
 
     internal fun observeFleetQuiescent(
@@ -691,12 +721,15 @@ class ProgramRuntimeHost internal constructor(
         applyProcessLifecycle(outcome)
     }
 
-    private fun applyProcessLifecycle(outcome: VmOutcome) {
+    private fun applyProcessLifecycle(
+        outcome: VmOutcome,
+        lifecyclePort: ProgramAddonLifecyclePort = addonLifecyclePort,
+    ) {
         when (outcome) {
             is VmOutcome.ProcessEntered -> {
                 check(!programScopes.contains(outcome.programId)) { "duplicate native program id" }
                 programScopes.addLast(outcome.programId)
-                check(addonLifecyclePort.submit(ProgramAddonAction.Started(outcome.programId))) { "addon lifecycle action limit exceeded" }
+                check(lifecyclePort.submit(ProgramAddonAction.Started(outcome.programId))) { "addon lifecycle action limit exceeded" }
             }
 
             is VmOutcome.ProcessExited -> {
@@ -704,7 +737,7 @@ class ProgramRuntimeHost internal constructor(
                 programScopes.removeLast()
                 pendingAddonRequests.entries.removeAll { it.value.programId == outcome.programId }
                 pendingTimerRequests.entries.removeAll { it.value.programId == outcome.programId }
-                check(addonLifecyclePort.submit(ProgramAddonAction.Stopped(outcome.programId))) { "addon lifecycle action limit exceeded" }
+                check(lifecyclePort.submit(ProgramAddonAction.Stopped(outcome.programId))) { "addon lifecycle action limit exceeded" }
             }
 
             is VmOutcome.ProcessReplaced -> {
@@ -715,9 +748,9 @@ class ProgramRuntimeHost internal constructor(
                 pendingAddonRequests.entries.removeAll { it.value.programId == outcome.previousProgramId }
                 pendingTimerRequests.entries.removeAll { it.value.programId == outcome.previousProgramId }
                 check(
-                    addonLifecyclePort.submit(ProgramAddonAction.Stopped(outcome.previousProgramId)),
+                    lifecyclePort.submit(ProgramAddonAction.Stopped(outcome.previousProgramId)),
                 ) { "addon lifecycle action limit exceeded" }
-                check(addonLifecyclePort.submit(ProgramAddonAction.Started(outcome.programId))) { "addon lifecycle action limit exceeded" }
+                check(lifecyclePort.submit(ProgramAddonAction.Started(outcome.programId))) { "addon lifecycle action limit exceeded" }
             }
 
             else -> {

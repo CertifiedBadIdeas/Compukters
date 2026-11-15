@@ -18,6 +18,7 @@ import ru.lazyhat.compukters.core.device.runtime.actor.ProgramRuntimeActorFailur
 import ru.lazyhat.compukters.core.device.runtime.actor.ProgramRuntimeActorReply
 import ru.lazyhat.compukters.core.device.runtime.actor.ProgramRuntimeActorValue
 import ru.lazyhat.compukters.core.device.runtime.actor.ProgramRuntimeFrameCredit
+import ru.lazyhat.compukters.core.device.runtime.actor.ProgramRuntimeTurnObserver
 import ru.lazyhat.compukters.core.device.runtime.actor.VmActorEndpoint
 import ru.lazyhat.compukters.core.device.runtime.actor.VmActorSubmission
 import ru.lazyhat.compukters.core.device.runtime.program.NativeProgramVmSessionFactory
@@ -422,7 +423,7 @@ class NativeFleetEventPumpIntegrationTest {
     }
 
     @Test
-    fun `native actor continuation uses the original frame after an external host reply`() {
+    fun `native actor streams addon request and continues within the original frame`() {
         installFfmRuntime()
         VmRuntime.loadNativeLibrary(Path.of(requireNotNull(System.getProperty("compukters.ffi.library"))))
         val artifact = Path.of(requireNotNull(System.getProperty("compukters.fleet.host.fixture"))).readBytes()
@@ -442,7 +443,7 @@ class NativeFleetEventPumpIntegrationTest {
                 assertEquals(endpoint, address)
                 if (event is ExperimentalFleetEvent.Outcome) {
                     val outcome = event.outcome
-                    if (outcome is VmOutcome.HostRequestBatch) request = outcome.requests.single().identity
+                    check(outcome !is VmOutcome.HostRequestBatch) { "managed addon request delivered twice" }
                 }
             }).use { service ->
                 assertTrue(service.register(endpoint, machine, host))
@@ -460,14 +461,31 @@ class NativeFleetEventPumpIntegrationTest {
                 val first = CompletableFuture<ProgramRuntimeActorReply>()
                 assertEquals(
                     VmActorSubmission.ACCEPTED,
-                    service.submitTurn(endpoint, 4, emptyList()) { reply, failure ->
-                        if (failure == null) first.complete(checkNotNull(reply)) else first.completeExceptionally(failure)
-                    },
+                    service.submitTurn(
+                        endpoint,
+                        4,
+                        emptyList(),
+                        object : ProgramRuntimeTurnObserver {
+                            override fun addonAction(action: ProgramAddonAction) {
+                                val addon = assertIs<ProgramAddonAction.Request>(action).request
+                                assertEquals(0L, addon.programId)
+                                assertTrue(!first.isDone)
+                                check(request == null)
+                                request = addon.identity
+                            }
+
+                            override fun complete(
+                                reply: ProgramRuntimeActorReply?,
+                                failure: Throwable?,
+                            ) {
+                                if (failure == null) first.complete(checkNotNull(reply)) else first.completeExceptionally(failure)
+                            }
+                        },
+                    ),
                 )
                 val before = await(first)
                 val runtime: ActorRuntimeService = service
-                // External dispatch still uses the owner hook. Its typed completion now travels
-                // through the carrier contract and ordered outbox together with the original grant.
+                // Streaming does not settle credit; only the final report permits this continuation.
                 val completion =
                     ProgramRuntimeActorEffect.CompleteAddons(
                         listOf(

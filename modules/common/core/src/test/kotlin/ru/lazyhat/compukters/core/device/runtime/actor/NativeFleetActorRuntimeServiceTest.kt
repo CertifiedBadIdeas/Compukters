@@ -5,22 +5,28 @@
  */
 package ru.lazyhat.compukters.core.device.runtime.actor
 
+import ru.lazyhat.compukters.api.addon.ProgramAddonAction
 import ru.lazyhat.compukters.api.addon.ProgramAddonCompletion
 import ru.lazyhat.compukters.core.device.runtime.program.ProgramRuntimeHost
 import ru.lazyhat.compukters.core.device.runtime.program.ProgramRuntimeState
 import ru.lazyhat.compukters.core.device.runtime.program.ProgramVmSession
 import ru.lazyhat.compukters.core.device.runtime.program.ProgramVmSessionFactory
+import ru.lazyhat.compukters.lang.runtime.capability.HostCapabilitySchema
+import ru.lazyhat.compukters.lang.runtime.capability.HostOperationSchema
 import ru.lazyhat.compukters.lang.runtime.capability.HostResponse
+import ru.lazyhat.compukters.lang.runtime.capability.HostValueType
 import ru.lazyhat.compukters.lang.runtime.fs.ComputerId
 import ru.lazyhat.compukters.lang.runtime.fs.VmFileChunk
 import ru.lazyhat.compukters.lang.runtime.fs.VmFileSystemReadFailure
 import ru.lazyhat.compukters.lang.runtime.fs.VmVirtualPath
+import ru.lazyhat.compukters.lang.runtime.vm.CapabilityIdentity
 import ru.lazyhat.compukters.lang.runtime.vm.ExperimentalFleet
 import ru.lazyhat.compukters.lang.runtime.vm.ExperimentalFleetEvent
 import ru.lazyhat.compukters.lang.runtime.vm.ExperimentalFleetInputResult
 import ru.lazyhat.compukters.lang.runtime.vm.TerminalKey
 import ru.lazyhat.compukters.lang.runtime.vm.TerminalKeyAction
 import ru.lazyhat.compukters.lang.runtime.vm.TerminalUpdate
+import ru.lazyhat.compukters.lang.runtime.vm.VmHostRequest
 import ru.lazyhat.compukters.lang.runtime.vm.VmHostRequestIdentity
 import ru.lazyhat.compukters.lang.runtime.vm.VmOutcome
 import java.lang.reflect.Proxy
@@ -431,6 +437,216 @@ class NativeFleetActorRuntimeServiceTest {
         }
     }
 
+    @Test
+    fun `addon actions stream before settlement with native scope ownership and no raw duplicate`() {
+        Harness().use { h ->
+            val capability = CapabilityIdentity("test", "device", 1, 0)
+            val schema = HostCapabilitySchema(capability, listOf(HostOperationSchema(emptyList(), HostValueType.UNIT, true)))
+            val endpoint = h.register(1, schemas = listOf(schema))
+            val actions = mutableListOf<ProgramAddonAction>()
+            val replies = mutableListOf<ProgramRuntimeActorReply>()
+            val observer =
+                object : ProgramRuntimeTurnObserver {
+                    override fun addonAction(action: ProgramAddonAction) {
+                        actions += action
+                    }
+
+                    override fun complete(
+                        reply: ProgramRuntimeActorReply?,
+                        failure: Throwable?,
+                    ) {
+                        check(failure == null)
+                        replies += checkNotNull(reply)
+                    }
+                }
+            assertTrue(h.service.grantFrame(endpoint, 4, 20))
+            assertEquals(VmActorSubmission.ACCEPTED, h.service.submitTurn(endpoint, 4, emptyList(), observer))
+            val request = VmHostRequest(1, capability, 0, emptyList())
+            h.events += ExperimentalFleetEvent.Outcome(1, 4, VmOutcome.ProcessEntered(1))
+            h.events += ExperimentalFleetEvent.Outcome(1, 4, VmOutcome.HostRequestBatch(listOf(request)))
+            h.events += ExperimentalFleetEvent.Outcome(1, 4, VmOutcome.ProcessReplaced(1, 2))
+            h.events += ExperimentalFleetEvent.Outcome(1, 4, VmOutcome.HostRequestBatch(listOf(request.copy(id = 2))))
+            h.events += ExperimentalFleetEvent.Outcome(1, 4, VmOutcome.ProcessExited(2))
+            h.service.pump(10, 10)
+            assertTrue(replies.isEmpty())
+            assertFalse(h.service.grantFrame(endpoint, 5, 20))
+            assertFalse(h.service.continueTurn(endpoint, 4, emptyList(), observer))
+            assertTrue(h.observed.isEmpty())
+            assertEquals(listOf(1L, 2L), actions.filterIsInstance<ProgramAddonAction.Request>().map { it.request.programId })
+            assertEquals(
+                listOf(
+                    ProgramAddonAction.Started(1),
+                    ProgramAddonAction.Stopped(1),
+                    ProgramAddonAction.Started(2),
+                    ProgramAddonAction.Stopped(2),
+                ),
+                actions.filter {
+                    it !is ProgramAddonAction.Request
+                },
+            )
+            h.events += ExperimentalFleetEvent.Quiescent(1, 4, 6, false)
+            h.service.pump(10, 10)
+            assertEquals(listOf(6L), replies.map { it.retiredInstructions })
+            assertTrue(h.service.continueTurn(endpoint, 4, emptyList(), observer))
+            h.service.pump(0, 10)
+            assertEquals(listOf(20, 14), h.grants.map { it.second })
+        }
+    }
+
+    @Test
+    fun `reentrant stop suppresses the rest of an addon batch`() {
+        Harness().use { h ->
+            val capability = CapabilityIdentity("test", "device", 1, 0)
+            val schema = HostCapabilitySchema(capability, listOf(HostOperationSchema(emptyList(), HostValueType.UNIT, true)))
+            val endpoint = h.register(1, schemas = listOf(schema))
+            var deliveries = 0
+            var canceled = false
+            val observer =
+                object : ProgramRuntimeTurnObserver {
+                    override fun addonAction(action: ProgramAddonAction) {
+                        deliveries++
+                        checkNotNull(h.service.stop(endpoint))
+                    }
+
+                    override fun complete(
+                        reply: ProgramRuntimeActorReply?,
+                        failure: Throwable?,
+                    ) {
+                        canceled = failure is java.util.concurrent.CancellationException
+                    }
+                }
+            assertTrue(h.service.grantFrame(endpoint, 4, 20))
+            h.service.submitTurn(endpoint, 4, emptyList(), observer)
+            h.events +=
+                ExperimentalFleetEvent.Outcome(
+                    1,
+                    4,
+                    VmOutcome.HostRequestBatch(
+                        listOf(VmHostRequest(1, capability, 0, emptyList()), VmHostRequest(2, capability, 0, emptyList())),
+                    ),
+                )
+            h.service.pump(10, 10)
+            h.service.pump(10, 10)
+            assertEquals(1, deliveries)
+            assertTrue(canceled)
+        }
+    }
+
+    @Test
+    fun `observer failure settles reservation and does not block another actor`() {
+        Harness().use { h ->
+            val capability = CapabilityIdentity("test", "device", 1, 0)
+            val schema = HostCapabilitySchema(capability, listOf(HostOperationSchema(emptyList(), HostValueType.UNIT, true)))
+            val a = h.register(1, schemas = listOf(schema))
+            val b = h.register(2)
+            var deliveries = 0
+            var failed = false
+            var otherCompleted = false
+            val observer =
+                object : ProgramRuntimeTurnObserver {
+                    override fun addonAction(action: ProgramAddonAction) {
+                        deliveries++
+                        error("handler failed")
+                    }
+
+                    override fun complete(
+                        reply: ProgramRuntimeActorReply?,
+                        failure: Throwable?,
+                    ) {
+                        failed = failure is IllegalStateException
+                    }
+                }
+            assertTrue(h.service.grantFrame(a, 4, 20))
+            assertTrue(h.service.grantFrame(b, 4, 20))
+            h.service.submitTurn(a, 4, emptyList(), observer)
+            h.service.submitTurn(b, 4, emptyList()) { _, failure ->
+                check(failure == null)
+                otherCompleted = true
+            }
+            h.events +=
+                ExperimentalFleetEvent.Outcome(
+                    1,
+                    4,
+                    VmOutcome.HostRequestBatch(
+                        listOf(VmHostRequest(1, capability, 0, emptyList()), VmHostRequest(2, capability, 0, emptyList())),
+                    ),
+                )
+            h.events += ExperimentalFleetEvent.Quiescent(1, 4, 6, false)
+            h.events += ExperimentalFleetEvent.Quiescent(2, 4, 2, false)
+            h.service.pump(10, 10)
+            assertEquals(1, deliveries)
+            assertTrue(failed && otherCompleted)
+            assertTrue(h.service.grantFrame(a, 5, 20))
+        }
+    }
+
+    @Test
+    fun `mixed batches forward only unmanaged requests and final-only callers retain the raw hook`() {
+        for (streaming in listOf(false, true)) {
+            Harness().use { h ->
+                val capability = CapabilityIdentity("test", "device", 1, 0)
+                val schema = HostCapabilitySchema(capability, listOf(HostOperationSchema(emptyList(), HostValueType.UNIT, true)))
+                val endpoint = h.register(1, schemas = listOf(schema))
+                val requests =
+                    listOf(
+                        VmHostRequest(1, CapabilityIdentity("compukter", "timer", 1, 0), 0, emptyList()),
+                        VmHostRequest(2, capability, 0, emptyList()),
+                        VmHostRequest(3, capability.copy(abiMinor = 1), 0, emptyList()),
+                    )
+                var delivered = 0
+                val completion: ProgramRuntimeTurnCompletion =
+                    if (streaming) {
+                        object : ProgramRuntimeTurnObserver {
+                            override fun addonAction(action: ProgramAddonAction) {
+                                delivered++
+                                assertEquals(requests[1].identity, assertIs<ProgramAddonAction.Request>(action).request.identity)
+                            }
+
+                            override fun complete(
+                                reply: ProgramRuntimeActorReply?,
+                                failure: Throwable?,
+                            ) = Unit
+                        }
+                    } else {
+                        ProgramRuntimeTurnCompletion { _, _ -> }
+                    }
+                assertTrue(h.service.grantFrame(endpoint, 4, 20))
+                h.service.submitTurn(endpoint, 4, emptyList(), completion)
+                h.events += ExperimentalFleetEvent.Outcome(1, 4, VmOutcome.HostRequestBatch(requests))
+                h.service.pump(10, 10)
+                assertEquals(if (streaming) 1 else 0, delivered)
+                val forwarded =
+                    assertIs<VmOutcome.HostRequestBatch>(assertIs<ExperimentalFleetEvent.Outcome>(h.observedEvents.single()).outcome)
+                assertEquals(if (streaming) listOf(requests[0], requests[2]) else requests, forwarded.requests)
+            }
+        }
+    }
+
+    @Test
+    fun `stop from replacement cleanup suppresses the following program start`() {
+        Harness().use { h ->
+            val endpoint = h.register(1)
+            val actions = mutableListOf<ProgramAddonAction>()
+            val observer =
+                object : ProgramRuntimeTurnObserver {
+                    override fun addonAction(action: ProgramAddonAction) {
+                        actions += action
+                        checkNotNull(h.service.stop(endpoint))
+                    }
+
+                    override fun complete(
+                        reply: ProgramRuntimeActorReply?,
+                        failure: Throwable?,
+                    ) = Unit
+                }
+            assertTrue(h.service.grantFrame(endpoint, 4, 20))
+            h.service.submitTurn(endpoint, 4, emptyList(), observer)
+            h.events += ExperimentalFleetEvent.Outcome(1, 4, VmOutcome.ProcessReplaced(0, 1))
+            h.service.pump(10, 10)
+            assertEquals(listOf<ProgramAddonAction>(ProgramAddonAction.Stopped(0)), actions)
+        }
+    }
+
     private class Harness(
         maximumRequests: Int = 16,
         private val closeFailureFor: Long? = null,
@@ -441,6 +657,7 @@ class NativeFleetActorRuntimeServiceTest {
         val grants = mutableListOf<Pair<Long, Int>>()
         val queries = mutableListOf<Long>()
         val observed = mutableListOf<VmActorEndpoint>()
+        val observedEvents = mutableListOf<ExperimentalFleetEvent>()
         val closedMachines = mutableListOf<Long>()
         val replies = mutableListOf<VmHostRequestIdentity>()
         var busyReplies = false
@@ -526,6 +743,7 @@ class NativeFleetActorRuntimeServiceTest {
                 )
             }, {}, { endpoint, event ->
                 observed += endpoint
+                observedEvents += event
                 check(event !is ExperimentalFleetEvent.Stopped || event.machine != cancellationFailureFor) { "cancellation failed" }
             }, { 100 }, byteLimits)
 
@@ -533,6 +751,7 @@ class NativeFleetActorRuntimeServiceTest {
             machine: Long,
             computerId: ComputerId = ComputerId.fromLongs(0, machine),
             epoch: Long = 1,
+            schemas: List<HostCapabilitySchema> = emptyList(),
         ): VmActorEndpoint {
             val session =
                 Proxy.newProxyInstance(ProgramVmSession::class.java.classLoader, arrayOf(ProgramVmSession::class.java)) { _, method, _ ->
@@ -564,7 +783,7 @@ class NativeFleetActorRuntimeServiceTest {
                 object : ProgramVmSessionFactory {
                     override fun open(artifact: ByteArray) = session
                 }
-            val host = ProgramRuntimeHost(factory)
+            val host = ProgramRuntimeHost(factory, addonCapabilitySchemas = schemas)
             host.start(byteArrayOf())
             host.transferToFleet(fleet, 0)
             val endpoint = VmActorEndpoint(computerId, epoch)

@@ -5,12 +5,15 @@
  */
 package ru.lazyhat.compukters.core.device.runtime.actor
 
+import ru.lazyhat.compukters.api.addon.ProgramAddonAction
 import ru.lazyhat.compukters.core.LOGGER
+import ru.lazyhat.compukters.core.device.runtime.program.ProgramAddonLifecyclePort
 import ru.lazyhat.compukters.core.device.runtime.program.ProgramRuntimeHost
 import ru.lazyhat.compukters.core.device.runtime.program.ProgramRuntimeState
 import ru.lazyhat.compukters.lang.runtime.vm.ExperimentalFleet
 import ru.lazyhat.compukters.lang.runtime.vm.ExperimentalFleetEvent
 import ru.lazyhat.compukters.lang.runtime.vm.RedstoneWire
+import ru.lazyhat.compukters.lang.runtime.vm.VmHostRequest
 import ru.lazyhat.compukters.lang.runtime.vm.VmOutcome
 import java.util.concurrent.CancellationException
 import java.util.concurrent.CompletableFuture
@@ -22,8 +25,10 @@ import java.util.concurrent.CompletableFuture
  *
  * Boot, checkpoint restoration, redstone/sound completion translation and backend selection are
  * not wired here yet. Addon completions are admitted with their continuation as an ordered batch.
- * Unsupported requests/effects are rejected before admission. External
- * host/compilation events go to [onExternalEvent] on the owner, without a second result backlog.
+ * Unsupported requests/effects are rejected before admission.
+ * Addon requests and program lifecycle actions stream to a turn observer on the owner thread;
+ * final-only callers and unsupported host/compilation events use [onExternalEvent]. Neither path
+ * accumulates a second result backlog. Only the final Quiescent report settles turn credit.
  * Stop is asynchronous but currently requires this service's owner pump; it is not yet a
  * replacement for the production lease's independent shutdown barrier.
  * The caller owns the fleet and closes this service only after all stops have completed.
@@ -186,7 +191,7 @@ internal class NativeFleetActorRuntimeService(
                 )
             }
         }
-        actor.turn = Turn(id, allowance, completion)
+        actor.turn = Turn(id, allowance, completion) { machines[actor.machine] === actor && actor.stopping == null && actor.turn?.id == id }
         credit.inFlight = true
         if (continuation) credit.continuations++
         actor.lastTurnTick = worldTick
@@ -271,8 +276,7 @@ internal class NativeFleetActorRuntimeService(
             is ExperimentalFleetEvent.Outcome -> {
                 val actor = machines[event.machine] ?: return
                 if (actor.stopping != null) return
-                actor.host.observeFleetOutcome(fleet, actor.machine, event.outcome)
-                onExternalEvent(actor.endpoint, event)
+                observeOutcome(actor, event)
             }
 
             is ExperimentalFleetEvent.Quiescent -> {
@@ -343,6 +347,57 @@ internal class NativeFleetActorRuntimeService(
         }
     }
 
+    private fun observeOutcome(
+        actor: Actor,
+        event: ExperimentalFleetEvent.Outcome,
+    ) {
+        val turn = actor.turn
+        if (turn?.completion !is ProgramRuntimeTurnObserver) {
+            actor.host.observeFleetOutcome(fleet, actor.machine, event.outcome)
+            if (isCurrent(actor, turn)) onExternalEvent(actor.endpoint, event)
+            return
+        }
+        actor.host.observeFleetOutcome(fleet, actor.machine, event.outcome, turn)
+        if (!isCurrent(actor, turn)) return
+        when (val outcome = event.outcome) {
+            is VmOutcome.HostRequestBatch -> {
+                var handled = false
+                var unhandled: MutableList<VmHostRequest>? = null
+                for (index in outcome.requests.indices) {
+                    val request = outcome.requests[index]
+                    if (!isCurrent(actor, turn)) return
+                    val prepared = actor.host.prepareFleetAddonRequest(fleet, actor.machine, request)
+                    if (prepared == null) {
+                        if (handled) (unhandled ?: mutableListOf<VmHostRequest>().also { unhandled = it }).add(request)
+                    } else {
+                        if (!handled && index > 0) unhandled = ArrayList(outcome.requests.subList(0, index))
+                        handled = true
+                        turn.submit(ProgramAddonAction.Request(prepared))
+                    }
+                }
+                if (!isCurrent(actor, turn)) return
+                if (!handled) {
+                    onExternalEvent(actor.endpoint, event)
+                } else {
+                    unhandled?.let { onExternalEvent(actor.endpoint, event.copy(outcome = VmOutcome.HostRequestBatch(it))) }
+                }
+            }
+
+            is VmOutcome.ProcessEntered, is VmOutcome.ProcessExited, is VmOutcome.ProcessReplaced -> {
+                Unit
+            }
+
+            else -> {
+                onExternalEvent(actor.endpoint, event)
+            }
+        }
+    }
+
+    private fun isCurrent(
+        actor: Actor,
+        turn: Turn?,
+    ): Boolean = machines[actor.machine] === actor && actor.stopping == null && actor.turn === turn
+
     private fun finishTurn(
         actor: Actor,
         event: ExperimentalFleetEvent.Quiescent,
@@ -354,7 +409,8 @@ internal class NativeFleetActorRuntimeService(
         val delta = credit.finishCumulative(event.retired, turn.allowance)
         actor.turn = null
         val reply = ProgramRuntimeActorReply(turn.id, actor.host.state, ProgramRuntimeActorValue.None, actor.generation, delta)
-        complete(turn.completion, reply, null)
+        val failure = turn.observationFailure
+        complete(turn.completion, if (failure == null) reply else null, failure)
     }
 
     private fun finishQuery(
@@ -478,7 +534,22 @@ internal class NativeFleetActorRuntimeService(
         val id: ProgramRuntimeRequestId,
         val allowance: Long,
         val completion: ProgramRuntimeTurnCompletion,
-    )
+        val isActive: () -> Boolean,
+    ) : ProgramAddonLifecyclePort {
+        var observationFailure: Exception? = null
+            private set
+
+        override fun submit(action: ProgramAddonAction): Boolean {
+            if (observationFailure == null && isActive()) {
+                try {
+                    (completion as ProgramRuntimeTurnObserver).addonAction(action)
+                } catch (failure: Exception) {
+                    observationFailure = failure
+                }
+            }
+            return true
+        }
+    }
 
     private class Query(
         val response: NativeFleetRequest.Response,

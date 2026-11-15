@@ -686,6 +686,11 @@ internal fun interface ProgramRuntimeTurnCompletion {
     )
 }
 
+/** Owner-delivered actions may arrive before final credit settlement; they do not finish the turn. */
+internal interface ProgramRuntimeTurnObserver : ProgramRuntimeTurnCompletion {
+    fun addonAction(action: ProgramAddonAction)
+}
+
 class ProgramRuntimeActorRequestException(
     val submission: VmActorSubmission,
 ) : IllegalStateException("runtime actor request was not accepted: $submission")

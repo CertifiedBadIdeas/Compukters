@@ -34,7 +34,7 @@ import ru.lazyhat.compukters.core.device.runtime.actor.ProgramRuntimeActorReques
 import ru.lazyhat.compukters.core.device.runtime.actor.ProgramRuntimeActorService
 import ru.lazyhat.compukters.core.device.runtime.actor.ProgramRuntimeActorValue
 import ru.lazyhat.compukters.core.device.runtime.actor.ProgramRuntimeRequestId
-import ru.lazyhat.compukters.core.device.runtime.actor.ProgramRuntimeTurnCompletion
+import ru.lazyhat.compukters.core.device.runtime.actor.ProgramRuntimeTurnObserver
 import ru.lazyhat.compukters.core.device.runtime.actor.VmActorSubmission
 import ru.lazyhat.compukters.core.device.runtime.program.EmptyProgramAddonHost
 import ru.lazyhat.compukters.core.device.runtime.program.ProgramFailure
@@ -257,8 +257,18 @@ class ActorProgramComputer internal constructor(
             }
         val currentLifecycle = lifecycle
         val completion =
-            ProgramRuntimeTurnCompletion { reply, failure ->
-                completeTurn(reply, failure, currentLifecycle, worldTick)
+            object : ProgramRuntimeTurnObserver {
+                override fun addonAction(action: ProgramAddonAction) {
+                    checkOwner()
+                    acceptAddonAction(action, currentLifecycle)
+                }
+
+                override fun complete(
+                    reply: ProgramRuntimeActorReply?,
+                    failure: Throwable?,
+                ) {
+                    completeTurn(reply, failure, currentLifecycle, worldTick)
+                }
             }
         if (continuation) {
             if (!service.continueTurn(lease.endpoint, worldTick, effects, completion)) return
@@ -300,6 +310,7 @@ class ActorProgramComputer internal constructor(
             publish(observed.state)
             if (version != lifecycle || closeResult != null) return
             acceptAdvanceReply(observed, version)
+            if (version != lifecycle || closeResult != null) return
             if (pendingOutput != null || pendingSound != null || pendingAddonCompletions.isNotEmpty()) {
                 submitTurn(worldTick, continuation = true)
             }
@@ -381,41 +392,50 @@ class ActorProgramComputer internal constructor(
         return result.copy()
     }
 
+    private fun acceptAddonAction(
+        action: ProgramAddonAction,
+        currentLifecycle: Long,
+    ) {
+        if (currentLifecycle != lifecycle || closeResult != null) return
+        when (action) {
+            is ProgramAddonAction.Started -> {
+                addon.programStarted(action.programId)
+            }
+
+            is ProgramAddonAction.Stopped -> {
+                addon.programStopped(action.programId)
+                if (currentLifecycle != lifecycle || closeResult != null) return
+                val retired = outstandingAddonRequests.filterValues { it == action.programId }.keys
+                pendingAddonCompletions.removeAll { it.identity in retired }
+                retired.forEach(outstandingAddonRequests::remove)
+            }
+
+            is ProgramAddonAction.Request -> {
+                val addonRequest = action.request
+                check(
+                    outstandingAddonRequests.put(addonRequest.identity, addonRequest.programId) == null,
+                ) { "duplicate pending addon request" }
+                val result =
+                    try {
+                        addon.dispatch(addonRequest)
+                    } catch (_: Exception) {
+                        ProgramAddonDispatch.Completed(HostResponse.Failure(HostFailureKind.INPUT_OUTPUT, "Addon request failed"))
+                    }
+                if (currentLifecycle != lifecycle || closeResult != null) return
+                if (result is ProgramAddonDispatch.Completed) {
+                    pendingAddonCompletions += ProgramAddonCompletion(addonRequest.identity, result.response)
+                }
+                hostCompletionTick = lastObservedServerTick
+            }
+        }
+    }
+
     private fun acceptAdvanceReply(
         reply: ProgramRuntimeActorReply,
         currentLifecycle: Long,
     ) {
-        reply.addonActions.forEach { action ->
-            when (action) {
-                is ProgramAddonAction.Started -> {
-                    addon.programStarted(action.programId)
-                }
-
-                is ProgramAddonAction.Stopped -> {
-                    addon.programStopped(action.programId)
-                    val retired = outstandingAddonRequests.filterValues { it == action.programId }.keys
-                    pendingAddonCompletions.removeAll { it.identity in retired }
-                    retired.forEach(outstandingAddonRequests::remove)
-                }
-
-                is ProgramAddonAction.Request -> {
-                    val addonRequest = action.request
-                    check(
-                        outstandingAddonRequests.put(addonRequest.identity, addonRequest.programId) == null,
-                    ) { "duplicate pending addon request" }
-                    val result =
-                        try {
-                            addon.dispatch(addonRequest)
-                        } catch (_: Exception) {
-                            ProgramAddonDispatch.Completed(HostResponse.Failure(HostFailureKind.INPUT_OUTPUT, "Addon request failed"))
-                        }
-                    if (result is ProgramAddonDispatch.Completed) {
-                        pendingAddonCompletions += ProgramAddonCompletion(addonRequest.identity, result.response)
-                    }
-                    hostCompletionTick = lastObservedServerTick
-                }
-            }
-        }
+        reply.addonActions.forEach { acceptAddonAction(it, currentLifecycle) }
+        if (currentLifecycle != lifecycle || closeResult != null) return
         when (val request = reply.value) {
             is ProgramRuntimeActorValue.RedstoneOutputRequested -> {
                 val result =

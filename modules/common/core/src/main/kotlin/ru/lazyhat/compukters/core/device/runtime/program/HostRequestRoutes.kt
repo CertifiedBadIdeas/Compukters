@@ -17,6 +17,17 @@ internal object HostRequestRoutes {
 
     fun isSound(request: VmHostRequest): Boolean = request.capability == sound && request.operation == 0
 
+    fun isAddon(
+        request: VmHostRequest,
+        schemas: List<HostCapabilitySchema>,
+    ): Boolean =
+        schemas.any { schema ->
+            schema.identity.namespace == request.capability.namespace &&
+                schema.identity.name == request.capability.name &&
+                schema.identity.abiMajor == request.capability.abiMajor &&
+                schema.identity.abiMinor >= request.capability.abiMinor
+        }
+
     fun partition(
         requests: List<VmHostRequest>,
         addonSchemas: List<HostCapabilitySchema>,
@@ -29,18 +40,9 @@ internal object HostRequestRoutes {
         for (request in requests) {
             when {
                 request.capability == redstone && request.operation in 6..7 -> redstoneRequests.add(request)
-
                 isSound(request) -> soundRequests.add(request)
-
                 request.capability == timer && request.operation == 0 -> timerRequests.add(request)
-
-                addonSchemas.any { schema ->
-                    schema.identity.namespace == request.capability.namespace &&
-                        schema.identity.name == request.capability.name &&
-                        schema.identity.abiMajor == request.capability.abiMajor &&
-                        schema.identity.abiMinor >= request.capability.abiMinor
-                } -> addonRequests.add(request)
-
+                isAddon(request, addonSchemas) -> addonRequests.add(request)
                 else -> unavailable.add(request)
             }
         }
