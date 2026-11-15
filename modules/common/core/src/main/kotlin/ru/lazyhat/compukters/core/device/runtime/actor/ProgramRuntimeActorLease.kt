@@ -23,22 +23,60 @@ import java.util.concurrent.CompletableFuture
 /** The close result is produced by the worker after draining accepted work and closing native resources. */
 class ProgramRuntimeActorLease internal constructor(
     val endpoint: VmActorEndpoint,
-    private val closed: CompletableFuture<Long?>,
-    private val prepareHibernation: (ProgramActorHibernation) -> Unit,
-    private val unregister: () -> CompletableFuture<Boolean>,
+    prepareClose: (ProgramActorHibernation?) -> ProgramActorCloseReservation,
 ) {
-    private var closing: CompletableFuture<Long?>? = null
+    internal constructor(
+        endpoint: VmActorEndpoint,
+        closed: CompletableFuture<Long?>,
+        prepareHibernation: (ProgramActorHibernation) -> Unit,
+        unregister: () -> CompletableFuture<Boolean>,
+    ) : this(endpoint, { request ->
+        ProgramActorCloseReservation {
+            if (request != null) prepareHibernation(request)
+            unregister().thenCompose { closed }
+        }
+    })
+
+    private var prepareClose: ((ProgramActorHibernation?) -> ProgramActorCloseReservation)? = prepareClose
+    private var closing: ProgramActorCloseReservation? = null
 
     /** Does not require server result pumping; callbacks may execute on the closing worker. */
-    fun closeAsync(): CompletableFuture<Long?> = finishClose(null)
+    fun closeAsync(): CompletableFuture<Long?> = reserveClose(null).commit()
 
-    internal fun hibernateAsync(request: ProgramActorHibernation): CompletableFuture<Long?> = finishClose(request)
+    internal fun hibernateAsync(request: ProgramActorHibernation): CompletableFuture<Long?> = reserveClose(request).commit()
+
+    /** Rejection must happen before returning a reservation, without canceling live carrier work. */
+    @Synchronized
+    internal fun reserveClose(request: ProgramActorHibernation?): ProgramActorCloseReservation {
+        closing?.let { return it }
+        val accepted = checkNotNull(prepareClose)(request)
+        closing = accepted
+        prepareClose = null
+        return accepted
+    }
+}
+
+/** Admission is side-effect-free for the carrier; commit is idempotent, including reentrant calls. */
+internal class ProgramActorCloseReservation(
+    commitClose: () -> CompletableFuture<Long?>,
+) {
+    private var commitClose: (() -> CompletableFuture<Long?>)? = commitClose
+    private val completed = CompletableFuture<Long?>()
+
+    fun result(): CompletableFuture<Long?> = completed.copy()
 
     @Synchronized
-    private fun finishClose(request: ProgramActorHibernation?): CompletableFuture<Long?> {
-        closing?.let { return it.copy() }
-        if (request != null) prepareHibernation(request)
-        return unregister().thenCompose { closed }.also { closing = it }.copy()
+    fun commit(): CompletableFuture<Long?> {
+        val action = commitClose ?: return completed.copy()
+        commitClose = null
+        try {
+            action().whenComplete { generation, failure ->
+                if (failure == null) completed.complete(generation) else completed.completeExceptionally(failure)
+            }
+        } catch (failure: Throwable) {
+            completed.completeExceptionally(failure)
+        }
+        return completed.copy()
     }
 }
 

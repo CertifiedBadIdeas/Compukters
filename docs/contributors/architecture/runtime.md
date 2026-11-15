@@ -121,8 +121,8 @@ owner result pumping. Canceling a returned future does not cancel the close. Clo
 are bounded by the actor admission limit, with no per-idle-machine reservation. Ordinary output from other machines
 remains untouched. Shutdown waits for both the event waiter and the lifecycle worker before allowing fleet destruction.
 Transport errors retain the charged head for retry; cleanup errors fail the individual barrier. Bootstrap, restoration,
-redstone/sound completion translation, broader command parity, checkpoint detach/capture and production lease wiring
-still need integration; production backend selection remains unchanged.
+redstone/sound completion translation and broader command parity still need integration; production backend selection
+remains unchanged.
 
 The native checkpoint-detach primitive is available through both experimental transports. It drains accepted
 commands, validates the capture tick, settles remaining external routes with Unavailable without advancing Guest,
@@ -142,8 +142,22 @@ encoded payload and rotates to another machine; retries neither recover the sess
 Successful capture reconciles the final filesystem generation and closes the host before completing its barrier;
 checkpoint failure discards stale saved execution, closes the recovered host and fails that barrier. Payload charges
 are returned on either terminal path. Actor/query cancellation and reentrant ownership handoff follow the same rules
-as stop. No owner pumping is required. Production lease wiring, boot/restore backend selection and broader builtin
-completion parity still need integration.
+as stop. No owner pumping is required.
+
+The common `ProgramRuntimeActorLease` separates admission from commit for both backends. Native admission validates
+final addon completions, reserves checkpoint bytes alongside their command bytes, and either admits the whole close
+or retains no prefix. Carrier lifecycle state, pending replies and addon resources remain live after refusal. After
+admission, the carrier fences callbacks before commit starts backend cancellation; repeated or reentrant closes join
+one barrier, and canceling a returned future cannot cancel native work. Reservation actions are dropped on commit,
+so completed leases do not retain checkpoint payloads or their backend preparation closures. Native `attach` produces
+this lease for an already started/restored and transferred host. Bootstrap remains outside that service.
+
+If addon state cannot be saved, native lease close drains acknowledged replies, detaches and recovers the session,
+then discards stored execution before closing. This path reserves only scalar control bytes and reports the filesystem
+generation after discard. StoreBusy keeps exclusive recovered ownership for retry. A later store reopen must not restore
+the discarded execution. Native final addon replies are supported; redstone/sound completions reject before admission
+until their translation is implemented. Production boot/restore selection, world-lifecycle admission retry and broader
+builtin completion parity remain required before selecting the native backend.
 
 ## Addon host boundary
 

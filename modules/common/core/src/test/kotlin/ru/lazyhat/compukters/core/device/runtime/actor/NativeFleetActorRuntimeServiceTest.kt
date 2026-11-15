@@ -47,6 +47,70 @@ import kotlin.test.assertTrue
 
 class NativeFleetActorRuntimeServiceTest {
     @Test
+    fun `native lease returns payload reservation when final reply entry admission is full`() =
+        Harness(maximumRequests = 1).use { h ->
+            val endpoint = h.register(1, leased = true)
+            h.service.request(endpoint, ProgramRuntimeActorCommand::FileSystemGeneration)
+            val identity = VmHostRequestIdentity(1, 8)
+            val request =
+                ProgramActorHibernation(
+                    10,
+                    byteArrayOf(),
+                    listOf(
+                        ProgramRuntimeActorEffect.CompleteAddons(listOf(ProgramAddonCompletion(identity, HostResponse.UnitSuccess))),
+                    ),
+                )
+            val lease = checkNotNull(h.leases[1])
+            repeat(2) { assertFailsWith<ProgramRuntimeActorRequestException> { lease.reserveClose(request) } }
+            assertTrue(h.replies.isEmpty())
+            h.service.pump(0, 1)
+            assertEquals(7L, lease.hibernateAsync(request).get(5, TimeUnit.SECONDS))
+            assertEquals(listOf(identity), h.captureReplies[1])
+        }
+
+    @Test
+    fun `native lease drains final addon reply before capture without a grant or owner pump`() =
+        Harness().use { h ->
+            h.register(1, leased = true)
+            val identity = VmHostRequestIdentity(1, 8)
+            val effect = ProgramRuntimeActorEffect.CompleteAddons(listOf(ProgramAddonCompletion(identity, HostResponse.UnitSuccess)))
+            val request = ProgramActorHibernation(10, byteArrayOf(4), listOf(effect))
+            assertEquals(7L, checkNotNull(h.leases[1]).hibernateAsync(request).get(5, TimeUnit.SECONDS))
+            assertEquals(listOf(identity), h.captureReplies[1])
+            assertTrue(h.grants.isEmpty())
+            assertEquals(listOf(1L), h.closedMachines)
+        }
+
+    @Test
+    fun `native lease rejects combined checkpoint and reply bytes without retaining a prefix`() {
+        val identity = VmHostRequestIdentity(1, 8)
+        val charge = NativeFleetOutbox.Command.Reply(identity, HostResponse.UnitSuccess).retainedBytes
+        Harness(byteLimits = NativeFleetOutboxLimits(8554 + charge - 1, 8554 + charge - 1)).use { h ->
+            val endpoint = h.register(1, leased = true)
+            val effect = ProgramRuntimeActorEffect.CompleteAddons(listOf(ProgramAddonCompletion(identity, HostResponse.UnitSuccess)))
+            val request = ProgramActorHibernation(10, byteArrayOf(), listOf(effect))
+            val lease = checkNotNull(h.leases[1])
+            assertFailsWith<ProgramRuntimeActorRequestException> { lease.reserveClose(request) }
+            h.service.pump(0, 10)
+            assertTrue(h.replies.isEmpty())
+            assertTrue(h.service.grantFrame(endpoint, 10, 8))
+            assertEquals(7L, lease.closeAsync().get(5, TimeUnit.SECONDS))
+            assertTrue(h.captured.isEmpty())
+        }
+    }
+
+    @Test
+    fun `native lease can discard saved execution under the scalar control budget`() =
+        Harness(byteLimits = NativeFleetOutboxLimits(64, 64)).use { h ->
+            h.register(1, leased = true)
+            val request = ProgramActorHibernation(10, byteArrayOf(4), emptyList(), saveExecution = false)
+            assertEquals(7L, checkNotNull(h.leases[1]).hibernateAsync(request).get(5, TimeUnit.SECONDS))
+            assertTrue(h.captured.isEmpty())
+            assertEquals(listOf(1L), h.discardedMachines)
+            assertEquals(listOf(1L), h.closedMachines)
+        }
+
+    @Test
     fun `checkpoint worker copies addon state and closes without owner pumping`() =
         Harness().use { h ->
             val endpoint = h.register(1)
@@ -737,6 +801,9 @@ class NativeFleetActorRuntimeServiceTest {
         val closedMachines = CopyOnWriteArrayList<Long>()
         val replies = CopyOnWriteArrayList<VmHostRequestIdentity>()
 
+        val leases = mutableMapOf<Long, ProgramRuntimeActorLease>()
+        val captureReplies = ConcurrentHashMap<Long, List<VmHostRequestIdentity>>()
+        val discardedMachines = CopyOnWriteArrayList<Long>()
         val captured = ConcurrentHashMap<Long, ByteArray>()
         val recoveredMachines = CopyOnWriteArrayList<Long>()
 
@@ -858,6 +925,7 @@ class NativeFleetActorRuntimeServiceTest {
             computerId: ComputerId = ComputerId.fromLongs(0, machine),
             epoch: Long = 1,
             schemas: List<HostCapabilitySchema> = emptyList(),
+            leased: Boolean = false,
         ): VmActorEndpoint {
             val session =
                 Proxy.newProxyInstance(ProgramVmSession::class.java.classLoader, arrayOf(ProgramVmSession::class.java)) { _, method, args ->
@@ -882,6 +950,7 @@ class NativeFleetActorRuntimeServiceTest {
                                 throw ru.lazyhat.compukters.lang.runtime.vm
                                     .VmBridgeException("capture failed")
                             }
+                            captureReplies[machine] = replies.toList()
                             captured[machine] = args!![0] as ByteArray
                             null
                         }
@@ -908,12 +977,20 @@ class NativeFleetActorRuntimeServiceTest {
             val factory =
                 object : ProgramVmSessionFactory {
                     override fun open(artifact: ByteArray) = session
+
+                    override fun discardCheckpoint() {
+                        discardedMachines += machine
+                    }
                 }
             val host = ProgramRuntimeHost(factory, addonCapabilitySchemas = schemas)
             host.start(byteArrayOf())
             host.transferToFleet(fleet, 0)
             val endpoint = VmActorEndpoint(computerId, epoch)
-            assertTrue(service.register(endpoint, machine, host))
+            if (leased) {
+                leases[machine] = checkNotNull(service.attach(endpoint, machine, host))
+            } else {
+                assertTrue(service.register(endpoint, machine, host))
+            }
             endpoints += endpoint
             return endpoint
         }

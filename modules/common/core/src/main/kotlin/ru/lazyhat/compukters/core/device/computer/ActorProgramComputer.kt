@@ -352,30 +352,25 @@ class ActorProgramComputer internal constructor(
                 if (pendingAddonCompletions.isNotEmpty()) add(ProgramRuntimeActorEffect.CompleteAddons(pendingAddonCompletions.toList()))
             }
         val request = ProgramActorHibernation(worldTick, addonState, effects, saveExecution)
-        lifecycle++
-        cancelLifecycleStage()
-        restoring = false
-        pendingOutput = null
-        pendingSound = null
-        pendingRedstoneInputs.clear()
-        pendingAddonCompletions.clear()
-        outstandingAddonRequests.clear()
-        hostCompletionTick = null
-        val result = lease.hibernateAsync(request)
-        closeResult = result
-        try {
-            addon.close()
-        } catch (failure: Exception) {
-            LOGGER.warn(failure) { "Computer addon cleanup failed after native close was scheduled" }
-        }
-        publish(ProgramRuntimeState.Closed)
-        return result.copy()
+        return closeWith(request)
     }
 
     /** The future completes after accepted work drains and native resources close, without requiring result pumping. */
     fun closeAsync(): CompletableFuture<Long?> {
         checkOwner()
         closeResult?.let { return it.copy() }
+        return closeWith(null)
+    }
+
+    private fun closeWith(request: ProgramActorHibernation?): CompletableFuture<Long?> {
+        val reservation =
+            try {
+                lease.reserveClose(request)
+            } catch (failure: Exception) {
+                return CompletableFuture.failedFuture(failure)
+            }
+        val result = reservation.result()
+        closeResult = result // Fence reentrant callbacks before committing backend cancellation.
         lifecycle++
         cancelLifecycleStage()
         restoring = false
@@ -384,10 +379,13 @@ class ActorProgramComputer internal constructor(
         pendingRedstoneInputs.clear()
         pendingAddonCompletions.clear()
         outstandingAddonRequests.clear()
-        addon.close()
         hostCompletionTick = null
-        val result = lease.closeAsync()
-        closeResult = result
+        reservation.commit()
+        try {
+            addon.close()
+        } catch (failure: Exception) {
+            LOGGER.warn(failure) { "Computer addon cleanup failed after native close was scheduled" }
+        }
         publish(ProgramRuntimeState.Closed)
         return result.copy()
     }

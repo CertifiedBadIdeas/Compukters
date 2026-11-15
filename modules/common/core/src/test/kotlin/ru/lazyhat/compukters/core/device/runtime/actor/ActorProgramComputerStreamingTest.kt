@@ -20,10 +20,95 @@ import ru.lazyhat.compukters.lang.runtime.vm.VmHostRequestIdentity
 import java.util.concurrent.CompletableFuture
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertTrue
 
 class ActorProgramComputerStreamingTest {
+    @Test
+    fun `refused hibernation retains carrier state addon resources and acknowledged replies`() {
+        val service = Service()
+        var addonClosed = 0
+        val addon =
+            object : TestAddon() {
+                override fun dispatch(request: ProgramAddonRequest) = ProgramAddonDispatch.Completed(HostResponse.UnitSuccess)
+
+                override fun close() {
+                    addonClosed++
+                }
+            }
+        var busy = true
+        var accepted: ProgramActorHibernation? = null
+        var commits = 0
+        val endpoint = VmActorEndpoint(ComputerId.fromLongs(0, 1), 1)
+        val lease =
+            ProgramRuntimeActorLease(endpoint) { request ->
+                if (busy) throw ProgramRuntimeActorRequestException(VmActorSubmission.MAILBOX_FULL)
+                accepted = request
+                ProgramActorCloseReservation {
+                    commits++
+                    CompletableFuture.completedFuture(7)
+                }
+            }
+        val carrier = ActorProgramComputer(service, lease, { RedstoneCommitResult.Committed }, addon = addon)
+        carrier.turnOn().join()
+        carrier.serverTick(4)
+        val observer = assertIs<ProgramRuntimeTurnObserver>(service.completion)
+        observer.addonAction(request(1))
+        val refused = carrier.hibernateAsync(4)
+        assertTrue(refused.isCompletedExceptionally)
+        assertEquals(ProgramRuntimeState.Running, carrier.state)
+        assertEquals(0, addonClosed)
+        assertEquals(0, commits)
+        busy = false
+        assertEquals(7L, carrier.hibernateAsync(4).join())
+        val replies = assertIs<ProgramRuntimeActorEffect.CompleteAddons>(checkNotNull(accepted).effects.single())
+        assertEquals(listOf(VmHostRequestIdentity(1, 1)), replies.completions.map { it.identity })
+        observer.complete(reply(), null)
+        assertTrue(service.continuations.isEmpty())
+        assertEquals(ProgramRuntimeState.Closed, carrier.state)
+        assertEquals(1, addonClosed)
+        assertEquals(1, commits)
+    }
+
+    @Test
+    fun `carrier fences callbacks before backend commits reentrant close`() {
+        val service = Service()
+        lateinit var carrier: ActorProgramComputer
+        var commits = 0
+        var addonClosed = 0
+        val endpoint = VmActorEndpoint(ComputerId.fromLongs(0, 1), 1)
+        val lease =
+            ProgramRuntimeActorLease(endpoint) {
+                ProgramActorCloseReservation {
+                    commits++
+                    val nested = carrier.closeAsync()
+                    assertFalse(nested.isDone)
+                    checkNotNull(service.completion).complete(reply(), IllegalStateException("turn canceled"))
+                    CompletableFuture.completedFuture(8)
+                }
+            }
+        carrier =
+            ActorProgramComputer(
+                service,
+                lease,
+                { RedstoneCommitResult.Committed },
+                addon =
+                    object : TestAddon() {
+                        override fun close() {
+                            addonClosed++
+                            error("cleanup failed")
+                        }
+                    },
+            )
+        carrier.turnOn().join()
+        carrier.serverTick(4)
+        assertEquals(8L, carrier.closeAsync().join())
+        assertEquals(ProgramRuntimeState.Closed, carrier.state)
+        assertEquals(1, commits)
+        assertEquals(1, addonClosed)
+    }
+
     @Test
     fun `streamed world result waits for turn settlement and is sent once`() {
         val service = Service()

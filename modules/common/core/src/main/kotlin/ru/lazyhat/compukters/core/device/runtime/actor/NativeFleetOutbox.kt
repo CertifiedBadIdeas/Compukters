@@ -192,11 +192,19 @@ internal class NativeFleetOutbox(
     fun reserveCheckpointPayload(
         machine: Long,
         bytes: ByteArray,
+        includeMetadata: Boolean = true,
+        precedingCommands: List<Command> = emptyList(),
     ): CheckpointPayload? {
         checkOwner()
         require(bytes.size <= 1024 * 1024)
-        val charge = 64L + ProgramHostCheckpoint.MAXIMUM_METADATA_BYTES + bytes.size
-        if (charge > byteLimits.perMachineBytes - (queues[machine]?.bytes ?: 0L) || !budget.reserve(0, charge)) return null
+        val charge = 64L + (if (includeMetadata) ProgramHostCheckpoint.MAXIMUM_METADATA_BYTES else 0) + bytes.size
+        var precedingBytes = 0L
+        for (command in precedingCommands) {
+            if (command.retainedBytes > byteLimits.perMachineBytes - precedingBytes) return null
+            precedingBytes += command.retainedBytes
+        }
+        val remaining = byteLimits.perMachineBytes - (queues[machine]?.bytes ?: 0L)
+        if (precedingBytes > remaining || charge > remaining - precedingBytes || !budget.reserve(0, charge)) return null
         return try {
             CheckpointPayload(bytes.copyOf(), budget, charge)
         } catch (failure: Throwable) {

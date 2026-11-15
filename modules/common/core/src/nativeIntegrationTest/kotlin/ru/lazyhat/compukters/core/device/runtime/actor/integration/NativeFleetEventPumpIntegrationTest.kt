@@ -7,6 +7,7 @@ package ru.lazyhat.compukters.core.device.runtime.actor.integration
 
 import ru.lazyhat.compukters.api.addon.ProgramAddonAction
 import ru.lazyhat.compukters.api.addon.ProgramAddonCompletion
+import ru.lazyhat.compukters.core.device.computer.ActorProgramComputer
 import ru.lazyhat.compukters.core.device.runtime.actor.ActorRuntimeService
 import ru.lazyhat.compukters.core.device.runtime.actor.NativeFleetActorRuntimeService
 import ru.lazyhat.compukters.core.device.runtime.actor.NativeFleetDispatcher
@@ -16,16 +17,19 @@ import ru.lazyhat.compukters.core.device.runtime.actor.ProgramRuntimeActorComman
 import ru.lazyhat.compukters.core.device.runtime.actor.ProgramRuntimeActorEffect
 import ru.lazyhat.compukters.core.device.runtime.actor.ProgramRuntimeActorFailure
 import ru.lazyhat.compukters.core.device.runtime.actor.ProgramRuntimeActorReply
+import ru.lazyhat.compukters.core.device.runtime.actor.ProgramRuntimeActorService
 import ru.lazyhat.compukters.core.device.runtime.actor.ProgramRuntimeActorValue
 import ru.lazyhat.compukters.core.device.runtime.actor.ProgramRuntimeFrameCredit
 import ru.lazyhat.compukters.core.device.runtime.actor.ProgramRuntimeTurnObserver
 import ru.lazyhat.compukters.core.device.runtime.actor.VmActorEndpoint
+import ru.lazyhat.compukters.core.device.runtime.actor.VmActorSchedulerConfig
 import ru.lazyhat.compukters.core.device.runtime.actor.VmActorSubmission
 import ru.lazyhat.compukters.core.device.runtime.program.NativeProgramVmSessionFactory
 import ru.lazyhat.compukters.core.device.runtime.program.ProgramFileSystemLaunchContext
 import ru.lazyhat.compukters.core.device.runtime.program.ProgramRuntimeHost
 import ru.lazyhat.compukters.core.device.runtime.program.ProgramRuntimeState
 import ru.lazyhat.compukters.core.device.runtime.program.ProgramStartResult
+import ru.lazyhat.compukters.core.device.runtime.program.RedstoneCommitResult
 import ru.lazyhat.compukters.core.device.runtime.program.integration.installFfmRuntime
 import ru.lazyhat.compukters.lang.runtime.capability.HostCapabilitySchema
 import ru.lazyhat.compukters.lang.runtime.capability.HostOperationSchema
@@ -65,9 +69,102 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertIs
 import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class NativeFleetEventPumpIntegrationTest {
+    @Test
+    fun `JVM actor lease hibernates without owner pumping and restores its native timer`() {
+        installFfmRuntime()
+        VmRuntime.loadNativeLibrary(Path.of(requireNotNull(System.getProperty("compukters.ffi.library"))))
+        val artifact = Path.of(requireNotNull(System.getProperty("compukters.fleet.timer.fixture"))).readBytes()
+        val header =
+            ByteBuffer
+                .allocate(16)
+                .order(ByteOrder.LITTLE_ENDIAN)
+                .put("CPKTSYS\u0000".encodeToByteArray())
+                .putShort(1)
+                .putShort(0)
+                .putInt(0)
+                .array()
+        val image = VmSystemImage.of(header + MessageDigest.getInstance("SHA-256").digest(header))
+        val root = Files.createTempDirectory("jvm-lease-checkpoint-").toRealPath()
+        val id = ComputerId.fromLongs(195, 196)
+        try {
+            WorldFileSystemStore.open(root).use { store ->
+                val factory = NativeProgramVmSessionFactory(ProgramFileSystemLaunchContext(store, id, image))
+                val host = ProgramRuntimeHost(factory)
+                assertEquals(ProgramStartResult.Started, host.start(artifact))
+                assertEquals(ProgramRuntimeState.Running, host.serverTick(1))
+                ProgramRuntimeActorService(VmActorSchedulerConfig(workerCount = 1, maximumActors = 1)).use { service ->
+                    val lease = checkNotNull(service.attach(VmActorEndpoint(id, 1), host))
+                    val carrier = ActorProgramComputer(service, lease, { RedstoneCommitResult.Committed })
+                    val generation = carrier.hibernateAsync(2, byteArrayOf(6)).get(5, TimeUnit.SECONDS)
+                    assertEquals(host.lastClosedFileSystemGeneration, generation)
+                }
+                val restored = ProgramRuntimeHost(factory)
+                val checkpoint = checkNotNull(restored.prepareRestoreBoot(100))
+                assertContentEquals(byteArrayOf(6), checkpoint.addonState)
+                assertEquals(1L, checkpoint.timers.single().remainingTicks)
+                restored.completeRestoration(100)
+                assertEquals(ProgramRuntimeState.Running, restored.serverTick(100))
+                assertIs<ProgramRuntimeState.Halted>(restored.serverTick(101))
+                restored.close()
+            }
+        } finally {
+            root.toFile().deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `native carrier cold boot close removes an unconsumed stored checkpoint`() {
+        installFfmRuntime()
+        VmRuntime.loadNativeLibrary(Path.of(requireNotNull(System.getProperty("compukters.ffi.library"))))
+        val artifact = Path.of(requireNotNull(System.getProperty("compukters.fleet.timer.fixture"))).readBytes()
+        val header =
+            ByteBuffer
+                .allocate(16)
+                .order(ByteOrder.LITTLE_ENDIAN)
+                .put("CPKTSYS\u0000".encodeToByteArray())
+                .putShort(1)
+                .putShort(0)
+                .putInt(0)
+                .array()
+        val image = VmSystemImage.of(header + MessageDigest.getInstance("SHA-256").digest(header))
+        val root = Files.createTempDirectory("fleet-lease-discard-").toRealPath()
+        val id = ComputerId.fromLongs(193, 194)
+        try {
+            WorldFileSystemStore.open(root).use { store ->
+                val factory = NativeProgramVmSessionFactory(ProgramFileSystemLaunchContext(store, id, image))
+                val saved = ProgramRuntimeHost(factory)
+                assertEquals(ProgramStartResult.Started, saved.start(artifact))
+                assertTrue(saved.hibernate(1, byteArrayOf(5)))
+                val running = ProgramRuntimeHost(factory)
+                assertEquals(ProgramStartResult.Started, running.start(artifact))
+                VmRuntime.openExperimentalFleet(ExperimentalFleetConfig(1, 32, 1, 128, 64, 64, 32, coordinatedTurns = true)).use { fleet ->
+                    val machine = running.transferToFleet(fleet, 2)
+                    NativeFleetActorRuntimeService(fleet, 1, 4, 4, {}, {}, { _, _ ->
+                        error("discard must not pump ordinary events")
+                    }, onActorClosing = {}).use { service ->
+                        val endpoint = VmActorEndpoint(id, 1)
+                        val lease = checkNotNull(service.attach(endpoint, machine, running))
+                        val carrier = ActorProgramComputer(service, lease, { RedstoneCommitResult.Committed })
+                        val closedGeneration = carrier.hibernateAsync(3, byteArrayOf(), saveExecution = false).get(5, TimeUnit.SECONDS)
+                        assertEquals(running.lastClosedFileSystemGeneration, closedGeneration)
+                        store.flush(id, checkNotNull(closedGeneration))
+                        assertNull(factory.restoreBoot())
+                    }
+                }
+            }
+            WorldFileSystemStore.open(root).use { reopened ->
+                val factory = NativeProgramVmSessionFactory(ProgramFileSystemLaunchContext(reopened, id, image))
+                assertNull(factory.restoreBoot())
+            }
+        } finally {
+            root.toFile().deleteRecursively()
+        }
+    }
+
     @Test
     fun `checkpoint capture uses native output and preserves timers without dispatching observations`() {
         installFfmRuntime()
@@ -123,8 +220,9 @@ class NativeFleetEventPumpIntegrationTest {
                         onActorClosing = {},
                     ).use { service ->
                         val endpoint = VmActorEndpoint(id, 1)
-                        assertTrue(service.register(endpoint, machine, host))
-                        val saved = checkNotNull(service.hibernate(endpoint, 2, addon))
+                        val lease = checkNotNull(service.attach(endpoint, machine, host))
+                        val carrier = ActorProgramComputer(service, lease, { RedstoneCommitResult.Committed })
+                        val saved = carrier.hibernateAsync(2, addon)
                         addon[0] = 99
                         val savedGeneration = saved.get(5, TimeUnit.SECONDS)
                         assertEquals(host.lastClosedFileSystemGeneration, savedGeneration)

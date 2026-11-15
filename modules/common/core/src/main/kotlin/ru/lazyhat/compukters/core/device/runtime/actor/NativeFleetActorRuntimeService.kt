@@ -107,6 +107,30 @@ internal class NativeFleetActorRuntimeService(
         return true
     }
 
+    /** Lease for an already started/restored and transferred host; bootstrap stays outside this service. */
+    fun attach(
+        endpoint: VmActorEndpoint,
+        machine: Long,
+        host: ProgramRuntimeHost,
+    ): ProgramRuntimeActorLease? {
+        if (!register(endpoint, machine, host)) return null
+        return ProgramRuntimeActorLease(endpoint) { request ->
+            prepareLeaseClose(endpoint, request)
+        }
+    }
+
+    private fun prepareLeaseClose(
+        endpoint: VmActorEndpoint,
+        request: ProgramActorHibernation?,
+    ): ProgramActorCloseReservation {
+        checkOwner()
+        closer.checkHealthy()
+        closing[endpoint]?.let { result -> return ProgramActorCloseReservation { result.thenApply { it } } }
+        val actor = actors[endpoint] ?: throw ProgramRuntimeActorRequestException(VmActorSubmission.STALE_ENDPOINT)
+        if (request == null) return ProgramActorCloseReservation { checkNotNull(stop(endpoint)).thenApply { it } }
+        return prepareCheckpoint(actor, request.worldTick, request.addonState, request.effects, request.saveExecution)
+    }
+
     /** A frame can be installed once; a still-in-flight reservation cannot be borrowed or replaced. */
     fun grantFrame(
         endpoint: VmActorEndpoint,
@@ -283,18 +307,64 @@ internal class NativeFleetActorRuntimeService(
         closer.checkHealthy()
         closing[endpoint]?.let { return it.copy() }
         val actor = actors[endpoint] ?: return null
+        return try {
+            prepareCheckpoint(actor, worldTick, addonState, emptyList(), true).commit().thenApply { checkNotNull(it) }
+        } catch (failure: ProgramRuntimeActorRequestException) {
+            CompletableFuture.failedFuture(failure)
+        }
+    }
+
+    private fun prepareCheckpoint(
+        actor: Actor,
+        worldTick: Long,
+        addonState: ByteArray,
+        effects: List<ProgramRuntimeActorEffect>,
+        saveExecution: Boolean,
+    ): ProgramActorCloseReservation {
         actor.host.validateFleetCheckpointTick(worldTick)
         require(worldTick >= (actor.credit?.worldTick ?: 0)) { "checkpoint tick precedes frame credit" }
+        require(effects.all { it is ProgramRuntimeActorEffect.CompleteAddons }) { "native builtin completion translation is not wired yet" }
+        var count = 0
+        for (effect in effects) {
+            val completions = (effect as ProgramRuntimeActorEffect.CompleteAddons).completions
+            if (completions.size > maximumRequestsPerActor - count) {
+                throw ProgramRuntimeActorRequestException(VmActorSubmission.MAILBOX_FULL)
+            }
+            count += completions.size
+        }
+        val commands = ArrayList<NativeFleetOutbox.Command>(count)
+        effects.forEach { effect ->
+            (effect as ProgramRuntimeActorEffect.CompleteAddons).completions.forEach {
+                commands += NativeFleetOutbox.Command.Reply(it.identity, it.response)
+            }
+        }
         val payload =
-            dispatcher.outbox.reserveCheckpointPayload(actor.machine, addonState)
-                ?: return CompletableFuture.failedFuture(ProgramRuntimeActorRequestException(VmActorSubmission.MAILBOX_FULL))
-        return finish(endpoint, worldTick, payload)
+            dispatcher.outbox.reserveCheckpointPayload(
+                actor.machine,
+                if (saveExecution) addonState else byteArrayOf(),
+                saveExecution,
+                commands,
+            ) ?: throw ProgramRuntimeActorRequestException(VmActorSubmission.MAILBOX_FULL)
+        try {
+            if (!dispatcher.outbox.offer(actor.machine, commands)) {
+                throw ProgramRuntimeActorRequestException(VmActorSubmission.MAILBOX_FULL)
+            }
+        } catch (failure: Throwable) {
+            payload.close()
+            throw failure
+        }
+        // Nothing pumps this owner queue between reservation and commit. The carrier can fence
+        // callbacks before its accepted completions and checkpoint ownership move to the worker.
+        return ProgramActorCloseReservation {
+            checkNotNull(finish(actor.endpoint, worldTick, payload, saveExecution)).thenApply { it }
+        }
     }
 
     private fun finish(
         endpoint: VmActorEndpoint,
         checkpointTick: Long?,
         payload: NativeFleetOutbox.CheckpointPayload?,
+        saveExecution: Boolean = true,
     ): CompletableFuture<Long>? {
         checkOwner()
         closer.checkHealthy()
@@ -325,7 +395,7 @@ internal class NativeFleetActorRuntimeService(
             }
         }
         // Reserve before invoking callbacks: a reentrant service close must include this host.
-        val start = closer.reserve(actor.machine, actor.host, commands, native, checkpointTick, payload)
+        val start = closer.reserve(actor.machine, actor.host, commands, native, checkpointTick, payload, saveExecution)
         try {
             cancellationFailure = runCatching { onActorClosing(endpoint) }.exceptionOrNull()
             val failure = cancellationFailure ?: CancellationException("native actor stopped")

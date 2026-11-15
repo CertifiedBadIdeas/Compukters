@@ -40,9 +40,10 @@ internal class NativeFleetCloser(
         result: CompletableFuture<Long>,
         checkpointTick: Long? = null,
         payload: NativeFleetOutbox.CheckpointPayload? = null,
+        saveExecution: Boolean = true,
     ): () -> Unit {
         require((checkpointTick == null) == (payload == null))
-        val checkpoint = checkpointTick?.let { Checkpoint(it, checkNotNull(payload)) }
+        val checkpoint = checkpointTick?.let { Checkpoint(it, checkNotNull(payload), saveExecution) }
         val task = Close(machine, host, commands, result, checkpoint)
         synchronized(monitor) {
             checkHealthy()
@@ -194,12 +195,17 @@ internal class NativeFleetCloser(
         checkpoint: Checkpoint,
     ): Progress {
         try {
-            if (checkpoint.phase == CapturePhase.Recovered) {
-                val encoded = checkNotNull(task.host.prepareHibernation(checkpoint.tick, checkpoint.payload.bytes))
-                checkpoint.payload.replaceWithHostState(encoded)
-                checkpoint.phase = CapturePhase.Prepared
+            if (!checkpoint.saveExecution) {
+                task.host.discardCheckpoint()
+                task.host.close()
+            } else {
+                if (checkpoint.phase == CapturePhase.Recovered) {
+                    val encoded = checkNotNull(task.host.prepareHibernation(checkpoint.tick, checkpoint.payload.bytes))
+                    checkpoint.payload.replaceWithHostState(encoded)
+                    checkpoint.phase = CapturePhase.Prepared
+                }
+                task.host.capturePreparedHibernation(checkpoint.payload.bytes)
             }
-            task.host.capturePreparedHibernation(checkpoint.payload.bytes)
         } catch (_: VmStoreBusyException) {
             return Progress.BLOCKED
         } catch (failure: Throwable) {
@@ -231,6 +237,7 @@ internal class NativeFleetCloser(
     private class Checkpoint(
         val tick: Long,
         val payload: NativeFleetOutbox.CheckpointPayload,
+        val saveExecution: Boolean,
     ) {
         var phase: CapturePhase = CapturePhase.Detaching
     }
