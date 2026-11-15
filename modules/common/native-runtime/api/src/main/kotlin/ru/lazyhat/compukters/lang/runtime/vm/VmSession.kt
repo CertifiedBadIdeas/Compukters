@@ -512,7 +512,7 @@ class VmDeploymentCandidate internal constructor(
     }
 }
 
-private class FileInspectionWireDecoder(
+internal class FileInspectionWireDecoder(
     bytes: ByteArray,
 ) {
     private val buffer = ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN)

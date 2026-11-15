@@ -22,6 +22,7 @@ import ru.lazyhat.compukters.lang.runtime.capability.HostValueType
 import ru.lazyhat.compukters.lang.runtime.fs.ComputerId
 import ru.lazyhat.compukters.lang.runtime.fs.VmVirtualPath
 import ru.lazyhat.compukters.lang.runtime.fs.WorldFileSystemStore
+import ru.lazyhat.compukters.lang.runtime.fs.VmFileSystemReadFailure
 
 class JniExperimentalFleetIntegrationTest {
     @Test
@@ -73,6 +74,11 @@ class JniExperimentalFleetIntegrationTest {
         ExperimentalJniFleet.open(library, 1, 32, 32, 1024, 64, 64, 32).use { fleet ->
             for (canonical in listOf(false, true)) {
                 val session = VmSession.open(artifact, bridge)
+                if (canonical) {
+                    var outcome: VmOutcome
+                    do { outcome = session.advance(1024, 64, 64) } while (outcome == VmOutcome.SliceExhausted)
+                    assertEquals(VmOutcome.WaitingForTerminalEvent, outcome)
+                }
                 val machine = session.transferToFleet(fleet)
                 val deadline = System.nanoTime() + 5_000_000_000L
                 fun next(): ExperimentalFleetEvent {
@@ -156,6 +162,21 @@ class JniExperimentalFleetIntegrationTest {
                         assertEquals(machine, request.machine)
                         assertEquals("/home/main.kt", request.request.sources.single().path)
                         assertEquals("fun main() = 42", request.request.sources.single().utf8Bytes().decodeToString())
+                        val path = VmVirtualPath.of("/home/main.kt")
+                        fleet.fileStat(machine, 31, path)
+                        val stat = next() as ExperimentalFleetEvent.FileStat
+                        assertEquals(machine, stat.machine)
+                        assertEquals(31L, stat.request)
+                        fleet.fileList(machine, 32, VmVirtualPath.of("/home"))
+                        val listing = next() as ExperimentalFleetEvent.FileList
+                        assertTrue(listing.listing.entries.any { it.name == "main.kt" })
+                        fleet.fileRead(machine, 33, path, 0, 1024, stat.stat.metadata.generation)
+                        val chunk = next() as ExperimentalFleetEvent.FileRead
+                        assertEquals("fun main() = 42", chunk.chunk.bytes.decodeToString())
+                        fleet.fileRead(machine, 34, path, 0, 1024, stat.stat.metadata.generation + 1)
+                        assertEquals(ExperimentalFleetEvent.FileFailure(machine, 34, VmFileSystemReadFailure.STALE_GENERATION), next())
+                        fleet.fileStat(machine, 35, VmVirtualPath.of("/home/missing"))
+                        assertEquals(ExperimentalFleetEvent.FileFailure(machine, 35, VmFileSystemReadFailure.NOT_FOUND), next())
                         fleet.completeCompilationArtifact(machine, request.request.token, resultArtifact)
                         assertEquals(VmOutcome.Halted(VmValue.I32(0)), (next() as ExperimentalFleetEvent.Outcome).outcome)
                         fleet.detach(machine)

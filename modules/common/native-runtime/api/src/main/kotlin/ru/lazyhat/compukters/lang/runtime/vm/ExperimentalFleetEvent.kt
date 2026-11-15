@@ -10,9 +10,17 @@ import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.nio.charset.CodingErrorAction
 import java.nio.charset.StandardCharsets
+import ru.lazyhat.compukters.lang.runtime.fs.VmFileStat
+import ru.lazyhat.compukters.lang.runtime.fs.VmDirectoryListing
+import ru.lazyhat.compukters.lang.runtime.fs.VmFileChunk
+import ru.lazyhat.compukters.lang.runtime.fs.VmFileSystemReadFailure
 
 /** Events from the opt-in native fleet transport. Machine identities are local to a fleet. */
 sealed interface ExperimentalFleetEvent {
+    data class FileStat(val machine: Long, val request: Long, val stat: VmFileStat) : ExperimentalFleetEvent
+    data class FileList(val machine: Long, val request: Long, val listing: VmDirectoryListing) : ExperimentalFleetEvent
+    data class FileRead(val machine: Long, val request: Long, val chunk: VmFileChunk) : ExperimentalFleetEvent
+    data class FileFailure(val machine: Long, val request: Long, val failure: VmFileSystemReadFailure) : ExperimentalFleetEvent
     data class Resources(val machine: Long, val request: Long, val snapshot: VmResourceSnapshot) : ExperimentalFleetEvent
     data class FilesystemGeneration(val machine: Long, val request: Long, val generation: Long) : ExperimentalFleetEvent
     data class Terminal(val machine: Long, val request: Long, val update: TerminalUpdate) : ExperimentalFleetEvent
@@ -42,6 +50,37 @@ object ExperimentalFleetEventWire {
             return items
         }
         return when (input.get().toInt() and 0xff) {
+            13 -> {
+                val machine = long()
+                val request = long()
+                val kind = input.get().toInt() and 0xff
+                val status = input.int
+                val body = ByteArray(input.remaining()).also(input::get)
+                if (kind == 3) {
+                    require(body.isEmpty()) { "trailing filesystem failure bytes" }
+                    val failure = when (status) {
+                        30 -> VmFileSystemReadFailure.INVALID_PATH
+                        31 -> VmFileSystemReadFailure.NOT_FOUND
+                        32 -> VmFileSystemReadFailure.NOT_DIRECTORY
+                        33 -> VmFileSystemReadFailure.NOT_FILE
+                        34, 35 -> VmFileSystemReadFailure.PERMISSION
+                        36 -> VmFileSystemReadFailure.STALE_GENERATION
+                        37 -> VmFileSystemReadFailure.LIMIT
+                        38, 39, 40, 41, 42 -> VmFileSystemReadFailure.STORAGE
+                        else -> throw IllegalArgumentException("invalid filesystem failure status")
+                    }
+                    ExperimentalFleetEvent.FileFailure(machine, request, failure)
+                } else {
+                    require(status == 0) { "invalid filesystem success status" }
+                    val decoder = FileInspectionWireDecoder(body)
+                    when (kind) {
+                        0 -> ExperimentalFleetEvent.FileStat(machine, request, decoder.stat())
+                        1 -> ExperimentalFleetEvent.FileList(machine, request, decoder.listing())
+                        2 -> ExperimentalFleetEvent.FileRead(machine, request, decoder.chunk())
+                        else -> throw IllegalArgumentException("invalid filesystem result kind")
+                    }
+                }
+            }
             11 -> {
                 val machine = long()
                 val request = long()

@@ -6,6 +6,7 @@
 package ru.lazyhat.compukters.lang.runtime.vm
 
 import ru.lazyhat.compukters.lang.runtime.capability.HostResponse
+import ru.lazyhat.compukters.lang.runtime.fs.VmVirtualPath
 import java.nio.file.Path
 
 data class ExperimentalRequestInspection(
@@ -80,6 +81,23 @@ class ExperimentalJniFleet private constructor(
     @Synchronized
     fun filesystemGeneration(machine: Long, request: Long) =
         success("filesystem generation", JniExperimentalFleet.filesystemGeneration(active(), machine, request))
+
+    @Synchronized
+    fun fileStat(machine: Long, request: Long, path: VmVirtualPath) =
+        success("file stat", JniExperimentalFleet.filesystemQuery(active(), machine, request, 0, path.value.encodeToByteArray(), byteArrayOf(), 0, 0, 0))
+
+    @Synchronized
+    fun fileList(machine: Long, request: Long, path: VmVirtualPath, cursor: String? = null, maximum: Int = 128) {
+        require(cursor == null || cursor.isNotEmpty()) { "filesystem cursor is empty" }
+        require(maximum in 1..256) { "filesystem list page must contain 1..256 entries" }
+        success("file list", JniExperimentalFleet.filesystemQuery(active(), machine, request, 1, path.value.encodeToByteArray(), cursor?.encodeToByteArray() ?: byteArrayOf(), 0, maximum, 0))
+    }
+
+    @Synchronized
+    fun fileRead(machine: Long, request: Long, path: VmVirtualPath, offset: Long, maximum: Int, generation: Long) {
+        require(offset >= 0 && generation >= 0 && maximum in 1..32768) { "invalid filesystem read range" }
+        success("file read", JniExperimentalFleet.filesystemQuery(active(), machine, request, 2, path.value.encodeToByteArray(), byteArrayOf(), offset, maximum, generation))
+    }
 
     @Synchronized
     fun redstoneInput(machine: Long, packet: Int) =
