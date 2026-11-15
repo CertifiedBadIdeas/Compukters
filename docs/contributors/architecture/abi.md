@@ -24,6 +24,14 @@ Successful output copying acknowledges one event. BufferTooSmall, invalid output
 retain the delivery for retry. Native memory reservations and the ownership fence remain until the
 terminal acknowledgement; recovery is refused while a lifecycle event is awaiting delivery. JNI and
 FFM expose the same contract through `independent = true` on stop/detach and `pollLifecycle(machine)`.
+
+Stop event tag 2 now contains machine (`u64`), final filesystem generation (`u64`), pending
+identity count (`u32`), then task/request pairs (`u32`, `u64`), all little-endian. Rust captures the
+generation after accepted commands drain and before destroying the machine, so the persistence close
+barrier does not need a separate ordinary generation query. This intentionally changes the experimental
+event layout: native library and JVM transport must be built from matching sources; the previous stop
+layout is rejected. Both ordinary and independent polling use this layout.
+
 These are additive experimental entry points; the released native ABI version, artifact encoding and
 checkpoint formats are unchanged. The native fleet remains opt-in.
 

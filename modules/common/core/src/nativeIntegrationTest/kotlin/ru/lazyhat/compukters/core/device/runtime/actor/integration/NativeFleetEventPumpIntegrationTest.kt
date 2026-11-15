@@ -66,22 +66,31 @@ class NativeFleetEventPumpIntegrationTest {
                 }
                 error("timed out waiting for fleet event")
             }
-            fleet.filesystemGeneration(machine, 1)
-            val generation = (next() as ExperimentalFleetEvent.FilesystemGeneration).generation
+            val published = fleet.eventGeneration()
+            fleet.resourceSnapshot(machine, 1)
+            assertTrue(fleet.waitEvents(published, 5_000))
             assertFailsWith<IllegalStateException> {
                 host.acknowledgeFleetStop(
                     fleet,
-                    ExperimentalFleetEvent.Stopped(machine + 1, emptyList()),
+                    ExperimentalFleetEvent.Stopped(machine + 1, emptyList(), 0),
                     ProgramRuntimeState.Idle,
-                    generation,
                 )
             }
             assertFailsWith<IllegalStateException> { host.close() }
-            fleet.stop(machine)
-            val stopped = next() as ExperimentalFleetEvent.Stopped
-            host.acknowledgeFleetStop(fleet, stopped, ProgramRuntimeState.Idle, generation)
+            fleet.stop(machine, independent = true)
+            val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5)
+            var stopped: ExperimentalFleetEvent.Stopped? = null
+            while (stopped == null) {
+                check(System.nanoTime() < deadline)
+                stopped = fleet.pollLifecycle(machine) as? ExperimentalFleetEvent.Stopped
+                if (stopped == null) Thread.yield()
+            }
+            host.acknowledgeFleetStop(fleet, stopped, ProgramRuntimeState.Idle)
             assertEquals(ProgramRuntimeState.Idle, host.state)
-            assertEquals(generation, host.lastClosedFileSystemGeneration)
+            assertEquals(stopped.filesystemGeneration, host.lastClosedFileSystemGeneration)
+            val older = next() as ExperimentalFleetEvent.Resources
+            assertEquals(machine, older.machine)
+            assertEquals(1L, older.request)
             assertEquals(ProgramStartResult.Started, host.start(artifact))
             host.close()
         }

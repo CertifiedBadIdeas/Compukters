@@ -30,6 +30,56 @@ class JniExperimentalFleetIntegrationTest {
 
 
     @Test
+    fun `independent stop returns generation after accepted deployment with ordinary output full`() {
+        val library = Path.of(requireNotNull(System.getProperty("compukter.jni.library")))
+        val artifact = Path.of(requireNotNull(System.getProperty("compukters.fleet.timer.fixture"))).readBytes()
+        val header = ByteBuffer.allocate(16).order(ByteOrder.LITTLE_ENDIAN)
+            .put("CPKTSYS\u0000".encodeToByteArray()).putShort(1).putShort(0).putInt(0).array()
+        val image = header + MessageDigest.getInstance("SHA-256").digest(header)
+        val root = Files.createTempDirectory("fleet-stop-generation-").toRealPath()
+        val bridge = JniBridge.open(library)
+        try {
+            WorldFileSystemStore.open(root, bridge).use { store ->
+                bridge.openExperimentalFleet(ExperimentalFleetConfig(1, 32, 1, 128, 64, 64, 32)).use { fleet ->
+                    val id = ComputerId.fromLongs(171, 172)
+                    val session = VmSession.openInStore(artifact, store, id, image)
+                    val before = session.filesystemGeneration()
+                    val observer = VmSession.open(artifact, bridge)
+                    val machine = session.transferToFleet(fleet)
+                    val other = observer.transferToFleet(fleet)
+                    val deadline = System.nanoTime() + 10_000_000_000L
+                    fun next(machine: Long? = null): ExperimentalFleetEvent {
+                        while (System.nanoTime() < deadline) {
+                            (if (machine == null) fleet.poll() else fleet.pollLifecycle(machine))?.let { return it }
+                            Thread.yield()
+                        }
+                        error("timed out waiting for fleet event")
+                    }
+                    fleet.prepareDeployment(machine, 1, artifact)
+                    val candidate = ((next() as ExperimentalFleetEvent.Deployment).result as ExperimentalFleetDeploymentResult.Prepared).candidate
+                    val published = fleet.eventGeneration()
+                    fleet.resourceSnapshot(other, 2)
+                    assertTrue(fleet.waitEvents(published, 5_000))
+                    fleet.installDeployment(machine, 3, VmVirtualPath.of("/home/demo"), candidate, VmExecutableRevision.Absent)
+                    fleet.stop(machine, independent = true)
+                    val stopped = next(machine) as ExperimentalFleetEvent.Stopped
+                    assertEquals(machine, stopped.machine)
+                    assertEquals(before + 1, stopped.filesystemGeneration)
+                    store.flush(id, stopped.filesystemGeneration)
+                    assertEquals(stopped.filesystemGeneration, store.durableGeneration(id))
+                    val queued = next() as ExperimentalFleetEvent.Resources
+                    assertEquals(other, queued.machine)
+                    assertEquals(2L, queued.request)
+                    fleet.stop(other, independent = true)
+                    assertTrue(next(other) is ExperimentalFleetEvent.Stopped)
+                    session.close()
+                    observer.close()
+                }
+            }
+        } finally { root.toFile().deleteRecursively() }
+    }
+
+    @Test
     fun `JNI lifecycle copy retries retain the detached session until delivery`() {
         val bridge = JniBridge.open(Path.of(requireNotNull(System.getProperty("compukter.jni.library"))))
         val artifact = Path.of(requireNotNull(System.getProperty("compukters.fleet.terminal.fixture"))).readBytes()
@@ -671,10 +721,10 @@ class JniExperimentalFleetIntegrationTest {
                 if (result == 0) Thread.yield()
             } while (result == 0 && System.nanoTime() < deadline)
             assertEquals(10, result)
-            assertEquals(13L, written[0])
+            assertEquals(21L, written[0])
             val event = ByteArray(written[0].toInt())
             assertEquals(0, JniExperimentalFleet.poll(first, event, written))
-            assertEquals(ExperimentalFleetEvent.Stopped(0, emptyList()), ExperimentalFleetEventWire.decode(event))
+            assertEquals(ExperimentalFleetEvent.Stopped(0, emptyList(), 0), ExperimentalFleetEventWire.decode(event))
             assertEquals(0, JniExperimentalFleet.close(first))
             assertEquals(6, JniExperimentalFleet.stop(first, 0))
             assertEquals(6, JniExperimentalFleet.terminalKey(first, 0, 67, 0, 2, -1))

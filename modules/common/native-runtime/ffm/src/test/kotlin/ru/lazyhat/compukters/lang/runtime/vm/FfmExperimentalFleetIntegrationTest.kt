@@ -28,6 +28,57 @@ class FfmExperimentalFleetIntegrationTest {
 
 
     @Test
+    fun `independent stop returns generation after accepted deployment with ordinary output full`() {
+        val library = Path.of(requireNotNull(System.getProperty("compukter.ffi.library")))
+        val artifact = Path.of(requireNotNull(System.getProperty("compukters.fleet.timer.fixture"))).readBytes()
+        val header = ByteBuffer.allocate(16).order(ByteOrder.LITTLE_ENDIAN)
+            .put("CPKTSYS\u0000".encodeToByteArray()).putShort(1).putShort(0).putInt(0).array()
+        val image = header + MessageDigest.getInstance("SHA-256").digest(header)
+        val root = Files.createTempDirectory("fleet-stop-generation-").toRealPath()
+        try {
+            FfmBridge.open(library).use { bridge ->
+                WorldFileSystemStore.open(root, bridge).use { store ->
+                    bridge.openExperimentalFleet(ExperimentalFleetConfig(1, 32, 1, 128, 64, 64, 32)).use { fleet ->
+                        val id = ComputerId.fromLongs(171, 172)
+                        val session = VmSession.openInStore(artifact, store, id, image)
+                        val before = session.filesystemGeneration()
+                        val observer = VmSession.open(artifact, bridge)
+                        val machine = session.transferToFleet(fleet)
+                        val other = observer.transferToFleet(fleet)
+                        val deadline = System.nanoTime() + 10_000_000_000L
+                        fun next(machine: Long? = null): ExperimentalFleetEvent {
+                            while (System.nanoTime() < deadline) {
+                                (if (machine == null) fleet.poll() else fleet.pollLifecycle(machine))?.let { return it }
+                                Thread.yield()
+                            }
+                            error("timed out waiting for fleet event")
+                        }
+                        fleet.prepareDeployment(machine, 1, artifact)
+                        val candidate = ((next() as ExperimentalFleetEvent.Deployment).result as ExperimentalFleetDeploymentResult.Prepared).candidate
+                        val published = fleet.eventGeneration()
+                        fleet.resourceSnapshot(other, 2)
+                        assertTrue(fleet.waitEvents(published, 5_000))
+                        fleet.installDeployment(machine, 3, VmVirtualPath.of("/home/demo"), candidate, VmExecutableRevision.Absent)
+                        fleet.stop(machine, independent = true)
+                        val stopped = next(machine) as ExperimentalFleetEvent.Stopped
+                        assertEquals(machine, stopped.machine)
+                        assertEquals(before + 1, stopped.filesystemGeneration)
+                        store.flush(id, stopped.filesystemGeneration)
+                        assertEquals(stopped.filesystemGeneration, store.durableGeneration(id))
+                        val queued = next() as ExperimentalFleetEvent.Resources
+                        assertEquals(other, queued.machine)
+                        assertEquals(2L, queued.request)
+                        fleet.stop(other, independent = true)
+                        assertTrue(next(other) is ExperimentalFleetEvent.Stopped)
+                        session.close()
+                        observer.close()
+                    }
+                }
+            }
+        } finally { root.toFile().deleteRecursively() }
+    }
+
+    @Test
     fun `independent timer detach preserves remaining ticks through readoption`() {
         val bridge = FfmBridge.open(Path.of(requireNotNull(System.getProperty("compukter.ffi.library"))))
         val artifact = Path.of(requireNotNull(System.getProperty("compukters.fleet.timer.fixture"))).readBytes()

@@ -83,7 +83,7 @@ class NativeFleetOutboxTest {
                 arrayOf(ExperimentalFleet::class.java),
             ) { _, method, _ ->
                 if (method.name == "pollLifecycle") {
-                    ExperimentalFleetEvent.Stopped(1, emptyList())
+                    ExperimentalFleetEvent.Stopped(1, emptyList(), 0)
                 } else {
                     sent += method.name
                     null
@@ -102,7 +102,7 @@ class NativeFleetOutboxTest {
         assertEquals(
             1,
             outbox.pumpLifecycle(1, 1) {
-                assertEquals(ExperimentalFleetEvent.Stopped(1, emptyList()), it)
+                assertEquals(ExperimentalFleetEvent.Stopped(1, emptyList(), 0), it)
             },
         )
         assertTrue(outbox.offer(1, listOf(input(3))))
@@ -111,7 +111,7 @@ class NativeFleetOutboxTest {
     @Test
     fun `independent lifecycle progresses with ordinary output untouched and rotates pending owners`() {
         val probes = mutableListOf<Long>()
-        val terminal = ExperimentalFleetEvent.Stopped(2, emptyList())
+        val terminal = ExperimentalFleetEvent.Stopped(2, emptyList(), 0)
         val source =
             lifecycleFleet { machine ->
                 probes += machine

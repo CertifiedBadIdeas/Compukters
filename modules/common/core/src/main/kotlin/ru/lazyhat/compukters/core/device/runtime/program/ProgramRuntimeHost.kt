@@ -370,24 +370,22 @@ class ProgramRuntimeHost internal constructor(
     /**
      * Release host-side state after the fleet reports that it destroyed the machine.
      * The caller must cancel the external requests named by [event] before acknowledging it.
-     * For a persistent session the generation must be captured from the fleet before stopping.
+     * The final generation comes from the stop barrier itself; ordinary output need not be polled.
      */
     internal fun acknowledgeFleetStop(
         fleet: ExperimentalFleetSessionOwner,
         event: ExperimentalFleetEvent.Stopped,
         finalState: ProgramRuntimeState,
-        filesystemGeneration: Long?,
     ) {
         check(fleetOwnership?.let { it.first === fleet && it.second == event.machine } == true) { "fleet does not own this host" }
         require(
             finalState == ProgramRuntimeState.Idle || finalState == ProgramRuntimeState.Closed || finalState is ProgramRuntimeState.Failed,
         )
-        require(filesystemGeneration == null || filesystemGeneration >= 0)
         val active = requireNotNull(session)
         active.acknowledgeFleetStop(fleet, event.machine)
         fleetOwnership = null
         session = null
-        if (filesystemGeneration != null) lastClosedFileSystemGeneration = filesystemGeneration
+        lastClosedFileSystemGeneration = event.filesystemGeneration
         try {
             active.close()
         } finally {
