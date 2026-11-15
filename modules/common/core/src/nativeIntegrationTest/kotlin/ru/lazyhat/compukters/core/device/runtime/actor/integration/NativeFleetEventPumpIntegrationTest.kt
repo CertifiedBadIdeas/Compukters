@@ -24,6 +24,8 @@ import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
 
 import ru.lazyhat.compukters.core.device.runtime.actor.NativeFleetEventPump
+import ru.lazyhat.compukters.core.device.runtime.actor.NativeFleetDispatcher
+import ru.lazyhat.compukters.core.device.runtime.actor.NativeFleetOutbox
 import ru.lazyhat.compukters.core.device.runtime.actor.ProgramRuntimeFrameCredit
 import ru.lazyhat.compukters.lang.runtime.capability.HostCapabilitySchema
 import ru.lazyhat.compukters.lang.runtime.capability.HostOperationSchema
@@ -151,11 +153,11 @@ class NativeFleetEventPumpIntegrationTest {
             val session = VmSession.open(artifact, listOf(schema))
             val machine = session.transferToFleet(fleet)
             val credit = ProgramRuntimeFrameCredit(4, 256, Long.MAX_VALUE, true)
-            NativeFleetEventPump(fleet, { check(Thread.currentThread() === owner) }, { notifications.offer(Unit) }, events::add).use { pump ->
+            NativeFleetDispatcher(fleet, 8, 8, { check(Thread.currentThread() === owner) }, { notifications.offer(Unit) }, events::add).use { pump ->
                 fun await(predicate: (ExperimentalFleetEvent) -> Boolean): ExperimentalFleetEvent {
                     val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5)
                     while (true) {
-                        pump.pump(32)
+                        pump.pump(32, 32)
                         val index = events.indexOfFirst(predicate)
                         if (index >= 0) return events.removeAt(index)
                         val remaining = deadline - System.nanoTime()
@@ -168,16 +170,20 @@ class NativeFleetEventPumpIntegrationTest {
                 val first = await { it is ExperimentalFleetEvent.Quiescent } as ExperimentalFleetEvent.Quiescent
                 val firstDelta = credit.finishCumulative(first.retired, 256)
                 val remaining = credit.remaining
-                fleet.reply(machine, request.identity, HostResponse.UnitSuccess)
+                assertTrue(pump.outbox.offer(machine, listOf(
+                    NativeFleetOutbox.Command.Reply(request.identity, HostResponse.UnitSuccess),
+                    NativeFleetOutbox.Command.Grant(4, remaining.toInt(), Long.MAX_VALUE),
+                )))
                 credit.inFlight = true
-                fleet.grant(machine, 4, remaining.toInt())
+                pump.pump(0, 2)
                 val halted = await { it is ExperimentalFleetEvent.Outcome } as ExperimentalFleetEvent.Outcome
                 assertEquals(VmOutcome.Halted(null), halted.outcome)
                 val second = await { it is ExperimentalFleetEvent.Quiescent } as ExperimentalFleetEvent.Quiescent
                 val secondDelta = credit.finishCumulative(second.retired, remaining)
                 assertEquals(second.retired, firstDelta + secondDelta)
                 assertEquals(256 - second.retired, credit.remaining)
-                fleet.stop(machine)
+                assertTrue(pump.outbox.offer(machine, listOf(NativeFleetOutbox.Command.Stop)))
+                pump.pump(0, 1)
                 await { it is ExperimentalFleetEvent.Stopped }
             }
             session.close()
