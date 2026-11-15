@@ -68,6 +68,34 @@ class ProgramRuntimeActorService(
     internal var lastCapacityAllocation = PerComputerCapacityAllocation(emptyList(), 0, 0)
         private set
     internal val redstoneInputCapacity = config.mailboxCapacity
+    internal val carrierRuntime: ActorRuntimeService =
+        object : ActorRuntimeService {
+            override val redstoneInputCapacity: Int get() = this@ProgramRuntimeActorService.redstoneInputCapacity
+
+            override fun request(
+                endpoint: VmActorEndpoint,
+                command: (ProgramRuntimeRequestId) -> ProgramRuntimeActorCommand,
+            ) = this@ProgramRuntimeActorService.request(endpoint, command)
+
+            override fun submitTurn(
+                endpoint: VmActorEndpoint,
+                worldTick: Long,
+                effects: List<ProgramRuntimeActorEffect>,
+                completion: ProgramRuntimeTurnCompletion,
+            ) = this@ProgramRuntimeActorService.submitTurn(endpoint, worldTick, effects, completion)
+
+            override fun continueTurn(
+                endpoint: VmActorEndpoint,
+                worldTick: Long,
+                effects: List<ProgramRuntimeActorEffect>,
+                completion: ProgramRuntimeTurnCompletion,
+            ) = this@ProgramRuntimeActorService.continueTurn(endpoint, worldTick, effects, completion)
+
+            override fun recordHostContinuationDelay(delayTicks: Long) =
+                this@ProgramRuntimeActorService.recordHostContinuationDelay(delayTicks)
+
+            override fun recordCoalescedRedstoneInput() = this@ProgramRuntimeActorService.recordCoalescedRedstoneInput()
+        }
     private val scheduler =
         VmActorScheduler<ProgramRuntimeActorMessage, ProgramRuntimeTickPermit, ProgramRuntimeActorReply>(config, onResultsReady)
     private val pending = ConcurrentHashMap<RequestAddress, PendingRequest>()

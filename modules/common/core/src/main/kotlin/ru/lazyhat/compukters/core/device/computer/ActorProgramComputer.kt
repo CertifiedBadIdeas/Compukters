@@ -23,6 +23,7 @@ import ru.lazyhat.compukters.api.addon.ProgramAddonCompletion
 import ru.lazyhat.compukters.api.addon.ProgramAddonDispatch
 import ru.lazyhat.compukters.api.addon.ProgramAddonHost
 import ru.lazyhat.compukters.core.LOGGER
+import ru.lazyhat.compukters.core.device.runtime.actor.ActorRuntimeService
 import ru.lazyhat.compukters.core.device.runtime.actor.ProgramActorHibernation
 import ru.lazyhat.compukters.core.device.runtime.actor.ProgramRuntimeActorCommand
 import ru.lazyhat.compukters.core.device.runtime.actor.ProgramRuntimeActorEffect
@@ -55,14 +56,23 @@ import java.util.concurrent.CompletionException
  * Server-side carrier of an actor-owned machine. Only immutable observations and request futures leave the actor.
  * The service must be pumped on this carrier's owning thread.
  */
-class ActorProgramComputer(
-    private val service: ProgramRuntimeActorService,
+class ActorProgramComputer internal constructor(
+    private val service: ActorRuntimeService,
     private val lease: ProgramRuntimeActorLease,
     private val redstone: RedstoneHostPort,
     private val sound: SoundHostPort = SoundHostPort { SoundCommitResult.Failed(HostFailureKind.UNAVAILABLE, "Sound is unavailable") },
     private val addon: ProgramAddonHost = EmptyProgramAddonHost,
     private val stateSink: (ProgramRuntimeState) -> Unit = {},
 ) {
+    constructor(
+        service: ProgramRuntimeActorService,
+        lease: ProgramRuntimeActorLease,
+        redstone: RedstoneHostPort,
+        sound: SoundHostPort = SoundHostPort { SoundCommitResult.Failed(HostFailureKind.UNAVAILABLE, "Sound is unavailable") },
+        addon: ProgramAddonHost = EmptyProgramAddonHost,
+        stateSink: (ProgramRuntimeState) -> Unit = {},
+    ) : this(service.carrierRuntime, lease, redstone, sound, addon, stateSink)
+
     private val owner = Thread.currentThread()
     private var lifecycle = 0L
     private var pendingOutput: PendingOutput? = null
