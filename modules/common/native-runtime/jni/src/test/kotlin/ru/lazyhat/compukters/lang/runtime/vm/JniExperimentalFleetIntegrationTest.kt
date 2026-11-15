@@ -480,6 +480,7 @@ class JniExperimentalFleetIntegrationTest {
             assertEquals(ExperimentalFleetEvent.Resources(machine, 21, resources), observation())
             assertEquals(ExperimentalFleetEvent.FilesystemGeneration(machine, 22, generation), observation())
             fleet.detach(machine)
+            kotlin.test.assertFailsWith<VmBridgeException> { fleet.resourceSnapshot(machine, 23) }
             val deadline = System.nanoTime() + 5_000_000_000L
             var event: ExperimentalFleetEvent?
             do {
