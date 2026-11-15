@@ -110,7 +110,7 @@ class NativeFleetEventPumpIntegrationTest {
                     assertFailsWith<IllegalStateException> { session.close() }
                     assertFailsWith<IllegalStateException> { session.recoverFromFleet(fleet, machine + 1) }
                     fleet.grant(machine, 1, 512)
-                    assertTrue(next() is ExperimentalFleetEvent.Quiescent)
+                    assertTrue((next() as ExperimentalFleetEvent.Quiescent).timersPending)
                     fleet.detachWithTimers(machine, 2)
                     val detached = next() as ExperimentalFleetEvent.Detached
                     val timer = detached.timers.single()
@@ -127,7 +127,7 @@ class NativeFleetEventPumpIntegrationTest {
                     assertTrue(next() is ExperimentalFleetEvent.Quiescent)
                     fleet.grant(restoredMachine, 101, 512)
                     assertTrue((next() as ExperimentalFleetEvent.Outcome).outcome is VmOutcome.Halted)
-                    assertTrue(next() is ExperimentalFleetEvent.Quiescent)
+                    assertTrue(!(next() as ExperimentalFleetEvent.Quiescent).timersPending)
                     fleet.stop(restoredMachine)
                     assertTrue(next() is ExperimentalFleetEvent.Stopped)
                     restored.session.acknowledgeFleetStop(fleet, restoredMachine)

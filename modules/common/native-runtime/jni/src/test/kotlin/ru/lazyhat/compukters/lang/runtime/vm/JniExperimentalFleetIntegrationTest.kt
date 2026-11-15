@@ -187,7 +187,7 @@ class JniExperimentalFleetIntegrationTest {
                     val session = VmSession.openInStore(artifact, store, id, image)
                     val machine = session.transferToFleet(fleet)
                     fleet.grant(machine, 1, 512)
-                    assertTrue(next() is ExperimentalFleetEvent.Quiescent)
+                    assertTrue((next() as ExperimentalFleetEvent.Quiescent).timersPending)
                     fleet.detachWithTimers(machine, 2)
                     val detached = next() as ExperimentalFleetEvent.Detached
                     assertEquals(1, detached.timers.size)

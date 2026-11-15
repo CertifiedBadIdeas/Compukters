@@ -13,6 +13,17 @@ import kotlin.test.assertFails
 
 class ExperimentalFleetEventTest {
     @Test
+    fun `quiescent report validates pending timer flag`() {
+        fun wire(flag: Int) = ByteBuffer.allocate(26).order(ByteOrder.LITTLE_ENDIAN)
+            .put(8).putLong(7).putLong(12).putLong(3).put(flag.toByte()).array()
+        assertEquals(ExperimentalFleetEvent.Quiescent(7, 12, 3, true), ExperimentalFleetEventWire.decode(wire(1)))
+        assertEquals(ExperimentalFleetEvent.Quiescent(7, 12, 3, false), ExperimentalFleetEventWire.decode(wire(0)))
+        assertFails { ExperimentalFleetEventWire.decode(wire(2)) }
+        for (size in 0 until 26) assertFails { ExperimentalFleetEventWire.decode(wire(1).copyOf(size)) }
+        assertFails { ExperimentalFleetEventWire.decode(wire(1) + 0) }
+    }
+
+    @Test
     fun `compilation event decodes checked source snapshot`() {
         val path = "/home/main.kt".encodeToByteArray()
         val source = "fun main() = 42".encodeToByteArray()

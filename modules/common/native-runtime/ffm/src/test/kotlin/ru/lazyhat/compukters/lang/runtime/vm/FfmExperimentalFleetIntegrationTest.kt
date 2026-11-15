@@ -399,7 +399,7 @@ class FfmExperimentalFleetIntegrationTest {
                     error("timed out waiting for fleet event")
                 }
                 fleet.grant(machine, 1, 512)
-                assertTrue(next() is ExperimentalFleetEvent.Quiescent)
+                assertTrue((next() as ExperimentalFleetEvent.Quiescent).timersPending)
                 fleet.detachWithTimers(machine, 2)
                 val detached = next() as ExperimentalFleetEvent.Detached
                 assertEquals(1L, detached.timers.single().remaining)

@@ -23,8 +23,8 @@ class NativeFleetEventPumpTest {
         val owner = Thread.currentThread()
         val notifications = LinkedBlockingQueue<Unit>()
         val delivered = mutableListOf<ExperimentalFleetEvent>()
-        val first = ExperimentalFleetEvent.Quiescent(1, 2, 3)
-        val second = ExperimentalFleetEvent.Quiescent(2, 2, 4)
+        val first = ExperimentalFleetEvent.Quiescent(1, 2, 3, false)
+        val second = ExperimentalFleetEvent.Quiescent(2, 2, 4, false)
         source.publish(first)
         NativeFleetEventPump(source.fleet, { check(Thread.currentThread() === owner) }, { notifications.offer(Unit) }, delivered::add).use { pump ->
             assertNotNull(notifications.poll(5, TimeUnit.SECONDS))

@@ -65,7 +65,7 @@ sealed interface ExperimentalFleetEvent {
     data class FilesystemGeneration(val machine: Long, val request: Long, val generation: Long) : ExperimentalFleetEvent
     data class Terminal(val machine: Long, val request: Long, val update: TerminalUpdate) : ExperimentalFleetEvent
     /** Retired instructions accumulated within the tick; later reports may increase this value. */
-    data class Quiescent(val machine: Long, val tick: Long, val retired: Long) : ExperimentalFleetEvent
+    data class Quiescent(val machine: Long, val tick: Long, val retired: Long, val timersPending: Boolean) : ExperimentalFleetEvent
     data class Compilation(val machine: Long, val tick: Long, val request: VmCompilationRequest) : ExperimentalFleetEvent
     data class Outcome(val machine: Long, val tick: Long, val outcome: VmOutcome) : ExperimentalFleetEvent
     data class Inspection(val machine: Long, val tick: Long, val request: VmHostRequest) : ExperimentalFleetEvent
@@ -201,9 +201,16 @@ object ExperimentalFleetEventWire {
                 ExperimentalFleetEvent.Compilation(machine, tick, request)
             }
             8 -> {
-                val result = ExperimentalFleetEvent.Quiescent(long(), long(), long())
+                val machine = long()
+                val tick = long()
+                val retired = long()
+                val timersPending = when (input.get().toInt()) {
+                    0 -> false
+                    1 -> true
+                    else -> throw IllegalArgumentException("invalid fleet timer state")
+                }
                 require(!input.hasRemaining()) { "trailing fleet accounting bytes" }
-                result
+                ExperimentalFleetEvent.Quiescent(machine, tick, retired, timersPending)
             }
             0, 1 -> {
                 val tag = bytes[0].toInt()
