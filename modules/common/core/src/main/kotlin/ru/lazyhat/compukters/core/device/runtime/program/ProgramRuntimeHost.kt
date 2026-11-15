@@ -30,7 +30,6 @@ import ru.lazyhat.compukters.lang.runtime.capability.HostResponse
 import ru.lazyhat.compukters.lang.runtime.fs.ComputerId
 import ru.lazyhat.compukters.lang.runtime.fs.VmSystemImage
 import ru.lazyhat.compukters.lang.runtime.fs.WorldFileSystemStore
-import ru.lazyhat.compukters.lang.runtime.vm.CapabilityIdentity
 import ru.lazyhat.compukters.lang.runtime.vm.HostFailureKind
 import ru.lazyhat.compukters.lang.runtime.vm.RedstoneWire
 import ru.lazyhat.compukters.lang.runtime.vm.TerminalKey
@@ -218,7 +217,7 @@ class ProgramRuntimeHost internal constructor(
                 val request =
                     VmHostRequest(
                         timer.identity.requestId,
-                        TIMER_CAPABILITY,
+                        HostRequestRoutes.timer,
                         0,
                         listOf(VmValue.I32(timer.durationTicks)),
                         timer.identity.taskId,
@@ -545,25 +544,20 @@ class ProgramRuntimeHost internal constructor(
                             }
                         }
                     }
-                    val redstone = deliverable.filter(::isRedstoneOutputRequest)
-                    val sound = deliverable.filter(::isSoundRequest)
-                    val timers = deliverable.filter(::isTimerRequest)
-                    val addon = deliverable.filter(::isAddonRequest)
-                    deliverable
-                        .asSequence()
-                        .filterNot(::isRedstoneOutputRequest)
-                        .filterNot(::isSoundRequest)
-                        .filterNot(::isTimerRequest)
-                        .filterNot(::isAddonRequest)
-                        .forEach { request ->
-                            if (!resume(
-                                    request,
-                                    HostResponse.Failure(HostFailureKind.UNAVAILABLE, "Host capability is unavailable"),
-                                )
-                            ) {
-                                return
-                            }
+                    val routes = HostRequestRoutes.partition(deliverable, addonCapabilitySchemas)
+                    val redstone = routes.redstone
+                    val sound = routes.sound
+                    val timers = routes.timers
+                    val addon = routes.addons
+                    routes.unavailable.forEach { request ->
+                        if (!resume(
+                                request,
+                                HostResponse.Failure(HostFailureKind.UNAVAILABLE, "Host capability is unavailable"),
+                            )
+                        ) {
+                            return
                         }
+                    }
                     addon.forEach { request ->
                         if (!deferAddonRequest(activeSession, request, preparedBatches?.get(request.identity))) return
                     }
@@ -928,7 +922,7 @@ class ProgramRuntimeHost internal constructor(
     }
 
     private fun decodeSoundRequest(request: VmHostRequest): SoundRequest {
-        require(isSoundRequest(request)) { "unexpected capability in sound request batch" }
+        require(HostRequestRoutes.isSound(request)) { "unexpected capability in sound request batch" }
         require(request.arguments.size == 2) { "sound beep requires exactly two arguments" }
         val note = requireNotNull((request.arguments[0] as? VmValue.I32)?.value) { "sound note must be I32" }
         val volume = requireNotNull((request.arguments[1] as? VmValue.I32)?.value) { "sound volume must be I32" }
@@ -1022,9 +1016,6 @@ class ProgramRuntimeHost internal constructor(
 
         fun nextEpoch(): Long = epochs.updateAndGet { Math.incrementExact(it) }
 
-        val REDSTONE_CAPABILITY = CapabilityIdentity("compukter", "redstone", 1, 0)
-        val SOUND_CAPABILITY = CapabilityIdentity("compukter", "sound", 1, 0)
-        val TIMER_CAPABILITY = CapabilityIdentity("compukter", "timer", 1, 0)
         val UNAVAILABLE_REDSTONE_PORT =
             RedstoneHostPort { RedstoneCommitResult.Failed(HostFailureKind.UNAVAILABLE, "Redstone is unavailable") }
         val UNAVAILABLE_SOUND_PORT =
@@ -1033,21 +1024,7 @@ class ProgramRuntimeHost internal constructor(
         const val MAXIMUM_PENDING_ADDON_REQUESTS = 256
         const val MAXIMUM_PENDING_TIMER_REQUESTS = 256
 
-        fun isRedstoneOutputRequest(request: VmHostRequest): Boolean =
-            request.capability == REDSTONE_CAPABILITY && request.operation in 6..7
-
-        fun isSoundRequest(request: VmHostRequest): Boolean = request.capability == SOUND_CAPABILITY && request.operation == 0
-
-        fun isTimerRequest(request: VmHostRequest): Boolean = request.capability == TIMER_CAPABILITY && request.operation == 0
     }
-
-    private fun isAddonRequest(request: VmHostRequest): Boolean =
-        addonCapabilitySchemas.any { schema ->
-            schema.identity.namespace == request.capability.namespace &&
-                schema.identity.name == request.capability.name &&
-                schema.identity.abiMajor == request.capability.abiMajor &&
-                schema.identity.abiMinor >= request.capability.abiMinor
-        }
 
     private fun deferAddonRequest(
         activeSession: ProgramVmSession,
