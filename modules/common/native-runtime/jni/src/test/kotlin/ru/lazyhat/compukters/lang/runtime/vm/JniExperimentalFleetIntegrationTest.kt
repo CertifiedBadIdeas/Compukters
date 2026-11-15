@@ -430,10 +430,24 @@ class JniExperimentalFleetIntegrationTest {
             ExperimentalRequestInspection(CapabilityIdentity("app", "entry", 1, 0), 0, "request exceeds budget"),
         ).use { fleet ->
             val original = VmSession.open(artifact, bridge)
+            val resources = original.resourceSnapshot()
+            val generation = original.filesystemGeneration()
             val machine = original.transferToFleet(fleet)
             kotlin.test.assertFailsWith<VmBridgeException> { fleet.close() }
             kotlin.test.assertFailsWith<IllegalStateException> { original.advance(128, 64, 64) }
             original.close()
+            fleet.resourceSnapshot(machine, 21)
+            fleet.filesystemGeneration(machine, 22)
+            val observationDeadline = System.nanoTime() + 5_000_000_000L
+            fun observation(): ExperimentalFleetEvent {
+                while (System.nanoTime() < observationDeadline) {
+                    fleet.poll()?.let { return it }
+                    Thread.yield()
+                }
+                error("timed out waiting for observation")
+            }
+            assertEquals(ExperimentalFleetEvent.Resources(machine, 21, resources), observation())
+            assertEquals(ExperimentalFleetEvent.FilesystemGeneration(machine, 22, generation), observation())
             fleet.detach(machine)
             val deadline = System.nanoTime() + 5_000_000_000L
             var event: ExperimentalFleetEvent?

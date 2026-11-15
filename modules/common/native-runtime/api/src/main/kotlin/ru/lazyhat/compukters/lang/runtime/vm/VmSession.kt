@@ -637,7 +637,7 @@ private class GenerationWireDecoder(
     }
 }
 
-private class ResourceSnapshotWireDecoder(
+internal class ResourceSnapshotWireDecoder(
     bytes: ByteArray,
 ) {
     private val buffer = ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN)

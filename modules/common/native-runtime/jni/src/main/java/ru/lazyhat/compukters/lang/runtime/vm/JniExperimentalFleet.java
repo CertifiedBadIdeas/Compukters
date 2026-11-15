@@ -21,6 +21,8 @@ final class JniExperimentalFleet {
     static native int restoreSession(long handle, long machine, long[] session);
     static native int terminalKey(long handle, long machine, int key, int action, int modifiers);
     static native int terminalUpdate(long handle, long machine, long request, long revision);
+    static native int resourceSnapshot(long handle, long machine, long request);
+    static native int filesystemGeneration(long handle, long machine, long request);
     static native int redstoneInput(long handle, long machine, int packet);
     static native int confirmRedstoneOutput(long handle, long machine, int packed);
     static native int terminalText(long handle, long machine, int[] codePoints);

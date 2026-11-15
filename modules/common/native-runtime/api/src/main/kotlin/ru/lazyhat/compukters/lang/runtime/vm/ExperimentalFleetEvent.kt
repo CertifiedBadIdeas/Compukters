@@ -13,6 +13,8 @@ import java.nio.charset.StandardCharsets
 
 /** Events from the opt-in native fleet transport. Machine identities are local to a fleet. */
 sealed interface ExperimentalFleetEvent {
+    data class Resources(val machine: Long, val request: Long, val snapshot: VmResourceSnapshot) : ExperimentalFleetEvent
+    data class FilesystemGeneration(val machine: Long, val request: Long, val generation: Long) : ExperimentalFleetEvent
     data class Terminal(val machine: Long, val request: Long, val update: TerminalUpdate) : ExperimentalFleetEvent
     /** Retired instructions accumulated within the tick; later reports may increase this value. */
     data class Quiescent(val machine: Long, val tick: Long, val retired: Long) : ExperimentalFleetEvent
@@ -40,6 +42,16 @@ object ExperimentalFleetEventWire {
             return items
         }
         return when (input.get().toInt() and 0xff) {
+            11 -> {
+                val machine = long()
+                val request = long()
+                ExperimentalFleetEvent.Resources(machine, request, ResourceSnapshotWireDecoder(ByteArray(input.remaining()).also(input::get)).snapshot())
+            }
+            12 -> {
+                val result = ExperimentalFleetEvent.FilesystemGeneration(long(), long(), long())
+                require(!input.hasRemaining()) { "trailing filesystem generation bytes" }
+                result
+            }
             10 -> {
                 val machine = long()
                 val request = long()

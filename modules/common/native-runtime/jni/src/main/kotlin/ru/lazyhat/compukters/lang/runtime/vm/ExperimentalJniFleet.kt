@@ -74,6 +74,14 @@ class ExperimentalJniFleet private constructor(
         success("terminal update", JniExperimentalFleet.terminalUpdate(active(), machine, request, revision))
 
     @Synchronized
+    fun resourceSnapshot(machine: Long, request: Long) =
+        success("resource snapshot", JniExperimentalFleet.resourceSnapshot(active(), machine, request))
+
+    @Synchronized
+    fun filesystemGeneration(machine: Long, request: Long) =
+        success("filesystem generation", JniExperimentalFleet.filesystemGeneration(active(), machine, request))
+
+    @Synchronized
     fun redstoneInput(machine: Long, packet: Int) =
         success("redstone input", JniExperimentalFleet.redstoneInput(active(), machine, packet))
 
