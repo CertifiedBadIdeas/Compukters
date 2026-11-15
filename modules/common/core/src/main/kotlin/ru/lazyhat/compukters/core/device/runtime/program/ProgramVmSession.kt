@@ -27,6 +27,8 @@ import ru.lazyhat.compukters.lang.runtime.fs.VmFileStat
 import ru.lazyhat.compukters.lang.runtime.fs.VmSystemImage
 import ru.lazyhat.compukters.lang.runtime.fs.VmVirtualPath
 import ru.lazyhat.compukters.lang.runtime.fs.WorldFileSystemStore
+import ru.lazyhat.compukters.lang.runtime.vm.ExperimentalFleetSessionOwner
+import ru.lazyhat.compukters.lang.runtime.vm.ExperimentalFleetTimer
 import ru.lazyhat.compukters.lang.runtime.vm.TerminalKey
 import ru.lazyhat.compukters.lang.runtime.vm.TerminalKeyAction
 import ru.lazyhat.compukters.lang.runtime.vm.TerminalModifier
@@ -120,6 +122,16 @@ internal interface ProgramVmSession : AutoCloseable {
     fun confirmRedstoneOutput(packed: Int)
 
     fun checkpoint(hostState: ByteArray): Unit = error("checkpoint capture is unavailable")
+
+    /** Transfers exclusive ownership; on refusal this session remains usable. */
+    fun transferToFleet(fleet: ExperimentalFleetSessionOwner, tick: Long, timers: List<ExperimentalFleetTimer>): Long =
+        error("fleet transfer is unavailable")
+
+    /** Recovers an already detached machine into this same filesystem-bound session. */
+    fun recoverFromFleet(fleet: ExperimentalFleetSessionOwner, machine: Long): Unit = error("fleet recovery is unavailable")
+
+    /** Releases the wrapper only after the fleet reports that it stopped the machine. */
+    fun acknowledgeFleetStop(fleet: ExperimentalFleetSessionOwner, machine: Long): Unit = error("fleet stop is unavailable")
 }
 
 interface ProgramDeploymentCandidate : AutoCloseable
@@ -205,9 +217,32 @@ internal class NativeProgramVmSessionFactory(
 }
 
 private class NativeProgramVmSession(
-    private val session: VmSession,
+    private var session: VmSession,
     private val filesystem: ProgramFileSystemLaunchContext?,
 ) : ProgramVmSession {
+    private var transferred: Pair<ExperimentalFleetSessionOwner, Long>? = null
+    private var stopped = false
+
+    override fun transferToFleet(fleet: ExperimentalFleetSessionOwner, tick: Long, timers: List<ExperimentalFleetTimer>): Long {
+        check(!stopped && transferred == null) { "session is not owned by the host" }
+        val machine = session.transferToFleet(fleet, tick, timers)
+        transferred = fleet to machine
+        return machine
+    }
+
+    override fun recoverFromFleet(fleet: ExperimentalFleetSessionOwner, machine: Long) {
+        check(transferred?.let { it.first === fleet && it.second == machine } == true) { "fleet does not own this session" }
+        val restored = VmSession.restoreFromFleet(fleet, machine)
+        session = restored
+        transferred = null
+    }
+
+    override fun acknowledgeFleetStop(fleet: ExperimentalFleetSessionOwner, machine: Long) {
+        check(transferred?.let { it.first === fleet && it.second == machine } == true) { "fleet does not own this session" }
+        transferred = null
+        stopped = true
+    }
+
     override fun checkpoint(hostState: ByteArray) = requireNotNull(filesystem).checkpoint(session, hostState)
 
     override fun advance(
@@ -297,5 +332,9 @@ private class NativeProgramVmSession(
 
     override fun confirmRedstoneOutput(packed: Int) = session.confirmRedstoneOutput(packed)
 
-    override fun close() = session.close()
+    override fun close() {
+        check(transferred == null) { "fleet still owns this session" }
+        session.close()
+        stopped = true
+    }
 }
