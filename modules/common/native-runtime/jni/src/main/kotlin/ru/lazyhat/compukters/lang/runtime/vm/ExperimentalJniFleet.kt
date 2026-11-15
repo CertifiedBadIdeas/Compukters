@@ -232,8 +232,6 @@ class ExperimentalJniFleet private constructor(
             return ExperimentalJniFleet(bridge, output[0])
         }
 
-        private fun success(operation: String, status: Int) {
-            if (status != 0) throw VmBridgeException("experimental fleet $operation failed with status $status")
-        }
+        private fun success(operation: String, status: Int) = requireFleetSuccess(operation, status)
     }
 }

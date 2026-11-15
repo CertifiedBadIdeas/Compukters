@@ -27,6 +27,47 @@ import ru.lazyhat.compukters.lang.runtime.fs.VmFileSystemReadFailure
 class JniExperimentalFleetIntegrationTest {
 
     @Test
+    fun `full native mailbox reports retryable contention`() {
+        val library = Path.of(requireNotNull(System.getProperty("compukter.jni.library")))
+        val artifact = Path.of(requireNotNull(System.getProperty("compukters.fleet.terminal.fixture"))).readBytes()
+        val bridge = JniBridge.open(library)
+        val fleet = bridge.openExperimentalFleet(ExperimentalFleetConfig(1, 1, 1, 128, 64, 64, 32))
+        val session = VmSession.open(artifact, bridge)
+        var machine: Long? = null
+        val deadline = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(10)
+        while (machine == null) {
+            check(System.nanoTime() < deadline)
+            try { machine = session.transferToFleet(fleet) } catch (_: VmFleetBusyException) { Thread.yield() }
+        }
+        var accepted = 0L
+        while (true) {
+            check(System.nanoTime() < deadline) { "mailbox did not fill" }
+            try { fleet.resourceSnapshot(machine, accepted); accepted++ }
+            catch (_: VmFleetBusyException) { if (accepted >= 3) break else Thread.yield() }
+        }
+        var sent = false
+        var observed = false
+        while (!observed) {
+            check(System.nanoTime() < deadline) { "mailbox did not recover" }
+            if (!sent) try { fleet.resourceSnapshot(machine, 10_000); sent = true } catch (_: VmFleetBusyException) { }
+            val event = fleet.poll()
+            if (event is ExperimentalFleetEvent.Resources && event.request == 10_000L) observed = true
+            if (event == null) Thread.yield()
+        }
+        var stopping = false
+        var stopped = false
+        while (!stopped) {
+            check(System.nanoTime() < deadline) { "fleet did not stop" }
+            if (!stopping) try { fleet.stop(machine); stopping = true } catch (_: VmFleetBusyException) { }
+            stopped = fleet.poll() is ExperimentalFleetEvent.Stopped
+            if (!stopped) Thread.yield()
+        }
+        session.close()
+        fleet.close()
+    }
+
+
+    @Test
     fun `closing an empty fleet releases an event waiter`() {
         val library = Path.of(requireNotNull(System.getProperty("compukter.jni.library")))
         val bridge = JniBridge.open(library)

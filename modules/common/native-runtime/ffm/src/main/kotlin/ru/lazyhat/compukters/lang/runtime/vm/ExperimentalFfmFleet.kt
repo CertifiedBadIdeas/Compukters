@@ -351,8 +351,6 @@ class ExperimentalFfmFleet private constructor(
             }
         }
 
-        private fun success(operation: String, status: Int) {
-            if (status != 0) throw VmBridgeException("experimental FFM fleet $operation failed with status $status")
-        }
+        private fun success(operation: String, status: Int) = requireFleetSuccess(operation, status)
     }
 }

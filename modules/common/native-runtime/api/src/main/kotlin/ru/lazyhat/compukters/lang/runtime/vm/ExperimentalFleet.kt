@@ -51,3 +51,20 @@ interface ExperimentalFleet : ExperimentalFleetSessionOwner, AutoCloseable {
     fun waitEvents(generation: Long, timeoutMillis: Int): Boolean
     fun poll(): ExperimentalFleetEvent?
 }
+
+/** Native fleet temporarily cannot accept an operation. The caller may retry when appropriate. */
+class VmFleetBusyException(message: String) : VmBridgeException(message)
+
+/** Native fleet handle is no longer valid. */
+class VmFleetStaleException(message: String) : VmBridgeException(message)
+
+/** Shared status decoding so JNI and FFM expose the same failure contract. */
+fun requireFleetSuccess(operation: String, status: Int) {
+    if (status == 0) return
+    val message = "experimental fleet $operation failed with status $status"
+    when (status) {
+        7 -> throw VmFleetBusyException(message)
+        6 -> throw VmFleetStaleException(message)
+        else -> throw VmBridgeException(message)
+    }
+}
