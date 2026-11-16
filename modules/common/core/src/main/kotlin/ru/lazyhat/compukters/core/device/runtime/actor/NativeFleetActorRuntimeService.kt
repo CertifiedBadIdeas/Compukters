@@ -6,11 +6,13 @@
 package ru.lazyhat.compukters.core.device.runtime.actor
 
 import ru.lazyhat.compukters.api.addon.ProgramAddonAction
-import ru.lazyhat.compukters.api.addon.ProgramAddonCompletion
 import ru.lazyhat.compukters.core.LOGGER
+import ru.lazyhat.compukters.core.device.runtime.program.HostRequestRoutes
 import ru.lazyhat.compukters.core.device.runtime.program.ProgramAddonLifecyclePort
 import ru.lazyhat.compukters.core.device.runtime.program.ProgramRuntimeHost
 import ru.lazyhat.compukters.core.device.runtime.program.ProgramRuntimeState
+import ru.lazyhat.compukters.core.device.runtime.program.ProgramWorldRequest
+import ru.lazyhat.compukters.core.device.runtime.program.ProgramWorldResult
 import ru.lazyhat.compukters.lang.runtime.vm.ExperimentalFleet
 import ru.lazyhat.compukters.lang.runtime.vm.ExperimentalFleetEvent
 import ru.lazyhat.compukters.lang.runtime.vm.RedstoneWire
@@ -24,10 +26,10 @@ import java.util.concurrent.CompletableFuture
  * started/restored host before registration; Rust owns its session from then until stop.
  * No JVM worker advances Guest instructions. Frame grants come from the capacity owner.
  *
- * Boot, checkpoint restoration, redstone/sound completion translation and backend selection are
- * not wired here yet. Addon completions are admitted with their continuation as an ordered batch.
- * Unsupported requests/effects are rejected before admission.
- * Addon requests and program lifecycle actions stream to a turn observer on the owner thread;
+ * Boot, checkpoint restoration and backend selection are not wired here yet. The carrier streams
+ * addon replies, redstone confirmations and world replies into one bounded ordered outbox,
+ * independently of the next execution grant. Legacy deferred world effects reject before admission.
+ * Addon/world requests and program lifecycle actions stream to a turn observer on the owner thread;
  * final-only callers and unsupported host/compilation events use [onExternalEvent]. Neither path
  * accumulates a second result backlog. Only the final Quiescent report settles turn credit.
  * Stop fences owner work and transfers the host and charged unsent commands to one shared
@@ -149,14 +151,22 @@ internal class NativeFleetActorRuntimeService(
         return true
     }
 
-    override fun submitAddonCompletions(
+    override fun submitHostCompletions(
         endpoint: VmActorEndpoint,
-        completions: List<ProgramAddonCompletion>,
+        completions: List<ProgramRuntimeHostCompletion>,
     ): Int {
         checkOwner()
         if (closed || endpoint in closing) return 0
         val actor = actors[endpoint] ?: return 0
-        return dispatcher.outbox.offerReplies(actor.machine, completions.map { NativeFleetOutbox.Command.Reply(it.identity, it.response) })
+        return dispatcher.outbox.offerPrefix(
+            actor.machine,
+            completions.map {
+                when (it) {
+                    is ProgramRuntimeHostCompletion.Reply -> NativeFleetOutbox.Command.Reply(it.identity, it.response)
+                    is ProgramRuntimeHostCompletion.ConfirmRedstoneOutput -> NativeFleetOutbox.Command.ConfirmRedstoneOutput(it.packed)
+                }
+            },
+        )
     }
 
     override fun submitTurn(
@@ -184,7 +194,7 @@ internal class NativeFleetActorRuntimeService(
         require(worldTick >= 0)
         if (closed) return VmActorSubmission.CLOSED
         require(effects.all { it is ProgramRuntimeActorEffect.RedstoneInput || it is ProgramRuntimeActorEffect.CompleteAddons }) {
-            "native redstone/sound completion translation is not wired yet"
+            "native world completions require the streamed host completion path"
         }
         if (endpoint in closing) return VmActorSubmission.CLOSED
         val actor = actors[endpoint] ?: return VmActorSubmission.STALE_ENDPOINT
@@ -334,7 +344,11 @@ internal class NativeFleetActorRuntimeService(
     ): ProgramActorCloseReservation {
         actor.host.validateFleetCheckpointTick(worldTick)
         require(worldTick >= (actor.credit?.worldTick ?: 0)) { "checkpoint tick precedes frame credit" }
-        require(effects.all { it is ProgramRuntimeActorEffect.CompleteAddons }) { "native builtin completion translation is not wired yet" }
+        require(
+            effects.all {
+                it is ProgramRuntimeActorEffect.CompleteAddons
+            },
+        ) { "native final world completions require the streamed host completion path" }
         var count = 0
         for (effect in effects) {
             val completions = (effect as ProgramRuntimeActorEffect.CompleteAddons).completions
@@ -552,23 +566,50 @@ internal class NativeFleetActorRuntimeService(
             is VmOutcome.HostRequestBatch -> {
                 var handled = false
                 var unhandled: MutableList<VmHostRequest>? = null
-                for (index in outcome.requests.indices) {
-                    val request = outcome.requests[index]
+                var world: MutableList<VmHostRequest>? = null
+                for (request in outcome.requests) {
                     if (!isCurrent(actor, turn)) return
-                    val prepared = actor.host.prepareFleetAddonRequest(fleet, actor.machine, request)
-                    if (prepared == null) {
-                        if (handled) (unhandled ?: mutableListOf<VmHostRequest>().also { unhandled = it }).add(request)
+                    if (HostRequestRoutes.isRedstoneOutput(request) || HostRequestRoutes.isSound(request)) {
+                        (world ?: mutableListOf<VmHostRequest>().also { world = it }).add(request)
                     } else {
-                        if (!handled && index > 0) unhandled = ArrayList(outcome.requests.subList(0, index))
-                        handled = true
-                        turn.submit(ProgramAddonAction.Request(prepared))
+                        val prepared = actor.host.prepareFleetAddonRequest(fleet, actor.machine, request)
+                        if (prepared != null) {
+                            handled = true
+                            turn.submit(ProgramAddonAction.Request(prepared))
+                        } else {
+                            (unhandled ?: mutableListOf<VmHostRequest>().also { unhandled = it }).add(request)
+                        }
                     }
                 }
-                if (!isCurrent(actor, turn)) return
+                if (!isCurrent(actor, turn) || turn.observationFailure != null) return
+                world?.let { requests ->
+                    val result = turn.submitWorld { actor.host.prepareFleetWorldRequest(fleet, actor.machine, requests) }
+                    if (!isCurrent(actor, turn) || turn.observationFailure != null) return
+                    if (result != null) {
+                        handled = true
+                        result.confirmedRedstoneOutput?.let { actor.host.observeFleetRedstoneOutput(fleet, actor.machine, it) }
+                    } else {
+                        (unhandled ?: mutableListOf<VmHostRequest>().also { unhandled = it }).addAll(requests)
+                    }
+                }
                 if (!handled) {
                     onExternalEvent(actor.endpoint, event)
                 } else {
-                    unhandled?.let { onExternalEvent(actor.endpoint, event.copy(outcome = VmOutcome.HostRequestBatch(it))) }
+                    unhandled?.let { remaining ->
+                        val identities = remaining.mapTo(mutableSetOf()) { it.identity }
+                        onExternalEvent(
+                            actor.endpoint,
+                            event.copy(
+                                outcome =
+                                    VmOutcome.HostRequestBatch(
+                                        outcome.requests.filter {
+                                            it.identity in
+                                                identities
+                                        },
+                                    ),
+                            ),
+                        )
+                    }
                 }
             }
 
@@ -691,6 +732,16 @@ internal class NativeFleetActorRuntimeService(
     ) : ProgramAddonLifecyclePort {
         var observationFailure: Exception? = null
             private set
+
+        fun submitWorld(prepare: () -> ProgramWorldRequest?): ProgramWorldResult? {
+            if (observationFailure != null || !isActive()) return null
+            return try {
+                prepare()?.let { (completion as ProgramRuntimeTurnObserver).worldRequest(it) }
+            } catch (failure: Exception) {
+                observationFailure = failure
+                null
+            }
+        }
 
         override fun submit(action: ProgramAddonAction): Boolean {
             if (observationFailure == null && isActive()) {

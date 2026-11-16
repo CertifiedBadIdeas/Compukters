@@ -29,6 +29,8 @@ import ru.lazyhat.compukters.core.device.runtime.program.ProgramAddonRequestPort
 import ru.lazyhat.compukters.core.device.runtime.program.ProgramRuntimeHost
 import ru.lazyhat.compukters.core.device.runtime.program.ProgramRuntimeState
 import ru.lazyhat.compukters.core.device.runtime.program.ProgramTickBudget
+import ru.lazyhat.compukters.core.device.runtime.program.ProgramWorldRequest
+import ru.lazyhat.compukters.core.device.runtime.program.ProgramWorldResult
 import ru.lazyhat.compukters.core.device.runtime.program.RedstoneCommitResult
 import ru.lazyhat.compukters.core.device.runtime.program.RedstoneHostPort
 import ru.lazyhat.compukters.core.device.runtime.program.SoundCommitResult
@@ -689,6 +691,9 @@ internal fun interface ProgramRuntimeTurnCompletion {
 /** Owner-delivered actions may arrive before final credit settlement; they do not finish the turn. */
 internal interface ProgramRuntimeTurnObserver : ProgramRuntimeTurnCompletion {
     fun addonAction(action: ProgramAddonAction)
+
+    /** Null preserves external routing for observers that do not own world ports. */
+    fun worldRequest(request: ProgramWorldRequest): ProgramWorldResult? = null
 }
 
 open class ProgramRuntimeActorRequestException(

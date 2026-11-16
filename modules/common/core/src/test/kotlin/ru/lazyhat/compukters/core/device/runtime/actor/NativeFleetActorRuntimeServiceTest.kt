@@ -11,6 +11,8 @@ import ru.lazyhat.compukters.core.device.runtime.program.ProgramRuntimeHost
 import ru.lazyhat.compukters.core.device.runtime.program.ProgramRuntimeState
 import ru.lazyhat.compukters.core.device.runtime.program.ProgramVmSession
 import ru.lazyhat.compukters.core.device.runtime.program.ProgramVmSessionFactory
+import ru.lazyhat.compukters.core.device.runtime.program.ProgramWorldRequest
+import ru.lazyhat.compukters.core.device.runtime.program.ProgramWorldResult
 import ru.lazyhat.compukters.lang.runtime.capability.HostCapabilitySchema
 import ru.lazyhat.compukters.lang.runtime.capability.HostOperationSchema
 import ru.lazyhat.compukters.lang.runtime.capability.HostResponse
@@ -30,6 +32,7 @@ import ru.lazyhat.compukters.lang.runtime.vm.TerminalUpdate
 import ru.lazyhat.compukters.lang.runtime.vm.VmHostRequest
 import ru.lazyhat.compukters.lang.runtime.vm.VmHostRequestIdentity
 import ru.lazyhat.compukters.lang.runtime.vm.VmOutcome
+import ru.lazyhat.compukters.lang.runtime.vm.VmValue
 import java.lang.reflect.Proxy
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.ConcurrentHashMap
@@ -47,15 +50,114 @@ import kotlin.test.assertTrue
 
 class NativeFleetActorRuntimeServiceTest {
     @Test
+    fun `world observations preserve successive output updates before final credit settlement`() =
+        Harness().use { h ->
+            val endpoint = h.register(1)
+            val actions = mutableListOf<ProgramWorldRequest>()
+            var done = false
+            h.service.grantFrame(endpoint, 1, 30)
+            h.service.submitTurn(
+                endpoint,
+                1,
+                emptyList(),
+                object : ProgramRuntimeTurnObserver {
+                    override fun addonAction(action: ProgramAddonAction) = error("unexpected addon")
+
+                    override fun worldRequest(request: ProgramWorldRequest): ProgramWorldResult {
+                        assertFalse(done)
+                        actions += request
+                        return ProgramWorldResult((request as? ProgramWorldRequest.Redstone)?.packed)
+                    }
+
+                    override fun complete(
+                        reply: ProgramRuntimeActorReply?,
+                        failure: Throwable?,
+                    ) {
+                        assertEquals(null, failure)
+                        done = true
+                    }
+                },
+            )
+
+            fun output(
+                id: Long,
+                side: Int,
+                value: Int,
+            ) = VmHostRequest(id, CapabilityIdentity("compukter", "redstone", 1, 0), 6, listOf(VmValue.I32(side), VmValue.I32(value)))
+            h.events += ExperimentalFleetEvent.Outcome(1, 1, VmOutcome.HostRequestBatch(listOf(output(1, 0, 5), output(2, 1, 7))))
+            h.events += ExperimentalFleetEvent.Outcome(1, 1, VmOutcome.HostRequestBatch(listOf(output(3, 2, 3))))
+            h.events += ExperimentalFleetEvent.Quiescent(1, 1, 3, false)
+            h.service.pump(8, 0)
+            assertEquals(
+                listOf(5 or (7 shl 5), 5 or (7 shl 5) or (3 shl 10)),
+                actions.map { assertIs<ProgramWorldRequest.Redstone>(it).packed },
+            )
+            assertTrue(done)
+            assertTrue(h.observedEvents.isEmpty())
+        }
+
+    @Test
+    fun `malformed world observation fails only its actor turn`() =
+        Harness().use { h ->
+            val first = h.register(1)
+            val second = h.register(2)
+            var failed: Throwable? = null
+            var done = false
+            h.service.grantFrame(first, 1, 30)
+            h.service.grantFrame(second, 1, 30)
+            h.service.submitTurn(
+                first,
+                1,
+                emptyList(),
+                object : ProgramRuntimeTurnObserver {
+                    override fun addonAction(action: ProgramAddonAction) = Unit
+
+                    override fun worldRequest(request: ProgramWorldRequest): ProgramWorldResult = error("invalid request reached world")
+
+                    override fun complete(
+                        reply: ProgramRuntimeActorReply?,
+                        failure: Throwable?,
+                    ) {
+                        failed = failure
+                    }
+                },
+            )
+            h.service.submitTurn(second, 1, emptyList()) { _, failure -> done = failure == null }
+            h.events +=
+                ExperimentalFleetEvent.Outcome(
+                    1,
+                    1,
+                    VmOutcome.HostRequestBatch(listOf(VmHostRequest(1, CapabilityIdentity("compukter", "sound", 1, 0), 0, emptyList()))),
+                )
+            h.events += ExperimentalFleetEvent.Quiescent(1, 1, 3, false)
+            h.events += ExperimentalFleetEvent.Quiescent(2, 1, 3, false)
+            h.service.pump(8, 0)
+            assertIs<IllegalArgumentException>(failed)
+            assertTrue(done)
+            assertTrue(h.observedEvents.isEmpty())
+        }
+
+    @Test
     fun `ordered reply prefixes free capacity for the execution grant`() =
         Harness(maximumRequests = 2).use { h ->
             val endpoint = h.register(1)
             val replies = (1L..3L).map { ProgramAddonCompletion(VmHostRequestIdentity(1, it), HostResponse.UnitSuccess) }
             assertTrue(h.service.grantFrame(endpoint, 1, 20))
-            assertEquals(2, h.service.submitAddonCompletions(endpoint, replies))
+            assertEquals(
+                2,
+                h.service.submitHostCompletions(endpoint, replies.map { ProgramRuntimeHostCompletion.Reply(it.identity, it.response) }),
+            )
             assertEquals(VmActorSubmission.MAILBOX_FULL, h.service.submitTurn(endpoint, 1, emptyList()) { _, _ -> })
             h.service.pump(0, 2)
-            assertEquals(1, h.service.submitAddonCompletions(endpoint, replies.drop(2)))
+            assertEquals(
+                1,
+                h.service.submitHostCompletions(
+                    endpoint,
+                    replies.drop(2).map {
+                        ProgramRuntimeHostCompletion.Reply(it.identity, it.response)
+                    },
+                ),
+            )
             var completed = false
             assertEquals(
                 VmActorSubmission.ACCEPTED,

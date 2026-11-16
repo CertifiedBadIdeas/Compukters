@@ -172,6 +172,12 @@ tasks.register("prepareJvmFleetProbe") {
 tasks.register<Test>("experimentalFleetEventIntegrationTest") {
     group = "verification"
     dependsOn(":native-runtime-ffm:buildExperimentalFleetFfi", ":native-runtime-ffm:jar")
+    dependsOn(":compiler-k2:generateRedstoneConformanceArtifact", ":compiler-k2:generateSoundConformanceArtifact")
+    val redstone = project(":compiler-k2").layout.buildDirectory.file("generated/conformance/redstone.cpkt")
+    val sound = project(":compiler-k2").layout.buildDirectory.file("generated/conformance/sound.cpkt")
+    inputs.files(redstone, sound)
+    systemProperty("compukters.fleet.redstone.fixture", redstone.get().asFile.absolutePath)
+    systemProperty("compukters.fleet.sound.fixture", sound.get().asFile.absolutePath)
     useJUnitPlatform()
     testClassesDirs = nativeIntegrationTest.output.classesDirs
     classpath = nativeIntegrationTest.runtimeClasspath

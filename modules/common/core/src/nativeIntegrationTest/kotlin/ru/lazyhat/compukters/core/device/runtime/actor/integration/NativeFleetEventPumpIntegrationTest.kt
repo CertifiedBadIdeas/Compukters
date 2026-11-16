@@ -20,6 +20,8 @@ import ru.lazyhat.compukters.core.device.runtime.actor.ProgramRuntimeActorReply
 import ru.lazyhat.compukters.core.device.runtime.actor.ProgramRuntimeActorService
 import ru.lazyhat.compukters.core.device.runtime.actor.ProgramRuntimeActorValue
 import ru.lazyhat.compukters.core.device.runtime.actor.ProgramRuntimeFrameCredit
+import ru.lazyhat.compukters.core.device.runtime.actor.ProgramRuntimeHostCompletion
+import ru.lazyhat.compukters.core.device.runtime.actor.ProgramRuntimeRequestId
 import ru.lazyhat.compukters.core.device.runtime.actor.ProgramRuntimeTurnObserver
 import ru.lazyhat.compukters.core.device.runtime.actor.VmActorEndpoint
 import ru.lazyhat.compukters.core.device.runtime.actor.VmActorSchedulerConfig
@@ -30,6 +32,8 @@ import ru.lazyhat.compukters.core.device.runtime.program.ProgramRuntimeHost
 import ru.lazyhat.compukters.core.device.runtime.program.ProgramRuntimeState
 import ru.lazyhat.compukters.core.device.runtime.program.ProgramStartResult
 import ru.lazyhat.compukters.core.device.runtime.program.RedstoneCommitResult
+import ru.lazyhat.compukters.core.device.runtime.program.SoundCommitResult
+import ru.lazyhat.compukters.core.device.runtime.program.SoundRequest
 import ru.lazyhat.compukters.core.device.runtime.program.integration.installFfmRuntime
 import ru.lazyhat.compukters.lang.runtime.capability.HostCapabilitySchema
 import ru.lazyhat.compukters.lang.runtime.capability.HostOperationSchema
@@ -44,6 +48,8 @@ import ru.lazyhat.compukters.lang.runtime.vm.CapabilityIdentity
 import ru.lazyhat.compukters.lang.runtime.vm.ExperimentalFleetConfig
 import ru.lazyhat.compukters.lang.runtime.vm.ExperimentalFleetEvent
 import ru.lazyhat.compukters.lang.runtime.vm.ExperimentalFleetTimer
+import ru.lazyhat.compukters.lang.runtime.vm.HostFailureKind
+import ru.lazyhat.compukters.lang.runtime.vm.RedstoneWire
 import ru.lazyhat.compukters.lang.runtime.vm.TerminalKey
 import ru.lazyhat.compukters.lang.runtime.vm.TerminalKeyAction
 import ru.lazyhat.compukters.lang.runtime.vm.TerminalUpdate
@@ -74,6 +80,197 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class NativeFleetEventPumpIntegrationTest {
+    @Test
+    fun `native hibernation drains a physical world confirmation before capture without advancing Guest`() {
+        installFfmRuntime()
+        VmRuntime.loadNativeLibrary(Path.of(requireNotNull(System.getProperty("compukters.ffi.library"))))
+        val artifact = Path.of(requireNotNull(System.getProperty("compukters.fleet.redstone.fixture"))).readBytes()
+        val header =
+            ByteBuffer
+                .allocate(
+                    16,
+                ).order(ByteOrder.LITTLE_ENDIAN)
+                .put("CPKTSYS\u0000".encodeToByteArray())
+                .putShort(1)
+                .putShort(0)
+                .putInt(0)
+                .array()
+        val image = VmSystemImage.of(header + MessageDigest.getInstance("SHA-256").digest(header))
+        val root = Files.createTempDirectory("fleet-world-confirm-checkpoint-").toRealPath()
+        val id = ComputerId.fromLongs(143, 144)
+        try {
+            WorldFileSystemStore.open(root).use { store ->
+                val factory = NativeProgramVmSessionFactory(ProgramFileSystemLaunchContext(store, id, image))
+                val host = ProgramRuntimeHost(factory)
+                assertEquals(ProgramStartResult.Started, host.start(artifact))
+                val config = ExperimentalFleetConfig(1, 32, 32, 4096, 64, 64, 32, coordinatedTurns = true)
+                VmRuntime.openExperimentalFleet(config).use { fleet ->
+                    val machine = host.transferToFleet(fleet, 0)
+                    fleet.redstoneInput(machine, RedstoneWire.packInput(63, IntArray(6) { 15 }))
+                    NativeFleetActorRuntimeService(fleet, 2, 4, 1, {}, {}, { _, _ -> }, onActorClosing = {}).use { service ->
+                        val endpoint = VmActorEndpoint(id, 1)
+                        val lease = checkNotNull(service.attach(endpoint, machine, host))
+                        val active =
+                            object : ActorRuntimeService by service {
+                                override fun request(
+                                    endpoint: VmActorEndpoint,
+                                    command: (ProgramRuntimeRequestId) -> ProgramRuntimeActorCommand,
+                                ): CompletableFuture<ProgramRuntimeActorReply> {
+                                    val requestId = ProgramRuntimeRequestId(1)
+                                    check(command(requestId) is ProgramRuntimeActorCommand.RestoreOrBoot)
+                                    return CompletableFuture.completedFuture(
+                                        ProgramRuntimeActorReply(requestId, ProgramRuntimeState.Running, ProgramRuntimeActorValue.None),
+                                    )
+                                }
+                            }
+                        val writes = mutableListOf<Int>()
+                        val carrier =
+                            ActorProgramComputer(active, lease, { packed ->
+                                writes += packed
+                                RedstoneCommitResult.Committed
+                            })
+                        try {
+                            carrier.turnOn().join()
+                            assertTrue(service.grantFrame(endpoint, 1, 100_000))
+                            carrier.serverTick(1)
+                            val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5)
+                            while (writes.isEmpty()) {
+                                check(System.nanoTime() < deadline) { "world request did not arrive" }
+                                service.pump(1, 1)
+                                Thread.yield()
+                            }
+                            // One slot accepts the confirmation; the reply remains in the live carrier.
+                            assertNull(carrier.tryHibernateAsync(2))
+                            service.pump(0, 1)
+                            checkNotNull(carrier.tryHibernateAsync(2)).get(5, TimeUnit.SECONDS)
+                            assertEquals(1, writes.size)
+                            val restored = ProgramRuntimeHost(factory)
+                            try {
+                                val checkpoint = checkNotNull(restored.prepareRestoreBoot(100))
+                                assertEquals(writes.single(), checkpoint.confirmedRedstoneOutput)
+                            } finally {
+                                restored.close()
+                            }
+                        } finally {
+                            carrier.closeAsync().get(5, TimeUnit.SECONDS)
+                        }
+                    }
+                }
+            }
+        } finally {
+            root.toFile().deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `native carrier completes redstone and sound through bounded queues without replaying world actions`() {
+        installFfmRuntime()
+        VmRuntime.loadNativeLibrary(Path.of(requireNotNull(System.getProperty("compukters.ffi.library"))))
+        for (capacity in listOf(1, 8)) {
+            for (kind in listOf("redstone", "sound")) {
+                for (reject in listOf(false, true)) {
+                    val artifact = Path.of(requireNotNull(System.getProperty("compukters.fleet.$kind.fixture"))).readBytes()
+                    val host = ProgramRuntimeHost(NativeProgramVmSessionFactory())
+                    assertEquals(ProgramStartResult.Started, host.start(artifact))
+                    val config = ExperimentalFleetConfig(1, 32, 32, 4096, 64, 64, 32, coordinatedTurns = true)
+                    VmRuntime.openExperimentalFleet(config).use { fleet ->
+                        val machine = host.transferToFleet(fleet, 0)
+                        // Fixture input is part of setup; this scenario isolates bounded world reply delivery.
+                        fleet.redstoneInput(machine, RedstoneWire.packInput(63, IntArray(6) { 15 }))
+                        NativeFleetActorRuntimeService(fleet, 4, 16, capacity, {}, {}, { _, event ->
+                            if (event is ExperimentalFleetEvent.Outcome) {
+                                check(
+                                    event.outcome !is VmOutcome.HostRequestBatch,
+                                ) { "world request escaped carrier" }
+                            }
+                        }, onActorClosing = {}).use { service ->
+                            val endpoint = VmActorEndpoint(ComputerId.fromLongs(41, 42), 1)
+                            val lease = checkNotNull(service.attach(endpoint, machine, host))
+                            // The host is already started/transferred. Automatic bootstrap remains outside this backend.
+                            val active =
+                                object : ActorRuntimeService by service {
+                                    override fun request(
+                                        endpoint: VmActorEndpoint,
+                                        command: (ProgramRuntimeRequestId) -> ProgramRuntimeActorCommand,
+                                    ): CompletableFuture<ProgramRuntimeActorReply> {
+                                        val id = ProgramRuntimeRequestId(1)
+                                        check(command(id) is ProgramRuntimeActorCommand.RestoreOrBoot)
+                                        return CompletableFuture.completedFuture(
+                                            ProgramRuntimeActorReply(id, ProgramRuntimeState.Running, ProgramRuntimeActorValue.None),
+                                        )
+                                    }
+                                }
+                            val writes = mutableListOf<Int>()
+                            val sounds = mutableListOf<SoundRequest>()
+                            val carrier =
+                                ActorProgramComputer(
+                                    active,
+                                    lease,
+                                    { packed ->
+                                        writes += packed
+                                        if (reject) {
+                                            RedstoneCommitResult.Failed(
+                                                HostFailureKind.INPUT_OUTPUT,
+                                                "test world failure",
+                                            )
+                                        } else {
+                                            RedstoneCommitResult.Committed
+                                        }
+                                    },
+                                    { requests ->
+                                        sounds += requests
+                                        if (reject) {
+                                            SoundCommitResult.Failed(HostFailureKind.INPUT_OUTPUT, "test world failure")
+                                        } else {
+                                            SoundCommitResult.Completed(
+                                                requests.map {
+                                                    it.note ==
+                                                        12
+                                                },
+                                            )
+                                        }
+                                    },
+                                )
+                            try {
+                                carrier.turnOn().join()
+                                var tick = 1L
+                                val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10)
+                                while (carrier.state == ProgramRuntimeState.Running ||
+                                    carrier.state == ProgramRuntimeState.WaitingForInput
+                                ) {
+                                    check(
+                                        System.nanoTime() < deadline,
+                                    ) { "world continuation stalled: $kind, capacity=$capacity, state=${carrier.state}" }
+                                    service.pump(32, 32)
+                                    if (service.grantFrame(endpoint, tick, 100_000)) {
+                                        carrier.serverTick(tick)
+                                        tick++
+                                    }
+                                    Thread.yield()
+                                }
+                                if (reject) {
+                                    assertIs<ProgramRuntimeState.Failed>(carrier.state)
+                                    assertEquals(1, if (kind == "redstone") writes.size else sounds.size)
+                                } else {
+                                    assertEquals(ProgramRuntimeState.Halted(null), carrier.state)
+                                    if (kind == "redstone") {
+                                        assertEquals(3, writes.size)
+                                        assertEquals(31, RedstoneWire.output(writes.last(), 3))
+                                        assertEquals(31, RedstoneWire.output(writes.last(), 4))
+                                    } else {
+                                        assertEquals(listOf(SoundRequest(12, 100), SoundRequest(24, 50)), sounds)
+                                    }
+                                }
+                            } finally {
+                                carrier.closeAsync().get(5, TimeUnit.SECONDS)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     @Test
     fun `JVM actor lease hibernates without owner pumping and restores its native timer`() {
         installFfmRuntime()
@@ -746,7 +943,15 @@ class NativeFleetEventPumpIntegrationTest {
                     val second = CompletableFuture<ProgramRuntimeActorReply>()
                     val effects =
                         if (capacity == 1) {
-                            assertEquals(1, runtime.submitAddonCompletions(endpoint, completion.completions))
+                            assertEquals(
+                                1,
+                                runtime.submitHostCompletions(
+                                    endpoint,
+                                    completion.completions.map {
+                                        ProgramRuntimeHostCompletion.Reply(it.identity, it.response)
+                                    },
+                                ),
+                            )
                             assertFalse(runtime.continueTurn(endpoint, 4, emptyList()) { _, _ -> error("refused grant completed") })
                             service.pump(0, 1) // Deliver the reply before the one-entry queue can admit a grant.
                             emptyList()

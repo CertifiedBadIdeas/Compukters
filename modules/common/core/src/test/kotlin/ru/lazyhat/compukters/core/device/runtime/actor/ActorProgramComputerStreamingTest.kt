@@ -12,7 +12,10 @@ import ru.lazyhat.compukters.api.addon.ProgramAddonHost
 import ru.lazyhat.compukters.api.addon.ProgramAddonRequest
 import ru.lazyhat.compukters.core.device.computer.ActorProgramComputer
 import ru.lazyhat.compukters.core.device.runtime.program.ProgramRuntimeState
+import ru.lazyhat.compukters.core.device.runtime.program.ProgramWorldRequest
 import ru.lazyhat.compukters.core.device.runtime.program.RedstoneCommitResult
+import ru.lazyhat.compukters.core.device.runtime.program.SoundCommitResult
+import ru.lazyhat.compukters.core.device.runtime.program.SoundRequest
 import ru.lazyhat.compukters.lang.runtime.capability.HostCapabilitySchema
 import ru.lazyhat.compukters.lang.runtime.capability.HostResponse
 import ru.lazyhat.compukters.lang.runtime.fs.ComputerId
@@ -21,12 +24,142 @@ import ru.lazyhat.compukters.lang.runtime.vm.VmHostRequestIdentity
 import java.util.concurrent.CompletableFuture
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class ActorProgramComputerStreamingTest {
+    @Test
+    fun `physical output confirmation survives stopped scopes and terminal state before hibernation`() {
+        val service = Service(1)
+        var captured: ProgramActorHibernation? = null
+        val endpoint = VmActorEndpoint(ComputerId.fromLongs(1, 2), 1)
+        val lease =
+            ProgramRuntimeActorLease(endpoint) { request ->
+                captured = request
+                ProgramActorCloseReservation { CompletableFuture.completedFuture(7) }
+            }
+        val carrier = ActorProgramComputer(service, lease, { RedstoneCommitResult.Committed })
+        carrier.turnOn().join()
+        carrier.serverTick(1) // Keep the one-entry native queue occupied by its initial grant.
+        val observer = assertIs<ProgramRuntimeTurnObserver>(service.completion)
+        observer.worldRequest(ProgramWorldRequest.Redstone(listOf(VmHostRequestIdentity(1, 1)), 7, 17))
+        observer.addonAction(ProgramAddonAction.Stopped(7))
+        observer.complete(reply().copy(state = ProgramRuntimeState.Halted(null)), null)
+        assertNull(carrier.tryHibernateAsync(1))
+        assertNull(captured)
+        service.queued = 0
+        assertEquals(7L, checkNotNull(carrier.tryHibernateAsync(1)).join())
+        assertEquals(listOf<ProgramRuntimeHostCompletion>(ProgramRuntimeHostCompletion.ConfirmRedstoneOutput(17)), service.hostCompletions)
+        assertEquals(1, service.acceptedTurns)
+        assertTrue(checkNotNull(captured).effects.isEmpty())
+    }
+
+    @Test
+    fun `streamed world actions execute once and their ordered completions drain through one slot`() {
+        val service = Service(1)
+        val writes = mutableListOf<Int>()
+        var sounds = 0
+        val endpoint = VmActorEndpoint(ComputerId.fromLongs(1, 2), 1)
+        val lease =
+            ProgramRuntimeActorLease(endpoint, CompletableFuture.completedFuture(7L), {}, { CompletableFuture.completedFuture(true) })
+        val carrier =
+            ActorProgramComputer(
+                service,
+                lease,
+                { packed ->
+                    writes += packed
+                    RedstoneCommitResult.Committed
+                },
+                { requests ->
+                    sounds++
+                    SoundCommitResult.Completed(requests.map { it.note == 12 })
+                },
+            )
+        carrier.turnOn().join()
+        carrier.serverTick(1)
+        service.queued = 0
+        val observer = assertIs<ProgramRuntimeTurnObserver>(service.completion)
+        val identities = (1L..4L).map { VmHostRequestIdentity(1, it) }
+        assertEquals(17, observer.worldRequest(ProgramWorldRequest.Redstone(identities.take(2), 0, 17))?.confirmedRedstoneOutput)
+        observer.worldRequest(ProgramWorldRequest.Sound(identities.drop(2), 0, listOf(SoundRequest(12, 100), SoundRequest(24, 50))))
+        observer.complete(reply().copy(state = ProgramRuntimeState.WaitingForInput), null)
+        for (tick in 2L..8L) {
+            service.queued = 0
+            carrier.serverTick(tick)
+        }
+        assertEquals(listOf(17), writes)
+        assertEquals(1, sounds)
+        assertEquals(ProgramRuntimeHostCompletion.ConfirmRedstoneOutput(17), service.hostCompletions.first())
+        val replies = service.hostCompletions.filterIsInstance<ProgramRuntimeHostCompletion.Reply>()
+        assertEquals(identities, replies.map { it.identity })
+        assertEquals(
+            listOf(
+                HostResponse.UnitSuccess,
+                HostResponse.UnitSuccess,
+                HostResponse.BoolSuccess(true),
+                HostResponse.BoolSuccess(false),
+            ),
+            replies.map {
+                it.response
+            },
+        )
+        assertTrue(service.acceptedTurns > 1)
+        carrier.closeAsync().join()
+    }
+
+    @Test
+    fun `world queue rejects overflow before mutation and a reentrant close fences completions`() {
+        val service = Service(1)
+        var writes = 0
+        lateinit var carrier: ActorProgramComputer
+        val endpoint = VmActorEndpoint(ComputerId.fromLongs(1, 2), 1)
+        val lease =
+            ProgramRuntimeActorLease(endpoint, CompletableFuture.completedFuture(7L), {}, { CompletableFuture.completedFuture(true) })
+        carrier =
+            ActorProgramComputer(service, lease, {
+                writes++
+                carrier.closeAsync()
+                RedstoneCommitResult.Committed
+            })
+        carrier.turnOn().join()
+        carrier.serverTick(1)
+        val observer = assertIs<ProgramRuntimeTurnObserver>(service.completion)
+        assertFailsWith<IllegalStateException> {
+            observer.worldRequest(ProgramWorldRequest.Redstone((1L..513L).map { VmHostRequestIdentity(1, it) }, 0, 17))
+        }
+        assertEquals(0, writes)
+        assertNull(observer.worldRequest(ProgramWorldRequest.Redstone(listOf(VmHostRequestIdentity(1, 1)), 0, 17)))
+        observer.complete(reply(), null)
+        assertEquals(1, writes)
+        assertTrue(service.hostCompletions.isEmpty())
+        assertEquals(ProgramRuntimeState.Closed, carrier.state)
+    }
+
+    @Test
+    fun `world port failure returns failures without confirming output or repeating a sound`() {
+        val service = Service(8)
+        val endpoint = VmActorEndpoint(ComputerId.fromLongs(1, 2), 1)
+        val lease =
+            ProgramRuntimeActorLease(endpoint, CompletableFuture.completedFuture(7L), {}, { CompletableFuture.completedFuture(true) })
+        val carrier =
+            ActorProgramComputer(service, lease, {
+                throw IllegalStateException("world unavailable")
+            }, { throw IllegalStateException("world unavailable") })
+        carrier.turnOn().join()
+        carrier.serverTick(1)
+        service.queued = 0
+        val observer = assertIs<ProgramRuntimeTurnObserver>(service.completion)
+        assertNull(observer.worldRequest(ProgramWorldRequest.Redstone(listOf(VmHostRequestIdentity(1, 1)), 0, 17))?.confirmedRedstoneOutput)
+        observer.worldRequest(ProgramWorldRequest.Sound(listOf(VmHostRequestIdentity(1, 2)), 0, listOf(SoundRequest(12, 100))))
+        observer.complete(reply(), null)
+        assertEquals(2, service.hostCompletions.size)
+        service.hostCompletions.forEach { assertIs<HostResponse.Failure>(assertIs<ProgramRuntimeHostCompletion.Reply>(it).response) }
+        carrier.closeAsync().join()
+    }
+
     @Test
     fun `hibernation retries remaining reply prefix without executing Guest`() {
         val service = Service(1)
@@ -321,14 +454,16 @@ class ActorProgramComputerStreamingTest {
         var queued = 0
         var acceptedTurns = 0
         val acceptedReplies = mutableListOf<VmHostRequestIdentity>()
+        val hostCompletions = mutableListOf<ProgramRuntimeHostCompletion>()
 
-        override fun submitAddonCompletions(
+        override fun submitHostCompletions(
             endpoint: VmActorEndpoint,
-            completions: List<ProgramAddonCompletion>,
+            completions: List<ProgramRuntimeHostCompletion>,
         ): Int? {
             val capacity = replyCapacity ?: return null
             val accepted = minOf(completions.size, capacity - queued)
-            acceptedReplies += completions.take(accepted).map { it.identity }
+            acceptedReplies += completions.take(accepted).filterIsInstance<ProgramRuntimeHostCompletion.Reply>().map { it.identity }
+            hostCompletions += completions.take(accepted)
             queued += accepted
             return accepted
         }

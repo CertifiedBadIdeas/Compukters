@@ -15,6 +15,8 @@ internal object HostRequestRoutes {
     private val sound = CapabilityIdentity("compukter", "sound", 1, 0)
     val timer = CapabilityIdentity("compukter", "timer", 1, 0)
 
+    fun isRedstoneOutput(request: VmHostRequest): Boolean = request.capability == redstone && request.operation in 6..7
+
     fun isSound(request: VmHostRequest): Boolean = request.capability == sound && request.operation == 0
 
     fun isAddon(
@@ -39,7 +41,7 @@ internal object HostRequestRoutes {
         val unavailable = ArrayList<VmHostRequest>()
         for (request in requests) {
             when {
-                request.capability == redstone && request.operation in 6..7 -> redstoneRequests.add(request)
+                isRedstoneOutput(request) -> redstoneRequests.add(request)
                 isSound(request) -> soundRequests.add(request)
                 request.capability == timer && request.operation == 0 -> timerRequests.add(request)
                 isAddon(request, addonSchemas) -> addonRequests.add(request)

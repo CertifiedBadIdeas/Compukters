@@ -255,15 +255,15 @@ internal class NativeFleetOutbox(
         return Handoff(queue?.commands ?: ArrayDeque(), budget)
     }
 
-    /** Largest ordered reply prefix that fits now. A grant is admitted separately, even with a one-entry queue. */
-    fun offerReplies(
+    /** Largest ordered completion prefix that fits now. A grant is admitted separately, even with a one-entry queue. */
+    fun offerPrefix(
         machine: Long,
-        replies: List<Command.Reply>,
+        commands: List<Command>,
     ): Int {
         checkOwner()
-        for (reply in replies) {
-            require(reply.retainedBytes <= byteLimits.perMachineBytes && reply.retainedBytes <= byteLimits.totalBytes) {
-                "native reply exceeds the configured byte limit"
+        for (command in commands) {
+            require(command.retainedBytes <= byteLimits.perMachineBytes && command.retainedBytes <= byteLimits.totalBytes) {
+                "native completion exceeds the configured byte limit"
             }
         }
         val queue = queues[machine]
@@ -271,16 +271,16 @@ internal class NativeFleetOutbox(
         val remainingBytes = byteLimits.perMachineBytes - (queue?.bytes ?: 0L)
         var count = 0
         var bytes = 0L
-        for (reply in replies) {
-            if (count == capacity || reply.retainedBytes > remainingBytes - bytes ||
-                !budget.canReserve(count + 1, bytes + reply.retainedBytes)
+        for (command in commands) {
+            if (count == capacity || command.retainedBytes > remainingBytes - bytes ||
+                !budget.canReserve(count + 1, bytes + command.retainedBytes)
             ) {
                 break
             }
             count++
-            bytes += reply.retainedBytes
+            bytes += command.retainedBytes
         }
-        return if (count > 0 && offer(machine, replies.subList(0, count))) count else 0
+        return if (count > 0 && offer(machine, commands.subList(0, count))) count else 0
     }
 
     /** Either retain the entire batch in order, or retain none of it. */

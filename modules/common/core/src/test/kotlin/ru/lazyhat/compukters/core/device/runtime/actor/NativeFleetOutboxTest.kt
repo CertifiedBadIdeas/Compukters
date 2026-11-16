@@ -29,12 +29,12 @@ class NativeFleetOutboxTest {
                 null
             } as ExperimentalFleet
         val outbox = NativeFleetOutbox(bridge, 8, 8, {}, byteLimits = NativeFleetOutboxLimits(small.retainedBytes, small.retainedBytes))
-        assertFailsWith<IllegalArgumentException> { outbox.offerReplies(1, listOf(small, large)) }
+        assertFailsWith<IllegalArgumentException> { outbox.offerPrefix(1, listOf(small, large)) }
         assertEquals(0L, outbox.retainedBytes)
-        assertEquals(1, outbox.offerReplies(1, listOf(small, small)))
-        assertEquals(0, outbox.offerReplies(1, listOf(small)))
+        assertEquals(1, outbox.offerPrefix(1, listOf(small, small)))
+        assertEquals(0, outbox.offerPrefix(1, listOf(small)))
         assertEquals(1, outbox.flush(8))
-        assertEquals(1, outbox.offerReplies(1, listOf(small)))
+        assertEquals(1, outbox.offerPrefix(1, listOf(small)))
     }
 
     @Test

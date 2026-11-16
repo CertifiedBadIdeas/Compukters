@@ -34,6 +34,7 @@ import ru.lazyhat.compukters.core.device.runtime.actor.ProgramRuntimeActorReply
 import ru.lazyhat.compukters.core.device.runtime.actor.ProgramRuntimeActorRequestException
 import ru.lazyhat.compukters.core.device.runtime.actor.ProgramRuntimeActorService
 import ru.lazyhat.compukters.core.device.runtime.actor.ProgramRuntimeActorValue
+import ru.lazyhat.compukters.core.device.runtime.actor.ProgramRuntimeHostCompletion
 import ru.lazyhat.compukters.core.device.runtime.actor.ProgramRuntimeRequestId
 import ru.lazyhat.compukters.core.device.runtime.actor.ProgramRuntimeTurnObserver
 import ru.lazyhat.compukters.core.device.runtime.actor.VmActorSubmission
@@ -41,10 +42,13 @@ import ru.lazyhat.compukters.core.device.runtime.program.EmptyProgramAddonHost
 import ru.lazyhat.compukters.core.device.runtime.program.ProgramFailure
 import ru.lazyhat.compukters.core.device.runtime.program.ProgramRuntimeState
 import ru.lazyhat.compukters.core.device.runtime.program.ProgramStartResult
+import ru.lazyhat.compukters.core.device.runtime.program.ProgramWorldRequest
+import ru.lazyhat.compukters.core.device.runtime.program.ProgramWorldResult
 import ru.lazyhat.compukters.core.device.runtime.program.RedstoneCommitResult
 import ru.lazyhat.compukters.core.device.runtime.program.RedstoneHostPort
 import ru.lazyhat.compukters.core.device.runtime.program.SoundCommitResult
 import ru.lazyhat.compukters.core.device.runtime.program.SoundHostPort
+import ru.lazyhat.compukters.core.device.runtime.program.SoundRequest
 import ru.lazyhat.compukters.lang.runtime.capability.HostResponse
 import ru.lazyhat.compukters.lang.runtime.vm.HostFailureKind
 import ru.lazyhat.compukters.lang.runtime.vm.RedstoneWire
@@ -79,8 +83,8 @@ class ActorProgramComputer internal constructor(
     private var pendingOutput: PendingOutput? = null
     private var pendingSound: PendingSound? = null
     private val pendingRedstoneInputs = ArrayDeque<Int>()
-    private val pendingAddonCompletions = ArrayDeque<ProgramAddonCompletion>()
-    private var pendingAddonContinuation = false
+    private val pendingHostCompletions = ArrayDeque<ProgramRuntimeHostCompletion>()
+    private var pendingHostContinuation = false
     private val outstandingAddonRequests = mutableMapOf<VmHostRequestIdentity, Long>()
     private var closeResult: CompletableFuture<Long?>? = null
     private var pendingLifecycle: LifecycleStage? = null
@@ -221,7 +225,7 @@ class ActorProgramComputer internal constructor(
                     state != ProgramRuntimeState.WaitingForCompiler &&
                     pendingOutput == null &&
                     pendingSound == null &&
-                    pendingAddonCompletions.isEmpty() && !pendingAddonContinuation &&
+                    pendingHostCompletions.isEmpty() && !pendingHostContinuation &&
                     pendingRedstoneInputs.isEmpty()
             )
         ) {
@@ -239,7 +243,7 @@ class ActorProgramComputer internal constructor(
         val requestedSound = pendingSound
         val addonCompletions =
             try {
-                prepareAddonCompletions()
+                prepareHostCompletions()
             } catch (failure: Exception) {
                 failUnlessBusy(failure)
                 return
@@ -271,6 +275,8 @@ class ActorProgramComputer internal constructor(
                     acceptAddonAction(action, currentLifecycle)
                 }
 
+                override fun worldRequest(request: ProgramWorldRequest): ProgramWorldResult? = acceptWorldRequest(request, currentLifecycle)
+
                 override fun complete(
                     reply: ProgramRuntimeActorReply?,
                     failure: Throwable?,
@@ -290,8 +296,8 @@ class ActorProgramComputer internal constructor(
         }
         pendingOutput = null
         pendingSound = null
-        pendingAddonContinuation = false
-        acknowledgeAddonCompletions(addonCompletions.size)
+        pendingHostContinuation = false
+        acknowledgeHostCompletions(addonCompletions.size)
         if (input != null) pendingRedstoneInputs.removeFirst()
         hostCompletionTick?.let { completedAt ->
             service.recordHostContinuationDelay((worldTick - completedAt).coerceAtLeast(0))
@@ -299,17 +305,24 @@ class ActorProgramComputer internal constructor(
         }
     }
 
-    private fun prepareAddonCompletions(): List<ProgramAddonCompletion> {
-        val completions = pendingAddonCompletions.toList()
-        val accepted = service.submitAddonCompletions(lease.endpoint, completions) ?: return completions
+    private fun prepareHostCompletions(): List<ProgramAddonCompletion> {
+        val completions = pendingHostCompletions.toList()
+        val accepted =
+            service.submitHostCompletions(lease.endpoint, completions) ?: return completions.map {
+                val reply = it as ProgramRuntimeHostCompletion.Reply
+                ProgramAddonCompletion(reply.identity, reply.response)
+            }
         check(accepted in 0..completions.size)
-        acknowledgeAddonCompletions(accepted)
-        if (accepted > 0) pendingAddonContinuation = true
+        acknowledgeHostCompletions(accepted)
+        if (accepted > 0) pendingHostContinuation = true
         return emptyList()
     }
 
-    private fun acknowledgeAddonCompletions(count: Int) {
-        repeat(count) { outstandingAddonRequests.remove(pendingAddonCompletions.removeFirst().identity) }
+    private fun acknowledgeHostCompletions(count: Int) {
+        repeat(count) {
+            val completion = pendingHostCompletions.removeFirst()
+            if (completion is ProgramRuntimeHostCompletion.Reply) outstandingAddonRequests.remove(completion.identity)
+        }
     }
 
     private fun completeTurn(
@@ -331,7 +344,7 @@ class ActorProgramComputer internal constructor(
             if (version != lifecycle || closeResult != null) return
             acceptAdvanceReply(observed, version)
             if (version != lifecycle || closeResult != null) return
-            if (pendingOutput != null || pendingSound != null || pendingAddonCompletions.isNotEmpty() || pendingAddonContinuation) {
+            if (pendingOutput != null || pendingSound != null || pendingHostCompletions.isNotEmpty() || pendingHostContinuation) {
                 submitTurn(worldTick, continuation = true)
             }
         } catch (cause: Throwable) {
@@ -378,12 +391,12 @@ class ActorProgramComputer internal constructor(
         closeResult?.let { return it.copy() }
         val addonCompletions =
             try {
-                prepareAddonCompletions()
+                prepareHostCompletions()
             } catch (failure: Exception) {
                 return CompletableFuture.failedFuture(failure)
             }
         // Native replies can drain before another close attempt, without executing Guest instructions.
-        if (addonCompletions.isEmpty() && pendingAddonCompletions.isNotEmpty()) return null
+        if (addonCompletions.isEmpty() && pendingHostCompletions.isNotEmpty()) return null
         val effects =
             buildList {
                 pendingOutput?.let { add(ProgramRuntimeActorEffect.CompleteRedstoneOutput(it.requestId, it.packed, it.result)) }
@@ -418,8 +431,8 @@ class ActorProgramComputer internal constructor(
         pendingOutput = null
         pendingSound = null
         pendingRedstoneInputs.clear()
-        pendingAddonCompletions.clear()
-        pendingAddonContinuation = false
+        pendingHostCompletions.clear()
+        pendingHostContinuation = false
         outstandingAddonRequests.clear()
         hostCompletionTick = null
         reservation.commit()
@@ -446,12 +459,13 @@ class ActorProgramComputer internal constructor(
                 addon.programStopped(action.programId)
                 if (currentLifecycle != lifecycle || closeResult != null) return
                 val retired = outstandingAddonRequests.filterValues { it == action.programId }.keys
-                pendingAddonCompletions.removeAll { it.identity in retired }
+                pendingHostCompletions.removeAll { it is ProgramRuntimeHostCompletion.Reply && it.programId == action.programId }
                 retired.forEach(outstandingAddonRequests::remove)
             }
 
             is ProgramAddonAction.Request -> {
                 val addonRequest = action.request
+                check(pendingHostCompletions.size < MAXIMUM_PENDING_HOST_COMPLETIONS) { "host completion queue is full" }
                 check(
                     outstandingAddonRequests.put(addonRequest.identity, addonRequest.programId) == null,
                 ) { "duplicate pending addon request" }
@@ -463,12 +477,99 @@ class ActorProgramComputer internal constructor(
                     }
                 if (currentLifecycle != lifecycle || closeResult != null) return
                 if (result is ProgramAddonDispatch.Completed) {
-                    pendingAddonCompletions += ProgramAddonCompletion(addonRequest.identity, result.response)
+                    pendingHostCompletions +=
+                        ProgramRuntimeHostCompletion.Reply(addonRequest.identity, result.response, addonRequest.programId)
                 }
                 hostCompletionTick = lastObservedServerTick
             }
         }
     }
+
+    private fun acceptWorldRequest(
+        request: ProgramWorldRequest,
+        version: Long,
+    ): ProgramWorldResult? {
+        if (version != lifecycle || closeResult != null) return null
+        check(request.identities.isNotEmpty() && request.identities.distinct().size == request.identities.size)
+        val allowance = request.identities.size + if (request is ProgramWorldRequest.Redstone && request.changed) 1 else 0
+        check(allowance <= MAXIMUM_PENDING_HOST_COMPLETIONS - pendingHostCompletions.size) { "host completion queue is full" }
+        val queued = pendingHostCompletions.filterIsInstance<ProgramRuntimeHostCompletion.Reply>().mapTo(mutableSetOf()) { it.identity }
+        check(request.identities.none { it in queued }) { "duplicate pending world request" }
+        var confirmed: Int? = null
+        val responses: List<HostResponse> =
+            when (request) {
+                is ProgramWorldRequest.Redstone -> {
+                    RedstoneWire.requireOutputRegister(request.packed)
+                    val result = if (request.changed) commitRedstone(request.packed) else RedstoneCommitResult.Committed
+                    if (version != lifecycle || closeResult != null) return null
+                    val response =
+                        when (result) {
+                            RedstoneCommitResult.Committed -> {
+                                if (request.changed) {
+                                    pendingHostCompletions +=
+                                        ProgramRuntimeHostCompletion.ConfirmRedstoneOutput(request.packed)
+                                }
+                                confirmed = request.packed
+                                HostResponse.UnitSuccess
+                            }
+
+                            is RedstoneCommitResult.Failed -> {
+                                HostResponse.Failure(result.kind, result.detail)
+                            }
+
+                            RedstoneCommitResult.Deferred -> {
+                                error("world redstone completion cannot be deferred")
+                            }
+                        }
+                    List(request.identities.size) { response }
+                }
+
+                is ProgramWorldRequest.Sound -> {
+                    check(request.requests.size == request.identities.size)
+                    val result = emitSound(request.requests)
+                    if (version != lifecycle || closeResult != null) return null
+                    when (result) {
+                        is SoundCommitResult.Completed -> {
+                            check(result.admissions.size == request.identities.size) { "sound completion size mismatch" }
+                            result.admissions.map { HostResponse.BoolSuccess(it) }
+                        }
+
+                        is SoundCommitResult.Failed -> {
+                            List(request.identities.size) { HostResponse.Failure(result.kind, result.detail) }
+                        }
+
+                        SoundCommitResult.Deferred -> {
+                            error("world sound completion cannot be deferred")
+                        }
+                    }
+                }
+
+                is ProgramWorldRequest.Rejected -> {
+                    List(request.identities.size) { request.response }
+                }
+            }
+        request.identities.forEachIndexed { index, identity ->
+            pendingHostCompletions += ProgramRuntimeHostCompletion.Reply(identity, responses[index], request.programId)
+        }
+        hostCompletionTick = lastObservedServerTick
+        return ProgramWorldResult(confirmed)
+    }
+
+    private fun commitRedstone(packed: Int): RedstoneCommitResult =
+        try {
+            redstone.commitOutput(packed).also {
+                check(it != RedstoneCommitResult.Deferred) { "server redstone port must complete the world mutation" }
+            }
+        } catch (_: Exception) {
+            RedstoneCommitResult.Failed(HostFailureKind.INPUT_OUTPUT, "Redstone output failed")
+        }
+
+    private fun emitSound(requests: List<SoundRequest>): SoundCommitResult =
+        try {
+            sound.emit(requests).also { check(it != SoundCommitResult.Deferred) { "server sound port must complete the world mutation" } }
+        } catch (_: Exception) {
+            SoundCommitResult.Failed(HostFailureKind.INPUT_OUTPUT, "Sound output failed")
+        }
 
     private fun acceptAdvanceReply(
         reply: ProgramRuntimeActorReply,
@@ -478,28 +579,14 @@ class ActorProgramComputer internal constructor(
         if (currentLifecycle != lifecycle || closeResult != null) return
         when (val request = reply.value) {
             is ProgramRuntimeActorValue.RedstoneOutputRequested -> {
-                val result =
-                    try {
-                        redstone.commitOutput(request.packed).also {
-                            check(it != RedstoneCommitResult.Deferred) { "server redstone port must complete the world mutation" }
-                        }
-                    } catch (_: Exception) {
-                        RedstoneCommitResult.Failed(HostFailureKind.INPUT_OUTPUT, "Redstone output failed")
-                    }
+                val result = commitRedstone(request.packed)
                 if (currentLifecycle != lifecycle || closeResult != null) return
                 pendingOutput = PendingOutput(reply.requestId, request.packed, result)
                 hostCompletionTick = lastObservedServerTick
             }
 
             is ProgramRuntimeActorValue.SoundRequested -> {
-                val result =
-                    try {
-                        sound.emit(request.requests).also {
-                            check(it != SoundCommitResult.Deferred) { "server sound port must complete the world mutation" }
-                        }
-                    } catch (_: Exception) {
-                        SoundCommitResult.Failed(HostFailureKind.INPUT_OUTPUT, "Sound output failed")
-                    }
+                val result = emitSound(request.requests)
                 if (currentLifecycle != lifecycle || closeResult != null) return
                 pendingSound = PendingSound(reply.requestId, result)
                 hostCompletionTick = lastObservedServerTick
@@ -514,7 +601,7 @@ class ActorProgramComputer internal constructor(
             reply.state != ProgramRuntimeState.WaitingForInput &&
             reply.state != ProgramRuntimeState.WaitingForCompiler
         ) {
-            discardAddonRequests()
+            discardHostRequests()
         }
     }
 
@@ -529,7 +616,7 @@ class ActorProgramComputer internal constructor(
         pendingOutput = null
         pendingSound = null
         pendingRedstoneInputs.clear()
-        discardAddonRequests()
+        discardHostRequests()
         hostCompletionTick = null
         return observe(retryLifecycleStage(lifecycle, command), lifecycle)
     }
@@ -622,21 +709,27 @@ class ActorProgramComputer internal constructor(
     }
 
     private fun collectAddonCompletions() {
-        val available = MAXIMUM_ADDON_COMPLETIONS_PER_TICK - pendingAddonCompletions.size
+        val available = MAXIMUM_ADDON_COMPLETIONS_PER_TICK - pendingHostCompletions.size
         if (available <= 0 || outstandingAddonRequests.isEmpty()) return
         val polled = addon.poll(available)
         require(polled.size <= available) { "addon host exceeded its completion budget" }
-        val queued = pendingAddonCompletions.mapTo(mutableSetOf(), ProgramAddonCompletion::identity)
+        val queued = pendingHostCompletions.filterIsInstance<ProgramRuntimeHostCompletion.Reply>().mapTo(mutableSetOf()) { it.identity }
         polled.forEach { completion ->
             require(completion.identity in outstandingAddonRequests) { "addon host completed an unknown or stale request" }
             require(queued.add(completion.identity)) { "addon host completed one request more than once" }
-            pendingAddonCompletions += completion
+            pendingHostCompletions +=
+                ProgramRuntimeHostCompletion.Reply(
+                    completion.identity,
+                    completion.response,
+                    outstandingAddonRequests.getValue(completion.identity),
+                )
         }
     }
 
-    private fun discardAddonRequests() {
-        pendingAddonCompletions.clear()
-        pendingAddonContinuation = false
+    private fun discardHostRequests() {
+        // Physical output already changed; retain its native acknowledgement even if Guest replies are obsolete.
+        pendingHostCompletions.removeAll { it is ProgramRuntimeHostCompletion.Reply }
+        pendingHostContinuation = pendingHostCompletions.isNotEmpty()
         outstandingAddonRequests.clear()
         addon.reset()
     }
@@ -662,5 +755,6 @@ class ActorProgramComputer internal constructor(
 
     private companion object {
         const val MAXIMUM_ADDON_COMPLETIONS_PER_TICK = 256
+        const val MAXIMUM_PENDING_HOST_COMPLETIONS = 512
     }
 }

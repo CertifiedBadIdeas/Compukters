@@ -45,7 +45,8 @@ the stored checkpoint and resume execution. Timers retain remaining ticks; unloa
 as sleep. Every carrier gets fresh machine/compiler epochs and per-tick instruction credit. A restoring carrier retries admission
 once per tick while waiting for its predecessor to release the filesystem lease.
 
-Accepted world completions drain before capture. Undelivered redstone, sound and addon operations receive catchable
+Accepted world completions drain before capture. The native carrier retains confirmations of physical redstone
+writes even after their Guest scope stops, and drains them before capture without advancing Guest. Undelivered redstone, sound and addon operations receive catchable
 unavailable failures; restoration never repeats their physical effects. Pending compilation retains its original
 source bytes and may be resubmitted without applying a stale worker response.
 

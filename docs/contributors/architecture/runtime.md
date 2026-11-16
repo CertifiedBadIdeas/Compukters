@@ -88,12 +88,12 @@ canonical lines, filesystem-generation queries and bounded file stat/list/read q
 validates payload bounds before admission and checks the response kind before completing a request. The queued command
 owns the input payload; the response registry retains only its kind and future. Accepted input updates host observations
 even if its caller canceled the future; rejected input does not wake a parked host. File errors retain their typed
-failure values, and duplicate or obsolete responses cannot change observations. Other effects and requests are rejected
+failure values, and duplicate or obsolete responses cannot change observations. Other raw effects and requests are rejected
 before admission. External events go to an owner callback without another
 result backlog. `CompleteAddons` replies and their grant are admitted to the ordered JVM outbox as one batch;
 refusal retains the caller's exact completion and frame reservation. Rust matches exact task/request identities and
 ignores obsolete or repeated completions, without a second JVM registry of native pending host requests.
-A turn observer streams registered addon requests and program start/stop actions to the carrier on its owner thread,
+A turn observer streams registered addon requests, redstone/sound requests and program start/stop actions to the carrier on its owner thread,
 without collecting a second payload queue until the final report. These actions do not settle instruction credit or
 start a continuation; only Quiescent does. Unhandled requests retain the external owner hook, and final-only callers
 retain raw event delivery. Mixed batches forward only unhandled requests. Scope changes reuse host metadata; stopping
@@ -106,11 +106,21 @@ These are charged-byte budgets, with no per-idle-machine reservation. Charges co
 response trees, UTF-16 strings and an allowance per value/schema field; shared schemas are counted in full. Queue/map
 overhead is separately bounded by entry limits; these charges are not a measurement of JVM heap or native retention.
 Validation and sizing allocate no encoded response. Busy and failed sends retain the payload and its charge until
-native acceptance or explicit removal. Atomic turn refusal retains no prefix and consumes no frame credit. Native addon delivery separately admits an ordered
-reply prefix within both entry and byte budgets; the carrier acknowledges only that prefix. Execution credit follows
+native acceptance or explicit removal. Atomic turn refusal retains no prefix and consumes no frame credit. Native host completion delivery separately admits an ordered
+completion prefix within both entry and byte budgets; the carrier acknowledges only that prefix. Execution credit follows
 in a separate grant, so replies can drain even through a one-entry queue. A refused grant remains pending even if the
-last reply has already left the carrier and the observed Guest state is waiting. A reply exceeding the configured
+last reply has already left the carrier and the observed Guest state is waiting. A completion exceeding the configured
 single-machine or global byte limit fails explicitly rather than retrying forever.
+
+Redstone and sound use the existing owner-thread world ports. The host normalizes builtin requests before the
+carrier performs a world action; retries submit retained responses rather than replaying that action. Successful
+changed redstone output queues a native confirmation before its Guest replies, and subsequent groups reduce against
+the observed physical output. Unchanged output skips the world write. Sound replies retain each note's admission
+result. Mixed redstone/sound groups retain the legacy unavailable response. The lazy carrier completion queue is
+bounded to 512 entries, checked before world mutation; its scalar world replies share native outbox entry and byte
+admission with addon replies. This does not add a complete carrier response-byte budget. Program stop cancels its
+queued Guest replies but preserves physical redstone confirmations, including after terminal Guest state. These
+confirmations and accepted replies drain before checkpoint capture without granting further Guest execution.
 
 A native error with a known machine identity fails only that actor's pending turn and queries, cancels its external
 requests and starts its independent close barrier. The same pump continues processing other actors. Stale machine
@@ -133,8 +143,8 @@ Stop barriers complete after native destruction, final filesystem generation rec
 owner result pumping. Canceling a returned future does not cancel the close. Closing metadata and one control operation
 are bounded by the actor admission limit, with no per-idle-machine reservation. Ordinary output from other machines
 remains untouched. Shutdown waits for both the event waiter and the lifecycle worker before allowing fleet destruction.
-Transport errors retain the charged head for retry; cleanup errors fail the individual barrier. Bootstrap, restoration,
-redstone/sound completion translation and broader command parity still need integration; production backend selection
+Transport errors retain the charged head for retry; cleanup errors fail the individual barrier. Bootstrap, restoration
+and broader command parity still need integration; production backend selection
 remains unchanged.
 
 The native checkpoint-detach primitive is available through both experimental transports. It drains accepted
@@ -158,7 +168,7 @@ are returned on either terminal path. Actor/query cancellation and reentrant own
 as stop. No owner pumping is required.
 
 The common `ProgramRuntimeActorLease` separates admission from commit for both backends. Before native close
-reservation, the carrier may drain ordered final addon reply prefixes without advancing Guest. A refused reservation
+reservation, the carrier may drain ordered final host completion prefixes without advancing Guest. A refused reservation
 retains no additional close commands or checkpoint payload. Already accepted replies remain owned and charged by the
 outbox and drain before capture. Carrier lifecycle state, remaining replies and addon resources stay live after refusal.
 Native admission reserves checkpoint bytes alongside remaining final command bytes. After
@@ -170,10 +180,10 @@ this lease for an already started/restored and transferred host. Bootstrap remai
 If addon state cannot be saved, native lease close drains acknowledged replies, detaches and recovers the session,
 then discards stored execution before closing. This path reserves only scalar control bytes and reports the filesystem
 generation after discard. StoreBusy keeps exclusive recovered ownership for retry. A later store reopen must not restore
-the discarded execution. Native final addon replies are supported; redstone/sound completions reject before admission
-until their translation is implemented. The carrier exposes pre-fence pressure as a null close attempt to the world
+the discarded execution. Native final addon and world replies use the streamed completion path; legacy raw
+redstone/sound completion effects still reject before admission. The carrier exposes pre-fence pressure as a null close attempt to the world
 lifecycle registry, which retains and retries that operation on the owner; accepted failures remain terminal barriers.
-Production boot/restore selection and broader builtin completion parity remain required before selecting the native backend.
+Production boot/restore selection and broader command parity remain required before selecting the native backend.
 
 ## Addon host boundary
 

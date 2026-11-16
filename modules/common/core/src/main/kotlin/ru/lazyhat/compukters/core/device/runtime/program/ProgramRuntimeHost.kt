@@ -742,6 +742,52 @@ class ProgramRuntimeHost internal constructor(
         }
     }
 
+    internal fun prepareFleetWorldRequest(
+        fleet: ExperimentalFleetSessionOwner,
+        machine: Long,
+        requests: List<VmHostRequest>,
+    ): ProgramWorldRequest? {
+        requireFleetOwnership(fleet, machine)
+        val routes = HostRequestRoutes.partition(requests, emptyList())
+        val identities = requests.map(VmHostRequest::identity)
+        val scope = programScopes.last()
+        return when {
+            routes.redstone.size == requests.size -> {
+                val batch = RedstoneOutputBatch.reduce(confirmedRedstoneOutput, requests)
+                ProgramWorldRequest.Redstone(identities, scope, batch.packed, batch.packed != confirmedRedstoneOutput)
+            }
+
+            routes.sound.size == requests.size -> {
+                ProgramWorldRequest.Sound(
+                    identities,
+                    scope,
+                    requests.map(::decodeSoundRequest),
+                )
+            }
+
+            routes.redstone.size + routes.sound.size == requests.size -> {
+                ProgramWorldRequest.Rejected(
+                    identities,
+                    scope,
+                    HostResponse.Failure(HostFailureKind.UNAVAILABLE, "Host capability is unavailable"),
+                )
+            }
+
+            else -> {
+                null
+            }
+        }
+    }
+
+    internal fun observeFleetRedstoneOutput(
+        fleet: ExperimentalFleetSessionOwner,
+        machine: Long,
+        packed: Int,
+    ) {
+        requireFleetOwnership(fleet, machine)
+        confirmedRedstoneOutput = RedstoneWire.requireOutputRegister(packed)
+    }
+
     internal fun observeFleetFailure(
         fleet: ExperimentalFleetSessionOwner,
         machine: Long,
