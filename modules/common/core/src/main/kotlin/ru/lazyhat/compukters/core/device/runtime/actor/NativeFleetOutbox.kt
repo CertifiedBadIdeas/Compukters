@@ -303,6 +303,14 @@ internal class NativeFleetOutbox(
         return if (count > 0 && offer(machine, commands.subList(0, count))) count else 0
     }
 
+    /** Permanent oversize is a validation error, distinct from temporary queue pressure. */
+    fun requireFits(command: Command) {
+        checkOwner()
+        require(command.retainedBytes <= byteLimits.totalBytes && command.retainedBytes <= byteLimits.perMachineBytes) {
+            "native request exceeds the configured byte limit"
+        }
+    }
+
     /** Either retain the entire batch in order, or retain none of it. */
     fun offer(
         machine: Long,

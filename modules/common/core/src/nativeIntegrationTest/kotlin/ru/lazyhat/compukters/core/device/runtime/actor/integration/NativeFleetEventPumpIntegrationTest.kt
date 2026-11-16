@@ -13,6 +13,8 @@ import ru.lazyhat.compukters.core.device.runtime.actor.NativeFleetActorRuntimeSe
 import ru.lazyhat.compukters.core.device.runtime.actor.NativeFleetDispatcher
 import ru.lazyhat.compukters.core.device.runtime.actor.NativeFleetEventPump
 import ru.lazyhat.compukters.core.device.runtime.actor.NativeFleetOutbox
+import ru.lazyhat.compukters.core.device.runtime.actor.ProgramDeploymentFailure
+import ru.lazyhat.compukters.core.device.runtime.actor.ProgramDeploymentToken
 import ru.lazyhat.compukters.core.device.runtime.actor.ProgramRuntimeActorCommand
 import ru.lazyhat.compukters.core.device.runtime.actor.ProgramRuntimeActorEffect
 import ru.lazyhat.compukters.core.device.runtime.actor.ProgramRuntimeActorFailure
@@ -55,6 +57,7 @@ import ru.lazyhat.compukters.lang.runtime.vm.TerminalKeyAction
 import ru.lazyhat.compukters.lang.runtime.vm.TerminalUpdate
 import ru.lazyhat.compukters.lang.runtime.vm.VmBridgeException
 import ru.lazyhat.compukters.lang.runtime.vm.VmCanonicalLineFailure
+import ru.lazyhat.compukters.lang.runtime.vm.VmExecutableRevision
 import ru.lazyhat.compukters.lang.runtime.vm.VmHostRequestIdentity
 import ru.lazyhat.compukters.lang.runtime.vm.VmOutcome
 import ru.lazyhat.compukters.lang.runtime.vm.VmRuntime
@@ -80,6 +83,189 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class NativeFleetEventPumpIntegrationTest {
+    @Test
+    fun `native carrier installs with revision checks and reclaims canceled or failed candidates`() {
+        installFfmRuntime()
+        VmRuntime.loadNativeLibrary(Path.of(requireNotNull(System.getProperty("compukters.ffi.library"))))
+        val artifact = Path.of(requireNotNull(System.getProperty("compukters.fleet.timer.fixture"))).readBytes()
+        val image = bootstrapImage(artifact)
+        val root = Files.createTempDirectory("fleet-native-deployment-").toRealPath()
+        val id = ComputerId.fromLongs(311, 312)
+        try {
+            WorldFileSystemStore.open(root).use { store ->
+                VmRuntime.openExperimentalFleet(ExperimentalFleetConfig(1, 2, 2, 4096, 64, 64, 32, coordinatedTurns = true)).use { fleet ->
+                    NativeFleetActorRuntimeService(
+                        fleet,
+                        4,
+                        8,
+                        8,
+                        {},
+                        {},
+                        { _, _ -> error("unexpected native event") },
+                        onActorClosing = {},
+                    ).use { service ->
+                        val endpoint = VmActorEndpoint(id, 1)
+                        val carrier =
+                            ActorProgramComputer(
+                                service,
+                                checkNotNull(service.attachBootable(endpoint, store, image)),
+                                { RedstoneCommitResult.Committed },
+                            )
+                        try {
+                            awaitBootstrap(service, carrier.turnOn())
+
+                            fun request(command: (ProgramRuntimeRequestId) -> ProgramRuntimeActorCommand): ProgramRuntimeActorReply =
+                                awaitBootstrap(service, service.request(endpoint, command))
+
+                            fun prepare(): ProgramDeploymentToken =
+                                checkNotNull(
+                                    assertIs<ProgramRuntimeActorValue.DeploymentPrepared>(
+                                        request { ProgramRuntimeActorCommand.PrepareDeployment(it, artifact) }.value,
+                                    ).token,
+                                )
+
+                            fun rejected(reply: ProgramRuntimeActorReply) = assertIs<ProgramRuntimeActorValue.Rejected>(reply.value).failure
+
+                            fun discard(token: ProgramDeploymentToken) =
+                                request { ProgramRuntimeActorCommand.DiscardDeployment(it, token) }.value
+                            assertEquals(
+                                VmExecutableRevision.Absent,
+                                assertIs<ProgramRuntimeActorValue.ExecutableRevisionValue>(
+                                    request {
+                                        ProgramRuntimeActorCommand.ExecutableRevision(it, "/home/demo")
+                                    }.value,
+                                ).revision,
+                            )
+                            assertEquals(
+                                ProgramRuntimeActorFailure.Verification,
+                                rejected(
+                                    request {
+                                        ProgramRuntimeActorCommand.PrepareDeployment(it, byteArrayOf(1, 2, 3))
+                                    },
+                                ),
+                            )
+                            val first = prepare()
+                            val installed =
+                                request { ProgramRuntimeActorCommand.Deploy(it, "/home/demo", VmExecutableRevision.Absent, first) }
+                            val revision =
+                                assertIs<VmExecutableRevision.Present>(
+                                    assertIs<ProgramRuntimeActorValue.DeployedRevision>(installed.value).revision,
+                                )
+                            assertEquals(revision.generation, installed.fileSystemGeneration)
+                            assertEquals(ProgramRuntimeActorValue.Accepted(false), discard(first))
+                            assertEquals(
+                                revision,
+                                assertIs<ProgramRuntimeActorValue.ExecutableRevisionValue>(
+                                    request {
+                                        ProgramRuntimeActorCommand.ExecutableRevision(it, "/home/demo")
+                                    }.value,
+                                ).revision,
+                            )
+                            val file =
+                                assertIs<ProgramRuntimeActorValue.FileStatValue>(
+                                    request {
+                                        ProgramRuntimeActorCommand.FileStat(it, VmVirtualPath.of("/home/demo"))
+                                    }.value,
+                                )
+                            assertTrue(checkNotNull(file.stat).metadata.executable)
+                            repeat(6) {
+                                val stale = prepare()
+                                assertEquals(
+                                    ProgramRuntimeActorFailure.Deployment(ProgramDeploymentFailure.CONFLICT),
+                                    rejected(
+                                        request {
+                                            ProgramRuntimeActorCommand.Deploy(it, "/home/demo", VmExecutableRevision.Absent, stale)
+                                        },
+                                    ),
+                                )
+                                assertEquals(ProgramRuntimeActorValue.Accepted(false), discard(stale))
+                            }
+                            val replacement = prepare()
+                            assertIs<ProgramRuntimeActorValue.DeployedRevision>(
+                                request {
+                                    ProgramRuntimeActorCommand.Deploy(it, "/home/demo", revision, replacement)
+                                }.value,
+                            )
+                            val invalidPath = prepare()
+                            assertIs<ProgramRuntimeActorFailure.InvalidRequest>(
+                                rejected(
+                                    request {
+                                        ProgramRuntimeActorCommand.Deploy(it, "../escape", VmExecutableRevision.Absent, invalidPath)
+                                    },
+                                ),
+                            )
+                            assertEquals(ProgramRuntimeActorValue.Accepted(false), discard(invalidPath))
+                            val missingParent = prepare()
+                            assertEquals(
+                                ProgramRuntimeActorFailure.Deployment(ProgramDeploymentFailure.FILESYSTEM),
+                                rejected(
+                                    request {
+                                        ProgramRuntimeActorCommand.Deploy(it, "/missing/demo", VmExecutableRevision.Absent, missingParent)
+                                    },
+                                ),
+                            )
+                            assertEquals(ProgramRuntimeActorValue.Accepted(false), discard(missingParent))
+                            repeat(6) {
+                                val canceled = service.request(endpoint) { ProgramRuntimeActorCommand.PrepareDeployment(it, artifact) }
+                                canceled.cancel(false)
+                                // Two FIFO observations cross both prepare publication and its disposal admission.
+                                repeat(2) { request(ProgramRuntimeActorCommand::FileSystemGeneration) }
+                            }
+                            val remaining = prepare()
+                            assertEquals(ProgramRuntimeActorValue.Accepted(true), discard(remaining))
+                            assertEquals(ProgramRuntimeActorValue.Accepted(false), discard(remaining))
+                            val held = List(4) { prepare() }
+                            assertEquals(
+                                ProgramRuntimeActorFailure.Deployment(ProgramDeploymentFailure.ADMISSION),
+                                rejected(
+                                    request {
+                                        ProgramRuntimeActorCommand.PrepareDeployment(it, artifact)
+                                    },
+                                ),
+                            )
+                            held.forEach { assertEquals(ProgramRuntimeActorValue.Accepted(true), discard(it)) }
+                            val privateToken = prepare()
+                            val otherEndpoint = VmActorEndpoint(ComputerId.fromLongs(313, 314), 1)
+                            val other =
+                                ActorProgramComputer(
+                                    service,
+                                    checkNotNull(service.attachBootable(otherEndpoint, store, image)),
+                                    { RedstoneCommitResult.Committed },
+                                )
+                            try {
+                                awaitBootstrap(service, other.turnOn())
+                                val crossMachine =
+                                    awaitBootstrap(
+                                        service,
+                                        service.request(otherEndpoint) {
+                                            ProgramRuntimeActorCommand.Deploy(it, "/home/stolen", VmExecutableRevision.Absent, privateToken)
+                                        },
+                                    )
+                                assertIs<ProgramRuntimeActorFailure.InvalidRequest>(rejected(crossMachine))
+                                assertEquals(ProgramRuntimeActorValue.Accepted(true), discard(privateToken))
+                            } finally {
+                                other.closeAsync().get(5, TimeUnit.SECONDS)
+                            }
+                            // Close drains an accepted prepare without requiring owner pumping or leaking its candidate.
+                            val pending = service.request(endpoint) { ProgramRuntimeActorCommand.PrepareDeployment(it, artifact) }
+                            carrier.hibernateAsync(1).get(5, TimeUnit.SECONDS)
+                            assertTrue(pending.isCompletedExceptionally)
+                        } finally {
+                            carrier.closeAsync().get(5, TimeUnit.SECONDS)
+                        }
+                    }
+                }
+                // Installed executable survives native checkpoint/close and ordinary restoration.
+                ProgramRuntimeHost(NativeProgramVmSessionFactory(ProgramFileSystemLaunchContext(store, id, image))).use { host ->
+                    assertNotNull(host.prepareRestoreBoot(2))
+                    assertNotNull(host.executableRevision("/home/demo"))
+                }
+            }
+        } finally {
+            root.toFile().deleteRecursively()
+        }
+    }
+
     @Test
     fun `native carrier boots installed init and restores addon state before native activation`() {
         installFfmRuntime()

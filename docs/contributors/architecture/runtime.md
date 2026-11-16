@@ -105,9 +105,21 @@ capture applies. Closing bootstrap identities retain actor capacity until cleanu
 worker and any reserved close whose owner callback has not unwound. No execution grant is issued before native adoption.
 
 This experimental implementation accepts redstone input, terminal snapshots/deltas, acknowledged terminal input and
-canonical lines, filesystem-generation queries and bounded file stat/list/read queries. A dedicated request adapter
+canonical lines, filesystem-generation queries, bounded file stat/list/read queries and executable
+prepare/revision/install/discard requests. A dedicated request adapter
 validates payload bounds before admission and checks the response kind before completing a request. The queued command
-owns the input payload; the response registry retains only its kind and future. Accepted input updates host observations
+owns the input payload; the response registry retains only scalar identity/disposal metadata and its future. Deployment
+candidates stay in Rust, bounded to four candidates and 16 MiB of artifact bytes per machine. Queued artifacts also
+consume the JVM outbox byte budget; an individually oversized request is rejected before admission. Failed installs
+consume their token as in the actor contract: a bounded disposal request must be acknowledged before returning the
+original failure. An admitted install reserves its public token in the existing in-flight request metadata,
+preventing another install or discard from racing its native candidate cleanup. A canceled prepare likewise retains its request slot until its candidate is reclaimed. Disposal
+uses a fresh native request identity, so duplicate original responses cannot settle it. Pending disposal retries share
+the ordinary outbox and a bounded owner pass; a full outbox still gets its normal flush allowance. Stop/checkpoint
+fences these requests and native lifecycle cleanup discards remaining candidates without owner pumping. Successful
+installation reports its committed filesystem generation, without executing the new program.
+
+Accepted input updates host observations
 even if its caller canceled the future; rejected input does not wake a parked host. File errors retain their typed
 failure values, and duplicate or obsolete responses cannot change observations. Other raw effects and requests are rejected
 before admission. External events go to an owner callback without another

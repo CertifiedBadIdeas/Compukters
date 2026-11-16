@@ -23,12 +23,15 @@ import ru.lazyhat.compukters.lang.runtime.fs.VmFileSystemReadFailure
 import ru.lazyhat.compukters.lang.runtime.fs.VmVirtualPath
 import ru.lazyhat.compukters.lang.runtime.vm.CapabilityIdentity
 import ru.lazyhat.compukters.lang.runtime.vm.ExperimentalFleet
+import ru.lazyhat.compukters.lang.runtime.vm.ExperimentalFleetDeploymentFailure
+import ru.lazyhat.compukters.lang.runtime.vm.ExperimentalFleetDeploymentResult
 import ru.lazyhat.compukters.lang.runtime.vm.ExperimentalFleetDetachedState
 import ru.lazyhat.compukters.lang.runtime.vm.ExperimentalFleetEvent
 import ru.lazyhat.compukters.lang.runtime.vm.ExperimentalFleetInputResult
 import ru.lazyhat.compukters.lang.runtime.vm.TerminalKey
 import ru.lazyhat.compukters.lang.runtime.vm.TerminalKeyAction
 import ru.lazyhat.compukters.lang.runtime.vm.TerminalUpdate
+import ru.lazyhat.compukters.lang.runtime.vm.VmExecutableRevision
 import ru.lazyhat.compukters.lang.runtime.vm.VmHostRequest
 import ru.lazyhat.compukters.lang.runtime.vm.VmHostRequestIdentity
 import ru.lazyhat.compukters.lang.runtime.vm.VmOutcome
@@ -49,6 +52,124 @@ import kotlin.test.assertIs
 import kotlin.test.assertTrue
 
 class NativeFleetActorRuntimeServiceTest {
+    @Test
+    fun `an admitted install owns its token until native disposal is acknowledged`() =
+        Harness().use { h ->
+            val endpoint = h.register(1)
+            val token = ProgramDeploymentToken(74)
+            val first =
+                h.service.request(
+                    endpoint,
+                ) { ProgramRuntimeActorCommand.Deploy(it, "/home/test", VmExecutableRevision.Absent, token) }
+            val duplicate =
+                h.service.request(
+                    endpoint,
+                ) { ProgramRuntimeActorCommand.Deploy(it, "/home/other", VmExecutableRevision.Absent, token) }
+            assertTrue(duplicate.isDone)
+            assertIs<ProgramRuntimeActorFailure.InvalidRequest>(assertIs<ProgramRuntimeActorValue.Rejected>(duplicate.join().value).failure)
+            val discarded = h.service.request(endpoint) { ProgramRuntimeActorCommand.DiscardDeployment(it, token) }
+            assertEquals(ProgramRuntimeActorValue.Accepted(false), discarded.join().value)
+            assertFalse(first.isDone)
+            h.service.pump(0, 8)
+            assertEquals(1, h.queries.size)
+        }
+
+    @Test
+    fun `oversized deployment rejects before queue admission and cannot strand a request`() =
+        Harness(maximumRequests = 1, byteLimits = NativeFleetOutboxLimits(128, 128)).use { h ->
+            val endpoint = h.register(1)
+            val result = h.service.request(endpoint) { ProgramRuntimeActorCommand.PrepareDeployment(it, ByteArray(65)) }.join()
+            assertIs<ProgramRuntimeActorFailure.InvalidRequest>(assertIs<ProgramRuntimeActorValue.Rejected>(result.value).failure)
+            assertTrue(h.queries.isEmpty())
+            assertFalse(h.service.request(endpoint) { ProgramRuntimeActorCommand.FileSystemGeneration(it) }.isDone)
+        }
+
+    @Test
+    fun `canceled preparation retains admission until candidate is discarded`() =
+        Harness(maximumRequests = 1).use { h ->
+            val endpoint = h.register(1)
+            val prepared = h.service.request(endpoint) { ProgramRuntimeActorCommand.PrepareDeployment(it, byteArrayOf(1, 2)) }
+            h.service.pump(0, 1)
+            val request = h.queries.single()
+            prepared.cancel(false)
+            h.events += ExperimentalFleetEvent.Deployment(1, request, ExperimentalFleetDeploymentResult.Prepared(71))
+            h.service.pump(1, 0)
+            assertTrue(h.service.request(endpoint) { ProgramRuntimeActorCommand.FileSystemGeneration(it) }.isCompletedExceptionally)
+            h.events += ExperimentalFleetEvent.Deployment(1, request, ExperimentalFleetDeploymentResult.Prepared(71))
+            h.service.pump(1, 1)
+            assertEquals(listOf(71L), h.discardedCandidates.toList())
+            h.events += ExperimentalFleetEvent.Deployment(1, h.queries.last(), ExperimentalFleetDeploymentResult.Discarded)
+            h.service.pump(1, 0)
+            assertFalse(h.service.request(endpoint) { ProgramRuntimeActorCommand.FileSystemGeneration(it) }.isDone)
+        }
+
+    @Test
+    fun `failed install waits for disposal and cleanup does not block flushing a full outbox`() =
+        Harness(maximumRequests = 2).use { h ->
+            val endpoint = h.register(1)
+            val install =
+                h.service.request(endpoint) {
+                    ProgramRuntimeActorCommand.Deploy(it, "/home/test", VmExecutableRevision.Absent, ProgramDeploymentToken(72))
+                }
+            h.service.pump(0, 1)
+            val request = h.queries.single()
+            assertTrue(h.service.grantFrame(endpoint, 1, 30))
+            assertEquals(
+                VmActorSubmission.ACCEPTED,
+                h.service.submitTurn(
+                    endpoint,
+                    1,
+                    listOf(ProgramRuntimeActorEffect.RedstoneInput(0)),
+                    { _, _ -> },
+                ),
+            )
+            h.events +=
+                ExperimentalFleetEvent.Deployment(
+                    1,
+                    request,
+                    ExperimentalFleetDeploymentResult.Failed(ExperimentalFleetDeploymentFailure.BUSY),
+                )
+            h.service.pump(1, 0)
+            assertFalse(install.isDone)
+            repeat(3) { h.service.pump(0, 1) }
+            assertEquals(listOf(72L), h.discardedCandidates.toList())
+            h.events += ExperimentalFleetEvent.Deployment(1, h.queries.last(), ExperimentalFleetDeploymentResult.Discarded)
+            h.service.pump(1, 0)
+            assertEquals(
+                ProgramRuntimeActorValue.Rejected(ProgramRuntimeActorFailure.Deployment(ProgramDeploymentFailure.CONFLICT)),
+                install.join().value,
+            )
+        }
+
+    @Test
+    fun `prepare callback can install with a single request slot`() =
+        Harness(maximumRequests = 1).use { h ->
+            val endpoint = h.register(1)
+            val installed =
+                h.service.request(endpoint) { ProgramRuntimeActorCommand.PrepareDeployment(it, byteArrayOf(1)) }.thenCompose { reply ->
+                    h.service.request(endpoint) {
+                        ProgramRuntimeActorCommand.Deploy(
+                            it,
+                            "/home/test",
+                            VmExecutableRevision.Absent,
+                            checkNotNull((reply.value as ProgramRuntimeActorValue.DeploymentPrepared).token),
+                        )
+                    }
+                }
+            h.service.pump(0, 1)
+            h.events += ExperimentalFleetEvent.Deployment(1, h.queries.single(), ExperimentalFleetDeploymentResult.Prepared(73))
+            h.service.pump(1, 1)
+            h.service.pump(0, 1)
+            h.events +=
+                ExperimentalFleetEvent.Deployment(
+                    1,
+                    h.queries.last(),
+                    ExperimentalFleetDeploymentResult.Installed(VmExecutableRevision.Present(3)),
+                )
+            h.service.pump(1, 0)
+            assertEquals(ProgramRuntimeActorValue.DeployedRevision(VmExecutableRevision.Present(3)), installed.join().value)
+        }
+
     @Test
     fun `world observations preserve successive output updates before final credit settlement`() =
         Harness().use { h ->
@@ -948,6 +1069,7 @@ class NativeFleetActorRuntimeServiceTest {
         val events = ConcurrentLinkedQueue<ExperimentalFleetEvent>()
         val grants = CopyOnWriteArrayList<Pair<Long, Int>>()
         val queries = CopyOnWriteArrayList<Long>()
+        val discardedCandidates = CopyOnWriteArrayList<Long>()
         val observed = mutableListOf<VmActorEndpoint>()
         val observedEvents = mutableListOf<ExperimentalFleetEvent>()
         val closedMachines = CopyOnWriteArrayList<Long>()
@@ -1011,8 +1133,16 @@ class NativeFleetActorRuntimeServiceTest {
                         null
                     }
 
-                    "terminalUpdate", "fileStat", "fileList", "fileRead" -> {
+                    "terminalUpdate", "fileStat", "fileList", "fileRead", "prepareDeployment",
+                    "deploymentRevision", "installDeployment",
+                    -> {
                         queries += args!![1] as Long
+                        null
+                    }
+
+                    "discardDeployment" -> {
+                        queries += args!![1] as Long
+                        discardedCandidates += args[2] as Long
                         null
                     }
 

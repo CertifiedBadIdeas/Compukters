@@ -18,8 +18,11 @@ import ru.lazyhat.compukters.core.device.runtime.program.ProgramWorldResult
 import ru.lazyhat.compukters.lang.runtime.fs.VmSystemImage
 import ru.lazyhat.compukters.lang.runtime.fs.WorldFileSystemStore
 import ru.lazyhat.compukters.lang.runtime.vm.ExperimentalFleet
+import ru.lazyhat.compukters.lang.runtime.vm.ExperimentalFleetDeploymentFailure
+import ru.lazyhat.compukters.lang.runtime.vm.ExperimentalFleetDeploymentResult
 import ru.lazyhat.compukters.lang.runtime.vm.ExperimentalFleetEvent
 import ru.lazyhat.compukters.lang.runtime.vm.RedstoneWire
+import ru.lazyhat.compukters.lang.runtime.vm.VmExecutableRevision
 import ru.lazyhat.compukters.lang.runtime.vm.VmHostRequest
 import ru.lazyhat.compukters.lang.runtime.vm.VmOutcome
 import java.util.concurrent.CancellationException
@@ -71,6 +74,9 @@ internal class NativeFleetActorRuntimeService(
     private var deferredCloseStarts: MutableList<() -> Unit>? = null
     private var nextRequest = 0L
     private var pendingQueries = 0
+
+    // Only requests with pending candidate disposal are queued, never idle machines.
+    private val deploymentCleanup = java.util.ArrayDeque<Pair<Long, Long>>()
     internal var hostContinuationSamples = 0L
         private set
     internal var totalHostContinuationDelayTicks = 0L
@@ -339,7 +345,7 @@ internal class NativeFleetActorRuntimeService(
         }
         val outgoing =
             try {
-                NativeFleetRequest.prepare(prepared)
+                NativeFleetRequest.prepare(prepared)?.also { dispatcher.outbox.requireFits(it) }
                     ?: return CompletableFuture.failedFuture(
                         UnsupportedOperationException("native request is not wired: ${prepared.javaClass.simpleName}"),
                     )
@@ -362,12 +368,32 @@ internal class NativeFleetActorRuntimeService(
                 ProgramRuntimeActorReply(id, actor.host.state, ProgramRuntimeActorValue.Accepted(false)),
             )
         }
+        val consumedToken =
+            when (prepared) {
+                is ProgramRuntimeActorCommand.Deploy -> prepared.token.value
+                is ProgramRuntimeActorCommand.DiscardDeployment -> prepared.token.value
+                else -> null
+            }
+        if (consumedToken != null && actor.queries?.values?.any {
+                it.deploymentCandidate == consumedToken || it.cleanupCandidate == consumedToken
+            } == true
+        ) {
+            // A first install consumes the public token on admission, even while Rust retains
+            // its candidate until installation or disposal. This is in-flight request state only.
+            val value =
+                if (prepared is ProgramRuntimeActorCommand.DiscardDeployment) {
+                    ProgramRuntimeActorValue.Accepted(false)
+                } else {
+                    ProgramRuntimeActorValue.Rejected(ProgramRuntimeActorFailure.InvalidRequest("unknown or consumed deployment token"))
+                }
+            return CompletableFuture.completedFuture(ProgramRuntimeActorReply(id, actor.host.state, value, actor.generation))
+        }
         if (!dispatcher.outbox.offer(actor.machine, listOf(outgoing))) {
             return CompletableFuture.failedFuture(ProgramRuntimeActorRequestException(VmActorSubmission.MAILBOX_FULL))
         }
         val result = CompletableFuture<ProgramRuntimeActorReply>()
         val queries = actor.queries ?: mutableMapOf<Long, Query>().also { actor.queries = it }
-        queries[id.value] = Query(outgoing.response, result)
+        queries[id.value] = Query(id, outgoing.response, result, outgoing.deploymentCandidate)
         pendingQueries++
         // Cancellation does not release admission until the native response arrives. Otherwise
         // canceled futures could bypass the bound while their commands/responses are still retained.
@@ -469,6 +495,7 @@ internal class NativeFleetActorRuntimeService(
                 return null
             }
         machines.remove(actor.machine)
+        deploymentCleanup.removeIf { it.first == actor.machine }
         val result = CompletableFuture<Long>()
         closing[endpoint] = result
         val commands = dispatcher.outbox.handoffForClose(actor.machine)
@@ -527,7 +554,9 @@ internal class NativeFleetActorRuntimeService(
         val bootstrapAllowance = maximumEvents / 2 + if (bootstrapFirst) maximumEvents % 2 else 0
         if (maximumEvents > 0) bootstrapFirst = !bootstrapFirst
         val prepared = bootstrap.pump(bootstrapAllowance, deadlineNanos, maximumAttempts)
-        return prepared + dispatcher.pump(maximumEvents - prepared, maximumAttempts - bootstrap.lastTransferAttempts, deadlineNanos)
+        val remaining = maximumAttempts - bootstrap.lastTransferAttempts
+        retryDeploymentCleanup(remaining, deadlineNanos)
+        return prepared + dispatcher.pump(maximumEvents - prepared, remaining, deadlineNanos)
     }
 
     private fun observe(event: ExperimentalFleetEvent) {
@@ -580,6 +609,10 @@ internal class NativeFleetActorRuntimeService(
             }
 
             is ExperimentalFleetEvent.FileRead -> {
+                machines[event.machine]?.let { finishQuery(it, event.request, event) }
+            }
+
+            is ExperimentalFleetEvent.Deployment -> {
                 machines[event.machine]?.let { finishQuery(it, event.request, event) }
             }
 
@@ -718,14 +751,35 @@ internal class NativeFleetActorRuntimeService(
         request: Long,
         event: ExperimentalFleetEvent,
     ) {
-        val query = actor.queries?.remove(request) ?: return
-        pendingQueries--
-        if (actor.queries?.isEmpty() == true) actor.queries = null
+        val query = actor.queries?.get(request) ?: return
+        if (query.cleanupCandidate != null) {
+            val result = (event as? ExperimentalFleetEvent.Deployment)?.result
+            if (result != ExperimentalFleetDeploymentResult.Discarded &&
+                result != ExperimentalFleetDeploymentResult.Failed(ExperimentalFleetDeploymentFailure.INVALID_CANDIDATE)
+            ) {
+                // Candidate disposal is an ownership barrier, not an ignorable best-effort send.
+                observeEvent(ExperimentalFleetEvent.Error(actor.machine, "native deployment cleanup failed: $event"))
+                return
+            }
+            releaseQuery(actor, request, query)
+            query.value?.let { completeQuery(actor, query, it) }
+            return
+        }
         val value =
             try {
                 query.response.decode(event).also { value ->
                     if (value is ProgramRuntimeActorValue.FileSystemGeneration) actor.generation = value.generation
-                    if (value is ProgramRuntimeActorValue.Accepted && value.accepted) {
+                    if (value is ProgramRuntimeActorValue.DeployedRevision) {
+                        actor.generation =
+                            (value.revision as? VmExecutableRevision.Present)?.generation
+                                ?: actor.generation
+                    }
+                    if (value is ProgramRuntimeActorValue.Accepted && value.accepted &&
+                        (
+                            query.response == NativeFleetRequest.Response.INPUT ||
+                                query.response == NativeFleetRequest.Response.INTERRUPT_INPUT
+                        )
+                    ) {
                         actor.host.observeFleetTerminalInput(
                             fleet,
                             actor.machine,
@@ -734,10 +788,83 @@ internal class NativeFleetActorRuntimeService(
                     }
                 }
             } catch (error: Exception) {
+                releaseQuery(actor, request, query)
                 query.future.completeExceptionally(error)
                 return
             }
-        query.future.complete(ProgramRuntimeActorReply(ProgramRuntimeRequestId(request), actor.host.state, value, actor.generation))
+        if (value is ProgramRuntimeActorValue.Rejected && query.response == NativeFleetRequest.Response.DEPLOY &&
+            query.deploymentCandidate != null
+        ) {
+            scheduleDeploymentCleanup(actor, request, query, query.deploymentCandidate, value)
+            return
+        }
+        // Release before callbacks so prepare.thenCompose(deploy) works even with a one-request limit.
+        releaseQuery(actor, request, query)
+        val delivered = completeQuery(actor, query, value)
+        if (!delivered && value is ProgramRuntimeActorValue.DeploymentPrepared && value.token != null &&
+            machines[actor.machine] === actor
+        ) {
+            // A canceled prepare has no recipient; retain its original slot until disposal is acknowledged.
+            val queries = actor.queries ?: mutableMapOf<Long, Query>().also { actor.queries = it }
+            queries[request] = query
+            pendingQueries++
+            scheduleDeploymentCleanup(actor, request, query, value.token.value, null)
+        }
+    }
+
+    private fun completeQuery(
+        actor: Actor,
+        query: Query,
+        value: ProgramRuntimeActorValue,
+    ): Boolean = query.future.complete(ProgramRuntimeActorReply(query.id, actor.host.state, value, actor.generation))
+
+    private fun releaseQuery(
+        actor: Actor,
+        request: Long,
+        query: Query,
+    ) {
+        if (actor.queries?.get(request) !== query) return // A completion callback may already have stopped the actor.
+        actor.queries?.remove(request)
+        pendingQueries--
+        if (actor.queries?.isEmpty() == true) actor.queries = null
+    }
+
+    private fun scheduleDeploymentCleanup(
+        actor: Actor,
+        request: Long,
+        query: Query,
+        candidate: Long,
+        value: ProgramRuntimeActorValue?,
+    ) {
+        query.cleanupCandidate = candidate
+        query.value = value
+        val cleanupId = requestId().value
+        val queries = checkNotNull(actor.queries)
+        check(queries.remove(request) === query)
+        queries[cleanupId] = query
+        deploymentCleanup.addLast(actor.machine to cleanupId)
+    }
+
+    private fun retryDeploymentCleanup(
+        maximumAttempts: Int,
+        deadlineNanos: Long,
+    ) {
+        var attempts = 0
+        val count = minOf(maximumAttempts, deploymentCleanup.size)
+        while (attempts < count && (deadlineNanos == Long.MAX_VALUE || nanoTime() - deadlineNanos < 0)) {
+            val (machine, request) = deploymentCleanup.removeFirst()
+            attempts++
+            val actor = machines[machine] ?: continue
+            val query = actor.queries?.get(request) ?: continue
+            val command =
+                NativeFleetRequest.prepare(
+                    ProgramRuntimeActorCommand.DiscardDeployment(
+                        ProgramRuntimeRequestId(request),
+                        ProgramDeploymentToken(checkNotNull(query.cleanupCandidate)),
+                    ),
+                )!!
+            if (!dispatcher.outbox.offer(machine, listOf(command))) deploymentCleanup.addLast(machine to request)
+        }
     }
 
     private fun requestId(): ProgramRuntimeRequestId = ProgramRuntimeRequestId(Math.incrementExact(nextRequest).also { nextRequest = it })
@@ -826,7 +953,12 @@ internal class NativeFleetActorRuntimeService(
     }
 
     private class Query(
+        val id: ProgramRuntimeRequestId,
         val response: NativeFleetRequest.Response,
         val future: CompletableFuture<ProgramRuntimeActorReply>,
-    )
+        val deploymentCandidate: Long?,
+    ) {
+        var cleanupCandidate: Long? = null
+        var value: ProgramRuntimeActorValue? = null
+    }
 }

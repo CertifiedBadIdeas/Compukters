@@ -164,6 +164,8 @@ sealed interface ProgramRuntimeActorCommand : ProgramRuntimeActorMessage {
     ) : ProgramRuntimeActorCommand {
         private val artifact = artifact.copyOf()
 
+        internal val artifactSize: Int get() = artifact.size
+
         internal fun artifactBytes(): ByteArray = artifact.copyOf()
     }
 
