@@ -21,10 +21,18 @@ package ru.lazyhat.compukters.impl.config
 import net.neoforged.neoforge.common.ModConfigSpec
 import ru.lazyhat.compukters.core.device.runtime.actor.VmActorSchedulerConfig
 import ru.lazyhat.compukters.core.device.runtime.actor.VmCapacityGovernorConfig
+import ru.lazyhat.compukters.core.device.runtime.actor.VmExecutionBackend
 
 object CompuktersServerConfig {
     private val builder = ModConfigSpec.Builder()
     private val defaultWorkers = VmActorSchedulerConfig.defaultWorkerCount()
+
+    private val backend =
+        builder
+            .comment("VM execution backend; NATIVE is experimental and requires a runtime built with fleet support. Restart required.")
+            .defineEnum("vm.backend", VmExecutionBackend.JVM)
+
+    fun executionBackend(): VmExecutionBackend = backend.get()
 
     private val workerCount =
         builder

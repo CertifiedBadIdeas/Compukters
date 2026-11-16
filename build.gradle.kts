@@ -210,6 +210,7 @@ val clippyCompukterFfiRust =
 
 val cargoBuildCompukterFfi =
     tasks.register<Exec>("cargoBuildCompukterFfi") {
+        inputs.property("experimentalFleetScheduler", true)
         description = "Builds the release Compukter FFM platform library."
         group = "build"
         workingDir(compukterVmRoot)
@@ -219,7 +220,7 @@ val cargoBuildCompukterFfi =
         inputs.dir(compukterFfiRoot.resolve("src"))
         inputs.dir(compukterVmRoot.resolve("src"))
         outputs.file(compukterFfiLibrary)
-        commandLine("cargo", "build", "-p", "compukter-ffi", "--release", "--locked", "--offline", "-j", compukterVmBuildJobs)
+        commandLine("cargo", "build", "-p", "compukter-ffi", "--features", "experimental-fleet-scheduler", "--release", "--locked", "--offline", "-j", compukterVmBuildJobs)
         environment("CARGO_TARGET_DIR", compukterFfiTargetRoot.absolutePath)
     }
 
@@ -266,6 +267,7 @@ val clippyCompukterJniRust =
 
 val cargoBuildCompukterJni =
     tasks.register<Exec>("cargoBuildCompukterJni") {
+        inputs.property("experimentalFleetScheduler", true)
         description = "Builds the release Compukter JNI platform library."
         group = "build"
         workingDir(compukterVmRoot)
@@ -276,7 +278,7 @@ val cargoBuildCompukterJni =
         inputs.dir(compukterFfiRoot.resolve("src"))
         inputs.dir(compukterVmRoot.resolve("src"))
         outputs.file(compukterJniLibrary)
-        commandLine("cargo", "build", "-p", "compukter-jni", "--release", "--locked", "--offline", "-j", compukterVmBuildJobs)
+        commandLine("cargo", "build", "-p", "compukter-jni", "--features", "experimental-fleet-scheduler", "--release", "--locked", "--offline", "-j", compukterVmBuildJobs)
         environment("CARGO_TARGET_DIR", compukterJniTargetRoot.absolutePath)
     }
 

@@ -19,7 +19,7 @@
 package ru.lazyhat.compukters.minecraft.computer
 
 import net.minecraft.server.level.ServerLevel
-import ru.lazyhat.compukters.core.device.runtime.actor.ProgramRuntimeActorService
+import ru.lazyhat.compukters.core.device.runtime.actor.ProgramRuntimeService
 import ru.lazyhat.compukters.core.device.runtime.compiler.CompilerCompletionRouter
 import ru.lazyhat.compukters.lang.runtime.fs.ComputerId
 import ru.lazyhat.compukters.lang.runtime.fs.VmSystemImage
@@ -32,7 +32,7 @@ class ComputerFileSystemContext(
     systemImage: VmSystemImage,
     private val lifecycle: ComputerFileSystemLifecycle,
     internal val compilerRouter: CompilerCompletionRouter? = null,
-    internal val actorService: ProgramRuntimeActorService,
+    internal val actorService: ProgramRuntimeService,
 ) {
     private val systemImage = systemImage
 

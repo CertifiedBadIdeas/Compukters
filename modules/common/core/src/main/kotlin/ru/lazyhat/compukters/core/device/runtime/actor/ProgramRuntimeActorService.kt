@@ -53,7 +53,7 @@ class ProgramRuntimeActorService(
     onResultsReady: () -> Unit = {},
     private val capacityFramesRequired: Boolean = false,
     private val nanoTime: () -> Long = System::nanoTime,
-) : AutoCloseable {
+) : ProgramRuntimeService() {
     init {
         require(perComputerEntitlement > 0) { "per-computer entitlement must be positive" }
         require(safeInstructionCapacity == null || safeInstructionCapacity >= 0) {
@@ -70,7 +70,7 @@ class ProgramRuntimeActorService(
     internal var lastCapacityAllocation = PerComputerCapacityAllocation(emptyList(), 0, 0)
         private set
     internal val redstoneInputCapacity = config.mailboxCapacity
-    internal val carrierRuntime: ActorRuntimeService =
+    internal override val carrierRuntime: ActorRuntimeService =
         object : ActorRuntimeService {
             override val redstoneInputCapacity: Int get() = this@ProgramRuntimeActorService.redstoneInputCapacity
 
@@ -122,14 +122,9 @@ class ProgramRuntimeActorService(
     private var previousFrameHadDemand = false
     private var observedLateTurn = false
 
-    fun registerStandalone(
+    override fun attachStandalone(
         endpoint: VmActorEndpoint,
-        tickBudget: ProgramTickBudget = ProgramTickBudget(),
-    ): Boolean = attachStandalone(endpoint, tickBudget) != null
-
-    fun attachStandalone(
-        endpoint: VmActorEndpoint,
-        tickBudget: ProgramTickBudget = ProgramTickBudget(),
+        tickBudget: ProgramTickBudget,
     ): ProgramRuntimeActorLease? = attach(endpoint, ProgramRuntimeHost(tickBudget))
 
     fun registerBootable(
@@ -142,14 +137,14 @@ class ProgramRuntimeActorService(
         addonHost: ProgramAddonHost? = null,
     ): Boolean = attachBootable(endpoint, store, systemImage, tickBudget, compilerRouter, initialRedstoneOutput, addonHost) != null
 
-    fun attachBootable(
+    override fun attachBootable(
         endpoint: VmActorEndpoint,
         store: WorldFileSystemStore,
         systemImage: VmSystemImage,
-        tickBudget: ProgramTickBudget = ProgramTickBudget(),
-        compilerRouter: CompilerCompletionRouter? = null,
-        initialRedstoneOutput: Int = 0,
-        addonHost: ProgramAddonHost? = null,
+        tickBudget: ProgramTickBudget,
+        compilerRouter: CompilerCompletionRouter?,
+        initialRedstoneOutput: Int,
+        addonHost: ProgramAddonHost?,
     ): ProgramRuntimeActorLease? {
         val port = ActorRedstoneHostPort()
         val soundPort = ActorSoundHostPort()
@@ -184,7 +179,7 @@ class ProgramRuntimeActorService(
         return ProgramRuntimeActorLease(endpoint, processor.closed, processor::prepareHibernation) { unregister(endpoint) }
     }
 
-    fun request(
+    override fun request(
         endpoint: VmActorEndpoint,
         command: (ProgramRuntimeRequestId) -> ProgramRuntimeActorCommand,
     ): CompletableFuture<ProgramRuntimeActorReply> {
@@ -210,10 +205,10 @@ class ProgramRuntimeActorService(
     }
 
     /** Atomically admits the world effects observed for [worldTick] and one bounded VM turn behind them. */
-    fun turn(
+    override fun turn(
         endpoint: VmActorEndpoint,
         worldTick: Long,
-        effects: List<ProgramRuntimeActorEffect> = emptyList(),
+        effects: List<ProgramRuntimeActorEffect>,
     ): CompletableFuture<ProgramRuntimeActorReply> {
         val future = CompletableFuture<ProgramRuntimeActorReply>()
         admitTurn(endpoint, worldTick, effects, FutureRequest(future, effects.any(::isWorldCompletion)))
@@ -339,7 +334,7 @@ class ProgramRuntimeActorService(
         }
 
     /** Starts collection for the server tick; carrier turns retain their mailbox fences until flush. */
-    fun beginCapacityFrame(worldTick: Long) {
+    override fun beginCapacityFrame(worldTick: Long) {
         require(worldTick >= 0) { "world tick must not be negative" }
         synchronized(frameLock) {
             check(capacityFrame == null) { "previous capacity frame has not been flushed" }
@@ -361,7 +356,7 @@ class ProgramRuntimeActorService(
     }
 
     /** Releases only the computers that submitted a turn, with reservations from one shared capacity. */
-    fun flushCapacityFrame() {
+    override fun flushCapacityFrame() {
         synchronized(frameLock) {
             val frame = capacityFrame ?: return
             capacityFrame = null
@@ -401,7 +396,7 @@ class ProgramRuntimeActorService(
     }
 
     /** Called once at the next server tick boundary, after draining the prior frame's results. */
-    fun observePreviousCapacityFrame() {
+    override fun observePreviousCapacityFrame() {
         capacityGovernor.observeTick(
             hadDemand = previousFrameHadDemand,
             deadlineOverrun = observedLateTurn,
@@ -437,9 +432,9 @@ class ProgramRuntimeActorService(
         return scheduler.unregister(endpoint).whenComplete { _, _ -> deferredWorldRequests.remove(endpoint) }
     }
 
-    fun pump(
+    override fun pump(
         maximumEvents: Int,
-        deadlineNanos: Long = Long.MAX_VALUE,
+        deadlineNanos: Long,
     ): Int {
         require(maximumEvents >= 0) { "result delivery allowance must not be negative" }
         val startedAt = nanoTime()
@@ -513,17 +508,17 @@ class ProgramRuntimeActorService(
 
     fun metrics(): VmActorSchedulerMetrics = scheduler.metrics()
 
-    fun calibratedCapacity(): Long = capacityGovernor.calibratedCapacity
+    override fun calibratedCapacity(): Long = capacityGovernor.calibratedCapacity
 
-    fun currentSafeCapacity(): Long = safeInstructionCapacity ?: capacityGovernor.currentCapacity
+    override fun currentSafeCapacity(): Long = safeInstructionCapacity ?: capacityGovernor.currentCapacity
 
-    fun capacityFallbackReason(): String? = capacityGovernor.fallbackReason
+    override fun capacityFallbackReason(): String? = capacityGovernor.fallbackReason
 
-    fun acceptCapacityCalibration(measurement: VmCapacityCalibration) {
+    override fun acceptCapacityCalibration(measurement: VmCapacityCalibration) {
         capacityGovernor.calibrated(measurement)
     }
 
-    fun rejectCapacityCalibration(reason: String) {
+    override fun rejectCapacityCalibration(reason: String) {
         capacityGovernor.calibrationFailed(reason)
     }
 
@@ -538,7 +533,7 @@ class ProgramRuntimeActorService(
         coalescedRedstoneInputs.incrementAndGet()
     }
 
-    fun runtimeMetrics(): ProgramRuntimeActorMetrics =
+    override fun runtimeMetrics(): ProgramRuntimeActorMetrics =
         ProgramRuntimeActorMetrics(
             scheduler = scheduler.metrics(),
             pendingRequests = pending.size,

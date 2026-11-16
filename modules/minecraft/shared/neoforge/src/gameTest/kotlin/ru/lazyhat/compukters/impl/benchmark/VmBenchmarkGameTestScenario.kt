@@ -62,11 +62,12 @@ internal object VmBenchmarkGameTestScenario {
                 helper.assertTrue(snapshot.admittedActors == 2, "headless benchmark did not admit both actors")
                 helper.assertTrue(snapshot.completedActors == 2, "headless benchmark actors did not halt")
                 helper.assertTrue(snapshot.failedActors == 0, "headless benchmark actor failed")
-                helper.assertTrue(
-                    snapshot.metrics.scheduler.executionLatencyP95Nanos > 0 &&
-                        snapshot.metrics.scheduler.resultLatencyP95Nanos > 0,
-                    "actor latency percentiles were not recorded",
-                )
+                snapshot.metrics.scheduler?.let { scheduler ->
+                    helper.assertTrue(
+                        scheduler.executionLatencyP95Nanos > 0 && scheduler.resultLatencyP95Nanos > 0,
+                        "actor latency percentiles were not recorded",
+                    )
+                }
             }.thenExecute {
                 server.commands.performPrefixedCommand(
                     server.createCommandSourceStack(),

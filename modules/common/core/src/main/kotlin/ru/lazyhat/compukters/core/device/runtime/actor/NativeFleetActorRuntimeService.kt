@@ -120,6 +120,13 @@ internal class NativeFleetActorRuntimeService(
             ::prepareLeaseClose,
         )
 
+    internal val pendingRequestCount: Int get() = pendingQueries + bootstrap.pendingRequests
+
+    internal fun contains(endpoint: VmActorEndpoint): Boolean {
+        checkOwner()
+        return endpoint in actors || bootstrap.contains(endpoint)
+    }
+
     /** Idle hosts are prepared off-thread and become native actors only after the restoration handshake. */
     fun attach(
         endpoint: VmActorEndpoint,
@@ -241,6 +248,20 @@ internal class NativeFleetActorRuntimeService(
         )
     }
 
+    override fun submitRedstoneInput(
+        endpoint: VmActorEndpoint,
+        packet: Int,
+    ): Boolean {
+        checkOwner()
+        val checked = RedstoneWire.requireInputPacket(packet)
+        if (closed || endpoint in closing) return false
+        val actor = actors[endpoint] ?: return false
+        if (actor.turn != null || actor.credit?.inFlight == true) return false
+        if (!dispatcher.outbox.offer(actor.machine, listOf(NativeFleetOutbox.Command.RedstoneInput(checked)))) return false
+        actor.host.observeFleetRedstoneInput(fleet, actor.machine, checked)
+        return true
+    }
+
     override fun submitTurn(
         endpoint: VmActorEndpoint,
         worldTick: Long,
@@ -272,7 +293,9 @@ internal class NativeFleetActorRuntimeService(
         val actor = actors[endpoint] ?: return VmActorSubmission.STALE_ENDPOINT
         val credit = actor.credit ?: return VmActorSubmission.MAILBOX_FULL
         if (actor.turn != null || credit.inFlight) return VmActorSubmission.PERMIT_PENDING
-        if (credit.worldTick != worldTick || (credit.deadlineNanos != Long.MAX_VALUE && nanoTime() - credit.deadlineNanos >= 0)) {
+        if (credit.worldTick != worldTick ||
+            (continuation && credit.deadlineNanos != Long.MAX_VALUE && nanoTime() - credit.deadlineNanos >= 0)
+        ) {
             return VmActorSubmission.MAILBOX_FULL
         }
         if (continuation) {

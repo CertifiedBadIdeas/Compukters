@@ -41,6 +41,21 @@ class NativeFleetOutboxTest {
     }
 
     @Test
+    fun `standalone bootstrap artifact copies are charged before admission`() {
+        val outbox = NativeFleetOutbox(fleet { _, _ -> }, 8, 8, {})
+        val base = checkNotNull(outbox.reserveBootstrap())
+        val baseCharge = outbox.retainedBytes
+        base.close()
+        val artifactCharge = 2L * 1024 * 1024
+        checkNotNull(outbox.reserveBootstrap(artifactCharge)).use {
+            assertEquals(baseCharge + artifactCharge, outbox.retainedBytes)
+        }
+        assertEquals(0L, outbox.retainedBytes)
+        assertFailsWith<IllegalArgumentException> { outbox.reserveBootstrap(16L * 1024 * 1024) }
+        assertEquals(0L, outbox.retainedBytes)
+    }
+
+    @Test
     fun `reply prefix respects byte admission and impossible replies fail before any acceptance`() {
         val small = NativeFleetOutbox.Command.Reply(VmHostRequestIdentity(1, 1), HostResponse.UnitSuccess)
         val large = NativeFleetOutbox.Command.Reply(VmHostRequestIdentity(1, 2), HostResponse.StringSuccess("x".repeat(512)))

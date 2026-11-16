@@ -32,10 +32,10 @@ import ru.lazyhat.compukters.core.device.runtime.actor.ProgramRuntimeActorFailur
 import ru.lazyhat.compukters.core.device.runtime.actor.ProgramRuntimeActorLease
 import ru.lazyhat.compukters.core.device.runtime.actor.ProgramRuntimeActorReply
 import ru.lazyhat.compukters.core.device.runtime.actor.ProgramRuntimeActorRequestException
-import ru.lazyhat.compukters.core.device.runtime.actor.ProgramRuntimeActorService
 import ru.lazyhat.compukters.core.device.runtime.actor.ProgramRuntimeActorValue
 import ru.lazyhat.compukters.core.device.runtime.actor.ProgramRuntimeHostCompletion
 import ru.lazyhat.compukters.core.device.runtime.actor.ProgramRuntimeRequestId
+import ru.lazyhat.compukters.core.device.runtime.actor.ProgramRuntimeService
 import ru.lazyhat.compukters.core.device.runtime.actor.ProgramRuntimeTurnObserver
 import ru.lazyhat.compukters.core.device.runtime.actor.VmActorSubmission
 import ru.lazyhat.compukters.core.device.runtime.program.EmptyProgramAddonHost
@@ -70,7 +70,7 @@ class ActorProgramComputer internal constructor(
     private val stateSink: (ProgramRuntimeState) -> Unit = {},
 ) {
     constructor(
-        service: ProgramRuntimeActorService,
+        service: ProgramRuntimeService,
         lease: ProgramRuntimeActorLease,
         redstone: RedstoneHostPort,
         sound: SoundHostPort = SoundHostPort { SoundCommitResult.Failed(HostFailureKind.UNAVAILABLE, "Sound is unavailable") },
@@ -249,7 +249,21 @@ class ActorProgramComputer internal constructor(
                 return
             }
         check(output == null || requestedSound == null) { "computer cannot own two pending world requests" }
-        val input = pendingRedstoneInputs.firstOrNull()
+        var input = pendingRedstoneInputs.firstOrNull()
+        if (input != null) {
+            val separate =
+                try {
+                    service.submitRedstoneInput(lease.endpoint, input)
+                } catch (failure: Exception) {
+                    failUnlessBusy(failure)
+                    return
+                }
+            if (separate == false) return
+            if (separate == true) {
+                pendingRedstoneInputs.removeFirst()
+                input = null
+            }
+        }
         val effects =
             buildList {
                 output?.let {

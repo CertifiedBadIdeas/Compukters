@@ -168,9 +168,10 @@ internal class NativeFleetOutbox(
     }
 
     /** Restore decoding and defensive response copies share the ordinary byte/entry budget. */
-    fun reserveBootstrap(): AutoCloseable? {
+    fun reserveBootstrap(additionalBytes: Long = 0): AutoCloseable? {
         checkOwner()
-        val charge = 64L + 4L * (ProgramHostCheckpoint.MAXIMUM_METADATA_BYTES + 1024 * 1024)
+        require(additionalBytes >= 0)
+        val charge = Math.addExact(64L + 4L * (ProgramHostCheckpoint.MAXIMUM_METADATA_BYTES + 1024 * 1024), additionalBytes)
         require(charge <= byteLimits.perMachineBytes && charge <= byteLimits.totalBytes) {
             "native bootstrap result exceeds the configured byte limit"
         }

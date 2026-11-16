@@ -22,6 +22,12 @@ internal interface ActorRuntimeService {
         completions: List<ProgramRuntimeHostCompletion>,
     ): Int? = null
 
+    /** Null keeps atomic turn effects. Otherwise acknowledge input independently before the next grant. */
+    fun submitRedstoneInput(
+        endpoint: VmActorEndpoint,
+        packet: Int,
+    ): Boolean? = null
+
     fun submitTurn(
         endpoint: VmActorEndpoint,
         worldTick: Long,

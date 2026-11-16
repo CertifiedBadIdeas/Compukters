@@ -21,8 +21,8 @@ package ru.lazyhat.compukters.impl.benchmark
 import ru.lazyhat.compukters.core.device.runtime.actor.ProgramRuntimeActorCommand
 import ru.lazyhat.compukters.core.device.runtime.actor.ProgramRuntimeActorLease
 import ru.lazyhat.compukters.core.device.runtime.actor.ProgramRuntimeActorMetrics
-import ru.lazyhat.compukters.core.device.runtime.actor.ProgramRuntimeActorService
 import ru.lazyhat.compukters.core.device.runtime.actor.ProgramRuntimeActorValue
+import ru.lazyhat.compukters.core.device.runtime.actor.ProgramRuntimeService
 import ru.lazyhat.compukters.core.device.runtime.actor.VmActorEndpoint
 import ru.lazyhat.compukters.core.device.runtime.actor.VmActorSchedulerConfig
 import ru.lazyhat.compukters.core.device.runtime.program.ProgramResourceSnapshot
@@ -375,7 +375,7 @@ internal interface HeadlessVmBenchmarkActor {
 }
 
 internal class ActorServiceBenchmarkRuntime(
-    private val service: ProgramRuntimeActorService,
+    private val service: ProgramRuntimeService,
 ) : HeadlessVmBenchmarkRuntime {
     override fun attach(endpoint: VmActorEndpoint): HeadlessVmBenchmarkActor? =
         service.attachStandalone(endpoint)?.let { ActorServiceBenchmarkActor(service, it) }
@@ -384,7 +384,7 @@ internal class ActorServiceBenchmarkRuntime(
 }
 
 private class ActorServiceBenchmarkActor(
-    private val service: ProgramRuntimeActorService,
+    private val service: ProgramRuntimeService,
     private val lease: ProgramRuntimeActorLease,
 ) : HeadlessVmBenchmarkActor {
     override fun start(artifact: ByteArray): CompletableFuture<ProgramRuntimeState> =

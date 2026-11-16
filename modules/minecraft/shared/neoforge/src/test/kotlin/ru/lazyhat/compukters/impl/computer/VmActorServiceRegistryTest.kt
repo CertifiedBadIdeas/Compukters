@@ -32,6 +32,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
+import kotlin.test.assertIs
 import kotlin.test.assertNull
 import kotlin.test.assertSame
 import kotlin.test.assertTrue
@@ -59,7 +60,7 @@ class VmActorServiceRegistryTest {
         val server = Any()
         registry.start(server)
         registry.tick(server, 0)
-        val runtime = registry.service(server)
+        val runtime = assertIs<ProgramRuntimeActorService>(registry.service(server))
         val endpoint = VmActorEndpoint(ComputerId.fromLongs(11, 12), 1)
         assertTrue(runtime.registerStandalone(endpoint))
         val first = runtime.request(endpoint, ProgramRuntimeActorCommand::TerminalFullState)
@@ -91,7 +92,7 @@ class VmActorServiceRegistryTest {
         val server = Any()
         registry.start(server)
         registry.tick(server, 0)
-        val runtime = registry.service(server)
+        val runtime = assertIs<ProgramRuntimeActorService>(registry.service(server))
         val endpoint = VmActorEndpoint(ComputerId.fromLongs(7, 8), 1)
         assertTrue(runtime.registerStandalone(endpoint))
         val first = runtime.request(endpoint, ProgramRuntimeActorCommand::TerminalFullState)
@@ -130,7 +131,7 @@ class VmActorServiceRegistryTest {
         val server = Any()
         registry.start(server)
         registry.tick(server, 0)
-        val runtime = registry.service(server)
+        val runtime = assertIs<ProgramRuntimeActorService>(registry.service(server))
         val endpoint = VmActorEndpoint(ComputerId.fromLongs(9, 10), 1)
         assertTrue(runtime.registerStandalone(endpoint))
         runtime.request(endpoint, ProgramRuntimeActorCommand::TerminalFullState)
@@ -212,7 +213,7 @@ class VmActorServiceRegistryTest {
         registry.start(first)
         registry.start(second)
         try {
-            val runtime = registry.service(first)
+            val runtime = assertIs<ProgramRuntimeActorService>(registry.service(first))
             assertSame(runtime, registry.service(first))
             assertEquals(runtime.runtimeMetrics(), registry.metrics(first))
             val endpoint = VmActorEndpoint(ComputerId.fromLongs(1, 1), 1)
@@ -242,7 +243,7 @@ class VmActorServiceRegistryTest {
         val registry = VmActorServiceRegistry<Any>({}, ::service)
         val server = Any()
         registry.start(server)
-        val runtime = registry.service(server)
+        val runtime = assertIs<ProgramRuntimeActorService>(registry.service(server))
         val endpoint = VmActorEndpoint(ComputerId.fromLongs(2, 2), 1)
         assertTrue(runtime.registerStandalone(endpoint))
         val reply = runtime.request(endpoint, ProgramRuntimeActorCommand::TerminalFullState)

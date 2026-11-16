@@ -23,10 +23,14 @@ import net.neoforged.neoforge.event.server.ServerStartingEvent
 import net.neoforged.neoforge.event.server.ServerStoppingEvent
 import net.neoforged.neoforge.event.tick.ServerTickEvent
 import ru.lazyhat.compukters.core.LOGGER
+import ru.lazyhat.compukters.core.device.runtime.actor.NativeProgramRuntimeService
 import ru.lazyhat.compukters.core.device.runtime.actor.ProgramRuntimeActorMetrics
 import ru.lazyhat.compukters.core.device.runtime.actor.ProgramRuntimeActorService
+import ru.lazyhat.compukters.core.device.runtime.actor.ProgramRuntimeService
+import ru.lazyhat.compukters.core.device.runtime.actor.VmActorSchedulerConfig
 import ru.lazyhat.compukters.core.device.runtime.actor.VmCapacityCalibration
 import ru.lazyhat.compukters.core.device.runtime.actor.VmCapacityGovernor
+import ru.lazyhat.compukters.core.device.runtime.actor.VmExecutionBackend
 import ru.lazyhat.compukters.impl.benchmark.VmCapacityCalibrator
 import ru.lazyhat.compukters.impl.config.CompuktersServerConfig
 import java.util.IdentityHashMap
@@ -36,10 +40,10 @@ import java.util.concurrent.atomic.AtomicBoolean
 /** Server-thread-owned lifecycle; a started server allocates workers only on first use. */
 internal class VmActorServiceRegistry<S : Any>(
     private val checkOwner: (S) -> Unit,
-    private val opener: (() -> Unit) -> ProgramRuntimeActorService = { ready ->
+    private val opener: (() -> Unit) -> ProgramRuntimeService = { ready ->
         ProgramRuntimeActorService(onResultsReady = ready, capacityFramesRequired = true)
     },
-    private val calibrator: (ProgramRuntimeActorService) -> CompletableFuture<VmCapacityCalibration>? = { null },
+    private val calibrator: (ProgramRuntimeService) -> CompletableFuture<VmCapacityCalibration>? = { null },
     private val maximumEventsPerTick: Int = 1_024,
     private val enqueueOnOwner: ((S, Runnable) -> Unit)? = null,
     private val maximumPumpNanosPerTick: Long = 2_000_000,
@@ -58,7 +62,7 @@ internal class VmActorServiceRegistry<S : Any>(
         servers[server] = Entry()
     }
 
-    fun service(server: S): ProgramRuntimeActorService {
+    fun service(server: S): ProgramRuntimeService {
         checkOwner(server)
         val entry = checkNotNull(servers[server]) { "VM service requires a running server" }
         return entry.service ?: opener { resultsReady(server, entry) }.also { service ->
@@ -158,7 +162,7 @@ internal class VmActorServiceRegistry<S : Any>(
     }
 
     private class Entry {
-        var service: ProgramRuntimeActorService? = null
+        var service: ProgramRuntimeService? = null
         var frameTick: Long? = null
         val closed = AtomicBoolean()
         val pumpQueued = AtomicBoolean()
@@ -176,18 +180,20 @@ internal object NeoForgeVmActorServices {
                 check(server.isSameThread) { "VM service lifecycle must run on the server thread" }
             },
             opener = { ready ->
-                ProgramRuntimeActorService(
+                openServerVmRuntime(
+                    CompuktersServerConfig.executionBackend(),
                     CompuktersServerConfig.schedulerConfig(),
-                    capacityGovernor = VmCapacityGovernor(CompuktersServerConfig.capacityGovernorConfig()),
-                    onResultsReady = ready,
-                    capacityFramesRequired = true,
+                    VmCapacityGovernor(CompuktersServerConfig.capacityGovernorConfig()),
+                    ready,
                 )
             },
-            calibrator = { VmCapacityCalibrator.start(CompuktersServerConfig.schedulerConfig().workerCount) },
+            calibrator = { service ->
+                VmCapacityCalibrator.start(CompuktersServerConfig.schedulerConfig().workerCount, service.runtimeMetrics().backend)
+            },
             enqueueOnOwner = { server, task -> server.execute(task) },
         )
 
-    fun service(server: MinecraftServer): ProgramRuntimeActorService = registry.service(server)
+    fun service(server: MinecraftServer): ProgramRuntimeService = registry.service(server)
 
     fun metrics(server: MinecraftServer): ProgramRuntimeActorMetrics? = registry.metrics(server)
 
@@ -206,6 +212,14 @@ internal object NeoForgeVmActorServices {
 
     private fun logMetrics(metrics: ProgramRuntimeActorMetrics) {
         val scheduler = metrics.scheduler
+        if (scheduler == null) {
+            LOGGER.debug {
+                "VM backend=${metrics.backend}, actors=${metrics.nativeActors}/${metrics.nativeMaximumActors}, " +
+                    "pending=${metrics.pendingRequests}, pumpLastUs=${metrics.lastPumpNanos / 1_000}, " +
+                    "capacity=${metrics.currentInstructionCapacity}, schedulerLatency=unavailable"
+            }
+            return
+        }
         val processed = (scheduler.processedMessages + scheduler.processedPermits).coerceAtLeast(1)
         val drained = scheduler.drainedEvents.coerceAtLeast(1)
         val continuationSamples = metrics.hostContinuationSamples.coerceAtLeast(1)
@@ -242,3 +256,25 @@ internal object NeoForgeVmActorServices {
 
     private const val METRICS_LOG_INTERVAL_TICKS = 100
 }
+
+/** One backend for a service lifetime; carriers and world actions use the same owner boundary. */
+internal fun openServerVmRuntime(
+    backend: VmExecutionBackend,
+    config: VmActorSchedulerConfig,
+    governor: VmCapacityGovernor = VmCapacityGovernor(),
+    ready: () -> Unit = {},
+): ProgramRuntimeService =
+    when (backend) {
+        VmExecutionBackend.JVM -> {
+            ProgramRuntimeActorService(
+                config,
+                capacityGovernor = governor,
+                onResultsReady = ready,
+                capacityFramesRequired = true,
+            )
+        }
+
+        VmExecutionBackend.NATIVE -> {
+            NativeProgramRuntimeService(config, capacityGovernor = governor, onResultsReady = ready)
+        }
+    }

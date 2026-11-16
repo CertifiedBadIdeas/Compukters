@@ -116,9 +116,9 @@ data class VmActorSchedulerMetrics(
 )
 
 data class ProgramRuntimeActorMetrics(
-    val scheduler: VmActorSchedulerMetrics,
+    val scheduler: VmActorSchedulerMetrics?,
     val pendingRequests: Int,
-    val deferredWorldRequests: Int,
+    val deferredWorldRequests: Int?,
     val totalDeferredWorldRequests: Long,
     val hostContinuationSamples: Long,
     val totalHostContinuationDelayTicks: Long,
@@ -140,6 +140,9 @@ data class ProgramRuntimeActorMetrics(
     val retiredInstructionsTotal: Long = 0,
     val unusedReservationsTotal: Long = 0,
     val countersSaturated: Boolean = false,
+    val backend: VmExecutionBackend = VmExecutionBackend.JVM,
+    val nativeActors: Int? = null,
+    val nativeMaximumActors: Int? = null,
 )
 
 interface VmActorProcessor<in C : Any, in P : Any, out R : Any> : AutoCloseable {

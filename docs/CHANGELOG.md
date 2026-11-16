@@ -13,6 +13,9 @@ headings so this page has one stable URL that can be shared outside the reposito
 
 ## 0.7.0 — In development
 
+- Servers can explicitly select an experimental Rust VM scheduling backend with `vm.backend = "NATIVE"` when the
+  runtime includes fleet support. The default remains `JVM`; both use the same world and persistence adapters.
+
 - Guest Kotlin tooling can be prepared for independent compilation and execution without rebuilding the mod.
 
 - The Java 21 runtime and JNI transport reuse temporary buffers when advancing computers, reducing allocation pressure.

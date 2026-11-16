@@ -75,6 +75,17 @@ callers. Production diagnostic snapshots retain their full histograms and loggin
 
 ## Experimental native actor backend
 
+The server selects `vm.backend` once when its lazy runtime service opens: `JVM` by default or explicitly
+`NATIVE`. Changing this setting requires a server restart. Both implement `ProgramRuntimeService` and use the
+same carrier, world callbacks and persistence lifecycle. `NativeProgramRuntimeService` collects submitted turns
+and uses the existing per-computer allocator and capacity governor; Rust owns Guest execution, timers and the
+original frame credit used by continuations. Pending admission retains at most one turn per registered computer.
+No JVM worker advances a native actor. Calibration uses the selected backend on a separate owner and execution pool.
+Development native libraries include dormant fleet support; runtime bundles without that feature reject explicit
+native selection instead of silently falling back. JVM queue and latency metrics are unavailable on native;
+semantic work, capacity, pump, admission and program memory observations remain distinct from those metrics.
+
+
 `NativeFleetActorRuntimeService` implements active turns of `ActorRuntimeService` for hosts already started or
 restored and transferred to a coordinated native fleet. Rust workers own execution and timers; the owner grants
 frame credit and delivers observations. Same-tick continuations consume the original reservation and deadline.
@@ -82,6 +93,12 @@ Uncoordinated fleets are rejected before dispatch starts, so external replies ca
 The owner retains bounded actor and request registries; query maps are allocated only while needed, and future
 cancellation does not release admission until the native response arrives or the actor is fenced for stop.
 One fleet waiter serves the service.
+
+Redstone input is acknowledged into the bounded outbox before the next grant, independently of Guest credit,
+so even a one-entry mailbox can deliver input followed by a grant. Refusal retains the carrier's input in order;
+input cannot enter while that actor has a turn in flight. Host replies use the same independently acknowledged
+prefix principle. A past ordinary frame deadline still allows accepted effects to settle and produces a zero-work
+final report; it cannot admit a Guest continuation.
 
 Idle native hosts use the same `RestoreOrBoot`, `CompleteRestoration` and `AbortRestoration` handler as the JVM
 backend. One lazy bootstrap worker handles storage operations and closes; it never advances Guest and waits for an
@@ -92,7 +109,8 @@ bootstrap entry, processor or per-machine completion slot. Fresh boot and restor
 
 Bootstrap holds at most one command/result per preparing actor and shares actor/request limits with active execution.
 Before work starts, it reserves one outbox entry and a conservative byte charge for four maximum checkpoint envelopes
-plus control overhead; this accounts for decoding and defensive copies, without preallocating those bytes. Prepared
+plus control overhead. Standalone artifact bootstrap additionally charges both retained artifact copies before
+worker admission; this accounts for decoding and defensive copies, without preallocating those bytes. Prepared
 restoration retains the reservation until transfer or close. The existing global/per-machine byte limits apply; a
 single impossible reservation rejects explicitly, and temporary global pressure leaves the caller retryable. This is
 charged admission rather than a total heap or native-session memory measurement. Boot failure releases its reservation.
@@ -264,7 +282,7 @@ generation after discard. StoreBusy keeps exclusive recovered ownership for retr
 the discarded execution. Native final addon and world replies use the streamed completion path; legacy raw
 redstone/sound completion effects still reject before admission. The carrier exposes pre-fence pressure as a null close attempt to the world
 lifecycle registry, which retains and retries that operation on the owner; accepted failures remain terminal barriers.
-Production backend selection and broader command parity remain required before selecting the native backend.
+Broader workload parity and comparative CPU, latency and memory validation remain required before making the native backend the default.
 
 ## Addon host boundary
 

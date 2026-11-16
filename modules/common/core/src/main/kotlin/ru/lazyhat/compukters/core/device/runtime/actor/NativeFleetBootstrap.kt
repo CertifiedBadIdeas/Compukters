@@ -15,7 +15,7 @@ import java.util.concurrent.CompletableFuture
 internal class NativeFleetBootstrap(
     private val checkOwner: () -> Unit,
     private val onResultsReady: () -> Unit,
-    private val reserve: () -> AutoCloseable?,
+    private val reserve: (Long) -> AutoCloseable?,
     private val activate: (Entry, Long) -> Unit,
     private val onActorClosing: (VmActorEndpoint) -> Unit,
     private val nanoTime: () -> Long,
@@ -68,7 +68,7 @@ internal class NativeFleetBootstrap(
         predecessor: CompletableFuture<Long>,
     ): CompletableFuture<ProgramRuntimeActorReply>? {
         checkOwner()
-        val reservation = reserve() ?: return null
+        val reservation = reserve(0) ?: return null
         attach(endpoint, host, lease)
         val entry = entries.getValue(endpoint)
         entry.reservation = reservation
@@ -95,7 +95,7 @@ internal class NativeFleetBootstrap(
     ): CompletableFuture<ProgramRuntimeActorReply> {
         checkOwner()
         val entry = entries.getValue(endpoint)
-        if (command !is ProgramRuntimeActorCommand.RestoreOrBoot &&
+        if (command !is ProgramRuntimeActorCommand.Start && command !is ProgramRuntimeActorCommand.RestoreOrBoot &&
             command !is ProgramRuntimeActorCommand.CompleteRestoration &&
             command !is ProgramRuntimeActorCommand.AbortRestoration && command !is ProgramRuntimeActorCommand.StartBoot &&
             command !is ProgramRuntimeActorCommand.Shutdown && command !is ProgramRuntimeActorCommand.Reboot &&
@@ -105,7 +105,15 @@ internal class NativeFleetBootstrap(
             return CompletableFuture.failedFuture(UnsupportedOperationException("native bootstrap does not support this command"))
         }
         if (entry.request != null) return refused()
-        if (entry.reservation == null) entry.reservation = reserve() ?: return refused()
+        if (entry.reservation == null) {
+            val bytes = if (command is ProgramRuntimeActorCommand.Start) 2L * command.artifactSize else 0L
+            entry.reservation =
+                try {
+                    reserve(bytes) ?: return refused()
+                } catch (failure: IllegalArgumentException) {
+                    return CompletableFuture.failedFuture(failure)
+                }
+        }
         val result = CompletableFuture<ProgramRuntimeActorReply>()
         entry.request = result
         entry.tick =
@@ -214,7 +222,7 @@ internal class NativeFleetBootstrap(
         check(entries[entry.endpoint] === entry)
         require(request == null || request.effects.isEmpty()) { "bootstrapping host cannot own world completions" }
         if (request != null && entry.reservation == null) {
-            entry.reservation = reserve() ?: throw ProgramRuntimeActorRequestException(VmActorSubmission.MAILBOX_FULL)
+            entry.reservation = reserve(0) ?: throw ProgramRuntimeActorRequestException(VmActorSubmission.MAILBOX_FULL)
         }
         return ProgramActorCloseReservation {
             // Fence and reserve worker ownership before any callback may reenter service shutdown.

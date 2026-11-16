@@ -18,14 +18,16 @@
 
 package ru.lazyhat.compukters.impl.benchmark
 
+import ru.lazyhat.compukters.core.device.runtime.actor.NativeProgramRuntimeService
+import ru.lazyhat.compukters.core.device.runtime.actor.ProgramRuntimeActorCommand
+import ru.lazyhat.compukters.core.device.runtime.actor.ProgramRuntimeActorReply
+import ru.lazyhat.compukters.core.device.runtime.actor.ProgramRuntimeActorService
+import ru.lazyhat.compukters.core.device.runtime.actor.ProgramRuntimeActorValue
+import ru.lazyhat.compukters.core.device.runtime.actor.ProgramRuntimeService
 import ru.lazyhat.compukters.core.device.runtime.actor.VmActorEndpoint
-import ru.lazyhat.compukters.core.device.runtime.actor.VmActorEvent
-import ru.lazyhat.compukters.core.device.runtime.actor.VmActorProcessor
-import ru.lazyhat.compukters.core.device.runtime.actor.VmActorScheduler
 import ru.lazyhat.compukters.core.device.runtime.actor.VmActorSchedulerConfig
-import ru.lazyhat.compukters.core.device.runtime.actor.VmActorSubmission
 import ru.lazyhat.compukters.core.device.runtime.actor.VmCapacityCalibration
-import ru.lazyhat.compukters.core.device.runtime.program.ProgramRuntimeHost
+import ru.lazyhat.compukters.core.device.runtime.actor.VmExecutionBackend
 import ru.lazyhat.compukters.core.device.runtime.program.ProgramRuntimeState
 import ru.lazyhat.compukters.core.device.runtime.program.ProgramStartResult
 import ru.lazyhat.compukters.core.device.runtime.program.ProgramTickBudget
@@ -34,38 +36,33 @@ import ru.lazyhat.compukters.minecraft.computer.HeadlessVmBenchmarkArtifact
 import java.math.BigInteger
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.locks.LockSupport
 
-/** Samples the packaged VM workload through real actor workers, host sessions, and the active native transport. */
+/** Samples the selected execution backend on its own owner, without Minecraft tick work. */
 internal object VmCapacityCalibrator {
-    fun start(workerCount: Int): CompletableFuture<VmCapacityCalibration> {
+    fun start(
+        workerCount: Int,
+        backend: VmExecutionBackend = VmExecutionBackend.JVM,
+    ): CompletableFuture<VmCapacityCalibration> {
         require(workerCount > 0) { "calibration worker count must be positive" }
         val result = CompletableFuture<VmCapacityCalibration>()
-        Thread
-            .ofPlatform()
-            .daemon(true)
-            .name("compukters-vm-calibration")
-            .start {
-                try {
-                    val integer = sample(workerCount, "1000000")
-                    val allocation = sample(workerCount, "alloc")
-                    val integerRate =
-                        BigInteger
-                            .valueOf(integer.retiredInstructions)
-                            .multiply(BigInteger.valueOf(allocation.elapsedNanos))
-                    val allocationRate =
-                        BigInteger
-                            .valueOf(allocation.retiredInstructions)
-                            .multiply(BigInteger.valueOf(integer.elapsedNanos))
-                    result.complete(if (integerRate <= allocationRate) integer else allocation)
-                } catch (failure: Throwable) {
-                    result.completeExceptionally(failure)
-                }
+        Thread.ofPlatform().daemon(true).name("compukters-vm-calibration").start {
+            try {
+                val integer = sample(workerCount, backend, "1000000")
+                val allocation = sample(workerCount, backend, "alloc")
+                val integerRate = BigInteger.valueOf(integer.retiredInstructions).multiply(BigInteger.valueOf(allocation.elapsedNanos))
+                val allocationRate = BigInteger.valueOf(allocation.retiredInstructions).multiply(BigInteger.valueOf(integer.elapsedNanos))
+                result.complete(if (integerRate <= allocationRate) integer else allocation)
+            } catch (failure: Throwable) {
+                result.completeExceptionally(failure)
             }
+        }
         return result
     }
 
     private fun sample(
         workerCount: Int,
+        backend: VmExecutionBackend,
         workload: String,
     ): VmCapacityCalibration {
         val artifact = HeadlessVmBenchmarkArtifact.packaged()
@@ -77,75 +74,84 @@ internal object VmCapacityCalibrator {
                 messagesPerTurn = 1,
                 resultCapacityPerWorker = 2,
             )
-        val hosts = ArrayList<ProgramRuntimeHost>(workerCount)
-        try {
-            VmActorScheduler<Int, Int, Long>(config).use { scheduler ->
-                val endpoints = List(workerCount) { index -> VmActorEndpoint(ComputerId.fromLongs(0, index + 1L), 1) }
-                endpoints.forEach { endpoint ->
-                    val host = ProgramRuntimeHost(ProgramTickBudget(maximumAdvancesPerTick = 4))
-                    hosts += host
-                    check(host.start(artifact) == ProgramStartResult.Started) { "calibration VM failed to start" }
-                    check(host.sendTerminalText(workload)) { "calibration input was rejected" }
-                    check(scheduler.register(endpoint, CalibrationProcessor(host, workload))) { "calibration worker admission failed" }
+        val quotas = ProgramTickBudget(maximumAdvancesPerTick = 4)
+        val capacity = workerCount * INSTRUCTIONS_PER_COMPUTER.toLong()
+        val service: ProgramRuntimeService =
+            when (backend) {
+                VmExecutionBackend.JVM -> {
+                    ProgramRuntimeActorService(
+                        config,
+                        perComputerEntitlement = INSTRUCTIONS_PER_COMPUTER,
+                        safeInstructionCapacity = capacity,
+                        capacityFramesRequired = true,
+                    )
                 }
-                val startedAt = System.nanoTime()
-                val deadline = startedAt + SAMPLE_NANOS
-                endpoints.forEach { endpoint ->
-                    check(scheduler.submitWithPermit(endpoint, emptyList(), 1) == VmActorSubmission.ACCEPTED)
-                }
-                var outstanding = workerCount
-                var retired = 0L
-                while (outstanding > 0) {
-                    val events = scheduler.drainEvents(workerCount)
-                    if (events.isEmpty()) {
-                        check(System.nanoTime() - deadline < MAXIMUM_OVERRUN_NANOS) { "calibration timed out" }
-                        Thread.sleep(1)
-                        continue
-                    }
-                    events.forEach { event ->
-                        when (event) {
-                            is VmActorEvent.Failed -> {
-                                throw IllegalStateException("calibration actor failed", event.cause)
-                            }
 
-                            is VmActorEvent.Result -> {
-                                retired = Math.addExact(retired, event.value)
-                                if (System.nanoTime() - deadline < 0) {
-                                    check(scheduler.submitWithPermit(event.endpoint, emptyList(), 1) == VmActorSubmission.ACCEPTED)
-                                } else {
-                                    outstanding--
-                                }
-                            }
-                        }
-                    }
+                VmExecutionBackend.NATIVE -> {
+                    NativeProgramRuntimeService(
+                        config,
+                        perComputerEntitlement = INSTRUCTIONS_PER_COMPUTER,
+                        safeInstructionCapacity = capacity,
+                        tickBudget = quotas,
+                    )
                 }
-                return VmCapacityCalibration(retired, (System.nanoTime() - startedAt).coerceAtLeast(1), workerCount)
             }
-        } finally {
-            hosts.forEach(ProgramRuntimeHost::close)
+        service.use {
+            val endpoints = List(workerCount) { VmActorEndpoint(ComputerId.fromLongs(0, it + 1L), 1) }
+
+            fun <T> await(future: CompletableFuture<T>): T {
+                val deadline = System.nanoTime() + MAXIMUM_OVERRUN_NANOS
+                while (!future.isDone) {
+                    check(System.nanoTime() - deadline < 0) { "calibration timed out" }
+                    if (service.pump(workerCount * 4) == 0) LockSupport.parkNanos(50_000)
+                }
+                return future.join()
+            }
+            // Bootstrap admission is byte bounded; prepare one artifact at a time even on large pools.
+            endpoints.forEach { endpoint ->
+                checkNotNull(service.attachStandalone(endpoint, quotas)) { "calibration actor admission failed" }
+                val started = await(service.request(endpoint) { ProgramRuntimeActorCommand.Start(it, artifact) })
+                check(
+                    (started.value as? ProgramRuntimeActorValue.Start)?.result == ProgramStartResult.Started,
+                ) { "calibration VM failed to start" }
+                sendInput(service, endpoint, workload, ::await)
+            }
+            val startedAt = System.nanoTime()
+            val deadline = startedAt + SAMPLE_NANOS
+            var tick = 0L
+            var replies = emptyList<Pair<VmActorEndpoint, ProgramRuntimeActorReply>>()
+            do {
+                replies.forEach { (endpoint, reply) ->
+                    check(reply.state == ProgramRuntimeState.Running || reply.state == ProgramRuntimeState.WaitingForInput) {
+                        "calibration VM stopped: ${reply.state}"
+                    }
+                    if (reply.state == ProgramRuntimeState.WaitingForInput) sendInput(service, endpoint, workload, ::await)
+                }
+                service.beginCapacityFrame(++tick)
+                val pending = endpoints.map { it to service.turn(it, tick) }
+                service.flushCapacityFrame()
+                await(CompletableFuture.allOf(*pending.map { it.second }.toTypedArray()))
+                replies = pending.map { it.first to it.second.join() }
+            } while (System.nanoTime() - deadline < 0)
+            return VmCapacityCalibration(
+                service.runtimeMetrics().retiredInstructionsTotal,
+                (System.nanoTime() - startedAt).coerceAtLeast(1),
+                workerCount,
+            )
         }
     }
 
-    private class CalibrationProcessor(
-        private val host: ProgramRuntimeHost,
-        private val workload: String,
-    ) : VmActorProcessor<Int, Int, Long> {
-        private var tick = 0L
-
-        override fun process(command: Int): Long? = null
-
-        override fun advance(permit: Int): Long {
-            val state = host.serverTick(tick++, retirementAllowance = 8_192)
-            if (state == ProgramRuntimeState.WaitingForInput) {
-                check(host.sendTerminalText(workload)) { "calibration VM did not resume" }
-            }
-            check(state == ProgramRuntimeState.Running || state == ProgramRuntimeState.WaitingForInput) {
-                "calibration VM stopped: $state"
-            }
-            return host.retiredInstructionsLastTick
-        }
+    private fun sendInput(
+        service: ProgramRuntimeService,
+        endpoint: VmActorEndpoint,
+        workload: String,
+        await: (CompletableFuture<ProgramRuntimeActorReply>) -> ProgramRuntimeActorReply,
+    ) {
+        val reply = await(service.request(endpoint) { ProgramRuntimeActorCommand.SendTerminalText(it, workload) })
+        check((reply.value as? ProgramRuntimeActorValue.Accepted)?.accepted == true) { "calibration input was rejected" }
     }
 
+    private const val INSTRUCTIONS_PER_COMPUTER = 8_192
     private const val SAMPLE_NANOS = 250_000_000L
     private val MAXIMUM_OVERRUN_NANOS = TimeUnit.SECONDS.toNanos(2)
 }

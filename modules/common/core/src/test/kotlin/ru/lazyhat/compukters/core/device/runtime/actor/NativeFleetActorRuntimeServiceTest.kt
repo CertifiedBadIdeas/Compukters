@@ -62,6 +62,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class NativeFleetActorRuntimeServiceTest {
@@ -790,12 +791,25 @@ class NativeFleetActorRuntimeServiceTest {
         }
 
     @Test
-    fun `expired grants reject without callbacks and a callback failure does not block another actor`() =
+    fun `expired turns settle zero credit and callback failure does not block another actor`() =
         Harness().use { h ->
             val a = h.register(1)
             val b = h.register(2)
             assertTrue(h.service.grantFrame(a, 1, 10, 100))
-            assertEquals(VmActorSubmission.MAILBOX_FULL, h.service.submitTurn(a, 1, emptyList()) { _, _ -> error("expired") })
+            var expiredCompleted = false
+            assertEquals(
+                VmActorSubmission.ACCEPTED,
+                h.service.submitTurn(a, 1, emptyList()) { reply, failure ->
+                    assertNull(failure)
+                    assertEquals(0L, checkNotNull(reply).retiredInstructions)
+                    expiredCompleted = true
+                },
+            )
+            h.service.pump(0, 10)
+            h.events += ExperimentalFleetEvent.Quiescent(1, 1, 0, false)
+            h.service.pump(1, 0)
+            assertTrue(expiredCompleted)
+            assertFalse(h.service.continueTurn(a, 1, emptyList()) { _, _ -> error("expired continuation") })
             assertTrue(h.service.grantFrame(a, 2, 10))
             assertTrue(h.service.grantFrame(b, 2, 10))
             assertEquals(VmActorSubmission.ACCEPTED, h.service.submitTurn(a, 2, emptyList()) { _, _ -> error("observer failed") })
