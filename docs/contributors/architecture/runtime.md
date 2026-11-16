@@ -145,8 +145,23 @@ without collecting a second payload queue until the final report. These actions 
 start a continuation; only Quiescent does. Unhandled requests retain the external owner hook, and final-only callers
 retain raw event delivery. Mixed batches forward only unhandled requests. Scope changes reuse host metadata; stopping
 or replacing the carrier during a callback fences later actions and stale completions. Observer failure suppresses
-further actions and fails that turn after credit settlement, without stopping other machines. Command-cost inspection
-still uses the external hook; sharing its prepared batch with dispatch remains pending.
+further actions and fails that turn after credit settlement, without stopping other machines. Callers configure the canonical commands ABI 2 inspection rule on the fleet. Command-cost inspection
+uses the canonical batch decoder and returns the number of commands through the ordered outbox; malformed packets
+cost one and retain the normal typed dispatch failure. Rust alone applies the tick quota, defers an intact batch
+or rejects a group larger than that quota. Unsupported inspection rules retain the external hook.
+
+Until its cost enters the outbox, one unclassified request per machine retains only scalar identity, scope and
+cost. Rust pauses execution at that request until classification; even a later tick or host reply cannot advance
+that machine across the boundary. Control unwinding can still terminate its scope. Other machines keep running.
+Mailbox pressure retries the same cost without granting execution.
+A separate optional FIFO cache shares the immutable decoded packet with addon dispatch. Global/per-machine entry
+limits equal the outbox entry limits; conservative retained-heap charges have their own global/per-machine byte
+allowance equal to the outbox byte limits (an additional maximum of 16 MiB by default). Neither cache nor pending
+classification allocates per idle machine. Eviction or a packet exceeding the cache allowance falls back to decoding
+at dispatch without changing quota or execution semantics. Native rejection has no separate acknowledgement, so
+unused cache entries remain bounded until eviction or scope/machine cancellation. Scope cancellation drops unsent
+classifications and matching prepared packets; actor fencing clears both before off-thread handoff. Accepted scalar
+cost commands may finish after cancellation; Rust ignores their obsolete request identities.
 
 Native compiler events use the same host submission rules and `CompilerCompletionRouter` as the JVM actor backend.
 Addresses bind computer identity, VM epoch and native transaction token. The shared router admits at most 64 pending

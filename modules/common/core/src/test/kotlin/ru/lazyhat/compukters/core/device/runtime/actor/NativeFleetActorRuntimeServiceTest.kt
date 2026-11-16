@@ -7,6 +7,7 @@ package ru.lazyhat.compukters.core.device.runtime.actor
 
 import ru.lazyhat.compukters.api.addon.ProgramAddonAction
 import ru.lazyhat.compukters.api.addon.ProgramAddonCompletion
+import ru.lazyhat.compukters.api.commands.CommandBatchCodec
 import ru.lazyhat.compukters.compiler.runtime.CompilerSubmissionResult
 import ru.lazyhat.compukters.core.device.runtime.compiler.CompilerCompletionRouter
 import ru.lazyhat.compukters.core.device.runtime.compiler.ComputerCompilationAddress
@@ -14,6 +15,7 @@ import ru.lazyhat.compukters.core.device.runtime.compiler.ComputerCompilationOut
 import ru.lazyhat.compukters.core.device.runtime.compiler.ComputerCompilationRequest
 import ru.lazyhat.compukters.core.device.runtime.compiler.ComputerCompiler
 import ru.lazyhat.compukters.core.device.runtime.compiler.ComputerCompilerCompletion
+import ru.lazyhat.compukters.core.device.runtime.program.CommandBatchProgramHost
 import ru.lazyhat.compukters.core.device.runtime.program.ProgramResourceSnapshot
 import ru.lazyhat.compukters.core.device.runtime.program.ProgramRuntimeHost
 import ru.lazyhat.compukters.core.device.runtime.program.ProgramRuntimeState
@@ -63,6 +65,73 @@ import kotlin.test.assertIs
 import kotlin.test.assertTrue
 
 class NativeFleetActorRuntimeServiceTest {
+    @Test
+    fun `process exit cancels an inspection even without a scope stopped event`() =
+        Harness().use { h ->
+            h.register(1, schemas = listOf(CommandBatchProgramHost.SCHEMA))
+            val request =
+                VmHostRequest(
+                    1,
+                    CommandBatchProgramHost.SCHEMA.identity,
+                    0,
+                    listOf(
+                        VmValue.ByteArrayValue(
+                            CommandBatchCodec.encode(listOf(CommandBatchCodec.Command("fixture.Binding.write", emptyList()))),
+                        ),
+                    ),
+                )
+            h.events += ExperimentalFleetEvent.Outcome(1, 1, VmOutcome.ProcessEntered(1))
+            h.events += ExperimentalFleetEvent.Inspection(1, 1, request)
+            h.events += ExperimentalFleetEvent.Outcome(1, 1, VmOutcome.ProcessExited(1))
+            h.service.pump(3, 0)
+            h.service.pump(0, 4)
+            assertTrue(h.costs.isEmpty())
+            assertEquals(0L, h.hosts.getValue(1).currentProgramScope)
+        }
+
+    @Test
+    fun `batch inspection retries cost without granting execution and scope stop discards an unsent cost`() =
+        Harness(maximumRequests = 1).use { h ->
+            val endpoint = h.register(1, schemas = listOf(CommandBatchProgramHost.SCHEMA))
+            val request =
+                VmHostRequest(
+                    1,
+                    CommandBatchProgramHost.SCHEMA.identity,
+                    0,
+                    listOf(
+                        VmValue.ByteArrayValue(
+                            CommandBatchCodec.encode(
+                                List(3) {
+                                    CommandBatchCodec.Command("fixture.Binding.write", listOf(VmValue.I32(it)))
+                                },
+                            ),
+                        ),
+                    ),
+                )
+            h.events += ExperimentalFleetEvent.Inspection(1, 1, request)
+            h.service.pump(1, 0)
+            h.busyCosts = true
+            repeat(3) { h.service.pump(0, 1) }
+            assertTrue(h.costs.isEmpty())
+            h.busyCosts = false
+            h.service.pump(0, 1)
+            assertEquals(listOf(Triple(1L, request.identity, 3)), h.costs.toList())
+            assertTrue(h.grants.isEmpty())
+            assertTrue(h.observedEvents.isEmpty())
+
+            // A new inspection can be waiting behind a full JVM queue when its scope exits.
+            val generation = h.service.request(endpoint, ProgramRuntimeActorCommand::FileSystemGeneration)
+            h.events += ExperimentalFleetEvent.Inspection(1, 2, request.copy(id = 2))
+            h.events += ExperimentalFleetEvent.ScopeStopped(1, 0, emptyList())
+            h.service.pump(2, 0)
+            h.service.pump(0, 1)
+            h.events += ExperimentalFleetEvent.FilesystemGeneration(1, h.queries.last(), 7)
+            h.service.pump(1, 1)
+            generation.join()
+            assertEquals(1, h.costs.size)
+            assertEquals(1, h.observedEvents.size) // Only scope lifecycle reaches the external hook.
+        }
+
     @Test
     fun `power control memory refusal leaves the native actor owned and runnable`() =
         Harness(byteLimits = NativeFleetOutboxLimits(128, 128)).use { h ->
@@ -1265,6 +1334,9 @@ class NativeFleetActorRuntimeServiceTest {
         val compilationResults = CopyOnWriteArrayList<Triple<Long, Long, ComputerCompilationOutcome>>()
 
         @Volatile var busyCompilation = false
+
+        @Volatile var busyCosts = false
+        val costs = CopyOnWriteArrayList<Triple<Long, VmHostRequestIdentity, Int>>()
         val queries = CopyOnWriteArrayList<Long>()
         val discardedCandidates = CopyOnWriteArrayList<Long>()
         val observed = mutableListOf<VmActorEndpoint>()
@@ -1322,6 +1394,15 @@ class NativeFleetActorRuntimeServiceTest {
 
                     "grant" -> {
                         grants += (args!![0] as Long) to (args[2] as Int)
+                        null
+                    }
+
+                    "resolveCost" -> {
+                        if (busyCosts) {
+                            throw ru.lazyhat.compukters.lang.runtime.vm
+                                .VmFleetBusyException("full")
+                        }
+                        costs += Triple(args!![0] as Long, args[1] as VmHostRequestIdentity, args[2] as Int)
                         null
                     }
 

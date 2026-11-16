@@ -7,10 +7,12 @@ package ru.lazyhat.compukters.core.device.runtime.actor.integration
 
 import ru.lazyhat.compukters.api.addon.ProgramAddonAction
 import ru.lazyhat.compukters.api.addon.ProgramAddonCompletion
+import ru.lazyhat.compukters.api.commands.CommandBatchCodec
 import ru.lazyhat.compukters.compiler.runtime.CompilerSubmissionResult
 import ru.lazyhat.compukters.core.device.computer.ActorProgramComputer
 import ru.lazyhat.compukters.core.device.runtime.actor.ActorRuntimeService
 import ru.lazyhat.compukters.core.device.runtime.actor.NativeFleetActorRuntimeService
+import ru.lazyhat.compukters.core.device.runtime.actor.NativeFleetCommandRequests
 import ru.lazyhat.compukters.core.device.runtime.actor.NativeFleetDispatcher
 import ru.lazyhat.compukters.core.device.runtime.actor.NativeFleetEventPump
 import ru.lazyhat.compukters.core.device.runtime.actor.NativeFleetOutbox
@@ -35,6 +37,7 @@ import ru.lazyhat.compukters.core.device.runtime.compiler.ComputerCompilationOut
 import ru.lazyhat.compukters.core.device.runtime.compiler.ComputerCompilationRequest
 import ru.lazyhat.compukters.core.device.runtime.compiler.ComputerCompiler
 import ru.lazyhat.compukters.core.device.runtime.compiler.ComputerCompilerCompletion
+import ru.lazyhat.compukters.core.device.runtime.program.CommandBatchProgramHost
 import ru.lazyhat.compukters.core.device.runtime.program.NativeProgramVmSessionFactory
 import ru.lazyhat.compukters.core.device.runtime.program.ProgramFileSystemLaunchContext
 import ru.lazyhat.compukters.core.device.runtime.program.ProgramResourceSnapshot
@@ -92,6 +95,112 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class NativeFleetEventPumpIntegrationTest {
+    @Test
+    fun `native command inspection charges each command and rejects batches larger than the tick budget`() {
+        installFfmRuntime()
+        VmRuntime.loadNativeLibrary(Path.of(requireNotNull(System.getProperty("compukters.ffi.library"))))
+        val artifact = Path.of(requireNotNull(System.getProperty("compukters.fleet.commands.fixture"))).readBytes()
+        for (budget in listOf(1, 2)) {
+            val schema = CommandBatchProgramHost.SCHEMA
+            val host =
+                ProgramRuntimeHost(
+                    NativeProgramVmSessionFactory(capabilitySchemas = listOf(schema)),
+                    addonCapabilitySchemas = listOf(schema),
+                )
+            assertEquals(ProgramStartResult.Started, host.start(artifact))
+            val config =
+                ExperimentalFleetConfig(
+                    1,
+                    2,
+                    2,
+                    1_000_000,
+                    100_000,
+                    budget,
+                    128,
+                    inspection = NativeFleetCommandRequests.INSPECTION,
+                    coordinatedTurns = true,
+                )
+            VmRuntime.openExperimentalFleet(config).use { fleet ->
+                val machine = host.transferToFleet(fleet, 0)
+                val endpoint = VmActorEndpoint(ComputerId.fromLongs(361, budget.toLong()), 1)
+                NativeFleetActorRuntimeService(fleet, 4, 16, 16, {}, {}, { _, event ->
+                    check(event !is ExperimentalFleetEvent.Inspection) { "command cost escaped to external owner" }
+                }, onActorClosing = {}).use { service ->
+                    assertTrue(service.register(endpoint, machine, host))
+                    val pending = mutableListOf<ProgramAddonCompletion>()
+                    val dispatchTicks = mutableListOf<Long>()
+                    for (tick in 1L..20L) {
+                        if (host.state is ProgramRuntimeState.Halted || host.state is ProgramRuntimeState.Failed) break
+                        assertTrue(service.grantFrame(endpoint, tick, 1_000_000))
+
+                        fun advance(continuation: Boolean) {
+                            val result = CompletableFuture<ProgramRuntimeActorReply>()
+                            val effects =
+                                if (pending.isEmpty()) {
+                                    emptyList()
+                                } else {
+                                    listOf(
+                                        ProgramRuntimeActorEffect.CompleteAddons(pending.toList()),
+                                    )
+                                }
+                            pending.clear()
+                            val observer =
+                                object : ProgramRuntimeTurnObserver {
+                                    override fun addonAction(action: ProgramAddonAction) {
+                                        val request = assertIs<ProgramAddonAction.Request>(action).request
+                                        assertEquals(2, CommandBatchCodec.decode(request).size)
+                                        dispatchTicks += tick
+                                        pending +=
+                                            ProgramAddonCompletion(
+                                                request.identity,
+                                                HostResponse.ByteArraySuccess(
+                                                    CommandBatchCodec.encodeResults(
+                                                        listOf(
+                                                            HostResponse.UnitSuccess,
+                                                            HostResponse.Failure(HostFailureKind.UNAVAILABLE, "missing"),
+                                                        ),
+                                                    ),
+                                                ),
+                                            )
+                                    }
+
+                                    override fun complete(
+                                        reply: ProgramRuntimeActorReply?,
+                                        failure: Throwable?,
+                                    ) {
+                                        if (failure == null) result.complete(checkNotNull(reply)) else result.completeExceptionally(failure)
+                                    }
+                                }
+                            if (continuation) {
+                                assertTrue(service.continueTurn(endpoint, tick, effects, observer))
+                            } else {
+                                assertEquals(VmActorSubmission.ACCEPTED, service.submitTurn(endpoint, tick, effects, observer))
+                            }
+                            awaitBootstrap(service, result)
+                        }
+                        advance(false)
+                        // Return the first reply within this frame. Its second two-command packet
+                        // must wait for the next tick, even with Guest instruction credit remaining.
+                        var continuations = 0
+                        while (pending.isNotEmpty()) {
+                            check(++continuations <= 3) { "unexpected command loop" }
+                            advance(true)
+                        }
+                    }
+                    if (budget == 1) {
+                        assertTrue(dispatchTicks.isEmpty())
+                        assertIs<ProgramRuntimeState.Failed>(host.state)
+                    } else {
+                        assertEquals(2, dispatchTicks.size)
+                        assertEquals(2, dispatchTicks.distinct().size)
+                        assertEquals(ProgramRuntimeState.Halted(null), host.state)
+                    }
+                    checkNotNull(service.stop(endpoint)).get(5, TimeUnit.SECONDS)
+                }
+            }
+        }
+    }
+
     @Test
     fun `native carrier reboots and powers off through the same lease without losing installed files`() {
         installFfmRuntime()

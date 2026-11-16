@@ -178,6 +178,10 @@ tasks.register<Test>("experimentalFleetEventIntegrationTest") {
     inputs.files(redstone, sound)
     systemProperty("compukters.fleet.redstone.fixture", redstone.get().asFile.absolutePath)
     systemProperty("compukters.fleet.sound.fixture", sound.get().asFile.absolutePath)
+    dependsOn(":compiler-k2:generateCommandsConformanceArtifact")
+    val commands = project(":compiler-k2").layout.buildDirectory.file("generated/conformance/commands.cpkt")
+    inputs.file(commands)
+    systemProperty("compukters.fleet.commands.fixture", commands.get().asFile.absolutePath)
     dependsOn(
         ":compiler-k2:generateCompilationArtifact",
         ":tooling-runtime:toolingRuntimeBundle",

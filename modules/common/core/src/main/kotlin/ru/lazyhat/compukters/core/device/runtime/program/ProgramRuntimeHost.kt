@@ -813,9 +813,17 @@ class ProgramRuntimeHost internal constructor(
         fleet: ExperimentalFleetSessionOwner,
         machine: Long,
         request: VmHostRequest,
+        prepared: ProgramAddonRequest? = null,
     ): ProgramAddonRequest? {
         requireFleetOwnership(fleet, machine)
         if (!HostRequestRoutes.isAddon(request, addonCapabilitySchemas)) return null
+        if (prepared != null) {
+            check(
+                prepared.identity == request.identity && prepared.capability == request.capability &&
+                    prepared.operation == request.operation && prepared.programId == programScopes.last(),
+            )
+            return prepared
+        }
         return prepareCommandRequest(request, programScopes.last())
             ?: ProgramAddonRequest(request.identity, request.capability, request.operation, request.arguments, programScopes.last())
     }

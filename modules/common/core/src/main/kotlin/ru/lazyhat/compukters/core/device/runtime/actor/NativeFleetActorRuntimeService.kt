@@ -16,6 +16,7 @@ import ru.lazyhat.compukters.core.device.runtime.program.ProgramRuntimeState
 import ru.lazyhat.compukters.core.device.runtime.program.ProgramTickBudget
 import ru.lazyhat.compukters.core.device.runtime.program.ProgramWorldRequest
 import ru.lazyhat.compukters.core.device.runtime.program.ProgramWorldResult
+import ru.lazyhat.compukters.core.device.runtime.program.prepareCommandRequest
 import ru.lazyhat.compukters.lang.runtime.fs.VmSystemImage
 import ru.lazyhat.compukters.lang.runtime.fs.WorldFileSystemStore
 import ru.lazyhat.compukters.lang.runtime.vm.ExperimentalFleet
@@ -34,6 +35,7 @@ import java.util.concurrent.CompletableFuture
  * boot/restoration handler. Resource rebinding precedes transfer; Rust then owns the session until stop.
  * No JVM worker advances Guest instructions. Frame grants come from the capacity owner.
  *
+ * Callers configure [NativeFleetCommandRequests.INSPECTION] for batch quota accounting.
  * Production backend selection and broader command parity are not wired here yet. The carrier streams
  * addon replies, redstone confirmations and world replies into one bounded ordered outbox,
  * independently of the next execution grant. Legacy deferred world effects reject before admission.
@@ -98,6 +100,8 @@ internal class NativeFleetActorRuntimeService(
         )
 
     private val compilations = NativeFleetCompilations(dispatcher.outbox, nanoTime)
+    private val commandRequests =
+        NativeFleetCommandRequests(dispatcher.outbox, maximumRequests, maximumRequestsPerActor, byteLimits, nanoTime)
 
     private val bootstrap =
         NativeFleetBootstrap(
@@ -544,6 +548,7 @@ internal class NativeFleetActorRuntimeService(
         finalState: ProgramRuntimeState = ProgramRuntimeState.Closed,
     ) {
         machines.remove(actor.machine)
+        commandRequests.cancel(actor.machine)
         deploymentCleanup.removeIf { it.first == actor.machine }
         val compilationCancellation = compilations.cancel(actor.machine)
         val commands = dispatcher.outbox.handoffForClose(actor.machine)
@@ -607,6 +612,7 @@ internal class NativeFleetActorRuntimeService(
         val remaining = maximumAttempts - bootstrap.lastTransferAttempts
         retryDeploymentCleanup(remaining, deadlineNanos)
         compilations.pump(remaining, deadlineNanos)
+        commandRequests.pump(remaining, deadlineNanos)
         return prepared + dispatcher.pump(maximumEvents - prepared, remaining, deadlineNanos)
     }
 
@@ -675,10 +681,11 @@ internal class NativeFleetActorRuntimeService(
                 machines[event.machine]?.let { finishQuery(it, event.request, event) }
             }
 
-            // The integration owner settles these typed events. It must not execute Guest code.
             is ExperimentalFleetEvent.Inspection -> {
                 val actor = machines[event.machine] ?: return
-                onExternalEvent(actor.endpoint, event)
+                actor.host.requireFleetOwnership(fleet, actor.machine)
+                val prepared = prepareCommandRequest(event.request, actor.host.currentProgramScope)
+                if (prepared != null) commandRequests.inspect(actor.machine, prepared) else onExternalEvent(actor.endpoint, event)
             }
 
             is ExperimentalFleetEvent.Compilation -> {
@@ -689,6 +696,7 @@ internal class NativeFleetActorRuntimeService(
 
             is ExperimentalFleetEvent.ScopeStopped -> {
                 compilations.cancelScope(event.machine, event.scope)
+                commandRequests.cancel(event.machine, event.scope)
                 machines[event.machine]?.let { onExternalEvent(it.endpoint, event) }
             }
 
@@ -713,6 +721,27 @@ internal class NativeFleetActorRuntimeService(
         actor: Actor,
         event: ExperimentalFleetEvent.Outcome,
     ) {
+        when (val outcome = event.outcome) {
+            is VmOutcome.ProcessExited -> {
+                commandRequests.cancel(actor.machine, outcome.programId)
+            }
+
+            is VmOutcome.ProcessReplaced -> {
+                commandRequests.cancel(actor.machine, outcome.previousProgramId)
+            }
+
+            is VmOutcome.Halted, is VmOutcome.Crashed, is VmOutcome.Faulted, is VmOutcome.QuotaExhausted,
+            is VmOutcome.AllocationExhausted, is VmOutcome.UncaughtException, is VmOutcome.HostFailed,
+            -> {
+                commandRequests.cancel(
+                    actor.machine,
+                )
+            }
+
+            else -> {
+                Unit
+            }
+        }
         val turn = actor.turn
         if (turn?.completion !is ProgramRuntimeTurnObserver) {
             actor.host.observeFleetOutcome(fleet, actor.machine, event.outcome)
@@ -731,7 +760,13 @@ internal class NativeFleetActorRuntimeService(
                     if (HostRequestRoutes.isRedstoneOutput(request) || HostRequestRoutes.isSound(request)) {
                         (world ?: mutableListOf<VmHostRequest>().also { world = it }).add(request)
                     } else {
-                        val prepared = actor.host.prepareFleetAddonRequest(fleet, actor.machine, request)
+                        val prepared =
+                            actor.host.prepareFleetAddonRequest(
+                                fleet,
+                                actor.machine,
+                                request,
+                                commandRequests.take(actor.machine, request.identity, actor.host.currentProgramScope),
+                            )
                         if (prepared != null) {
                             handled = true
                             turn.submit(ProgramAddonAction.Request(prepared))
