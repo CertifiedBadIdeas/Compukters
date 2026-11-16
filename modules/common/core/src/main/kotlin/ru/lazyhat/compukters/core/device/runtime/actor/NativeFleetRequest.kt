@@ -50,6 +50,10 @@ internal class NativeFleetRequest private constructor(
     ) {
         val id = command.requestId.value
         when (val command = command) {
+            is ProgramRuntimeActorCommand.ResourceSnapshot -> {
+                fleet.resourceSnapshot(machine, id)
+            }
+
             is ProgramRuntimeActorCommand.FileSystemGeneration -> {
                 fleet.filesystemGeneration(machine, id)
             }
@@ -121,6 +125,7 @@ internal class NativeFleetRequest private constructor(
 
     enum class Response {
         GENERATION,
+        RESOURCES,
         TERMINAL_FULL,
         TERMINAL_UPDATE,
         INPUT,
@@ -276,6 +281,10 @@ internal class NativeFleetRequest private constructor(
             var path: VmVirtualPath? = null
             val response =
                 when (command) {
+                    is ProgramRuntimeActorCommand.ResourceSnapshot -> {
+                        Response.RESOURCES
+                    }
+
                     is ProgramRuntimeActorCommand.FileSystemGeneration -> {
                         Response.GENERATION
                     }

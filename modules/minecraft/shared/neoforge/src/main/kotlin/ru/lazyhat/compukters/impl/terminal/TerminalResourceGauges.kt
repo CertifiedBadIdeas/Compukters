@@ -170,8 +170,10 @@ internal class TerminalResourceGaugeWindow {
         val previousConsumed = addExactOrNull(previous.fixedGuestUnits, previous.dynamicGuestUnits) ?: return null
         val currentConsumed = addExactOrNull(current.fixedGuestUnits, current.dynamicGuestUnits) ?: return null
         val consumed = differenceOrNull(currentConsumed, previousConsumed) ?: return null
-        val granted = differenceOrNull(current.grantedGuestUnits, previous.grantedGuestUnits) ?: return null
         val maintenance = differenceOrNull(current.maintenanceUnits, previous.maintenanceUnits) ?: return null
+        val previousGranted = previous.grantedGuestUnits ?: return ResourceInterval(null, maintenance)
+        val currentGranted = current.grantedGuestUnits ?: return ResourceInterval(null, maintenance)
+        val granted = differenceOrNull(currentGranted, previousGranted) ?: return null
         if (granted == 0L || consumed > granted) return ResourceInterval(null, maintenance)
         return ResourceInterval(ratioBasisPoints(consumed, granted), maintenance)
     }

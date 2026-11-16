@@ -14,6 +14,7 @@ import ru.lazyhat.compukters.core.device.runtime.compiler.ComputerCompilationOut
 import ru.lazyhat.compukters.core.device.runtime.compiler.ComputerCompilationRequest
 import ru.lazyhat.compukters.core.device.runtime.compiler.ComputerCompiler
 import ru.lazyhat.compukters.core.device.runtime.compiler.ComputerCompilerCompletion
+import ru.lazyhat.compukters.core.device.runtime.program.ProgramResourceSnapshot
 import ru.lazyhat.compukters.core.device.runtime.program.ProgramRuntimeHost
 import ru.lazyhat.compukters.core.device.runtime.program.ProgramRuntimeState
 import ru.lazyhat.compukters.core.device.runtime.program.ProgramVmSession
@@ -44,6 +45,7 @@ import ru.lazyhat.compukters.lang.runtime.vm.VmExecutableRevision
 import ru.lazyhat.compukters.lang.runtime.vm.VmHostRequest
 import ru.lazyhat.compukters.lang.runtime.vm.VmHostRequestIdentity
 import ru.lazyhat.compukters.lang.runtime.vm.VmOutcome
+import ru.lazyhat.compukters.lang.runtime.vm.VmResourceSnapshot
 import ru.lazyhat.compukters.lang.runtime.vm.VmValue
 import java.lang.reflect.Proxy
 import java.util.concurrent.CompletableFuture
@@ -61,6 +63,48 @@ import kotlin.test.assertIs
 import kotlin.test.assertTrue
 
 class NativeFleetActorRuntimeServiceTest {
+    @Test
+    fun `resource requests are bounded observations and preserve native counters without granting execution`() =
+        Harness(maximumRequests = 1).use { h ->
+            val endpoint = h.register(1)
+            val native = VmResourceSnapshot(11, 12, 13, 14, 15, 100, 40, 3, 70, 80, 100, 2, 10, true, 8, 3, 1, 2, 4)
+
+            fun request() = h.service.request(endpoint, ProgramRuntimeActorCommand::ResourceSnapshot)
+            val first = request()
+            assertTrue(request().isCompletedExceptionally)
+            h.service.pump(0, 1)
+            assertFalse(first.isDone)
+            h.events += ExperimentalFleetEvent.Resources(1, h.queries.last(), native)
+            h.service.pump(1, 0)
+            val snapshot =
+                assertIs<ProgramResourceSnapshot.Available>(
+                    assertIs<ProgramRuntimeActorValue.ResourceSnapshotValue>(first.join().value).snapshot,
+                )
+            assertEquals(ProgramRuntimeState.Running, snapshot.state)
+            assertEquals(null, snapshot.grantedGuestUnits)
+            assertEquals(null, snapshot.grantedMaintenanceUnits)
+            assertEquals(native.fixedGuestUnits, snapshot.fixedGuestUnits)
+            assertEquals(native.maintenanceUnits, snapshot.maintenanceUnits)
+            assertEquals(native.heapUsedBytes, snapshot.heapUsedBytes)
+            assertEquals(native.filesystemLogicalBytes, snapshot.filesystemLogicalBytes)
+            assertEquals(native.liveTasks, snapshot.liveTasks)
+            assertTrue(snapshot.countersSaturated)
+            assertTrue(h.grants.isEmpty())
+
+            val canceled = request()
+            h.service.pump(0, 1)
+            assertTrue(canceled.cancel(false))
+            assertTrue(request().isCompletedExceptionally) // Cancellation does not free native ownership early.
+            h.events += ExperimentalFleetEvent.Resources(1, h.queries.last(), native)
+            h.service.pump(1, 0)
+            val wrongKind = request()
+            h.service.pump(0, 1)
+            h.events += ExperimentalFleetEvent.FilesystemGeneration(1, h.queries.last(), 7)
+            h.service.pump(1, 0)
+            assertTrue(wrongKind.isCompletedExceptionally)
+            assertFalse(request().isDone) // A malformed response also releases admission.
+        }
+
     @Test
     fun `scope cancellation rejects late compiler results after the computer restarts`() =
         Harness().use { h ->
@@ -1282,7 +1326,7 @@ class NativeFleetActorRuntimeServiceTest {
                         null
                     }
 
-                    "filesystemGeneration" -> {
+                    "filesystemGeneration", "resourceSnapshot" -> {
                         queries += args!![1] as Long
                         null
                     }

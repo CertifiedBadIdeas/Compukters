@@ -993,12 +993,20 @@ class ProgramRuntimeHost internal constructor(
         val activeSession = session ?: return ProgramResourceSnapshot.Unavailable(state, tickBudget)
         return try {
             val native = activeSession.resourceSnapshot()
-            val granted = grantedBudgets.snapshot()
-            native.toProgramSnapshot(state, tickBudget, granted)
+            native.toProgramSnapshot(state, tickBudget, grantedBudgets.snapshot())
         } catch (error: VmBridgeException) {
             finish(ProgramRuntimeState.Failed(ProgramFailure.Bridge(error.bridgeDetail())))
             throw error
         }
+    }
+
+    internal fun fleetResourceSnapshot(
+        fleet: ExperimentalFleetSessionOwner,
+        machine: Long,
+        snapshot: VmResourceSnapshot,
+    ): ProgramResourceSnapshot.Available {
+        requireFleetOwnership(fleet, machine)
+        return snapshot.toProgramSnapshot(state, tickBudget, null)
     }
 
     fun fileStat(path: ru.lazyhat.compukters.lang.runtime.fs.VmVirtualPath) = session?.fileStat(path)
@@ -1491,13 +1499,13 @@ internal data class GrantedResourceBudgetSnapshot(
 private fun VmResourceSnapshot.toProgramSnapshot(
     state: ProgramRuntimeState,
     configuredBudget: ProgramTickBudget,
-    granted: GrantedResourceBudgetSnapshot,
+    granted: GrantedResourceBudgetSnapshot?,
 ): ProgramResourceSnapshot.Available =
     ProgramResourceSnapshot.Available(
         state = state,
         configuredBudget = configuredBudget,
-        grantedGuestUnits = granted.guestUnits,
-        grantedMaintenanceUnits = granted.maintenanceUnits,
+        grantedGuestUnits = granted?.guestUnits,
+        grantedMaintenanceUnits = granted?.maintenanceUnits,
         fixedGuestUnits = fixedGuestUnits,
         dynamicGuestUnits = dynamicGuestUnits,
         maintenanceUnits = maintenanceUnits,
@@ -1511,7 +1519,7 @@ private fun VmResourceSnapshot.toProgramSnapshot(
         filesystemLogicalCapacityBytes = filesystemLogicalCapacityBytes,
         filesystemNodes = filesystemNodes,
         filesystemNodeCapacity = filesystemNodeCapacity,
-        countersSaturated = countersSaturated || granted.saturated,
+        countersSaturated = countersSaturated || granted?.saturated == true,
         taskCapacity = taskCapacity,
         liveTasks = liveTasks,
         runnableTasks = runnableTasks,

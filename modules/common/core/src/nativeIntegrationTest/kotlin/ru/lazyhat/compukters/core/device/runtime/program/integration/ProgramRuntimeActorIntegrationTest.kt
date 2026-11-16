@@ -85,7 +85,7 @@ class ProgramRuntimeActorIntegrationTest {
                     assertIs<ProgramRuntimeActorValue.ResourceSnapshotValue>(resources.value).snapshot,
                 )
             assertEquals(ProgramRuntimeState.WaitingForInput, snapshot.state)
-            assertTrue(snapshot.grantedGuestUnits > 0)
+            assertTrue(requireNotNull(snapshot.grantedGuestUnits) > 0)
             assertTrue(snapshot.executedInstructions > 0)
             assertTrue(snapshot.heapCapacityBytes > 0)
             assertTrue(snapshot.filesystemLogicalCapacityBytes > 0)
@@ -170,8 +170,8 @@ class ProgramRuntimeActorIntegrationTest {
                 latestStep,
                 tick,
                 snapshot.executedInstructions,
-                snapshot.grantedGuestUnits,
-                snapshot.grantedMaintenanceUnits,
+                requireNotNull(snapshot.grantedGuestUnits),
+                requireNotNull(snapshot.grantedMaintenanceUnits),
                 scheduler.runtimeMetrics().retiredInstructionsTotal,
                 output,
             )

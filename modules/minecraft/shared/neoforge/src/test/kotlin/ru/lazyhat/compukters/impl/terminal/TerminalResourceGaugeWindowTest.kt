@@ -30,6 +30,20 @@ import kotlin.test.assertTrue
 
 class TerminalResourceGaugeWindowTest {
     @Test
+    fun `native observations keep memory and activity when grant counters are unavailable`() {
+        val window = TerminalResourceGaugeWindow()
+        val baseline = snapshot(fixed = 10, maintenance = 2).copy(grantedGuestUnits = null, grantedMaintenanceUnits = null)
+        window.accept(baseline)
+        val gauges = window.accept(baseline.copy(fixedGuestUnits = 20, maintenanceUnits = 3, heapUsedBytes = 40))
+        assertNull(gauges.vmBudgetBasisPoints)
+        assertEquals(40, gauges.heapUsedBytes)
+        assertEquals(TerminalResourceActivity.COLLECTING, gauges.activity)
+        // Transitioning from a native observation must not compare against old JVM grant counters.
+        assertNull(window.accept(snapshot(fixed = 30, granted = 200, maintenance = 4)).vmBudgetBasisPoints)
+        assertEquals(5_000, window.accept(snapshot(fixed = 80, granted = 300, maintenance = 5)).vmBudgetBasisPoints)
+    }
+
+    @Test
     fun `footer text is compact explicit and bounded to the terminal grid`() {
         assertEquals(
             "CPU 63% | RAM 40% | DISK 75% | COLLECT",

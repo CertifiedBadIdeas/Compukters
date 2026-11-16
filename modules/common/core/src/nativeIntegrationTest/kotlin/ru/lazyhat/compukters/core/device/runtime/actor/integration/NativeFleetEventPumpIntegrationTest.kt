@@ -37,6 +37,7 @@ import ru.lazyhat.compukters.core.device.runtime.compiler.ComputerCompiler
 import ru.lazyhat.compukters.core.device.runtime.compiler.ComputerCompilerCompletion
 import ru.lazyhat.compukters.core.device.runtime.program.NativeProgramVmSessionFactory
 import ru.lazyhat.compukters.core.device.runtime.program.ProgramFileSystemLaunchContext
+import ru.lazyhat.compukters.core.device.runtime.program.ProgramResourceSnapshot
 import ru.lazyhat.compukters.core.device.runtime.program.ProgramRuntimeHost
 import ru.lazyhat.compukters.core.device.runtime.program.ProgramRuntimeState
 import ru.lazyhat.compukters.core.device.runtime.program.ProgramStartResult
@@ -1689,7 +1690,7 @@ class NativeFleetEventPumpIntegrationTest {
     }
 
     @Test
-    fun `native actor filesystem queries match the original session and preserve typed failures`() {
+    fun `native actor filesystem and resource queries match the original session without execution grants`() {
         installFfmRuntime()
         VmRuntime.loadNativeLibrary(Path.of(requireNotNull(System.getProperty("compukters.ffi.library"))))
         val artifact = Path.of(requireNotNull(System.getProperty("compukters.fleet.timer.fixture"))).readBytes()
@@ -1719,6 +1720,7 @@ class NativeFleetEventPumpIntegrationTest {
                 val id = ComputerId.fromLongs(37, 38)
                 val host = ProgramRuntimeHost(NativeProgramVmSessionFactory(ProgramFileSystemLaunchContext(store, id, image)))
                 assertEquals(ProgramStartResult.Started, host.start(artifact))
+                val resources = assertIs<ProgramResourceSnapshot.Available>(host.resourceSnapshot())
                 val stat = host.fileStat(path)!!
                 val listing = host.fileList(VmVirtualPath.of("/bin"), null, 256)!!
                 val chunk = host.fileRead(path, 0, 32, stat.metadata.generation)!!
@@ -1738,6 +1740,11 @@ class NativeFleetEventPumpIntegrationTest {
                             return future.join()
                         }
                         val runtime: ActorRuntimeService = service
+                        repeat(2) {
+                            val reply = await(runtime.request(endpoint, ProgramRuntimeActorCommand::ResourceSnapshot))
+                            val snapshot = assertIs<ProgramRuntimeActorValue.ResourceSnapshotValue>(reply.value).snapshot
+                            assertEquals(resources.copy(grantedGuestUnits = null, grantedMaintenanceUnits = null), snapshot)
+                        }
                         val statReply = runtime.request(endpoint) { ProgramRuntimeActorCommand.FileStat(it, path) }
                         val listReply =
                             runtime.request(

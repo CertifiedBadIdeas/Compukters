@@ -46,8 +46,9 @@ sealed interface ProgramResourceSnapshot {
     data class Available(
         override val state: ProgramRuntimeState,
         override val configuredBudget: ProgramTickBudget,
-        val grantedGuestUnits: Long,
-        val grantedMaintenanceUnits: Long,
+        /** Null when execution is owned by a scheduler without exported grant counters. */
+        val grantedGuestUnits: Long?,
+        val grantedMaintenanceUnits: Long?,
         val fixedGuestUnits: Long,
         val dynamicGuestUnits: Long,
         val maintenanceUnits: Long,
@@ -70,7 +71,7 @@ sealed interface ProgramResourceSnapshot {
     ) : ProgramResourceSnapshot {
         init {
             require(
-                listOf(
+                listOfNotNull(
                     grantedGuestUnits,
                     grantedMaintenanceUnits,
                     fixedGuestUnits,

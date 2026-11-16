@@ -105,7 +105,7 @@ capture applies. Closing bootstrap identities retain actor capacity until cleanu
 worker and any reserved close whose owner callback has not unwound. No execution grant is issued before native adoption.
 
 This experimental implementation accepts redstone input, terminal snapshots/deltas, acknowledged terminal input and
-canonical lines, filesystem-generation queries, bounded file stat/list/read queries and executable
+canonical lines, resource and filesystem-generation queries, bounded file stat/list/read queries and executable
 prepare/revision/install/discard requests. A dedicated request adapter
 validates payload bounds before admission and checks the response kind before completing a request. The queued command
 owns the input payload; the response registry retains only scalar identity/disposal metadata and its future. Deployment
@@ -385,7 +385,11 @@ An explicit actor request can also compose one immutable resource snapshot from 
 native machine's semantic work, Guest heap, admitted mutable execution-resident, and filesystem quota counters. The
 host counts Guest and maintenance budgets only when it actually invokes native advancement; both host and native
 counters saturate explicitly instead of overflowing. These values describe VM work and granted capacity, not host CPU
-percentage. No sampling loop, history buffer, heap-content scan, or unsolicited FFM call runs for unobserved computers.
+percentage. Grant counters are nullable: the JVM executor reports its own advancement grants, while the native
+fleet currently exports semantic work and memory counters without scheduler grant counters. Its explicit resource
+request composes the native response with host state/configuration without executing Guest or retaining a per-machine
+snapshot. The terminal keeps heap/disk observations and displays an unknown budget ratio when grant counters are absent.
+No sampling loop, history buffer, heap-content scan, or unsolicited FFM call runs for unobserved computers.
 
 ## Program-owned addon resources
 

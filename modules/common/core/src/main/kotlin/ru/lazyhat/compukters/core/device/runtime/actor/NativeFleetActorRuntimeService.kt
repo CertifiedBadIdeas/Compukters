@@ -600,6 +600,10 @@ internal class NativeFleetActorRuntimeService(
                 finishQuery(actor, event.request, event)
             }
 
+            is ExperimentalFleetEvent.Resources -> {
+                machines[event.machine]?.let { finishQuery(it, event.request, event) }
+            }
+
             is ExperimentalFleetEvent.Terminal -> {
                 machines[event.machine]?.let {
                     finishQuery(it, event.request, event)
@@ -778,7 +782,16 @@ internal class NativeFleetActorRuntimeService(
         }
         val value =
             try {
-                query.response.decode(event).also { value ->
+                val decoded =
+                    if (query.response == NativeFleetRequest.Response.RESOURCES) {
+                        check(event is ExperimentalFleetEvent.Resources) { "unexpected native resource response: $event" }
+                        ProgramRuntimeActorValue.ResourceSnapshotValue(
+                            actor.host.fleetResourceSnapshot(fleet, actor.machine, event.snapshot),
+                        )
+                    } else {
+                        query.response.decode(event)
+                    }
+                decoded.also { value ->
                     if (value is ProgramRuntimeActorValue.FileSystemGeneration) actor.generation = value.generation
                     if (value is ProgramRuntimeActorValue.DeployedRevision) {
                         actor.generation =
