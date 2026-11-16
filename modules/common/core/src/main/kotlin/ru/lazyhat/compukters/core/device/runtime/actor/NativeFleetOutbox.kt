@@ -167,6 +167,26 @@ internal class NativeFleetOutbox(
         }
     }
 
+    /** Restore decoding and defensive response copies share the ordinary byte/entry budget. */
+    fun reserveBootstrap(): AutoCloseable? {
+        checkOwner()
+        val charge = 64L + 4L * (ProgramHostCheckpoint.MAXIMUM_METADATA_BYTES + 1024 * 1024)
+        require(charge <= byteLimits.perMachineBytes && charge <= byteLimits.totalBytes) {
+            "native bootstrap result exceeds the configured byte limit"
+        }
+        if (!budget.reserve(1, charge)) return null
+        return object : AutoCloseable {
+            private var released = false
+
+            @Synchronized override fun close() {
+                if (!released) {
+                    released = true
+                    budget.release(1, charge)
+                }
+            }
+        }
+    }
+
     /** A closing machine's copied addon state shares the ordinary outbox byte budget. */
     internal class CheckpointPayload(
         bytes: ByteArray,

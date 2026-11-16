@@ -83,6 +83,27 @@ The owner retains bounded actor and request registries; query maps are allocated
 cancellation does not release admission until the native response arrives or the actor is fenced for stop.
 One fleet waiter serves the service.
 
+Idle native hosts use the same `RestoreOrBoot`, `CompleteRestoration` and `AbortRestoration` handler as the JVM
+backend. One lazy bootstrap worker handles storage operations and closes; it never advances Guest and waits for an
+explicit signal when idle. The carrier performs addon restoration on its owner thread before completing restoration.
+Only then does owner-side nonblocking fleet admission transfer the session and timers to Rust. Transfer pressure
+retains the completed bootstrap result instead of repeating boot or checkpoint decoding. Active actors retain no
+bootstrap entry, processor or per-machine completion slot. Fresh boot and restore do not change backend selection.
+
+Bootstrap holds at most one command/result per preparing actor and shares actor/request limits with active execution.
+Before work starts, it reserves one outbox entry and a conservative byte charge for four maximum checkpoint envelopes
+plus control overhead; this accounts for decoding and defensive copies, without preallocating those bytes. Prepared
+restoration retains the reservation until transfer or close. The existing global/per-machine byte limits apply; a
+single impossible reservation rejects explicitly, and temporary global pressure leaves the caller retryable. This is
+charged admission rather than a total heap or native-session memory measurement. Boot failure releases its reservation.
+Only pending results enter the owner pump; active machines are not scanned. Startup shares its event, transport-attempt
+and deadline allowances, leaving observation capacity for active machines during continuous boot demand.
+
+Bootstrap close fences owner callbacks, drains its accepted operation and releases the host off-thread without owner
+pumping. Unload preserves an already prepared, unconsumed durable checkpoint; after restoration consumption, ordinary
+capture applies. Closing bootstrap identities retain actor capacity until cleanup completes. Shutdown includes that
+worker and any reserved close whose owner callback has not unwound. No execution grant is issued before native adoption.
+
 This experimental implementation accepts redstone input, terminal snapshots/deltas, acknowledged terminal input and
 canonical lines, filesystem-generation queries and bounded file stat/list/read queries. A dedicated request adapter
 validates payload bounds before admission and checks the response kind before completing a request. The queued command
@@ -143,8 +164,8 @@ Stop barriers complete after native destruction, final filesystem generation rec
 owner result pumping. Canceling a returned future does not cancel the close. Closing metadata and one control operation
 are bounded by the actor admission limit, with no per-idle-machine reservation. Ordinary output from other machines
 remains untouched. Shutdown waits for both the event waiter and the lifecycle worker before allowing fleet destruction.
-Transport errors retain the charged head for retry; cleanup errors fail the individual barrier. Bootstrap, restoration
-and broader command parity still need integration; production backend selection
+Transport errors retain the charged head for retry; cleanup errors fail the individual barrier. Broader command parity and production selection
+still need integration; production backend selection
 remains unchanged.
 
 The native checkpoint-detach primitive is available through both experimental transports. It drains accepted
@@ -175,7 +196,7 @@ Native admission reserves checkpoint bytes alongside remaining final command byt
 admission, the carrier fences callbacks before commit starts backend cancellation; repeated or reentrant closes join
 one barrier, and canceling a returned future cannot cancel native work. Reservation actions are dropped on commit,
 so completed leases do not retain checkpoint payloads or their backend preparation closures. Native `attach` produces
-this lease for an already started/restored and transferred host. Bootstrap remains outside that service.
+this lease for either an idle bootstrapping host or an already transferred host.
 
 If addon state cannot be saved, native lease close drains acknowledged replies, detaches and recovers the session,
 then discards stored execution before closing. This path reserves only scalar control bytes and reports the filesystem
@@ -183,7 +204,7 @@ generation after discard. StoreBusy keeps exclusive recovered ownership for retr
 the discarded execution. Native final addon and world replies use the streamed completion path; legacy raw
 redstone/sound completion effects still reject before admission. The carrier exposes pre-fence pressure as a null close attempt to the world
 lifecycle registry, which retains and retries that operation on the owner; accepted failures remain terminal barriers.
-Production boot/restore selection and broader command parity remain required before selecting the native backend.
+Production backend selection and broader command parity remain required before selecting the native backend.
 
 ## Addon host boundary
 

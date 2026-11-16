@@ -6,13 +6,17 @@
 package ru.lazyhat.compukters.core.device.runtime.actor
 
 import ru.lazyhat.compukters.api.addon.ProgramAddonAction
+import ru.lazyhat.compukters.api.addon.ProgramAddonHost
 import ru.lazyhat.compukters.core.LOGGER
 import ru.lazyhat.compukters.core.device.runtime.program.HostRequestRoutes
 import ru.lazyhat.compukters.core.device.runtime.program.ProgramAddonLifecyclePort
 import ru.lazyhat.compukters.core.device.runtime.program.ProgramRuntimeHost
 import ru.lazyhat.compukters.core.device.runtime.program.ProgramRuntimeState
+import ru.lazyhat.compukters.core.device.runtime.program.ProgramTickBudget
 import ru.lazyhat.compukters.core.device.runtime.program.ProgramWorldRequest
 import ru.lazyhat.compukters.core.device.runtime.program.ProgramWorldResult
+import ru.lazyhat.compukters.lang.runtime.fs.VmSystemImage
+import ru.lazyhat.compukters.lang.runtime.fs.WorldFileSystemStore
 import ru.lazyhat.compukters.lang.runtime.vm.ExperimentalFleet
 import ru.lazyhat.compukters.lang.runtime.vm.ExperimentalFleetEvent
 import ru.lazyhat.compukters.lang.runtime.vm.RedstoneWire
@@ -22,11 +26,11 @@ import java.util.concurrent.CancellationException
 import java.util.concurrent.CompletableFuture
 
 /**
- * Active-execution portion of the experimental native backend. Bootstrap transfers an already
- * started/restored host before registration; Rust owns its session from then until stop.
+ * Experimental native backend. A lazy bootstrap worker prepares idle hosts using the existing
+ * boot/restoration handler. Resource rebinding precedes transfer; Rust then owns the session until stop.
  * No JVM worker advances Guest instructions. Frame grants come from the capacity owner.
  *
- * Boot, checkpoint restoration and backend selection are not wired here yet. The carrier streams
+ * Production backend selection and broader command parity are not wired here yet. The carrier streams
  * addon replies, redstone confirmations and world replies into one bounded ordered outbox,
  * independently of the next execution grant. Legacy deferred world effects reject before admission.
  * Addon/world requests and program lifecycle actions stream to a turn observer on the owner thread;
@@ -62,6 +66,7 @@ internal class NativeFleetActorRuntimeService(
     private var closed = false
     private val closing = mutableMapOf<VmActorEndpoint, CompletableFuture<Long>>()
     private val closer = NativeFleetCloser(fleet)
+    private var bootstrapFirst = true
     private var observationDepth = 0
     private var deferredCloseStarts: MutableList<() -> Unit>? = null
     private var nextRequest = 0L
@@ -85,6 +90,65 @@ internal class NativeFleetActorRuntimeService(
             byteLimits,
         )
 
+    private val bootstrap =
+        NativeFleetBootstrap(
+            checkOwner,
+            onResultsReady,
+            dispatcher.outbox::reserveBootstrap,
+            { entry, tick ->
+                val machine = entry.host.transferToFleet(fleet, tick)
+                val actor = Actor(entry.endpoint, machine, entry.host)
+                actor.lease = entry.lease
+                check(actors.put(entry.endpoint, actor) == null)
+                check(machines.put(machine, actor) == null)
+            },
+            onActorClosing,
+            nanoTime,
+            ::prepareLeaseClose,
+        )
+
+    /** Idle hosts are prepared off-thread and become native actors only after the restoration handshake. */
+    fun attach(
+        endpoint: VmActorEndpoint,
+        host: ProgramRuntimeHost,
+    ): ProgramRuntimeActorLease? {
+        checkOwner()
+        check(!closed) { "native actor service is closed" }
+        closer.checkHealthy()
+        if (!canAttach(endpoint)) return null
+        host.requireIdleForBootstrap()
+        return bootstrap.attach(endpoint, host)
+    }
+
+    fun attachBootable(
+        endpoint: VmActorEndpoint,
+        store: WorldFileSystemStore,
+        systemImage: VmSystemImage,
+        tickBudget: ProgramTickBudget = ProgramTickBudget(),
+        initialRedstoneOutput: Int = 0,
+        addonHost: ProgramAddonHost? = null,
+    ): ProgramRuntimeActorLease? {
+        checkOwner()
+        if (!canAttach(endpoint)) return null
+        val host =
+            ProgramRuntimeHost(
+                store = store,
+                computerId = endpoint.computerId,
+                systemImage = systemImage,
+                tickBudget = tickBudget,
+                initialRedstoneOutput = initialRedstoneOutput,
+                addonCapabilitySchemas = addonHost?.capabilitySchemas.orEmpty(),
+            )
+        return attach(endpoint, host)
+    }
+
+    private fun canAttach(endpoint: VmActorEndpoint): Boolean {
+        closing.entries.removeAll { it.value.isDone }
+        return actors.size + closing.size + bootstrap.size < maximumActors &&
+            actors.keys.none { it.computerId == endpoint.computerId } &&
+            closing.keys.none { it.computerId == endpoint.computerId } && !bootstrap.containsComputer(endpoint)
+    }
+
     /** The caller retains ownership if admission fails; successful registration owns host metadata. */
     fun register(
         endpoint: VmActorEndpoint,
@@ -95,22 +159,14 @@ internal class NativeFleetActorRuntimeService(
         check(!closed) { "native actor service is closed" }
         host.requireFleetOwnership(fleet, machine)
         closer.checkHealthy()
-        closing.entries.removeAll { it.value.isDone }
-        if (actors.size + closing.size >= maximumActors || machine in machines ||
-            actors.keys.any {
-                it.computerId == endpoint.computerId
-            } ||
-            closing.keys.any { it.computerId == endpoint.computerId }
-        ) {
-            return false
-        }
+        if (!canAttach(endpoint) || machine in machines) return false
         val actor = Actor(endpoint, machine, host)
         actors[endpoint] = actor
         machines[machine] = actor
         return true
     }
 
-    /** Lease for an already started/restored and transferred host; bootstrap stays outside this service. */
+    /** Adopts an already transferred host; idle hosts use the bootstrap overload. */
     fun attach(
         endpoint: VmActorEndpoint,
         machine: Long,
@@ -128,6 +184,7 @@ internal class NativeFleetActorRuntimeService(
     ): ProgramActorCloseReservation {
         checkOwner()
         closer.checkHealthy()
+        if (bootstrap.contains(endpoint)) return bootstrap.prepareClose(endpoint, request)
         closing[endpoint]?.let { result -> return ProgramActorCloseReservation { result.thenApply { it } } }
         val actor = actors[endpoint] ?: throw ProgramRuntimeActorRequestException(VmActorSubmission.STALE_ENDPOINT)
         if (request == null) return ProgramActorCloseReservation { checkNotNull(stop(endpoint)).thenApply { it } }
@@ -268,10 +325,16 @@ internal class NativeFleetActorRuntimeService(
         val prepared = command(id)
         require(prepared.requestId == id) { "runtime command factory returned a mismatched request id" }
         if (endpoint in closing) return CompletableFuture.failedFuture(ProgramRuntimeActorRequestException(VmActorSubmission.CLOSED))
+        if (bootstrap.contains(endpoint)) {
+            if (pendingQueries + bootstrap.pendingRequests >= maximumRequests) {
+                return CompletableFuture.failedFuture(ProgramRuntimeActorRequestException(VmActorSubmission.MAILBOX_FULL))
+            }
+            return bootstrap.request(endpoint, prepared)
+        }
         val actor =
             actors[endpoint]
                 ?: return CompletableFuture.failedFuture(ProgramRuntimeActorRequestException(VmActorSubmission.STALE_ENDPOINT))
-        if (pendingQueries >= maximumRequests || (actor.queries?.size ?: 0) >= maximumRequestsPerActor) {
+        if (pendingQueries + bootstrap.pendingRequests >= maximumRequests || (actor.queries?.size ?: 0) >= maximumRequestsPerActor) {
             return CompletableFuture.failedFuture(ProgramRuntimeActorRequestException(VmActorSubmission.MAILBOX_FULL))
         }
         val outgoing =
@@ -316,7 +379,10 @@ internal class NativeFleetActorRuntimeService(
      * resources are canceled by endpoint, not by retaining the native list of pending identities.
      * The returned barrier needs no owner pumping and cannot be canceled by canceling its copy.
      */
-    fun stop(endpoint: VmActorEndpoint): CompletableFuture<Long>? = finish(endpoint, null, null)
+    fun stop(endpoint: VmActorEndpoint): CompletableFuture<Long>? {
+        checkOwner()
+        return bootstrap.stop(endpoint)?.thenApply { it ?: 0L } ?: finish(endpoint, null, null)
+    }
 
     /** Accepted effects must already be queued. Refusal leaves this actor running and retryable. */
     fun hibernate(
@@ -457,7 +523,11 @@ internal class NativeFleetActorRuntimeService(
         checkOwner()
         require(maximumEvents >= 0 && maximumAttempts >= 0)
         closing.entries.removeAll { it.value.isDone }
-        return dispatcher.pump(maximumEvents, maximumAttempts, deadlineNanos)
+        // Continuous startup must leave observation capacity for already active machines.
+        val bootstrapAllowance = maximumEvents / 2 + if (bootstrapFirst) maximumEvents % 2 else 0
+        if (maximumEvents > 0) bootstrapFirst = !bootstrapFirst
+        val prepared = bootstrap.pump(bootstrapAllowance, deadlineNanos, maximumAttempts)
+        return prepared + dispatcher.pump(maximumEvents - prepared, maximumAttempts - bootstrap.lastTransferAttempts, deadlineNanos)
     }
 
     private fun observe(event: ExperimentalFleetEvent) {
@@ -687,9 +757,9 @@ internal class NativeFleetActorRuntimeService(
 
     fun closeAsync(): CompletableFuture<Unit> {
         checkOwner()
-        check(actors.isEmpty()) { "native actors must be fenced for stop before closing dispatch" }
+        check(actors.isEmpty() && bootstrap.isEmpty) { "native actors must be fenced for stop before closing dispatch" }
         closed = true
-        return CompletableFuture.allOf(dispatcher.closeAsync(), closer.closeAsync()).thenApply { Unit }
+        return CompletableFuture.allOf(bootstrap.closeAsync(), dispatcher.closeAsync(), closer.closeAsync()).thenApply { Unit }
     }
 
     override fun close() {

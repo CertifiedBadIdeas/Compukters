@@ -20,6 +20,27 @@ import kotlin.test.assertTrue
 
 class NativeFleetOutboxTest {
     @Test
+    fun `bootstrap results share global bytes and entries and release their charge once`() {
+        val outbox = NativeFleetOutbox(fleet { _, _ -> }, 8, 8, {}, byteLimits = NativeFleetOutboxLimits(8L * 1024 * 1024))
+        val reserved = checkNotNull(outbox.reserveBootstrap())
+        assertTrue(outbox.retainedBytes > 4L * 1024 * 1024)
+        assertEquals(null, outbox.reserveBootstrap())
+        assertTrue(outbox.offer(1, listOf(input(1))))
+        reserved.close()
+        reserved.close()
+        assertEquals(64L, outbox.retainedBytes)
+        checkNotNull(outbox.reserveBootstrap()).close()
+        outbox.remove(1)
+        assertEquals(0L, outbox.retainedBytes)
+        val oneEntry = NativeFleetOutbox(fleet { _, _ -> }, 1, 1, {})
+        checkNotNull(oneEntry.reserveBootstrap()).use { assertFalse(oneEntry.offer(1, listOf(input(1)))) }
+        assertTrue(oneEntry.offer(1, listOf(input(1))))
+        val tooSmall = NativeFleetOutbox(fleet { _, _ -> }, 1, 1, {}, byteLimits = NativeFleetOutboxLimits(64, 64))
+        assertFailsWith<IllegalArgumentException> { tooSmall.reserveBootstrap() }
+        assertEquals(0L, tooSmall.retainedBytes)
+    }
+
+    @Test
     fun `reply prefix respects byte admission and impossible replies fail before any acceptance`() {
         val small = NativeFleetOutbox.Command.Reply(VmHostRequestIdentity(1, 1), HostResponse.UnitSuccess)
         val large = NativeFleetOutbox.Command.Reply(VmHostRequestIdentity(1, 2), HostResponse.StringSuccess("x".repeat(512)))

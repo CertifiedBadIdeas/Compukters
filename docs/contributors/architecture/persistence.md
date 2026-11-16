@@ -45,6 +45,10 @@ the stored checkpoint and resume execution. Timers retain remaining ticks; unloa
 as sleep. Every carrier gets fresh machine/compiler epochs and per-tick instruction credit. A restoring carrier retries admission
 once per tick while waiting for its predecessor to release the filesystem lease.
 
+Native bootstrap uses the existing restoration handshake off-thread. Owner-side addon rebinding precedes native
+fleet adoption; unload before restoration consumption preserves the original durable checkpoint without requiring
+owner result pumping to close the temporary session.
+
 Accepted world completions drain before capture. The native carrier retains confirmations of physical redstone
 writes even after their Guest scope stops, and drains them before capture without advancing Guest. Undelivered redstone, sound and addon operations receive catchable
 unavailable failures; restoration never repeats their physical effects. Pending compilation retains its original

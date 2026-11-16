@@ -216,6 +216,14 @@ class ProgramRuntimeHost internal constructor(
         state = ProgramRuntimeState.Closed
     }
 
+    internal val hasPreparedRestoration: Boolean get() = preparedRestoration != null
+
+    internal fun requireIdleForBootstrap() {
+        check(state == ProgramRuntimeState.Idle && session == null && fleetOwnership == null && preparedRestoration == null) {
+            "bootstrap requires an idle host without an owned session"
+        }
+    }
+
     /** Native admission runs no Guest code. Resource rebinding must precede completeRestoration. */
     internal fun prepareRestoreBoot(worldTick: Long): ProgramHostCheckpoint? {
         require(worldTick >= 0)

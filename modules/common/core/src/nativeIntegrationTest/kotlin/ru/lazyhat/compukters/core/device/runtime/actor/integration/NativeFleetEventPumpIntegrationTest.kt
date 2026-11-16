@@ -81,6 +81,237 @@ import kotlin.test.assertTrue
 
 class NativeFleetEventPumpIntegrationTest {
     @Test
+    fun `native carrier boots installed init and restores addon state before native activation`() {
+        installFfmRuntime()
+        VmRuntime.loadNativeLibrary(Path.of(requireNotNull(System.getProperty("compukters.ffi.library"))))
+        val artifact = Path.of(requireNotNull(System.getProperty("compukters.fleet.timer.fixture"))).readBytes()
+        val image = bootstrapImage(artifact)
+        val root = Files.createTempDirectory("fleet-native-boot-").toRealPath()
+        val owner = Thread.currentThread()
+        val id = ComputerId.fromLongs(301, 302)
+        try {
+            WorldFileSystemStore.open(root).use { store ->
+                val config = ExperimentalFleetConfig(1, 32, 32, 4096, 64, 64, 32, coordinatedTurns = true)
+                VmRuntime.openExperimentalFleet(config).use { fleet ->
+                    NativeFleetActorRuntimeService(fleet, 4, 16, 16, {}, {}, { _, _ -> }, onActorClosing = {}).use { service ->
+                        var restored = 0
+
+                        fun addon(endpoint: VmActorEndpoint) =
+                            object : ru.lazyhat.compukters.api.addon.ProgramAddonHost {
+                                override val capabilitySchemas = emptyList<HostCapabilitySchema>()
+
+                                override fun dispatch(request: ru.lazyhat.compukters.api.addon.ProgramAddonRequest) =
+                                    error("no addon calls")
+
+                                override fun reset() {
+                                    check(Thread.currentThread() === owner)
+                                }
+
+                                override fun checkpoint() = byteArrayOf(7)
+
+                                override fun restoreCheckpoint(state: ByteArray) {
+                                    check(Thread.currentThread() === owner)
+                                    assertContentEquals(byteArrayOf(7), state)
+                                    assertFalse(service.grantFrame(endpoint, 0, 100))
+                                    restored++
+                                }
+                            }
+                        val endpoint = VmActorEndpoint(id, 1)
+                        val first =
+                            ActorProgramComputer(
+                                service,
+                                checkNotNull(service.attachBootable(endpoint, store, image)),
+                                { RedstoneCommitResult.Committed },
+                                addon = addon(endpoint),
+                            )
+                        try {
+                            val boot = awaitBootstrap(service, first.turnOn())
+                            assertEquals(ProgramStartResult.Started, assertIs<ProgramRuntimeActorValue.Start>(boot.value).result)
+                            assertTrue(service.grantFrame(endpoint, 1, 100_000))
+                            first.serverTick(1)
+                            // Admission of the next frame proves the first frame settled; unload cancels its unused credit.
+                            awaitBootstrapFrame(service, endpoint, 2)
+                            first.hibernateAsync(2).get(5, TimeUnit.SECONDS)
+                        } finally {
+                            first.closeAsync().get(5, TimeUnit.SECONDS)
+                        }
+                        val next = VmActorEndpoint(id, 2)
+                        val second =
+                            ActorProgramComputer(
+                                service,
+                                checkNotNull(service.attachBootable(next, store, image)),
+                                { RedstoneCommitResult.Committed },
+                                addon = addon(next),
+                            )
+                        try {
+                            awaitBootstrap(service, second.turnOn(requiredCheckpoint = true))
+                            assertEquals(1, restored)
+                            for (tick in 1L..4L) {
+                                if (second.state is ProgramRuntimeState.Halted) break
+                                awaitBootstrapFrame(service, next, tick)
+                                second.serverTick(tick)
+                                awaitBootstrap(service, second.request(ProgramRuntimeActorCommand::FileSystemGeneration))
+                            }
+                            assertIs<ProgramRuntimeState.Halted>(second.state)
+                        } finally {
+                            second.closeAsync().get(5, TimeUnit.SECONDS)
+                        }
+                    }
+                }
+            }
+        } finally {
+            root.toFile().deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `unloading a prepared native bootstrap preserves its unconsumed checkpoint without owner pumping`() {
+        installFfmRuntime()
+        VmRuntime.loadNativeLibrary(Path.of(requireNotNull(System.getProperty("compukters.ffi.library"))))
+        val artifact = Path.of(requireNotNull(System.getProperty("compukters.fleet.timer.fixture"))).readBytes()
+        val image = bootstrapImage(artifact)
+        val root = Files.createTempDirectory("fleet-bootstrap-unload-").toRealPath()
+        val id = ComputerId.fromLongs(303, 304)
+        try {
+            WorldFileSystemStore.open(root).use { store ->
+                val factory = NativeProgramVmSessionFactory(ProgramFileSystemLaunchContext(store, id, image))
+                ProgramRuntimeHost(factory).use { host ->
+                    assertEquals(ProgramStartResult.Started, host.startBoot())
+                    assertTrue(host.hibernate(1, byteArrayOf(7)))
+                }
+                val config = ExperimentalFleetConfig(1, 32, 32, 4096, 64, 64, 32, coordinatedTurns = true)
+                VmRuntime.openExperimentalFleet(config).use { fleet ->
+                    NativeFleetActorRuntimeService(fleet, 4, 16, 16, {}, {}, { _, _ -> }, onActorClosing = {}).use { service ->
+                        val endpoint = VmActorEndpoint(id, 1)
+                        val lease = checkNotNull(service.attachBootable(endpoint, store, image))
+                        val prepared =
+                            awaitBootstrap(service, service.request(endpoint) { ProgramRuntimeActorCommand.RestoreOrBoot(it, 10) })
+                        assertIs<ProgramRuntimeActorValue.RestorationPrepared>(prepared.value)
+                        lease
+                            .hibernateAsync(
+                                ru.lazyhat.compukters.core.device.runtime.actor
+                                    .ProgramActorHibernation(10, byteArrayOf(99), emptyList()),
+                            ).get(5, TimeUnit.SECONDS)
+                    }
+                }
+                ProgramRuntimeHost(factory).use { restored ->
+                    assertContentEquals(byteArrayOf(7), checkNotNull(restored.prepareRestoreBoot(20)).addonState)
+                }
+            }
+        } finally {
+            root.toFile().deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `native restoration rebind failure resets owner resources before cold boot`() {
+        installFfmRuntime()
+        VmRuntime.loadNativeLibrary(Path.of(requireNotNull(System.getProperty("compukters.ffi.library"))))
+        val artifact = Path.of(requireNotNull(System.getProperty("compukters.fleet.timer.fixture"))).readBytes()
+        val image = bootstrapImage(artifact)
+        val root = Files.createTempDirectory("fleet-bootstrap-rebind-").toRealPath()
+        val id = ComputerId.fromLongs(305, 306)
+        try {
+            WorldFileSystemStore.open(root).use { store ->
+                val factory = NativeProgramVmSessionFactory(ProgramFileSystemLaunchContext(store, id, image))
+                ProgramRuntimeHost(factory).use { host ->
+                    host.startBoot()
+                    assertTrue(host.hibernate(1, byteArrayOf(7)))
+                }
+                val config = ExperimentalFleetConfig(1, 32, 32, 4096, 64, 64, 32, coordinatedTurns = true)
+                VmRuntime.openExperimentalFleet(config).use { fleet ->
+                    NativeFleetActorRuntimeService(fleet, 4, 16, 16, {}, {}, { _, _ -> }, onActorClosing = {}).use { service ->
+                        var restores = 0
+                        var resets = 0
+                        val addon =
+                            object : ru.lazyhat.compukters.api.addon.ProgramAddonHost {
+                                override val capabilitySchemas = emptyList<HostCapabilitySchema>()
+
+                                override fun dispatch(request: ru.lazyhat.compukters.api.addon.ProgramAddonRequest) = error("no calls")
+
+                                override fun reset() {
+                                    resets++
+                                }
+
+                                override fun restoreCheckpoint(state: ByteArray) {
+                                    restores++
+                                    error("missing resource")
+                                }
+                            }
+                        val endpoint = VmActorEndpoint(id, 1)
+                        val carrier =
+                            ActorProgramComputer(
+                                service,
+                                checkNotNull(service.attachBootable(endpoint, store, image)),
+                                { RedstoneCommitResult.Committed },
+                                addon = addon,
+                            )
+                        try {
+                            val boot = awaitBootstrap(service, carrier.turnOn(true))
+                            assertEquals(ProgramStartResult.Started, assertIs<ProgramRuntimeActorValue.Start>(boot.value).result)
+                            assertEquals(1, restores)
+                            assertTrue(resets > 0)
+                            assertTrue(service.grantFrame(endpoint, 1, 100))
+                        } finally {
+                            carrier.closeAsync().get(5, TimeUnit.SECONDS)
+                        }
+                    }
+                }
+                ProgramRuntimeHost(factory).use { assertNull(it.prepareRestoreBoot(20)) }
+            }
+        } finally {
+            root.toFile().deleteRecursively()
+        }
+    }
+
+    private fun awaitBootstrapFrame(
+        service: NativeFleetActorRuntimeService,
+        endpoint: VmActorEndpoint,
+        tick: Long,
+    ) {
+        val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10)
+        while (!service.grantFrame(endpoint, tick, 100_000)) {
+            check(System.nanoTime() < deadline) { "previous native frame did not settle" }
+            service.pump(32, 32)
+            Thread.yield()
+        }
+    }
+
+    private fun <T> awaitBootstrap(
+        service: NativeFleetActorRuntimeService,
+        future: CompletableFuture<T>,
+    ): T {
+        val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10)
+        while (!future.isDone) {
+            check(System.nanoTime() < deadline) { "native bootstrap stalled" }
+            service.pump(32, 32)
+            Thread.yield()
+        }
+        return future.get(1, TimeUnit.SECONDS)
+    }
+
+    private fun bootstrapImage(artifact: ByteArray): VmSystemImage {
+        val path = "/boot/init".encodeToByteArray()
+        val bytes =
+            ByteBuffer
+                .allocate(32 + path.size + artifact.size)
+                .order(ByteOrder.LITTLE_ENDIAN)
+                .put("CPKTSYS\u0000".encodeToByteArray())
+                .putShort(1)
+                .putShort(0)
+                .putInt(1)
+                .putInt(path.size)
+                .put(path)
+                .put(2.toByte())
+                .put(1.toByte())
+                .putShort(0)
+                .putLong(artifact.size.toLong())
+                .put(artifact)
+                .array()
+        return VmSystemImage.of(bytes + MessageDigest.getInstance("SHA-256").digest(bytes))
+    }
+
+    @Test
     fun `native hibernation drains a physical world confirmation before capture without advancing Guest`() {
         installFfmRuntime()
         VmRuntime.loadNativeLibrary(Path.of(requireNotNull(System.getProperty("compukters.ffi.library"))))
