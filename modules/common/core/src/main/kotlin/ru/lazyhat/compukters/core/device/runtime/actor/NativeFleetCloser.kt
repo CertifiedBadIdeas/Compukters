@@ -41,10 +41,11 @@ internal class NativeFleetCloser(
         checkpointTick: Long? = null,
         payload: NativeFleetOutbox.CheckpointPayload? = null,
         saveExecution: Boolean = true,
+        finalState: ProgramRuntimeState = ProgramRuntimeState.Closed,
     ): () -> Unit {
         require((checkpointTick == null) == (payload == null))
         val checkpoint = checkpointTick?.let { Checkpoint(it, checkNotNull(payload), saveExecution) }
-        val task = Close(machine, host, commands, result, checkpoint)
+        val task = Close(machine, host, commands, result, checkpoint, finalState)
         synchronized(monitor) {
             checkHealthy()
             check(!closing)
@@ -146,7 +147,7 @@ internal class NativeFleetCloser(
         if (event is ExperimentalFleetEvent.Quiescent) return Progress.MORE
         try {
             check(event is ExperimentalFleetEvent.Stopped && event.machine == task.machine) { "unexpected native stop output: $event" }
-            task.host.acknowledgeFleetStop(fleet, event, ProgramRuntimeState.Closed)
+            task.host.acknowledgeFleetStop(fleet, event, task.finalState)
             task.result.complete(event.filesystemGeneration)
         } catch (failure: Throwable) {
             task.result.completeExceptionally(failure)
@@ -250,6 +251,7 @@ internal class NativeFleetCloser(
         val commands: NativeFleetOutbox.Handoff,
         val result: CompletableFuture<Long>,
         val checkpoint: Checkpoint?,
+        val finalState: ProgramRuntimeState,
     ) {
         @Volatile var ready = false
         var submitted = false

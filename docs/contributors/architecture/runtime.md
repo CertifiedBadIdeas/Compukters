@@ -104,6 +104,20 @@ pumping. Unload preserves an already prepared, unconsumed durable checkpoint; af
 capture applies. Closing bootstrap identities retain actor capacity until cleanup completes. Shutdown includes that
 worker and any reserved close whose owner callback has not unwound. No execution grant is issued before native adoption.
 
+Native shutdown and reboot reserve a bootstrap entry and byte budget before fencing the active actor. The common
+retirement path invalidates compiler/turn/query ownership, drains accepted native commands and stops the machine on
+the lifecycle worker. Its final acknowledgement returns the host to `Idle`; only then may the bootstrap worker run
+the existing processor's shutdown or fresh boot operation. The same endpoint and lease survive replacement. Reboot
+gets a new VM epoch and requires a later explicit execution grant. Plain reboot preserves installed files; system
+reinstallation still requires the explicit option. Power-off keeps an idle bootstrap host for later turn-on and scalar
+terminal/resource/generation observations, with no retained native session. Bootstrap time never moves backwards.
+
+The carrier drains surviving physical-output confirmations before admitting power control, retrying bounded pressure
+on a later tick without advancing Guest. A transition retains its request and reservation until native stop and boot
+complete; cancellation does not free ownership early. Unload fences that entry and waits asynchronously for the same
+native predecessor before closing the host, without ordinary owner pumping. Service shutdown includes these predecessor
+barriers. A failed predecessor cannot start a replacement. Existing StoreBusy retry and boot-result handoff rules apply.
+
 This experimental implementation accepts redstone input, terminal snapshots/deltas, acknowledged terminal input and
 canonical lines, resource and filesystem-generation queries, bounded file stat/list/read queries and executable
 prepare/revision/install/discard requests. A dedicated request adapter

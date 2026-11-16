@@ -32,6 +32,31 @@ import kotlin.test.assertTrue
 
 class ActorProgramComputerStreamingTest {
     @Test
+    fun `power control waits for physical output confirmation admission without another Guest turn`() {
+        for (reboot in listOf(false, true)) {
+            val service = Service(1)
+            val carrier = computer(service, TestAddon())
+            carrier.turnOn().join()
+            carrier.serverTick(1)
+            val observer = assertIs<ProgramRuntimeTurnObserver>(service.completion)
+            observer.worldRequest(ProgramWorldRequest.Redstone(listOf(VmHostRequestIdentity(1, 1)), 0, 17))
+            observer.complete(reply().copy(state = ProgramRuntimeState.Halted(null)), null)
+            val power = if (reboot) carrier.reboot() else carrier.shutdown()
+            assertFalse(power.isDone)
+            assertTrue(service.hostCompletions.isEmpty())
+            service.queued = 0
+            carrier.serverTick(2)
+            assertTrue(power.isDone)
+            assertEquals(
+                listOf<ProgramRuntimeHostCompletion>(ProgramRuntimeHostCompletion.ConfirmRedstoneOutput(17)),
+                service.hostCompletions,
+            )
+            assertEquals(1, service.acceptedTurns)
+            carrier.closeAsync().join()
+        }
+    }
+
+    @Test
     fun `physical output confirmation survives stopped scopes and terminal state before hibernation`() {
         val service = Service(1)
         var captured: ProgramActorHibernation? = null

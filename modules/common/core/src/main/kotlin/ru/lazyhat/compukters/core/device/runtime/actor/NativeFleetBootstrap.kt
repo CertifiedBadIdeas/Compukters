@@ -28,6 +28,7 @@ internal class NativeFleetBootstrap(
     private val closing = mutableMapOf<VmActorEndpoint, CompletableFuture<Long?>>()
     private var worker: Thread? = null
     private var shutdown = false
+    private var predecessors = 0
     private val stopped = CompletableFuture<Unit>()
     var lastTransferAttempts = 0
         private set
@@ -48,12 +49,44 @@ internal class NativeFleetBootstrap(
     fun attach(
         endpoint: VmActorEndpoint,
         host: ProgramRuntimeHost,
+        lease: ProgramRuntimeActorLease? = null,
     ): ProgramRuntimeActorLease {
         checkOwner()
         val entry = Entry(endpoint, host, ProgramRuntimeActorProcessor(host))
-        entry.lease = ProgramRuntimeActorLease(endpoint) { request -> prepareLeaseClose(endpoint, request) }
+        entry.lease = lease ?: ProgramRuntimeActorLease(endpoint) { request -> prepareLeaseClose(endpoint, request) }
         entries[endpoint] = entry
         return entry.lease
+    }
+
+    /** Reserve before fencing the native actor; neither commands nor close may touch its host before predecessor. */
+    fun transition(
+        endpoint: VmActorEndpoint,
+        host: ProgramRuntimeHost,
+        lease: ProgramRuntimeActorLease?,
+        tick: Long,
+        command: ProgramRuntimeActorCommand,
+        predecessor: CompletableFuture<Long>,
+    ): CompletableFuture<ProgramRuntimeActorReply>? {
+        checkOwner()
+        val reservation = reserve() ?: return null
+        attach(endpoint, host, lease)
+        val entry = entries.getValue(endpoint)
+        entry.reservation = reservation
+        entry.tick = tick
+        synchronized(monitor) {
+            entry.waiting = true
+            predecessors++
+            ensureWorker()
+        }
+        predecessor.whenComplete { _, failure ->
+            synchronized(monitor) {
+                predecessors--
+                entry.predecessorFailure = failure
+                entry.waiting = false
+                if (entry.command != null || entry.closing) enqueue(entry)
+            }
+        }
+        return request(endpoint, command)
     }
 
     fun request(
@@ -64,9 +97,12 @@ internal class NativeFleetBootstrap(
         val entry = entries.getValue(endpoint)
         if (command !is ProgramRuntimeActorCommand.RestoreOrBoot &&
             command !is ProgramRuntimeActorCommand.CompleteRestoration &&
-            command !is ProgramRuntimeActorCommand.AbortRestoration && command !is ProgramRuntimeActorCommand.StartBoot
+            command !is ProgramRuntimeActorCommand.AbortRestoration && command !is ProgramRuntimeActorCommand.StartBoot &&
+            command !is ProgramRuntimeActorCommand.Shutdown && command !is ProgramRuntimeActorCommand.Reboot &&
+            command !is ProgramRuntimeActorCommand.ResourceSnapshot && command !is ProgramRuntimeActorCommand.FileSystemGeneration &&
+            command !is ProgramRuntimeActorCommand.TerminalFullState && command !is ProgramRuntimeActorCommand.TerminalChangesSince
         ) {
-            return CompletableFuture.failedFuture(UnsupportedOperationException("native bootstrap accepts only boot/restoration commands"))
+            return CompletableFuture.failedFuture(UnsupportedOperationException("native bootstrap does not support this command"))
         }
         if (entry.request != null) return refused()
         if (entry.reservation == null) entry.reservation = reserve() ?: return refused()
@@ -74,19 +110,20 @@ internal class NativeFleetBootstrap(
         entry.request = result
         entry.tick =
             when (command) {
-                is ProgramRuntimeActorCommand.RestoreOrBoot -> command.worldTick
-                is ProgramRuntimeActorCommand.CompleteRestoration -> command.worldTick
+                is ProgramRuntimeActorCommand.RestoreOrBoot -> maxOf(entry.tick, command.worldTick)
+                is ProgramRuntimeActorCommand.CompleteRestoration -> maxOf(entry.tick, command.worldTick)
                 else -> entry.tick
             }
         pendingRequests++
         synchronized(monitor) {
             entry.command =
-                if (command is ProgramRuntimeActorCommand.AbortRestoration) {
-                    command.copy(detail = command.detail.take(1024))
-                } else {
-                    command
+                when (command) {
+                    is ProgramRuntimeActorCommand.AbortRestoration -> command.copy(detail = command.detail.take(1024))
+                    is ProgramRuntimeActorCommand.RestoreOrBoot -> command.copy(worldTick = entry.tick)
+                    is ProgramRuntimeActorCommand.CompleteRestoration -> command.copy(worldTick = entry.tick)
+                    else -> command
                 }
-            enqueue(entry)
+            if (!entry.waiting) enqueue(entry)
         }
         return result
     }
@@ -185,7 +222,7 @@ internal class NativeFleetBootstrap(
                 entry.closing = true
                 entry.hibernation = request
                 ready.remove(entry)
-                if (!entry.running && !entry.queued) enqueue(entry)
+                if (!entry.running && !entry.queued && !entry.waiting) enqueue(entry)
             }
             entries.remove(entry.endpoint)
             closing[entry.endpoint] = entry.closed
@@ -220,6 +257,12 @@ internal class NativeFleetBootstrap(
         check(!entry.queued)
         entry.queued = true
         work.addLast(entry)
+        ensureWorker()
+        monitor.notifyAll()
+    }
+
+    /** Caller holds monitor. The worker also waits for outstanding native ownership barriers at shutdown. */
+    private fun ensureWorker() {
         if (worker == null) {
             worker =
                 Thread
@@ -228,7 +271,6 @@ internal class NativeFleetBootstrap(
                     .name("compukters-native-bootstrap")
                     .start(::run)
         }
-        monitor.notifyAll()
     }
 
     private fun run() {
@@ -246,7 +288,7 @@ internal class NativeFleetBootstrap(
             synchronized(monitor) {
                 var next = work.firstOrNull { !it.closing || it.closeEnabled }
                 while (next == null) {
-                    if (shutdown && work.isEmpty()) return false
+                    if (shutdown && work.isEmpty() && predecessors == 0) return false
                     monitor.wait()
                     next = work.firstOrNull { !it.closing || it.closeEnabled }
                 }
@@ -277,7 +319,11 @@ internal class NativeFleetBootstrap(
             entry.outcome = null
             outcome.fold(entry.closed::complete, entry.closed::completeExceptionally)
         } else {
-            val result = runCatching { entry.processor.process(checkNotNull(entry.command)) }
+            val result =
+                runCatching {
+                    entry.predecessorFailure?.let { throw it }
+                    entry.processor.process(checkNotNull(entry.command))
+                }
             val publish =
                 synchronized(monitor) {
                     entry.running = false
@@ -311,6 +357,8 @@ internal class NativeFleetBootstrap(
         var tick = 0L
         var outcome: Result<ProgramRuntimeActorReply>? = null
         var command: ProgramRuntimeActorCommand? = null
+        var waiting = false
+        var predecessorFailure: Throwable? = null
         var queued = false
         var running = false
         var closing = false

@@ -11,6 +11,7 @@ import ru.lazyhat.compukters.core.device.runtime.program.ProgramVmSessionFactory
 import ru.lazyhat.compukters.lang.runtime.fs.ComputerId
 import ru.lazyhat.compukters.lang.runtime.vm.VmFleetBusyException
 import java.lang.reflect.Proxy
+import java.util.concurrent.CompletableFuture
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
@@ -20,6 +21,92 @@ import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class NativeFleetBootstrapTest {
+    @Test
+    fun `transition close and service shutdown wait for predecessor without owner pumping`() {
+        val owner = Thread.currentThread()
+        val boots = AtomicInteger()
+        val closes = AtomicInteger()
+        val reservations = AtomicInteger()
+        lateinit var bootstrap: NativeFleetBootstrap
+        bootstrap =
+            NativeFleetBootstrap(
+                {},
+                {},
+                {
+                    reservations.incrementAndGet()
+                    AutoCloseable { reservations.decrementAndGet() }
+                },
+                { _, _ -> error("closing transition must not activate") },
+                {},
+                System::nanoTime,
+                { endpoint, request -> bootstrap.prepareClose(endpoint, request) },
+            )
+        val predecessor = CompletableFuture<Long>()
+        val endpoint = endpoint(1)
+        val request =
+            checkNotNull(
+                bootstrap.transition(
+                    endpoint,
+                    host(boots, closes) {
+                        check(Thread.currentThread() !== owner)
+                    },
+                    null,
+                    0,
+                    ProgramRuntimeActorCommand.Reboot(ProgramRuntimeRequestId(1)),
+                    predecessor,
+                ),
+            )
+        assertFalse(request.isDone)
+        assertEquals(0, boots.get())
+        val closed = checkNotNull(bootstrap.stop(endpoint))
+        val shutdown = bootstrap.closeAsync()
+        assertTrue(request.isCompletedExceptionally)
+        assertFalse(closed.isDone)
+        assertFalse(shutdown.isDone)
+        predecessor.complete(7)
+        closed.get(5, TimeUnit.SECONDS)
+        shutdown.get(5, TimeUnit.SECONDS)
+        assertEquals(0, boots.get())
+        assertEquals(0, reservations.get())
+    }
+
+    @Test
+    fun `failed power predecessor cannot boot and only its request fails`() {
+        val boots = AtomicInteger()
+        val closes = AtomicInteger()
+        lateinit var bootstrap: NativeFleetBootstrap
+        bootstrap =
+            NativeFleetBootstrap(
+                {},
+                {},
+                { AutoCloseable {} },
+                { _, _ -> error("failed predecessor must not activate") },
+                {},
+                System::nanoTime,
+                { endpoint, request -> bootstrap.prepareClose(endpoint, request) },
+            )
+        val predecessor = CompletableFuture<Long>()
+        val request =
+            checkNotNull(
+                bootstrap.transition(
+                    endpoint(1),
+                    host(boots, closes) {},
+                    null,
+                    0,
+                    ProgramRuntimeActorCommand.Reboot(ProgramRuntimeRequestId(1)),
+                    predecessor,
+                ),
+            )
+        predecessor.completeExceptionally(IllegalStateException("native stop failed"))
+        await {
+            bootstrap.pump(8, Long.MAX_VALUE)
+            request.isDone
+        }
+        assertTrue(request.isCompletedExceptionally)
+        bootstrap.closeAsync().get(5, TimeUnit.SECONDS)
+        assertEquals(0, boots.get())
+    }
+
     @Test
     fun `transfer pressure retains completed boot and delivers its result only on owner`() {
         val owner = Thread.currentThread()

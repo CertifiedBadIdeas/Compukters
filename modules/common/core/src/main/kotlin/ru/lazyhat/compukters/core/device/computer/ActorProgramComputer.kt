@@ -639,6 +639,21 @@ class ActorProgramComputer internal constructor(
         checkOwner()
         stage.inFlight = true
         stage.lastAttemptTick = lastObservedServerTick
+        try {
+            if (pendingHostCompletions.isNotEmpty()) {
+                check(prepareHostCompletions().isEmpty()) { "lifecycle retained obsolete Guest replies" }
+                if (pendingHostCompletions.isNotEmpty()) {
+                    stage.inFlight = false
+                    return // Preserve physical-output acknowledgements until bounded native admission succeeds.
+                }
+            }
+            pendingHostContinuation = false
+        } catch (failure: Exception) {
+            stage.inFlight = false
+            pendingLifecycle = null
+            stage.result.completeExceptionally(failure)
+            return
+        }
         service.request(lease.endpoint, stage.command).whenComplete { reply, failure ->
             checkOwner()
             if (pendingLifecycle !== stage || stage.version != lifecycle || closeResult != null) return@whenComplete

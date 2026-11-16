@@ -64,6 +64,22 @@ import kotlin.test.assertTrue
 
 class NativeFleetActorRuntimeServiceTest {
     @Test
+    fun `power control memory refusal leaves the native actor owned and runnable`() =
+        Harness(byteLimits = NativeFleetOutboxLimits(128, 128)).use { h ->
+            val endpoint = h.register(1)
+            val refused = h.service.request(endpoint, ProgramRuntimeActorCommand::Shutdown)
+            assertTrue(refused.isCompletedExceptionally)
+            assertTrue(h.closedMachines.isEmpty())
+            assertEquals(ProgramRuntimeState.Running, h.hosts.getValue(1).state)
+            assertTrue(h.service.grantFrame(endpoint, 1, 100))
+            val query = h.service.request(endpoint, ProgramRuntimeActorCommand::FileSystemGeneration)
+            h.service.pump(0, 1)
+            h.events += ExperimentalFleetEvent.FilesystemGeneration(1, h.queries.last(), 7)
+            h.service.pump(1, 0)
+            assertEquals(ProgramRuntimeActorValue.FileSystemGeneration(7), query.join().value)
+        }
+
+    @Test
     fun `resource requests are bounded observations and preserve native counters without granting execution`() =
         Harness(maximumRequests = 1).use { h ->
             val endpoint = h.register(1)

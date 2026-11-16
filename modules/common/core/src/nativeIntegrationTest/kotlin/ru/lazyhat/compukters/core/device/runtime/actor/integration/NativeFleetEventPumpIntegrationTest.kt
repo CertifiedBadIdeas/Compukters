@@ -93,6 +93,93 @@ import kotlin.test.assertTrue
 
 class NativeFleetEventPumpIntegrationTest {
     @Test
+    fun `native carrier reboots and powers off through the same lease without losing installed files`() {
+        installFfmRuntime()
+        VmRuntime.loadNativeLibrary(Path.of(requireNotNull(System.getProperty("compukters.ffi.library"))))
+        val artifact = Path.of(requireNotNull(System.getProperty("compukters.fleet.timer.fixture"))).readBytes()
+        val root = Files.createTempDirectory("native-power-control-").toRealPath()
+        val endpoint = VmActorEndpoint(ComputerId.fromLongs(341, 342), 1)
+        try {
+            WorldFileSystemStore.open(root).use { store ->
+                VmRuntime.openExperimentalFleet(ExperimentalFleetConfig(1, 2, 2, 4096, 64, 64, 32, coordinatedTurns = true)).use { fleet ->
+                    NativeFleetActorRuntimeService(fleet, 4, 8, 8, {}, {}, { _, _ -> }, onActorClosing = {}).use { service ->
+                        val carrier =
+                            ActorProgramComputer(
+                                service,
+                                checkNotNull(service.attachBootable(endpoint, store, bootstrapImage(artifact))),
+                                { RedstoneCommitResult.Committed },
+                            )
+
+                        fun await(future: CompletableFuture<ProgramRuntimeActorReply>) = awaitBootstrap(service, future)
+
+                        fun request(command: (ProgramRuntimeRequestId) -> ProgramRuntimeActorCommand) = await(carrier.request(command))
+
+                        fun resources() =
+                            assertIs<ProgramRuntimeActorValue.ResourceSnapshotValue>(
+                                request(ProgramRuntimeActorCommand::ResourceSnapshot).value,
+                            ).snapshot
+                        try {
+                            await(carrier.turnOn())
+                            val candidate =
+                                assertIs<ProgramRuntimeActorValue.DeploymentPrepared>(
+                                    request {
+                                        ProgramRuntimeActorCommand.PrepareDeployment(it, artifact)
+                                    }.value,
+                                ).token!!
+                            val installed =
+                                assertIs<ProgramRuntimeActorValue.DeployedRevision>(
+                                    request {
+                                        ProgramRuntimeActorCommand.Deploy(it, "/home/retained", VmExecutableRevision.Absent, candidate)
+                                    }.value,
+                                ).revision
+                            assertTrue(service.grantFrame(endpoint, 5, 2048))
+                            carrier.serverTick(5)
+                            awaitBootstrapFrame(service, endpoint, 6)
+                            assertTrue(assertIs<ProgramResourceSnapshot.Available>(resources()).executedInstructions > 0)
+                            await(carrier.reboot())
+                            repeat(2) { assertEquals(0, assertIs<ProgramResourceSnapshot.Available>(resources()).executedInstructions) }
+                            assertEquals(
+                                installed,
+                                assertIs<ProgramRuntimeActorValue.ExecutableRevisionValue>(
+                                    request {
+                                        ProgramRuntimeActorCommand.ExecutableRevision(it, "/home/retained")
+                                    }.value,
+                                ).revision,
+                            )
+                            val shutdown = await(carrier.shutdown())
+                            assertEquals(ProgramRuntimeState.Idle, shutdown.state)
+                            assertEquals(ProgramRuntimeState.Idle, carrier.state)
+                            assertIs<ProgramResourceSnapshot.Unavailable>(resources())
+                            assertEquals(ProgramRuntimeState.Idle, await(carrier.shutdown()).state)
+                            assertFalse(service.grantFrame(endpoint, 7, 2048))
+                            await(carrier.turnOn())
+                            assertEquals(0, assertIs<ProgramResourceSnapshot.Available>(resources()).executedInstructions)
+                            await(carrier.reboot(installSystem = true))
+                            assertEquals(0, assertIs<ProgramResourceSnapshot.Available>(resources()).executedInstructions)
+                            assertIs<VmExecutableRevision.Present>(
+                                assertIs<ProgramRuntimeActorValue.ExecutableRevisionValue>(
+                                    request {
+                                        ProgramRuntimeActorCommand.ExecutableRevision(it, "/home/retained")
+                                    }.value,
+                                ).revision,
+                            )
+                            // Closing the original lease still owns the replacement machine and needs no owner pumping.
+                            val restarting = carrier.reboot()
+                            carrier.closeAsync().get(5, TimeUnit.SECONDS)
+                            assertTrue(restarting.isCompletedExceptionally)
+                            assertEquals(ProgramRuntimeState.Closed, carrier.state)
+                        } finally {
+                            service.stop(endpoint)?.get(5, TimeUnit.SECONDS)
+                        }
+                    }
+                }
+            }
+        } finally {
+            root.toFile().deleteRecursively()
+        }
+    }
+
+    @Test
     fun `native hibernation cancels compiler work and restoration rejects the previous epoch result`() {
         installFfmRuntime()
         VmRuntime.loadNativeLibrary(Path.of(requireNotNull(System.getProperty("compukters.ffi.library"))))

@@ -417,6 +417,8 @@ class ProgramRuntimeHost internal constructor(
         return hibernate(worldTick, addonState)
     }
 
+    internal val lastObservedWorldTick: Long get() = lastObservedTick.coerceAtLeast(0)
+
     internal fun validateFleetCheckpointTick(worldTick: Long) {
         require(worldTick >= 0 && worldTick >= lastObservedTick) { "checkpoint tick must not move backwards" }
     }

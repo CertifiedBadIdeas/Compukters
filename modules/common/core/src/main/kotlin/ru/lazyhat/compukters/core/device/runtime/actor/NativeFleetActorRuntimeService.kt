@@ -348,6 +348,9 @@ internal class NativeFleetActorRuntimeService(
         if (pendingQueries + bootstrap.pendingRequests >= maximumRequests || (actor.queries?.size ?: 0) >= maximumRequestsPerActor) {
             return CompletableFuture.failedFuture(ProgramRuntimeActorRequestException(VmActorSubmission.MAILBOX_FULL))
         }
+        if (prepared is ProgramRuntimeActorCommand.Shutdown || prepared is ProgramRuntimeActorCommand.Reboot) {
+            return powerControl(actor, prepared)
+        }
         val outgoing =
             try {
                 NativeFleetRequest.prepare(prepared)?.also { dispatcher.outbox.requireFits(it) }
@@ -413,6 +416,32 @@ internal class NativeFleetActorRuntimeService(
     fun stop(endpoint: VmActorEndpoint): CompletableFuture<Long>? {
         checkOwner()
         return bootstrap.stop(endpoint)?.thenApply { it ?: 0L } ?: finish(endpoint, null, null)
+    }
+
+    private fun powerControl(
+        actor: Actor,
+        command: ProgramRuntimeActorCommand,
+    ): CompletableFuture<ProgramRuntimeActorReply> {
+        closer.checkHealthy()
+        val predecessor = CompletableFuture<Long>()
+        val result =
+            try {
+                bootstrap.transition(
+                    actor.endpoint,
+                    actor.host,
+                    actor.lease,
+                    maxOf(actor.host.lastObservedWorldTick, actor.lastTurnTick),
+                    command,
+                    predecessor,
+                ) ?: return CompletableFuture.failedFuture(ProgramRuntimeActorRequestException(VmActorSubmission.MAILBOX_FULL))
+            } catch (failure: IllegalArgumentException) {
+                return CompletableFuture.failedFuture(failure)
+            }
+        // The bounded bootstrap entry now owns this endpoint and the same lease. Fence native
+        // observations before callbacks; its worker cannot use the host until retirement completes.
+        actors.remove(actor.endpoint)
+        retire(actor, predecessor, finalState = ProgramRuntimeState.Idle)
+        return result
     }
 
     /** Accepted effects must already be queued. Refusal leaves this actor running and retryable. */
@@ -499,11 +528,24 @@ internal class NativeFleetActorRuntimeService(
                 payload?.close()
                 return null
             }
+        val result = CompletableFuture<Long>()
+        closing[endpoint] = result
+        retire(actor, result, checkpointTick, payload, saveExecution)
+        return result.copy()
+    }
+
+    /** Common exclusive handoff for terminal closes and reusable power transitions. */
+    private fun retire(
+        actor: Actor,
+        result: CompletableFuture<Long>,
+        checkpointTick: Long? = null,
+        payload: NativeFleetOutbox.CheckpointPayload? = null,
+        saveExecution: Boolean = true,
+        finalState: ProgramRuntimeState = ProgramRuntimeState.Closed,
+    ) {
         machines.remove(actor.machine)
         deploymentCleanup.removeIf { it.first == actor.machine }
         val compilationCancellation = compilations.cancel(actor.machine)
-        val result = CompletableFuture<Long>()
-        closing[endpoint] = result
         val commands = dispatcher.outbox.handoffForClose(actor.machine)
         var cancellationFailure: Throwable? = compilationCancellation
         val native = CompletableFuture<Long>()
@@ -519,9 +561,9 @@ internal class NativeFleetActorRuntimeService(
             }
         }
         // Reserve before invoking callbacks: a reentrant service close must include this host.
-        val start = closer.reserve(actor.machine, actor.host, commands, native, checkpointTick, payload, saveExecution)
+        val start = closer.reserve(actor.machine, actor.host, commands, native, checkpointTick, payload, saveExecution, finalState)
         try {
-            runCatching { onActorClosing(endpoint) }.exceptionOrNull()?.let { failure ->
+            runCatching { onActorClosing(actor.endpoint) }.exceptionOrNull()?.let { failure ->
                 val previous = cancellationFailure
                 if (previous == null) cancellationFailure = failure else previous.addSuppressed(failure)
             }
@@ -547,7 +589,6 @@ internal class NativeFleetActorRuntimeService(
                 (deferredCloseStarts ?: mutableListOf<() -> Unit>().also { deferredCloseStarts = it }).add(start)
             }
         }
-        return result.copy()
     }
 
     /** Ordinary observations still run only on their owner; close progress is independent. */
