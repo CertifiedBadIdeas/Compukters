@@ -105,8 +105,13 @@ internal class NativeFleetBootstrap(
             return CompletableFuture.failedFuture(UnsupportedOperationException("native bootstrap does not support this command"))
         }
         if (entry.request != null) return refused()
+        if (command is ProgramRuntimeActorCommand.Start && entry.host.hasPreparedRestoration) {
+            // The held reservation belongs to restoration, not to a replacement artifact.
+            return CompletableFuture.failedFuture(IllegalStateException("restoration must be completed before starting"))
+        }
         if (entry.reservation == null) {
-            val bytes = if (command is ProgramRuntimeActorCommand.Start) 2L * command.artifactSize else 0L
+            // Command storage, processor handoff and ProgramRuntimeHost's launch copy coexist.
+            val bytes = if (command is ProgramRuntimeActorCommand.Start) 3L * command.artifactSize else 0L
             entry.reservation =
                 try {
                     reserve(bytes) ?: return refused()

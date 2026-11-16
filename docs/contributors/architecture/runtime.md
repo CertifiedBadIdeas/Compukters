@@ -109,11 +109,13 @@ bootstrap entry, processor or per-machine completion slot. Fresh boot and restor
 
 Bootstrap holds at most one command/result per preparing actor and shares actor/request limits with active execution.
 Before work starts, it reserves one outbox entry and a conservative byte charge for four maximum checkpoint envelopes
-plus control overhead. Standalone artifact bootstrap additionally charges both retained artifact copies before
+plus control overhead. Standalone artifact bootstrap additionally charges its three defensive artifact copies before
 worker admission; this accounts for decoding and defensive copies, without preallocating those bytes. Prepared
 restoration retains the reservation until transfer or close. The existing global/per-machine byte limits apply; a
 single impossible reservation rejects explicitly, and temporary global pressure leaves the caller retryable. This is
 charged admission rather than a total heap or native-session memory measurement. Boot failure releases its reservation.
+Standalone replacement rejects while restoration is prepared, before retaining artifact work against that restoration
+reservation.
 Only pending results enter the owner pump; active machines are not scanned. Startup shares its event, transport-attempt
 and deadline allowances, leaving observation capacity for active machines during continuous boot demand.
 

@@ -764,6 +764,13 @@ class NativeFleetEventPumpIntegrationTest {
                         val prepared =
                             awaitBootstrap(service, service.request(endpoint) { ProgramRuntimeActorCommand.RestoreOrBoot(it, 10) })
                         assertIs<ProgramRuntimeActorValue.RestorationPrepared>(prepared.value)
+                        val replacement = service.request(endpoint) { ProgramRuntimeActorCommand.Start(it, artifact) }
+                        val refusedImmediately = replacement.isCompletedExceptionally
+                        if (!refusedImmediately) lease.closeAsync().get(5, TimeUnit.SECONDS)
+                        assertTrue(
+                            refusedImmediately,
+                            "prepared restoration must reject standalone replacement before retaining artifact work",
+                        )
                         lease
                             .hibernateAsync(
                                 ru.lazyhat.compukters.core.device.runtime.actor
