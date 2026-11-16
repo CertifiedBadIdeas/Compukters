@@ -63,6 +63,8 @@ sealed interface ComputerCompilationOutcome {
             require(this.artifact.size <= MAXIMUM_ARTIFACT_BYTES) { "compiler artifact exceeds FFM limit" }
         }
 
+        internal val artifactSize: Int get() = artifact.size
+
         fun artifactBytes(): ByteArray = artifact.copyOf()
 
         override fun equals(other: Any?): Boolean = other is Success && artifact.contentEquals(other.artifact)

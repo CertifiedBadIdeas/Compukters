@@ -28,6 +28,8 @@ import ru.lazyhat.compukters.compiler.worker.protocol.Hash256
 import ru.lazyhat.compukters.compiler.worker.protocol.WorkerLimits
 import ru.lazyhat.compukters.lang.runtime.fs.ComputerId
 import ru.lazyhat.compukters.lang.runtime.vm.VmCompilationSource
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
@@ -35,6 +37,43 @@ import kotlin.test.assertNotEquals
 import kotlin.test.assertTrue
 
 class ServerComputerCompilerTest {
+    @Test
+    fun `process cancellation never waits on the owner and retains bounded admission until completion`() {
+        val owner = Thread.currentThread()
+        val entered = CountDownLatch(1)
+        val release = CountDownLatch(1)
+        val port =
+            FakePort {
+                assertNotEquals(owner, Thread.currentThread())
+                entered.countDown()
+                assertTrue(release.await(5, TimeUnit.SECONDS))
+            }
+        val compiler = ServerComputerCompiler(port, WorkerLimits(), maximumOutstanding = 1)
+        val first = address(1, 1)
+        val second = address(2, 2)
+
+        fun request(address: ComputerCompilationAddress) =
+            ComputerCompilationRequest(address, listOf(VmCompilationSource("/home/main.kt", byteArrayOf(1))))
+        assertEquals(CompilerSubmissionResult.ACCEPTED, compiler.submit(request(first)))
+        try {
+            assertTrue(compiler.cancel(first))
+            assertTrue(entered.await(5, TimeUnit.SECONDS))
+            assertEquals(CompilerSubmissionResult.BUSY, compiler.submit(request(second)))
+            port.completions +=
+                CompilerCompletion(
+                    port.submissions.single().first,
+                    CompilerOutcome.Success(byteArrayOf(1), Hash256.zero(), cacheHit = false),
+                )
+            assertTrue(compiler.drain(1).isEmpty())
+        } finally {
+            release.countDown()
+            compiler.cancellationBarrier().get(5, TimeUnit.SECONDS)
+        }
+        assertEquals(CompilerSubmissionResult.ACCEPTED, compiler.submit(request(second)))
+        assertTrue(compiler.cancel(second))
+        compiler.cancellationBarrier().get(5, TimeUnit.SECONDS)
+    }
+
     @Test
     fun `full VM address survives opaque service targets and copied snapshots`() {
         val port = FakePort()
@@ -78,6 +117,7 @@ class ServerComputerCompilerTest {
         assertEquals(second, completion.address)
         assertEquals(ComputerCompilationOutcome.Success(byteArrayOf(1, 2, 3)), completion.outcome)
         assertTrue(compiler.cancel(first))
+        compiler.cancellationBarrier().get(5, TimeUnit.SECONDS)
         assertEquals(port.submissions[0].first, port.cancelled.single())
     }
 
@@ -86,7 +126,9 @@ class ServerComputerCompilerTest {
         low: Long,
     ) = ComputerCompilationAddress(ComputerId.fromLongs(high, low), 3, 5)
 
-    private class FakePort : CompilerServicePort {
+    private class FakePort(
+        private val onCancel: () -> Unit = {},
+    ) : CompilerServicePort {
         val submissions = mutableListOf<Pair<CompilerTarget, ProjectSnapshot>>()
         val completions = ArrayDeque<CompilerCompletion>()
         val cancelled = mutableListOf<CompilerTarget>()
@@ -103,6 +145,7 @@ class ServerComputerCompilerTest {
             buildList { repeat(minOf(maximum, completions.size)) { add(completions.removeFirst()) } }
 
         override fun cancel(target: CompilerTarget): Boolean {
+            onCancel()
             cancelled.add(target)
             return true
         }

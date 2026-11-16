@@ -105,6 +105,8 @@ class ProgramRuntimeHost internal constructor(
     private var preparedRestoration: ProgramHostCheckpoint? = null
     private var activeVmEpoch = 0L
     private var pendingCompilation: ComputerCompilationAddress? = null
+    private var lastCompilationToken = 0L
+    internal val currentProgramScope: Long get() = programScopes.last()
     private var pendingRedstoneCommit: PendingRedstoneCommit? = null
     private var pendingSoundCommit: PendingSoundCommit? = null
     private val pendingAddonRequests = mutableMapOf<ru.lazyhat.compukters.lang.runtime.vm.VmHostRequestIdentity, PendingAddonRequest>()
@@ -710,8 +712,7 @@ class ProgramRuntimeHost internal constructor(
         if (state == ProgramRuntimeState.WaitingForInput) state = ProgramRuntimeState.Running
         if (interruptNestedProgram && programScopes.size > 1) {
             preparedRestoration = null
-            pendingCompilation?.let { compilerRouter?.cancel(it) }
-            pendingCompilation = null
+            cancelCompilation()
             state = ProgramRuntimeState.Running
         }
     }
@@ -849,6 +850,7 @@ class ProgramRuntimeHost internal constructor(
             }
 
             is VmOutcome.ProcessExited -> {
+                cancelCompilation()
                 check(programScopes.size > 1 && programScopes.last() == outcome.programId) { "native program scope mismatch" }
                 programScopes.removeLast()
                 pendingAddonRequests.entries.removeAll { it.value.programId == outcome.programId }
@@ -857,6 +859,7 @@ class ProgramRuntimeHost internal constructor(
             }
 
             is VmOutcome.ProcessReplaced -> {
+                cancelCompilation()
                 check(programScopes.last() == outcome.previousProgramId) { "native replacement scope mismatch" }
                 check(outcome.programId > programScopes.last()) { "native replacement identity must increase" }
                 programScopes.removeLast()
@@ -875,37 +878,64 @@ class ProgramRuntimeHost internal constructor(
         }
     }
 
-    private fun submitCompilation(
-        activeSession: ProgramVmSession,
-        request: VmCompilationRequest,
-    ) {
-        val router = compilerRouter
-        if (router == null) {
-            completeCompilationFailure(activeSession, request.token, "compiler is unavailable")
-            return
-        }
+    /** Shared compiler addressing/admission for the JVM actor and native carrier. No Guest execution. */
+    internal fun beginCompilation(request: VmCompilationRequest): ComputerCompilationOutcome.Failure? {
+        check(pendingCompilation == null) { "compilation is already pending" }
+        check(isNewCompilation(request.token)) { "obsolete compilation token" }
+        lastCompilationToken = request.token
         val address = ComputerCompilationAddress(computerId, activeVmEpoch, request.token)
+        pendingCompilation = address
+        state = ProgramRuntimeState.WaitingForCompiler
+        val router = compilerRouter ?: return ComputerCompilationOutcome.Failure("compiler is unavailable")
         val submission =
             try {
                 router.submit(address, request.sources)
             } catch (error: IllegalArgumentException) {
-                completeCompilationFailure(activeSession, request.token, error.message ?: "invalid compilation request")
-                return
+                return ComputerCompilationOutcome.Failure((error.message ?: "invalid compilation request").take(16000))
             }
-        when (submission) {
-            CompilerSubmissionResult.ACCEPTED -> {
-                pendingCompilation = address
-                state = ProgramRuntimeState.WaitingForCompiler
-            }
-
-            CompilerSubmissionResult.BUSY -> {
-                completeCompilationFailure(activeSession, request.token, "compiler is busy")
-            }
-
-            CompilerSubmissionResult.CLOSED -> {
-                completeCompilationFailure(activeSession, request.token, "compiler is unavailable")
-            }
+        return when (submission) {
+            CompilerSubmissionResult.ACCEPTED -> null
+            CompilerSubmissionResult.BUSY -> ComputerCompilationOutcome.Failure("compiler is busy")
+            CompilerSubmissionResult.CLOSED -> ComputerCompilationOutcome.Failure("compiler is unavailable")
         }
+    }
+
+    internal fun isNewCompilation(token: Long): Boolean = token > lastCompilationToken
+
+    internal fun isCompilationCurrent(token: Long): Boolean = pendingCompilation?.token == token
+
+    internal fun pollCompilation(token: Long): ComputerCompilationOutcome? {
+        val address = pendingCompilation?.takeIf { it.token == token } ?: return null
+        compilerRouter?.routeCompletions(1)
+        return compilerRouter?.peek(address)
+    }
+
+    /** Move payload ownership to an admitted native command; keep its transaction until acceptance. */
+    internal fun claimCompilationResult(token: Long) {
+        pendingCompilation?.takeIf { it.token == token }?.let { compilerRouter?.take(it) }
+    }
+
+    internal fun finishCompilation(token: Long) {
+        if (!isCompilationCurrent(token)) return
+        claimCompilationResult(token)
+        pendingCompilation = null
+        state = ProgramRuntimeState.Running
+    }
+
+    internal fun cancelCompilation() {
+        val address = pendingCompilation
+        pendingCompilation = null
+        if (state == ProgramRuntimeState.WaitingForCompiler) state = ProgramRuntimeState.Running
+        address?.let { compilerRouter?.cancel(it) }
+    }
+
+    private fun submitCompilation(
+        activeSession: ProgramVmSession,
+        request: VmCompilationRequest,
+    ) {
+        val failure = beginCompilation(request) ?: return
+        completeCompilationFailure(activeSession, request.token, failure.diagnostics)
+        if (session === activeSession) finishCompilation(request.token)
     }
 
     private fun applyCompilationCompletion(activeSession: ProgramVmSession) {
@@ -913,20 +943,14 @@ class ProgramRuntimeHost internal constructor(
         val outcome = compilerRouter?.take(address) ?: return
         try {
             when (outcome) {
-                is ComputerCompilationOutcome.Success -> {
-                    activeSession.completeCompilationArtifact(address.token, outcome.artifactBytes())
-                }
-
-                is ComputerCompilationOutcome.Failure -> {
-                    activeSession.completeCompilationFailure(address.token, outcome.diagnostics)
-                }
+                is ComputerCompilationOutcome.Success -> activeSession.completeCompilationArtifact(address.token, outcome.artifactBytes())
+                is ComputerCompilationOutcome.Failure -> activeSession.completeCompilationFailure(address.token, outcome.diagnostics)
             }
         } catch (error: VmBridgeException) {
             finish(ProgramRuntimeState.Failed(ProgramFailure.Bridge(error.bridgeDetail())))
             return
         }
-        pendingCompilation = null
-        state = ProgramRuntimeState.Running
+        finishCompilation(address.token)
     }
 
     private fun completeCompilationFailure(
@@ -955,8 +979,7 @@ class ProgramRuntimeHost internal constructor(
             TerminalModifier.CONTROL in modifiers && programScopes.size > 1
         ) {
             preparedRestoration = null
-            pendingCompilation?.let { compilerRouter?.cancel(it) }
-            pendingCompilation = null
+            cancelCompilation()
             state = ProgramRuntimeState.Running
         }
         return accepted
@@ -1266,8 +1289,7 @@ class ProgramRuntimeHost internal constructor(
     private fun releaseSession() {
         check(fleetOwnership == null) { "fleet owns the VM session" }
         preparedRestoration = null
-        pendingCompilation?.let { compilerRouter?.cancel(it) }
-        pendingCompilation = null
+        cancelCompilation()
         pendingRedstoneCommit = null
         pendingSoundCommit = null
         pendingAddonRequests.clear()
@@ -1275,6 +1297,7 @@ class ProgramRuntimeHost internal constructor(
         programScopes.addLast(0)
         pendingTimerRequests.clear()
         activeVmEpoch = 0
+        lastCompilationToken = 0
         try {
             try {
                 session?.filesystemGeneration()?.let { lastClosedFileSystemGeneration = it }

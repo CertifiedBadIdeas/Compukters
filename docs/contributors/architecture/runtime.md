@@ -134,6 +134,25 @@ or replacing the carrier during a callback fences later actions and stale comple
 further actions and fails that turn after credit settlement, without stopping other machines. Command-cost inspection
 still uses the external hook; sharing its prepared batch with dispatch remains pending.
 
+Native compiler events use the same host submission rules and `CompilerCompletionRouter` as the JVM actor backend.
+Addresses bind computer identity, VM epoch and native transaction token. The shared router admits at most 64 pending
+or unconsumed completed requests and charges at most 64 MiB for retained completions, including 256 bytes reserved per
+active request for a bounded failure response. It converts one backend result at a time; an oversized result becomes
+a typed compiler failure. Taking or canceling the completion releases its admission and byte reservation.
+`ServerComputerCompiler` separately bounds outstanding and canceling targets to 64. Cancel invalidates routing on the
+caller immediately and queues only a scalar target for one transient control worker. That worker terminates the
+compiler process outside the caller and all routing locks, retains admission until cancellation finishes, and exits
+when idle. A cancellation failure closes new admission. No waiting process termination runs on a server tick.
+
+The native carrier keeps one small compiler entry per compiling actor, bounded by actor capacity, and polls only
+these entries within its owner pass. Source snapshots stay in the existing compiler pipeline. Completed artifact bytes
+remain router-owned until accepted into the charged native outbox. Native mailbox pressure retains that exact command;
+a result larger than the configured outbox limit becomes a failure that fits the queue. Delivering a result grants no
+instructions. Epoch, token and scope cancellation invalidate queued commands before off-thread close; those commands
+then release without touching transferred host metadata. Checkpoint restoration reissues the original native transaction
+with a fresh host epoch. Late results from the old epoch are discarded. An actual Ctrl+C termination removes Rust's
+compiler wait before control unwinding, while ordinary terminal input keeps an active compilation parked.
+
 The JVM outbox has entry limits plus shared and per-machine byte admission limits, both defaulting to 16 MiB.
 These are charged-byte budgets, with no per-idle-machine reservation. Charges cover input payloads and immutable host
 response trees, UTF-16 strings and an allowance per value/schema field; shared schemas are counted in full. Queue/map

@@ -28,6 +28,29 @@ import kotlin.test.assertNull
 
 class CompilerCompletionRouterTest {
     @Test
+    fun `completed outcomes retain admission and byte pressure produces a bounded failure`() {
+        val compiler = FakeComputerCompiler()
+        val router = CompilerCompletionRouter(compiler, maximumPendingCompilations = 2, maximumCompletionBytes = 512)
+        val first = address(1, 1, 1)
+        val second = address(2, 1, 1)
+        val third = address(3, 1, 1)
+        val sources = listOf(VmCompilationSource("/home/main.kt", byteArrayOf(1)))
+        assertEquals(CompilerSubmissionResult.ACCEPTED, router.submit(first, sources))
+        assertEquals(CompilerSubmissionResult.ACCEPTED, router.submit(second, sources))
+        compiler.completions += ComputerCompilerCompletion(first, ComputerCompilationOutcome.Success(ByteArray(1024)))
+        compiler.completions += ComputerCompilerCompletion(second, success(7))
+        router.routeCompletions()
+        assertEquals(CompilerSubmissionResult.BUSY, router.submit(third, sources))
+        kotlin.test.assertIs<ComputerCompilationOutcome.Failure>(router.peek(first))
+        kotlin.test.assertSame(router.peek(first), router.peek(first))
+        kotlin.test.assertIs<ComputerCompilationOutcome.Failure>(router.take(first))
+        assertEquals(success(7), router.take(second))
+        assertEquals(CompilerSubmissionResult.ACCEPTED, router.submit(third, sources))
+        router.cancel(third)
+        assertEquals(CompilerSubmissionResult.ACCEPTED, router.submit(first, sources))
+    }
+
+    @Test
     fun `bounded drain routes completions by full computer epoch and token address`() {
         val compiler = FakeComputerCompiler()
         val router = CompilerCompletionRouter(compiler, maximumCompletionsPerDrain = 1)

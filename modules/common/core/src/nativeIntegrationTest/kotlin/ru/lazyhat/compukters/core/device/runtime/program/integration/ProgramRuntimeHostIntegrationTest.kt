@@ -958,7 +958,7 @@ class ProgramRuntimeHostIntegrationTest {
         return text.toString().trimEnd('\n') + '\n'
     }
 
-    private class TestCompilerService private constructor(
+    internal class TestCompilerService private constructor(
         val router: CompilerCompletionRouter,
         private val service: ServerCompilerService,
         private val executor: ExecutorService,

@@ -7,6 +7,7 @@ package ru.lazyhat.compukters.core.device.runtime.actor.integration
 
 import ru.lazyhat.compukters.api.addon.ProgramAddonAction
 import ru.lazyhat.compukters.api.addon.ProgramAddonCompletion
+import ru.lazyhat.compukters.compiler.runtime.CompilerSubmissionResult
 import ru.lazyhat.compukters.core.device.computer.ActorProgramComputer
 import ru.lazyhat.compukters.core.device.runtime.actor.ActorRuntimeService
 import ru.lazyhat.compukters.core.device.runtime.actor.NativeFleetActorRuntimeService
@@ -28,6 +29,12 @@ import ru.lazyhat.compukters.core.device.runtime.actor.ProgramRuntimeTurnObserve
 import ru.lazyhat.compukters.core.device.runtime.actor.VmActorEndpoint
 import ru.lazyhat.compukters.core.device.runtime.actor.VmActorSchedulerConfig
 import ru.lazyhat.compukters.core.device.runtime.actor.VmActorSubmission
+import ru.lazyhat.compukters.core.device.runtime.compiler.CompilerCompletionRouter
+import ru.lazyhat.compukters.core.device.runtime.compiler.ComputerCompilationAddress
+import ru.lazyhat.compukters.core.device.runtime.compiler.ComputerCompilationOutcome
+import ru.lazyhat.compukters.core.device.runtime.compiler.ComputerCompilationRequest
+import ru.lazyhat.compukters.core.device.runtime.compiler.ComputerCompiler
+import ru.lazyhat.compukters.core.device.runtime.compiler.ComputerCompilerCompletion
 import ru.lazyhat.compukters.core.device.runtime.program.NativeProgramVmSessionFactory
 import ru.lazyhat.compukters.core.device.runtime.program.ProgramFileSystemLaunchContext
 import ru.lazyhat.compukters.core.device.runtime.program.ProgramRuntimeHost
@@ -36,6 +43,7 @@ import ru.lazyhat.compukters.core.device.runtime.program.ProgramStartResult
 import ru.lazyhat.compukters.core.device.runtime.program.RedstoneCommitResult
 import ru.lazyhat.compukters.core.device.runtime.program.SoundCommitResult
 import ru.lazyhat.compukters.core.device.runtime.program.SoundRequest
+import ru.lazyhat.compukters.core.device.runtime.program.integration.ProgramRuntimeHostIntegrationTest
 import ru.lazyhat.compukters.core.device.runtime.program.integration.installFfmRuntime
 import ru.lazyhat.compukters.lang.runtime.capability.HostCapabilitySchema
 import ru.lazyhat.compukters.lang.runtime.capability.HostOperationSchema
@@ -83,6 +91,192 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class NativeFleetEventPumpIntegrationTest {
+    @Test
+    fun `native hibernation cancels compiler work and restoration rejects the previous epoch result`() {
+        installFfmRuntime()
+        VmRuntime.loadNativeLibrary(Path.of(requireNotNull(System.getProperty("compukters.ffi.library"))))
+        val artifact = Path.of(requireNotNull(System.getProperty("compukters.compilationRuntime.artifact"))).readBytes()
+        val resultArtifact = Path.of(requireNotNull(System.getProperty("compukters.fleet.timer.fixture"))).readBytes()
+        val requests = mutableListOf<ComputerCompilationRequest>()
+        val cancellations = mutableListOf<ComputerCompilationAddress>()
+        val completions = ArrayDeque<ComputerCompilerCompletion>()
+        val compiler =
+            object : ComputerCompiler {
+                override fun submit(request: ComputerCompilationRequest): CompilerSubmissionResult {
+                    requests += request
+                    return CompilerSubmissionResult.ACCEPTED
+                }
+
+                override fun drain(maximum: Int): List<ComputerCompilerCompletion> =
+                    List(minOf(maximum, completions.size)) { completions.removeFirst() }
+
+                override fun cancel(address: ComputerCompilationAddress): Boolean {
+                    cancellations += address
+                    return true
+                }
+            }
+        val router = CompilerCompletionRouter(compiler)
+        val root = Files.createTempDirectory("native-compiler-restore-").toRealPath()
+        val id = ComputerId.fromLongs(323, 324)
+        try {
+            WorldFileSystemStore.open(root).use { store ->
+                VmRuntime
+                    .openExperimentalFleet(ExperimentalFleetConfig(1, 32, 32, 4096, 64, 64, 32, coordinatedTurns = true))
+                    .use { fleet ->
+                        NativeFleetActorRuntimeService(fleet, 4, 16, 16, {}, {}, { _, _ -> }, onActorClosing = {}).use { service ->
+                            fun carrier(endpoint: VmActorEndpoint) =
+                                ActorProgramComputer(
+                                    service,
+                                    checkNotNull(
+                                        service.attachBootable(endpoint, store, bootstrapImage(artifact), compilerRouter = router),
+                                    ),
+                                    { RedstoneCommitResult.Committed },
+                                )
+
+                            fun awaitRequests(
+                                carrier: ActorProgramComputer,
+                                endpoint: VmActorEndpoint,
+                                count: Int,
+                                firstTick: Long,
+                            ): Long {
+                                val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10)
+                                var tick = firstTick
+                                while (requests.size < count) {
+                                    check(System.nanoTime() < deadline) { "native compiler request did not arrive: ${carrier.state}" }
+                                    check(carrier.state !is ProgramRuntimeState.Failed) { "native compiler failed: ${carrier.state}" }
+                                    if (service.grantFrame(endpoint, tick, 100_000)) {
+                                        carrier.serverTick(tick)
+                                        tick++
+                                    }
+                                    service.pump(32, 32)
+                                    Thread.yield()
+                                }
+                                awaitBootstrapFrame(service, endpoint, tick)
+                                return tick
+                            }
+                            val firstEndpoint = VmActorEndpoint(id, 1)
+                            val first = carrier(firstEndpoint)
+                            var checkpointTick = 1L
+                            try {
+                                awaitBootstrap(service, first.turnOn())
+                                checkpointTick = awaitRequests(first, firstEndpoint, 1, 1)
+                                first.hibernateAsync(checkpointTick).get(5, TimeUnit.SECONDS)
+                            } finally {
+                                first.closeAsync().get(5, TimeUnit.SECONDS)
+                            }
+                            val old = requests.single().address
+                            assertEquals(listOf(old), cancellations)
+                            val nextEndpoint = VmActorEndpoint(id, 2)
+                            val next = carrier(nextEndpoint)
+                            try {
+                                awaitBootstrap(service, next.turnOn(requiredCheckpoint = true))
+                                awaitRequests(next, nextEndpoint, 2, checkpointTick + 1)
+                                val resumed = requests.last().address
+                                assertEquals(old.computerId, resumed.computerId)
+                                assertEquals(old.token, resumed.token)
+                                assertTrue(old.vmEpoch != resumed.vmEpoch)
+                                assertEquals(requests.first().sources, requests.last().sources)
+                                completions += ComputerCompilerCompletion(old, ComputerCompilationOutcome.Success(resultArtifact))
+                                val observed =
+                                    awaitBootstrap(
+                                        service,
+                                        service.request(
+                                            nextEndpoint,
+                                        ) { ProgramRuntimeActorCommand.FileStat(it, VmVirtualPath.of("/home/bad")) },
+                                    )
+                                assertEquals(ProgramRuntimeState.WaitingForCompiler, observed.state)
+                                assertEquals(
+                                    ProgramRuntimeActorValue.Rejected(
+                                        ProgramRuntimeActorFailure.FileSystem(VmFileSystemReadFailure.NOT_FOUND),
+                                    ),
+                                    observed.value,
+                                )
+                                next.closeAsync().get(5, TimeUnit.SECONDS) // No owner pump needed to cancel the restored compiler job.
+                                assertEquals(listOf(old, resumed), cancellations)
+                            } finally {
+                                // Preserve the original assertion if the backend has already fenced a failed actor.
+                                service.stop(nextEndpoint)?.get(5, TimeUnit.SECONDS)
+                            }
+                        }
+                    }
+            }
+        } finally {
+            root.toFile().deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `native carrier compiles real Guest sources with typed diagnostics and runs installed children`() {
+        installFfmRuntime()
+        VmRuntime.loadNativeLibrary(Path.of(requireNotNull(System.getProperty("compukters.ffi.library"))))
+        val artifact = Path.of(requireNotNull(System.getProperty("compukters.compilationRuntime.artifact"))).readBytes()
+        val root = Files.createTempDirectory("native-fleet-compiler-").toRealPath()
+        try {
+            ProgramRuntimeHostIntegrationTest.TestCompilerService
+                .open(
+                    root.resolve("compiler"),
+                    Path.of(requireNotNull(System.getProperty("compukters.compilerWorker.manifest"))),
+                    Path.of(requireNotNull(System.getProperty("compukters.compilerWorker.payload"))),
+                ).use { compiler ->
+                    // Use the same /home-only capability as the legacy conformance scenario, rather than boot's root capability.
+                    val host = ProgramRuntimeHost(sessionFactory = NativeProgramVmSessionFactory(), compilerRouter = compiler.router)
+                    assertEquals(ProgramStartResult.Started, host.start(artifact))
+                    VmRuntime
+                        .openExperimentalFleet(ExperimentalFleetConfig(1, 32, 32, 4096, 64, 64, 32, coordinatedTurns = true))
+                        .use { fleet ->
+                            NativeFleetActorRuntimeService(fleet, 4, 16, 16, {}, {}, { _, _ -> }, onActorClosing = {}).use { service ->
+                                val endpoint = VmActorEndpoint(ComputerId.fromLongs(321, 322), 1)
+                                val machine = host.transferToFleet(fleet, 0)
+                                assertTrue(service.register(endpoint, machine, host))
+                                try {
+                                    var tick = 1L
+                                    val deadline = System.nanoTime() + TimeUnit.MINUTES.toNanos(2)
+                                    while (host.state !is ProgramRuntimeState.Halted) {
+                                        check(System.nanoTime() < deadline) { "native compilation stalled: ${host.state}" }
+                                        check(host.state !is ProgramRuntimeState.Failed) { "native compilation failed: ${host.state}" }
+                                        if (service.grantFrame(endpoint, tick, 100_000)) {
+                                            assertEquals(
+                                                VmActorSubmission.ACCEPTED,
+                                                service.submitTurn(endpoint, tick, emptyList(), { _, _ -> }),
+                                            )
+                                            tick++
+                                        }
+                                        service.pump(32, 32)
+                                        if (host.state == ProgramRuntimeState.WaitingForCompiler) Thread.sleep(1) else Thread.yield()
+                                    }
+                                    val state =
+                                        checkNotNull(
+                                            assertIs<ProgramRuntimeActorValue.TerminalStateValue>(
+                                                awaitBootstrap(
+                                                    service,
+                                                    service.request(endpoint) { ProgramRuntimeActorCommand.TerminalFullState(it) },
+                                                ).value,
+                                            ).state,
+                                        )
+                                    val text =
+                                        buildString {
+                                            repeat(state.height) { y ->
+                                                val row =
+                                                    buildString {
+                                                        repeat(
+                                                            state.width,
+                                                        ) { x -> appendCodePoint(state.cells[y * state.width + x].codePoint) }
+                                                    }
+                                                append(row.trimEnd()).append('\n')
+                                            }
+                                        }.trimEnd('\n') + "\n"
+                                    assertEquals("42\n42\n42\ncompiler and process Path API ok\n", text)
+                                } finally {
+                                    checkNotNull(service.stop(endpoint)).get(5, TimeUnit.SECONDS)
+                                }
+                            }
+                        }
+                }
+        } finally {
+            root.toFile().deleteRecursively()
+        }
+    }
+
     @Test
     fun `native carrier installs with revision checks and reclaims canceled or failed candidates`() {
         installFfmRuntime()

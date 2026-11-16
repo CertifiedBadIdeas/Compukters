@@ -8,6 +8,7 @@ package ru.lazyhat.compukters.core.device.runtime.actor
 import ru.lazyhat.compukters.api.addon.ProgramAddonAction
 import ru.lazyhat.compukters.api.addon.ProgramAddonHost
 import ru.lazyhat.compukters.core.LOGGER
+import ru.lazyhat.compukters.core.device.runtime.compiler.CompilerCompletionRouter
 import ru.lazyhat.compukters.core.device.runtime.program.HostRequestRoutes
 import ru.lazyhat.compukters.core.device.runtime.program.ProgramAddonLifecyclePort
 import ru.lazyhat.compukters.core.device.runtime.program.ProgramRuntimeHost
@@ -37,7 +38,7 @@ import java.util.concurrent.CompletableFuture
  * addon replies, redstone confirmations and world replies into one bounded ordered outbox,
  * independently of the next execution grant. Legacy deferred world effects reject before admission.
  * Addon/world requests and program lifecycle actions stream to a turn observer on the owner thread;
- * final-only callers and unsupported host/compilation events use [onExternalEvent]. Neither path
+ * final-only callers and unsupported host events use [onExternalEvent]. Neither path
  * accumulates a second result backlog. Only the final Quiescent report settles turn credit.
  * Stop fences owner work and transfers the host and charged unsent commands to one shared
  * lifecycle worker. Its native cleanup barrier completes without owner result pumping.
@@ -96,6 +97,8 @@ internal class NativeFleetActorRuntimeService(
             byteLimits,
         )
 
+    private val compilations = NativeFleetCompilations(dispatcher.outbox, nanoTime)
+
     private val bootstrap =
         NativeFleetBootstrap(
             checkOwner,
@@ -133,6 +136,7 @@ internal class NativeFleetActorRuntimeService(
         tickBudget: ProgramTickBudget = ProgramTickBudget(),
         initialRedstoneOutput: Int = 0,
         addonHost: ProgramAddonHost? = null,
+        compilerRouter: CompilerCompletionRouter? = null,
     ): ProgramRuntimeActorLease? {
         checkOwner()
         if (!canAttach(endpoint)) return null
@@ -143,6 +147,7 @@ internal class NativeFleetActorRuntimeService(
                 systemImage = systemImage,
                 tickBudget = tickBudget,
                 initialRedstoneOutput = initialRedstoneOutput,
+                compilerRouter = compilerRouter,
                 addonCapabilitySchemas = addonHost?.capabilitySchemas.orEmpty(),
             )
         return attach(endpoint, host)
@@ -496,10 +501,11 @@ internal class NativeFleetActorRuntimeService(
             }
         machines.remove(actor.machine)
         deploymentCleanup.removeIf { it.first == actor.machine }
+        val compilationCancellation = compilations.cancel(actor.machine)
         val result = CompletableFuture<Long>()
         closing[endpoint] = result
         val commands = dispatcher.outbox.handoffForClose(actor.machine)
-        var cancellationFailure: Throwable? = null
+        var cancellationFailure: Throwable? = compilationCancellation
         val native = CompletableFuture<Long>()
         native.whenComplete { generation, closeFailure ->
             val canceled = cancellationFailure
@@ -515,7 +521,10 @@ internal class NativeFleetActorRuntimeService(
         // Reserve before invoking callbacks: a reentrant service close must include this host.
         val start = closer.reserve(actor.machine, actor.host, commands, native, checkpointTick, payload, saveExecution)
         try {
-            cancellationFailure = runCatching { onActorClosing(endpoint) }.exceptionOrNull()
+            runCatching { onActorClosing(endpoint) }.exceptionOrNull()?.let { failure ->
+                val previous = cancellationFailure
+                if (previous == null) cancellationFailure = failure else previous.addSuppressed(failure)
+            }
             val failure = actor.failure ?: cancellationFailure ?: CancellationException("native actor stopped")
             actor.turn?.let {
                 val callbackFailure = runCatching { complete(it.completion, null, failure) }.exceptionOrNull()
@@ -556,6 +565,7 @@ internal class NativeFleetActorRuntimeService(
         val prepared = bootstrap.pump(bootstrapAllowance, deadlineNanos, maximumAttempts)
         val remaining = maximumAttempts - bootstrap.lastTransferAttempts
         retryDeploymentCleanup(remaining, deadlineNanos)
+        compilations.pump(remaining, deadlineNanos)
         return prepared + dispatcher.pump(maximumEvents - prepared, remaining, deadlineNanos)
     }
 
@@ -628,11 +638,12 @@ internal class NativeFleetActorRuntimeService(
 
             is ExperimentalFleetEvent.Compilation -> {
                 val actor = machines[event.machine] ?: return
-                actor.host.observeFleetOutcome(fleet, actor.machine, VmOutcome.CompilationRequested(event.request))
-                onExternalEvent(actor.endpoint, event)
+                actor.host.requireFleetOwnership(fleet, actor.machine)
+                compilations.request(actor.machine, actor.host, event.request)
             }
 
             is ExperimentalFleetEvent.ScopeStopped -> {
+                compilations.cancelScope(event.machine, event.scope)
                 machines[event.machine]?.let { onExternalEvent(it.endpoint, event) }
             }
 

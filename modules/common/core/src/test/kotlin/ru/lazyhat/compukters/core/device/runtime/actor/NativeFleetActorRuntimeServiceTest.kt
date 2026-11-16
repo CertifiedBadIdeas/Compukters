@@ -7,6 +7,13 @@ package ru.lazyhat.compukters.core.device.runtime.actor
 
 import ru.lazyhat.compukters.api.addon.ProgramAddonAction
 import ru.lazyhat.compukters.api.addon.ProgramAddonCompletion
+import ru.lazyhat.compukters.compiler.runtime.CompilerSubmissionResult
+import ru.lazyhat.compukters.core.device.runtime.compiler.CompilerCompletionRouter
+import ru.lazyhat.compukters.core.device.runtime.compiler.ComputerCompilationAddress
+import ru.lazyhat.compukters.core.device.runtime.compiler.ComputerCompilationOutcome
+import ru.lazyhat.compukters.core.device.runtime.compiler.ComputerCompilationRequest
+import ru.lazyhat.compukters.core.device.runtime.compiler.ComputerCompiler
+import ru.lazyhat.compukters.core.device.runtime.compiler.ComputerCompilerCompletion
 import ru.lazyhat.compukters.core.device.runtime.program.ProgramRuntimeHost
 import ru.lazyhat.compukters.core.device.runtime.program.ProgramRuntimeState
 import ru.lazyhat.compukters.core.device.runtime.program.ProgramVmSession
@@ -31,6 +38,8 @@ import ru.lazyhat.compukters.lang.runtime.vm.ExperimentalFleetInputResult
 import ru.lazyhat.compukters.lang.runtime.vm.TerminalKey
 import ru.lazyhat.compukters.lang.runtime.vm.TerminalKeyAction
 import ru.lazyhat.compukters.lang.runtime.vm.TerminalUpdate
+import ru.lazyhat.compukters.lang.runtime.vm.VmCompilationRequest
+import ru.lazyhat.compukters.lang.runtime.vm.VmCompilationSource
 import ru.lazyhat.compukters.lang.runtime.vm.VmExecutableRevision
 import ru.lazyhat.compukters.lang.runtime.vm.VmHostRequest
 import ru.lazyhat.compukters.lang.runtime.vm.VmHostRequestIdentity
@@ -52,6 +61,130 @@ import kotlin.test.assertIs
 import kotlin.test.assertTrue
 
 class NativeFleetActorRuntimeServiceTest {
+    @Test
+    fun `scope cancellation rejects late compiler results after the computer restarts`() =
+        Harness().use { h ->
+            val compiler = FakeCompiler()
+            val router = CompilerCompletionRouter(compiler)
+            val id = ComputerId.fromLongs(10, 11)
+            val first = h.register(1, computerId = id, compilerRouter = router)
+            val request = VmCompilationRequest(1, listOf(VmCompilationSource("/home/main.kt", byteArrayOf(1))))
+            h.events += ExperimentalFleetEvent.Compilation(1, 0, request)
+            h.service.pump(1, 0)
+            val oldAddress = compiler.requests.single().address
+            h.events += ExperimentalFleetEvent.ScopeStopped(1, 0, emptyList())
+            h.service.pump(1, 0)
+            assertEquals(ProgramRuntimeState.Running, h.hosts.getValue(1).state)
+            checkNotNull(h.service.stop(first)).get(5, TimeUnit.SECONDS)
+            h.register(2, computerId = id, epoch = 2, compilerRouter = router)
+            h.events += ExperimentalFleetEvent.Compilation(2, 0, request)
+            h.service.pump(1, 0)
+            val newAddress = compiler.requests.last().address
+            assertTrue(oldAddress.vmEpoch != newAddress.vmEpoch)
+            compiler.completions += ComputerCompilerCompletion(oldAddress, ComputerCompilationOutcome.Success(byteArrayOf(1)))
+            compiler.completions += ComputerCompilerCompletion(newAddress, ComputerCompilationOutcome.Failure("new epoch failure"))
+            repeat(3) { h.service.pump(0, 1) }
+            assertEquals(listOf(Triple(2L, 1L, ComputerCompilationOutcome.Failure("new epoch failure"))), h.compilationResults.toList())
+        }
+
+    @Test
+    fun `compiler result survives native backpressure and does not grant execution`() =
+        Harness().use { h ->
+            val compiler = FakeCompiler()
+            val endpoint = h.register(1, compilerRouter = CompilerCompletionRouter(compiler))
+            val request = VmCompilationRequest(1, listOf(VmCompilationSource("/home/main.kt", byteArrayOf(1))))
+            h.events += ExperimentalFleetEvent.Compilation(1, 0, request)
+            h.events += ExperimentalFleetEvent.Compilation(1, 0, request)
+            h.service.pump(2, 0)
+            assertEquals(1, compiler.requests.size)
+            val address = compiler.requests.single().address
+            compiler.completions += ComputerCompilerCompletion(address, ComputerCompilationOutcome.Success(byteArrayOf(1, 2, 3)))
+            h.busyCompilation = true
+            repeat(3) { h.service.pump(0, 1) }
+            assertTrue(h.compilationResults.isEmpty())
+            assertEquals(ProgramRuntimeState.WaitingForCompiler, h.hosts.getValue(1).state)
+            h.busyCompilation = false
+            h.service.pump(0, 1)
+            assertEquals(listOf(Triple(1L, 1L, ComputerCompilationOutcome.Success(byteArrayOf(1, 2, 3)))), h.compilationResults.toList())
+            assertEquals(ProgramRuntimeState.Running, h.hosts.getValue(1).state)
+            assertTrue(h.grants.isEmpty())
+            h.events += ExperimentalFleetEvent.Compilation(1, 0, request)
+            h.service.pump(1, 1)
+            assertEquals(1, compiler.requests.size)
+            assertEquals(ProgramRuntimeState.Running, h.hosts.getValue(1).state)
+            assertFalse(h.service.request(endpoint) { ProgramRuntimeActorCommand.FileSystemGeneration(it) }.isDone)
+        }
+
+    @Test
+    fun `compiler cancellation fences an already queued result before off-thread close`() =
+        Harness().use { h ->
+            val compiler = FakeCompiler()
+            val endpoint = h.register(1, compilerRouter = CompilerCompletionRouter(compiler))
+            h.events +=
+                ExperimentalFleetEvent.Compilation(
+                    1,
+                    0,
+                    VmCompilationRequest(1, listOf(VmCompilationSource("/home/main.kt", byteArrayOf(1)))),
+                )
+            h.service.pump(1, 0)
+            val address = compiler.requests.single().address
+            compiler.completions += ComputerCompilerCompletion(address, ComputerCompilationOutcome.Success(byteArrayOf(3)))
+            h.busyCompilation = true
+            h.service.pump(0, 1)
+            checkNotNull(h.service.stop(endpoint)).get(5, TimeUnit.SECONDS)
+            assertEquals(listOf(address), compiler.cancellations)
+            assertTrue(h.compilationResults.isEmpty())
+        }
+
+    @Test
+    fun `compiler failures and oversized results make progress even in scalar-only queues`() {
+        for (compiler in listOf(
+            null,
+            FakeCompiler(CompilerSubmissionResult.BUSY),
+            FakeCompiler(CompilerSubmissionResult.CLOSED),
+            FakeCompiler(),
+        )) {
+            Harness(byteLimits = NativeFleetOutboxLimits(64, 64)).use { h ->
+                h.register(1, compilerRouter = compiler?.let { CompilerCompletionRouter(it) })
+                h.events +=
+                    ExperimentalFleetEvent.Compilation(
+                        1,
+                        0,
+                        VmCompilationRequest(1, listOf(VmCompilationSource("/home/main.kt", byteArrayOf(1)))),
+                    )
+                h.service.pump(1, 0)
+                if (compiler?.submission == CompilerSubmissionResult.ACCEPTED) {
+                    compiler.completions +=
+                        ComputerCompilerCompletion(compiler.requests.single().address, ComputerCompilationOutcome.Success(ByteArray(1024)))
+                }
+                h.service.pump(0, 1)
+                assertEquals(ComputerCompilationOutcome.Failure(""), h.compilationResults.single().third)
+                assertEquals(ProgramRuntimeState.Running, h.hosts.getValue(1).state)
+            }
+        }
+    }
+
+    private class FakeCompiler(
+        val submission: CompilerSubmissionResult = CompilerSubmissionResult.ACCEPTED,
+    ) : ComputerCompiler {
+        val requests = mutableListOf<ComputerCompilationRequest>()
+        val completions = ArrayDeque<ComputerCompilerCompletion>()
+        val cancellations = mutableListOf<ComputerCompilationAddress>()
+
+        override fun submit(request: ComputerCompilationRequest): CompilerSubmissionResult {
+            requests += request
+            return submission
+        }
+
+        override fun drain(maximum: Int): List<ComputerCompilerCompletion> =
+            List(minOf(maximum, completions.size)) { completions.removeFirst() }
+
+        override fun cancel(address: ComputerCompilationAddress): Boolean {
+            cancellations += address
+            return true
+        }
+    }
+
     @Test
     fun `an admitted install owns its token until native disposal is acknowledged`() =
         Harness().use { h ->
@@ -1068,6 +1201,10 @@ class NativeFleetActorRuntimeServiceTest {
     ) : AutoCloseable {
         val events = ConcurrentLinkedQueue<ExperimentalFleetEvent>()
         val grants = CopyOnWriteArrayList<Pair<Long, Int>>()
+        val hosts = mutableMapOf<Long, ProgramRuntimeHost>()
+        val compilationResults = CopyOnWriteArrayList<Triple<Long, Long, ComputerCompilationOutcome>>()
+
+        @Volatile var busyCompilation = false
         val queries = CopyOnWriteArrayList<Long>()
         val discardedCandidates = CopyOnWriteArrayList<Long>()
         val observed = mutableListOf<VmActorEndpoint>()
@@ -1125,6 +1262,23 @@ class NativeFleetActorRuntimeServiceTest {
 
                     "grant" -> {
                         grants += (args!![0] as Long) to (args[2] as Int)
+                        null
+                    }
+
+                    "completeCompilationArtifact", "completeCompilationFailure" -> {
+                        if (busyCompilation) {
+                            throw ru.lazyhat.compukters.lang.runtime.vm
+                                .VmFleetBusyException("full")
+                        }
+                        val result =
+                            if (method.name ==
+                                "completeCompilationArtifact"
+                            ) {
+                                ComputerCompilationOutcome.Success(args!![2] as ByteArray)
+                            } else {
+                                ComputerCompilationOutcome.Failure(args!![2] as String)
+                            }
+                        compilationResults += Triple(args[0] as Long, args[1] as Long, result)
                         null
                     }
 
@@ -1208,6 +1362,7 @@ class NativeFleetActorRuntimeServiceTest {
             epoch: Long = 1,
             schemas: List<HostCapabilitySchema> = emptyList(),
             leased: Boolean = false,
+            compilerRouter: CompilerCompletionRouter? = null,
         ): VmActorEndpoint {
             val session =
                 Proxy.newProxyInstance(ProgramVmSession::class.java.classLoader, arrayOf(ProgramVmSession::class.java)) { _, method, args ->
@@ -1264,7 +1419,9 @@ class NativeFleetActorRuntimeServiceTest {
                         discardedMachines += machine
                     }
                 }
-            val host = ProgramRuntimeHost(factory, addonCapabilitySchemas = schemas)
+            val host =
+                ProgramRuntimeHost(factory, computerId = computerId, compilerRouter = compilerRouter, addonCapabilitySchemas = schemas)
+            hosts[machine] = host
             host.start(byteArrayOf())
             host.transferToFleet(fleet, 0)
             val endpoint = VmActorEndpoint(computerId, epoch)

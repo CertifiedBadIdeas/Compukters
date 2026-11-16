@@ -178,6 +178,15 @@ tasks.register<Test>("experimentalFleetEventIntegrationTest") {
     inputs.files(redstone, sound)
     systemProperty("compukters.fleet.redstone.fixture", redstone.get().asFile.absolutePath)
     systemProperty("compukters.fleet.sound.fixture", sound.get().asFile.absolutePath)
+    dependsOn(
+        ":compiler-k2:generateCompilationArtifact",
+        ":tooling-runtime:toolingRuntimeBundle",
+        ":tooling-runtime:toolingRuntimeManifest",
+    )
+    inputs.files(compilationRuntimeArtifact, compilerWorkerManifest, compilerWorkerPayload)
+    systemProperty("compukters.compilationRuntime.artifact", compilationRuntimeArtifact.get().asFile.absolutePath)
+    systemProperty("compukters.compilerWorker.manifest", compilerWorkerManifest.get().asFile.absolutePath)
+    systemProperty("compukters.compilerWorker.payload", compilerWorkerPayload.get().asFile.absolutePath)
     useJUnitPlatform()
     testClassesDirs = nativeIntegrationTest.output.classesDirs
     classpath = nativeIntegrationTest.runtimeClasspath

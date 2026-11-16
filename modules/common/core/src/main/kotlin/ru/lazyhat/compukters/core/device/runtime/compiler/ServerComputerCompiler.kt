@@ -29,18 +29,31 @@ import ru.lazyhat.compukters.compiler.worker.protocol.CompilerFailure
 import ru.lazyhat.compukters.compiler.worker.protocol.PlatformFailure
 import ru.lazyhat.compukters.compiler.worker.protocol.VirtualSourcePath
 import ru.lazyhat.compukters.compiler.worker.protocol.WorkerLimits
+import java.util.ArrayDeque
+import java.util.concurrent.CompletableFuture
 
 class ServerComputerCompiler(
     private val service: CompilerServicePort,
     private val limits: WorkerLimits,
+    private val maximumOutstanding: Int = 64,
 ) : ComputerCompiler {
     private val addresses = mutableMapOf<CompilerTarget, ComputerCompilationAddress>()
     private val targets = mutableMapOf<ComputerCompilationAddress, CompilerTarget>()
     private var nextOwner = 1L
+    private val cancellations = ArrayDeque<CompilerTarget>()
+    private var cancelling = 0
+    private var cancellationWorker = false
+    private var cancellationFailure: Throwable? = null
+    private var cancellationIdle = CompletableFuture.completedFuture(Unit)
+
+    init {
+        require(maximumOutstanding > 0)
+    }
 
     @Synchronized
     override fun submit(request: ComputerCompilationRequest): CompilerSubmissionResult {
-        if (request.address in targets) return CompilerSubmissionResult.BUSY
+        if (cancellationFailure != null) return CompilerSubmissionResult.CLOSED
+        if (request.address in targets || targets.size + cancelling >= maximumOutstanding) return CompilerSubmissionResult.BUSY
         val target = CompilerTarget(nextOwner(), request.address.vmEpoch, request.address.token)
         val snapshot =
             ProjectSnapshot.of(
@@ -67,11 +80,47 @@ class ServerComputerCompiler(
             ComputerCompilerCompletion(address, completion.outcome.toComputerOutcome())
         }
 
+    /** Invalidate delivery immediately; process termination may wait and therefore runs off the owner. */
     @Synchronized
     override fun cancel(address: ComputerCompilationAddress): Boolean {
         val target = targets.remove(address) ?: return false
         addresses.remove(target)
-        return service.cancel(target)
+        cancellations.addLast(target)
+        cancelling++ // Admission stays occupied until the potentially blocking process cancellation finishes.
+        if (!cancellationWorker) {
+            cancellationWorker = true
+            cancellationIdle = CompletableFuture()
+            Thread
+                .ofPlatform()
+                .daemon(true)
+                .name("compukters-compiler-cancel")
+                .start(::cancelPending)
+        }
+        return true
+    }
+
+    @Synchronized
+    internal fun cancellationBarrier(): CompletableFuture<Unit> = cancellationIdle.copy()
+
+    /** One transient worker per compiler, which exits when its bounded queue is empty. */
+    private fun cancelPending() {
+        while (true) {
+            val target =
+                synchronized(this) {
+                    if (cancellations.isEmpty()) {
+                        cancellationWorker = false
+                        val failure = cancellationFailure
+                        if (failure == null) cancellationIdle.complete(Unit) else cancellationIdle.completeExceptionally(failure)
+                        return
+                    }
+                    cancellations.removeFirst()
+                }
+            val failure = runCatching { service.cancel(target) }.exceptionOrNull()
+            synchronized(this) {
+                cancelling--
+                if (failure != null && cancellationFailure == null) cancellationFailure = failure
+            }
+        }
     }
 
     private fun nextOwner(): Long {
