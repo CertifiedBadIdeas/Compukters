@@ -71,7 +71,8 @@ capture and select cold boot.
 The Minecraft filesystem registry accepts owner-thread close attempts. A null result explicitly means admission
 pressure before fencing, while a returned future is an accepted terminal barrier, including an immediately failed one.
 The registry retains one callback per pending identity and rotates deferred attempts, at most sixteen per pass on the
-server pre-tick; no unloaded block tick or worker-side resource capture is needed. It does not retain addon snapshots
+server pre-tick; no unloaded block tick or worker-side resource capture is needed. The pre-tick retry callback uses
+a canonical world key resolved during server startup, with no filesystem path resolution during ordinary retries. It does not retain addon snapshots
 between refused attempts. Accepted operations are never retried. Server shutdown uses the same bounded retry pass
 inside its existing ten-second wait, without ordinary actor-result pumping. The runtime and peripheral leases remain
 owned while admission is pending.

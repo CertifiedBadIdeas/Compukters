@@ -37,6 +37,31 @@ class NeoForgeWorldFileSystemStoresTest {
     lateinit var world: Path
 
     @Test
+    fun `cached close retrier avoids path resolution on empty and deferred ticks`() {
+        var resolutions = 0
+        val fixture =
+            Fixture(canonicalize = {
+                resolutions++
+                it.toRealPath()
+            })
+        val retry = fixture.registry.closeRetrier(world)
+        var attempts = 0
+        val lease = fixture.attach()
+        val released =
+            lease.release {
+                attempts++
+                if (attempts < 3) null else completed(5)
+            }
+        val initial = resolutions
+        repeat(10) { retry() }
+        fixture.executor.runAll()
+        released.join()
+        assertEquals(initial, resolutions)
+        assertEquals(3, attempts)
+        fixture.stop()
+    }
+
+    @Test
     fun `store opens once at the exact canonical path`() {
         val fixture = Fixture()
         fixture.registry.store(world.resolve(".").normalize())
@@ -324,6 +349,7 @@ class NeoForgeWorldFileSystemStoresTest {
     }
 
     private inner class Fixture(
+        canonicalize: (Path) -> Path = { it.toRealPath() },
         retryBudget: Int = 16,
         capacity: Int = 1024,
         capacitySource: () -> Int = { capacity },
@@ -350,6 +376,7 @@ class NeoForgeWorldFileSystemStoresTest {
                 executorFactory = { executor },
                 reportFailure = { failures += it },
                 maximumCloseAttemptsPerPass = retryBudget,
+                canonicalRoot = canonicalize,
             )
 
         init {

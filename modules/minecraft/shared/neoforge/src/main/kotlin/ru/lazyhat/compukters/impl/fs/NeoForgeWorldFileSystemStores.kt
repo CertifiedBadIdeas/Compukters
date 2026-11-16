@@ -52,6 +52,7 @@ internal class WorldFileSystemStoreRegistry<S : Any>(
     private val executorFactory: (Int) -> java.util.concurrent.ExecutorService = ::persistenceExecutor,
     private val reportFailure: (Throwable) -> Unit = {},
     private val maximumCloseAttemptsPerPass: Int = 16,
+    private val canonicalRoot: (Path) -> Path = { it.toRealPath() },
 ) {
     private val entries = mutableMapOf<Path, Entry<S>>()
 
@@ -173,10 +174,18 @@ internal class WorldFileSystemStoreRegistry<S : Any>(
         return released.copy()
     }
 
+    /** Resolve once during lifecycle setup; invocation performs no filesystem lookup. */
+    fun closeRetrier(worldRoot: Path): () -> Unit {
+        val key = canonicalWorldRoot(worldRoot)
+        return { retryClosesAt(key) }
+    }
+
+    fun retryCloses(worldRoot: Path) = retryClosesAt(canonicalWorldRoot(worldRoot))
+
     /** Owner-thread only: workers complete barriers, but never inspect or capture world resources. */
     @Synchronized
-    fun retryCloses(worldRoot: Path) {
-        val current = entries[canonicalWorldRoot(worldRoot)] ?: return
+    private fun retryClosesAt(key: Path) {
+        val current = entries[key] ?: return
         if (current.failure != null) return
         repeat(minOf(current.closeRetries.size, maximumCloseAttemptsPerPass)) {
             if (current.failure != null) return
@@ -399,7 +408,7 @@ internal class WorldFileSystemStoreRegistry<S : Any>(
         check(current.failure == null) { "filesystem persistence failed" }
     }
 
-    private fun canonicalWorldRoot(worldRoot: Path): Path = worldRoot.toRealPath()
+    private fun canonicalWorldRoot(worldRoot: Path): Path = canonicalRoot(worldRoot)
 
     private class Entry<S : Any>(
         val key: Path,
@@ -462,6 +471,7 @@ internal class WorldFileSystemStoreRegistry<S : Any>(
 }
 
 object NeoForgeWorldFileSystemStores {
+    private val closeRetriers = java.util.IdentityHashMap<MinecraftServer, () -> Unit>()
     private val registry =
         WorldFileSystemStoreRegistry(
             opener = WorldFileSystemStore::open,
@@ -489,6 +499,7 @@ object NeoForgeWorldFileSystemStores {
                 systemImage: VmSystemImage,
             ): ComputerFileSystemContext {
                 val root = worldRoot(level.server)
+                closeRetriers.getOrPut(level.server) { registry.closeRetrier(root) }
                 return ComputerFileSystemContext(
                     registry.store(root),
                     computerId,
@@ -513,7 +524,9 @@ object NeoForgeWorldFileSystemStores {
         computerId: ComputerId,
     ) = registry.recover(worldRoot(level.server), computerId)
 
-    fun beforeServerTick(event: ServerTickEvent.Pre) = registry.retryCloses(worldRoot(event.server))
+    fun beforeServerTick(event: ServerTickEvent.Pre) {
+        closeRetriers[event.server]?.invoke()
+    }
 
     fun onLevelSave(event: LevelEvent.Save) {
         val level = event.level as? ServerLevel ?: return
@@ -522,16 +535,19 @@ object NeoForgeWorldFileSystemStores {
 
     fun onServerStarting(event: ServerStartingEvent) {
         // Open and validate the world store during server startup, never during an ordinary computer tick.
-        registry.store(worldRoot(event.server))
+        val root = worldRoot(event.server)
+        registry.store(root)
+        closeRetriers[event.server] = registry.closeRetrier(root)
     }
 
     fun onServerStopping(event: ServerStoppingEvent) {
         // Shutdown only: actor close barriers do not depend on server tick/result pumping.
         val root = worldRoot(event.server)
+        val retry = closeRetriers.getOrPut(event.server) { registry.closeRetrier(root) }
         val stopped = registry.stop(root)
         val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10)
         while (!stopped.isDone) {
-            registry.retryCloses(root)
+            retry()
             val remaining = deadline - System.nanoTime()
             if (remaining <= 0) throw java.util.concurrent.TimeoutException("computer filesystem shutdown timed out")
             try {
@@ -541,6 +557,7 @@ object NeoForgeWorldFileSystemStores {
             }
         }
         stopped.join()
+        closeRetriers.remove(event.server)
     }
 
     private fun worldRoot(server: MinecraftServer): Path = server.getWorldPath(LevelResource.ROOT)
