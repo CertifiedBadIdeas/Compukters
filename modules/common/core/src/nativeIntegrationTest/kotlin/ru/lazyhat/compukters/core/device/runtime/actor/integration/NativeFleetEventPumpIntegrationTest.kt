@@ -67,6 +67,7 @@ import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
@@ -678,77 +679,91 @@ class NativeFleetEventPumpIntegrationTest {
                 CapabilityIdentity("app", "entry", 1, 2),
                 listOf(HostOperationSchema(emptyList(), HostValueType.UNIT, true)),
             )
-        val host =
-            ProgramRuntimeHost(NativeProgramVmSessionFactory(capabilitySchemas = listOf(schema)), addonCapabilitySchemas = listOf(schema))
-        assertEquals(ProgramStartResult.Started, host.start(artifact))
-        VmRuntime.openExperimentalFleet(ExperimentalFleetConfig(1, 32, 32, 128, 64, 64, 32, coordinatedTurns = true)).use { fleet ->
-            val machine = host.transferToFleet(fleet, 0)
-            val endpoint = VmActorEndpoint(ComputerId.fromLongs(33, 34), 1)
-            var request: VmHostRequestIdentity? = null
-            NativeFleetActorRuntimeService(fleet, 4, 16, 16, {}, {}, { address, event ->
-                assertEquals(endpoint, address)
-                if (event is ExperimentalFleetEvent.Outcome) {
-                    val outcome = event.outcome
-                    check(outcome !is VmOutcome.HostRequestBatch) { "managed addon request delivered twice" }
-                }
-            }, onActorClosing = {}).use { service ->
-                assertTrue(service.register(endpoint, machine, host))
-
-                fun <T> await(future: CompletableFuture<T>): T {
-                    val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5)
-                    while (!future.isDone) {
-                        check(System.nanoTime() < deadline)
-                        service.pump(32, 32)
-                        Thread.yield()
-                    }
-                    return future.join()
-                }
-                assertTrue(service.grantFrame(endpoint, 4, 256))
-                val first = CompletableFuture<ProgramRuntimeActorReply>()
-                assertEquals(
-                    VmActorSubmission.ACCEPTED,
-                    service.submitTurn(
-                        endpoint,
-                        4,
-                        emptyList(),
-                        object : ProgramRuntimeTurnObserver {
-                            override fun addonAction(action: ProgramAddonAction) {
-                                val addon = assertIs<ProgramAddonAction.Request>(action).request
-                                assertEquals(0L, addon.programId)
-                                assertTrue(!first.isDone)
-                                check(request == null)
-                                request = addon.identity
-                            }
-
-                            override fun complete(
-                                reply: ProgramRuntimeActorReply?,
-                                failure: Throwable?,
-                            ) {
-                                if (failure == null) first.complete(checkNotNull(reply)) else first.completeExceptionally(failure)
-                            }
-                        },
-                    ),
+        for (capacity in listOf(1, 16)) {
+            val host =
+                ProgramRuntimeHost(
+                    NativeProgramVmSessionFactory(capabilitySchemas = listOf(schema)),
+                    addonCapabilitySchemas = listOf(schema),
                 )
-                val before = await(first)
-                val runtime: ActorRuntimeService = service
-                // Streaming does not settle credit; only the final report permits this continuation.
-                val completion =
-                    ProgramRuntimeActorEffect.CompleteAddons(
-                        listOf(
-                            ProgramAddonCompletion(checkNotNull(request), HostResponse.UnitSuccess),
+            assertEquals(ProgramStartResult.Started, host.start(artifact))
+            VmRuntime.openExperimentalFleet(ExperimentalFleetConfig(1, 32, 32, 128, 64, 64, 32, coordinatedTurns = true)).use { fleet ->
+                val machine = host.transferToFleet(fleet, 0)
+                val endpoint = VmActorEndpoint(ComputerId.fromLongs(33, 34), 1)
+                var request: VmHostRequestIdentity? = null
+                NativeFleetActorRuntimeService(fleet, 4, 16, capacity, {}, {}, { address, event ->
+                    assertEquals(endpoint, address)
+                    if (event is ExperimentalFleetEvent.Outcome) {
+                        val outcome = event.outcome
+                        check(outcome !is VmOutcome.HostRequestBatch) { "managed addon request delivered twice" }
+                    }
+                }, onActorClosing = {}).use { service ->
+                    assertTrue(service.register(endpoint, machine, host))
+
+                    fun <T> await(future: CompletableFuture<T>): T {
+                        val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5)
+                        while (!future.isDone) {
+                            check(System.nanoTime() < deadline)
+                            service.pump(32, 32)
+                            Thread.yield()
+                        }
+                        return future.join()
+                    }
+                    assertTrue(service.grantFrame(endpoint, 4, 256))
+                    val first = CompletableFuture<ProgramRuntimeActorReply>()
+                    assertEquals(
+                        VmActorSubmission.ACCEPTED,
+                        service.submitTurn(
+                            endpoint,
+                            4,
+                            emptyList(),
+                            object : ProgramRuntimeTurnObserver {
+                                override fun addonAction(action: ProgramAddonAction) {
+                                    val addon = assertIs<ProgramAddonAction.Request>(action).request
+                                    assertEquals(0L, addon.programId)
+                                    assertTrue(!first.isDone)
+                                    check(request == null)
+                                    request = addon.identity
+                                }
+
+                                override fun complete(
+                                    reply: ProgramRuntimeActorReply?,
+                                    failure: Throwable?,
+                                ) {
+                                    if (failure == null) first.complete(checkNotNull(reply)) else first.completeExceptionally(failure)
+                                }
+                            },
                         ),
                     )
-                val second = CompletableFuture<ProgramRuntimeActorReply>()
-                assertTrue(
-                    runtime.continueTurn(endpoint, 4, listOf(completion, completion)) { reply, failure ->
-                        if (failure == null) second.complete(checkNotNull(reply)) else second.completeExceptionally(failure)
-                    },
-                )
-                val after = await(second)
-                assertEquals(ProgramRuntimeState.Halted(null), after.state)
-                assertTrue(before.retiredInstructions > 0 && after.retiredInstructions > 0)
-                assertTrue(before.retiredInstructions + after.retiredInstructions <= 256)
-                await(checkNotNull(service.stop(endpoint)))
+                    val before = await(first)
+                    val runtime: ActorRuntimeService = service
+                    // Streaming does not settle credit; only the final report permits this continuation.
+                    val completion =
+                        ProgramRuntimeActorEffect.CompleteAddons(
+                            listOf(
+                                ProgramAddonCompletion(checkNotNull(request), HostResponse.UnitSuccess),
+                            ),
+                        )
+                    val second = CompletableFuture<ProgramRuntimeActorReply>()
+                    val effects =
+                        if (capacity == 1) {
+                            assertEquals(1, runtime.submitAddonCompletions(endpoint, completion.completions))
+                            assertFalse(runtime.continueTurn(endpoint, 4, emptyList()) { _, _ -> error("refused grant completed") })
+                            service.pump(0, 1) // Deliver the reply before the one-entry queue can admit a grant.
+                            emptyList()
+                        } else {
+                            listOf(completion, completion)
+                        }
+                    assertTrue(
+                        runtime.continueTurn(endpoint, 4, effects) { reply, failure ->
+                            if (failure == null) second.complete(checkNotNull(reply)) else second.completeExceptionally(failure)
+                        },
+                    )
+                    val after = await(second)
+                    assertEquals(ProgramRuntimeState.Halted(null), after.state)
+                    assertTrue(before.retiredInstructions > 0 && after.retiredInstructions > 0)
+                    assertTrue(before.retiredInstructions + after.retiredInstructions <= 256)
+                    await(checkNotNull(service.stop(endpoint)))
+                }
             }
         }
     }

@@ -6,6 +6,7 @@
 package ru.lazyhat.compukters.core.device.runtime.actor
 
 import ru.lazyhat.compukters.api.addon.ProgramAddonAction
+import ru.lazyhat.compukters.api.addon.ProgramAddonCompletion
 import ru.lazyhat.compukters.core.LOGGER
 import ru.lazyhat.compukters.core.device.runtime.program.ProgramAddonLifecyclePort
 import ru.lazyhat.compukters.core.device.runtime.program.ProgramRuntimeHost
@@ -116,7 +117,7 @@ internal class NativeFleetActorRuntimeService(
         if (!register(endpoint, machine, host)) return null
         return ProgramRuntimeActorLease(endpoint) { request ->
             prepareLeaseClose(endpoint, request)
-        }
+        }.also { actors.getValue(endpoint).lease = it }
     }
 
     private fun prepareLeaseClose(
@@ -146,6 +147,16 @@ internal class NativeFleetActorRuntimeService(
         if (previous != null && (previous.inFlight || tick <= previous.worldTick)) return false
         actor.credit = ProgramRuntimeFrameCredit(tick, retirements.toLong(), deadlineNanos, false)
         return true
+    }
+
+    override fun submitAddonCompletions(
+        endpoint: VmActorEndpoint,
+        completions: List<ProgramAddonCompletion>,
+    ): Int {
+        checkOwner()
+        if (closed || endpoint in closing) return 0
+        val actor = actors[endpoint] ?: return 0
+        return dispatcher.outbox.offerReplies(actor.machine, completions.map { NativeFleetOutbox.Command.Reply(it.identity, it.response) })
     }
 
     override fun submitTurn(
@@ -398,7 +409,7 @@ internal class NativeFleetActorRuntimeService(
         val start = closer.reserve(actor.machine, actor.host, commands, native, checkpointTick, payload, saveExecution)
         try {
             cancellationFailure = runCatching { onActorClosing(endpoint) }.exceptionOrNull()
-            val failure = cancellationFailure ?: CancellationException("native actor stopped")
+            val failure = actor.failure ?: cancellationFailure ?: CancellationException("native actor stopped")
             actor.turn?.let {
                 val callbackFailure = runCatching { complete(it.completion, null, failure) }.exceptionOrNull()
                 if (callbackFailure != null) {
@@ -510,10 +521,13 @@ internal class NativeFleetActorRuntimeService(
 
             is ExperimentalFleetEvent.Error -> {
                 val machine = event.machine
-                if (machine != null) {
-                    if (machine !in machines) return
-                }
-                error("native fleet failed: ${event.message}")
+                if (machine == null) error("native fleet failed: ${event.message}")
+                val actor = machines[machine] ?: return
+                actor.host.observeFleetFailure(fleet, machine, event.message)
+                actor.failure = ProgramRuntimeActorFailedException(actor.endpoint, IllegalStateException(event.message.take(1024)))
+                // Retain the close barrier in the lease even after the closing registry is reaped.
+                // Only this machine is fenced; the pump keeps delivering other machines' events.
+                actor.lease?.closeAsync() ?: stop(actor.endpoint)
             }
 
             else -> {
@@ -660,6 +674,8 @@ internal class NativeFleetActorRuntimeService(
         val machine: Long,
         val host: ProgramRuntimeHost,
     ) {
+        var lease: ProgramRuntimeActorLease? = null
+        var failure: Throwable? = null
         var credit: ProgramRuntimeFrameCredit? = null
         var lastTurnTick = -1L
         var turn: Turn? = null

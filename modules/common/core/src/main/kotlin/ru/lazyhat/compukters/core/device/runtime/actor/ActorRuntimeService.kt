@@ -5,6 +5,7 @@
  */
 package ru.lazyhat.compukters.core.device.runtime.actor
 
+import ru.lazyhat.compukters.api.addon.ProgramAddonCompletion
 import java.util.concurrent.CompletableFuture
 
 /** The owner-thread contract needed by an in-world computer carrier. */
@@ -15,6 +16,12 @@ internal interface ActorRuntimeService {
         endpoint: VmActorEndpoint,
         command: (ProgramRuntimeRequestId) -> ProgramRuntimeActorCommand,
     ): CompletableFuture<ProgramRuntimeActorReply>
+
+    /** Null keeps atomic turn delivery. Otherwise admit an ordered prefix independently of Guest credit. */
+    fun submitAddonCompletions(
+        endpoint: VmActorEndpoint,
+        completions: List<ProgramAddonCompletion>,
+    ): Int? = null
 
     fun submitTurn(
         endpoint: VmActorEndpoint,

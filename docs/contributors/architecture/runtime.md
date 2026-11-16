@@ -106,7 +106,16 @@ These are charged-byte budgets, with no per-idle-machine reservation. Charges co
 response trees, UTF-16 strings and an allowance per value/schema field; shared schemas are counted in full. Queue/map
 overhead is separately bounded by entry limits; these charges are not a measurement of JVM heap or native retention.
 Validation and sizing allocate no encoded response. Busy and failed sends retain the payload and its charge until
-native acceptance or explicit removal. Atomic batch refusal retains no prefix and consumes no frame credit.
+native acceptance or explicit removal. Atomic turn refusal retains no prefix and consumes no frame credit. Native addon delivery separately admits an ordered
+reply prefix within both entry and byte budgets; the carrier acknowledges only that prefix. Execution credit follows
+in a separate grant, so replies can drain even through a one-entry queue. A refused grant remains pending even if the
+last reply has already left the carrier and the observed Guest state is waiting. A reply exceeding the configured
+single-machine or global byte limit fails explicitly rather than retrying forever.
+
+A native error with a known machine identity fails only that actor's pending turn and queries, cancels its external
+requests and starts its independent close barrier. The same pump continues processing other actors. Stale machine
+errors are ignored; errors without a machine identity remain fleet-wide failures. Empty native execution workers park
+until explicitly signalled by submission or shutdown; output-pressure and detach-fence waits retain bounded polling.
 
 Stop invalidates the machine identity and cancels outstanding owner work synchronously. An endpoint cancellation
 callback, required explicitly when constructing the service, releases external resources on that thread; the native list of canceled requests is not queued back to the
@@ -144,9 +153,11 @@ checkpoint failure discards stale saved execution, closes the recovered host and
 are returned on either terminal path. Actor/query cancellation and reentrant ownership handoff follow the same rules
 as stop. No owner pumping is required.
 
-The common `ProgramRuntimeActorLease` separates admission from commit for both backends. Native admission validates
-final addon completions, reserves checkpoint bytes alongside their command bytes, and either admits the whole close
-or retains no prefix. Carrier lifecycle state, pending replies and addon resources remain live after refusal. After
+The common `ProgramRuntimeActorLease` separates admission from commit for both backends. Before native close
+reservation, the carrier may drain ordered final addon reply prefixes without advancing Guest. A refused reservation
+retains no additional close commands or checkpoint payload. Already accepted replies remain owned and charged by the
+outbox and drain before capture. Carrier lifecycle state, remaining replies and addon resources stay live after refusal.
+Native admission reserves checkpoint bytes alongside remaining final command bytes. After
 admission, the carrier fences callbacks before commit starts backend cancellation; repeated or reentrant closes join
 one barrier, and canceling a returned future cannot cancel native work. Reservation actions are dropped on commit,
 so completed leases do not retain checkpoint payloads or their backend preparation closures. Native `attach` produces

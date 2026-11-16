@@ -47,6 +47,56 @@ import kotlin.test.assertTrue
 
 class NativeFleetActorRuntimeServiceTest {
     @Test
+    fun `ordered reply prefixes free capacity for the execution grant`() =
+        Harness(maximumRequests = 2).use { h ->
+            val endpoint = h.register(1)
+            val replies = (1L..3L).map { ProgramAddonCompletion(VmHostRequestIdentity(1, it), HostResponse.UnitSuccess) }
+            assertTrue(h.service.grantFrame(endpoint, 1, 20))
+            assertEquals(2, h.service.submitAddonCompletions(endpoint, replies))
+            assertEquals(VmActorSubmission.MAILBOX_FULL, h.service.submitTurn(endpoint, 1, emptyList()) { _, _ -> })
+            h.service.pump(0, 2)
+            assertEquals(1, h.service.submitAddonCompletions(endpoint, replies.drop(2)))
+            var completed = false
+            assertEquals(
+                VmActorSubmission.ACCEPTED,
+                h.service.submitTurn(endpoint, 1, emptyList()) { _, failure -> completed = failure == null },
+            )
+            h.service.pump(0, 2)
+            h.events += ExperimentalFleetEvent.Quiescent(1, 1, 3, false)
+            h.service.pump(8, 0)
+            assertTrue(completed)
+            assertEquals(replies.map { it.identity }, h.replies)
+        }
+
+    @Test
+    fun `machine error fails its turn and queries while another machine completes in the same pump`() =
+        Harness().use { h ->
+            val first = h.register(1, leased = true)
+            val second = h.register(2)
+            var failed: Throwable? = null
+            var completed = false
+            assertTrue(h.service.grantFrame(first, 1, 20))
+            assertTrue(h.service.grantFrame(second, 1, 20))
+            h.service.submitTurn(first, 1, emptyList()) { _, failure -> failed = failure }
+            h.service.submitTurn(second, 1, emptyList()) { reply, failure -> completed = reply != null && failure == null }
+            val query = h.service.request(first, ProgramRuntimeActorCommand::FileSystemGeneration)
+            h.events += ExperimentalFleetEvent.Error(1, "invalid host response")
+            h.events += ExperimentalFleetEvent.Quiescent(2, 1, 3, false)
+            h.service.pump(8, 0)
+            assertIs<ProgramRuntimeActorFailedException>(failed)
+            assertTrue(query.isCompletedExceptionally)
+            assertTrue(completed)
+            assertFalse(h.service.grantFrame(first, 2, 20))
+            assertTrue(h.service.grantFrame(second, 2, 20))
+            assertEquals(7L, checkNotNull(h.leases[1]).closeAsync().get(5, TimeUnit.SECONDS))
+            h.service.pump(8, 0) // Reap completed close entries, then join the original lease again.
+            assertEquals(7L, checkNotNull(h.leases[1]).closeAsync().get(5, TimeUnit.SECONDS))
+            h.events += ExperimentalFleetEvent.Error(1, "stale failure")
+            h.service.pump(8, 0)
+            assertEquals(listOf(1L), h.closedMachines)
+        }
+
+    @Test
     fun `native lease returns payload reservation when final reply entry admission is full`() =
         Harness(maximumRequests = 1).use { h ->
             val endpoint = h.register(1, leased = true)

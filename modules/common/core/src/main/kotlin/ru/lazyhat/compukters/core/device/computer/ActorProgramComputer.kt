@@ -80,6 +80,7 @@ class ActorProgramComputer internal constructor(
     private var pendingSound: PendingSound? = null
     private val pendingRedstoneInputs = ArrayDeque<Int>()
     private val pendingAddonCompletions = ArrayDeque<ProgramAddonCompletion>()
+    private var pendingAddonContinuation = false
     private val outstandingAddonRequests = mutableMapOf<VmHostRequestIdentity, Long>()
     private var closeResult: CompletableFuture<Long?>? = null
     private var pendingLifecycle: LifecycleStage? = null
@@ -220,7 +221,7 @@ class ActorProgramComputer internal constructor(
                     state != ProgramRuntimeState.WaitingForCompiler &&
                     pendingOutput == null &&
                     pendingSound == null &&
-                    pendingAddonCompletions.isEmpty() &&
+                    pendingAddonCompletions.isEmpty() && !pendingAddonContinuation &&
                     pendingRedstoneInputs.isEmpty()
             )
         ) {
@@ -236,7 +237,13 @@ class ActorProgramComputer internal constructor(
         if (closeResult != null) return
         val output = pendingOutput
         val requestedSound = pendingSound
-        val addonCompletions = pendingAddonCompletions.toList()
+        val addonCompletions =
+            try {
+                prepareAddonCompletions()
+            } catch (failure: Exception) {
+                failUnlessBusy(failure)
+                return
+            }
         check(output == null || requestedSound == null) { "computer cannot own two pending world requests" }
         val input = pendingRedstoneInputs.firstOrNull()
         val effects =
@@ -283,14 +290,26 @@ class ActorProgramComputer internal constructor(
         }
         pendingOutput = null
         pendingSound = null
-        repeat(addonCompletions.size) {
-            outstandingAddonRequests.remove(pendingAddonCompletions.removeFirst().identity)
-        }
+        pendingAddonContinuation = false
+        acknowledgeAddonCompletions(addonCompletions.size)
         if (input != null) pendingRedstoneInputs.removeFirst()
         hostCompletionTick?.let { completedAt ->
             service.recordHostContinuationDelay((worldTick - completedAt).coerceAtLeast(0))
             hostCompletionTick = null
         }
+    }
+
+    private fun prepareAddonCompletions(): List<ProgramAddonCompletion> {
+        val completions = pendingAddonCompletions.toList()
+        val accepted = service.submitAddonCompletions(lease.endpoint, completions) ?: return completions
+        check(accepted in 0..completions.size)
+        acknowledgeAddonCompletions(accepted)
+        if (accepted > 0) pendingAddonContinuation = true
+        return emptyList()
+    }
+
+    private fun acknowledgeAddonCompletions(count: Int) {
+        repeat(count) { outstandingAddonRequests.remove(pendingAddonCompletions.removeFirst().identity) }
     }
 
     private fun completeTurn(
@@ -312,7 +331,7 @@ class ActorProgramComputer internal constructor(
             if (version != lifecycle || closeResult != null) return
             acceptAdvanceReply(observed, version)
             if (version != lifecycle || closeResult != null) return
-            if (pendingOutput != null || pendingSound != null || pendingAddonCompletions.isNotEmpty()) {
+            if (pendingOutput != null || pendingSound != null || pendingAddonCompletions.isNotEmpty() || pendingAddonContinuation) {
                 submitTurn(worldTick, continuation = true)
             }
         } catch (cause: Throwable) {
@@ -357,11 +376,19 @@ class ActorProgramComputer internal constructor(
         checkOwner()
         require(worldTick >= 0)
         closeResult?.let { return it.copy() }
+        val addonCompletions =
+            try {
+                prepareAddonCompletions()
+            } catch (failure: Exception) {
+                return CompletableFuture.failedFuture(failure)
+            }
+        // Native replies can drain before another close attempt, without executing Guest instructions.
+        if (addonCompletions.isEmpty() && pendingAddonCompletions.isNotEmpty()) return null
         val effects =
             buildList {
                 pendingOutput?.let { add(ProgramRuntimeActorEffect.CompleteRedstoneOutput(it.requestId, it.packed, it.result)) }
                 pendingSound?.let { add(ProgramRuntimeActorEffect.CompleteSound(it.requestId, it.result)) }
-                if (pendingAddonCompletions.isNotEmpty()) add(ProgramRuntimeActorEffect.CompleteAddons(pendingAddonCompletions.toList()))
+                if (addonCompletions.isNotEmpty()) add(ProgramRuntimeActorEffect.CompleteAddons(addonCompletions))
             }
         val request = ProgramActorHibernation(worldTick, addonState, effects, saveExecution)
         return tryCloseWith(request)
@@ -392,6 +419,7 @@ class ActorProgramComputer internal constructor(
         pendingSound = null
         pendingRedstoneInputs.clear()
         pendingAddonCompletions.clear()
+        pendingAddonContinuation = false
         outstandingAddonRequests.clear()
         hostCompletionTick = null
         reservation.commit()
@@ -608,6 +636,7 @@ class ActorProgramComputer internal constructor(
 
     private fun discardAddonRequests() {
         pendingAddonCompletions.clear()
+        pendingAddonContinuation = false
         outstandingAddonRequests.clear()
         addon.reset()
     }

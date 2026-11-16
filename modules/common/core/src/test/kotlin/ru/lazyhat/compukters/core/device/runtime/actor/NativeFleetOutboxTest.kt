@@ -20,6 +20,24 @@ import kotlin.test.assertTrue
 
 class NativeFleetOutboxTest {
     @Test
+    fun `reply prefix respects byte admission and impossible replies fail before any acceptance`() {
+        val small = NativeFleetOutbox.Command.Reply(VmHostRequestIdentity(1, 1), HostResponse.UnitSuccess)
+        val large = NativeFleetOutbox.Command.Reply(VmHostRequestIdentity(1, 2), HostResponse.StringSuccess("x".repeat(512)))
+        val bridge =
+            Proxy.newProxyInstance(ExperimentalFleet::class.java.classLoader, arrayOf(ExperimentalFleet::class.java)) { _, method, _ ->
+                check(method.name == "reply")
+                null
+            } as ExperimentalFleet
+        val outbox = NativeFleetOutbox(bridge, 8, 8, {}, byteLimits = NativeFleetOutboxLimits(small.retainedBytes, small.retainedBytes))
+        assertFailsWith<IllegalArgumentException> { outbox.offerReplies(1, listOf(small, large)) }
+        assertEquals(0L, outbox.retainedBytes)
+        assertEquals(1, outbox.offerReplies(1, listOf(small, small)))
+        assertEquals(0, outbox.offerReplies(1, listOf(small)))
+        assertEquals(1, outbox.flush(8))
+        assertEquals(1, outbox.offerReplies(1, listOf(small)))
+    }
+
+    @Test
     fun `checkpoint payload shares byte admission until explicitly released`() {
         val outbox = NativeFleetOutbox(fleet { _, _ -> }, 4, 4, {}, byteLimits = NativeFleetOutboxLimits(8682, 8618))
         assertTrue(outbox.offer(1, listOf(input(1))))

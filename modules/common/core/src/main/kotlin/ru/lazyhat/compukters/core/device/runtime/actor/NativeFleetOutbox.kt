@@ -142,6 +142,11 @@ internal class NativeFleetOutbox(
             @Synchronized get
             private set
 
+        @Synchronized fun canReserve(
+            count: Int,
+            charge: Long,
+        ): Boolean = count <= maximumEntries - entries && charge <= maximumBytes - bytes
+
         @Synchronized fun reserve(
             count: Int,
             charge: Long,
@@ -248,6 +253,34 @@ internal class NativeFleetOutbox(
             }
         }
         return Handoff(queue?.commands ?: ArrayDeque(), budget)
+    }
+
+    /** Largest ordered reply prefix that fits now. A grant is admitted separately, even with a one-entry queue. */
+    fun offerReplies(
+        machine: Long,
+        replies: List<Command.Reply>,
+    ): Int {
+        checkOwner()
+        for (reply in replies) {
+            require(reply.retainedBytes <= byteLimits.perMachineBytes && reply.retainedBytes <= byteLimits.totalBytes) {
+                "native reply exceeds the configured byte limit"
+            }
+        }
+        val queue = queues[machine]
+        val capacity = maximumCommandsPerMachine - (queue?.commands?.size ?: 0)
+        val remainingBytes = byteLimits.perMachineBytes - (queue?.bytes ?: 0L)
+        var count = 0
+        var bytes = 0L
+        for (reply in replies) {
+            if (count == capacity || reply.retainedBytes > remainingBytes - bytes ||
+                !budget.canReserve(count + 1, bytes + reply.retainedBytes)
+            ) {
+                break
+            }
+            count++
+            bytes += reply.retainedBytes
+        }
+        return if (count > 0 && offer(machine, replies.subList(0, count))) count else 0
     }
 
     /** Either retain the entire batch in order, or retain none of it. */

@@ -6,6 +6,7 @@
 package ru.lazyhat.compukters.core.device.runtime.actor
 
 import ru.lazyhat.compukters.api.addon.ProgramAddonAction
+import ru.lazyhat.compukters.api.addon.ProgramAddonCompletion
 import ru.lazyhat.compukters.api.addon.ProgramAddonDispatch
 import ru.lazyhat.compukters.api.addon.ProgramAddonHost
 import ru.lazyhat.compukters.api.addon.ProgramAddonRequest
@@ -26,6 +27,73 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class ActorProgramComputerStreamingTest {
+    @Test
+    fun `hibernation retries remaining reply prefix without executing Guest`() {
+        val service = Service(1)
+        var captured: ProgramActorHibernation? = null
+        val endpoint = VmActorEndpoint(ComputerId.fromLongs(1, 2), 1)
+        val lease =
+            ProgramRuntimeActorLease(endpoint) { request ->
+                captured = request
+                ProgramActorCloseReservation { CompletableFuture.completedFuture(7) }
+            }
+        val carrier =
+            ActorProgramComputer(
+                service,
+                lease,
+                { RedstoneCommitResult.Committed },
+                addon =
+                    object : TestAddon() {
+                        override fun dispatch(request: ProgramAddonRequest) = ProgramAddonDispatch.Completed(HostResponse.UnitSuccess)
+                    },
+            )
+        carrier.turnOn().join()
+        carrier.serverTick(1)
+        service.queued = 0
+        val observer = assertIs<ProgramRuntimeTurnObserver>(service.completion)
+        observer.addonAction(request(1))
+        observer.addonAction(request(2))
+        observer.complete(reply().copy(state = ProgramRuntimeState.WaitingForInput), null)
+        assertNull(carrier.tryHibernateAsync(1))
+        assertEquals(ProgramRuntimeState.WaitingForInput, carrier.state)
+        assertNull(captured)
+        service.queued = 0
+        assertEquals(7L, checkNotNull(carrier.tryHibernateAsync(1)).join())
+        assertTrue(checkNotNull(captured).effects.isEmpty())
+        assertEquals(listOf(VmHostRequestIdentity(1, 1), VmHostRequestIdentity(1, 2)), service.acceptedReplies)
+        assertEquals(1, service.acceptedTurns)
+    }
+
+    @Test
+    fun `bounded reply prefixes resume a waiting carrier after grant refusal`() {
+        for (capacity in listOf(1, 2)) {
+            val service = Service(capacity)
+            val carrier =
+                computer(
+                    service,
+                    object : TestAddon() {
+                        override fun dispatch(request: ProgramAddonRequest) = ProgramAddonDispatch.Completed(HostResponse.UnitSuccess)
+                    },
+                )
+            carrier.turnOn().join()
+            carrier.serverTick(1)
+            service.queued = 0 // Native worker consumed the initial grant.
+            val observer = assertIs<ProgramRuntimeTurnObserver>(service.completion)
+            observer.addonAction(request(1))
+            observer.addonAction(request(2))
+            observer.complete(reply().copy(state = ProgramRuntimeState.WaitingForInput), null)
+            assertEquals(capacity, service.acceptedReplies.size)
+            assertEquals(1, service.acceptedTurns)
+            for (tick in 2L..4L) {
+                service.queued = 0 // Worker consumes the accepted prefix between ticks.
+                carrier.serverTick(tick)
+            }
+            assertEquals(listOf(VmHostRequestIdentity(1, 1), VmHostRequestIdentity(1, 2)), service.acceptedReplies)
+            assertTrue(service.acceptedTurns > 1)
+            carrier.closeAsync().join()
+        }
+    }
+
     @Test
     fun `refused hibernation retains carrier state addon resources and acknowledged replies`() {
         val service = Service()
@@ -247,7 +315,24 @@ class ActorProgramComputerStreamingTest {
         override fun reset() = Unit
     }
 
-    private class Service : ActorRuntimeService {
+    private class Service(
+        private val replyCapacity: Int? = null,
+    ) : ActorRuntimeService {
+        var queued = 0
+        var acceptedTurns = 0
+        val acceptedReplies = mutableListOf<VmHostRequestIdentity>()
+
+        override fun submitAddonCompletions(
+            endpoint: VmActorEndpoint,
+            completions: List<ProgramAddonCompletion>,
+        ): Int? {
+            val capacity = replyCapacity ?: return null
+            val accepted = minOf(completions.size, capacity - queued)
+            acceptedReplies += completions.take(accepted).map { it.identity }
+            queued += accepted
+            return accepted
+        }
+
         override val redstoneInputCapacity = 1
         var completion: ProgramRuntimeTurnCompletion? = null
         val continuations = mutableListOf<List<ProgramRuntimeActorEffect>>()
@@ -269,6 +354,9 @@ class ActorProgramComputerStreamingTest {
             effects: List<ProgramRuntimeActorEffect>,
             completion: ProgramRuntimeTurnCompletion,
         ): VmActorSubmission {
+            if (replyCapacity != null && queued >= replyCapacity) return VmActorSubmission.MAILBOX_FULL
+            queued++
+            acceptedTurns++
             this.completion = completion
             return VmActorSubmission.ACCEPTED
         }
@@ -279,6 +367,9 @@ class ActorProgramComputerStreamingTest {
             effects: List<ProgramRuntimeActorEffect>,
             completion: ProgramRuntimeTurnCompletion,
         ): Boolean {
+            if (replyCapacity != null && queued >= replyCapacity) return false
+            queued++
+            acceptedTurns++
             continuations += effects
             this.completion = completion
             return true

@@ -742,6 +742,15 @@ class ProgramRuntimeHost internal constructor(
         }
     }
 
+    internal fun observeFleetFailure(
+        fleet: ExperimentalFleetSessionOwner,
+        machine: Long,
+        detail: String,
+    ) {
+        requireFleetOwnership(fleet, machine)
+        state = ProgramRuntimeState.Failed(ProgramFailure.Bridge(detail.take(1024)))
+    }
+
     /** Host schema/scope metadata only; the fleet remains the sole owner of pending native requests. */
     internal fun prepareFleetAddonRequest(
         fleet: ExperimentalFleetSessionOwner,
