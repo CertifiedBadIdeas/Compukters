@@ -114,8 +114,12 @@ single-machine or global byte limit fails explicitly rather than retrying foreve
 
 A native error with a known machine identity fails only that actor's pending turn and queries, cancels its external
 requests and starts its independent close barrier. The same pump continues processing other actors. Stale machine
-errors are ignored; errors without a machine identity remain fleet-wide failures. Empty native execution workers park
-until explicitly signalled by submission or shutdown; output-pressure and detach-fence waits retain bounded polling.
+errors are ignored; errors without a machine identity remain fleet-wide failures. Native execution workers park
+until explicitly signalled by command submission, freed output capacity, lifecycle acknowledgement or shutdown.
+Before parking, a worker retries bounded output publication after its publisher registration. Successful publication
+keeps it runnable while more retained events may fit; it sleeps only when publication cannot progress. Mailbox guards
+are released before sleeping. These rules cover empty workers, output pressure and detach fences without timed polling;
+queue entry and byte reservations remain unchanged.
 
 Stop invalidates the machine identity and cancels outstanding owner work synchronously. An endpoint cancellation
 callback, required explicitly when constructing the service, releases external resources on that thread; the native list of canceled requests is not queued back to the
