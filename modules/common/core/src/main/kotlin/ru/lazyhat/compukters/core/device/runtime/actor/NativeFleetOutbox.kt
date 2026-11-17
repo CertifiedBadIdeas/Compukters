@@ -121,8 +121,11 @@ internal class NativeFleetOutbox(
         }
     }
 
-    private class Queue {
-        val commands = ArrayDeque<Command>()
+    private class Queue(
+        initialCapacity: Int,
+    ) {
+        // Most turns enqueue a single grant; grow only when more commands arrive.
+        val commands = ArrayDeque<Command>(initialCapacity)
         var bytes = 0L
     }
 
@@ -346,7 +349,7 @@ internal class NativeFleetOutbox(
         }
         if (bytes > byteLimits.perMachineBytes - (existing?.bytes ?: 0L) || !budget.reserve(commands.size, bytes)) return false
         val queue =
-            existing ?: Queue().also {
+            existing ?: Queue(commands.size).also {
                 queues[machine] = it
                 ready.addLast(machine)
             }
