@@ -37,6 +37,7 @@ internal class NativeFleetOutbox(
     private val checkOwner: () -> Unit,
     private val nanoTime: () -> Long = System::nanoTime,
     private val byteLimits: NativeFleetOutboxLimits = NativeFleetOutboxLimits(),
+    private val onCommandsReady: () -> Unit = {},
 ) {
     init {
         require(maximumCommands > 0 && maximumCommandsPerMachine > 0)
@@ -127,6 +128,7 @@ internal class NativeFleetOutbox(
 
     private val queues = mutableMapOf<Long, Queue>()
     private val ready = ArrayDeque<Long>()
+    private var notificationPending = false
     private val closing = mutableMapOf<Long, Command.Lifecycle>()
     private val awaitingLifecycle = ArrayDeque<Long>()
     private val budget = Budget(maximumCommands, byteLimits.totalBytes)
@@ -351,6 +353,11 @@ internal class NativeFleetOutbox(
         queue.commands.addAll(commands)
         queue.bytes += bytes
         if (lifecycleIndex >= 0) closing[machine] = commands[lifecycleIndex] as Command.Lifecycle
+        // Notify only; the owner runs native work later within its shared pump budget.
+        if (!notificationPending) {
+            notificationPending = true
+            onCommandsReady()
+        }
         return true
     }
 
@@ -365,6 +372,9 @@ internal class NativeFleetOutbox(
     ): Int {
         checkOwner()
         require(maximumAttempts >= 0)
+        // New admissions can request another pump even if an older mailbox remains busy.
+        // Retrying an existing queue alone must not create a notification spin.
+        notificationPending = false
         var attempts = 0
         var sent = 0
         while (ready.isNotEmpty() && attempts < maximumAttempts &&

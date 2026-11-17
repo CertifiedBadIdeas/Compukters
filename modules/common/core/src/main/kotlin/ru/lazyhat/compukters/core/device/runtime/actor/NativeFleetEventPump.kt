@@ -57,7 +57,7 @@ internal class NativeFleetEventPump(
         return count
     }
 
-    private fun notifyOwner() {
+    fun requestPump() {
         try {
             onResultsReady()
         } catch (error: Exception) {
@@ -69,19 +69,19 @@ internal class NativeFleetEventPump(
         try {
             var generation = initialGeneration
             // An event might have been queued before the initial generation was captured.
-            if (!closed.get()) notifyOwner()
+            if (!closed.get()) requestPump()
             while (!closed.get()) {
                 val changed = fleet.waitEvents(generation, WAIT_MILLIS)
                 if (closed.get()) break
                 if (changed) {
                     generation = fleet.eventGeneration()
-                    notifyOwner()
+                    requestPump()
                 }
             }
         } catch (error: Exception) {
             if (!closed.get()) {
                 failure.set(error)
-                notifyOwner()
+                requestPump()
             }
         } finally {
             waiterStopped.complete(Unit)

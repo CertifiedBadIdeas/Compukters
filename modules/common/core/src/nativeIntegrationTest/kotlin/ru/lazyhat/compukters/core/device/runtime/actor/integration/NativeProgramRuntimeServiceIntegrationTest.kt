@@ -22,7 +22,9 @@ import ru.lazyhat.compukters.lang.runtime.fs.ComputerId
 import ru.lazyhat.compukters.lang.runtime.vm.VmRuntime
 import java.nio.file.Path
 import java.util.concurrent.CompletableFuture
+import java.util.concurrent.LinkedBlockingQueue
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.locks.LockSupport
 import kotlin.io.path.readBytes
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -33,6 +35,43 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class NativeProgramRuntimeServiceIntegrationTest {
+    @Test
+    fun `owner notifications dispatch ordinary grants within the server deadline without another tick`() {
+        install()
+        val notifications = LinkedBlockingQueue<Unit>()
+        NativeProgramRuntimeService(config(), onResultsReady = { notifications.offer(Unit) }).use { service ->
+            val endpoint = endpoint(12)
+            val lease = start(service, endpoint, "timer")
+            var pending: CompletableFuture<ProgramRuntimeActorReply>? = null
+            var tick = 0L
+            val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(3)
+            while (service.runtimeMetrics().retiredInstructionsTotal == 0L && System.nanoTime() < deadline) {
+                val nextTick = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(50)
+                service.pump(32)
+                service.beginCapacityFrame(++tick)
+                if (pending == null || pending.isDone) pending = service.turn(endpoint, tick)
+                service.flushCapacityFrame()
+                var pumpNanos = 0L
+                while (System.nanoTime() < nextTick) {
+                    val wait = nextTick - System.nanoTime()
+                    if (wait <= 0) break
+                    if (pumpNanos < TimeUnit.MILLISECONDS.toNanos(2) && notifications.poll(wait, TimeUnit.NANOSECONDS) != null) {
+                        val started = System.nanoTime()
+                        service.pump(32, started + TimeUnit.MILLISECONDS.toNanos(2) - pumpNanos)
+                        pumpNanos += System.nanoTime() - started
+                    } else {
+                        LockSupport.parkNanos((nextTick - System.nanoTime()).coerceAtLeast(0))
+                    }
+                }
+            }
+            assertTrue(
+                service.runtimeMetrics().retiredInstructionsTotal > 0,
+                "notification must dispatch credit before its 2.5 ms deadline",
+            )
+            lease.closeAsync().get(5, TimeUnit.SECONDS)
+        }
+    }
+
     @Test
     fun `server service bootstraps an artifact and retires only after a capacity frame`() {
         install()

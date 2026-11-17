@@ -32,6 +32,7 @@ import ru.lazyhat.compukters.core.device.runtime.actor.VmCapacityCalibration
 import ru.lazyhat.compukters.core.device.runtime.actor.VmCapacityGovernor
 import ru.lazyhat.compukters.core.device.runtime.actor.VmExecutionBackend
 import ru.lazyhat.compukters.impl.benchmark.VmCapacityCalibrator
+import ru.lazyhat.compukters.impl.compat.enqueueCompuktersTask
 import ru.lazyhat.compukters.impl.config.CompuktersServerConfig
 import java.util.IdentityHashMap
 import java.util.concurrent.CompletableFuture
@@ -190,7 +191,7 @@ internal object NeoForgeVmActorServices {
             calibrator = { service ->
                 VmCapacityCalibrator.start(CompuktersServerConfig.schedulerConfig().workerCount, service.runtimeMetrics().backend)
             },
-            enqueueOnOwner = { server, task -> server.execute(task) },
+            enqueueOnOwner = { server, task -> server.enqueueCompuktersTask(task) },
         )
 
     fun service(server: MinecraftServer): ProgramRuntimeService = registry.service(server)

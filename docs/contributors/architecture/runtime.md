@@ -17,7 +17,7 @@ permalink: /ARCHITECTURE/runtime/
 The asynchronous VM actor scheduler has a server-scoped service registered with NeoForge. Server startup records
 its lifetime; workers are allocated on first use. Publishing a worker result sends a lightweight notification;
 one coalesced server task can deliver ready replies between ordinary tick boundaries. This task and the pre-tick
-fallback share a limit of 1024 delivered results and a 2 ms owner-pump allowance per tick. The time limit is checked
+fallback share a limit of 1024 delivered results and a 2 ms owner-pump allowance per tick. Native outbound commands request the same owner delivery when admitted, so a grant does not wait for a future native event or server tick. Owner delivery is always queued, including notifications originating on the server thread, so it cannot reenter command admission. Admissions coalesce until the next flush attempt; a busy retry alone does not request another owner task. The time limit is checked
 between callbacks; one world callback is not preempted. Workers never execute world actions. Stopping invalidates
 queued notifications and removes the service before closing it, so late callbacks cannot reopen it.
 Production computers attach one actor identified by `ComputerId` and a machine epoch. A full scheduler rejects a new

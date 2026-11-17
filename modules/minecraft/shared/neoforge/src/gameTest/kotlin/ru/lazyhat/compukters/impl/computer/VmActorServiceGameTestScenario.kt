@@ -29,6 +29,7 @@ import ru.lazyhat.compukters.core.device.runtime.actor.VmExecutionBackend
 import ru.lazyhat.compukters.core.device.runtime.program.ProgramRuntimeState
 import ru.lazyhat.compukters.core.device.runtime.program.RedstoneCommitResult
 import ru.lazyhat.compukters.impl.benchmark.VmCapacityCalibrator
+import ru.lazyhat.compukters.impl.compat.enqueueCompuktersTask
 import ru.lazyhat.compukters.impl.fs.WorldFileSystemStoreRegistry
 import ru.lazyhat.compukters.lang.runtime.fs.ComputerId
 import ru.lazyhat.compukters.lang.runtime.fs.VmSystemImage
@@ -73,7 +74,14 @@ internal object VmActorServiceGameTestScenario {
                     )
                 },
                 calibrator = { VmCapacityCalibrator.start(1, it.runtimeMetrics().backend) },
-                enqueueOnOwner = { owner, task -> owner.execute(task) },
+                enqueueOnOwner = { owner, task ->
+                    var enqueued = !owner.isSameThread
+                    owner.enqueueCompuktersTask {
+                        helper.assertTrue(enqueued, "VM notification executed inline during command admission")
+                        task.run()
+                    }
+                    enqueued = true
+                },
             )
         nativeRegistry.start(server)
         val nativeService = nativeRegistry.service(server)
