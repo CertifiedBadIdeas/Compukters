@@ -18,6 +18,9 @@ enum class VmExecutionBackend { JVM, NATIVE }
 abstract class ProgramRuntimeService : AutoCloseable {
     internal abstract val carrierRuntime: ActorRuntimeService
 
+    /** Can progress queued transport with maximumEvents = 0, without delivering observations. */
+    open val supportsCommandOnlyPump: Boolean get() = false
+
     abstract fun attachStandalone(
         endpoint: VmActorEndpoint,
         tickBudget: ProgramTickBudget = ProgramTickBudget(),

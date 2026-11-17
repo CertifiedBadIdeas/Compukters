@@ -17,9 +17,35 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class NativeFleetEventPumpTest {
+    @Test
+    fun `event notifications coalesce until owner has observation allowance while command wakeups remain independent`() {
+        val source = FleetSource()
+        val notifications = LinkedBlockingQueue<Unit>()
+        val delivered = mutableListOf<ExperimentalFleetEvent>()
+        NativeFleetEventPump(source.fleet, {}, { notifications.offer(Unit) }, delivered::add).use { pump ->
+            assertNotNull(notifications.poll(5, TimeUnit.SECONDS))
+            source.publish(ExperimentalFleetEvent.Quiescent(1, 1, 0, false))
+            source.awaitObservation()
+            assertNull(notifications.poll(), "publication must coalesce with the pending initial notification")
+            assertEquals(0, pump.pump(0))
+            source.publish(ExperimentalFleetEvent.Quiescent(2, 1, 0, false))
+            source.awaitObservation()
+            assertNull(notifications.poll(), "zero event allowance must not rearm result notifications")
+            pump.requestPump()
+            assertNotNull(notifications.poll(), "outbound work must still wake the owner independently")
+            assertEquals(1, pump.pump(1))
+            source.publish(ExperimentalFleetEvent.Quiescent(3, 1, 0, false))
+            source.awaitObservation()
+            assertNotNull(notifications.poll(), "reading with observation allowance must rearm readiness")
+            assertEquals(2, pump.pump(8))
+            assertEquals(listOf(1L, 2L, 3L), delivered.map { (it as ExperimentalFleetEvent.Quiescent).machine })
+        }
+    }
+
     @Test
     fun `asynchronous close waits for native wait to end without blocking owner`() {
         val entered = CountDownLatch(1)
@@ -109,6 +135,7 @@ class NativeFleetEventPumpTest {
         private val lock = Object()
         private val events = ArrayDeque<ExperimentalFleetEvent>()
         private var generation = 0L
+        private var observedGeneration = -1L
         val fleet: ExperimentalFleet =
             Proxy.newProxyInstance(
                 ExperimentalFleet::class.java.classLoader,
@@ -126,6 +153,8 @@ class NativeFleetEventPumpTest {
                     "waitEvents" -> {
                         synchronized(lock) {
                             val expected = arguments!![0] as Long
+                            observedGeneration = expected
+                            lock.notifyAll()
                             if (generation == expected) lock.wait((arguments[1] as Int).toLong())
                             generation != expected
                         }
@@ -142,6 +171,16 @@ class NativeFleetEventPumpTest {
                 events.addLast(event)
                 generation++
                 lock.notifyAll()
+            }
+
+        fun awaitObservation() =
+            synchronized(lock) {
+                val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5)
+                while (observedGeneration < generation) {
+                    val remaining = deadline - System.nanoTime()
+                    check(remaining > 0) { "waiter did not observe publication" }
+                    TimeUnit.NANOSECONDS.timedWait(lock, remaining)
+                }
             }
     }
 }

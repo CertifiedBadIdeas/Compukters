@@ -79,6 +79,10 @@ class NativeFleetDispatcherTest {
             assertFalse(dispatcher.outbox.offer(4, listOf(grant)))
             assertTrue(dispatcher.outbox.offer(5, emptyList()))
             assertEquals(4, notifications.get(), "rejected and empty batches must not wake owner")
+            dispatcher.outbox.remove(4)
+            dispatcher.pump(0, 0)
+            assertTrue(dispatcher.outbox.offer(6, listOf(grant)))
+            assertEquals(5, notifications.get(), "a consumed wakeup must rearm even when its queue was fenced")
         } finally {
             releaseWaiter.countDown()
             dispatcher.close()

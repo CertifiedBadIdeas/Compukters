@@ -129,7 +129,7 @@ internal class VmActorServiceRegistry<S : Any>(
         checkOwner(server)
         val service = entry.service ?: return 0
         val remainingNanos = maximumPumpNanosPerTick - entry.spentPumpNanos
-        if (entry.remainingEvents <= 0 || remainingNanos <= 0) {
+        if ((entry.remainingEvents <= 0 && !service.supportsCommandOnlyPump) || remainingNanos <= 0) {
             entry.pumpAllowed.set(false)
             return 0
         }
@@ -137,7 +137,9 @@ internal class VmActorServiceRegistry<S : Any>(
         val events = service.pump(entry.remainingEvents, started + remainingNanos)
         entry.remainingEvents -= events
         entry.spentPumpNanos += (nanoTime() - started).coerceAtLeast(0)
-        if (entry.remainingEvents <= 0 || entry.spentPumpNanos >= maximumPumpNanosPerTick) entry.pumpAllowed.set(false)
+        if ((entry.remainingEvents <= 0 && !service.supportsCommandOnlyPump) || entry.spentPumpNanos >= maximumPumpNanosPerTick) {
+            entry.pumpAllowed.set(false)
+        }
         return events
     }
 

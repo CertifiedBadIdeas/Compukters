@@ -36,6 +36,10 @@ class NativeProgramRuntimeService(
     private val tickBudget: ProgramTickBudget = ProgramTickBudget(),
     private val nanoTime: () -> Long = System::nanoTime,
 ) : ProgramRuntimeService() {
+    override val supportsCommandOnlyPump: Boolean get() = true
+
+    // One bounded pass over the configured outbox capacity, independently of result delivery.
+    private val maximumCommandAttempts = Math.multiplyExact(config.resultCapacityPerWorker, config.workerCount)
     private val owner = Thread.currentThread()
     private val registered = mutableMapOf<VmActorEndpoint, Registration>()
     private val turns = mutableMapOf<VmActorEndpoint, Turn>()
@@ -69,7 +73,7 @@ class NativeProgramRuntimeService(
             ExperimentalFleetConfig(
                 config.workerCount,
                 config.mailboxCapacity,
-                Math.multiplyExact(config.resultCapacityPerWorker, config.workerCount),
+                maximumCommandAttempts,
                 tickBudget.guestBudgetPerAdvance,
                 tickBudget.maintenanceBudgetPerAdvance,
                 tickBudget.hostRequestsPerTick,
@@ -83,7 +87,7 @@ class NativeProgramRuntimeService(
                 NativeFleetActorRuntimeService(
                     fleet,
                     config.maximumActors,
-                    Math.multiplyExact(config.resultCapacityPerWorker, config.workerCount),
+                    maximumCommandAttempts,
                     config.mailboxCapacity,
                     ::checkOwner,
                     onResultsReady,
@@ -381,7 +385,7 @@ class NativeProgramRuntimeService(
         require(maximumEvents >= 0)
         val started = nanoTime()
         retryTurns(maximumEvents, deadlineNanos)
-        val events = runtime.pump(maximumEvents, maximumEvents, deadlineNanos)
+        val events = runtime.pump(maximumEvents, maximumCommandAttempts, deadlineNanos)
         lastPumpEvents = events
         lastPumpNanos = (nanoTime() - started).coerceAtLeast(0)
         return events

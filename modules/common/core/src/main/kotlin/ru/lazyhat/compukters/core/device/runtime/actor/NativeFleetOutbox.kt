@@ -136,6 +136,7 @@ internal class NativeFleetOutbox(
     private val awaitingLifecycle = ArrayDeque<Long>()
     private val budget = Budget(maximumCommands, byteLimits.totalBytes)
     internal val retainedBytes: Long get() = budget.bytes
+    internal val hasPendingCommands: Boolean get() = ready.isNotEmpty()
 
     /** Shared across an ownership handoff; no native call holds this admission lock. */
     internal class Budget(

@@ -74,6 +74,8 @@ internal object VmActorServiceGameTestScenario {
                     )
                 },
                 calibrator = { VmCapacityCalibrator.start(1, it.runtimeMetrics().backend) },
+                // Command delivery must remain live after the single observation slot is spent.
+                maximumEventsPerTick = 1,
                 enqueueOnOwner = { owner, task ->
                     var enqueued = !owner.isSameThread
                     owner.enqueueCompuktersTask {

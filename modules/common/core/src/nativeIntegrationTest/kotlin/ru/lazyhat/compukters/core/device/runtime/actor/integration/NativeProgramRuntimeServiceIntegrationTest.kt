@@ -36,6 +36,31 @@ import kotlin.test.assertTrue
 
 class NativeProgramRuntimeServiceIntegrationTest {
     @Test
+    fun `command only pumps deliver credit before expiry without completing owner observations`() {
+        install()
+        NativeProgramRuntimeService(config()).use { service ->
+            assertTrue(service.supportsCommandOnlyPump)
+            val endpoint = endpoint(13)
+            val lease = start(service, endpoint, "timer")
+            var retired = 0L
+            for (tick in 1L..20L) {
+                service.beginCapacityFrame(tick)
+                val pending = service.turn(endpoint, tick)
+                service.flushCapacityFrame()
+                assertEquals(0, service.pump(0, System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(2)))
+                assertFalse(pending.isDone, "sending credit must not complete an owner observation")
+                // A grant first sent by the later result pump would already have expired.
+                Thread.sleep(10)
+                assertFalse(pending.isDone)
+                retired += await(service, pending).retiredInstructions
+                if (retired > 0) break
+            }
+            assertTrue(retired > 0, "zero-event pumping must send credit before its 2.5 ms deadline")
+            lease.closeAsync().get(5, TimeUnit.SECONDS)
+        }
+    }
+
+    @Test
     fun `owner notifications dispatch ordinary grants within the server deadline without another tick`() {
         install()
         val notifications = LinkedBlockingQueue<Unit>()

@@ -97,6 +97,7 @@ internal class NativeFleetActorRuntimeService(
             onResultsReady,
             ::observe,
             byteLimits,
+            nanoTime,
         )
 
     private val compilations = NativeFleetCompilations(dispatcher.outbox, nanoTime)

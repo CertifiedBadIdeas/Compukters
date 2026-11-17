@@ -24,16 +24,19 @@ internal class NativeFleetDispatcher(
     onResultsReady: () -> Unit,
     deliver: (ExperimentalFleetEvent) -> Unit,
     byteLimits: NativeFleetOutboxLimits = NativeFleetOutboxLimits(),
+    private val nanoTime: () -> Long = System::nanoTime,
 ) : AutoCloseable {
     private var closed = false
+    private var commandTurn = true
     private val events =
-        NativeFleetEventPump(fleet, checkOwner, onResultsReady, deliver)
+        NativeFleetEventPump(fleet, checkOwner, onResultsReady, deliver, nanoTime)
     val outbox =
         NativeFleetOutbox(
             fleet,
             maximumCommands,
             maximumCommandsPerMachine,
             checkOwner,
+            nanoTime = nanoTime,
             byteLimits = byteLimits,
             onCommandsReady = events::requestPump,
         )
@@ -44,9 +47,32 @@ internal class NativeFleetDispatcher(
         maximumCommandAttempts: Int,
         deadlineNanos: Long = Long.MAX_VALUE,
     ): Int {
-        require(maximumCommandAttempts >= 0)
-        val delivered = events.pump(maximumEvents, deadlineNanos)
-        outbox.flush(maximumCommandAttempts, deadlineNanos)
+        require(maximumEvents >= 0 && maximumCommandAttempts >= 0)
+        // Validate owner, lifetime and waiter failure even for command-only or expired pumps.
+        events.pump(0, deadlineNanos)
+        // Acknowledge this wakeup even when its commands were removed by a lifecycle fence.
+        outbox.flush(0, deadlineNanos)
+        var delivered = 0
+        var attempted = 0
+        var idleLanes = 0
+        while (!closed && idleLanes < 2 && (deadlineNanos == Long.MAX_VALUE || nanoTime() - deadlineNanos < 0)) {
+            val send = commandTurn
+            // Retain the other lane's turn if this operation exhausts the deadline or fails.
+            commandTurn = !commandTurn
+            if (send) {
+                if (attempted < maximumCommandAttempts && outbox.hasPendingCommands) {
+                    attempted++
+                    outbox.flush(1, deadlineNanos)
+                    idleLanes = 0
+                } else {
+                    idleLanes++
+                }
+            } else {
+                val count = if (delivered < maximumEvents) events.pump(1, deadlineNanos) else 0
+                delivered += count
+                idleLanes = if (count > 0) 0 else idleLanes + 1
+            }
+        }
         return delivered
     }
 

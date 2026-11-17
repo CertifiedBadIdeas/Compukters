@@ -94,6 +94,16 @@ The owner retains bounded actor and request registries; query maps are allocated
 cancellation does not release admission until the native response arrives or the actor is fenced for stop.
 One fleet waiter serves the service.
 
+Native owner pumping alternates one queued command attempt with one observation, retaining the other
+lane's turn when the shared deadline expires. A busy attempt consumes transport allowance without
+discarding its command. Observation count and transport progress are independent: after the tick's
+observation quota is spent, a native service can still send queued commands with zero event allowance
+within the remaining owner time. Each pump bounds transport attempts by the configured outbox capacity;
+the server does not extend its shared time allowance. JVM services stop when their observation quota is spent.
+Result notifications coalesce until an owner pump has observation allowance again. Command readiness
+remains independent, so a full result quota neither creates empty owner wakeups for every publication
+nor prevents an admitted command from requesting delivery.
+
 Redstone input is acknowledged into the bounded outbox before the next grant, independently of Guest credit,
 so even a one-entry mailbox can deliver input followed by a grant. Refusal retains the carrier's input in order;
 input cannot enter while that actor has a turn in flight. Host replies use the same independently acknowledged

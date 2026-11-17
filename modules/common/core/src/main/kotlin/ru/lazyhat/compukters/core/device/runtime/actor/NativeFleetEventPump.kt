@@ -25,6 +25,7 @@ internal class NativeFleetEventPump(
     private val nanoTime: () -> Long = System::nanoTime,
 ) : AutoCloseable {
     private val closed = AtomicBoolean()
+    private val eventNotificationPending = AtomicBoolean()
     private val failure = AtomicReference<Throwable?>()
     private val waiterStopped = CompletableFuture<Unit>()
     private val initialGeneration = fleet.eventGeneration()
@@ -48,6 +49,8 @@ internal class NativeFleetEventPump(
         require(maximumEvents >= 0)
         check(!closed.get()) { "native fleet event pump is closed" }
         failure.get()?.let { throw IllegalStateException("native fleet notification failed", it) }
+        // Command-only pumping cannot acknowledge an observation it is not allowed to read.
+        if (maximumEvents > 0) eventNotificationPending.set(false)
         var count = 0
         while (count < maximumEvents && (deadlineNanos == Long.MAX_VALUE || nanoTime() - deadlineNanos < 0)) {
             val event = fleet.poll() ?: break
@@ -65,17 +68,21 @@ internal class NativeFleetEventPump(
         }
     }
 
+    private fun requestEventPump() {
+        if (eventNotificationPending.compareAndSet(false, true)) requestPump()
+    }
+
     private fun waitForEvents() {
         try {
             var generation = initialGeneration
             // An event might have been queued before the initial generation was captured.
-            if (!closed.get()) requestPump()
+            if (!closed.get()) requestEventPump()
             while (!closed.get()) {
                 val changed = fleet.waitEvents(generation, WAIT_MILLIS)
                 if (closed.get()) break
                 if (changed) {
                     generation = fleet.eventGeneration()
-                    requestPump()
+                    requestEventPump()
                 }
             }
         } catch (error: Exception) {

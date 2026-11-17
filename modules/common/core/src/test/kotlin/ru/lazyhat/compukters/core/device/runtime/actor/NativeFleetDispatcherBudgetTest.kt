@@ -1,0 +1,175 @@
+/*
+ * The Compukters Developers
+ * Copyright 2026 Vsevolod Petrov (lazyhat)
+ * Licensed under the Apache License, Version 2.0.
+ */
+package ru.lazyhat.compukters.core.device.runtime.actor
+
+import ru.lazyhat.compukters.lang.runtime.vm.ExperimentalFleet
+import ru.lazyhat.compukters.lang.runtime.vm.ExperimentalFleetEvent
+import ru.lazyhat.compukters.lang.runtime.vm.VmFleetBusyException
+import java.lang.reflect.Proxy
+import java.util.ArrayDeque
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
+import kotlin.test.assertTrue
+
+class NativeFleetDispatcherBudgetTest {
+    @Test
+    fun `continuous callbacks and commands both progress when one operation consumes a pump deadline`() {
+        Source(operationNanos = 1_000).use { source ->
+            repeat(8) { index ->
+                source.publish(index + 1L)
+                source.offer(index + 1L)
+            }
+            repeat(4) {
+                source.dispatcher.pump(8, 8, source.now + 1_000)
+            }
+            assertTrue(source.sent.isNotEmpty(), "ready observations must not starve accepted commands")
+            assertTrue(source.delivered.isNotEmpty(), "accepted commands must not starve ready observations")
+            assertEquals(4, source.sent.size + source.delivered.size, "no second operation starts after the deadline")
+            assertEquals(source.sent.sorted(), source.sent)
+            assertEquals(source.delivered.sorted(), source.delivered)
+        }
+    }
+
+    @Test
+    fun `zero event allowance still sends commands and busy attempts consume their own allowance`() {
+        Source().use { source ->
+            source.publish(9)
+            for (machine in 1L..3L) source.offer(machine)
+            source.busy = setOf(1L)
+            assertEquals(0, source.dispatcher.pump(0, 2))
+            assertEquals(listOf(1L, 2L), source.attempted)
+            assertEquals(listOf(2L), source.sent)
+            assertEquals(0, source.polls)
+            source.busy = emptySet()
+            assertEquals(0, source.dispatcher.pump(0, 8))
+            assertEquals(listOf(2L, 3L, 1L), source.sent)
+            assertEquals(0L, source.dispatcher.outbox.retainedBytes)
+            assertEquals(1, source.dispatcher.pump(1, 0))
+            assertEquals(listOf(9L), source.delivered)
+        }
+    }
+
+    @Test
+    fun `event and transport allowances are independent and commands admitted by callbacks can use free attempts`() {
+        Source().use { source ->
+            source.publish(1)
+            source.onDelivery = { source.offer(1) }
+            assertEquals(1, source.dispatcher.pump(1, 1))
+            assertEquals(listOf(1L), source.sent)
+            source.onDelivery = null
+            for (machine in 2L..4L) {
+                source.publish(machine)
+                source.offer(machine)
+            }
+            assertEquals(2, source.dispatcher.pump(2, 1))
+            assertEquals(listOf(1L, 2L), source.sent)
+            assertEquals(listOf(1L, 2L, 3L), source.delivered)
+            assertEquals(1, source.dispatcher.pump(1, 2))
+            assertEquals(listOf(1L, 2L, 3L, 4L), source.sent)
+        }
+    }
+
+    @Test
+    fun `closing from an observation fences commands admitted by that callback`() {
+        Source().use { source ->
+            source.publish(1)
+            source.onDelivery = {
+                source.offer(2)
+                source.dispatcher.closeAsync()
+            }
+            assertEquals(1, source.dispatcher.pump(2, 2))
+            assertTrue(source.sent.isEmpty())
+        }
+    }
+
+    @Test
+    fun `expired or closed pumps cannot submit commands even without an event allowance`() {
+        Source().use { source ->
+            source.offer(1)
+            assertEquals(0, source.dispatcher.pump(0, 1, source.now))
+            assertTrue(source.sent.isEmpty())
+            source.releaseWaiter.countDown()
+            source.dispatcher.close()
+            assertFailsWith<IllegalStateException> { source.dispatcher.pump(0, 1) }
+            assertTrue(source.sent.isEmpty())
+        }
+    }
+
+    private class Source(
+        private val operationNanos: Long = 0,
+    ) : AutoCloseable {
+        var now = 0L
+        var polls = 0
+        var busy: Set<Long> = emptySet()
+        var onDelivery: (() -> Unit)? = null
+        val attempted = mutableListOf<Long>()
+        val sent = mutableListOf<Long>()
+        val delivered = mutableListOf<Long>()
+        val releaseWaiter = CountDownLatch(1)
+        private val ready = ArrayDeque<ExperimentalFleetEvent.Quiescent>()
+        private val fleet =
+            Proxy.newProxyInstance(ExperimentalFleet::class.java.classLoader, arrayOf(ExperimentalFleet::class.java)) { _, method, args ->
+                when (method.name) {
+                    "eventGeneration" -> {
+                        0L
+                    }
+
+                    "waitEvents" -> {
+                        check(releaseWaiter.await(5, TimeUnit.SECONDS))
+                        false
+                    }
+
+                    "poll" -> {
+                        polls++
+                        ready.pollFirst()
+                    }
+
+                    "grant" -> {
+                        val machine = args!![0] as Long
+                        attempted.add(machine)
+                        now += operationNanos
+                        if (machine in busy) throw VmFleetBusyException("full")
+                        sent.add(machine)
+                        Unit
+                    }
+
+                    else -> {
+                        error("unexpected method ${method.name}")
+                    }
+                }
+            } as ExperimentalFleet
+        val dispatcher =
+            NativeFleetDispatcher(
+                fleet,
+                16,
+                4,
+                {},
+                {},
+                {
+                    delivered.add((it as ExperimentalFleetEvent.Quiescent).machine)
+                    now += operationNanos
+                    onDelivery?.invoke()
+                },
+                nanoTime = { now },
+            )
+
+        fun publish(machine: Long) {
+            ready.addLast(ExperimentalFleetEvent.Quiescent(machine, 1, 0, false))
+        }
+
+        fun offer(machine: Long) {
+            assertTrue(dispatcher.outbox.offer(machine, listOf(NativeFleetOutbox.Command.Grant(1, 4096, Long.MAX_VALUE))))
+        }
+
+        override fun close() {
+            releaseWaiter.countDown()
+            dispatcher.close()
+        }
+    }
+}
