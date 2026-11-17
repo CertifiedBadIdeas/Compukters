@@ -675,36 +675,6 @@ class ProgramRuntimeActorService(
     }
 }
 
-/** Internal owner-delivered turn result. A rejected submission never invokes this callback. */
-internal fun interface ProgramRuntimeTurnCompletion {
-    fun complete(
-        reply: ProgramRuntimeActorReply?,
-        failure: Throwable?,
-    )
-}
-
-/** Owner-delivered actions may arrive before final credit settlement; they do not finish the turn. */
-internal interface ProgramRuntimeTurnObserver : ProgramRuntimeTurnCompletion {
-    fun addonAction(action: ProgramAddonAction)
-
-    /** Null preserves external routing for observers that do not own world ports. */
-    fun worldRequest(request: ProgramWorldRequest): ProgramWorldResult? = null
-}
-
-open class ProgramRuntimeActorRequestException(
-    val submission: VmActorSubmission,
-) : IllegalStateException("runtime actor request was not accepted: $submission")
-
-/** Close was not admitted; the carrier still owns its live resources and may retry on its owner. */
-class ProgramActorCloseDeferredException : ProgramRuntimeActorRequestException(VmActorSubmission.MAILBOX_FULL)
-
-class ProgramRuntimeActorFailedException(
-    val endpoint: VmActorEndpoint,
-    cause: Throwable,
-) : IllegalStateException("runtime actor failed: $endpoint", cause)
-
-class ProgramRuntimeActorServiceClosedException : IllegalStateException("runtime actor service is closed")
-
 internal class ActorRedstoneHostPort : RedstoneHostPort {
     private var requestedOutput: Int? = null
 

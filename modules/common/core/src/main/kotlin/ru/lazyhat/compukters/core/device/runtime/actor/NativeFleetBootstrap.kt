@@ -52,7 +52,7 @@ internal class NativeFleetBootstrap(
         lease: ProgramRuntimeActorLease? = null,
     ): ProgramRuntimeActorLease {
         checkOwner()
-        val entry = Entry(endpoint, host, ProgramRuntimeActorProcessor(host))
+        val entry = Entry(endpoint, host, ProgramRuntimeBootstrapProcessor(host))
         entry.lease = lease ?: ProgramRuntimeActorLease(endpoint) { request -> prepareLeaseClose(endpoint, request) }
         entries[endpoint] = entry
         return entry.lease
@@ -361,7 +361,7 @@ internal class NativeFleetBootstrap(
     class Entry(
         val endpoint: VmActorEndpoint,
         val host: ProgramRuntimeHost,
-        val processor: ProgramRuntimeActorProcessor,
+        val processor: ProgramRuntimeBootstrapProcessor,
     ) {
         val closed = CompletableFuture<Long?>()
         lateinit var lease: ProgramRuntimeActorLease
