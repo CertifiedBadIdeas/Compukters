@@ -374,29 +374,43 @@ internal class NativeFleetOutbox(
         maximumAttempts: Int,
         deadlineNanos: Long = Long.MAX_VALUE,
     ): Int {
-        checkOwner()
         require(maximumAttempts >= 0)
-        // New admissions can request another pump even if an older mailbox remains busy.
-        // Retrying an existing queue alone must not create a notification spin.
-        notificationPending = false
+        beginFlush()
         var attempts = 0
         var sent = 0
         while (ready.isNotEmpty() && attempts < maximumAttempts &&
             (deadlineNanos == Long.MAX_VALUE || nanoTime() - deadlineNanos < 0)
         ) {
-            val machine = ready.removeFirst()
-            val queue = checkNotNull(queues[machine])
-            val commands = queue.commands
             attempts++
+            if (sendNext()) sent++
+        }
+        return sent
+    }
+
+    /** Acknowledge once before an owner-controlled attempt loop, including empty queues. */
+    internal fun beginFlush() {
+        checkOwner()
+        // New admissions can request another pump even if an older mailbox remains busy.
+        // Retrying an existing queue alone must not create a notification spin.
+        notificationPending = false
+    }
+
+    /** One attempt from a nonempty queue; the owning loop checks its allowance first. */
+    internal fun sendNext(): Boolean {
+        val machine = ready.removeFirst()
+        val queue = checkNotNull(queues[machine])
+        val commands = queue.commands
+        val sent =
             try {
                 commands.first.send(fleet, machine)
                 val accepted = commands.removeFirst()
                 if (accepted is Command.Lifecycle) awaitingLifecycle.addLast(machine)
                 queue.bytes -= accepted.retainedBytes
                 budget.release(1, accepted.retainedBytes)
-                sent++
+                true
             } catch (_: VmFleetBusyException) {
                 // The operation was not accepted, so it remains at the head.
+                false
             } catch (error: Exception) {
                 ready.addFirst(machine)
                 throw NativeFleetCommandException(machine, error)
@@ -404,8 +418,7 @@ internal class NativeFleetOutbox(
                 ready.addFirst(machine)
                 throw error
             }
-            if (commands.isEmpty()) queues.remove(machine) else ready.addLast(machine)
-        }
+        if (commands.isEmpty()) queues.remove(machine) else ready.addLast(machine)
         return sent
     }
 

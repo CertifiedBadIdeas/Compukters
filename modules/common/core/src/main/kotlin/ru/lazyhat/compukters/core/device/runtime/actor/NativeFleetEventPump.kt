@@ -45,19 +45,36 @@ internal class NativeFleetEventPump(
         maximumEvents: Int,
         deadlineNanos: Long = Long.MAX_VALUE,
     ): Int {
-        checkOwner()
-        require(maximumEvents >= 0)
-        check(!closed.get()) { "native fleet event pump is closed" }
-        failure.get()?.let { throw IllegalStateException("native fleet notification failed", it) }
-        // Command-only pumping cannot acknowledge an observation it is not allowed to read.
-        if (maximumEvents > 0) eventNotificationPending.set(false)
+        beginPump(maximumEvents)
         var count = 0
         while (count < maximumEvents && (deadlineNanos == Long.MAX_VALUE || nanoTime() - deadlineNanos < 0)) {
-            val event = fleet.poll() ?: break
+            if (!pollNext()) break
             count++
-            deliver(event)
         }
         return count
+    }
+
+    /** Validate and acknowledge once before an owner-controlled delivery loop. */
+    internal fun beginPump(maximumEvents: Int) {
+        checkOwner()
+        require(maximumEvents >= 0)
+        checkOpen()
+        // Command-only pumping cannot acknowledge an observation it is not allowed to read.
+        if (maximumEvents > 0) eventNotificationPending.set(false)
+    }
+
+    /** The owning loop has validated the pump and checks its allowance before each call. */
+    internal fun pollNext(): Boolean {
+        checkOpen()
+        eventNotificationPending.set(false)
+        val event = fleet.poll() ?: return false
+        deliver(event)
+        return true
+    }
+
+    private fun checkOpen() {
+        check(!closed.get()) { "native fleet event pump is closed" }
+        failure.get()?.let { throw IllegalStateException("native fleet notification failed", it) }
     }
 
     fun requestPump() {

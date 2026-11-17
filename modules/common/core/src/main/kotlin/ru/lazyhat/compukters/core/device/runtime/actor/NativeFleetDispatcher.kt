@@ -49,9 +49,9 @@ internal class NativeFleetDispatcher(
     ): Int {
         require(maximumEvents >= 0 && maximumCommandAttempts >= 0)
         // Validate owner, lifetime and waiter failure even for command-only or expired pumps.
-        events.pump(0, deadlineNanos)
+        events.beginPump(0)
         // Acknowledge this wakeup even when its commands were removed by a lifecycle fence.
-        outbox.flush(0, deadlineNanos)
+        outbox.beginFlush()
         var delivered = 0
         var attempted = 0
         var idleLanes = 0
@@ -62,13 +62,13 @@ internal class NativeFleetDispatcher(
             if (send) {
                 if (attempted < maximumCommandAttempts && outbox.hasPendingCommands) {
                     attempted++
-                    outbox.flush(1, deadlineNanos)
+                    outbox.sendNext()
                     idleLanes = 0
                 } else {
                     idleLanes++
                 }
             } else {
-                val count = if (delivered < maximumEvents) events.pump(1, deadlineNanos) else 0
+                val count = if (delivered < maximumEvents && events.pollNext()) 1 else 0
                 delivered += count
                 idleLanes = if (count > 0) 0 else idleLanes + 1
             }
