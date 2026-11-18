@@ -15,8 +15,9 @@ import java.nio.ByteOrder
 class ExperimentalJniFleet private constructor(
     private val bridge: JniBridge,
     @Volatile private var handle: Long,
-    override val coordinatedTurns: Boolean,
+    override val executionMode: FleetExecutionMode,
 ) : ExperimentalFleetCommandTransport {
+    override val coordinatedTurns: Boolean get() = executionMode == FleetExecutionMode.COORDINATED_TURNS
     private val output = ByteArray(1_048_576)
     private val eventInput = ByteBuffer.wrap(output)
     private val written = LongArray(1)
@@ -67,6 +68,13 @@ class ExperimentalJniFleet private constructor(
     override fun grant(machine: Long, tick: Long, retirements: Int, deadlineNanos: Long) {
         val remainingNanos = if (deadlineNanos == Long.MAX_VALUE) -1 else (deadlineNanos - System.nanoTime()).coerceAtLeast(0)
         success("grant", JniExperimentalFleet.grant(active(), machine, tick, retirements, remainingNanos))
+    }
+
+    @Synchronized
+    override fun grantFrame(machine: Long, tick: Long, retirements: Int, executionNanos: Long, authorizedUntilNanos: Long) {
+        require(machine >= 0 && tick >= 0 && retirements >= 0 && executionNanos >= 0)
+        val remaining = (authorizedUntilNanos - System.nanoTime()).coerceAtLeast(0)
+        success("grant frame", JniExperimentalFleet.grantFrame(active(), machine, tick, retirements, executionNanos, remaining))
     }
 
     @Synchronized
@@ -254,13 +262,13 @@ class ExperimentalJniFleet private constructor(
                 "create",
                 JniExperimentalFleet.create(
                     empty, byteArrayOf(1, 0), 0,
-                    intArrayOf(config.workers, config.mailboxCapacity, config.eventCapacity, config.guestBudget, config.maintenanceBudget, config.hostBudget, config.advancesPerTick, if (config.coordinatedTurns) 1 else 0),
+                    intArrayOf(config.workers, config.mailboxCapacity, config.eventCapacity, config.guestBudget, config.maintenanceBudget, config.hostBudget, config.advancesPerTick, config.executionMode.wireValue),
                     capability?.namespace?.encodeToByteArray() ?: empty,
                     capability?.name?.encodeToByteArray() ?: empty,
                     detail, capability?.abiMajor ?: 0, capability?.abiMinor ?: 0, config.inspection?.operation ?: 0, output,
                 ),
             )
-            return ExperimentalJniFleet(bridge, output[0], config.coordinatedTurns)
+            return ExperimentalJniFleet(bridge, output[0], config.executionMode)
         }
 
         private fun success(operation: String, status: Int) = requireFleetSuccess(operation, status)

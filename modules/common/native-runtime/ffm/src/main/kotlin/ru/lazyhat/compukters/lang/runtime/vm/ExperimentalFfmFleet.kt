@@ -22,8 +22,9 @@ class ExperimentalFfmFleet private constructor(
     private val arena: Arena,
     private var handle: Long,
     private val calls: Calls,
-    override val coordinatedTurns: Boolean,
+    override val executionMode: FleetExecutionMode,
 ) : ExperimentalFleetCommandTransport {
+    override val coordinatedTurns: Boolean get() = executionMode == FleetExecutionMode.COORDINATED_TURNS
     private val output = arena.allocate(1_048_576)
     private val eventInput = output.asByteBuffer()
     private val written = arena.allocate(ValueLayout.JAVA_LONG)
@@ -75,6 +76,13 @@ class ExperimentalFfmFleet private constructor(
         require(machine >= 0 && tick >= 0 && retirements >= 0)
         val remaining = if (deadlineNanos == Long.MAX_VALUE) -1L else (deadlineNanos - System.nanoTime()).coerceAtLeast(0)
         success("grant", calls.grant.invokeExact(active(), machine, tick, retirements, remaining) as Int)
+    }
+
+    @Synchronized
+    override fun grantFrame(machine: Long, tick: Long, retirements: Int, executionNanos: Long, authorizedUntilNanos: Long) {
+        require(machine >= 0 && tick >= 0 && retirements >= 0 && executionNanos >= 0)
+        val remaining = (authorizedUntilNanos - System.nanoTime()).coerceAtLeast(0)
+        success("grant frame", calls.grantFrame.invokeExact(active(), machine, tick, retirements, executionNanos, remaining) as Int)
     }
 
     @Synchronized
@@ -313,7 +321,7 @@ class ExperimentalFfmFleet private constructor(
     private fun active(): Long = handle.takeIf { it != 0L } ?: error("fleet is closed")
 
     private class Calls(val commands: MethodHandle, val attach: MethodHandle, val attachTimers: MethodHandle, val recover: MethodHandle,
-        val grant: MethodHandle, val detach: MethodHandle, val detachTimers: MethodHandle,
+        val grant: MethodHandle, val grantFrame: MethodHandle, val detach: MethodHandle, val detachTimers: MethodHandle,
         val stop: MethodHandle, val requestLifecycle: MethodHandle, val poll: MethodHandle, val pollLifecycle: MethodHandle, val close: MethodHandle,
         val generation: MethodHandle, val waitEvents: MethodHandle,
         val reply: MethodHandle, val replyFailure: MethodHandle, val resolveCost: MethodHandle, val compilation: MethodHandle,
@@ -326,7 +334,9 @@ class ExperimentalFfmFleet private constructor(
 
         fun open(bridge: LowLevelVmBridge, workers: Int, mailboxCapacity: Int, eventCapacity: Int,
             guestBudget: Int, maintenanceBudget: Int, hostBudget: Int, advancesPerTick: Int,
-            inspection: ExperimentalRequestInspection? = null, coordinatedTurns: Boolean = false): ExperimentalFfmFleet {
+            inspection: ExperimentalRequestInspection? = null, coordinatedTurns: Boolean = false,
+            executionMode: FleetExecutionMode = if (coordinatedTurns) FleetExecutionMode.COORDINATED_TURNS else FleetExecutionMode.INDEPENDENT): ExperimentalFfmFleet {
+            require(!coordinatedTurns || executionMode == FleetExecutionMode.COORDINATED_TURNS)
             require(bridge is FfmBridge) { "fleet requires an FFM bridge" }
             require(workers in 1..64 && mailboxCapacity in 1..65536 && eventCapacity in 1..65536 &&
                 guestBudget > 0 && maintenanceBudget >= 0 && hostBudget > 0 && advancesPerTick > 0) { "invalid fleet configuration" }
@@ -344,7 +354,7 @@ class ExperimentalFfmFleet private constructor(
                 val create = call("create", p, p)
                 val createInspected = call("create_inspection", p, p, l, p, l, p, l, i, i, i, p)
                 val calls = Calls(call("commands_v1", l, p, l, p, l), call("attach", l, l, p), call("attach_timers", l, l, l, p, l, p),
-                    call("recover", l, l, p), call("grant", l, l, l, i, l), call("detach", l, l),
+                    call("recover", l, l, p), call("grant", l, l, l, i, l), call("grant_frame", l, l, l, i, l, l), call("detach", l, l),
                     call("detach_timers", l, l, l), call("stop", l, l), call("request_lifecycle", l, l, i, l), call("poll", l, p, l, p), call("poll_lifecycle", l, l, p, l, p), call("close", l),
                     call("event_generation", l, p), call("wait_events", l, l, i, p),
                     call("reply", l, l, i, l, p, l), call("reply_failure", l, l, i, l, i, p, l),
@@ -354,7 +364,7 @@ class ExperimentalFfmFleet private constructor(
                     call("filesystem", l, l, l, i, p, l, p, l, l, i, l), call("deployment", l, l, l, i, p, l, l, l))
                 closeCall = calls.close
                 val config = arena.allocate(ValueLayout.JAVA_INT, 8)
-                intArrayOf(workers, mailboxCapacity, eventCapacity, guestBudget, maintenanceBudget, hostBudget, advancesPerTick, if (coordinatedTurns) 1 else 0)
+                intArrayOf(workers, mailboxCapacity, eventCapacity, guestBudget, maintenanceBudget, hostBudget, advancesPerTick, executionMode.wireValue)
                     .forEachIndexed { index, value -> config.setAtIndex(ValueLayout.JAVA_INT, index.toLong(), value) }
                 val result = arena.allocate(ValueLayout.JAVA_LONG)
                 val status = if (inspection == null) {
@@ -373,7 +383,7 @@ class ExperimentalFfmFleet private constructor(
                 }
                 success("create", status)
                 createdHandle = result.get(ValueLayout.JAVA_LONG, 0)
-                return ExperimentalFfmFleet(bridge, arena, createdHandle, calls, coordinatedTurns)
+                return ExperimentalFfmFleet(bridge, arena, createdHandle, calls, executionMode)
             } catch (failure: Throwable) {
                 if (createdHandle != 0L) {
                     try { closeCall!!.invokeExact(createdHandle) as Int } catch (closeFailure: Throwable) { failure.addSuppressed(closeFailure) }

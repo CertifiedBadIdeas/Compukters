@@ -641,7 +641,7 @@ internal class JniBridge private constructor() : LowLevelVmBridge {
                 System.load(path.toString())
                 loadedLibrary = path
             }
-            if (JniNative.abiVersion() != 28) throw VmBridgeException("unsupported Compukter JNI ABI")
+            if (JniNative.abiVersion() != 29) throw VmBridgeException("unsupported Compukter JNI ABI")
             return JniBridge()
         }
     }

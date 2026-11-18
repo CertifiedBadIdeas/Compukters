@@ -86,7 +86,7 @@ internal class FfmBridge private constructor(
     override fun openExperimentalFleet(config: ExperimentalFleetConfig): ExperimentalFleet =
         ExperimentalFfmFleet.open(this, config.workers, config.mailboxCapacity, config.eventCapacity,
             config.guestBudget, config.maintenanceBudget, config.hostBudget, config.advancesPerTick,
-            config.inspection, config.coordinatedTurns)
+            config.inspection, config.coordinatedTurns, config.executionMode)
 
     private var fleetUsers = 0
     private var closed = false
@@ -1174,7 +1174,7 @@ internal class FfmBridge private constructor(
                     terminalTextHandle =
                         downcall(FfmAbiFunction.TERMINAL_TEXT),
                 ).also { bridge ->
-                    if (bridge.abiVersion() != 28) throw VmBridgeException("unsupported Compukter FFM ABI")
+                    if (bridge.abiVersion() != 29) throw VmBridgeException("unsupported Compukter FFM ABI")
                 }
             } catch (error: Throwable) {
                 arena.close()

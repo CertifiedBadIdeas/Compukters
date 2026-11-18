@@ -8,6 +8,12 @@ package ru.lazyhat.compukters.lang.runtime.vm
 import ru.lazyhat.compukters.lang.runtime.capability.HostResponse
 import ru.lazyhat.compukters.lang.runtime.fs.VmVirtualPath
 
+enum class FleetExecutionMode(val wireValue: Int) {
+    INDEPENDENT(0),
+    COORDINATED_TURNS(1),
+    AUTONOMOUS_FRAMES(2),
+}
+
 data class ExperimentalFleetConfig(
     val workers: Int,
     val mailboxCapacity: Int,
@@ -18,7 +24,12 @@ data class ExperimentalFleetConfig(
     val advancesPerTick: Int,
     val inspection: ExperimentalRequestInspection? = null,
     val coordinatedTurns: Boolean = false,
-)
+    val executionMode: FleetExecutionMode = if (coordinatedTurns) FleetExecutionMode.COORDINATED_TURNS else FleetExecutionMode.INDEPENDENT,
+) {
+    init {
+        require(!coordinatedTurns || executionMode == FleetExecutionMode.COORDINATED_TURNS)
+    }
+}
 
 /** Common asynchronous transport for the experimental native scheduler. */
 interface ExperimentalFleet :
@@ -26,6 +37,19 @@ interface ExperimentalFleet :
     AutoCloseable {
     /** When true, external replies cannot resume Guest execution before the next grant. */
     val coordinatedTurns: Boolean
+    val executionMode: FleetExecutionMode
+        get() = if (coordinatedTurns) FleetExecutionMode.COORDINATED_TURNS else FleetExecutionMode.INDEPENDENT
+
+    /** Worker-shared accumulated execution time; authorization expires independently. */
+    fun grantFrame(
+        machine: Long,
+        tick: Long,
+        retirements: Int,
+        executionNanos: Long,
+        authorizedUntilNanos: Long,
+    ) {
+        throw UnsupportedOperationException("autonomous frame grants are unavailable")
+    }
 
     fun grant(
         machine: Long,

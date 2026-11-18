@@ -28,6 +28,48 @@ class FfmExperimentalFleetIntegrationTest {
 
 
     @Test
+    fun `autonomous frame resumes inspection and host reply without another grant`() {
+        val library = Path.of(requireNotNull(System.getProperty("compukter.ffi.library")))
+        val artifact = Path.of(requireNotNull(System.getProperty("compukters.fleet.host.fixture"))).readBytes()
+        val capability = CapabilityIdentity("app", "entry", 1, 2)
+        val schema = HostCapabilitySchema(capability, listOf(HostOperationSchema(emptyList(), HostValueType.UNIT, true)))
+        val bridge = FfmBridge.open(library)
+        val fleet = bridge.openExperimentalFleet(ExperimentalFleetConfig(1, 32, 32, 128, 64, 64, 32,
+            ExperimentalRequestInspection(capability, 0, "request exceeds budget"),
+            executionMode = FleetExecutionMode.AUTONOMOUS_FRAMES))
+        val session = VmSession.open(artifact, listOf(schema), bridge)
+        val machine = session.transferToFleet(fleet)
+        val deadline = System.nanoTime() + 5_000_000_000L
+        fun nextEvent(): ExperimentalFleetEvent {
+            while (System.nanoTime() < deadline) {
+                fleet.poll()?.let { return it }
+                Thread.yield()
+            }
+            error("timed out waiting for autonomous fleet event")
+        }
+        try {
+            assertEquals(FleetExecutionMode.AUTONOMOUS_FRAMES, fleet.executionMode)
+            fleet.grantFrame(machine, 1, 256, 1_000_000_000L, deadline)
+            val inspection = nextEvent() as ExperimentalFleetEvent.Inspection
+            // Waiting reports are observations; consuming them does not revoke credit.
+            assertTrue(nextEvent() is ExperimentalFleetEvent.Quiescent)
+            fleet.resolveCost(machine, inspection.request.identity, 1)
+            var event = nextEvent()
+            while (event is ExperimentalFleetEvent.Quiescent) event = nextEvent()
+            assertTrue((event as ExperimentalFleetEvent.Outcome).outcome is VmOutcome.HostRequestBatch)
+            fleet.reply(machine, inspection.request.identity, HostResponse.UnitSuccess)
+            event = nextEvent()
+            while (event is ExperimentalFleetEvent.Quiescent) event = nextEvent()
+            assertEquals(VmOutcome.Halted(null), (event as ExperimentalFleetEvent.Outcome).outcome)
+        } finally {
+            fleet.stop(machine)
+            while (nextEvent() !is ExperimentalFleetEvent.Stopped) { }
+            session.close()
+            fleet.close()
+        }
+    }
+
+    @Test
     fun `scalar batch reports each admission and rejects malformed suffix before any command`() {
         val artifact = Path.of(requireNotNull(System.getProperty("compukters.fleet.timer.fixture"))).readBytes()
         FfmBridge.open(Path.of(requireNotNull(System.getProperty("compukter.ffi.library")))).use { bridge ->

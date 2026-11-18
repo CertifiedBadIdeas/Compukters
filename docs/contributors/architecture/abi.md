@@ -11,20 +11,41 @@ permalink: /ARCHITECTURE/abi/
 
 This reference groups versioned representation boundaries by the version that introduced them. Those versions are minimum feature requirements, not a claim that older Runtime distributions implement today’s platform. The source owners below define the active contract. Before changing a wire format, inspect each producer, consumer and verifier. Runtime release pins in `build-scripts/src/main/kotlin/RuntimeBundleSupport.kt` describe published bundles separately from the local VM checkout.
 
+## Autonomous native frame grants (C ABI 29)
+
+Fleet configuration word 7 selects independent execution (0), coordinated turns (1), or autonomous
+frames (2). The explicit `compukter_experimental_fleet_grant_frame` export and JNI `grantFrame` accept
+instruction credit, a nonnegative accumulated execution-time allowance and a separate nonnegative
+relative authorization duration. Legacy `grant` retains its wall-clock deadline meaning and is rejected
+by autonomous fleets; frame grants are rejected by legacy fleets. Kotlin supplies an absolute
+`System.nanoTime` authorization limit and transports convert it immediately before admission.
+
+Within autonomous mode, one time allowance belongs to a worker and tick, shared by its machines.
+Only a newer tick replenishes it. Duplicate/stale grants and replies never create credit, and an older
+actor frame cannot use a newer worker frame's credit. Native slices charge monotonic elapsed duration,
+including maintenance and possible OS descheduling; queue and host waiting charge nothing. One bounded
+slice can overrun and is charged in full. Expiring execution authorization remains independent of this
+compute allowance so server pause cannot leave Guest execution indefinitely authorized. Quiescent
+reports are observations in this mode and do not require another Grant before a reply/cost result can
+resume eligible execution. Coordinated low-level entrypoints retain their explicit turn boundary.
+
 ## Native fleet scalar command batches
 
 The source-matched scheduler transports implement `ExperimentalFleetCommandTransport` and experimental
 `compukter_experimental_fleet_commands_v1(handle, input, length, output, capacity)` (JNI: `commandsV1`).
-This explicitly versioned experimental extension requires matching native/JVM builds; released session
-C ABI 28, Guest artifacts and checkpoints are unchanged. Production service creation requires the batch
+This explicitly versioned experimental extension requires matching native/JVM builds; source session
+C ABI 29. Guest artifact and checkpoint codec versions are unchanged. Production service creation requires the batch
 capability. Missing native symbols fail explicitly. JNI checks `commandBatchVersion()` before creating the fleet;
 FFM resolves the versioned export before allocation of native workers.
 
 Input is little-endian: version `u32=1`, count `u32` in 1..16, then count 40-byte records:
-`machine:u64, tag:u32, argument:u32, value:u64, extra:i64, reserved:u64=0`.
+`machine:u64, tag:u32, argument:u32, value:u64, extra:i64, authorization:u64=0`.
 Tags: 0 grants (`argument` retirements, `value` tick, `extra` remaining nanoseconds or -1 for no deadline);
 1 resolves cost (`argument` task, `value` request, `extra` positive units); 2/3 submit input/confirm output
-(`argument` packed redstone, `value=extra=0`). Machine IDs must be distinct; all fields retain scalar
+(`argument` packed redstone, `value=extra=0`); 4 grants an autonomous frame
+(`argument` retirements, `value` tick, `extra` nonnegative execution nanoseconds,
+`authorization` nonnegative remaining authorization nanoseconds). The last field is zero for other tags.
+Machine IDs must be distinct; all fields retain scalar
 validation limits. The whole input is validated before any admission. Output has at least count writable
 bytes, each the ordinary native status for that record: 0 accepted, 7 mailbox full, other values permanent
 errors. A valid batch returns global success even with mixed per-machine outcomes; malformed input has
@@ -626,7 +647,7 @@ Protocol 17 workers are rejected at handshake; compiler, platform, artifact and 
 | Boundary | Current representation | Owner |
 | --- | --- | --- |
 | Executable container | Format 3; covariant method results require Runtime ABI 1.18 | `modules/common/compiler-artifact` and `host/compukter-vm/src/artifact/format.rs` |
-| Native session transport | C ABI 28, checked by both FFM and JNI | `host/compukter-vm/ffi/src/lib.rs` and `modules/common/native-runtime` |
+| Native session transport | C ABI 29, checked by both FFM and JNI | `host/compukter-vm/ffi/src/lib.rs` and `modules/common/native-runtime` |
 | Base platform | Bundle format 10, standalone module format 6, platform ABI 3 | `PlatformBundleCodec` in `modules/common/platform-bundle` |
 | Kotlin metadata carrier | Private format 6 | `platform-k2` |
 | Compiler worker | Protocol 5; explicit source-free library preparation | `compiler-client` and `compiler-k2` |
@@ -760,10 +781,10 @@ checkpoint restore in both directions, filesystem state, executable admission an
 contract or codec changes require an ABI increment; a revision must preserve those contracts. The earlier
 unpublished development identity based on the full version is rejected without a fallback. CI exchanges a
 full-computer checkpoint between two real builds of adjacent revisions in both directions.
-FFM/JNI admission checks native ABI 28 without a package-revision constraint. Release selection is
+FFM/JNI admission checks native ABI 29 without a package-revision constraint. Release selection is
 separate: `config/runtime-release.properties` selects one compatible published revision and its exact
 release commit, independently of the development VM submodule. Alternate descriptors may select any
-`0.28.x`; packaging still verifies the selected archive identity, formats and hashes. Both mod archives
+`0.29.x`; packaging still verifies the selected archive identity, formats and hashes. Both mod archives
 and the release inventory record the actual selected native component for future external delivery.
 Production version preparation queries the latest complete stable GitHub Release. Revision and ABI requests
 are idempotent within a release cycle; an ABI request updates the native constant and version together.
@@ -772,14 +793,14 @@ marks incompatible development; semantic breaking changes are not inferred from 
 Rust exposes contextual capture/restore and bounded atomic store methods through C ABI 21, JNI and FFM. Minecraft carriers use this boundary for unload and orderly shutdown; failed restoration cold boots from installed system files while retaining ComputerId and `/home`.
 The native reference is `host/compukter-vm/docs/architecture/computer-checkpoints.md`.
 
-The current source Runtime is 0.28.0 / C ABI 28. It deliberately breaks prior ROM and persisted filesystem
+The current source Runtime is 0.29.0 / C ABI 29. It deliberately breaks prior ROM and persisted filesystem
 contracts: system installation images are `CPKTSYS\0` version 1; root namespace journals/checkpoints are
 version 2; logical execution envelope/schema is 9. `compukter_store_install_system(store, id, image, length)`
 is a status-returning operation with caller-owned inputs and no retained pointers. Close that computer's
 active session first; run it away from the server thread. Both JVM transports expose it through the existing
 serialized world-store owner. Checkpoint restoration no longer takes a boot-mode flag: direct and booted
 programs use the same private root authority, and the saved program determines execution. Source builds use this VM; the published Runtime descriptor still selects
-ABI 24 and cannot be used for a release until a compatible ABI 28 Runtime is published and pinned separately.
+ABI 24 and cannot be used for a release until a compatible ABI 29 Runtime is published and pinned separately.
 
 Runtime 0.28.0 uses C ABI 28 and logical checkpoint envelope/schema 9. Managed heaps retain
 initialized prefixes and logical quotas. Frame arenas also retain only their backed prefix;

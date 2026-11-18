@@ -43,6 +43,12 @@ class ExperimentalFleetCommandBatch {
         append(machine, 0, retirements, tick, deadlineNanos)
     }
 
+    fun grantFrame(machine: Long, tick: Long, retirements: Int, executionNanos: Long, authorizedUntilNanos: Long) {
+        require(tick >= 0 && retirements >= 0 && executionNanos >= 0)
+        append(machine, 4, retirements, tick, executionNanos)
+        transportBuffer.putLong(8 + (size - 1) * RECORD_BYTES + 32, authorizedUntilNanos)
+    }
+
     fun resolveCost(
         machine: Long,
         identity: VmHostRequestIdentity,
@@ -98,6 +104,9 @@ class ExperimentalFleetCommandBatch {
                 val deadline = transportBuffer.getLong(offset + 24)
                 val remaining = if (deadline == Long.MAX_VALUE) -1L else (deadline - nowNanos).coerceAtLeast(0)
                 transportBuffer.putLong(offset + 24, remaining)
+            } else if (transportBuffer.getInt(offset + 8) == 4) {
+                val deadline = transportBuffer.getLong(offset + 32)
+                transportBuffer.putLong(offset + 32, (deadline - nowNanos).coerceAtLeast(0))
             }
         }
         prepared = true

@@ -12,6 +12,21 @@ import kotlin.test.assertTrue
 
 class ExperimentalFleetCommandBatchTest {
     @Test
+    fun `frame compute duration is retained while authorization ages before admission`() {
+        val batch = ExperimentalFleetCommandBatch()
+        batch.grantFrame(1, 2, 100, 2500, 150)
+        batch.prepare(100)
+        assertEquals(4, batch.transportBuffer.getInt(16))
+        assertEquals(2500L, batch.transportBuffer.getLong(32))
+        assertEquals(50L, batch.transportBuffer.getLong(40))
+        batch.clear()
+        batch.grantFrame(1, 2, 100, 0, 50)
+        batch.prepare(100)
+        assertEquals(0L, batch.transportBuffer.getLong(40))
+        assertFailsWith<IllegalArgumentException> { batch.grantFrame(1, 2, 100, -1, 150) }
+    }
+
+    @Test
     fun `fixed records retain original deadlines until submission and reset outcomes on reuse`() {
         val batch = ExperimentalFleetCommandBatch()
         val storage = batch.transportBuffer
