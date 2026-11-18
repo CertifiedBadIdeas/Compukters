@@ -68,8 +68,9 @@ Scroll the list to reach additional projects. An external path is remembered acr
 you only need to enter it once. Listing saved folders does not read their manifests; a missing or invalid
 `compukter.toml` does not hide other projects or prevent opening files. Such a project stays editable, with analysis
 and compilation unavailable until its manifest is repaired and saved. When opened without a computer, a project with no `compukter.lock` resolves its local dependencies automatically.
-This prepares Kotlin analysis without saving unsaved source edits. An existing lock is preserved; use **Resolve**
-to review dependency updates.
+This prepares Kotlin analysis without saving unsaved source edits. An existing lock is preserved when opening the
+project. **Build** saves changed files, resolves dependencies and compiles; if an existing lock needs an update,
+confirm the proposed replacement to continue the same build. Declining leaves the lock unchanged.
 Saved changes to the manifest and lock refresh analysis without reopening the project.
 Modified buffers are saved before a project transition. A failed create/open/clone keeps the current project available.
 
@@ -115,6 +116,9 @@ starts a new tab list. The tab list lasts for the current IDE session.
 The header separates the project selector, active file path and attached target. **Build** and **Run** have labels
 on wider windows and become icons when space is limited; their tooltips explain the action and any unavailable state.
 The status bar keeps diagnostic counts, save state and current activity in separate areas.
+
+In the Project tree, click a computer directory to expand or collapse it. Reopening a loaded directory reuses its
+contents; **Refresh** reloads the attached computer's filesystem.
 
 Click **Details** in the status bar to read all messages captured when the window opens, including full failure
 messages and artifact information. Use the wheel, **Up/Down**, **Page Up/Down**, **Home** or **End** to scroll.
@@ -247,7 +251,9 @@ All IDE text, including menus, dialogs and tooltips, uses the bundled JetBrains 
 
 Enter the commit message below Changes. Configure author name and email in **Settings · Git**, opened from the
 left stripe or Commit's **Settings** button. The message supports multiple lines, cursor movement, selection,
-paste and undo/redo. Tab and Shift+Tab move between the fields in the active window. **Commit**
+paste and undo/redo. If author details are missing or invalid, **Commit** opens Settings with the required field
+focused, keeping the message and selected files. Fill in the author details, return to Commit and submit again.
+Tab and Shift+Tab move between the fields in the active window. **Commit**
 includes only checked files; **Commit & Push** pushes after the commit succeeds. Ctrl+Enter commits and
 Ctrl+Shift+Enter commits and pushes. There are no separate Stage/Unstage steps. Unrelated staged changes from an
 external Git client remain in its index and are not included automatically.

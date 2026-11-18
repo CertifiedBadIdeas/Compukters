@@ -123,11 +123,11 @@ fun main() {
 }
 ```
 
-4. Use **Resolve Dependencies** and wait for success. This creates `compukter.lock`, which is required before building.
-5. Press **Ctrl+S**, then use **Build** or press **Ctrl+F9**. Wait for the status line to report a successful build.
-6. Use **Deploy** to install `/home/hello` on the attached computer. Confirm the overwrite dialog if that path already
+4. Use **Build** or press **Ctrl+F9**. The IDE saves changed files and resolves dependencies before compiling.
+   Confirm an update if an existing `compukter.lock` needs to change, then wait for a successful build.
+5. Use **Deploy** to install `/home/hello` on the attached computer. Confirm the overwrite dialog if that path already
    exists.
-7. Open the **Terminal** tool on the right and run `hello` at the shell prompt.
+6. Open the **Terminal** tool on the right and run `hello` at the shell prompt.
 
 The triangular **Run** action is the shortcut for the final sequence: it saves, builds, deploys the manifest program,
 and submits its installed path to the attached computer.
