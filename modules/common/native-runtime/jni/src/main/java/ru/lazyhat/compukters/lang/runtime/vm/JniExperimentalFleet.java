@@ -13,6 +13,8 @@ final class JniExperimentalFleet {
     static native int create(byte[] artifact, byte[] schemas, int count, int[] config,
         byte[] namespace, byte[] name, byte[] overBudgetDetail,
         int major, int minor, int operation, long[] handle);
+    static native int commandBatchVersion();
+    static native int commandsV1(long handle, java.nio.ByteBuffer buffer, int length);
     static native int grant(long handle, long machine, long tick, int retirements, long deadlineNanos);
     static native int stop(long handle, long machine);
     static native int requestLifecycle(long handle, long machine, int kind, long tick);

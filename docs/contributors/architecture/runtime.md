@@ -87,7 +87,7 @@ The owner retains bounded actor and request registries; query maps are allocated
 cancellation does not release admission until the native response arrives or the actor is fenced for stop.
 One fleet waiter serves the service.
 
-Native owner pumping alternates one queued command attempt with one observation, retaining the other
+Native owner pumping alternates one bounded group of up to 16 scalar command attempts with one observation, retaining the other
 lane's turn when the shared deadline expires. A busy attempt consumes transport allowance without
 discarding its command. Observation count and transport progress are independent: after the tick's
 observation quota is spent, a native service can still send queued commands with zero event allowance
@@ -286,6 +286,14 @@ redstone/sound completion effects still reject before admission. The carrier exp
 lifecycle registry, which retains and retries that operation on the owner; accepted failures remain terminal barriers.
 Bootstrap close uses the same deferred-admission signal as active close, so the registry retries queue pressure
 without recording it as an accepted persistence failure.
+
+Scalar groups select at most one queued head per machine in round-robin order, without waiting to fill
+a batch. Accepted heads alone release entry/byte reservations; mailbox-full and unattempted heads retain
+ownership. All results are reconciled before reporting a permanent machine failure. Payload/query/lifecycle
+heads and single-machine queues use scalar calls. Native batch admission shares the scalar mailbox helper,
+holds the owner registry once, and wakes each affected worker once. The lazy 664-byte transport buffer and
+selection arrays belong to the service, not individual computers.
+
 
 ## Addon host boundary
 

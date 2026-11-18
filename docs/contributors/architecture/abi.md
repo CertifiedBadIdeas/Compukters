@@ -11,6 +11,29 @@ permalink: /ARCHITECTURE/abi/
 
 This reference groups versioned representation boundaries by the version that introduced them. Those versions are minimum feature requirements, not a claim that older Runtime distributions implement today’s platform. The source owners below define the active contract. Before changing a wire format, inspect each producer, consumer and verifier. Runtime release pins in `build-scripts/src/main/kotlin/RuntimeBundleSupport.kt` describe published bundles separately from the local VM checkout.
 
+## Native fleet scalar command batches
+
+The source-matched scheduler transports implement `ExperimentalFleetCommandTransport` and experimental
+`compukter_experimental_fleet_commands_v1(handle, input, length, output, capacity)` (JNI: `commandsV1`).
+This explicitly versioned experimental extension requires matching native/JVM builds; released session
+C ABI 28, Guest artifacts and checkpoints are unchanged. Production service creation requires the batch
+capability. Missing native symbols fail explicitly. JNI checks `commandBatchVersion()` before creating the fleet;
+FFM resolves the versioned export before allocation of native workers.
+
+Input is little-endian: version `u32=1`, count `u32` in 1..16, then count 40-byte records:
+`machine:u64, tag:u32, argument:u32, value:u64, extra:i64, reserved:u64=0`.
+Tags: 0 grants (`argument` retirements, `value` tick, `extra` remaining nanoseconds or -1 for no deadline);
+1 resolves cost (`argument` task, `value` request, `extra` positive units); 2/3 submit input/confirm output
+(`argument` packed redstone, `value=extra=0`). Machine IDs must be distinct; all fields retain scalar
+validation limits. The whole input is validated before any admission. Output has at least count writable
+bytes, each the ordinary native status for that record: 0 accepted, 7 mailbox full, other values permanent
+errors. A valid batch returns global success even with mixed per-machine outcomes; malformed input has
+no admissions. Input and output regions must not overlap. Neither transport retains borrowed pointers.
+
+One lazy caller-owned direct buffer reserves 648 input bytes and 16 result bytes per outbox. JNI borrows
+it directly; FFM borrows its native segment view. Deadlines are converted immediately before submission.
+Ordinary payload replies, queries and lifecycle operations retain their scalar transport contracts.
+
 ## Experimental native fleet lifecycle
 
 The opt-in `experimental-fleet-scheduler` build adds independent lifecycle delivery. C

@@ -61,8 +61,7 @@ internal class NativeFleetDispatcher(
             commandTurn = !commandTurn
             if (send) {
                 if (attempted < maximumCommandAttempts && outbox.hasPendingCommands) {
-                    attempted++
-                    outbox.sendNext()
+                    attempted += outbox.sendNextGroup(maximumCommandAttempts - attempted, deadlineNanos)
                     idleLanes = 0
                 } else {
                     idleLanes++

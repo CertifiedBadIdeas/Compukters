@@ -28,6 +28,57 @@ class FfmExperimentalFleetIntegrationTest {
 
 
     @Test
+    fun `scalar batch reports each admission and rejects malformed suffix before any command`() {
+        val artifact = Path.of(requireNotNull(System.getProperty("compukters.fleet.timer.fixture"))).readBytes()
+        FfmBridge.open(Path.of(requireNotNull(System.getProperty("compukter.ffi.library")))).use { bridge ->
+            bridge.openExperimentalFleet(ExperimentalFleetConfig(1, 32, 32, 128, 64, 64, 32, coordinatedTurns = true)).use { fleet ->
+                val transport = fleet as ExperimentalFleetCommandTransport
+                val first = VmSession.open(artifact, bridge)
+                val second = VmSession.open(artifact, bridge)
+                val one = first.transferToFleet(fleet)
+                val two = second.transferToFleet(fleet)
+                val batch = ExperimentalFleetCommandBatch()
+                batch.redstoneInput(one, 1)
+                batch.redstoneInput(two, 2)
+                batch.transportBuffer.putInt(8 + 40 + 8, 99)
+                kotlin.test.assertFailsWith<VmBridgeException> { transport.submitCommands(batch) }
+                assertEquals(ExperimentalFleetCommandBatch.NOT_ATTEMPTED, batch.result(0))
+                batch.clear()
+                batch.grant(one, 1, 128, Long.MAX_VALUE)
+                batch.grant(Long.MAX_VALUE, 1, 128, Long.MAX_VALUE)
+                batch.grant(two, 1, 128, Long.MAX_VALUE)
+                transport.submitCommands(batch)
+                assertEquals(0, batch.result(0))
+                assertEquals(1, batch.result(1))
+                assertEquals(0, batch.result(2))
+                val quiescent = mutableSetOf<Long>()
+                val deadline = System.nanoTime() + 10_000_000_000L
+                while (quiescent.size < 2 && System.nanoTime() < deadline) {
+                    val event = fleet.poll()
+                    if (event is ExperimentalFleetEvent.Quiescent) quiescent += event.machine
+                    if (event == null) Thread.yield()
+                }
+                assertEquals(setOf(one, two), quiescent)
+                batch.clear()
+                batch.redstoneInput(one, 1)
+                batch.redstoneInput(one, 2)
+                kotlin.test.assertFailsWith<VmBridgeException> { transport.submitCommands(batch) }
+                assertEquals(ExperimentalFleetCommandBatch.NOT_ATTEMPTED, batch.result(0))
+                fleet.stop(one, independent = true)
+                fleet.stop(two, independent = true)
+                val stopped = mutableSetOf<Long>()
+                while (stopped.size < 2 && System.nanoTime() < deadline) {
+                    for (machine in listOf(one, two)) if (machine !in stopped && fleet.pollLifecycle(machine) is ExperimentalFleetEvent.Stopped) stopped += machine
+                    Thread.yield()
+                }
+                assertEquals(setOf(one, two), stopped)
+                first.close()
+                second.close()
+            }
+        }
+    }
+
+    @Test
     fun `checkpoint detach settles ordinary and inspected requests without polling unrelated output`() {
         val artifact = Path.of(requireNotNull(System.getProperty("compukters.fleet.host.fixture"))).readBytes()
         val timer = Path.of(requireNotNull(System.getProperty("compukters.fleet.timer.fixture"))).readBytes()

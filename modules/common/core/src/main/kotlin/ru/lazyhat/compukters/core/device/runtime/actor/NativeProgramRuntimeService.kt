@@ -16,6 +16,7 @@ import ru.lazyhat.compukters.core.device.runtime.program.ProgramWorldResult
 import ru.lazyhat.compukters.lang.runtime.fs.VmSystemImage
 import ru.lazyhat.compukters.lang.runtime.fs.WorldFileSystemStore
 import ru.lazyhat.compukters.lang.runtime.vm.ExperimentalFleet
+import ru.lazyhat.compukters.lang.runtime.vm.ExperimentalFleetCommandTransport
 import ru.lazyhat.compukters.lang.runtime.vm.ExperimentalFleetConfig
 import ru.lazyhat.compukters.lang.runtime.vm.ExperimentalFleetEvent
 import ru.lazyhat.compukters.lang.runtime.vm.VmOutcome
@@ -84,6 +85,7 @@ class NativeProgramRuntimeService(
         fleet = VmRuntime.openExperimentalFleet(fleetConfig)
         runtime =
             try {
+                require(fleet is ExperimentalFleetCommandTransport) { "native fleet command batching is required" }
                 NativeFleetActorRuntimeService(
                     fleet,
                     config.maximumActors,

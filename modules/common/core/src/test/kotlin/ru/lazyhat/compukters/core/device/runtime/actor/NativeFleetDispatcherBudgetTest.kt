@@ -6,6 +6,8 @@
 package ru.lazyhat.compukters.core.device.runtime.actor
 
 import ru.lazyhat.compukters.lang.runtime.vm.ExperimentalFleet
+import ru.lazyhat.compukters.lang.runtime.vm.ExperimentalFleetCommandBatch
+import ru.lazyhat.compukters.lang.runtime.vm.ExperimentalFleetCommandTransport
 import ru.lazyhat.compukters.lang.runtime.vm.ExperimentalFleetEvent
 import ru.lazyhat.compukters.lang.runtime.vm.VmFleetBusyException
 import java.lang.reflect.Proxy
@@ -101,8 +103,42 @@ class NativeFleetDispatcherBudgetTest {
         }
     }
 
+    @Test
+    fun `batch quantum retains event turn across a deadline and bounds command-only work`() {
+        Source(operationNanos = 1_000, batched = true).use { source ->
+            for (machine in 1L..20L) source.offer(machine)
+            source.publish(99)
+            assertEquals(0, source.dispatcher.pump(1, 32, source.now + 1_000))
+            assertEquals((1L..16L).toList(), source.sent)
+            assertEquals(1, source.dispatcher.pump(1, 32, source.now + 1_000))
+            assertEquals(listOf(99L), source.delivered)
+            assertEquals(16, source.sent.size)
+            assertEquals(0, source.dispatcher.pump(0, 3))
+            assertEquals((1L..19L).toList(), source.sent)
+            assertEquals(64L, source.dispatcher.outbox.retainedBytes)
+        }
+    }
+
+    @Test
+    fun `busy batch heads consume attempts without starving other machines or observations`() {
+        Source(batched = true).use { source ->
+            for (machine in 1L..3L) source.offer(machine)
+            source.publish(99)
+            source.busy = setOf(1L)
+            assertEquals(1, source.dispatcher.pump(1, 3))
+            assertEquals(listOf(1L, 2L, 3L), source.attempted)
+            assertEquals(listOf(2L, 3L), source.sent)
+            assertEquals(listOf(99L), source.delivered)
+            assertEquals(64L, source.dispatcher.outbox.retainedBytes)
+            source.busy = emptySet()
+            source.dispatcher.pump(0, 1)
+            assertEquals(listOf(2L, 3L, 1L), source.sent)
+        }
+    }
+
     private class Source(
         private val operationNanos: Long = 0,
+        batched: Boolean = false,
     ) : AutoCloseable {
         var now = 0L
         var polls = 0
@@ -113,7 +149,7 @@ class NativeFleetDispatcherBudgetTest {
         val delivered = mutableListOf<Long>()
         val releaseWaiter = CountDownLatch(1)
         private val ready = ArrayDeque<ExperimentalFleetEvent.Quiescent>()
-        private val fleet =
+        private val scalar =
             Proxy.newProxyInstance(ExperimentalFleet::class.java.classLoader, arrayOf(ExperimentalFleet::class.java)) { _, method, args ->
                 when (method.name) {
                     "eventGeneration" -> {
@@ -144,10 +180,27 @@ class NativeFleetDispatcherBudgetTest {
                     }
                 }
             } as ExperimentalFleet
+        private val fleet =
+            if (!batched) {
+                scalar
+            } else {
+                object : ExperimentalFleet by scalar, ExperimentalFleetCommandTransport {
+                    override fun submitCommands(batch: ExperimentalFleetCommandBatch) {
+                        batch.prepare(now)
+                        for (index in 0 until batch.size) {
+                            val machine = batch.transportBuffer.getLong(8 + index * 40)
+                            attempted += machine
+                            val status = if (machine in busy) 7 else 0.also { sent += machine }
+                            batch.transportBuffer.put(ExperimentalFleetCommandBatch.INPUT_BYTES + index, status.toByte())
+                        }
+                        now += operationNanos
+                    }
+                }
+            }
         val dispatcher =
             NativeFleetDispatcher(
                 fleet,
-                16,
+                32,
                 4,
                 {},
                 {},

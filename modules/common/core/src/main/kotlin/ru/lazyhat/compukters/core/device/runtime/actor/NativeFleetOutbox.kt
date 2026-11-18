@@ -8,10 +8,13 @@ package ru.lazyhat.compukters.core.device.runtime.actor
 import ru.lazyhat.compukters.core.device.runtime.program.ProgramHostCheckpoint
 import ru.lazyhat.compukters.lang.runtime.capability.HostResponse
 import ru.lazyhat.compukters.lang.runtime.vm.ExperimentalFleet
+import ru.lazyhat.compukters.lang.runtime.vm.ExperimentalFleetCommandBatch
+import ru.lazyhat.compukters.lang.runtime.vm.ExperimentalFleetCommandTransport
 import ru.lazyhat.compukters.lang.runtime.vm.ExperimentalFleetEvent
 import ru.lazyhat.compukters.lang.runtime.vm.ExperimentalFleetResponseMemory
 import ru.lazyhat.compukters.lang.runtime.vm.VmFleetBusyException
 import ru.lazyhat.compukters.lang.runtime.vm.VmHostRequestIdentity
+import ru.lazyhat.compukters.lang.runtime.vm.requireFleetSuccess
 import java.util.ArrayDeque
 
 internal class NativeFleetCommandException(
@@ -175,6 +178,14 @@ internal class NativeFleetOutbox(
             }
     }
 
+    private class Batch {
+        val wire = ExperimentalFleetCommandBatch()
+        val machines = LongArray(ExperimentalFleetCommandBatch.MAXIMUM_COMMANDS)
+        val queues = arrayOfNulls<Queue>(ExperimentalFleetCommandBatch.MAXIMUM_COMMANDS)
+    }
+
+    private val commandTransport = fleet as? ExperimentalFleetCommandTransport
+    private var batch: Batch? = null
     private val queues = mutableMapOf<Long, Queue>()
     private val ready = ArrayDeque<Long>()
     private var notificationPending = false
@@ -480,6 +491,85 @@ internal class NativeFleetOutbox(
         if (queue.size == 0) queues.remove(machine) else ready.addLast(machine)
         return sent
     }
+
+    /** One bounded round of distinct machine heads, never waiting for a packet to fill. */
+    internal fun sendNextGroup(
+        maximumAttempts: Int,
+        deadlineNanos: Long,
+    ): Int {
+        require(maximumAttempts > 0)
+        if (commandTransport == null || ready.size < 2 || !isScalar(checkNotNull(queues[ready.first]).first())) {
+            sendNext()
+            return 1
+        }
+        val batch = batch ?: Batch().also { this.batch = it }
+        batch.wire.clear()
+        val count = minOf(maximumAttempts, ready.size, ExperimentalFleetCommandBatch.MAXIMUM_COMMANDS)
+        try {
+            while (batch.wire.size < count) {
+                if (batch.wire.size > 0 && deadlineNanos != Long.MAX_VALUE && nanoTime() - deadlineNanos >= 0) break
+                val machine = ready.first
+                val queue = checkNotNull(queues[machine])
+                val command = checkNotNull(queue.first())
+                if (!isScalar(command)) break
+                val index = batch.wire.size
+                when (command) {
+                    is Command.Grant -> batch.wire.grant(machine, command.tick, command.retirements, command.deadlineNanos)
+                    is Command.ResolveCost -> batch.wire.resolveCost(machine, command.identity, command.units)
+                    is Command.RedstoneInput -> batch.wire.redstoneInput(machine, command.packet)
+                    is Command.ConfirmRedstoneOutput -> batch.wire.confirmRedstoneOutput(machine, command.packed)
+                    else -> error("unsupported scalar command")
+                }
+                ready.removeFirst()
+                batch.machines[index] = machine
+                batch.queues[index] = queue
+            }
+        } catch (failure: Throwable) {
+            val failedMachine = ready.first
+            for (index in batch.wire.size - 1 downTo 0) {
+                ready.addFirst(batch.machines[index])
+                batch.queues[index] = null
+            }
+            if (failure is Exception) throw NativeFleetCommandException(failedMachine, failure)
+            throw failure
+        }
+        // No owner callback runs between selection and reconciliation.
+        var transportFailure: Throwable? = null
+        try {
+            commandTransport.submitCommands(batch.wire)
+        } catch (failure: Throwable) {
+            transportFailure = failure
+        }
+        var commandFailure: NativeFleetCommandException? = null
+        for (index in 0 until batch.wire.size) {
+            val machine = batch.machines[index]
+            val queue = checkNotNull(batch.queues[index])
+            batch.queues[index] = null
+            val status = batch.wire.result(index)
+            if (status == 0) {
+                val accepted = queue.removeFirst()
+                budget.release(1, accepted.retainedBytes)
+                if (queue.size == 0) queues.remove(machine) else ready.addLast(machine)
+            } else {
+                ready.addLast(machine)
+                if (status != 7 && status != ExperimentalFleetCommandBatch.NOT_ATTEMPTED && commandFailure == null) {
+                    try {
+                        requireFleetSuccess("command batch", status)
+                    } catch (failure: Exception) {
+                        commandFailure = NativeFleetCommandException(machine, failure)
+                    }
+                }
+            }
+        }
+        // Reconcile every accepted head even when another machine failed.
+        transportFailure?.let { throw it }
+        commandFailure?.let { throw it }
+        return batch.wire.size
+    }
+
+    private fun isScalar(command: Command?): Boolean =
+        command is Command.Grant || command is Command.ResolveCost ||
+            command is Command.RedstoneInput || command is Command.ConfirmRedstoneOutput
 
     /** Discard only after the owner has dealt with the machine's pending operations. */
     fun remove(machine: Long): List<Command> {

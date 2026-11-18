@@ -23,7 +23,7 @@ class ExperimentalFfmFleet private constructor(
     private var handle: Long,
     private val calls: Calls,
     override val coordinatedTurns: Boolean,
-) : ExperimentalFleet {
+) : ExperimentalFleetCommandTransport {
     private val output = arena.allocate(1_048_576)
     private val eventInput = output.asByteBuffer()
     private val written = arena.allocate(ValueLayout.JAVA_LONG)
@@ -58,6 +58,16 @@ class ExperimentalFfmFleet private constructor(
         success("recover", calls.recover.invokeExact(active(), machine, result) as Int)
         owned.remove(machine)
         return ExperimentalRestoredSession(bridge, result.get(ValueLayout.JAVA_LONG, 0))
+    }
+
+    @Synchronized
+    override fun submitCommands(batch: ExperimentalFleetCommandBatch) {
+        val handle = active()
+        val data = MemorySegment.ofBuffer(batch.transportBuffer.clear())
+        val results = data.asSlice(ExperimentalFleetCommandBatch.INPUT_BYTES.toLong(), ExperimentalFleetCommandBatch.MAXIMUM_COMMANDS.toLong())
+        batch.prepare()
+        success("commands v1", calls.commands.invokeExact(handle, data, batch.inputLength.toLong(), results,
+            ExperimentalFleetCommandBatch.MAXIMUM_COMMANDS.toLong()) as Int)
     }
 
     @Synchronized
@@ -302,7 +312,7 @@ class ExperimentalFfmFleet private constructor(
 
     private fun active(): Long = handle.takeIf { it != 0L } ?: error("fleet is closed")
 
-    private class Calls(val attach: MethodHandle, val attachTimers: MethodHandle, val recover: MethodHandle,
+    private class Calls(val commands: MethodHandle, val attach: MethodHandle, val attachTimers: MethodHandle, val recover: MethodHandle,
         val grant: MethodHandle, val detach: MethodHandle, val detachTimers: MethodHandle,
         val stop: MethodHandle, val requestLifecycle: MethodHandle, val poll: MethodHandle, val pollLifecycle: MethodHandle, val close: MethodHandle,
         val generation: MethodHandle, val waitEvents: MethodHandle,
@@ -333,7 +343,7 @@ class ExperimentalFfmFleet private constructor(
                 val p = ValueLayout.ADDRESS
                 val create = call("create", p, p)
                 val createInspected = call("create_inspection", p, p, l, p, l, p, l, i, i, i, p)
-                val calls = Calls(call("attach", l, l, p), call("attach_timers", l, l, l, p, l, p),
+                val calls = Calls(call("commands_v1", l, p, l, p, l), call("attach", l, l, p), call("attach_timers", l, l, l, p, l, p),
                     call("recover", l, l, p), call("grant", l, l, l, i, l), call("detach", l, l),
                     call("detach_timers", l, l, l), call("stop", l, l), call("request_lifecycle", l, l, i, l), call("poll", l, p, l, p), call("poll_lifecycle", l, l, p, l, p), call("close", l),
                     call("event_generation", l, p), call("wait_events", l, l, i, p),

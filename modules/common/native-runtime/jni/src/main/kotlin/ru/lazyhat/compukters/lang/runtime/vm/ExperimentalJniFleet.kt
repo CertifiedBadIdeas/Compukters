@@ -16,7 +16,7 @@ class ExperimentalJniFleet private constructor(
     private val bridge: JniBridge,
     @Volatile private var handle: Long,
     override val coordinatedTurns: Boolean,
-) : ExperimentalFleet {
+) : ExperimentalFleetCommandTransport {
     private val output = ByteArray(1_048_576)
     private val eventInput = ByteBuffer.wrap(output)
     private val written = LongArray(1)
@@ -53,6 +53,13 @@ class ExperimentalJniFleet private constructor(
         success("restore", JniExperimentalFleet.restoreSession(active(), machine, session))
         sessionBridges.remove(machine)
         return ExperimentalRestoredSession(originalBridge, session[0])
+    }
+
+    @Synchronized
+    override fun submitCommands(batch: ExperimentalFleetCommandBatch) {
+        val handle = active()
+        batch.prepare()
+        success("commands v1", JniExperimentalFleet.commandsV1(handle, batch.transportBuffer, batch.inputLength))
     }
 
     /** [deadlineNanos] uses the same System.nanoTime clock as the server scheduler. */
@@ -238,6 +245,7 @@ class ExperimentalJniFleet private constructor(
         }
 
         internal fun openWithBridge(bridge: JniBridge, config: ExperimentalFleetConfig): ExperimentalJniFleet {
+            check(JniExperimentalFleet.commandBatchVersion() == ExperimentalFleetCommandBatch.VERSION) { "unsupported native fleet command batch version" }
             val output = LongArray(1)
             val empty = byteArrayOf()
             val capability = config.inspection?.capability
