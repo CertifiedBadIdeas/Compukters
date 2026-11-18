@@ -84,9 +84,19 @@ internal class FfmBridge private constructor(
 ) : LowLevelVmBridge,
     AutoCloseable {
     override fun openExperimentalFleet(config: ExperimentalFleetConfig): ExperimentalFleet =
-        ExperimentalFfmFleet.open(this, config.workers, config.mailboxCapacity, config.eventCapacity,
-            config.guestBudget, config.maintenanceBudget, config.hostBudget, config.advancesPerTick,
-            config.inspection, config.coordinatedTurns, config.executionMode)
+        ExperimentalFfmFleet.open(
+            this,
+            config.workers,
+            config.mailboxCapacity,
+            config.eventCapacity,
+            config.guestBudget,
+            config.maintenanceBudget,
+            config.hostBudget,
+            config.advancesPerTick,
+            config.inspection,
+            config.coordinatedTurns,
+            config.executionMode,
+        )
 
     private var fleetUsers = 0
     private var closed = false

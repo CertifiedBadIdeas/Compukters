@@ -8,7 +8,9 @@ package ru.lazyhat.compukters.lang.runtime.vm
 import ru.lazyhat.compukters.lang.runtime.capability.HostResponse
 import ru.lazyhat.compukters.lang.runtime.fs.VmVirtualPath
 
-enum class FleetExecutionMode(val wireValue: Int) {
+enum class FleetExecutionMode(
+    val wireValue: Int,
+) {
     INDEPENDENT(0),
     COORDINATED_TURNS(1),
     AUTONOMOUS_FRAMES(2),
@@ -47,9 +49,7 @@ interface ExperimentalFleet :
         retirements: Int,
         executionNanos: Long,
         authorizedUntilNanos: Long,
-    ) {
-        throw UnsupportedOperationException("autonomous frame grants are unavailable")
-    }
+    ): Unit = throw UnsupportedOperationException("autonomous frame grants are unavailable")
 
     fun grant(
         machine: Long,

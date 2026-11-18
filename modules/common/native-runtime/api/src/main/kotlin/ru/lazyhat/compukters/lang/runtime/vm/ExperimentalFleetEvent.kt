@@ -85,8 +85,18 @@ data class ExperimentalFleetTimer(
 
 /** Events from the opt-in native fleet transport. Machine identities are local to a fleet. */
 enum class FleetWaitReason {
-    RUNNABLE, INSTRUCTIONS, REQUESTS, ADVANCES, EXECUTION_TIME, AUTHORIZATION,
-    HOST, INSPECTION, INPUT, COMPILATION, STOPPED, FRAME_REPLACED,
+    RUNNABLE,
+    INSTRUCTIONS,
+    REQUESTS,
+    ADVANCES,
+    EXECUTION_TIME,
+    AUTHORIZATION,
+    HOST,
+    INSPECTION,
+    INPUT,
+    COMPILATION,
+    STOPPED,
+    FRAME_REPLACED,
 }
 
 data class FleetFrameProgress(
@@ -400,15 +410,19 @@ object ExperimentalFleetEventWire {
                         1 -> true
                         else -> throw IllegalArgumentException("invalid fleet timer state")
                     }
-                val frame = if (tag == 19) {
-                    val executionNanos = long()
-                    val instructions = input.int.also { require(it >= 0) }
-                    val requests = input.int.also { require(it >= 0) }
-                    val advances = input.int.also { require(it >= 0) }
-                    val reason = FleetWaitReason.entries.getOrNull(input.get().toInt() and 255)
-                        ?: throw IllegalArgumentException("invalid fleet wait reason")
-                    FleetFrameProgress(executionNanos, instructions, requests, advances, reason)
-                } else null
+                val frame =
+                    if (tag == 19) {
+                        val executionNanos = long()
+                        val instructions = input.int.also { require(it >= 0) }
+                        val requests = input.int.also { require(it >= 0) }
+                        val advances = input.int.also { require(it >= 0) }
+                        val reason =
+                            FleetWaitReason.entries.getOrNull(input.get().toInt() and 255)
+                                ?: throw IllegalArgumentException("invalid fleet wait reason")
+                        FleetFrameProgress(executionNanos, instructions, requests, advances, reason)
+                    } else {
+                        null
+                    }
                 require(!input.hasRemaining()) { "trailing fleet accounting bytes" }
                 ExperimentalFleetEvent.Quiescent(machine, tick, retired, timersPending, frame)
             }

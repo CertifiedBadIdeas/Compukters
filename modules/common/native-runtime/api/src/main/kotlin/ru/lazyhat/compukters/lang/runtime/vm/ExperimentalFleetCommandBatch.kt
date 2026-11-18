@@ -43,7 +43,13 @@ class ExperimentalFleetCommandBatch {
         append(machine, 0, retirements, tick, deadlineNanos)
     }
 
-    fun grantFrame(machine: Long, tick: Long, retirements: Int, executionNanos: Long, authorizedUntilNanos: Long) {
+    fun grantFrame(
+        machine: Long,
+        tick: Long,
+        retirements: Int,
+        executionNanos: Long,
+        authorizedUntilNanos: Long,
+    ) {
         require(tick >= 0 && retirements >= 0 && executionNanos >= 0)
         append(machine, 4, retirements, tick, executionNanos)
         transportBuffer.putLong(8 + (size - 1) * RECORD_BYTES + 32, authorizedUntilNanos)

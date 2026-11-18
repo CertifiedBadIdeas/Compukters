@@ -6,29 +6,25 @@
 
 package ru.lazyhat.compukters.lang.runtime.vm
 
-import java.nio.ByteBuffer
-import java.nio.ByteOrder
-import java.nio.file.Path
-import java.nio.file.Files
-import java.security.MessageDigest
-import kotlin.io.path.readBytes
-import kotlin.test.Test
-import kotlin.test.assertEquals
-import kotlin.test.assertTrue
 import ru.lazyhat.compukters.lang.runtime.capability.HostCapabilitySchema
 import ru.lazyhat.compukters.lang.runtime.capability.HostOperationSchema
 import ru.lazyhat.compukters.lang.runtime.capability.HostResponse
 import ru.lazyhat.compukters.lang.runtime.capability.HostValueType
 import ru.lazyhat.compukters.lang.runtime.fs.ComputerId
+import ru.lazyhat.compukters.lang.runtime.fs.VmFileSystemReadFailure
 import ru.lazyhat.compukters.lang.runtime.fs.VmVirtualPath
 import ru.lazyhat.compukters.lang.runtime.fs.WorldFileSystemStore
-import ru.lazyhat.compukters.lang.runtime.fs.VmFileSystemReadFailure
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
+import java.nio.file.Files
+import java.nio.file.Path
+import java.security.MessageDigest
+import kotlin.io.path.readBytes
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 
 class JniExperimentalFleetIntegrationTest {
-
-
-
-
     @Test
     fun `autonomous frame resumes inspection and host reply without another grant`() {
         val library = Path.of(requireNotNull(System.getProperty("compukter.jni.library")))
@@ -36,12 +32,24 @@ class JniExperimentalFleetIntegrationTest {
         val capability = CapabilityIdentity("app", "entry", 1, 2)
         val schema = HostCapabilitySchema(capability, listOf(HostOperationSchema(emptyList(), HostValueType.UNIT, true)))
         val bridge = JniBridge.open(library)
-        val fleet = bridge.openExperimentalFleet(ExperimentalFleetConfig(1, 32, 32, 128, 64, 64, 32,
-            ExperimentalRequestInspection(capability, 0, "request exceeds budget"),
-            executionMode = FleetExecutionMode.AUTONOMOUS_FRAMES))
+        val fleet =
+            bridge.openExperimentalFleet(
+                ExperimentalFleetConfig(
+                    1,
+                    32,
+                    32,
+                    128,
+                    64,
+                    64,
+                    32,
+                    ExperimentalRequestInspection(capability, 0, "request exceeds budget"),
+                    executionMode = FleetExecutionMode.AUTONOMOUS_FRAMES,
+                ),
+            )
         val session = VmSession.open(artifact, listOf(schema), bridge)
         val machine = session.transferToFleet(fleet)
         val deadline = System.nanoTime() + 5_000_000_000L
+
         fun nextEvent(): ExperimentalFleetEvent {
             while (System.nanoTime() < deadline) {
                 fleet.poll()?.let { return it }
@@ -114,7 +122,13 @@ class JniExperimentalFleetIntegrationTest {
                 fleet.stop(two, independent = true)
                 val stopped = mutableSetOf<Long>()
                 while (stopped.size < 2 && System.nanoTime() < deadline) {
-                    for (machine in listOf(one, two)) if (machine !in stopped && fleet.pollLifecycle(machine) is ExperimentalFleetEvent.Stopped) stopped += machine
+                    for (machine in listOf(one, two)) {
+                        if (machine !in stopped &&
+                            fleet.pollLifecycle(machine) is ExperimentalFleetEvent.Stopped
+                        ) {
+                            stopped += machine
+                        }
+                    }
                     Thread.yield()
                 }
                 assertEquals(setOf(one, two), stopped)
@@ -132,51 +146,69 @@ class JniExperimentalFleetIntegrationTest {
         val schema = HostCapabilitySchema(capability, listOf(HostOperationSchema(emptyList(), HostValueType.UNIT, true)))
         for (inspect in listOf(false, true)) {
             JniBridge.open(Path.of(requireNotNull(System.getProperty("compukter.jni.library")))).let { bridge ->
-                bridge.openExperimentalFleet(ExperimentalFleetConfig(1, 32, 1, 128, 64, 64, 32,
-                    if (inspect) ExperimentalRequestInspection(capability, 0, "over budget") else null,
-                    coordinatedTurns = true,
-                )).use { fleet ->
-                    val session = VmSession.open(artifact, listOf(schema), bridge)
-                    val observer = VmSession.open(timer, bridge)
-                    val machine = session.transferToFleet(fleet)
-                    val other = observer.transferToFleet(fleet)
-                    val deadline = System.nanoTime() + 10_000_000_000L
-                    fun next(lifecycle: Long? = null): ExperimentalFleetEvent {
-                        while (System.nanoTime() < deadline) {
-                            (if (lifecycle == null) fleet.poll() else fleet.pollLifecycle(lifecycle))?.let { return it }
-                            Thread.yield()
+                bridge
+                    .openExperimentalFleet(
+                        ExperimentalFleetConfig(
+                            1,
+                            32,
+                            1,
+                            128,
+                            64,
+                            64,
+                            32,
+                            if (inspect) ExperimentalRequestInspection(capability, 0, "over budget") else null,
+                            coordinatedTurns = true,
+                        ),
+                    ).use { fleet ->
+                        val session = VmSession.open(artifact, listOf(schema), bridge)
+                        val observer = VmSession.open(timer, bridge)
+                        val machine = session.transferToFleet(fleet)
+                        val other = observer.transferToFleet(fleet)
+                        val deadline = System.nanoTime() + 10_000_000_000L
+
+                        fun next(lifecycle: Long? = null): ExperimentalFleetEvent {
+                            while (System.nanoTime() < deadline) {
+                                (if (lifecycle == null) fleet.poll() else fleet.pollLifecycle(lifecycle))?.let { return it }
+                                Thread.yield()
+                            }
+                            error("timed out waiting for checkpoint lifecycle")
                         }
-                        error("timed out waiting for checkpoint lifecycle")
-                    }
-                    kotlin.test.assertFailsWith<IllegalArgumentException> { fleet.detachForCheckpoint(machine, -1) }
-                    fleet.grant(machine, 1, 512)
-                    val request = next()
-                    assertTrue(if (inspect) request is ExperimentalFleetEvent.Inspection else request is ExperimentalFleetEvent.Outcome && request.outcome is VmOutcome.HostRequestBatch)
-                    val before = next() as ExperimentalFleetEvent.Quiescent
-                    val generation = fleet.eventGeneration()
-                    fleet.resourceSnapshot(other, 42)
-                    assertTrue(fleet.waitEvents(generation, 5_000))
-                    fleet.detachForCheckpoint(machine, 1)
-                    var event = next(machine)
-                    while (event !is ExperimentalFleetEvent.Detached) event = next(machine)
-                    assertTrue(event.timers.isEmpty())
-                    assertEquals(ExperimentalFleetDetachedState(listOf(0), 0), event.state)
-                    VmSession.restoreFromFleet(fleet, machine).use { restored ->
-                        assertEquals(before.retired, restored.resourceSnapshot().executedInstructions)
-                        var outcome = restored.advance(512, 512, 64)
-                        repeat(16) {
-                            if (outcome is VmOutcome.SliceExhausted) outcome = restored.advance(512, 512, 64)
+                        kotlin.test.assertFailsWith<IllegalArgumentException> { fleet.detachForCheckpoint(machine, -1) }
+                        fleet.grant(machine, 1, 512)
+                        val request = next()
+                        assertTrue(
+                            if (inspect) {
+                                request is ExperimentalFleetEvent.Inspection
+                            } else {
+                                request is ExperimentalFleetEvent.Outcome &&
+                                    request.outcome is VmOutcome.HostRequestBatch
+                            },
+                        )
+                        val before = next() as ExperimentalFleetEvent.Quiescent
+                        val generation = fleet.eventGeneration()
+                        fleet.resourceSnapshot(other, 42)
+                        assertTrue(fleet.waitEvents(generation, 5_000))
+                        fleet.detachForCheckpoint(machine, 1)
+                        var event = next(machine)
+                        while (event !is ExperimentalFleetEvent.Detached) event = next(machine)
+                        assertTrue(event.timers.isEmpty())
+                        assertEquals(ExperimentalFleetDetachedState(listOf(0), 0), event.state)
+                        VmSession.restoreFromFleet(fleet, machine).use { restored ->
+                            assertEquals(before.retired, restored.resourceSnapshot().executedInstructions)
+                            var outcome = restored.advance(512, 512, 64)
+                            repeat(16) {
+                                if (outcome is VmOutcome.SliceExhausted) outcome = restored.advance(512, 512, 64)
+                            }
+                            assertTrue(outcome is VmOutcome.UncaughtException)
                         }
-                        assertTrue(outcome is VmOutcome.UncaughtException)
+                        val preserved = next() as ExperimentalFleetEvent.Resources
+                        assertEquals(other, preserved.machine)
+                        assertEquals(42L, preserved.request)
+                        fleet.stop(other, independent = true)
+                        while (next(other) !is ExperimentalFleetEvent.Stopped) { }
+                        observer.close()
+                        session.close()
                     }
-                    val preserved = next() as ExperimentalFleetEvent.Resources
-                    assertEquals(other, preserved.machine)
-                    assertEquals(42L, preserved.request)
-                    fleet.stop(other, independent = true)
-                    while (next(other) !is ExperimentalFleetEvent.Stopped) { }
-                    observer.close()
-                    session.close()
-                }
             }
         }
     }
@@ -185,8 +217,15 @@ class JniExperimentalFleetIntegrationTest {
     fun `independent stop returns generation after accepted deployment with ordinary output full`() {
         val library = Path.of(requireNotNull(System.getProperty("compukter.jni.library")))
         val artifact = Path.of(requireNotNull(System.getProperty("compukters.fleet.timer.fixture"))).readBytes()
-        val header = ByteBuffer.allocate(16).order(ByteOrder.LITTLE_ENDIAN)
-            .put("CPKTSYS\u0000".encodeToByteArray()).putShort(1).putShort(0).putInt(0).array()
+        val header =
+            ByteBuffer
+                .allocate(16)
+                .order(ByteOrder.LITTLE_ENDIAN)
+                .put("CPKTSYS\u0000".encodeToByteArray())
+                .putShort(1)
+                .putShort(0)
+                .putInt(0)
+                .array()
         val image = header + MessageDigest.getInstance("SHA-256").digest(header)
         val root = Files.createTempDirectory("fleet-stop-generation-").toRealPath()
         val bridge = JniBridge.open(library)
@@ -201,6 +240,7 @@ class JniExperimentalFleetIntegrationTest {
                     val machine = session.transferToFleet(fleet)
                     val other = observer.transferToFleet(fleet)
                     val deadline = System.nanoTime() + 10_000_000_000L
+
                     fun next(machine: Long? = null): ExperimentalFleetEvent {
                         while (System.nanoTime() < deadline) {
                             (if (machine == null) fleet.poll() else fleet.pollLifecycle(machine))?.let { return it }
@@ -209,7 +249,9 @@ class JniExperimentalFleetIntegrationTest {
                         error("timed out waiting for fleet event")
                     }
                     fleet.prepareDeployment(machine, 1, artifact)
-                    val candidate = ((next() as ExperimentalFleetEvent.Deployment).result as ExperimentalFleetDeploymentResult.Prepared).candidate
+                    val candidate =
+                        ((next() as ExperimentalFleetEvent.Deployment).result as ExperimentalFleetDeploymentResult.Prepared)
+                            .candidate
                     val published = fleet.eventGeneration()
                     fleet.resourceSnapshot(other, 2)
                     assertTrue(fleet.waitEvents(published, 5_000))
@@ -229,7 +271,9 @@ class JniExperimentalFleetIntegrationTest {
                     observer.close()
                 }
             }
-        } finally { root.toFile().deleteRecursively() }
+        } finally {
+            root.toFile().deleteRecursively()
+        }
     }
 
     @Test
@@ -241,7 +285,10 @@ class JniExperimentalFleetIntegrationTest {
         val original = ByteBuffer.wrap(created, 1, 8).order(ByteOrder.LITTLE_ENDIAN).long
         val fleet = LongArray(1)
         val none = byteArrayOf()
-        assertEquals(0, JniExperimentalFleet.create(none, byteArrayOf(1, 0), 0, intArrayOf(1, 32, 1, 64, 64, 64, 16), none, none, none, 0, 0, 0, fleet))
+        assertEquals(
+            0,
+            JniExperimentalFleet.create(none, byteArrayOf(1, 0), 0, intArrayOf(1, 32, 1, 64, 64, 64, 16), none, none, none, 0, 0, 0, fleet),
+        )
         val machine = LongArray(1)
         assertEquals(0, JniExperimentalFleet.attachSession(fleet[0], original, machine))
         assertEquals(0, JniExperimentalFleet.requestLifecycle(fleet[0], machine[0], 1, 0))
@@ -263,7 +310,10 @@ class JniExperimentalFleetIntegrationTest {
         assertEquals(7, JniExperimentalFleet.close(fleet[0]))
         val bytes = ByteArray(29)
         assertEquals(0, JniExperimentalFleet.pollLifecycle(fleet[0], machine[0], bytes, written))
-        assertEquals(ExperimentalFleetEvent.Detached(machine[0], state = ExperimentalFleetDetachedState(listOf(0), 0)), ExperimentalFleetEventWire.decode(bytes))
+        assertEquals(
+            ExperimentalFleetEvent.Detached(machine[0], state = ExperimentalFleetDetachedState(listOf(0), 0)),
+            ExperimentalFleetEventWire.decode(bytes),
+        )
         val restored = LongArray(1)
         assertEquals(0, JniExperimentalFleet.restoreSession(fleet[0], machine[0], restored))
         assertEquals(1, JniExperimentalFleet.restoreSession(fleet[0], machine[0], LongArray(1)))
@@ -281,6 +331,7 @@ class JniExperimentalFleetIntegrationTest {
         val session = VmSession.open(artifact, bridge)
         val machine = session.transferToFleet(fleet)
         val deadline = System.nanoTime() + 10_000_000_000L
+
         fun next(lifecycle: Long? = null): ExperimentalFleetEvent {
             while (System.nanoTime() < deadline) {
                 (if (lifecycle == null) fleet.poll() else fleet.pollLifecycle(lifecycle))?.let { return it }
@@ -304,7 +355,6 @@ class JniExperimentalFleetIntegrationTest {
         restored.close()
         session.close()
         fleet.close()
-
     }
 
     @Test
@@ -323,8 +373,14 @@ class JniExperimentalFleetIntegrationTest {
         var accepted = 0
         while (true) {
             check(System.nanoTime() < deadline) { "native output did not saturate" }
-            try { fleet.resourceSnapshot(a, 300L + accepted); accepted++ }
-            catch (_: VmFleetBusyException) { if (accepted >= 4) break else Thread.yield() }
+            try {
+                fleet.resourceSnapshot(a, 300L + accepted)
+                accepted++
+            } catch (
+                _: VmFleetBusyException,
+            ) {
+                if (accepted >= 4) break else Thread.yield()
+            }
         }
         fleet.detach(b, independent = true)
         var observedQuery = false
@@ -332,17 +388,24 @@ class JniExperimentalFleetIntegrationTest {
         while (!detached) {
             check(System.nanoTime() < deadline) { "detach depended on ordinary polling" }
             when (val event = fleet.pollLifecycle(b)) {
-                null -> Thread.yield()
+                null -> {
+                    Thread.yield()
+                }
+
                 is ExperimentalFleetEvent.Resources -> {
                     assertEquals(b, event.machine)
                     assertEquals(200L, event.request)
                     observedQuery = true
                 }
+
                 is ExperimentalFleetEvent.Detached -> {
                     assertEquals(b, event.machine)
                     detached = true
                 }
-                else -> error("unexpected lifecycle event $event")
+
+                else -> {
+                    error("unexpected lifecycle event $event")
+                }
             }
         }
         assertTrue(observedQuery, "accepted query was lost on detach")
@@ -356,7 +419,6 @@ class JniExperimentalFleetIntegrationTest {
         first.close()
         second.close()
         fleet.close()
-
     }
 
     @Test
@@ -367,22 +429,41 @@ class JniExperimentalFleetIntegrationTest {
         val fleet = bridge.openExperimentalFleet(ExperimentalFleetConfig(1, 1, 1, 128, 64, 64, 32))
         val session = VmSession.open(artifact, bridge)
         var machine: Long? = null
-        val deadline = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(10)
+        val deadline =
+            System.nanoTime() +
+                java.util.concurrent.TimeUnit.SECONDS
+                    .toNanos(10)
         while (machine == null) {
             check(System.nanoTime() < deadline)
-            try { machine = session.transferToFleet(fleet) } catch (_: VmFleetBusyException) { Thread.yield() }
+            try {
+                machine = session.transferToFleet(fleet)
+            } catch (_: VmFleetBusyException) {
+                Thread.yield()
+            }
         }
         var accepted = 0L
         while (true) {
             check(System.nanoTime() < deadline) { "mailbox did not fill" }
-            try { fleet.resourceSnapshot(machine, accepted); accepted++ }
-            catch (_: VmFleetBusyException) { if (accepted >= 3) break else Thread.yield() }
+            try {
+                fleet.resourceSnapshot(machine, accepted)
+                accepted++
+            } catch (
+                _: VmFleetBusyException,
+            ) {
+                if (accepted >= 3) break else Thread.yield()
+            }
         }
         var sent = false
         var observed = false
         while (!observed) {
             check(System.nanoTime() < deadline) { "mailbox did not recover" }
-            if (!sent) try { fleet.resourceSnapshot(machine, 10_000); sent = true } catch (_: VmFleetBusyException) { }
+            if (!sent) {
+                try {
+                    fleet.resourceSnapshot(machine, 10_000)
+                    sent = true
+                } catch (_: VmFleetBusyException) {
+                }
+            }
             val event = fleet.poll()
             if (event is ExperimentalFleetEvent.Resources && event.request == 10_000L) observed = true
             if (event == null) Thread.yield()
@@ -391,7 +472,13 @@ class JniExperimentalFleetIntegrationTest {
         var stopped = false
         while (!stopped) {
             check(System.nanoTime() < deadline) { "fleet did not stop" }
-            if (!stopping) try { fleet.stop(machine); stopping = true } catch (_: VmFleetBusyException) { }
+            if (!stopping) {
+                try {
+                    fleet.stop(machine)
+                    stopping = true
+                } catch (_: VmFleetBusyException) {
+                }
+            }
             stopped = fleet.poll() is ExperimentalFleetEvent.Stopped
             if (!stopped) Thread.yield()
         }
@@ -399,14 +486,15 @@ class JniExperimentalFleetIntegrationTest {
         fleet.close()
     }
 
-
     @Test
     fun `closing an empty fleet releases an event waiter`() {
         val library = Path.of(requireNotNull(System.getProperty("compukter.jni.library")))
         val bridge = JniBridge.open(library)
         val fleet = bridge.openExperimentalFleet(ExperimentalFleetConfig(1, 32, 32, 128, 64, 64, 32))
         val generation = fleet.eventGeneration()
-        val wait = java.util.concurrent.CompletableFuture.supplyAsync { fleet.waitEvents(generation, 5_000) }
+        val wait =
+            java.util.concurrent.CompletableFuture
+                .supplyAsync { fleet.waitEvents(generation, 5_000) }
         kotlin.test.assertFailsWith<java.util.concurrent.TimeoutException> { wait.get(100, java.util.concurrent.TimeUnit.MILLISECONDS) }
         fleet.close()
         assertTrue(!wait.get(5, java.util.concurrent.TimeUnit.SECONDS))
@@ -422,7 +510,9 @@ class JniExperimentalFleetIntegrationTest {
         val machine = session.transferToFleet(fleet)
         val generation = fleet.eventGeneration()
         assertEquals(null, fleet.poll())
-        val wait = java.util.concurrent.CompletableFuture.supplyAsync { fleet.waitEvents(generation, 5_000) }
+        val wait =
+            java.util.concurrent.CompletableFuture
+                .supplyAsync { fleet.waitEvents(generation, 5_000) }
         kotlin.test.assertFailsWith<java.util.concurrent.TimeoutException> { wait.get(100, java.util.concurrent.TimeUnit.MILLISECONDS) }
         fleet.resourceSnapshot(machine, 42)
         assertTrue(wait.get(5, java.util.concurrent.TimeUnit.SECONDS))
@@ -444,8 +534,15 @@ class JniExperimentalFleetIntegrationTest {
         val library = Path.of(requireNotNull(System.getProperty("compukter.jni.library")))
         val artifact = Path.of(requireNotNull(System.getProperty("compukters.fleet.timer.fixture"))).readBytes()
         val bridge = JniBridge.open(library)
-        val header = ByteBuffer.allocate(16).order(ByteOrder.LITTLE_ENDIAN)
-            .put("CPKTSYS\u0000".encodeToByteArray()).putShort(1).putShort(0).putInt(0).array()
+        val header =
+            ByteBuffer
+                .allocate(16)
+                .order(ByteOrder.LITTLE_ENDIAN)
+                .put("CPKTSYS\u0000".encodeToByteArray())
+                .putShort(1)
+                .putShort(0)
+                .putInt(0)
+                .array()
         val image = header + MessageDigest.getInstance("SHA-256").digest(header)
         val root = Files.createTempDirectory("fleet-deployment-").toRealPath()
         try {
@@ -456,6 +553,7 @@ class JniExperimentalFleetIntegrationTest {
                     val a = first.transferToFleet(fleet)
                     val b = second.transferToFleet(fleet)
                     val deadline = System.nanoTime() + 10_000_000_000L
+
                     fun next(): ExperimentalFleetEvent {
                         while (System.nanoTime() < deadline) {
                             fleet.poll()?.let { return it }
@@ -465,20 +563,42 @@ class JniExperimentalFleetIntegrationTest {
                     }
                     val path = VmVirtualPath.of("/home/demo")
                     fleet.prepareDeployment(a, 1, artifact)
-                    val candidateA = ((next() as ExperimentalFleetEvent.Deployment).result as ExperimentalFleetDeploymentResult.Prepared).candidate
+                    val candidateA =
+                        ((next() as ExperimentalFleetEvent.Deployment).result as ExperimentalFleetDeploymentResult.Prepared)
+                            .candidate
                     fleet.prepareDeployment(b, 2, artifact)
-                    val candidateB = ((next() as ExperimentalFleetEvent.Deployment).result as ExperimentalFleetDeploymentResult.Prepared).candidate
+                    val candidateB =
+                        ((next() as ExperimentalFleetEvent.Deployment).result as ExperimentalFleetDeploymentResult.Prepared)
+                            .candidate
                     kotlin.test.assertNotEquals(candidateA, candidateB)
                     fleet.installDeployment(b, 3, path, candidateA, VmExecutableRevision.Absent)
-                    assertEquals(ExperimentalFleetEvent.Deployment(b, 3, ExperimentalFleetDeploymentResult.Failed(ExperimentalFleetDeploymentFailure.INVALID_CANDIDATE)), next())
+                    assertEquals(
+                        ExperimentalFleetEvent.Deployment(
+                            b,
+                            3,
+                            ExperimentalFleetDeploymentResult.Failed(ExperimentalFleetDeploymentFailure.INVALID_CANDIDATE),
+                        ),
+                        next(),
+                    )
                     fleet.installDeployment(a, 4, path, candidateA, VmExecutableRevision.Absent)
                     assertTrue((next() as ExperimentalFleetEvent.Deployment).result is ExperimentalFleetDeploymentResult.Installed)
                     fleet.prepareDeployment(a, 5, artifact)
-                    val retry = ((next() as ExperimentalFleetEvent.Deployment).result as ExperimentalFleetDeploymentResult.Prepared).candidate
+                    val retry =
+                        ((next() as ExperimentalFleetEvent.Deployment).result as ExperimentalFleetDeploymentResult.Prepared)
+                            .candidate
                     fleet.installDeployment(a, 6, path, retry, VmExecutableRevision.Absent)
-                    assertEquals(ExperimentalFleetEvent.Deployment(a, 6, ExperimentalFleetDeploymentResult.Failed(ExperimentalFleetDeploymentFailure.BUSY)), next())
+                    assertEquals(
+                        ExperimentalFleetEvent.Deployment(
+                            a,
+                            6,
+                            ExperimentalFleetDeploymentResult.Failed(ExperimentalFleetDeploymentFailure.BUSY),
+                        ),
+                        next(),
+                    )
                     fleet.deploymentRevision(a, 7, path)
-                    val revision = ((next() as ExperimentalFleetEvent.Deployment).result as ExperimentalFleetDeploymentResult.Revision).revision
+                    val revision =
+                        ((next() as ExperimentalFleetEvent.Deployment).result as ExperimentalFleetDeploymentResult.Revision)
+                            .revision
                     fleet.installDeployment(a, 8, path, retry, revision)
                     assertTrue((next() as ExperimentalFleetEvent.Deployment).result is ExperimentalFleetDeploymentResult.Installed)
                     fleet.discardDeployment(b, 9, candidateB)
@@ -501,8 +621,15 @@ class JniExperimentalFleetIntegrationTest {
         val library = Path.of(requireNotNull(System.getProperty("compukter.jni.library")))
         val artifact = Path.of(requireNotNull(System.getProperty("compukters.fleet.timer.fixture"))).readBytes()
         val bridge = JniBridge.open(library)
-        val header = ByteBuffer.allocate(16).order(ByteOrder.LITTLE_ENDIAN)
-            .put("CPKTSYS\u0000".encodeToByteArray()).putShort(1).putShort(0).putInt(0).array()
+        val header =
+            ByteBuffer
+                .allocate(16)
+                .order(ByteOrder.LITTLE_ENDIAN)
+                .put("CPKTSYS\u0000".encodeToByteArray())
+                .putShort(1)
+                .putShort(0)
+                .putInt(0)
+                .array()
         val image = header + MessageDigest.getInstance("SHA-256").digest(header)
         val root = Files.createTempDirectory("fleet-timer-").toRealPath()
         try {
@@ -510,6 +637,7 @@ class JniExperimentalFleetIntegrationTest {
                 val id = ComputerId.fromLongs(93, 94)
                 ExperimentalJniFleet.open(library, 1, 32, 32, 128, 64, 64, 32, coordinatedTurns = true).use { fleet ->
                     val deadline = System.nanoTime() + 10_000_000_000L
+
                     fun next(): ExperimentalFleetEvent {
                         while (System.nanoTime() < deadline) {
                             fleet.poll()?.let { return it }
@@ -526,13 +654,21 @@ class JniExperimentalFleetIntegrationTest {
                     assertEquals(1, detached.timers.size)
                     assertEquals(1L, detached.timers.single().remaining)
                     val timer = detached.timers.single()
-                    val host = ByteBuffer.allocate(32).order(ByteOrder.LITTLE_ENDIAN)
-                        .putInt(timer.identity.taskId).putLong(timer.identity.requestId).putLong(timer.scope)
-                        .putInt(timer.duration).putLong(timer.remaining).array()
+                    val host =
+                        ByteBuffer
+                            .allocate(32)
+                            .order(ByteOrder.LITTLE_ENDIAN)
+                            .putInt(timer.identity.taskId)
+                            .putLong(timer.identity.requestId)
+                            .putLong(timer.scope)
+                            .putInt(timer.duration)
+                            .putLong(timer.remaining)
+                            .array()
                     VmSession.restoreFromFleet(fleet, machine).use { it.checkpoint(store, id, host) }
                     val restored = requireNotNull(VmSession.restoreInStore(store, id, image))
                     val encoded = ByteBuffer.wrap(restored.hostStateBytes()).order(ByteOrder.LITTLE_ENDIAN)
-                    val persisted = ExperimentalFleetTimer(VmHostRequestIdentity(encoded.int, encoded.long), encoded.long, encoded.int, encoded.long)
+                    val persisted =
+                        ExperimentalFleetTimer(VmHostRequestIdentity(encoded.int, encoded.long), encoded.long, encoded.int, encoded.long)
                     assertEquals(timer, persisted)
                     store.discardCheckpoint(id)
                     val restoredMachine = restored.session.transferToFleet(fleet, 100, listOf(persisted))
@@ -556,6 +692,7 @@ class JniExperimentalFleetIntegrationTest {
     fun `redstone input and confirmed output reach the correct machine over JNI`() {
         val library = Path.of(requireNotNull(System.getProperty("compukter.jni.library")))
         val bridge = JniBridge.open(library)
+
         fun fixture(name: String) = Path.of(requireNotNull(System.getProperty(name))).readBytes()
         ExperimentalJniFleet.open(library, 2, 32, 32, 128, 64, 64, 32).use { fleet ->
             val input = VmSession.open(fixture("compukters.fleet.redstone.input.fixture"), bridge)
@@ -563,6 +700,7 @@ class JniExperimentalFleetIntegrationTest {
             val inputId = input.transferToFleet(fleet)
             val outputId = output.transferToFleet(fleet)
             val deadline = System.nanoTime() + 5_000_000_000L
+
             fun next(): ExperimentalFleetEvent {
                 while (System.nanoTime() < deadline) {
                     fleet.poll()?.let { return it }
@@ -576,10 +714,11 @@ class JniExperimentalFleetIntegrationTest {
                 fleet.confirmRedstoneOutput(outputId, 0x12345678)
                 fleet.grant(inputId, 1, 512)
                 fleet.grant(outputId, 1, 512)
-                val outcomes = (0..1).associate {
-                    val event = next() as ExperimentalFleetEvent.Outcome
-                    event.machine to event.outcome
-                }
+                val outcomes =
+                    (0..1).associate {
+                        val event = next() as ExperimentalFleetEvent.Outcome
+                        event.machine to event.outcome
+                    }
                 assertEquals(VmOutcome.Halted(VmValue.I32(11)), outcomes[inputId])
                 assertEquals(VmOutcome.Halted(VmValue.I32(0x12345678)), outcomes[outputId])
             } finally {
@@ -603,11 +742,14 @@ class JniExperimentalFleetIntegrationTest {
                 val session = VmSession.open(artifact, bridge)
                 if (canonical) {
                     var outcome: VmOutcome
-                    do { outcome = session.advance(1024, 64, 64) } while (outcome == VmOutcome.SliceExhausted)
+                    do {
+                        outcome = session.advance(1024, 64, 64)
+                    } while (outcome == VmOutcome.SliceExhausted)
                     assertEquals(VmOutcome.WaitingForTerminalEvent, outcome)
                 }
                 val machine = session.transferToFleet(fleet)
                 val deadline = System.nanoTime() + 5_000_000_000L
+
                 fun next(): ExperimentalFleetEvent {
                     while (System.nanoTime() < deadline) {
                         fleet.poll()?.let { return it }
@@ -618,7 +760,14 @@ class JniExperimentalFleetIntegrationTest {
                 try {
                     if (!canonical) {
                         fleet.canonicalLine(machine, charArrayOf(), request = 80)
-                        assertEquals(ExperimentalFleetEvent.InputResult(machine, 80, ExperimentalFleetInputResult.CanonicalRejected(VmCanonicalLineFailure.NO_PENDING_READ)), next())
+                        assertEquals(
+                            ExperimentalFleetEvent.InputResult(
+                                machine,
+                                80,
+                                ExperimentalFleetInputResult.CanonicalRejected(VmCanonicalLineFailure.NO_PENDING_READ),
+                            ),
+                            next(),
+                        )
                     }
                     fleet.grant(machine, 1, 512)
                     assertEquals(VmOutcome.WaitingForTerminalEvent, (next() as ExperimentalFleetEvent.Outcome).outcome)
@@ -646,7 +795,13 @@ class JniExperimentalFleetIntegrationTest {
                     assertEquals(machine, full.machine)
                     assertEquals(11L, full.request)
                     val state = (full.update as TerminalUpdate.Full).state
-                    assertEquals("hello", state.cells.take(5).map { it.codePoint.toChar() }.joinToString(""))
+                    assertEquals(
+                        "hello",
+                        state.cells
+                            .take(5)
+                            .map { it.codePoint.toChar() }
+                            .joinToString(""),
+                    )
                     fleet.terminalUpdate(machine, 12, state.revision)
                     assertEquals(ExperimentalFleetEvent.Terminal(machine, 12, TerminalUpdate.Unchanged(state.revision)), next())
                 } finally {
@@ -661,13 +816,21 @@ class JniExperimentalFleetIntegrationTest {
     @Test
     fun `compilation request and result cross JNI and install into stored filesystem`() {
         val library = Path.of(requireNotNull(System.getProperty("compukter.jni.library")))
+
         fun fixture(name: String) = Path.of(requireNotNull(System.getProperty(name))).readBytes()
         val sourceWriter = fixture("compukters.fleet.compiler.source.fixture")
         val compiler = fixture("compukters.fleet.compiler.fixture")
         val resultArtifact = fixture("compukters.shell.artifact")
         val bridge = JniBridge.open(library)
-        val header = ByteBuffer.allocate(16).order(ByteOrder.LITTLE_ENDIAN)
-            .put("CPKTSYS\u0000".encodeToByteArray()).putShort(1).putShort(0).putInt(0).array()
+        val header =
+            ByteBuffer
+                .allocate(16)
+                .order(ByteOrder.LITTLE_ENDIAN)
+                .put("CPKTSYS\u0000".encodeToByteArray())
+                .putShort(1)
+                .putShort(0)
+                .putInt(0)
+                .array()
         val image = header + MessageDigest.getInstance("SHA-256").digest(header)
         val root = Files.createTempDirectory("fleet-compiler-").toRealPath()
         try {
@@ -675,13 +838,16 @@ class JniExperimentalFleetIntegrationTest {
                 val id = ComputerId.fromLongs(91, 92)
                 VmSession.openInStore(sourceWriter, store, id, image).use { writer ->
                     var result: VmOutcome
-                    do { result = writer.advance(128, 64, 64) } while (result == VmOutcome.SliceExhausted)
+                    do {
+                        result = writer.advance(128, 64, 64)
+                    } while (result == VmOutcome.SliceExhausted)
                     assertTrue(result is VmOutcome.Halted)
                 }
                 ExperimentalJniFleet.open(library, 1, 32, 32, 128, 64, 64, 32).use { fleet ->
                     val session = VmSession.openInStore(compiler, store, id, image)
                     val machine = session.transferToFleet(fleet)
                     val deadline = System.nanoTime() + 5_000_000_000L
+
                     fun next(): ExperimentalFleetEvent {
                         while (System.nanoTime() < deadline) {
                             fleet.poll()?.let { return it }
@@ -694,8 +860,19 @@ class JniExperimentalFleetIntegrationTest {
                         fleet.grant(machine, 1, 1024)
                         val request = next() as ExperimentalFleetEvent.Compilation
                         assertEquals(machine, request.machine)
-                        assertEquals("/home/main.kt", request.request.sources.single().path)
-                        assertEquals("fun main() = 42", request.request.sources.single().utf8Bytes().decodeToString())
+                        assertEquals(
+                            "/home/main.kt",
+                            request.request.sources
+                                .single()
+                                .path,
+                        )
+                        assertEquals(
+                            "fun main() = 42",
+                            request.request.sources
+                                .single()
+                                .utf8Bytes()
+                                .decodeToString(),
+                        )
                         val path = VmVirtualPath.of("/home/main.kt")
                         fleet.fileStat(machine, 31, path)
                         val stat = next() as ExperimentalFleetEvent.FileStat
@@ -743,6 +920,7 @@ class JniExperimentalFleetIntegrationTest {
             val session = VmSession.open(artifact, listOf(schema), JniBridge.open(library))
             val machine = session.transferToFleet(fleet)
             val deadline = System.nanoTime() + 5_000_000_000L
+
             fun next(): ExperimentalFleetEvent {
                 while (System.nanoTime() < deadline) {
                     fleet.poll()?.let { return it }
@@ -784,6 +962,7 @@ class JniExperimentalFleetIntegrationTest {
         bridge.openExperimentalFleet(ExperimentalFleetConfig(1, 32, 32, 128, 64, 64, 32, coordinatedTurns = true)).use { fleet ->
             val session = VmSession.open(artifact, listOf(schema), bridge)
             val machine = session.transferToFleet(fleet)
+
             fun next(): ExperimentalFleetEvent {
                 val deadline = System.nanoTime() + 5_000_000_000L
                 while (System.nanoTime() < deadline) {
@@ -852,10 +1031,14 @@ class JniExperimentalFleetIntegrationTest {
         val capability = CapabilityIdentity("app", "entry", 1, 2)
         val schema = HostCapabilitySchema(capability, listOf(HostOperationSchema(emptyList(), HostValueType.UNIT, true)))
         val bridge = JniBridge.open(library)
-        val fleet = bridge.openExperimentalFleet(ExperimentalFleetConfig(1, 32, 32, 128, 64, 64, 32, ExperimentalRequestInspection(capability, 0, "request exceeds budget")))
+        val fleet =
+            bridge.openExperimentalFleet(
+                ExperimentalFleetConfig(1, 32, 32, 128, 64, 64, 32, ExperimentalRequestInspection(capability, 0, "request exceeds budget")),
+            )
         val session = VmSession.open(artifact, listOf(schema), bridge)
         val machine = session.transferToFleet(fleet)
         val deadline = System.nanoTime() + 5_000_000_000L
+
         fun nextEvent(): ExperimentalFleetEvent {
             while (System.nanoTime() < deadline) {
                 fleet.poll()?.let { return it }
@@ -888,12 +1071,14 @@ class JniExperimentalFleetIntegrationTest {
             fleet.close()
         }
     }
+
     @Test
     fun `stop event survives a short output buffer and handles are isolated`() {
         JniBridge.open(Path.of(requireNotNull(System.getProperty("compukter.jni.library"))))
         val artifact = Path.of(requireNotNull(System.getProperty("compukters.shell.artifact"))).readBytes()
         val config = intArrayOf(1, 32, 32, 64, 64, 64, 16)
         val none = byteArrayOf()
+
         fun create(): Long {
             val handle = LongArray(1)
             assertEquals(0, JniExperimentalFleet.create(artifact, byteArrayOf(1, 0), 1, config, none, none, none, 0, 0, 0, handle))
@@ -930,13 +1115,29 @@ class JniExperimentalFleetIntegrationTest {
             JniExperimentalFleet.close(second)
         }
     }
+
     @Test
     fun `terminal queue failure reaches JVM with its machine identity`() {
         JniBridge.open(Path.of(requireNotNull(System.getProperty("compukter.jni.library"))))
         val artifact = Path.of(requireNotNull(System.getProperty("compukters.shell.artifact"))).readBytes()
         val handle = LongArray(1)
         val none = byteArrayOf()
-        assertEquals(0, JniExperimentalFleet.create(artifact, byteArrayOf(1, 0), 1, intArrayOf(1, 32, 32, 64, 64, 64, 16), none, none, none, 0, 0, 0, handle))
+        assertEquals(
+            0,
+            JniExperimentalFleet.create(
+                artifact,
+                byteArrayOf(1, 0),
+                1,
+                intArrayOf(1, 32, 32, 64, 64, 64, 16),
+                none,
+                none,
+                none,
+                0,
+                0,
+                0,
+                handle,
+            ),
+        )
         try {
             val deadline = System.nanoTime() + 5_000_000_000L
             repeat(257) {
@@ -955,7 +1156,10 @@ class JniExperimentalFleetIntegrationTest {
                 if (written[0] == 0L) Thread.yield()
                 assertTrue(System.nanoTime() < deadline, "fleet error timed out")
             } while (written[0] == 0L)
-            assertEquals(ExperimentalFleetEvent.Error(0, "terminal key: QueueFull"), ExperimentalFleetEventWire.decode(output.copyOf(written[0].toInt())))
+            assertEquals(
+                ExperimentalFleetEvent.Error(0, "terminal key: QueueFull"),
+                ExperimentalFleetEventWire.decode(output.copyOf(written[0].toInt())),
+            )
         } finally {
             JniExperimentalFleet.close(handle[0])
         }
@@ -970,7 +1174,22 @@ class JniExperimentalFleetIntegrationTest {
         val original = ByteBuffer.wrap(created, 1, 8).order(ByteOrder.LITTLE_ENDIAN).long
         val fleet = LongArray(1)
         val none = byteArrayOf()
-        assertEquals(0, JniExperimentalFleet.create(none, byteArrayOf(1, 0), 0, intArrayOf(1, 32, 32, 64, 64, 64, 16), none, none, none, 0, 0, 0, fleet))
+        assertEquals(
+            0,
+            JniExperimentalFleet.create(
+                none,
+                byteArrayOf(1, 0),
+                0,
+                intArrayOf(1, 32, 32, 64, 64, 64, 16),
+                none,
+                none,
+                none,
+                0,
+                0,
+                0,
+                fleet,
+            ),
+        )
         var restored = 0L
         try {
             val machine = LongArray(1)
@@ -985,7 +1204,10 @@ class JniExperimentalFleetIntegrationTest {
                 if (written[0] == 0L) Thread.yield()
                 assertTrue(System.nanoTime() < deadline)
             } while (written[0] == 0L)
-            assertEquals(ExperimentalFleetEvent.Detached(machine[0], state = ExperimentalFleetDetachedState(listOf(0), 0)), ExperimentalFleetEventWire.decode(bytes.copyOf(written[0].toInt())))
+            assertEquals(
+                ExperimentalFleetEvent.Detached(machine[0], state = ExperimentalFleetDetachedState(listOf(0), 0)),
+                ExperimentalFleetEventWire.decode(bytes.copyOf(written[0].toInt())),
+            )
             val result = LongArray(1)
             assertEquals(0, JniExperimentalFleet.restoreSession(fleet[0], machine[0], result))
             restored = result[0]
@@ -1004,7 +1226,10 @@ class JniExperimentalFleetIntegrationTest {
                 assertEquals(expected, actual)
                 if (actual == 0) {
                     assertEquals(controlWritten[0], advanceWritten[0])
-                    kotlin.test.assertContentEquals(controlOutput.copyOf(controlWritten[0].toInt()), output.copyOf(advanceWritten[0].toInt()))
+                    kotlin.test.assertContentEquals(
+                        controlOutput.copyOf(controlWritten[0].toInt()),
+                        output.copyOf(advanceWritten[0].toInt()),
+                    )
                 }
             } finally {
                 bridge.close(control)
@@ -1020,43 +1245,52 @@ class JniExperimentalFleetIntegrationTest {
         val library = Path.of(requireNotNull(System.getProperty("compukter.jni.library")))
         val artifact = Path.of(requireNotNull(System.getProperty("compukters.shell.artifact"))).readBytes()
         val bridge = JniBridge.open(library)
-        ExperimentalJniFleet.open(
-            library, 1, 32, 32, 128, 64, 64, 16,
-            ExperimentalRequestInspection(CapabilityIdentity("app", "entry", 1, 0), 0, "request exceeds budget"),
-        ).use { fleet ->
-            val original = VmSession.open(artifact, bridge)
-            val resources = original.resourceSnapshot()
-            val generation = original.filesystemGeneration()
-            val machine = original.transferToFleet(fleet)
-            kotlin.test.assertFailsWith<VmBridgeException> { fleet.close() }
-            kotlin.test.assertFailsWith<IllegalStateException> { original.advance(128, 64, 64) }
-            original.close()
-            fleet.resourceSnapshot(machine, 21)
-            fleet.filesystemGeneration(machine, 22)
-            val observationDeadline = System.nanoTime() + 5_000_000_000L
-            fun observation(): ExperimentalFleetEvent {
-                while (System.nanoTime() < observationDeadline) {
-                    fleet.poll()?.let { return it }
-                    Thread.yield()
+        ExperimentalJniFleet
+            .open(
+                library,
+                1,
+                32,
+                32,
+                128,
+                64,
+                64,
+                16,
+                ExperimentalRequestInspection(CapabilityIdentity("app", "entry", 1, 0), 0, "request exceeds budget"),
+            ).use { fleet ->
+                val original = VmSession.open(artifact, bridge)
+                val resources = original.resourceSnapshot()
+                val generation = original.filesystemGeneration()
+                val machine = original.transferToFleet(fleet)
+                kotlin.test.assertFailsWith<VmBridgeException> { fleet.close() }
+                kotlin.test.assertFailsWith<IllegalStateException> { original.advance(128, 64, 64) }
+                original.close()
+                fleet.resourceSnapshot(machine, 21)
+                fleet.filesystemGeneration(machine, 22)
+                val observationDeadline = System.nanoTime() + 5_000_000_000L
+
+                fun observation(): ExperimentalFleetEvent {
+                    while (System.nanoTime() < observationDeadline) {
+                        fleet.poll()?.let { return it }
+                        Thread.yield()
+                    }
+                    error("timed out waiting for observation")
                 }
-                error("timed out waiting for observation")
+                assertEquals(ExperimentalFleetEvent.Resources(machine, 21, resources), observation())
+                assertEquals(ExperimentalFleetEvent.FilesystemGeneration(machine, 22, generation), observation())
+                fleet.detach(machine)
+                kotlin.test.assertFailsWith<VmBridgeException> { fleet.resourceSnapshot(machine, 23) }
+                val deadline = System.nanoTime() + 5_000_000_000L
+                var event: ExperimentalFleetEvent?
+                do {
+                    event = fleet.poll()
+                    if (event == null) Thread.yield()
+                    assertTrue(System.nanoTime() < deadline)
+                } while (event == null)
+                assertEquals(ExperimentalFleetEvent.Detached(machine, state = ExperimentalFleetDetachedState(listOf(0), 0)), event)
+                VmSession.restoreFromFleet(fleet, machine).use { restored ->
+                    assertEquals(VmOutcome.SliceExhausted, restored.advanceWithRetirementLimit(128, 64, Int.MAX_VALUE, 0).outcome)
+                }
             }
-            assertEquals(ExperimentalFleetEvent.Resources(machine, 21, resources), observation())
-            assertEquals(ExperimentalFleetEvent.FilesystemGeneration(machine, 22, generation), observation())
-            fleet.detach(machine)
-            kotlin.test.assertFailsWith<VmBridgeException> { fleet.resourceSnapshot(machine, 23) }
-            val deadline = System.nanoTime() + 5_000_000_000L
-            var event: ExperimentalFleetEvent?
-            do {
-                event = fleet.poll()
-                if (event == null) Thread.yield()
-                assertTrue(System.nanoTime() < deadline)
-            } while (event == null)
-            assertEquals(ExperimentalFleetEvent.Detached(machine, state = ExperimentalFleetDetachedState(listOf(0), 0)), event)
-            VmSession.restoreFromFleet(fleet, machine).use { restored ->
-                assertEquals(VmOutcome.SliceExhausted, restored.advanceWithRetirementLimit(128, 64, Int.MAX_VALUE, 0).outcome)
-            }
-        }
     }
 
     @Test
@@ -1093,5 +1327,4 @@ class JniExperimentalFleetIntegrationTest {
         val different = library.resolveSibling("different-native-library")
         kotlin.test.assertFailsWith<VmBridgeException> { JniBridge.open(different) }
     }
-
 }

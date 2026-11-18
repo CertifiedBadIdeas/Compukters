@@ -5,18 +5,18 @@
  */
 package ru.lazyhat.compukters.lang.runtime.vm
 
-import java.nio.file.Path
-import java.nio.file.Files
-import java.nio.ByteBuffer
-import java.nio.ByteOrder
-import java.security.MessageDigest
 import ru.lazyhat.compukters.lang.runtime.capability.HostCapabilitySchema
 import ru.lazyhat.compukters.lang.runtime.capability.HostOperationSchema
-import ru.lazyhat.compukters.lang.runtime.capability.HostValueType
 import ru.lazyhat.compukters.lang.runtime.capability.HostResponse
-import ru.lazyhat.compukters.lang.runtime.fs.VmVirtualPath
+import ru.lazyhat.compukters.lang.runtime.capability.HostValueType
 import ru.lazyhat.compukters.lang.runtime.fs.ComputerId
+import ru.lazyhat.compukters.lang.runtime.fs.VmVirtualPath
 import ru.lazyhat.compukters.lang.runtime.fs.WorldFileSystemStore
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
+import java.nio.file.Files
+import java.nio.file.Path
+import java.security.MessageDigest
 import kotlin.io.path.readBytes
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -24,9 +24,6 @@ import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
 
 class FfmExperimentalFleetIntegrationTest {
-
-
-
     @Test
     fun `autonomous frame resumes inspection and host reply without another grant`() {
         val library = Path.of(requireNotNull(System.getProperty("compukter.ffi.library")))
@@ -34,12 +31,24 @@ class FfmExperimentalFleetIntegrationTest {
         val capability = CapabilityIdentity("app", "entry", 1, 2)
         val schema = HostCapabilitySchema(capability, listOf(HostOperationSchema(emptyList(), HostValueType.UNIT, true)))
         val bridge = FfmBridge.open(library)
-        val fleet = bridge.openExperimentalFleet(ExperimentalFleetConfig(1, 32, 32, 128, 64, 64, 32,
-            ExperimentalRequestInspection(capability, 0, "request exceeds budget"),
-            executionMode = FleetExecutionMode.AUTONOMOUS_FRAMES))
+        val fleet =
+            bridge.openExperimentalFleet(
+                ExperimentalFleetConfig(
+                    1,
+                    32,
+                    32,
+                    128,
+                    64,
+                    64,
+                    32,
+                    ExperimentalRequestInspection(capability, 0, "request exceeds budget"),
+                    executionMode = FleetExecutionMode.AUTONOMOUS_FRAMES,
+                ),
+            )
         val session = VmSession.open(artifact, listOf(schema), bridge)
         val machine = session.transferToFleet(fleet)
         val deadline = System.nanoTime() + 5_000_000_000L
+
         fun nextEvent(): ExperimentalFleetEvent {
             while (System.nanoTime() < deadline) {
                 fleet.poll()?.let { return it }
@@ -112,7 +121,13 @@ class FfmExperimentalFleetIntegrationTest {
                 fleet.stop(two, independent = true)
                 val stopped = mutableSetOf<Long>()
                 while (stopped.size < 2 && System.nanoTime() < deadline) {
-                    for (machine in listOf(one, two)) if (machine !in stopped && fleet.pollLifecycle(machine) is ExperimentalFleetEvent.Stopped) stopped += machine
+                    for (machine in listOf(one, two)) {
+                        if (machine !in stopped &&
+                            fleet.pollLifecycle(machine) is ExperimentalFleetEvent.Stopped
+                        ) {
+                            stopped += machine
+                        }
+                    }
                     Thread.yield()
                 }
                 assertEquals(setOf(one, two), stopped)
@@ -130,51 +145,69 @@ class FfmExperimentalFleetIntegrationTest {
         val schema = HostCapabilitySchema(capability, listOf(HostOperationSchema(emptyList(), HostValueType.UNIT, true)))
         for (inspect in listOf(false, true)) {
             FfmBridge.open(Path.of(requireNotNull(System.getProperty("compukter.ffi.library")))).use { bridge ->
-                bridge.openExperimentalFleet(ExperimentalFleetConfig(1, 32, 1, 128, 64, 64, 32,
-                    if (inspect) ExperimentalRequestInspection(capability, 0, "over budget") else null,
-                    coordinatedTurns = true,
-                )).use { fleet ->
-                    val session = VmSession.open(artifact, listOf(schema), bridge)
-                    val observer = VmSession.open(timer, bridge)
-                    val machine = session.transferToFleet(fleet)
-                    val other = observer.transferToFleet(fleet)
-                    val deadline = System.nanoTime() + 10_000_000_000L
-                    fun next(lifecycle: Long? = null): ExperimentalFleetEvent {
-                        while (System.nanoTime() < deadline) {
-                            (if (lifecycle == null) fleet.poll() else fleet.pollLifecycle(lifecycle))?.let { return it }
-                            Thread.yield()
+                bridge
+                    .openExperimentalFleet(
+                        ExperimentalFleetConfig(
+                            1,
+                            32,
+                            1,
+                            128,
+                            64,
+                            64,
+                            32,
+                            if (inspect) ExperimentalRequestInspection(capability, 0, "over budget") else null,
+                            coordinatedTurns = true,
+                        ),
+                    ).use { fleet ->
+                        val session = VmSession.open(artifact, listOf(schema), bridge)
+                        val observer = VmSession.open(timer, bridge)
+                        val machine = session.transferToFleet(fleet)
+                        val other = observer.transferToFleet(fleet)
+                        val deadline = System.nanoTime() + 10_000_000_000L
+
+                        fun next(lifecycle: Long? = null): ExperimentalFleetEvent {
+                            while (System.nanoTime() < deadline) {
+                                (if (lifecycle == null) fleet.poll() else fleet.pollLifecycle(lifecycle))?.let { return it }
+                                Thread.yield()
+                            }
+                            error("timed out waiting for checkpoint lifecycle")
                         }
-                        error("timed out waiting for checkpoint lifecycle")
-                    }
-                    kotlin.test.assertFailsWith<IllegalArgumentException> { fleet.detachForCheckpoint(machine, -1) }
-                    fleet.grant(machine, 1, 512)
-                    val request = next()
-                    assertTrue(if (inspect) request is ExperimentalFleetEvent.Inspection else request is ExperimentalFleetEvent.Outcome && request.outcome is VmOutcome.HostRequestBatch)
-                    val before = next() as ExperimentalFleetEvent.Quiescent
-                    val generation = fleet.eventGeneration()
-                    fleet.resourceSnapshot(other, 42)
-                    assertTrue(fleet.waitEvents(generation, 5_000))
-                    fleet.detachForCheckpoint(machine, 1)
-                    var event = next(machine)
-                    while (event !is ExperimentalFleetEvent.Detached) event = next(machine)
-                    assertTrue(event.timers.isEmpty())
-                    assertEquals(ExperimentalFleetDetachedState(listOf(0), 0), event.state)
-                    VmSession.restoreFromFleet(fleet, machine).use { restored ->
-                        assertEquals(before.retired, restored.resourceSnapshot().executedInstructions)
-                        var outcome = restored.advance(512, 512, 64)
-                        repeat(16) {
-                            if (outcome is VmOutcome.SliceExhausted) outcome = restored.advance(512, 512, 64)
+                        kotlin.test.assertFailsWith<IllegalArgumentException> { fleet.detachForCheckpoint(machine, -1) }
+                        fleet.grant(machine, 1, 512)
+                        val request = next()
+                        assertTrue(
+                            if (inspect) {
+                                request is ExperimentalFleetEvent.Inspection
+                            } else {
+                                request is ExperimentalFleetEvent.Outcome &&
+                                    request.outcome is VmOutcome.HostRequestBatch
+                            },
+                        )
+                        val before = next() as ExperimentalFleetEvent.Quiescent
+                        val generation = fleet.eventGeneration()
+                        fleet.resourceSnapshot(other, 42)
+                        assertTrue(fleet.waitEvents(generation, 5_000))
+                        fleet.detachForCheckpoint(machine, 1)
+                        var event = next(machine)
+                        while (event !is ExperimentalFleetEvent.Detached) event = next(machine)
+                        assertTrue(event.timers.isEmpty())
+                        assertEquals(ExperimentalFleetDetachedState(listOf(0), 0), event.state)
+                        VmSession.restoreFromFleet(fleet, machine).use { restored ->
+                            assertEquals(before.retired, restored.resourceSnapshot().executedInstructions)
+                            var outcome = restored.advance(512, 512, 64)
+                            repeat(16) {
+                                if (outcome is VmOutcome.SliceExhausted) outcome = restored.advance(512, 512, 64)
+                            }
+                            assertTrue(outcome is VmOutcome.UncaughtException)
                         }
-                        assertTrue(outcome is VmOutcome.UncaughtException)
+                        val preserved = next() as ExperimentalFleetEvent.Resources
+                        assertEquals(other, preserved.machine)
+                        assertEquals(42L, preserved.request)
+                        fleet.stop(other, independent = true)
+                        while (next(other) !is ExperimentalFleetEvent.Stopped) { }
+                        observer.close()
+                        session.close()
                     }
-                    val preserved = next() as ExperimentalFleetEvent.Resources
-                    assertEquals(other, preserved.machine)
-                    assertEquals(42L, preserved.request)
-                    fleet.stop(other, independent = true)
-                    while (next(other) !is ExperimentalFleetEvent.Stopped) { }
-                    observer.close()
-                    session.close()
-                }
             }
         }
     }
@@ -183,8 +216,15 @@ class FfmExperimentalFleetIntegrationTest {
     fun `independent stop returns generation after accepted deployment with ordinary output full`() {
         val library = Path.of(requireNotNull(System.getProperty("compukter.ffi.library")))
         val artifact = Path.of(requireNotNull(System.getProperty("compukters.fleet.timer.fixture"))).readBytes()
-        val header = ByteBuffer.allocate(16).order(ByteOrder.LITTLE_ENDIAN)
-            .put("CPKTSYS\u0000".encodeToByteArray()).putShort(1).putShort(0).putInt(0).array()
+        val header =
+            ByteBuffer
+                .allocate(16)
+                .order(ByteOrder.LITTLE_ENDIAN)
+                .put("CPKTSYS\u0000".encodeToByteArray())
+                .putShort(1)
+                .putShort(0)
+                .putInt(0)
+                .array()
         val image = header + MessageDigest.getInstance("SHA-256").digest(header)
         val root = Files.createTempDirectory("fleet-stop-generation-").toRealPath()
         try {
@@ -199,6 +239,7 @@ class FfmExperimentalFleetIntegrationTest {
                         val machine = session.transferToFleet(fleet)
                         val other = observer.transferToFleet(fleet)
                         val deadline = System.nanoTime() + 10_000_000_000L
+
                         fun next(machine: Long? = null): ExperimentalFleetEvent {
                             while (System.nanoTime() < deadline) {
                                 (if (machine == null) fleet.poll() else fleet.pollLifecycle(machine))?.let { return it }
@@ -207,7 +248,9 @@ class FfmExperimentalFleetIntegrationTest {
                             error("timed out waiting for fleet event")
                         }
                         fleet.prepareDeployment(machine, 1, artifact)
-                        val candidate = ((next() as ExperimentalFleetEvent.Deployment).result as ExperimentalFleetDeploymentResult.Prepared).candidate
+                        val candidate =
+                            ((next() as ExperimentalFleetEvent.Deployment).result as ExperimentalFleetDeploymentResult.Prepared)
+                                .candidate
                         val published = fleet.eventGeneration()
                         fleet.resourceSnapshot(other, 2)
                         assertTrue(fleet.waitEvents(published, 5_000))
@@ -228,7 +271,9 @@ class FfmExperimentalFleetIntegrationTest {
                     }
                 }
             }
-        } finally { root.toFile().deleteRecursively() }
+        } finally {
+            root.toFile().deleteRecursively()
+        }
     }
 
     @Test
@@ -240,6 +285,7 @@ class FfmExperimentalFleetIntegrationTest {
         val session = VmSession.open(artifact, bridge)
         val machine = session.transferToFleet(fleet)
         val deadline = System.nanoTime() + 10_000_000_000L
+
         fun next(lifecycle: Long? = null): ExperimentalFleetEvent {
             while (System.nanoTime() < deadline) {
                 (if (lifecycle == null) fleet.poll() else fleet.pollLifecycle(lifecycle))?.let { return it }
@@ -282,8 +328,14 @@ class FfmExperimentalFleetIntegrationTest {
         var accepted = 0
         while (true) {
             check(System.nanoTime() < deadline) { "native output did not saturate" }
-            try { fleet.resourceSnapshot(a, 300L + accepted); accepted++ }
-            catch (_: VmFleetBusyException) { if (accepted >= 4) break else Thread.yield() }
+            try {
+                fleet.resourceSnapshot(a, 300L + accepted)
+                accepted++
+            } catch (
+                _: VmFleetBusyException,
+            ) {
+                if (accepted >= 4) break else Thread.yield()
+            }
         }
         fleet.detach(b, independent = true)
         var observedQuery = false
@@ -291,17 +343,24 @@ class FfmExperimentalFleetIntegrationTest {
         while (!detached) {
             check(System.nanoTime() < deadline) { "detach depended on ordinary polling" }
             when (val event = fleet.pollLifecycle(b)) {
-                null -> Thread.yield()
+                null -> {
+                    Thread.yield()
+                }
+
                 is ExperimentalFleetEvent.Resources -> {
                     assertEquals(b, event.machine)
                     assertEquals(200L, event.request)
                     observedQuery = true
                 }
+
                 is ExperimentalFleetEvent.Detached -> {
                     assertEquals(b, event.machine)
                     detached = true
                 }
-                else -> error("unexpected lifecycle event $event")
+
+                else -> {
+                    error("unexpected lifecycle event $event")
+                }
             }
         }
         assertTrue(observedQuery, "accepted query was lost on detach")
@@ -326,22 +385,41 @@ class FfmExperimentalFleetIntegrationTest {
         val fleet = bridge.openExperimentalFleet(ExperimentalFleetConfig(1, 1, 1, 128, 64, 64, 32))
         val session = VmSession.open(artifact, bridge)
         var machine: Long? = null
-        val deadline = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(10)
+        val deadline =
+            System.nanoTime() +
+                java.util.concurrent.TimeUnit.SECONDS
+                    .toNanos(10)
         while (machine == null) {
             check(System.nanoTime() < deadline)
-            try { machine = session.transferToFleet(fleet) } catch (_: VmFleetBusyException) { Thread.yield() }
+            try {
+                machine = session.transferToFleet(fleet)
+            } catch (_: VmFleetBusyException) {
+                Thread.yield()
+            }
         }
         var accepted = 0L
         while (true) {
             check(System.nanoTime() < deadline) { "mailbox did not fill" }
-            try { fleet.resourceSnapshot(machine, accepted); accepted++ }
-            catch (_: VmFleetBusyException) { if (accepted >= 3) break else Thread.yield() }
+            try {
+                fleet.resourceSnapshot(machine, accepted)
+                accepted++
+            } catch (
+                _: VmFleetBusyException,
+            ) {
+                if (accepted >= 3) break else Thread.yield()
+            }
         }
         var sent = false
         var observed = false
         while (!observed) {
             check(System.nanoTime() < deadline) { "mailbox did not recover" }
-            if (!sent) try { fleet.resourceSnapshot(machine, 10_000); sent = true } catch (_: VmFleetBusyException) { }
+            if (!sent) {
+                try {
+                    fleet.resourceSnapshot(machine, 10_000)
+                    sent = true
+                } catch (_: VmFleetBusyException) {
+                }
+            }
             val event = fleet.poll()
             if (event is ExperimentalFleetEvent.Resources && event.request == 10_000L) observed = true
             if (event == null) Thread.yield()
@@ -350,7 +428,13 @@ class FfmExperimentalFleetIntegrationTest {
         var stopped = false
         while (!stopped) {
             check(System.nanoTime() < deadline) { "fleet did not stop" }
-            if (!stopping) try { fleet.stop(machine); stopping = true } catch (_: VmFleetBusyException) { }
+            if (!stopping) {
+                try {
+                    fleet.stop(machine)
+                    stopping = true
+                } catch (_: VmFleetBusyException) {
+                }
+            }
             stopped = fleet.poll() is ExperimentalFleetEvent.Stopped
             if (!stopped) Thread.yield()
         }
@@ -359,14 +443,15 @@ class FfmExperimentalFleetIntegrationTest {
         bridge.close()
     }
 
-
     @Test
     fun `closing an empty fleet releases an event waiter`() {
         val library = Path.of(requireNotNull(System.getProperty("compukter.ffi.library")))
         val bridge = FfmBridge.open(library)
         val fleet = bridge.openExperimentalFleet(ExperimentalFleetConfig(1, 32, 32, 128, 64, 64, 32))
         val generation = fleet.eventGeneration()
-        val wait = java.util.concurrent.CompletableFuture.supplyAsync { fleet.waitEvents(generation, 5_000) }
+        val wait =
+            java.util.concurrent.CompletableFuture
+                .supplyAsync { fleet.waitEvents(generation, 5_000) }
         kotlin.test.assertFailsWith<java.util.concurrent.TimeoutException> { wait.get(100, java.util.concurrent.TimeUnit.MILLISECONDS) }
         fleet.close()
         assertTrue(!wait.get(5, java.util.concurrent.TimeUnit.SECONDS))
@@ -383,7 +468,9 @@ class FfmExperimentalFleetIntegrationTest {
         val machine = session.transferToFleet(fleet)
         val generation = fleet.eventGeneration()
         assertEquals(null, fleet.poll())
-        val wait = java.util.concurrent.CompletableFuture.supplyAsync { fleet.waitEvents(generation, 5_000) }
+        val wait =
+            java.util.concurrent.CompletableFuture
+                .supplyAsync { fleet.waitEvents(generation, 5_000) }
         kotlin.test.assertFailsWith<java.util.concurrent.TimeoutException> { wait.get(100, java.util.concurrent.TimeUnit.MILLISECONDS) }
         fleet.resourceSnapshot(machine, 42)
         assertTrue(wait.get(5, java.util.concurrent.TimeUnit.SECONDS))
@@ -412,8 +499,12 @@ class FfmExperimentalFleetIntegrationTest {
                 val a = input.transferToFleet(fleet)
                 val b = output.transferToFleet(fleet)
                 val deadline = System.nanoTime() + 10_000_000_000L
+
                 fun next(): ExperimentalFleetEvent {
-                    while (System.nanoTime() < deadline) { fleet.poll()?.let { return it }; Thread.yield() }
+                    while (System.nanoTime() < deadline) {
+                        fleet.poll()?.let { return it }
+                        Thread.yield()
+                    }
                     error("timed out waiting for fleet event")
                 }
                 assertFailsWith<VmBridgeException> { fleet.redstoneInput(a, 1 shl 30) }
@@ -421,7 +512,11 @@ class FfmExperimentalFleetIntegrationTest {
                 fleet.confirmRedstoneOutput(b, 0x12345678)
                 fleet.grant(a, 1, 512)
                 fleet.grant(b, 1, 512)
-                val outcomes = (0..1).associate { val event = next() as ExperimentalFleetEvent.Outcome; event.machine to event.outcome }
+                val outcomes =
+                    (0..1).associate {
+                        val event = next() as ExperimentalFleetEvent.Outcome
+                        event.machine to event.outcome
+                    }
                 assertEquals(VmOutcome.Halted(VmValue.I32(11)), outcomes[a])
                 assertEquals(VmOutcome.Halted(VmValue.I32(0x12345678)), outcomes[b])
                 fleet.stop(a)
@@ -443,8 +538,12 @@ class FfmExperimentalFleetIntegrationTest {
                 val session = VmSession.open(artifact, bridge)
                 val machine = session.transferToFleet(fleet)
                 val deadline = System.nanoTime() + 10_000_000_000L
+
                 fun next(): ExperimentalFleetEvent {
-                    while (System.nanoTime() < deadline) { fleet.poll()?.let { return it }; Thread.yield() }
+                    while (System.nanoTime() < deadline) {
+                        fleet.poll()?.let { return it }
+                        Thread.yield()
+                    }
                     error("timed out waiting for fleet event")
                 }
                 fleet.grant(machine, 1, 512)
@@ -456,7 +555,10 @@ class FfmExperimentalFleetIntegrationTest {
                     fleet.grant(machine, tick, 512)
                     Thread.sleep(1)
                     val event = fleet.poll()
-                    if (event is ExperimentalFleetEvent.Outcome && event.outcome is VmOutcome.Halted) { outcome = event.outcome; break }
+                    if (event is ExperimentalFleetEvent.Outcome && event.outcome is VmOutcome.Halted) {
+                        outcome = event.outcome
+                        break
+                    }
                     if (event is ExperimentalFleetEvent.Error) error(event.message)
                 }
                 assertEquals(VmOutcome.Halted(VmValue.I32("hello".hashCode())), outcome)
@@ -476,8 +578,12 @@ class FfmExperimentalFleetIntegrationTest {
                 val session = VmSession.open(artifact, bridge)
                 val machine = session.transferToFleet(fleet)
                 val deadline = System.nanoTime() + 10_000_000_000L
+
                 fun next(): ExperimentalFleetEvent {
-                    while (System.nanoTime() < deadline) { fleet.poll()?.let { return it }; Thread.yield() }
+                    while (System.nanoTime() < deadline) {
+                        fleet.poll()?.let { return it }
+                        Thread.yield()
+                    }
                     error("timed out waiting for fleet event")
                 }
                 fleet.resourceSnapshot(machine, 11)
@@ -494,9 +600,20 @@ class FfmExperimentalFleetIntegrationTest {
                     fleet.grant(machine, tick, 512)
                     Thread.sleep(1)
                     when (val event = fleet.poll()) {
-                        is ExperimentalFleetEvent.Outcome -> if (event.outcome is VmOutcome.Halted) { outcome = event.outcome; break }
-                        is ExperimentalFleetEvent.Error -> error(event.message)
-                        else -> Unit
+                        is ExperimentalFleetEvent.Outcome -> {
+                            if (event.outcome is VmOutcome.Halted) {
+                                outcome = event.outcome
+                                break
+                            }
+                        }
+
+                        is ExperimentalFleetEvent.Error -> {
+                            error(event.message)
+                        }
+
+                        else -> {
+                            Unit
+                        }
                     }
                 }
                 assertEquals(VmOutcome.Halted(VmValue.I32("hello".hashCode())), outcome)
@@ -513,8 +630,15 @@ class FfmExperimentalFleetIntegrationTest {
     fun `FFM compiler completion installs artifact in stored filesystem`() {
         fun fixture(name: String) = Path.of(requireNotNull(System.getProperty(name))).readBytes()
         val library = Path.of(requireNotNull(System.getProperty("compukter.ffi.library")))
-        val header = ByteBuffer.allocate(16).order(ByteOrder.LITTLE_ENDIAN)
-            .put("CPKTSYS\u0000".encodeToByteArray()).putShort(1).putShort(0).putInt(0).array()
+        val header =
+            ByteBuffer
+                .allocate(16)
+                .order(ByteOrder.LITTLE_ENDIAN)
+                .put("CPKTSYS\u0000".encodeToByteArray())
+                .putShort(1)
+                .putShort(0)
+                .putInt(0)
+                .array()
         val image = header + MessageDigest.getInstance("SHA-256").digest(header)
         val root = Files.createTempDirectory("ffm-fleet-compiler-").toRealPath()
         try {
@@ -523,20 +647,32 @@ class FfmExperimentalFleetIntegrationTest {
                     val id = ComputerId.fromLongs(101, 102)
                     VmSession.openInStore(fixture("compukters.fleet.compiler.source.fixture"), store, id, image).use { writer ->
                         var outcome: VmOutcome
-                        do { outcome = writer.advance(128, 64, 64) } while (outcome == VmOutcome.SliceExhausted)
+                        do {
+                            outcome = writer.advance(128, 64, 64)
+                        } while (outcome == VmOutcome.SliceExhausted)
                         assertTrue(outcome is VmOutcome.Halted)
                     }
                     ExperimentalFfmFleet.open(bridge, 1, 32, 32, 128, 64, 64, 32).use { fleet ->
                         val session = VmSession.openInStore(fixture("compukters.fleet.compiler.fixture"), store, id, image)
                         val machine = session.transferToFleet(fleet)
                         val deadline = System.nanoTime() + 10_000_000_000L
+
                         fun next(): ExperimentalFleetEvent {
-                            while (System.nanoTime() < deadline) { fleet.poll()?.let { return it }; Thread.yield() }
+                            while (System.nanoTime() < deadline) {
+                                fleet.poll()?.let { return it }
+                                Thread.yield()
+                            }
                             error("timed out waiting for fleet event")
                         }
                         fleet.grant(machine, 1, 1024)
                         val request = next() as ExperimentalFleetEvent.Compilation
-                        assertEquals("fun main() = 42", request.request.sources.single().utf8Bytes().decodeToString())
+                        assertEquals(
+                            "fun main() = 42",
+                            request.request.sources
+                                .single()
+                                .utf8Bytes()
+                                .decodeToString(),
+                        )
                         val source = VmVirtualPath.of("/home/main.kt")
                         fleet.fileStat(machine, 21, source)
                         val stat = next() as ExperimentalFleetEvent.FileStat
@@ -547,9 +683,14 @@ class FfmExperimentalFleetIntegrationTest {
                         val artifact = fixture("compukters.shell.artifact")
                         val target = VmVirtualPath.of("/home/demo")
                         fleet.prepareDeployment(machine, 24, artifact)
-                        val candidate = ((next() as ExperimentalFleetEvent.Deployment).result as ExperimentalFleetDeploymentResult.Prepared).candidate
+                        val candidate =
+                            ((next() as ExperimentalFleetEvent.Deployment).result as ExperimentalFleetDeploymentResult.Prepared)
+                                .candidate
                         fleet.deploymentRevision(machine, 25, target)
-                        assertEquals(VmExecutableRevision.Absent, ((next() as ExperimentalFleetEvent.Deployment).result as ExperimentalFleetDeploymentResult.Revision).revision)
+                        assertEquals(
+                            VmExecutableRevision.Absent,
+                            ((next() as ExperimentalFleetEvent.Deployment).result as ExperimentalFleetDeploymentResult.Revision).revision,
+                        )
                         fleet.installDeployment(machine, 26, target, candidate, VmExecutableRevision.Absent)
                         assertTrue((next() as ExperimentalFleetEvent.Deployment).result is ExperimentalFleetDeploymentResult.Installed)
                         fleet.completeCompilationArtifact(machine, request.request.token, fixture("compukters.shell.artifact"))
@@ -563,7 +704,9 @@ class FfmExperimentalFleetIntegrationTest {
                     }
                 }
             }
-        } finally { root.toFile().deleteRecursively() }
+        } finally {
+            root.toFile().deleteRecursively()
+        }
     }
 
     @Test
@@ -573,27 +716,42 @@ class FfmExperimentalFleetIntegrationTest {
         val capability = CapabilityIdentity("app", "entry", 1, 2)
         val schema = HostCapabilitySchema(capability, listOf(HostOperationSchema(emptyList(), HostValueType.UNIT, true)))
         FfmBridge.open(library).use { bridge ->
-            bridge.openExperimentalFleet(ExperimentalFleetConfig(1, 32, 32, 128, 64, 64, 32,
-                inspection = ExperimentalRequestInspection(capability, 0, "request exceeds budget"))).use { fleet ->
-                val session = VmSession.open(artifact, listOf(schema), bridge)
-                val machine = session.transferToFleet(fleet)
-                val deadline = System.nanoTime() + 10_000_000_000L
-                fun next(): ExperimentalFleetEvent {
-                    while (System.nanoTime() < deadline) { fleet.poll()?.let { return it }; Thread.yield() }
-                    error("timed out waiting for fleet event")
+            bridge
+                .openExperimentalFleet(
+                    ExperimentalFleetConfig(
+                        1,
+                        32,
+                        32,
+                        128,
+                        64,
+                        64,
+                        32,
+                        inspection = ExperimentalRequestInspection(capability, 0, "request exceeds budget"),
+                    ),
+                ).use { fleet ->
+                    val session = VmSession.open(artifact, listOf(schema), bridge)
+                    val machine = session.transferToFleet(fleet)
+                    val deadline = System.nanoTime() + 10_000_000_000L
+
+                    fun next(): ExperimentalFleetEvent {
+                        while (System.nanoTime() < deadline) {
+                            fleet.poll()?.let { return it }
+                            Thread.yield()
+                        }
+                        error("timed out waiting for fleet event")
+                    }
+                    fleet.grant(machine, 1, 256)
+                    val inspection = next() as ExperimentalFleetEvent.Inspection
+                    assertEquals(capability, inspection.request.capability)
+                    fleet.resolveCost(machine, inspection.request.identity, 1)
+                    val request = ((next() as ExperimentalFleetEvent.Outcome).outcome as VmOutcome.HostRequestBatch).requests.single()
+                    assertEquals(inspection.request.identity, request.identity)
+                    fleet.reply(machine, request.identity, HostResponse.UnitSuccess)
+                    assertEquals(VmOutcome.Halted(null), (next() as ExperimentalFleetEvent.Outcome).outcome)
+                    fleet.stop(machine)
+                    while (next() !is ExperimentalFleetEvent.Stopped) { }
+                    session.close()
                 }
-                fleet.grant(machine, 1, 256)
-                val inspection = next() as ExperimentalFleetEvent.Inspection
-                assertEquals(capability, inspection.request.capability)
-                fleet.resolveCost(machine, inspection.request.identity, 1)
-                val request = ((next() as ExperimentalFleetEvent.Outcome).outcome as VmOutcome.HostRequestBatch).requests.single()
-                assertEquals(inspection.request.identity, request.identity)
-                fleet.reply(machine, request.identity, HostResponse.UnitSuccess)
-                assertEquals(VmOutcome.Halted(null), (next() as ExperimentalFleetEvent.Outcome).outcome)
-                fleet.stop(machine)
-                while (next() !is ExperimentalFleetEvent.Stopped) { }
-                session.close()
-            }
         }
     }
 
@@ -601,14 +759,22 @@ class FfmExperimentalFleetIntegrationTest {
     fun `FFM host reply resumes a guest under coordinated turn`() {
         val library = Path.of(requireNotNull(System.getProperty("compukter.ffi.library")))
         val artifact = Path.of(requireNotNull(System.getProperty("compukters.fleet.host.fixture"))).readBytes()
-        val schema = HostCapabilitySchema(CapabilityIdentity("app", "entry", 1, 2), listOf(HostOperationSchema(emptyList(), HostValueType.UNIT, true)))
+        val schema =
+            HostCapabilitySchema(
+                CapabilityIdentity("app", "entry", 1, 2),
+                listOf(HostOperationSchema(emptyList(), HostValueType.UNIT, true)),
+            )
         FfmBridge.open(library).use { bridge ->
             ExperimentalFfmFleet.open(bridge, 1, 32, 32, 128, 64, 64, 32, coordinatedTurns = true).use { fleet ->
                 val session = VmSession.open(artifact, listOf(schema), bridge)
                 val machine = session.transferToFleet(fleet)
                 val deadline = System.nanoTime() + 10_000_000_000L
+
                 fun next(): ExperimentalFleetEvent {
-                    while (System.nanoTime() < deadline) { fleet.poll()?.let { return it }; Thread.yield() }
+                    while (System.nanoTime() < deadline) {
+                        fleet.poll()?.let { return it }
+                        Thread.yield()
+                    }
                     error("timed out waiting for fleet event")
                 }
                 fleet.grant(machine, 4, 256)
@@ -629,8 +795,15 @@ class FfmExperimentalFleetIntegrationTest {
     fun `FFM fleet recovery keeps store identity for checkpoint`() {
         val library = Path.of(requireNotNull(System.getProperty("compukter.ffi.library")))
         val artifact = Path.of(requireNotNull(System.getProperty("compukters.fleet.timer.fixture"))).readBytes()
-        val header = ByteBuffer.allocate(16).order(ByteOrder.LITTLE_ENDIAN)
-            .put("CPKTSYS\u0000".encodeToByteArray()).putShort(1).putShort(0).putInt(0).array()
+        val header =
+            ByteBuffer
+                .allocate(16)
+                .order(ByteOrder.LITTLE_ENDIAN)
+                .put("CPKTSYS\u0000".encodeToByteArray())
+                .putShort(1)
+                .putShort(0)
+                .putInt(0)
+                .array()
         val image = header + MessageDigest.getInstance("SHA-256").digest(header)
         val root = Files.createTempDirectory("ffm-fleet-timer-").toRealPath()
         try {
@@ -641,21 +814,33 @@ class FfmExperimentalFleetIntegrationTest {
                         val initial = VmSession.openInStore(artifact, store, id, image)
                         val machine = initial.transferToFleet(fleet)
                         val deadline = System.nanoTime() + 10_000_000_000L
+
                         fun next(): ExperimentalFleetEvent {
-                            while (System.nanoTime() < deadline) { fleet.poll()?.let { return it }; Thread.yield() }
+                            while (System.nanoTime() < deadline) {
+                                fleet.poll()?.let { return it }
+                                Thread.yield()
+                            }
                             error("timed out waiting for fleet event")
                         }
                         fleet.grant(machine, 1, 512)
                         assertTrue(next() is ExperimentalFleetEvent.Quiescent)
                         fleet.detachWithTimers(machine, 2)
                         val timer = (next() as ExperimentalFleetEvent.Detached).timers.single()
-                        val host = ByteBuffer.allocate(32).order(ByteOrder.LITTLE_ENDIAN)
-                            .putInt(timer.identity.taskId).putLong(timer.identity.requestId).putLong(timer.scope)
-                            .putInt(timer.duration).putLong(timer.remaining).array()
+                        val host =
+                            ByteBuffer
+                                .allocate(32)
+                                .order(ByteOrder.LITTLE_ENDIAN)
+                                .putInt(timer.identity.taskId)
+                                .putLong(timer.identity.requestId)
+                                .putLong(timer.scope)
+                                .putInt(timer.duration)
+                                .putLong(timer.remaining)
+                                .array()
                         VmSession.restoreFromFleet(fleet, machine).use { it.checkpoint(store, id, host) }
                         val restored = requireNotNull(VmSession.restoreInStore(store, id, image))
                         val bytes = ByteBuffer.wrap(restored.hostStateBytes()).order(ByteOrder.LITTLE_ENDIAN)
-                        val persisted = ExperimentalFleetTimer(VmHostRequestIdentity(bytes.int, bytes.long), bytes.long, bytes.int, bytes.long)
+                        val persisted =
+                            ExperimentalFleetTimer(VmHostRequestIdentity(bytes.int, bytes.long), bytes.long, bytes.int, bytes.long)
                         assertEquals(timer, persisted)
                         store.discardCheckpoint(id)
                         val restarted = restored.session.transferToFleet(fleet, 100, listOf(persisted))
@@ -670,7 +855,9 @@ class FfmExperimentalFleetIntegrationTest {
                     }
                 }
             }
-        } finally { root.toFile().deleteRecursively() }
+        } finally {
+            root.toFile().deleteRecursively()
+        }
     }
 
     @Test
@@ -684,6 +871,7 @@ class FfmExperimentalFleetIntegrationTest {
                 val machine = session.transferToFleet(fleet)
                 assertFailsWith<IllegalStateException> { session.advance(128, 64, 64) }
                 val deadline = System.nanoTime() + 10_000_000_000L
+
                 fun next(): ExperimentalFleetEvent {
                     while (System.nanoTime() < deadline) {
                         fleet.poll()?.let { return it }
