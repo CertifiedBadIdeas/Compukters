@@ -385,6 +385,58 @@ class NativeFleetOutboxTest {
         assertEquals(2, probes)
     }
 
+    @Test
+    fun `scalar and batch admissions preserve order through busy retry drain and re-admission`() {
+        var busy = true
+        val sent = mutableListOf<Int>()
+        val bridge =
+            fleet { _, packet ->
+                if (busy) throw VmFleetBusyException("full")
+                sent += packet
+            }
+        val outbox = NativeFleetOutbox(bridge, 3, 3, {}, byteLimits = NativeFleetOutboxLimits(192, 192))
+        assertTrue(outbox.offer(1, input(1)))
+        assertTrue(outbox.offer(1, listOf(input(2), input(3))))
+        assertFalse(outbox.offer(1, input(4)))
+        assertEquals(0, outbox.flush(1))
+        assertEquals(192L, outbox.retainedBytes)
+        busy = false
+        assertEquals(1, outbox.flush(1))
+        assertTrue(outbox.offer(1, input(4)))
+        assertEquals(3, outbox.flush(3))
+        assertEquals(listOf(1, 2, 3, 4), sent)
+        assertFalse(outbox.hasPendingCommands)
+        assertEquals(0L, outbox.retainedBytes)
+        assertTrue(outbox.offer(1, input(5)))
+        assertEquals(listOf(input(5)), outbox.remove(1))
+        assertEquals(0L, outbox.retainedBytes)
+        assertTrue(outbox.offer(1, input(6)))
+        assertEquals(1, outbox.flush(1))
+        assertEquals(listOf(1, 2, 3, 4, 6), sent)
+    }
+
+    @Test
+    fun `close cancels grants in every queue position and transfers only ordered effects`() {
+        val sent = mutableListOf<Int>()
+        val bridge = fleet { _, packet -> sent += packet }
+        val outbox = NativeFleetOutbox(bridge, 8, 8, {})
+        val grant = NativeFleetOutbox.Command.Grant(1, 10, Long.MAX_VALUE)
+        assertTrue(outbox.offer(1, grant))
+        assertTrue(outbox.offer(1, listOf(input(1), grant, input(2), grant)))
+        val handoff = outbox.handoffForClose(1)
+        assertFalse(outbox.hasPendingCommands)
+        assertEquals(128L, outbox.retainedBytes)
+        assertTrue(handoff.sendNext(bridge, 1))
+        assertTrue(handoff.sendNext(bridge, 1))
+        assertFalse(handoff.sendNext(bridge, 1))
+        assertEquals(listOf(1, 2), sent)
+        assertEquals(0L, outbox.retainedBytes)
+        assertTrue(outbox.offer(2, grant))
+        assertFalse(outbox.handoffForClose(2).sendNext(bridge, 2))
+        assertFalse(outbox.handoffForClose(3).sendNext(bridge, 3))
+        assertEquals(0L, outbox.retainedBytes)
+    }
+
     private fun lifecycleFleet(poll: (Long) -> ExperimentalFleetEvent?): ExperimentalFleet =
         Proxy.newProxyInstance(
             ExperimentalFleet::class.java.classLoader,

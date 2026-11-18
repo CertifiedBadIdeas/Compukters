@@ -121,12 +121,58 @@ internal class NativeFleetOutbox(
         }
     }
 
-    private class Queue(
-        initialCapacity: Int,
-    ) {
-        // Most turns enqueue a single grant; grow only when more commands arrive.
-        val commands = ArrayDeque<Command>(initialCapacity)
+    /** The common one-command queue needs no deque or backing array. */
+    internal class Queue {
+        private var head: Command? = null
+        private var tail: ArrayDeque<Command>? = null
+        val size: Int get() = (if (head == null) 0 else 1) + (tail?.size ?: 0)
         var bytes = 0L
+            private set
+
+        fun first(): Command? = head
+
+        fun add(
+            command: Command,
+            remainingCapacity: Int = 1,
+        ) {
+            if (head == null) {
+                head = command
+            } else {
+                (tail ?: ArrayDeque<Command>(remainingCapacity).also { tail = it }).addLast(command)
+            }
+            bytes += command.retainedBytes
+        }
+
+        fun removeFirst(): Command {
+            val command = checkNotNull(head)
+            head = tail?.pollFirst()
+            if (head == null) tail = null
+            bytes -= command.retainedBytes
+            return command
+        }
+
+        fun cancelGrants(budget: Budget) {
+            while (head is Command.Grant) {
+                val command = removeFirst()
+                budget.release(1, command.retainedBytes)
+            }
+            val iterator = tail?.iterator() ?: return
+            while (iterator.hasNext()) {
+                val command = iterator.next()
+                if (command is Command.Grant) {
+                    iterator.remove()
+                    bytes -= command.retainedBytes
+                    budget.release(1, command.retainedBytes)
+                }
+            }
+            if (tail?.isEmpty() == true) tail = null
+        }
+
+        fun toList(): List<Command> =
+            buildList(size) {
+                head?.let { add(it) }
+                tail?.let { addAll(it) }
+            }
     }
 
     private val queues = mutableMapOf<Long, Queue>()
@@ -247,14 +293,14 @@ internal class NativeFleetOutbox(
 
     /** Exclusive ownership of unsent commands, retaining the original shared reservation. */
     internal class Handoff internal constructor(
-        private val commands: ArrayDeque<Command>,
+        private val commands: Queue?,
         private val budget: Budget,
     ) {
         fun sendNext(
             fleet: ExperimentalFleet,
             machine: Long,
         ): Boolean {
-            val command = commands.peekFirst() ?: return false
+            val command = commands?.first() ?: return false
             command.send(fleet, machine)
             commands.removeFirst()
             budget.release(1, command.retainedBytes)
@@ -270,16 +316,9 @@ internal class NativeFleetOutbox(
         if (queue != null) {
             check(ready.remove(machine))
             // A terminal fence cancels unsent execution credit, but preserves acknowledged effects.
-            val iterator = queue.commands.iterator()
-            while (iterator.hasNext()) {
-                val command = iterator.next()
-                if (command is Command.Grant) {
-                    iterator.remove()
-                    budget.release(1, command.retainedBytes)
-                }
-            }
+            queue.cancelGrants(budget)
         }
-        return Handoff(queue?.commands ?: ArrayDeque(), budget)
+        return Handoff(queue, budget)
     }
 
     /** Largest ordered completion prefix that fits now. A grant is admitted separately, even with a one-entry queue. */
@@ -294,7 +333,7 @@ internal class NativeFleetOutbox(
             }
         }
         val queue = queues[machine]
-        val capacity = maximumCommandsPerMachine - (queue?.commands?.size ?: 0)
+        val capacity = maximumCommandsPerMachine - (queue?.size ?: 0)
         val remainingBytes = byteLimits.perMachineBytes - (queue?.bytes ?: 0L)
         var count = 0
         var bytes = 0L
@@ -330,16 +369,37 @@ internal class NativeFleetOutbox(
     ): Boolean {
         checkOwner()
         if (commands.isEmpty()) return true
+        return offer(machine, commands[0], commands, 1)
+    }
+
+    /** Scalar admission shares batch validation without allocating a temporary list. */
+    fun offer(
+        machine: Long,
+        command: Command,
+    ): Boolean {
+        checkOwner()
+        return offer(machine, command, emptyList(), 0)
+    }
+
+    private fun offer(
+        machine: Long,
+        first: Command,
+        commands: List<Command>,
+        fromIndex: Int,
+    ): Boolean {
         check(machine !in closing) { "machine is closing" }
-        val lifecycleIndex = commands.indexOfFirst { it is Command.Lifecycle }
-        require(lifecycleIndex == -1 || lifecycleIndex == commands.lastIndex) { "lifecycle command must be last" }
-        if (lifecycleIndex >= 0 && closing.size >= maximumCommands) return false
-        val existing = queues[machine]
-        if (commands.size > maximumCommandsPerMachine - (existing?.commands?.size ?: 0)) {
-            return false
+        val count = 1 + commands.size - fromIndex
+        for (index in 0 until count) {
+            val command = if (index == 0) first else commands[fromIndex + index - 1]
+            require(command !is Command.Lifecycle || index == count - 1) { "lifecycle command must be last" }
         }
+        val existing = queues[machine]
+        if (count > maximumCommandsPerMachine - (existing?.size ?: 0)) return false
         var bytes = 0L
-        for (command in commands) {
+        var lifecycle: Command.Lifecycle? = null
+        for (index in 0 until count) {
+            val command = if (index == 0) first else commands[fromIndex + index - 1]
+            if (command is Command.Lifecycle) lifecycle = command
             require(command.retainedBytes >= 64L) { "invalid native command byte charge" }
             if (command.retainedBytes > byteLimits.totalBytes - bytes ||
                 command.retainedBytes > byteLimits.perMachineBytes - bytes
@@ -348,15 +408,16 @@ internal class NativeFleetOutbox(
             }
             bytes += command.retainedBytes
         }
-        if (bytes > byteLimits.perMachineBytes - (existing?.bytes ?: 0L) || !budget.reserve(commands.size, bytes)) return false
+        if (lifecycle != null && closing.size >= maximumCommands) return false
+        if (bytes > byteLimits.perMachineBytes - (existing?.bytes ?: 0L) || !budget.reserve(count, bytes)) return false
         val queue =
-            existing ?: Queue(commands.size).also {
+            existing ?: Queue().also {
                 queues[machine] = it
                 ready.addLast(machine)
             }
-        queue.commands.addAll(commands)
-        queue.bytes += bytes
-        if (lifecycleIndex >= 0) closing[machine] = commands[lifecycleIndex] as Command.Lifecycle
+        queue.add(first)
+        for (index in fromIndex until commands.size) queue.add(commands[index], commands.size - index)
+        if (lifecycle != null) closing[machine] = lifecycle
         // Notify only; the owner runs native work later within its shared pump budget.
         if (!notificationPending) {
             notificationPending = true
@@ -399,13 +460,11 @@ internal class NativeFleetOutbox(
     internal fun sendNext(): Boolean {
         val machine = ready.removeFirst()
         val queue = checkNotNull(queues[machine])
-        val commands = queue.commands
         val sent =
             try {
-                commands.first.send(fleet, machine)
-                val accepted = commands.removeFirst()
+                checkNotNull(queue.first()).send(fleet, machine)
+                val accepted = queue.removeFirst()
                 if (accepted is Command.Lifecycle) awaitingLifecycle.addLast(machine)
-                queue.bytes -= accepted.retainedBytes
                 budget.release(1, accepted.retainedBytes)
                 true
             } catch (_: VmFleetBusyException) {
@@ -418,7 +477,7 @@ internal class NativeFleetOutbox(
                 ready.addFirst(machine)
                 throw error
             }
-        if (commands.isEmpty()) queues.remove(machine) else ready.addLast(machine)
+        if (queue.size == 0) queues.remove(machine) else ready.addLast(machine)
         return sent
     }
 
@@ -429,8 +488,8 @@ internal class NativeFleetOutbox(
         closing.remove(machine)
         val queue = queues.remove(machine) ?: return emptyList()
         check(ready.remove(machine))
-        budget.release(queue.commands.size, queue.bytes)
-        return queue.commands.toList()
+        budget.release(queue.size, queue.bytes)
+        return queue.toList()
     }
 
     /**

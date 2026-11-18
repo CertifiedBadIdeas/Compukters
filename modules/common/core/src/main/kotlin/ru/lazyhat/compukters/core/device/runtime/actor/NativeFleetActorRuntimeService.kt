@@ -258,7 +258,7 @@ internal class NativeFleetActorRuntimeService(
         if (closed || endpoint in closing) return false
         val actor = actors[endpoint] ?: return false
         if (actor.turn != null || actor.credit?.inFlight == true) return false
-        if (!dispatcher.outbox.offer(actor.machine, listOf(NativeFleetOutbox.Command.RedstoneInput(checked)))) return false
+        if (!dispatcher.outbox.offer(actor.machine, NativeFleetOutbox.Command.RedstoneInput(checked))) return false
         actor.host.observeFleetRedstoneInput(fleet, actor.machine, checked)
         return true
     }
@@ -314,30 +314,36 @@ internal class NativeFleetActorRuntimeService(
             if (count > maximumRequestsPerActor - commandCount) return VmActorSubmission.MAILBOX_FULL
             commandCount += count
         }
-        val commands = ArrayList<NativeFleetOutbox.Command>(commandCount)
-        effects.forEach { effect ->
-            when (effect) {
-                is ProgramRuntimeActorEffect.RedstoneInput -> {
-                    commands +=
-                        NativeFleetOutbox.Command.RedstoneInput(RedstoneWire.requireInputPacket(effect.packet))
-                }
+        val allowance = credit.remaining
+        val grant = NativeFleetOutbox.Command.Grant(worldTick, allowance.toInt(), credit.deadlineNanos)
+        val id = requestId()
+        val accepted =
+            if (effects.isEmpty()) {
+                dispatcher.outbox.offer(actor.machine, grant)
+            } else {
+                val commands = ArrayList<NativeFleetOutbox.Command>(commandCount)
+                effects.forEach { effect ->
+                    when (effect) {
+                        is ProgramRuntimeActorEffect.RedstoneInput -> {
+                            commands +=
+                                NativeFleetOutbox.Command.RedstoneInput(RedstoneWire.requireInputPacket(effect.packet))
+                        }
 
-                is ProgramRuntimeActorEffect.CompleteAddons -> {
-                    effect.completions.forEach {
-                        commands +=
-                            NativeFleetOutbox.Command.Reply(it.identity, it.response)
+                        is ProgramRuntimeActorEffect.CompleteAddons -> {
+                            effect.completions.forEach {
+                                commands += NativeFleetOutbox.Command.Reply(it.identity, it.response)
+                            }
+                        }
+
+                        else -> {
+                            error("unsupported native effect")
+                        }
                     }
                 }
-
-                else -> {
-                    error("unsupported native effect")
-                }
+                commands += grant
+                dispatcher.outbox.offer(actor.machine, commands)
             }
-        }
-        val allowance = credit.remaining
-        commands += NativeFleetOutbox.Command.Grant(worldTick, allowance.toInt(), credit.deadlineNanos)
-        val id = requestId()
-        if (!dispatcher.outbox.offer(actor.machine, commands)) return VmActorSubmission.MAILBOX_FULL
+        if (!accepted) return VmActorSubmission.MAILBOX_FULL
         effects.forEach { effect ->
             if (effect is ProgramRuntimeActorEffect.RedstoneInput) {
                 actor.host.observeFleetRedstoneInput(
@@ -424,7 +430,7 @@ internal class NativeFleetActorRuntimeService(
                 }
             return CompletableFuture.completedFuture(ProgramRuntimeActorReply(id, actor.host.state, value, actor.generation))
         }
-        if (!dispatcher.outbox.offer(actor.machine, listOf(outgoing))) {
+        if (!dispatcher.outbox.offer(actor.machine, outgoing)) {
             return CompletableFuture.failedFuture(ProgramRuntimeActorRequestException(VmActorSubmission.MAILBOX_FULL))
         }
         val result = CompletableFuture<ProgramRuntimeActorReply>()
@@ -987,7 +993,7 @@ internal class NativeFleetActorRuntimeService(
                         ProgramDeploymentToken(checkNotNull(query.cleanupCandidate)),
                     ),
                 )!!
-            if (!dispatcher.outbox.offer(machine, listOf(command))) deploymentCleanup.addLast(machine to request)
+            if (!dispatcher.outbox.offer(machine, command)) deploymentCleanup.addLast(machine to request)
         }
     }
 
