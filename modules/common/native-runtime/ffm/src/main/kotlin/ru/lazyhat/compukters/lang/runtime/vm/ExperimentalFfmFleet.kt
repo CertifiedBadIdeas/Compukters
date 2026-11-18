@@ -25,6 +25,7 @@ class ExperimentalFfmFleet private constructor(
     override val coordinatedTurns: Boolean,
 ) : ExperimentalFleet {
     private val output = arena.allocate(1_048_576)
+    private val eventInput = output.asByteBuffer()
     private val written = arena.allocate(ValueLayout.JAVA_LONG)
     private val result = arena.allocate(ValueLayout.JAVA_LONG)
     private val owned = mutableSetOf<Long>()
@@ -286,7 +287,7 @@ class ExperimentalFfmFleet private constructor(
         val length = written.get(ValueLayout.JAVA_LONG, 0)
         require(length in 0..output.byteSize()) { "invalid FFM fleet event length" }
         if (length == 0L) return null
-        val event = ExperimentalFleetEventWire.decode(output.asSlice(0, length).toArray(ValueLayout.JAVA_BYTE))
+        val event = ExperimentalFleetEventWire.decode(eventInput.clear().limit(length.toInt()))
         if (event is ExperimentalFleetEvent.Stopped) owned.remove(event.machine)
         return event
     }

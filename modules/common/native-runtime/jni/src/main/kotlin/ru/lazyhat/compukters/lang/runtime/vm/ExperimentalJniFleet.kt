@@ -18,6 +18,7 @@ class ExperimentalJniFleet private constructor(
     override val coordinatedTurns: Boolean,
 ) : ExperimentalFleet {
     private val output = ByteArray(1_048_576)
+    private val eventInput = ByteBuffer.wrap(output)
     private val written = LongArray(1)
     private val sessionBridges = mutableMapOf<Long, LowLevelVmBridge>()
 
@@ -203,7 +204,7 @@ class ExperimentalJniFleet private constructor(
     private fun decodePolledEvent(): ExperimentalFleetEvent? {
         require(written[0] in 0..output.size.toLong()) { "invalid native fleet event length" }
         if (written[0] == 0L) return null
-        val event = ExperimentalFleetEventWire.decode(output.copyOf(written[0].toInt()))
+        val event = ExperimentalFleetEventWire.decode(eventInput.clear().limit(written[0].toInt()))
         if (event is ExperimentalFleetEvent.Stopped) sessionBridges.remove(event.machine)
         return event
     }

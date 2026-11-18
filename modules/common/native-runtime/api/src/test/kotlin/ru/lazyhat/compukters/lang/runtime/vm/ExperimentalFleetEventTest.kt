@@ -13,6 +13,84 @@ import kotlin.test.assertFails
 
 class ExperimentalFleetEventTest {
     @Test
+    fun `buffer decoder honors position limit and tags for heap direct and read only views`() {
+        val wires =
+            listOf(
+                ByteBuffer
+                    .allocate(26)
+                    .order(ByteOrder.LITTLE_ENDIAN)
+                    .put(8)
+                    .putLong(7)
+                    .putLong(12)
+                    .putLong(3)
+                    .put(1)
+                    .array(),
+                ByteBuffer
+                    .allocate(9)
+                    .order(ByteOrder.LITTLE_ENDIAN)
+                    .put(6)
+                    .putLong(7)
+                    .array(),
+                ByteBuffer
+                    .allocate(9)
+                    .order(ByteOrder.LITTLE_ENDIAN)
+                    .put(7)
+                    .putLong(7)
+                    .array(),
+                ByteBuffer
+                    .allocate(12)
+                    .order(ByteOrder.LITTLE_ENDIAN)
+                    .put(3)
+                    .putLong(7)
+                    .put("bad".encodeToByteArray())
+                    .array(),
+                byteArrayOf(5) + "bad".encodeToByteArray(),
+                ByteBuffer
+                    .allocate(26)
+                    .order(ByteOrder.LITTLE_ENDIAN)
+                    .put(0)
+                    .putLong(7)
+                    .putLong(9)
+                    .put(13)
+                    .putLong(3)
+                    .array(),
+            )
+        for (wire in wires) {
+            val expected = ExperimentalFleetEventWire.decode(wire)
+            for (storage in listOf(ByteBuffer.allocate(wire.size + 8), ByteBuffer.allocateDirect(wire.size + 8))) {
+                storage.position(3).put(wire).put(127)
+                for (input in listOf(storage, storage.asReadOnlyBuffer())) {
+                    input.clear().position(3).limit(3 + wire.size)
+                    input.order(ByteOrder.BIG_ENDIAN)
+                    assertEquals(expected, ExperimentalFleetEventWire.decode(input))
+                    assertEquals(input.limit(), input.position())
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `reusable buffer validates the current event length instead of its capacity`() {
+        val wire =
+            ByteBuffer
+                .allocate(26)
+                .order(ByteOrder.LITTLE_ENDIAN)
+                .put(8)
+                .putLong(7)
+                .putLong(12)
+                .putLong(3)
+                .put(1)
+                .array()
+        val input = ByteBuffer.allocateDirect(1_048_577).put(wire)
+        for (length in 0 until wire.size) {
+            assertFails { ExperimentalFleetEventWire.decode(input.clear().limit(length)) }
+        }
+        assertFails { ExperimentalFleetEventWire.decode(input.clear().limit(wire.size + 1)) }
+        assertFails { ExperimentalFleetEventWire.decode(input.clear()) }
+        assertEquals(ExperimentalFleetEvent.Quiescent(7, 12, 3, true), ExperimentalFleetEventWire.decode(input.clear().limit(wire.size)))
+    }
+
+    @Test
     fun `detach state validates scopes output and timer ownership`() {
         fun wire(
             scopes: List<Long> = listOf(0, 7),
@@ -102,6 +180,15 @@ class ExperimentalFleetEventTest {
         )
         for (size in 0 until wire.size) assertFails { ExperimentalFleetEventWire.decode(wire.copyOf(size)) }
         assertFails { ExperimentalFleetEventWire.decode(wire + 0) }
+        val input = ByteBuffer.allocateDirect(wire.size).put(wire).flip()
+        val owned = ExperimentalFleetEventWire.decode(input) as ExperimentalFleetEvent.Compilation
+        input.clear().put(ByteArray(wire.size))
+        kotlin.test.assertContentEquals(
+            source,
+            owned.request.sources
+                .single()
+                .utf8Bytes(),
+        )
     }
 
     @Test

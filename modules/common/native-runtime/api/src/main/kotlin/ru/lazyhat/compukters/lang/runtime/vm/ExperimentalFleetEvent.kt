@@ -200,9 +200,12 @@ sealed interface ExperimentalFleetEvent {
 
 /** Checks lengths and identities before an event is handed to the world-side dispatcher. */
 object ExperimentalFleetEventWire {
-    fun decode(bytes: ByteArray): ExperimentalFleetEvent {
-        require(bytes.isNotEmpty() && bytes.size <= 1_048_576) { "invalid fleet event size" }
-        val input = ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN)
+    fun decode(bytes: ByteArray): ExperimentalFleetEvent = decode(ByteBuffer.wrap(bytes))
+
+    /** Consumes the remaining bytes in little-endian order; returned events own all decoded payloads. */
+    fun decode(input: ByteBuffer): ExperimentalFleetEvent {
+        require(input.remaining() in 1..1_048_576) { "invalid fleet event size" }
+        input.order(ByteOrder.LITTLE_ENDIAN)
 
         fun long(): Long = input.long.also { require(it >= 0) { "invalid fleet identity or tick" } }
 
@@ -215,7 +218,8 @@ object ExperimentalFleetEventWire {
             require(items.toSet().size == items.size) { "duplicate fleet cancellation identity" }
             return items
         }
-        return when (input.get().toInt() and 0xff) {
+        val tag = input.get().toInt() and 0xff
+        return when (tag) {
             17 -> {
                 val machine = long()
                 val request = long()
@@ -387,7 +391,6 @@ object ExperimentalFleetEventWire {
             }
 
             0, 1 -> {
-                val tag = bytes[0].toInt()
                 val machine = long()
                 val tick = long()
                 val outcome = VmOutcomeWire.decode(ByteArray(input.remaining()).also(input::get))
@@ -442,11 +445,11 @@ object ExperimentalFleetEventWire {
             6, 7 -> {
                 val machine = long()
                 require(!input.hasRemaining()) { "trailing fleet detach bytes" }
-                if (bytes[0].toInt() == 6) ExperimentalFleetEvent.Detached(machine) else ExperimentalFleetEvent.DetachRejected(machine)
+                if (tag == 6) ExperimentalFleetEvent.Detached(machine) else ExperimentalFleetEvent.DetachRejected(machine)
             }
 
             3, 5 -> {
-                val machine = if (bytes[0].toInt() == 3) long() else null
+                val machine = if (tag == 3) long() else null
                 val decoder =
                     StandardCharsets.UTF_8
                         .newDecoder()

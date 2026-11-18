@@ -73,8 +73,11 @@ calibration and close; the computer carrier uses the machine request/turn contra
 
 There is no JVM execution scheduler or backend selection. Calibration opens a separate native fleet. Both
 supported Minecraft versions require fleet support in their native runtime, using FFM or JNI respectively;
-a runtime missing that capability fails explicitly instead of falling back. The Cargo feature and low-level
-transport symbols retain their existing `experimental` names; this source migration does not change wire layouts.
+a runtime missing that capability fails explicitly instead of falling back. Both fleet transports decode events
+from a reusable buffer limited to the current response length. Decoding consumes that view synchronously;
+returned events own their variable payloads and remain valid after the next poll or fleet close.
+The Cargo feature and low-level transport symbols retain their existing `experimental` names; this source
+migration does not change wire layouts.
 
 `NativeFleetActorRuntimeService` implements active turns of `ActorRuntimeService` for hosts already started or
 restored and transferred to a coordinated native fleet. Rust workers own execution and timers; the owner grants
