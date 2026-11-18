@@ -20,6 +20,7 @@ package ru.lazyhat.compukters.impl.benchmark
 
 import ru.lazyhat.compukters.core.device.runtime.actor.NativeProgramRuntimeService
 import ru.lazyhat.compukters.core.device.runtime.actor.ProgramRuntimeActorCommand
+import ru.lazyhat.compukters.core.device.runtime.actor.ProgramRuntimeActorObservation
 import ru.lazyhat.compukters.core.device.runtime.actor.ProgramRuntimeActorReply
 import ru.lazyhat.compukters.core.device.runtime.actor.ProgramRuntimeActorValue
 import ru.lazyhat.compukters.core.device.runtime.actor.ProgramRuntimeService
@@ -99,7 +100,7 @@ internal object VmCapacityCalibrator {
             val startedAt = System.nanoTime()
             val deadline = startedAt + SAMPLE_NANOS
             var tick = 0L
-            var replies = emptyList<Pair<VmActorEndpoint, ProgramRuntimeActorReply>>()
+            var replies = emptyList<Pair<VmActorEndpoint, ProgramRuntimeActorObservation>>()
             do {
                 replies.forEach { (endpoint, reply) ->
                     check(reply.state == ProgramRuntimeState.Running || reply.state == ProgramRuntimeState.WaitingForInput) {
@@ -108,7 +109,7 @@ internal object VmCapacityCalibrator {
                     if (reply.state == ProgramRuntimeState.WaitingForInput) sendInput(service, endpoint, workload, ::await)
                 }
                 service.beginCapacityFrame(++tick)
-                val pending = endpoints.map { it to service.turn(it, tick) }
+                val pending = endpoints.map { it to service.frame(it, tick) }
                 service.flushCapacityFrame()
                 await(CompletableFuture.allOf(*pending.map { it.second }.toTypedArray()))
                 replies = pending.map { it.first to it.second.join() }

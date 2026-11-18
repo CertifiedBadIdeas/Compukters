@@ -20,7 +20,10 @@ internal object NativeRuntimePerformanceTrace {
     const val EVENT_NAME = "ru.lazyhat.compukters.NativeRuntimePhase"
     private val type by lazy { EventType.getEventType(NativeRuntimePhaseEvent::class.java) }
 
-    fun begin(phase: String, machine: Long): NativeRuntimePhaseEvent? {
+    fun begin(
+        phase: String,
+        machine: Long,
+    ): NativeRuntimePhaseEvent? {
         if (!FlightRecorder.isInitialized() || !type.isEnabled) return null
         return NativeRuntimePhaseEvent().also {
             it.phase = phase
@@ -29,35 +32,53 @@ internal object NativeRuntimePerformanceTrace {
         }
     }
 
-    fun command(phase: String, machine: Long, command: NativeFleetOutbox.Command, clock: () -> Long) {
-        if (command !is NativeFleetOutbox.Command.Grant && command !is NativeFleetOutbox.Command.Reply &&
+    fun command(
+        phase: String,
+        machine: Long,
+        command: NativeFleetOutbox.Command,
+        clock: () -> Long,
+    ) {
+        if (command !is NativeFleetOutbox.Command.FrameGrant && command !is NativeFleetOutbox.Command.Reply &&
             command !is NativeFleetOutbox.Command.ResolveCost
-        ) return
+        ) {
+            return
+        }
         val event = begin(phase, machine) ?: return
         when (command) {
-            is NativeFleetOutbox.Command.Grant -> {
+            is NativeFleetOutbox.Command.FrameGrant -> {
                 event.kind = "grant"
                 event.tick = command.tick
                 event.units = command.retirements.toLong()
-                event.deadlineRemainingNanos = if (command.deadlineNanos == Long.MAX_VALUE) Long.MAX_VALUE else command.deadlineNanos - clock()
+                event.deadlineRemainingNanos =
+                    if (command.authorizedUntilNanos == Long.MAX_VALUE) Long.MAX_VALUE else command.authorizedUntilNanos - clock()
             }
+
             is NativeFleetOutbox.Command.Reply -> {
                 event.kind = "reply"
                 event.task = command.identity.taskId
                 event.request = command.identity.requestId
             }
+
             is NativeFleetOutbox.Command.ResolveCost -> {
                 event.kind = "cost"
                 event.task = command.identity.taskId
                 event.request = command.identity.requestId
                 event.units = command.units.toLong()
             }
-            else -> error("unsupported trace command")
+
+            else -> {
+                error("unsupported trace command")
+            }
         }
         event.commit()
     }
 
-    fun request(phase: String, machine: Long, tick: Long, request: VmHostRequest) {
+    fun request(
+        phase: String,
+        machine: Long,
+        tick: Long,
+        request: VmHostRequest,
+    ) {
         begin(phase, machine)?.apply {
             this.tick = tick
             task = request.taskId
@@ -77,14 +98,24 @@ internal object NativeRuntimePerformanceTrace {
 @StackTrace(false)
 internal class NativeRuntimePhaseEvent : Event() {
     @JvmField var phase: String = ""
+
     @JvmField var machine: Long = -1
+
     @JvmField var kind: String = ""
+
     @JvmField var tick: Long = -1
+
     @JvmField var task: Int = -1
+
     @JvmField var request: Long = -1
+
     @JvmField var namespace: String = ""
+
     @JvmField var capability: String = ""
+
     @JvmField var operation: Int = -1
+
     @JvmField var units: Long = -1
+
     @JvmField var deadlineRemainingNanos: Long = Long.MAX_VALUE
 }

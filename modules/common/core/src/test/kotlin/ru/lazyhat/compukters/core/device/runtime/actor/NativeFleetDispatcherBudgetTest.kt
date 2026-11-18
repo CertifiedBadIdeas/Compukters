@@ -136,6 +136,44 @@ class NativeFleetDispatcherBudgetTest {
         }
     }
 
+    @Test
+    fun `inspection preparation and its command use the same pump without sharing attempt credit`() {
+        Source().use { source ->
+            var pending = false
+            var preparations = 0
+            source.publish(1)
+            source.onDelivery = { pending = true }
+            source.onPrepare = {
+                if (pending) {
+                    pending = false
+                    preparations++
+                    source.offer(1)
+                    1
+                } else {
+                    0
+                }
+            }
+            assertEquals(1, source.dispatcher.pump(1, 1))
+            assertEquals(1, preparations)
+            assertEquals(listOf(1L), source.sent)
+        }
+    }
+
+    @Test
+    fun `bounded preparation retries cannot consume the transport attempt needed to free an outbox`() {
+        Source().use { source ->
+            var preparations = 0
+            source.offer(1)
+            source.onPrepare = {
+                preparations++
+                1
+            }
+            assertEquals(0, source.dispatcher.pump(0, 1))
+            assertEquals(1, preparations)
+            assertEquals(listOf(1L), source.sent)
+        }
+    }
+
     private class Source(
         private val operationNanos: Long = 0,
         batched: Boolean = false,
@@ -144,6 +182,7 @@ class NativeFleetDispatcherBudgetTest {
         var polls = 0
         var busy: Set<Long> = emptySet()
         var onDelivery: (() -> Unit)? = null
+        var onPrepare: (() -> Int)? = null
         val attempted = mutableListOf<Long>()
         val sent = mutableListOf<Long>()
         val delivered = mutableListOf<Long>()
@@ -166,7 +205,7 @@ class NativeFleetDispatcherBudgetTest {
                         ready.pollFirst()
                     }
 
-                    "grant" -> {
+                    "grantFrame" -> {
                         val machine = args!![0] as Long
                         attempted.add(machine)
                         now += operationNanos
@@ -210,6 +249,7 @@ class NativeFleetDispatcherBudgetTest {
                     onDelivery?.invoke()
                 },
                 nanoTime = { now },
+                prepareCommands = { _, _ -> onPrepare?.invoke() ?: 0 },
             )
 
         fun publish(machine: Long) {
@@ -217,7 +257,9 @@ class NativeFleetDispatcherBudgetTest {
         }
 
         fun offer(machine: Long) {
-            assertTrue(dispatcher.outbox.offer(machine, listOf(NativeFleetOutbox.Command.Grant(1, 4096, Long.MAX_VALUE))))
+            assertTrue(
+                dispatcher.outbox.offer(machine, listOf(NativeFleetOutbox.Command.FrameGrant(1, 4096, Long.MAX_VALUE, Long.MAX_VALUE))),
+            )
         }
 
         override fun close() {

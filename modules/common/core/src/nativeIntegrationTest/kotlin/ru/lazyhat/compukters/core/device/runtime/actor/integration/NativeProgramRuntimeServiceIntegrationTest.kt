@@ -9,6 +9,7 @@ import ru.lazyhat.compukters.core.device.computer.ActorProgramComputer
 import ru.lazyhat.compukters.core.device.runtime.actor.NativeProgramRuntimeService
 import ru.lazyhat.compukters.core.device.runtime.actor.ProgramRuntimeActorCommand
 import ru.lazyhat.compukters.core.device.runtime.actor.ProgramRuntimeActorLease
+import ru.lazyhat.compukters.core.device.runtime.actor.ProgramRuntimeActorObservation
 import ru.lazyhat.compukters.core.device.runtime.actor.ProgramRuntimeActorReply
 import ru.lazyhat.compukters.core.device.runtime.actor.ProgramRuntimeActorValue
 import ru.lazyhat.compukters.core.device.runtime.actor.VmActorEndpoint
@@ -44,7 +45,7 @@ class NativeProgramRuntimeServiceIntegrationTest {
             var retired = 0L
             for (tick in 1L..20L) {
                 service.beginCapacityFrame(tick)
-                val pending = service.turn(endpoint, tick)
+                val pending = service.frame(endpoint, tick)
                 service.flushCapacityFrame()
                 assertEquals(0, service.pump(0, System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(2)))
                 assertFalse(pending.isDone, "sending credit must not complete an owner observation")
@@ -66,14 +67,14 @@ class NativeProgramRuntimeServiceIntegrationTest {
         NativeProgramRuntimeService(config(), onResultsReady = { notifications.offer(Unit) }).use { service ->
             val endpoint = endpoint(12)
             val lease = start(service, endpoint, "timer")
-            var pending: CompletableFuture<ProgramRuntimeActorReply>? = null
+            var pending: CompletableFuture<ProgramRuntimeActorObservation>? = null
             var tick = 0L
             val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(3)
             while (service.runtimeMetrics().retiredInstructionsTotal == 0L && System.nanoTime() < deadline) {
                 val nextTick = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(50)
                 service.pump(32)
                 service.beginCapacityFrame(++tick)
-                if (pending == null || pending.isDone) pending = service.turn(endpoint, tick)
+                if (pending == null || pending.isDone) pending = service.frame(endpoint, tick)
                 service.flushCapacityFrame()
                 var pumpNanos = 0L
                 while (System.nanoTime() < nextTick) {
@@ -104,7 +105,7 @@ class NativeProgramRuntimeServiceIntegrationTest {
             val lease = start(service, endpoint, "timer")
             val before = await(service, service.request(endpoint, ProgramRuntimeActorCommand::ResourceSnapshot))
             service.beginCapacityFrame(1)
-            val turn = service.turn(endpoint, 1)
+            val turn = service.frame(endpoint, 1)
             repeat(10) { service.pump(32) }
             assertFalse(turn.isDone)
             assertEquals(0L, service.runtimeMetrics().retiredInstructionsTotal)
@@ -112,7 +113,10 @@ class NativeProgramRuntimeServiceIntegrationTest {
             val first = await(service, turn)
             assertEquals(ProgramRuntimeState.Running, first.state)
             assertTrue(first.retiredInstructions in 1..512)
-            assertTrue(service.turn(endpoint, 1).isCompletedExceptionally, "duplicate ordinary turn must reject instead of waiting forever")
+            assertTrue(
+                service.frame(endpoint, 1).isCompletedExceptionally,
+                "duplicate ordinary turn must reject instead of waiting forever",
+            )
             val second = frame(service, endpoint, 2)
             assertEquals(0L, second.retiredInstructions)
             val third = frame(service, endpoint, 3)
@@ -133,7 +137,7 @@ class NativeProgramRuntimeServiceIntegrationTest {
             val totals = endpoints.associateWith { 0L }.toMutableMap()
             for (tick in 1L..3L) {
                 service.beginCapacityFrame(tick)
-                val pending = endpoints.map { it to service.turn(it, tick) }
+                val pending = endpoints.map { it to service.frame(it, tick) }
                 service.flushCapacityFrame()
                 val replies = pending.map { (endpoint, future) -> endpoint to await(service, future) }
                 assertEquals(2L, replies.sumOf { it.second.retiredInstructions })
@@ -179,7 +183,7 @@ class NativeProgramRuntimeServiceIntegrationTest {
             val endpoint = endpoint(8)
             val lease = start(service, endpoint, "timer")
             service.beginCapacityFrame(1)
-            val pending = service.turn(endpoint, 1)
+            val pending = service.frame(endpoint, 1)
             lease.closeAsync().get(5, TimeUnit.SECONDS)
             assertTrue(pending.isCompletedExceptionally)
             service.flushCapacityFrame()
@@ -265,9 +269,9 @@ class NativeProgramRuntimeServiceIntegrationTest {
         service: NativeProgramRuntimeService,
         endpoint: VmActorEndpoint,
         tick: Long,
-    ): ProgramRuntimeActorReply {
+    ): ProgramRuntimeActorObservation {
         service.beginCapacityFrame(tick)
-        val pending = service.turn(endpoint, tick)
+        val pending = service.frame(endpoint, tick)
         service.flushCapacityFrame()
         return await(service, pending)
     }

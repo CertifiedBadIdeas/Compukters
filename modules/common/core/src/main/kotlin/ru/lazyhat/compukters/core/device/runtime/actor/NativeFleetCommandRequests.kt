@@ -134,9 +134,11 @@ internal class NativeFleetCommandRequests(
     fun pump(
         maximumAttempts: Int,
         deadlineNanos: Long,
-    ) {
+    ): Int {
+        var attempts = 0
         repeat(minOf(maximumAttempts, polling.size)) {
-            if (deadlineNanos != Long.MAX_VALUE && nanoTime() - deadlineNanos >= 0) return
+            if (deadlineNanos != Long.MAX_VALUE && nanoTime() - deadlineNanos >= 0) return attempts
+            attempts++
             val entry = polling.removeFirst()
             if (outbox.offer(entry.machine, listOf(entry.command))) {
                 pending.remove(entry.machine)
@@ -144,6 +146,7 @@ internal class NativeFleetCommandRequests(
                 polling.addLast(entry)
             }
         }
+        return attempts
     }
 
     private fun remove(key: Key): Prepared? = prepared.remove(key)?.also { release(key, it) }

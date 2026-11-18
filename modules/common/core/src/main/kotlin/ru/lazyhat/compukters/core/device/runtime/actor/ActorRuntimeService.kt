@@ -28,19 +28,13 @@ internal interface ActorRuntimeService {
         packet: Int,
     ): Boolean? = null
 
-    fun submitTurn(
+    /** Admission of one frame; the observer remains bound across later host waits and reports. */
+    fun submitFrame(
         endpoint: VmActorEndpoint,
         worldTick: Long,
         effects: List<ProgramRuntimeActorEffect>,
-        completion: ProgramRuntimeTurnCompletion,
+        observer: ProgramRuntimeActorObserver,
     ): VmActorSubmission
-
-    fun continueTurn(
-        endpoint: VmActorEndpoint,
-        worldTick: Long,
-        effects: List<ProgramRuntimeActorEffect>,
-        completion: ProgramRuntimeTurnCompletion,
-    ): Boolean
 
     fun recordHostContinuationDelay(delayTicks: Long)
 

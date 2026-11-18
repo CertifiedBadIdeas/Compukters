@@ -420,7 +420,7 @@ class NativeFleetOutboxTest {
         val sent = mutableListOf<Int>()
         val bridge = fleet { _, packet -> sent += packet }
         val outbox = NativeFleetOutbox(bridge, 8, 8, {})
-        val grant = NativeFleetOutbox.Command.Grant(1, 10, Long.MAX_VALUE)
+        val grant = NativeFleetOutbox.Command.FrameGrant(1, 10, Long.MAX_VALUE, Long.MAX_VALUE)
         assertTrue(outbox.offer(1, grant))
         assertTrue(outbox.offer(1, listOf(input(1), grant, input(2), grant)))
         val handoff = outbox.handoffForClose(1)

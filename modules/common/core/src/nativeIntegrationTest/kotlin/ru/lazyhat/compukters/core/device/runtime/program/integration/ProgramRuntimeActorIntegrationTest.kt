@@ -20,6 +20,7 @@ package ru.lazyhat.compukters.core.device.runtime.program.integration
 
 import ru.lazyhat.compukters.core.device.runtime.actor.NativeProgramRuntimeService
 import ru.lazyhat.compukters.core.device.runtime.actor.ProgramRuntimeActorCommand
+import ru.lazyhat.compukters.core.device.runtime.actor.ProgramRuntimeActorObservation
 import ru.lazyhat.compukters.core.device.runtime.actor.ProgramRuntimeActorReply
 import ru.lazyhat.compukters.core.device.runtime.actor.ProgramRuntimeActorValue
 import ru.lazyhat.compukters.core.device.runtime.actor.VmActorEndpoint
@@ -107,7 +108,8 @@ class ProgramRuntimeActorIntegrationTest {
         val runs = listOf(1, 4, 16, 64).map { substeps -> nativeBaseline(artifact, substeps) }
         val baseline = runs.first()
         runs.forEach { run ->
-            assertEquals(baseline.turns, run.turns)
+            // Native work can continue between observational reports and the next Grant.
+            // Owner-pump cadence is not a deterministic count of execution frames.
             assertEquals(baseline.instructions, run.instructions)
             assertEquals(baseline.guestUnits, run.guestUnits)
             assertEquals(baseline.maintenanceUnits, run.maintenanceUnits)
@@ -143,7 +145,7 @@ class ProgramRuntimeActorIntegrationTest {
                     inputSent = true
                 }
                 scheduler.beginCapacityFrame(tick)
-                val future = scheduler.turn(endpoint, tick++)
+                val future = scheduler.frame(endpoint, tick++)
                 scheduler.flushCapacityFrame()
                 val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(TIMEOUT_SECONDS)
                 while (!future.isDone && System.nanoTime() < deadline) {
@@ -207,9 +209,9 @@ class ProgramRuntimeActorIntegrationTest {
     private fun NativeProgramRuntimeService.awaitTurn(
         endpoint: VmActorEndpoint,
         worldTick: Long,
-    ): ProgramRuntimeActorReply {
+    ): ProgramRuntimeActorObservation {
         beginCapacityFrame(worldTick)
-        val future = turn(endpoint, worldTick)
+        val future = frame(endpoint, worldTick)
         flushCapacityFrame()
         val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(TIMEOUT_SECONDS)
         while (System.nanoTime() < deadline) {

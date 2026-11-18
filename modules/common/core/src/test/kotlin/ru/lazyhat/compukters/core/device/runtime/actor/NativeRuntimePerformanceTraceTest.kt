@@ -7,36 +7,37 @@ package ru.lazyhat.compukters.core.device.runtime.actor
 
 import jdk.jfr.Recording
 import jdk.jfr.consumer.RecordingFile
+import ru.lazyhat.compukters.lang.runtime.capability.HostResponse
+import ru.lazyhat.compukters.lang.runtime.vm.ExperimentalFleet
+import ru.lazyhat.compukters.lang.runtime.vm.VmFleetBusyException
+import ru.lazyhat.compukters.lang.runtime.vm.VmHostRequestIdentity
 import java.lang.reflect.Proxy
 import java.nio.file.Files
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
-import ru.lazyhat.compukters.lang.runtime.capability.HostResponse
-import ru.lazyhat.compukters.lang.runtime.vm.ExperimentalFleet
-import ru.lazyhat.compukters.lang.runtime.vm.VmFleetBusyException
-import ru.lazyhat.compukters.lang.runtime.vm.VmHostRequestIdentity
 
 class NativeRuntimePerformanceTraceTest {
     @Test
     fun `trace distinguishes admission from accepted delivery and preserves expired grant`() {
         val file = Files.createTempFile("native-runtime-phases", ".jfr")
         var busy = true
-        val fleet = Proxy.newProxyInstance(
-            ExperimentalFleet::class.java.classLoader,
-            arrayOf(ExperimentalFleet::class.java),
-        ) { _, method, _ ->
-            check(method.name == "grant" || method.name == "reply")
-            if (busy) throw VmFleetBusyException("busy")
-            null
-        } as ExperimentalFleet
+        val fleet =
+            Proxy.newProxyInstance(
+                ExperimentalFleet::class.java.classLoader,
+                arrayOf(ExperimentalFleet::class.java),
+            ) { _, method, _ ->
+                check(method.name == "grantFrame" || method.name == "reply")
+                if (busy) throw VmFleetBusyException("busy")
+                null
+            } as ExperimentalFleet
         try {
             Recording().use { recording ->
                 recording.enable(NativeRuntimePerformanceTrace.EVENT_NAME).withoutStackTrace()
                 recording.start()
                 val outbox = NativeFleetOutbox(fleet, 8, 8, {}, nanoTime = { 10L })
-                assertTrue(outbox.offer(7, NativeFleetOutbox.Command.Grant(11, 128, 5)))
+                assertTrue(outbox.offer(7, NativeFleetOutbox.Command.FrameGrant(11, 128, Long.MAX_VALUE, 5)))
                 assertEquals(0, outbox.flush(1))
                 busy = false
                 assertEquals(1, outbox.flush(1))
@@ -58,7 +59,7 @@ class NativeRuntimePerformanceTraceTest {
             Files.deleteIfExists(file)
         }
         assertNull(NativeRuntimePerformanceTrace.begin("disabled", 7))
-        NativeRuntimePerformanceTrace.command("disabled", 7, NativeFleetOutbox.Command.Grant(1, 128, 5)) {
+        NativeRuntimePerformanceTrace.command("disabled", 7, NativeFleetOutbox.Command.FrameGrant(1, 128, Long.MAX_VALUE, 5)) {
             error("Disabled tracing must not read the clock")
         }
     }

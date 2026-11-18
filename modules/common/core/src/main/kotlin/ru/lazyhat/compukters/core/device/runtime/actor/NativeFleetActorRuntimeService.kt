@@ -7,7 +7,6 @@ package ru.lazyhat.compukters.core.device.runtime.actor
 
 import ru.lazyhat.compukters.api.addon.ProgramAddonAction
 import ru.lazyhat.compukters.api.addon.ProgramAddonHost
-import ru.lazyhat.compukters.core.LOGGER
 import ru.lazyhat.compukters.core.device.runtime.compiler.CompilerCompletionRouter
 import ru.lazyhat.compukters.core.device.runtime.program.HostRequestRoutes
 import ru.lazyhat.compukters.core.device.runtime.program.ProgramAddonLifecyclePort
@@ -23,6 +22,8 @@ import ru.lazyhat.compukters.lang.runtime.vm.ExperimentalFleet
 import ru.lazyhat.compukters.lang.runtime.vm.ExperimentalFleetDeploymentFailure
 import ru.lazyhat.compukters.lang.runtime.vm.ExperimentalFleetDeploymentResult
 import ru.lazyhat.compukters.lang.runtime.vm.ExperimentalFleetEvent
+import ru.lazyhat.compukters.lang.runtime.vm.FleetExecutionMode
+import ru.lazyhat.compukters.lang.runtime.vm.FleetWaitReason
 import ru.lazyhat.compukters.lang.runtime.vm.RedstoneWire
 import ru.lazyhat.compukters.lang.runtime.vm.VmExecutableRevision
 import ru.lazyhat.compukters.lang.runtime.vm.VmHostRequest
@@ -39,9 +40,9 @@ import java.util.concurrent.CompletableFuture
  * The carrier streams
  * addon replies, redstone confirmations and world replies into one bounded ordered outbox,
  * independently of the next execution grant. Legacy deferred world effects reject before admission.
- * Addon/world requests and program lifecycle actions stream to a turn observer on the owner thread;
- * final-only callers and unsupported host events use [onExternalEvent]. Neither path
- * accumulates a second result backlog. Only the final Quiescent report settles turn credit.
+ * Addon/world requests and program lifecycle actions stream to a persistent observer on the owner thread;
+ * unsupported host events use [onExternalEvent]. Neither path accumulates a second result backlog.
+ * Quiescent reports expose native frame usage; only Rust owns remaining execution credit.
  * Stop fences owner work and transfers the host and charged unsent commands to one shared
  * lifecycle worker. Its native cleanup barrier completes without owner result pumping.
  * The caller owns the fleet. Service shutdown requires all actors fenced for stop and waits
@@ -58,15 +59,15 @@ internal class NativeFleetActorRuntimeService(
     private val nanoTime: () -> Long = System::nanoTime,
     byteLimits: NativeFleetOutboxLimits = NativeFleetOutboxLimits(),
     private val onActorClosing: (VmActorEndpoint) -> Unit,
-) : ActorRuntimeService,
-    AutoCloseable {
+    private val onFrameProgress: (VmActorEndpoint, ExperimentalFleetEvent.Quiescent) -> Unit = { _, _ -> },
+) : AutoCloseable {
     init {
         require(maximumActors > 0 && maximumRequests > 0 && maximumRequestsPerActor > 0)
         checkOwner()
-        require(fleet.coordinatedTurns) { "native actor service requires a coordinated fleet" }
+        require(fleet.executionMode == FleetExecutionMode.AUTONOMOUS_FRAMES) { "native actor service requires autonomous frames" }
     }
 
-    override val redstoneInputCapacity: Int get() = maximumRequestsPerActor
+    val redstoneInputCapacity: Int get() = maximumRequestsPerActor
     private val actors = mutableMapOf<VmActorEndpoint, Actor>()
     private val machines = mutableMapOf<Long, Actor>()
     private var closed = false
@@ -88,7 +89,7 @@ internal class NativeFleetActorRuntimeService(
         private set
     internal var coalescedRedstoneInputs = 0L
         private set
-    private val dispatcher =
+    private val dispatcher: NativeFleetDispatcher =
         NativeFleetDispatcher(
             fleet,
             maximumRequests,
@@ -98,10 +99,11 @@ internal class NativeFleetActorRuntimeService(
             ::observe,
             byteLimits,
             nanoTime,
+            prepareCommands = { maximum, deadline -> commandRequests.pump(maximum, deadline) },
         )
 
     private val compilations = NativeFleetCompilations(dispatcher.outbox, nanoTime)
-    private val commandRequests =
+    private val commandRequests: NativeFleetCommandRequests =
         NativeFleetCommandRequests(dispatcher.outbox, maximumRequests, maximumRequestsPerActor, byteLimits, nanoTime)
 
     private val bootstrap =
@@ -214,24 +216,7 @@ internal class NativeFleetActorRuntimeService(
         return prepareCheckpoint(actor, request.worldTick, request.addonState, request.effects, request.saveExecution)
     }
 
-    /** A frame can be installed once; a still-in-flight reservation cannot be borrowed or replaced. */
-    fun grantFrame(
-        endpoint: VmActorEndpoint,
-        tick: Long,
-        retirements: Int,
-        deadlineNanos: Long = Long.MAX_VALUE,
-    ): Boolean {
-        checkOwner()
-        require(tick >= 0 && retirements >= 0)
-        if (closed) return false
-        val actor = actors[endpoint] ?: return false
-        val previous = actor.credit
-        if (previous != null && (previous.inFlight || tick <= previous.worldTick)) return false
-        actor.credit = ProgramRuntimeFrameCredit(tick, retirements.toLong(), deadlineNanos, false)
-        return true
-    }
-
-    override fun submitHostCompletions(
+    fun submitHostCompletions(
         endpoint: VmActorEndpoint,
         completions: List<ProgramRuntimeHostCompletion>,
     ): Int {
@@ -249,7 +234,7 @@ internal class NativeFleetActorRuntimeService(
         )
     }
 
-    override fun submitRedstoneInput(
+    fun submitRedstoneInput(
         endpoint: VmActorEndpoint,
         packet: Int,
     ): Boolean {
@@ -257,66 +242,35 @@ internal class NativeFleetActorRuntimeService(
         val checked = RedstoneWire.requireInputPacket(packet)
         if (closed || endpoint in closing) return false
         val actor = actors[endpoint] ?: return false
-        if (actor.turn != null || actor.credit?.inFlight == true) return false
         if (!dispatcher.outbox.offer(actor.machine, NativeFleetOutbox.Command.RedstoneInput(checked))) return false
         actor.host.observeFleetRedstoneInput(fleet, actor.machine, checked)
         return true
     }
 
-    override fun submitTurn(
+    fun submitFrame(
         endpoint: VmActorEndpoint,
         worldTick: Long,
+        retirements: Int,
+        executionNanos: Long,
+        authorizedUntilNanos: Long,
         effects: List<ProgramRuntimeActorEffect>,
-        completion: ProgramRuntimeTurnCompletion,
-    ): VmActorSubmission = admit(endpoint, worldTick, effects, completion, continuation = false)
-
-    override fun continueTurn(
-        endpoint: VmActorEndpoint,
-        worldTick: Long,
-        effects: List<ProgramRuntimeActorEffect>,
-        completion: ProgramRuntimeTurnCompletion,
-    ): Boolean = admit(endpoint, worldTick, effects, completion, continuation = true) == VmActorSubmission.ACCEPTED
-
-    private fun admit(
-        endpoint: VmActorEndpoint,
-        worldTick: Long,
-        effects: List<ProgramRuntimeActorEffect>,
-        completion: ProgramRuntimeTurnCompletion,
-        continuation: Boolean,
+        observer: ProgramRuntimeActorObserver,
     ): VmActorSubmission {
         checkOwner()
-        require(worldTick >= 0)
-        if (closed) return VmActorSubmission.CLOSED
+        require(worldTick >= 0 && retirements >= 0 && executionNanos >= 0)
+        if (closed || endpoint in closing) return VmActorSubmission.CLOSED
         require(effects.all { it is ProgramRuntimeActorEffect.RedstoneInput || it is ProgramRuntimeActorEffect.CompleteAddons }) {
             "native world completions require the streamed host completion path"
         }
-        if (endpoint in closing) return VmActorSubmission.CLOSED
         val actor = actors[endpoint] ?: return VmActorSubmission.STALE_ENDPOINT
-        val credit = actor.credit ?: return VmActorSubmission.MAILBOX_FULL
-        if (actor.turn != null || credit.inFlight) return VmActorSubmission.PERMIT_PENDING
-        if (credit.worldTick != worldTick ||
-            (continuation && credit.deadlineNanos != Long.MAX_VALUE && nanoTime() - credit.deadlineNanos >= 0)
-        ) {
-            return VmActorSubmission.MAILBOX_FULL
-        }
-        if (continuation) {
-            if (actor.lastTurnTick != worldTick || credit.continuations >= MAXIMUM_CONTINUATIONS_PER_FRAME ||
-                credit.remaining == 0L
-            ) {
-                return VmActorSubmission.MAILBOX_FULL
-            }
-        } else if (actor.lastTurnTick == worldTick) {
-            return VmActorSubmission.PERMIT_PENDING
-        }
+        if (worldTick <= actor.lastFrameTick) return VmActorSubmission.PERMIT_PENDING
         var commandCount = 1
         for (effect in effects) {
             val count = if (effect is ProgramRuntimeActorEffect.CompleteAddons) effect.completions.size else 1
             if (count > maximumRequestsPerActor - commandCount) return VmActorSubmission.MAILBOX_FULL
             commandCount += count
         }
-        val allowance = credit.remaining
-        val grant = NativeFleetOutbox.Command.Grant(worldTick, allowance.toInt(), credit.deadlineNanos)
-        val id = requestId()
+        val grant = NativeFleetOutbox.Command.FrameGrant(worldTick, retirements, executionNanos, authorizedUntilNanos)
         val accepted =
             if (effects.isEmpty()) {
                 dispatcher.outbox.offer(actor.machine, grant)
@@ -353,14 +307,14 @@ internal class NativeFleetActorRuntimeService(
                 )
             }
         }
-        actor.turn = Turn(id, allowance, completion) { machines[actor.machine] === actor && actor.turn?.id == id }
-        credit.inFlight = true
-        if (continuation) credit.continuations++
-        actor.lastTurnTick = worldTick
+        if (actor.observer?.observer !== observer) {
+            actor.observer = ObservationPort(observer) { machines[actor.machine] === actor && actor.observer?.observer === observer }
+        }
+        actor.lastFrameTick = worldTick
         return VmActorSubmission.ACCEPTED
     }
 
-    override fun request(
+    fun request(
         endpoint: VmActorEndpoint,
         command: (ProgramRuntimeRequestId) -> ProgramRuntimeActorCommand,
     ): CompletableFuture<ProgramRuntimeActorReply> {
@@ -464,7 +418,7 @@ internal class NativeFleetActorRuntimeService(
                     actor.endpoint,
                     actor.host,
                     actor.lease,
-                    maxOf(actor.host.lastObservedWorldTick, actor.lastTurnTick),
+                    maxOf(actor.host.lastObservedWorldTick, actor.lastFrameTick),
                     command,
                     predecessor,
                 ) ?: return CompletableFuture.failedFuture(ProgramRuntimeActorRequestException(VmActorSubmission.MAILBOX_FULL))
@@ -503,7 +457,7 @@ internal class NativeFleetActorRuntimeService(
         saveExecution: Boolean,
     ): ProgramActorCloseReservation {
         actor.host.validateFleetCheckpointTick(worldTick)
-        require(worldTick >= (actor.credit?.worldTick ?: 0)) { "checkpoint tick precedes frame credit" }
+        require(worldTick >= actor.lastFrameTick) { "checkpoint tick precedes the admitted frame" }
         require(
             effects.all {
                 it is ProgramRuntimeActorEffect.CompleteAddons
@@ -603,14 +557,13 @@ internal class NativeFleetActorRuntimeService(
                 if (previous == null) cancellationFailure = failure else previous.addSuppressed(failure)
             }
             val failure = actor.failure ?: cancellationFailure ?: CancellationException("native actor stopped")
-            actor.turn?.let {
-                val callbackFailure = runCatching { complete(it.completion, null, failure) }.exceptionOrNull()
-                if (callbackFailure != null) {
+            actor.observer?.let { port ->
+                runCatching { port.observer.failed(failure) }.exceptionOrNull()?.let { callbackFailure ->
                     val canceled = cancellationFailure
                     if (canceled == null) cancellationFailure = callbackFailure else canceled.addSuppressed(callbackFailure)
                 }
             }
-            actor.turn = null
+            actor.observer = null
             val queries = actor.queries
             actor.queries = null
             pendingQueries -= queries?.size ?: 0
@@ -642,7 +595,6 @@ internal class NativeFleetActorRuntimeService(
         val remaining = maximumAttempts - bootstrap.lastTransferAttempts
         retryDeploymentCleanup(remaining, deadlineNanos)
         compilations.pump(remaining, deadlineNanos)
-        commandRequests.pump(remaining, deadlineNanos)
         return prepared + dispatcher.pump(maximumEvents - prepared, remaining, deadlineNanos)
     }
 
@@ -669,6 +621,13 @@ internal class NativeFleetActorRuntimeService(
                     for (request in outcome.requests) NativeRuntimePerformanceTrace.request("request", event.machine, event.tick, request)
                 }
                 observeOutcome(actor, event)
+                actor.observer?.observationFailure?.let { failure ->
+                    if (machines[actor.machine] ===
+                        actor
+                    ) {
+                        observeEvent(ExperimentalFleetEvent.Error(actor.machine, "host observation failed: ${failure.message}"))
+                    }
+                }
             }
 
             is ExperimentalFleetEvent.Quiescent -> {
@@ -678,7 +637,7 @@ internal class NativeFleetActorRuntimeService(
                     units = event.retired
                     commit()
                 }
-                finishTurn(actor, event)
+                observeProgress(actor, event)
             }
 
             is ExperimentalFleetEvent.FilesystemGeneration -> {
@@ -782,21 +741,21 @@ internal class NativeFleetActorRuntimeService(
                 Unit
             }
         }
-        val turn = actor.turn
-        if (turn?.completion !is ProgramRuntimeTurnObserver) {
+        val port = actor.observer
+        if (port == null) {
             actor.host.observeFleetOutcome(fleet, actor.machine, event.outcome)
-            if (isCurrent(actor, turn)) onExternalEvent(actor.endpoint, event)
+            if (isCurrent(actor, port)) onExternalEvent(actor.endpoint, event)
             return
         }
-        actor.host.observeFleetOutcome(fleet, actor.machine, event.outcome, turn)
-        if (!isCurrent(actor, turn)) return
+        actor.host.observeFleetOutcome(fleet, actor.machine, event.outcome, port)
+        if (!isCurrent(actor, port)) return
         when (val outcome = event.outcome) {
             is VmOutcome.HostRequestBatch -> {
                 var handled = false
                 var unhandled: MutableList<VmHostRequest>? = null
                 var world: MutableList<VmHostRequest>? = null
                 for (request in outcome.requests) {
-                    if (!isCurrent(actor, turn)) return
+                    if (!isCurrent(actor, port)) return
                     if (HostRequestRoutes.isRedstoneOutput(request) || HostRequestRoutes.isSound(request)) {
                         (world ?: mutableListOf<VmHostRequest>().also { world = it }).add(request)
                     } else {
@@ -809,16 +768,16 @@ internal class NativeFleetActorRuntimeService(
                             )
                         if (prepared != null) {
                             handled = true
-                            turn.submit(ProgramAddonAction.Request(prepared))
+                            port.submit(ProgramAddonAction.Request(prepared))
                         } else {
                             (unhandled ?: mutableListOf<VmHostRequest>().also { unhandled = it }).add(request)
                         }
                     }
                 }
-                if (!isCurrent(actor, turn) || turn.observationFailure != null) return
+                if (!isCurrent(actor, port) || port.observationFailure != null) return
                 world?.let { requests ->
-                    val result = turn.submitWorld { actor.host.prepareFleetWorldRequest(fleet, actor.machine, requests) }
-                    if (!isCurrent(actor, turn) || turn.observationFailure != null) return
+                    val result = port.submitWorld { actor.host.prepareFleetWorldRequest(fleet, actor.machine, requests) }
+                    if (!isCurrent(actor, port) || port.observationFailure != null) return
                     if (result != null) {
                         handled = true
                         result.confirmedRedstoneOutput?.let { actor.host.observeFleetRedstoneOutput(fleet, actor.machine, it) }
@@ -859,22 +818,41 @@ internal class NativeFleetActorRuntimeService(
 
     private fun isCurrent(
         actor: Actor,
-        turn: Turn?,
-    ): Boolean = machines[actor.machine] === actor && actor.turn === turn
+        port: ObservationPort?,
+    ): Boolean = machines[actor.machine] === actor && actor.observer === port
 
-    private fun finishTurn(
+    private fun observeProgress(
         actor: Actor,
         event: ExperimentalFleetEvent.Quiescent,
     ) {
-        val turn = actor.turn ?: return // Duplicate final reports cannot mint credit or another reply.
-        val credit = checkNotNull(actor.credit)
-        check(event.tick == credit.worldTick) { "native turn report belongs to another frame" }
+        val progress = requireNotNull(event.frame) { "autonomous native progress is required" }
         actor.host.observeFleetQuiescent(fleet, event)
-        val delta = credit.finishCumulative(event.retired, turn.allowance)
-        actor.turn = null
-        val reply = ProgramRuntimeActorReply(turn.id, actor.host.state, ProgramRuntimeActorValue.None, actor.generation, delta)
-        val failure = turn.observationFailure
-        complete(turn.completion, if (failure == null) reply else null, failure)
+        onFrameProgress(actor.endpoint, event)
+        val port = actor.observer ?: return
+        val failure = port.observationFailure
+        if (failure != null) {
+            observeEvent(ExperimentalFleetEvent.Error(actor.machine, "host observation failed: ${failure.message}"))
+        } else if (isCurrent(actor, port)) {
+            try {
+                port.observer.updated(
+                    ProgramRuntimeActorObservation(
+                        event.tick,
+                        event.retired,
+                        actor.host.state,
+                        actor.generation,
+                        progress.reason != FleetWaitReason.INPUT && progress.reason != FleetWaitReason.STOPPED,
+                    ),
+                )
+            } catch (failure: Exception) {
+                if (isCurrent(
+                        actor,
+                        port,
+                    )
+                ) {
+                    observeEvent(ExperimentalFleetEvent.Error(actor.machine, "host observer failed: ${failure.message}"))
+                }
+            }
+        }
     }
 
     private fun finishQuery(
@@ -1009,7 +987,7 @@ internal class NativeFleetActorRuntimeService(
 
     private fun requestId(): ProgramRuntimeRequestId = ProgramRuntimeRequestId(Math.incrementExact(nextRequest).also { nextRequest = it })
 
-    override fun recordHostContinuationDelay(delayTicks: Long) {
+    fun recordHostContinuationDelay(delayTicks: Long) {
         checkOwner()
         require(delayTicks >= 0)
         if (hostContinuationSamples < Long.MAX_VALUE) hostContinuationSamples++
@@ -1017,7 +995,7 @@ internal class NativeFleetActorRuntimeService(
         maximumHostContinuationDelayTicks = maxOf(maximumHostContinuationDelayTicks, delayTicks)
     }
 
-    override fun recordCoalescedRedstoneInput() {
+    fun recordCoalescedRedstoneInput() {
         checkOwner()
         if (coalescedRedstoneInputs < Long.MAX_VALUE) coalescedRedstoneInputs++
     }
@@ -1033,20 +1011,6 @@ internal class NativeFleetActorRuntimeService(
         closeAsync().join()
     }
 
-    private fun complete(
-        completion: ProgramRuntimeTurnCompletion,
-        reply: ProgramRuntimeActorReply?,
-        failure: Throwable?,
-    ) {
-        try {
-            completion.complete(reply, failure)
-        } catch (
-            error: Exception,
-        ) {
-            LOGGER.warn(error) { "Native actor turn completion failed" }
-        }
-    }
-
     private class Actor(
         val endpoint: VmActorEndpoint,
         val machine: Long,
@@ -1054,17 +1018,14 @@ internal class NativeFleetActorRuntimeService(
     ) {
         var lease: ProgramRuntimeActorLease? = null
         var failure: Throwable? = null
-        var credit: ProgramRuntimeFrameCredit? = null
-        var lastTurnTick = -1L
-        var turn: Turn? = null
+        var lastFrameTick = -1L
+        var observer: ObservationPort? = null
         var generation: Long? = null
         var queries: MutableMap<Long, Query>? = null
     }
 
-    private class Turn(
-        val id: ProgramRuntimeRequestId,
-        val allowance: Long,
-        val completion: ProgramRuntimeTurnCompletion,
+    private class ObservationPort(
+        val observer: ProgramRuntimeActorObserver,
         val isActive: () -> Boolean,
     ) : ProgramAddonLifecyclePort {
         var observationFailure: Exception? = null
@@ -1073,7 +1034,7 @@ internal class NativeFleetActorRuntimeService(
         fun submitWorld(prepare: () -> ProgramWorldRequest?): ProgramWorldResult? {
             if (observationFailure != null || !isActive()) return null
             return try {
-                prepare()?.let { (completion as ProgramRuntimeTurnObserver).worldRequest(it) }
+                prepare()?.let { observer.worldRequest(it) }
             } catch (failure: Exception) {
                 observationFailure = failure
                 null
@@ -1083,7 +1044,7 @@ internal class NativeFleetActorRuntimeService(
         override fun submit(action: ProgramAddonAction): Boolean {
             if (observationFailure == null && isActive()) {
                 try {
-                    (completion as ProgramRuntimeTurnObserver).addonAction(action)
+                    observer.addonAction(action)
                 } catch (failure: Exception) {
                     observationFailure = failure
                 }

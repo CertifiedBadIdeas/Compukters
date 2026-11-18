@@ -96,15 +96,16 @@ internal class NativeFleetOutbox(
             ) = fleet.confirmRedstoneOutput(machine, packed)
         }
 
-        data class Grant(
+        data class FrameGrant(
             val tick: Long,
             val retirements: Int,
-            val deadlineNanos: Long,
+            val executionNanos: Long,
+            val authorizedUntilNanos: Long,
         ) : Command {
             override fun send(
                 fleet: ExperimentalFleet,
                 machine: Long,
-            ) = fleet.grant(machine, tick, retirements, deadlineNanos)
+            ) = fleet.grantFrame(machine, tick, retirements, executionNanos, authorizedUntilNanos)
         }
 
         data object Stop : Lifecycle {
@@ -155,14 +156,14 @@ internal class NativeFleetOutbox(
         }
 
         fun cancelGrants(budget: Budget) {
-            while (head is Command.Grant) {
+            while (head is Command.FrameGrant) {
                 val command = removeFirst()
                 budget.release(1, command.retainedBytes)
             }
             val iterator = tail?.iterator() ?: return
             while (iterator.hasNext()) {
                 val command = iterator.next()
-                if (command is Command.Grant) {
+                if (command is Command.FrameGrant) {
                     iterator.remove()
                     bytes -= command.retainedBytes
                     budget.release(1, command.retainedBytes)
@@ -519,11 +520,31 @@ internal class NativeFleetOutbox(
                 if (!isScalar(command)) break
                 val index = batch.wire.size
                 when (command) {
-                    is Command.Grant -> batch.wire.grant(machine, command.tick, command.retirements, command.deadlineNanos)
-                    is Command.ResolveCost -> batch.wire.resolveCost(machine, command.identity, command.units)
-                    is Command.RedstoneInput -> batch.wire.redstoneInput(machine, command.packet)
-                    is Command.ConfirmRedstoneOutput -> batch.wire.confirmRedstoneOutput(machine, command.packed)
-                    else -> error("unsupported scalar command")
+                    is Command.FrameGrant -> {
+                        batch.wire.grantFrame(
+                            machine,
+                            command.tick,
+                            command.retirements,
+                            command.executionNanos,
+                            command.authorizedUntilNanos,
+                        )
+                    }
+
+                    is Command.ResolveCost -> {
+                        batch.wire.resolveCost(machine, command.identity, command.units)
+                    }
+
+                    is Command.RedstoneInput -> {
+                        batch.wire.redstoneInput(machine, command.packet)
+                    }
+
+                    is Command.ConfirmRedstoneOutput -> {
+                        batch.wire.confirmRedstoneOutput(machine, command.packed)
+                    }
+
+                    else -> {
+                        error("unsupported scalar command")
+                    }
                 }
                 ready.removeFirst()
                 batch.machines[index] = machine
@@ -574,7 +595,7 @@ internal class NativeFleetOutbox(
     }
 
     private fun isScalar(command: Command?): Boolean =
-        command is Command.Grant || command is Command.ResolveCost ||
+        command is Command.FrameGrant || command is Command.ResolveCost ||
             command is Command.RedstoneInput || command is Command.ConfirmRedstoneOutput
 
     /** Discard only after the owner has dealt with the machine's pending operations. */

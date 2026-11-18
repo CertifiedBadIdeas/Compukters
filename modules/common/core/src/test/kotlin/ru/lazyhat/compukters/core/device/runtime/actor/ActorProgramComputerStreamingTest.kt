@@ -38,9 +38,9 @@ class ActorProgramComputerStreamingTest {
             val carrier = computer(service, TestAddon())
             carrier.turnOn().join()
             carrier.serverTick(1)
-            val observer = assertIs<ProgramRuntimeTurnObserver>(service.completion)
+            val observer = assertIs<ProgramRuntimeActorObserver>(service.completion)
             observer.worldRequest(ProgramWorldRequest.Redstone(listOf(VmHostRequestIdentity(1, 1)), 0, 17))
-            observer.complete(reply().copy(state = ProgramRuntimeState.Halted(null)), null)
+            observer.deliver(reply().copy(state = ProgramRuntimeState.Halted(null)), null)
             val power = if (reboot) carrier.reboot() else carrier.shutdown()
             assertFalse(power.isDone)
             assertTrue(service.hostCompletions.isEmpty())
@@ -69,10 +69,10 @@ class ActorProgramComputerStreamingTest {
         val carrier = ActorProgramComputer(service, lease, { RedstoneCommitResult.Committed })
         carrier.turnOn().join()
         carrier.serverTick(1) // Keep the one-entry native queue occupied by its initial grant.
-        val observer = assertIs<ProgramRuntimeTurnObserver>(service.completion)
+        val observer = assertIs<ProgramRuntimeActorObserver>(service.completion)
         observer.worldRequest(ProgramWorldRequest.Redstone(listOf(VmHostRequestIdentity(1, 1)), 7, 17))
         observer.addonAction(ProgramAddonAction.Stopped(7))
-        observer.complete(reply().copy(state = ProgramRuntimeState.Halted(null)), null)
+        observer.deliver(reply().copy(state = ProgramRuntimeState.Halted(null)), null)
         assertNull(carrier.tryHibernateAsync(1))
         assertNull(captured)
         service.queued = 0
@@ -106,11 +106,11 @@ class ActorProgramComputerStreamingTest {
         carrier.turnOn().join()
         carrier.serverTick(1)
         service.queued = 0
-        val observer = assertIs<ProgramRuntimeTurnObserver>(service.completion)
+        val observer = assertIs<ProgramRuntimeActorObserver>(service.completion)
         val identities = (1L..4L).map { VmHostRequestIdentity(1, it) }
         assertEquals(17, observer.worldRequest(ProgramWorldRequest.Redstone(identities.take(2), 0, 17))?.confirmedRedstoneOutput)
         observer.worldRequest(ProgramWorldRequest.Sound(identities.drop(2), 0, listOf(SoundRequest(12, 100), SoundRequest(24, 50))))
-        observer.complete(reply().copy(state = ProgramRuntimeState.WaitingForInput), null)
+        observer.deliver(reply().copy(state = ProgramRuntimeState.WaitingForInput), null)
         for (tick in 2L..8L) {
             service.queued = 0
             carrier.serverTick(tick)
@@ -131,7 +131,7 @@ class ActorProgramComputerStreamingTest {
                 it.response
             },
         )
-        assertTrue(service.acceptedTurns > 1)
+        assertEquals(1, service.acceptedTurns)
         carrier.closeAsync().join()
     }
 
@@ -151,13 +151,13 @@ class ActorProgramComputerStreamingTest {
             })
         carrier.turnOn().join()
         carrier.serverTick(1)
-        val observer = assertIs<ProgramRuntimeTurnObserver>(service.completion)
+        val observer = assertIs<ProgramRuntimeActorObserver>(service.completion)
         assertFailsWith<IllegalStateException> {
             observer.worldRequest(ProgramWorldRequest.Redstone((1L..513L).map { VmHostRequestIdentity(1, it) }, 0, 17))
         }
         assertEquals(0, writes)
         assertNull(observer.worldRequest(ProgramWorldRequest.Redstone(listOf(VmHostRequestIdentity(1, 1)), 0, 17)))
-        observer.complete(reply(), null)
+        observer.deliver(reply(), null)
         assertEquals(1, writes)
         assertTrue(service.hostCompletions.isEmpty())
         assertEquals(ProgramRuntimeState.Closed, carrier.state)
@@ -176,10 +176,10 @@ class ActorProgramComputerStreamingTest {
         carrier.turnOn().join()
         carrier.serverTick(1)
         service.queued = 0
-        val observer = assertIs<ProgramRuntimeTurnObserver>(service.completion)
+        val observer = assertIs<ProgramRuntimeActorObserver>(service.completion)
         assertNull(observer.worldRequest(ProgramWorldRequest.Redstone(listOf(VmHostRequestIdentity(1, 1)), 0, 17))?.confirmedRedstoneOutput)
         observer.worldRequest(ProgramWorldRequest.Sound(listOf(VmHostRequestIdentity(1, 2)), 0, listOf(SoundRequest(12, 100))))
-        observer.complete(reply(), null)
+        observer.deliver(reply(), null)
         assertEquals(2, service.hostCompletions.size)
         service.hostCompletions.forEach { assertIs<HostResponse.Failure>(assertIs<ProgramRuntimeHostCompletion.Reply>(it).response) }
         carrier.closeAsync().join()
@@ -208,10 +208,10 @@ class ActorProgramComputerStreamingTest {
         carrier.turnOn().join()
         carrier.serverTick(1)
         service.queued = 0
-        val observer = assertIs<ProgramRuntimeTurnObserver>(service.completion)
+        val observer = assertIs<ProgramRuntimeActorObserver>(service.completion)
         observer.addonAction(request(1))
         observer.addonAction(request(2))
-        observer.complete(reply().copy(state = ProgramRuntimeState.WaitingForInput), null)
+        observer.deliver(reply().copy(state = ProgramRuntimeState.WaitingForInput), null)
         assertNull(carrier.tryHibernateAsync(1))
         assertEquals(ProgramRuntimeState.WaitingForInput, carrier.state)
         assertNull(captured)
@@ -236,10 +236,10 @@ class ActorProgramComputerStreamingTest {
             carrier.turnOn().join()
             carrier.serverTick(1)
             service.queued = 0 // Native worker consumed the initial grant.
-            val observer = assertIs<ProgramRuntimeTurnObserver>(service.completion)
+            val observer = assertIs<ProgramRuntimeActorObserver>(service.completion)
             observer.addonAction(request(1))
             observer.addonAction(request(2))
-            observer.complete(reply().copy(state = ProgramRuntimeState.WaitingForInput), null)
+            observer.deliver(reply().copy(state = ProgramRuntimeState.WaitingForInput), null)
             assertEquals(capacity, service.acceptedReplies.size)
             assertEquals(1, service.acceptedTurns)
             for (tick in 2L..4L) {
@@ -247,7 +247,7 @@ class ActorProgramComputerStreamingTest {
                 carrier.serverTick(tick)
             }
             assertEquals(listOf(VmHostRequestIdentity(1, 1), VmHostRequestIdentity(1, 2)), service.acceptedReplies)
-            assertTrue(service.acceptedTurns > 1)
+            assertEquals(1, service.acceptedTurns)
             carrier.closeAsync().join()
         }
     }
@@ -280,7 +280,7 @@ class ActorProgramComputerStreamingTest {
         val carrier = ActorProgramComputer(service, lease, { RedstoneCommitResult.Committed }, addon = addon)
         carrier.turnOn().join()
         carrier.serverTick(4)
-        val observer = assertIs<ProgramRuntimeTurnObserver>(service.completion)
+        val observer = assertIs<ProgramRuntimeActorObserver>(service.completion)
         observer.addonAction(request(1))
         assertNull(carrier.tryHibernateAsync(4))
         val refused = carrier.hibernateAsync(4)
@@ -290,10 +290,10 @@ class ActorProgramComputerStreamingTest {
         assertEquals(0, commits)
         busy = false
         assertEquals(7L, carrier.hibernateAsync(4).join())
-        val replies = assertIs<ProgramRuntimeActorEffect.CompleteAddons>(checkNotNull(accepted).effects.single())
-        assertEquals(listOf(VmHostRequestIdentity(1, 1)), replies.completions.map { it.identity })
-        observer.complete(reply(), null)
-        assertTrue(service.continuations.isEmpty())
+        assertTrue(checkNotNull(accepted).effects.isEmpty())
+        assertEquals(listOf(VmHostRequestIdentity(1, 1)), service.acceptedReplies)
+        observer.deliver(reply(), null)
+        assertEquals(1, service.acceptedTurns)
         assertEquals(ProgramRuntimeState.Closed, carrier.state)
         assertEquals(1, addonClosed)
         assertEquals(1, commits)
@@ -333,7 +333,7 @@ class ActorProgramComputerStreamingTest {
                     commits++
                     val nested = carrier.closeAsync()
                     assertFalse(nested.isDone)
-                    checkNotNull(service.completion).complete(reply(), IllegalStateException("turn canceled"))
+                    checkNotNull(service.completion).deliver(reply(), IllegalStateException("turn canceled"))
                     CompletableFuture.completedFuture(8)
                 }
             }
@@ -359,7 +359,7 @@ class ActorProgramComputerStreamingTest {
     }
 
     @Test
-    fun `streamed world result waits for turn settlement and is sent once`() {
+    fun `streamed result is sent immediately without another frame and is not repeated by observations`() {
         val service = Service()
         var dispatched = 0
         val addon =
@@ -372,51 +372,44 @@ class ActorProgramComputerStreamingTest {
         val carrier = computer(service, addon)
         carrier.turnOn().join()
         carrier.serverTick(4)
-        val observer = assertIs<ProgramRuntimeTurnObserver>(service.completion)
+        val observer = assertIs<ProgramRuntimeActorObserver>(service.completion)
         observer.addonAction(request(1))
         assertEquals(1, dispatched)
-        assertEquals(0, service.continuations.size)
-        observer.complete(reply(), null)
-        val effect = assertIs<ProgramRuntimeActorEffect.CompleteAddons>(service.continuations.single().single())
-        assertEquals(listOf(VmHostRequestIdentity(1, 1)), effect.completions.map { it.identity })
-        checkNotNull(service.completion).complete(reply(), null)
-        assertEquals(1, service.continuations.size)
+        assertEquals(listOf(VmHostRequestIdentity(1, 1)), service.acceptedReplies)
+        observer.deliver(reply(), null)
+        assertEquals(listOf(VmHostRequestIdentity(1, 1)), service.acceptedReplies)
+        checkNotNull(service.completion).deliver(reply(), null)
+        assertEquals(1, service.acceptedTurns)
         carrier.closeAsync().join()
     }
 
     @Test
-    fun `reentrant addon close fences streamed and final reply actions`() {
-        for (streaming in listOf(false, true)) {
-            val service = Service()
-            lateinit var carrier: ActorProgramComputer
-            var dispatched = 0
-            val addon =
-                object : TestAddon() {
-                    override fun dispatch(request: ProgramAddonRequest): ProgramAddonDispatch {
-                        dispatched++
-                        carrier.closeAsync()
-                        return ProgramAddonDispatch.Completed(HostResponse.UnitSuccess)
-                    }
+    fun `reentrant addon close fences later streamed actions`() {
+        val service = Service()
+        lateinit var carrier: ActorProgramComputer
+        var dispatched = 0
+        val addon =
+            object : TestAddon() {
+                override fun dispatch(request: ProgramAddonRequest): ProgramAddonDispatch {
+                    dispatched++
+                    carrier.closeAsync()
+                    return ProgramAddonDispatch.Completed(HostResponse.UnitSuccess)
                 }
-            carrier = computer(service, addon)
-            carrier.turnOn().join()
-            carrier.serverTick(4)
-            val observer = assertIs<ProgramRuntimeTurnObserver>(service.completion)
-            if (streaming) {
-                observer.addonAction(request(1))
-                observer.addonAction(request(2))
-                observer.complete(reply(), null)
-            } else {
-                observer.complete(reply().copy(addonActions = listOf(request(1), request(2))), null)
             }
-            assertEquals(1, dispatched)
-            assertTrue(service.continuations.isEmpty())
-            assertEquals(ProgramRuntimeState.Closed, carrier.state)
-        }
+        carrier = computer(service, addon)
+        carrier.turnOn().join()
+        carrier.serverTick(4)
+        val observer = assertIs<ProgramRuntimeActorObserver>(service.completion)
+        observer.addonAction(request(1))
+        observer.addonAction(request(2))
+        observer.deliver(reply(), null)
+        assertEquals(1, dispatched)
+        assertTrue(service.acceptedReplies.isEmpty())
+        assertEquals(ProgramRuntimeState.Closed, carrier.state)
     }
 
     @Test
-    fun `streamed child exit discards only child completions before continuation`() {
+    fun `streamed child exit preserves replies already admitted before cancellation`() {
         val service = Service()
         val lifecycle = mutableListOf<Long>()
         val addon =
@@ -434,15 +427,14 @@ class ActorProgramComputerStreamingTest {
         val carrier = computer(service, addon)
         carrier.turnOn().join()
         carrier.serverTick(4)
-        val observer = assertIs<ProgramRuntimeTurnObserver>(service.completion)
+        val observer = assertIs<ProgramRuntimeActorObserver>(service.completion)
         observer.addonAction(request(1))
         observer.addonAction(ProgramAddonAction.Started(1))
         observer.addonAction(request(2, 1))
         observer.addonAction(ProgramAddonAction.Stopped(1))
-        observer.complete(reply(), null)
+        observer.deliver(reply(), null)
         assertEquals(listOf(1L, -1L), lifecycle)
-        val effect = assertIs<ProgramRuntimeActorEffect.CompleteAddons>(service.continuations.single().single())
-        assertEquals(listOf(VmHostRequestIdentity(1, 1)), effect.completions.map { it.identity })
+        assertEquals(listOf(VmHostRequestIdentity(1, 1), VmHostRequestIdentity(1, 2)), service.acceptedReplies)
         carrier.closeAsync().join()
     }
 
@@ -467,12 +459,51 @@ class ActorProgramComputerStreamingTest {
             )
         carrier.turnOn().join()
         carrier.serverTick(0)
-        checkNotNull(service.completion).complete(reply().copy(state = ProgramRuntimeState.WaitingForInput), null)
+        checkNotNull(service.completion).deliver(reply().copy(state = ProgramRuntimeState.WaitingForInput), null)
         closeOnRunning = true
         carrier.serverTick(1, 1)
-        checkNotNull(service.completion).complete(reply().copy(value = ProgramRuntimeActorValue.RedstoneOutputRequested(7)), null)
+        val observer = checkNotNull(service.completion)
+        observer.deliver(reply(), null)
+        observer.worldRequest(ProgramWorldRequest.Redstone(listOf(VmHostRequestIdentity(1, 1)), 0, 7))
         assertEquals(ProgramRuntimeState.Closed, carrier.state)
         assertEquals(0, writes)
+    }
+
+    @Test
+    fun `native quota wait receives the next frame while input idle stays asleep`() {
+        val service = Service()
+        val carrier = computer(service, object : TestAddon() {})
+        carrier.turnOn().join()
+        carrier.serverTick(1)
+        val observer = checkNotNull(service.completion)
+        observer.updated(ProgramRuntimeActorObservation(1, 10, ProgramRuntimeState.WaitingForInput, null, needsFrame = true))
+        carrier.serverTick(2)
+        assertEquals(2, service.acceptedTurns, "native quota exhaustion must receive fresh credit")
+        observer.updated(ProgramRuntimeActorObservation(2, 4, ProgramRuntimeState.WaitingForInput, null, needsFrame = false))
+        carrier.serverTick(3)
+        assertEquals(2, service.acceptedTurns, "input idle must wait for an actual event")
+        carrier.closeAsync().join()
+    }
+
+    private fun ProgramRuntimeActorObserver.deliver(
+        reply: ProgramRuntimeActorReply,
+        failure: Throwable?,
+    ) {
+        if (failure !=
+            null
+        ) {
+            failed(failure)
+        } else {
+            updated(
+                ProgramRuntimeActorObservation(
+                    1,
+                    reply.retiredInstructions,
+                    reply.state,
+                    reply.fileSystemGeneration,
+                    needsFrame = false,
+                ),
+            )
+        }
     }
 
     private fun computer(
@@ -503,7 +534,7 @@ class ActorProgramComputerStreamingTest {
     }
 
     private class Service(
-        private val replyCapacity: Int? = null,
+        private val replyCapacity: Int = Int.MAX_VALUE,
     ) : ActorRuntimeService {
         var queued = 0
         var acceptedTurns = 0
@@ -514,7 +545,7 @@ class ActorProgramComputerStreamingTest {
             endpoint: VmActorEndpoint,
             completions: List<ProgramRuntimeHostCompletion>,
         ): Int? {
-            val capacity = replyCapacity ?: return null
+            val capacity = replyCapacity
             val accepted = minOf(completions.size, capacity - queued)
             acceptedReplies += completions.take(accepted).filterIsInstance<ProgramRuntimeHostCompletion.Reply>().map { it.identity }
             hostCompletions += completions.take(accepted)
@@ -523,8 +554,7 @@ class ActorProgramComputerStreamingTest {
         }
 
         override val redstoneInputCapacity = 1
-        var completion: ProgramRuntimeTurnCompletion? = null
-        val continuations = mutableListOf<List<ProgramRuntimeActorEffect>>()
+        var completion: ProgramRuntimeActorObserver? = null
 
         override fun request(
             endpoint: VmActorEndpoint,
@@ -537,31 +567,17 @@ class ActorProgramComputerStreamingTest {
             )
         }
 
-        override fun submitTurn(
+        override fun submitFrame(
             endpoint: VmActorEndpoint,
             worldTick: Long,
             effects: List<ProgramRuntimeActorEffect>,
-            completion: ProgramRuntimeTurnCompletion,
+            observer: ProgramRuntimeActorObserver,
         ): VmActorSubmission {
-            if (replyCapacity != null && queued >= replyCapacity) return VmActorSubmission.MAILBOX_FULL
+            if (queued >= replyCapacity) return VmActorSubmission.MAILBOX_FULL
             queued++
             acceptedTurns++
-            this.completion = completion
+            this.completion = observer
             return VmActorSubmission.ACCEPTED
-        }
-
-        override fun continueTurn(
-            endpoint: VmActorEndpoint,
-            worldTick: Long,
-            effects: List<ProgramRuntimeActorEffect>,
-            completion: ProgramRuntimeTurnCompletion,
-        ): Boolean {
-            if (replyCapacity != null && queued >= replyCapacity) return false
-            queued++
-            acceptedTurns++
-            continuations += effects
-            this.completion = completion
-            return true
         }
 
         override fun recordHostContinuationDelay(delayTicks: Long) = Unit

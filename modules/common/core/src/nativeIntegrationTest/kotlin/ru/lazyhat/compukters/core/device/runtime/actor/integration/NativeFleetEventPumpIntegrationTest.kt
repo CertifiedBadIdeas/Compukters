@@ -21,12 +21,12 @@ import ru.lazyhat.compukters.core.device.runtime.actor.ProgramDeploymentToken
 import ru.lazyhat.compukters.core.device.runtime.actor.ProgramRuntimeActorCommand
 import ru.lazyhat.compukters.core.device.runtime.actor.ProgramRuntimeActorEffect
 import ru.lazyhat.compukters.core.device.runtime.actor.ProgramRuntimeActorFailure
+import ru.lazyhat.compukters.core.device.runtime.actor.ProgramRuntimeActorObservation
+import ru.lazyhat.compukters.core.device.runtime.actor.ProgramRuntimeActorObserver
 import ru.lazyhat.compukters.core.device.runtime.actor.ProgramRuntimeActorReply
 import ru.lazyhat.compukters.core.device.runtime.actor.ProgramRuntimeActorValue
-import ru.lazyhat.compukters.core.device.runtime.actor.ProgramRuntimeFrameCredit
 import ru.lazyhat.compukters.core.device.runtime.actor.ProgramRuntimeHostCompletion
 import ru.lazyhat.compukters.core.device.runtime.actor.ProgramRuntimeRequestId
-import ru.lazyhat.compukters.core.device.runtime.actor.ProgramRuntimeTurnObserver
 import ru.lazyhat.compukters.core.device.runtime.actor.VmActorEndpoint
 import ru.lazyhat.compukters.core.device.runtime.actor.VmActorSchedulerConfig
 import ru.lazyhat.compukters.core.device.runtime.actor.VmActorSubmission
@@ -61,6 +61,7 @@ import ru.lazyhat.compukters.lang.runtime.vm.CapabilityIdentity
 import ru.lazyhat.compukters.lang.runtime.vm.ExperimentalFleetConfig
 import ru.lazyhat.compukters.lang.runtime.vm.ExperimentalFleetEvent
 import ru.lazyhat.compukters.lang.runtime.vm.ExperimentalFleetTimer
+import ru.lazyhat.compukters.lang.runtime.vm.FleetExecutionMode
 import ru.lazyhat.compukters.lang.runtime.vm.HostFailureKind
 import ru.lazyhat.compukters.lang.runtime.vm.RedstoneWire
 import ru.lazyhat.compukters.lang.runtime.vm.TerminalKey
@@ -99,7 +100,7 @@ class NativeFleetEventPumpIntegrationTest {
         installFfmRuntime()
         VmRuntime.loadNativeLibrary(Path.of(requireNotNull(System.getProperty("compukters.ffi.library"))))
         val artifact = Path.of(requireNotNull(System.getProperty("compukters.fleet.commands.fixture"))).readBytes()
-        for (budget in listOf(1, 2)) {
+        for (budget in listOf(1, 2, 4)) {
             val schema = CommandBatchProgramHost.SCHEMA
             val host =
                 ProgramRuntimeHost(
@@ -117,73 +118,68 @@ class NativeFleetEventPumpIntegrationTest {
                     budget,
                     128,
                     inspection = NativeFleetCommandRequests.INSPECTION,
-                    coordinatedTurns = true,
+                    executionMode = FleetExecutionMode.AUTONOMOUS_FRAMES,
                 )
             VmRuntime.openExperimentalFleet(config).use { fleet ->
                 val machine = host.transferToFleet(fleet, 0)
                 val endpoint = VmActorEndpoint(ComputerId.fromLongs(361, budget.toLong()), 1)
-                NativeFleetActorRuntimeService(fleet, 4, 16, 16, {}, {}, { _, event ->
-                    check(event !is ExperimentalFleetEvent.Inspection) { "command cost escaped to external owner" }
-                }, onActorClosing = {}).use { service ->
+                val reports = mutableListOf<ExperimentalFleetEvent.Quiescent>()
+                NativeFrameFixture(
+                    NativeFleetActorRuntimeService(fleet, 4, 16, 16, {}, {}, { _, event ->
+                        check(event !is ExperimentalFleetEvent.Inspection) { "command cost escaped to external owner" }
+                    }, onActorClosing = {}, onFrameProgress = { _, event -> reports += event }),
+                ).use { service ->
                     assertTrue(service.register(endpoint, machine, host))
-                    val pending = mutableListOf<ProgramAddonCompletion>()
+                    var currentTick = 0L
                     val dispatchTicks = mutableListOf<Long>()
+                    val observer =
+                        object : ProgramRuntimeActorObserver {
+                            override fun addonAction(action: ProgramAddonAction) {
+                                val request = assertIs<ProgramAddonAction.Request>(action).request
+                                assertEquals(2, CommandBatchCodec.decode(request).size)
+                                dispatchTicks += currentTick
+                                val response =
+                                    HostResponse.ByteArraySuccess(
+                                        CommandBatchCodec.encodeResults(
+                                            listOf(HostResponse.UnitSuccess, HostResponse.Failure(HostFailureKind.UNAVAILABLE, "missing")),
+                                        ),
+                                    )
+                                assertEquals(
+                                    1,
+                                    service.submitHostCompletions(
+                                        endpoint,
+                                        listOf(ProgramRuntimeHostCompletion.Reply(request.identity, response)),
+                                    ),
+                                )
+                            }
+
+                            override fun updated(observation: ProgramRuntimeActorObservation) = Unit
+
+                            override fun failed(failure: Throwable) {
+                                check(failure is java.util.concurrent.CancellationException) { "native actor failed: $failure" }
+                            }
+                        }
                     for (tick in 1L..20L) {
                         if (host.state is ProgramRuntimeState.Halted || host.state is ProgramRuntimeState.Failed) break
-                        assertTrue(service.grantFrame(endpoint, tick, 1_000_000))
-
-                        fun advance(continuation: Boolean) {
-                            val result = CompletableFuture<ProgramRuntimeActorReply>()
-                            val effects =
-                                if (pending.isEmpty()) {
-                                    emptyList()
-                                } else {
-                                    listOf(
-                                        ProgramRuntimeActorEffect.CompleteAddons(pending.toList()),
-                                    )
-                                }
-                            pending.clear()
-                            val observer =
-                                object : ProgramRuntimeTurnObserver {
-                                    override fun addonAction(action: ProgramAddonAction) {
-                                        val request = assertIs<ProgramAddonAction.Request>(action).request
-                                        assertEquals(2, CommandBatchCodec.decode(request).size)
-                                        dispatchTicks += tick
-                                        pending +=
-                                            ProgramAddonCompletion(
-                                                request.identity,
-                                                HostResponse.ByteArraySuccess(
-                                                    CommandBatchCodec.encodeResults(
-                                                        listOf(
-                                                            HostResponse.UnitSuccess,
-                                                            HostResponse.Failure(HostFailureKind.UNAVAILABLE, "missing"),
-                                                        ),
-                                                    ),
-                                                ),
-                                            )
-                                    }
-
-                                    override fun complete(
-                                        reply: ProgramRuntimeActorReply?,
-                                        failure: Throwable?,
-                                    ) {
-                                        if (failure == null) result.complete(checkNotNull(reply)) else result.completeExceptionally(failure)
-                                    }
-                                }
-                            if (continuation) {
-                                assertTrue(service.continueTurn(endpoint, tick, effects, observer))
-                            } else {
-                                assertEquals(VmActorSubmission.ACCEPTED, service.submitTurn(endpoint, tick, effects, observer))
+                        currentTick = tick
+                        assertTrue(service.configureFrame(endpoint, tick, 1_000_000))
+                        assertEquals(VmActorSubmission.ACCEPTED, service.submitFrame(endpoint, tick, emptyList(), observer))
+                        val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5)
+                        while (true) {
+                            service.pump(32, 32)
+                            val report = reports.lastOrNull { it.tick == tick }
+                            if (host.state is ProgramRuntimeState.Halted || host.state is ProgramRuntimeState.Failed ||
+                                report?.frame?.reason in
+                                listOf(
+                                    ru.lazyhat.compukters.lang.runtime.vm.FleetWaitReason.REQUESTS,
+                                    ru.lazyhat.compukters.lang.runtime.vm.FleetWaitReason.INSTRUCTIONS,
+                                    ru.lazyhat.compukters.lang.runtime.vm.FleetWaitReason.ADVANCES,
+                                )
+                            ) {
+                                break
                             }
-                            awaitBootstrap(service, result)
-                        }
-                        advance(false)
-                        // Return the first reply within this frame. Its second two-command packet
-                        // must wait for the next tick, even with Guest instruction credit remaining.
-                        var continuations = 0
-                        while (pending.isNotEmpty()) {
-                            check(++continuations <= 3) { "unexpected command loop" }
-                            advance(true)
+                            check(System.nanoTime() < deadline) { "frame did not reach a bounded execution boundary" }
+                            Thread.yield()
                         }
                     }
                     if (budget == 1) {
@@ -191,7 +187,7 @@ class NativeFleetEventPumpIntegrationTest {
                         assertIs<ProgramRuntimeState.Failed>(host.state)
                     } else {
                         assertEquals(2, dispatchTicks.size)
-                        assertEquals(2, dispatchTicks.distinct().size)
+                        assertEquals(if (budget == 2) 2 else 1, dispatchTicks.distinct().size)
                         assertEquals(ProgramRuntimeState.Halted(null), host.state)
                     }
                     checkNotNull(service.stop(endpoint)).get(5, TimeUnit.SECONDS)
@@ -209,78 +205,93 @@ class NativeFleetEventPumpIntegrationTest {
         val endpoint = VmActorEndpoint(ComputerId.fromLongs(341, 342), 1)
         try {
             WorldFileSystemStore.open(root).use { store ->
-                VmRuntime.openExperimentalFleet(ExperimentalFleetConfig(1, 2, 2, 4096, 64, 64, 32, coordinatedTurns = true)).use { fleet ->
-                    NativeFleetActorRuntimeService(fleet, 4, 8, 8, {}, {}, { _, _ -> }, onActorClosing = {}).use { service ->
-                        val carrier =
-                            ActorProgramComputer(
-                                service,
-                                checkNotNull(service.attachBootable(endpoint, store, bootstrapImage(artifact))),
-                                { RedstoneCommitResult.Committed },
-                            )
+                VmRuntime
+                    .openExperimentalFleet(
+                        ExperimentalFleetConfig(1, 2, 2, 4096, 64, 64, 32, executionMode = FleetExecutionMode.AUTONOMOUS_FRAMES),
+                    ).use { fleet ->
+                        NativeFrameFixture(
+                            NativeFleetActorRuntimeService(
+                                fleet,
+                                4,
+                                8,
+                                8,
+                                {},
+                                {},
+                                { _, _ -> },
+                                onActorClosing = {},
+                            ),
+                        ).use { service ->
+                            val carrier =
+                                ActorProgramComputer(
+                                    service,
+                                    checkNotNull(service.attachBootable(endpoint, store, bootstrapImage(artifact))),
+                                    { RedstoneCommitResult.Committed },
+                                )
 
-                        fun await(future: CompletableFuture<ProgramRuntimeActorReply>) = awaitBootstrap(service, future)
+                            fun await(future: CompletableFuture<ProgramRuntimeActorReply>) = awaitBootstrap(service, future)
 
-                        fun request(command: (ProgramRuntimeRequestId) -> ProgramRuntimeActorCommand) = await(carrier.request(command))
+                            fun request(command: (ProgramRuntimeRequestId) -> ProgramRuntimeActorCommand) = await(carrier.request(command))
 
-                        fun resources() =
-                            assertIs<ProgramRuntimeActorValue.ResourceSnapshotValue>(
-                                request(ProgramRuntimeActorCommand::ResourceSnapshot).value,
-                            ).snapshot
-                        try {
-                            await(carrier.turnOn())
-                            val candidate =
-                                assertIs<ProgramRuntimeActorValue.DeploymentPrepared>(
-                                    request {
-                                        ProgramRuntimeActorCommand.PrepareDeployment(it, artifact)
-                                    }.value,
-                                ).token!!
-                            val installed =
-                                assertIs<ProgramRuntimeActorValue.DeployedRevision>(
-                                    request {
-                                        ProgramRuntimeActorCommand.Deploy(it, "/home/retained", VmExecutableRevision.Absent, candidate)
-                                    }.value,
-                                ).revision
-                            assertTrue(service.grantFrame(endpoint, 5, 2048))
-                            carrier.serverTick(5)
-                            awaitBootstrapFrame(service, endpoint, 6)
-                            assertTrue(assertIs<ProgramResourceSnapshot.Available>(resources()).executedInstructions > 0)
-                            await(carrier.reboot())
-                            repeat(2) { assertEquals(0, assertIs<ProgramResourceSnapshot.Available>(resources()).executedInstructions) }
-                            assertEquals(
-                                installed,
-                                assertIs<ProgramRuntimeActorValue.ExecutableRevisionValue>(
-                                    request {
-                                        ProgramRuntimeActorCommand.ExecutableRevision(it, "/home/retained")
-                                    }.value,
-                                ).revision,
-                            )
-                            val shutdown = await(carrier.shutdown())
-                            assertEquals(ProgramRuntimeState.Idle, shutdown.state)
-                            assertEquals(ProgramRuntimeState.Idle, carrier.state)
-                            assertIs<ProgramResourceSnapshot.Unavailable>(resources())
-                            assertEquals(ProgramRuntimeState.Idle, await(carrier.shutdown()).state)
-                            assertFalse(service.grantFrame(endpoint, 7, 2048))
-                            await(carrier.turnOn())
-                            assertEquals(0, assertIs<ProgramResourceSnapshot.Available>(resources()).executedInstructions)
-                            await(carrier.reboot(installSystem = true))
-                            assertEquals(0, assertIs<ProgramResourceSnapshot.Available>(resources()).executedInstructions)
-                            assertIs<VmExecutableRevision.Present>(
-                                assertIs<ProgramRuntimeActorValue.ExecutableRevisionValue>(
-                                    request {
-                                        ProgramRuntimeActorCommand.ExecutableRevision(it, "/home/retained")
-                                    }.value,
-                                ).revision,
-                            )
-                            // Closing the original lease still owns the replacement machine and needs no owner pumping.
-                            val restarting = carrier.reboot()
-                            carrier.closeAsync().get(5, TimeUnit.SECONDS)
-                            assertTrue(restarting.isCompletedExceptionally)
-                            assertEquals(ProgramRuntimeState.Closed, carrier.state)
-                        } finally {
-                            service.stop(endpoint)?.get(5, TimeUnit.SECONDS)
+                            fun resources() =
+                                assertIs<ProgramRuntimeActorValue.ResourceSnapshotValue>(
+                                    request(ProgramRuntimeActorCommand::ResourceSnapshot).value,
+                                ).snapshot
+                            try {
+                                await(carrier.turnOn())
+                                val candidate =
+                                    assertIs<ProgramRuntimeActorValue.DeploymentPrepared>(
+                                        request {
+                                            ProgramRuntimeActorCommand.PrepareDeployment(it, artifact)
+                                        }.value,
+                                    ).token!!
+                                val installed =
+                                    assertIs<ProgramRuntimeActorValue.DeployedRevision>(
+                                        request {
+                                            ProgramRuntimeActorCommand.Deploy(it, "/home/retained", VmExecutableRevision.Absent, candidate)
+                                        }.value,
+                                    ).revision
+                                assertTrue(service.configureFrame(endpoint, 5, 2048))
+                                carrier.serverTick(5)
+                                awaitBootstrapFrame(service, endpoint, 6)
+                                assertTrue(assertIs<ProgramResourceSnapshot.Available>(resources()).executedInstructions > 0)
+                                await(carrier.reboot())
+                                repeat(2) { assertEquals(0, assertIs<ProgramResourceSnapshot.Available>(resources()).executedInstructions) }
+                                assertEquals(
+                                    installed,
+                                    assertIs<ProgramRuntimeActorValue.ExecutableRevisionValue>(
+                                        request {
+                                            ProgramRuntimeActorCommand.ExecutableRevision(it, "/home/retained")
+                                        }.value,
+                                    ).revision,
+                                )
+                                val shutdown = await(carrier.shutdown())
+                                assertEquals(ProgramRuntimeState.Idle, shutdown.state)
+                                assertEquals(ProgramRuntimeState.Idle, carrier.state)
+                                assertIs<ProgramResourceSnapshot.Unavailable>(resources())
+                                assertEquals(ProgramRuntimeState.Idle, await(carrier.shutdown()).state)
+                                assertTrue(service.configureFrame(endpoint, 7, 2048))
+                                assertEquals(VmActorSubmission.STALE_ENDPOINT, service.submitFrame(endpoint, 7, emptyList()) { _, _ -> })
+                                await(carrier.turnOn())
+                                assertEquals(0, assertIs<ProgramResourceSnapshot.Available>(resources()).executedInstructions)
+                                await(carrier.reboot(installSystem = true))
+                                assertEquals(0, assertIs<ProgramResourceSnapshot.Available>(resources()).executedInstructions)
+                                assertIs<VmExecutableRevision.Present>(
+                                    assertIs<ProgramRuntimeActorValue.ExecutableRevisionValue>(
+                                        request {
+                                            ProgramRuntimeActorCommand.ExecutableRevision(it, "/home/retained")
+                                        }.value,
+                                    ).revision,
+                                )
+                                // Closing the original lease still owns the replacement machine and needs no owner pumping.
+                                val restarting = carrier.reboot()
+                                carrier.closeAsync().get(5, TimeUnit.SECONDS)
+                                assertTrue(restarting.isCompletedExceptionally)
+                                assertEquals(ProgramRuntimeState.Closed, carrier.state)
+                            } finally {
+                                service.stop(endpoint)?.get(5, TimeUnit.SECONDS)
+                            }
                         }
                     }
-                }
             }
         } finally {
             root.toFile().deleteRecursively()
@@ -317,9 +328,21 @@ class NativeFleetEventPumpIntegrationTest {
         try {
             WorldFileSystemStore.open(root).use { store ->
                 VmRuntime
-                    .openExperimentalFleet(ExperimentalFleetConfig(1, 32, 32, 4096, 64, 64, 32, coordinatedTurns = true))
-                    .use { fleet ->
-                        NativeFleetActorRuntimeService(fleet, 4, 16, 16, {}, {}, { _, _ -> }, onActorClosing = {}).use { service ->
+                    .openExperimentalFleet(
+                        ExperimentalFleetConfig(1, 32, 32, 4096, 64, 64, 32, executionMode = FleetExecutionMode.AUTONOMOUS_FRAMES),
+                    ).use { fleet ->
+                        NativeFrameFixture(
+                            NativeFleetActorRuntimeService(
+                                fleet,
+                                4,
+                                16,
+                                16,
+                                {},
+                                {},
+                                { _, _ -> },
+                                onActorClosing = {},
+                            ),
+                        ).use { service ->
                             fun carrier(endpoint: VmActorEndpoint) =
                                 ActorProgramComputer(
                                     service,
@@ -340,7 +363,7 @@ class NativeFleetEventPumpIntegrationTest {
                                 while (requests.size < count) {
                                     check(System.nanoTime() < deadline) { "native compiler request did not arrive: ${carrier.state}" }
                                     check(carrier.state !is ProgramRuntimeState.Failed) { "native compiler failed: ${carrier.state}" }
-                                    if (service.grantFrame(endpoint, tick, 100_000)) {
+                                    if (service.configureFrame(endpoint, tick, 100_000)) {
                                         carrier.serverTick(tick)
                                         tick++
                                     }
@@ -418,9 +441,12 @@ class NativeFleetEventPumpIntegrationTest {
                     val host = ProgramRuntimeHost(sessionFactory = NativeProgramVmSessionFactory(), compilerRouter = compiler.router)
                     assertEquals(ProgramStartResult.Started, host.start(artifact))
                     VmRuntime
-                        .openExperimentalFleet(ExperimentalFleetConfig(1, 32, 32, 4096, 64, 64, 32, coordinatedTurns = true))
-                        .use { fleet ->
-                            NativeFleetActorRuntimeService(fleet, 4, 16, 16, {}, {}, { _, _ -> }, onActorClosing = {}).use { service ->
+                        .openExperimentalFleet(
+                            ExperimentalFleetConfig(1, 32, 32, 4096, 64, 64, 32, executionMode = FleetExecutionMode.AUTONOMOUS_FRAMES),
+                        ).use { fleet ->
+                            NativeFrameFixture(
+                                NativeFleetActorRuntimeService(fleet, 4, 16, 16, {}, {}, { _, _ -> }, onActorClosing = {}),
+                            ).use { service ->
                                 val endpoint = VmActorEndpoint(ComputerId.fromLongs(321, 322), 1)
                                 val machine = host.transferToFleet(fleet, 0)
                                 assertTrue(service.register(endpoint, machine, host))
@@ -430,10 +456,10 @@ class NativeFleetEventPumpIntegrationTest {
                                     while (host.state !is ProgramRuntimeState.Halted) {
                                         check(System.nanoTime() < deadline) { "native compilation stalled: ${host.state}" }
                                         check(host.state !is ProgramRuntimeState.Failed) { "native compilation failed: ${host.state}" }
-                                        if (service.grantFrame(endpoint, tick, 100_000)) {
+                                        if (service.configureFrame(endpoint, tick, 100_000)) {
                                             assertEquals(
                                                 VmActorSubmission.ACCEPTED,
-                                                service.submitTurn(endpoint, tick, emptyList(), { _, _ -> }),
+                                                service.submitFrame(endpoint, tick, emptyList(), { _, _ -> }),
                                             )
                                             tick++
                                         }
@@ -483,168 +509,184 @@ class NativeFleetEventPumpIntegrationTest {
         val id = ComputerId.fromLongs(311, 312)
         try {
             WorldFileSystemStore.open(root).use { store ->
-                VmRuntime.openExperimentalFleet(ExperimentalFleetConfig(1, 2, 2, 4096, 64, 64, 32, coordinatedTurns = true)).use { fleet ->
-                    NativeFleetActorRuntimeService(
-                        fleet,
-                        4,
-                        8,
-                        8,
-                        {},
-                        {},
-                        { _, _ -> error("unexpected native event") },
-                        onActorClosing = {},
-                    ).use { service ->
-                        val endpoint = VmActorEndpoint(id, 1)
-                        val carrier =
-                            ActorProgramComputer(
-                                service,
-                                checkNotNull(service.attachBootable(endpoint, store, image)),
-                                { RedstoneCommitResult.Committed },
-                            )
-                        try {
-                            awaitBootstrap(service, carrier.turnOn())
-
-                            fun request(command: (ProgramRuntimeRequestId) -> ProgramRuntimeActorCommand): ProgramRuntimeActorReply =
-                                awaitBootstrap(service, service.request(endpoint, command))
-
-                            fun prepare(): ProgramDeploymentToken =
-                                checkNotNull(
-                                    assertIs<ProgramRuntimeActorValue.DeploymentPrepared>(
-                                        request { ProgramRuntimeActorCommand.PrepareDeployment(it, artifact) }.value,
-                                    ).token,
-                                )
-
-                            fun rejected(reply: ProgramRuntimeActorReply) = assertIs<ProgramRuntimeActorValue.Rejected>(reply.value).failure
-
-                            fun discard(token: ProgramDeploymentToken) =
-                                request { ProgramRuntimeActorCommand.DiscardDeployment(it, token) }.value
-                            assertEquals(
-                                VmExecutableRevision.Absent,
-                                assertIs<ProgramRuntimeActorValue.ExecutableRevisionValue>(
-                                    request {
-                                        ProgramRuntimeActorCommand.ExecutableRevision(it, "/home/demo")
-                                    }.value,
-                                ).revision,
-                            )
-                            assertEquals(
-                                ProgramRuntimeActorFailure.Verification,
-                                rejected(
-                                    request {
-                                        ProgramRuntimeActorCommand.PrepareDeployment(it, byteArrayOf(1, 2, 3))
-                                    },
-                                ),
-                            )
-                            val first = prepare()
-                            val installed =
-                                request { ProgramRuntimeActorCommand.Deploy(it, "/home/demo", VmExecutableRevision.Absent, first) }
-                            val revision =
-                                assertIs<VmExecutableRevision.Present>(
-                                    assertIs<ProgramRuntimeActorValue.DeployedRevision>(installed.value).revision,
-                                )
-                            assertEquals(revision.generation, installed.fileSystemGeneration)
-                            assertEquals(ProgramRuntimeActorValue.Accepted(false), discard(first))
-                            assertEquals(
-                                revision,
-                                assertIs<ProgramRuntimeActorValue.ExecutableRevisionValue>(
-                                    request {
-                                        ProgramRuntimeActorCommand.ExecutableRevision(it, "/home/demo")
-                                    }.value,
-                                ).revision,
-                            )
-                            val file =
-                                assertIs<ProgramRuntimeActorValue.FileStatValue>(
-                                    request {
-                                        ProgramRuntimeActorCommand.FileStat(it, VmVirtualPath.of("/home/demo"))
-                                    }.value,
-                                )
-                            assertTrue(checkNotNull(file.stat).metadata.executable)
-                            repeat(6) {
-                                val stale = prepare()
-                                assertEquals(
-                                    ProgramRuntimeActorFailure.Deployment(ProgramDeploymentFailure.CONFLICT),
-                                    rejected(
-                                        request {
-                                            ProgramRuntimeActorCommand.Deploy(it, "/home/demo", VmExecutableRevision.Absent, stale)
-                                        },
-                                    ),
-                                )
-                                assertEquals(ProgramRuntimeActorValue.Accepted(false), discard(stale))
-                            }
-                            val replacement = prepare()
-                            assertIs<ProgramRuntimeActorValue.DeployedRevision>(
-                                request {
-                                    ProgramRuntimeActorCommand.Deploy(it, "/home/demo", revision, replacement)
-                                }.value,
-                            )
-                            val invalidPath = prepare()
-                            assertIs<ProgramRuntimeActorFailure.InvalidRequest>(
-                                rejected(
-                                    request {
-                                        ProgramRuntimeActorCommand.Deploy(it, "../escape", VmExecutableRevision.Absent, invalidPath)
-                                    },
-                                ),
-                            )
-                            assertEquals(ProgramRuntimeActorValue.Accepted(false), discard(invalidPath))
-                            val missingParent = prepare()
-                            assertEquals(
-                                ProgramRuntimeActorFailure.Deployment(ProgramDeploymentFailure.FILESYSTEM),
-                                rejected(
-                                    request {
-                                        ProgramRuntimeActorCommand.Deploy(it, "/missing/demo", VmExecutableRevision.Absent, missingParent)
-                                    },
-                                ),
-                            )
-                            assertEquals(ProgramRuntimeActorValue.Accepted(false), discard(missingParent))
-                            repeat(6) {
-                                val canceled = service.request(endpoint) { ProgramRuntimeActorCommand.PrepareDeployment(it, artifact) }
-                                canceled.cancel(false)
-                                // Two FIFO observations cross both prepare publication and its disposal admission.
-                                repeat(2) { request(ProgramRuntimeActorCommand::FileSystemGeneration) }
-                            }
-                            val remaining = prepare()
-                            assertEquals(ProgramRuntimeActorValue.Accepted(true), discard(remaining))
-                            assertEquals(ProgramRuntimeActorValue.Accepted(false), discard(remaining))
-                            val held = List(4) { prepare() }
-                            assertEquals(
-                                ProgramRuntimeActorFailure.Deployment(ProgramDeploymentFailure.ADMISSION),
-                                rejected(
-                                    request {
-                                        ProgramRuntimeActorCommand.PrepareDeployment(it, artifact)
-                                    },
-                                ),
-                            )
-                            held.forEach { assertEquals(ProgramRuntimeActorValue.Accepted(true), discard(it)) }
-                            val privateToken = prepare()
-                            val otherEndpoint = VmActorEndpoint(ComputerId.fromLongs(313, 314), 1)
-                            val other =
+                VmRuntime
+                    .openExperimentalFleet(
+                        ExperimentalFleetConfig(1, 2, 2, 4096, 64, 64, 32, executionMode = FleetExecutionMode.AUTONOMOUS_FRAMES),
+                    ).use { fleet ->
+                        NativeFrameFixture(
+                            NativeFleetActorRuntimeService(
+                                fleet,
+                                4,
+                                8,
+                                8,
+                                {},
+                                {},
+                                { _, _ -> error("unexpected native event") },
+                                onActorClosing = {},
+                            ),
+                        ).use { service ->
+                            val endpoint = VmActorEndpoint(id, 1)
+                            val carrier =
                                 ActorProgramComputer(
                                     service,
-                                    checkNotNull(service.attachBootable(otherEndpoint, store, image)),
+                                    checkNotNull(service.attachBootable(endpoint, store, image)),
                                     { RedstoneCommitResult.Committed },
                                 )
                             try {
-                                awaitBootstrap(service, other.turnOn())
-                                val crossMachine =
-                                    awaitBootstrap(
-                                        service,
-                                        service.request(otherEndpoint) {
-                                            ProgramRuntimeActorCommand.Deploy(it, "/home/stolen", VmExecutableRevision.Absent, privateToken)
-                                        },
+                                awaitBootstrap(service, carrier.turnOn())
+
+                                fun request(command: (ProgramRuntimeRequestId) -> ProgramRuntimeActorCommand): ProgramRuntimeActorReply =
+                                    awaitBootstrap(service, service.request(endpoint, command))
+
+                                fun prepare(): ProgramDeploymentToken =
+                                    checkNotNull(
+                                        assertIs<ProgramRuntimeActorValue.DeploymentPrepared>(
+                                            request { ProgramRuntimeActorCommand.PrepareDeployment(it, artifact) }.value,
+                                        ).token,
                                     )
-                                assertIs<ProgramRuntimeActorFailure.InvalidRequest>(rejected(crossMachine))
-                                assertEquals(ProgramRuntimeActorValue.Accepted(true), discard(privateToken))
+
+                                fun rejected(reply: ProgramRuntimeActorReply) =
+                                    assertIs<ProgramRuntimeActorValue.Rejected>(reply.value).failure
+
+                                fun discard(token: ProgramDeploymentToken) =
+                                    request { ProgramRuntimeActorCommand.DiscardDeployment(it, token) }.value
+                                assertEquals(
+                                    VmExecutableRevision.Absent,
+                                    assertIs<ProgramRuntimeActorValue.ExecutableRevisionValue>(
+                                        request {
+                                            ProgramRuntimeActorCommand.ExecutableRevision(it, "/home/demo")
+                                        }.value,
+                                    ).revision,
+                                )
+                                assertEquals(
+                                    ProgramRuntimeActorFailure.Verification,
+                                    rejected(
+                                        request {
+                                            ProgramRuntimeActorCommand.PrepareDeployment(it, byteArrayOf(1, 2, 3))
+                                        },
+                                    ),
+                                )
+                                val first = prepare()
+                                val installed =
+                                    request { ProgramRuntimeActorCommand.Deploy(it, "/home/demo", VmExecutableRevision.Absent, first) }
+                                val revision =
+                                    assertIs<VmExecutableRevision.Present>(
+                                        assertIs<ProgramRuntimeActorValue.DeployedRevision>(installed.value).revision,
+                                    )
+                                assertEquals(revision.generation, installed.fileSystemGeneration)
+                                assertEquals(ProgramRuntimeActorValue.Accepted(false), discard(first))
+                                assertEquals(
+                                    revision,
+                                    assertIs<ProgramRuntimeActorValue.ExecutableRevisionValue>(
+                                        request {
+                                            ProgramRuntimeActorCommand.ExecutableRevision(it, "/home/demo")
+                                        }.value,
+                                    ).revision,
+                                )
+                                val file =
+                                    assertIs<ProgramRuntimeActorValue.FileStatValue>(
+                                        request {
+                                            ProgramRuntimeActorCommand.FileStat(it, VmVirtualPath.of("/home/demo"))
+                                        }.value,
+                                    )
+                                assertTrue(checkNotNull(file.stat).metadata.executable)
+                                repeat(6) {
+                                    val stale = prepare()
+                                    assertEquals(
+                                        ProgramRuntimeActorFailure.Deployment(ProgramDeploymentFailure.CONFLICT),
+                                        rejected(
+                                            request {
+                                                ProgramRuntimeActorCommand.Deploy(it, "/home/demo", VmExecutableRevision.Absent, stale)
+                                            },
+                                        ),
+                                    )
+                                    assertEquals(ProgramRuntimeActorValue.Accepted(false), discard(stale))
+                                }
+                                val replacement = prepare()
+                                assertIs<ProgramRuntimeActorValue.DeployedRevision>(
+                                    request {
+                                        ProgramRuntimeActorCommand.Deploy(it, "/home/demo", revision, replacement)
+                                    }.value,
+                                )
+                                val invalidPath = prepare()
+                                assertIs<ProgramRuntimeActorFailure.InvalidRequest>(
+                                    rejected(
+                                        request {
+                                            ProgramRuntimeActorCommand.Deploy(it, "../escape", VmExecutableRevision.Absent, invalidPath)
+                                        },
+                                    ),
+                                )
+                                assertEquals(ProgramRuntimeActorValue.Accepted(false), discard(invalidPath))
+                                val missingParent = prepare()
+                                assertEquals(
+                                    ProgramRuntimeActorFailure.Deployment(ProgramDeploymentFailure.FILESYSTEM),
+                                    rejected(
+                                        request {
+                                            ProgramRuntimeActorCommand.Deploy(
+                                                it,
+                                                "/missing/demo",
+                                                VmExecutableRevision.Absent,
+                                                missingParent,
+                                            )
+                                        },
+                                    ),
+                                )
+                                assertEquals(ProgramRuntimeActorValue.Accepted(false), discard(missingParent))
+                                repeat(6) {
+                                    val canceled = service.request(endpoint) { ProgramRuntimeActorCommand.PrepareDeployment(it, artifact) }
+                                    canceled.cancel(false)
+                                    // Two FIFO observations cross both prepare publication and its disposal admission.
+                                    repeat(2) { request(ProgramRuntimeActorCommand::FileSystemGeneration) }
+                                }
+                                val remaining = prepare()
+                                assertEquals(ProgramRuntimeActorValue.Accepted(true), discard(remaining))
+                                assertEquals(ProgramRuntimeActorValue.Accepted(false), discard(remaining))
+                                val held = List(4) { prepare() }
+                                assertEquals(
+                                    ProgramRuntimeActorFailure.Deployment(ProgramDeploymentFailure.ADMISSION),
+                                    rejected(
+                                        request {
+                                            ProgramRuntimeActorCommand.PrepareDeployment(it, artifact)
+                                        },
+                                    ),
+                                )
+                                held.forEach { assertEquals(ProgramRuntimeActorValue.Accepted(true), discard(it)) }
+                                val privateToken = prepare()
+                                val otherEndpoint = VmActorEndpoint(ComputerId.fromLongs(313, 314), 1)
+                                val other =
+                                    ActorProgramComputer(
+                                        service,
+                                        checkNotNull(service.attachBootable(otherEndpoint, store, image)),
+                                        { RedstoneCommitResult.Committed },
+                                    )
+                                try {
+                                    awaitBootstrap(service, other.turnOn())
+                                    val crossMachine =
+                                        awaitBootstrap(
+                                            service,
+                                            service.request(otherEndpoint) {
+                                                ProgramRuntimeActorCommand.Deploy(
+                                                    it,
+                                                    "/home/stolen",
+                                                    VmExecutableRevision.Absent,
+                                                    privateToken,
+                                                )
+                                            },
+                                        )
+                                    assertIs<ProgramRuntimeActorFailure.InvalidRequest>(rejected(crossMachine))
+                                    assertEquals(ProgramRuntimeActorValue.Accepted(true), discard(privateToken))
+                                } finally {
+                                    other.closeAsync().get(5, TimeUnit.SECONDS)
+                                }
+                                // Close drains an accepted prepare without requiring owner pumping or leaking its candidate.
+                                val pending = service.request(endpoint) { ProgramRuntimeActorCommand.PrepareDeployment(it, artifact) }
+                                carrier.hibernateAsync(1).get(5, TimeUnit.SECONDS)
+                                assertTrue(pending.isCompletedExceptionally)
                             } finally {
-                                other.closeAsync().get(5, TimeUnit.SECONDS)
+                                carrier.closeAsync().get(5, TimeUnit.SECONDS)
                             }
-                            // Close drains an accepted prepare without requiring owner pumping or leaking its candidate.
-                            val pending = service.request(endpoint) { ProgramRuntimeActorCommand.PrepareDeployment(it, artifact) }
-                            carrier.hibernateAsync(1).get(5, TimeUnit.SECONDS)
-                            assertTrue(pending.isCompletedExceptionally)
-                        } finally {
-                            carrier.closeAsync().get(5, TimeUnit.SECONDS)
                         }
                     }
-                }
                 // Installed executable survives native checkpoint/close and ordinary restoration.
                 ProgramRuntimeHost(NativeProgramVmSessionFactory(ProgramFileSystemLaunchContext(store, id, image))).use { host ->
                     assertNotNull(host.prepareRestoreBoot(2))
@@ -667,9 +709,20 @@ class NativeFleetEventPumpIntegrationTest {
         val id = ComputerId.fromLongs(301, 302)
         try {
             WorldFileSystemStore.open(root).use { store ->
-                val config = ExperimentalFleetConfig(1, 32, 32, 4096, 64, 64, 32, coordinatedTurns = true)
+                val config = ExperimentalFleetConfig(1, 32, 32, 4096, 64, 64, 32, executionMode = FleetExecutionMode.AUTONOMOUS_FRAMES)
                 VmRuntime.openExperimentalFleet(config).use { fleet ->
-                    NativeFleetActorRuntimeService(fleet, 4, 16, 16, {}, {}, { _, _ -> }, onActorClosing = {}).use { service ->
+                    NativeFrameFixture(
+                        NativeFleetActorRuntimeService(
+                            fleet,
+                            4,
+                            16,
+                            16,
+                            {},
+                            {},
+                            { _, _ -> },
+                            onActorClosing = {},
+                        ),
+                    ).use { service ->
                         var restored = 0
 
                         fun addon(endpoint: VmActorEndpoint) =
@@ -688,7 +741,11 @@ class NativeFleetEventPumpIntegrationTest {
                                 override fun restoreCheckpoint(state: ByteArray) {
                                     check(Thread.currentThread() === owner)
                                     assertContentEquals(byteArrayOf(7), state)
-                                    assertFalse(service.grantFrame(endpoint, 0, 100))
+                                    assertTrue(service.configureFrame(endpoint, 0, 100))
+                                    assertEquals(
+                                        VmActorSubmission.STALE_ENDPOINT,
+                                        service.submitFrame(endpoint, 0, emptyList()) { _, _ -> },
+                                    )
                                     restored++
                                 }
                             }
@@ -703,9 +760,9 @@ class NativeFleetEventPumpIntegrationTest {
                         try {
                             val boot = awaitBootstrap(service, first.turnOn())
                             assertEquals(ProgramStartResult.Started, assertIs<ProgramRuntimeActorValue.Start>(boot.value).result)
-                            assertTrue(service.grantFrame(endpoint, 1, 100_000))
+                            assertTrue(service.configureFrame(endpoint, 1, 100_000))
                             first.serverTick(1)
-                            // Admission of the next frame proves the first frame settled; unload cancels its unused credit.
+                            // Wait for the first native observation; unload cancels its unused credit.
                             awaitBootstrapFrame(service, endpoint, 2)
                             first.hibernateAsync(2).get(5, TimeUnit.SECONDS)
                         } finally {
@@ -755,9 +812,20 @@ class NativeFleetEventPumpIntegrationTest {
                     assertEquals(ProgramStartResult.Started, host.startBoot())
                     assertTrue(host.hibernate(1, byteArrayOf(7)))
                 }
-                val config = ExperimentalFleetConfig(1, 32, 32, 4096, 64, 64, 32, coordinatedTurns = true)
+                val config = ExperimentalFleetConfig(1, 32, 32, 4096, 64, 64, 32, executionMode = FleetExecutionMode.AUTONOMOUS_FRAMES)
                 VmRuntime.openExperimentalFleet(config).use { fleet ->
-                    NativeFleetActorRuntimeService(fleet, 4, 16, 16, {}, {}, { _, _ -> }, onActorClosing = {}).use { service ->
+                    NativeFrameFixture(
+                        NativeFleetActorRuntimeService(
+                            fleet,
+                            4,
+                            16,
+                            16,
+                            {},
+                            {},
+                            { _, _ -> },
+                            onActorClosing = {},
+                        ),
+                    ).use { service ->
                         val endpoint = VmActorEndpoint(id, 1)
                         val lease = checkNotNull(service.attachBootable(endpoint, store, image))
                         val prepared =
@@ -801,9 +869,20 @@ class NativeFleetEventPumpIntegrationTest {
                     host.startBoot()
                     assertTrue(host.hibernate(1, byteArrayOf(7)))
                 }
-                val config = ExperimentalFleetConfig(1, 32, 32, 4096, 64, 64, 32, coordinatedTurns = true)
+                val config = ExperimentalFleetConfig(1, 32, 32, 4096, 64, 64, 32, executionMode = FleetExecutionMode.AUTONOMOUS_FRAMES)
                 VmRuntime.openExperimentalFleet(config).use { fleet ->
-                    NativeFleetActorRuntimeService(fleet, 4, 16, 16, {}, {}, { _, _ -> }, onActorClosing = {}).use { service ->
+                    NativeFrameFixture(
+                        NativeFleetActorRuntimeService(
+                            fleet,
+                            4,
+                            16,
+                            16,
+                            {},
+                            {},
+                            { _, _ -> },
+                            onActorClosing = {},
+                        ),
+                    ).use { service ->
                         var restores = 0
                         var resets = 0
                         val addon =
@@ -834,7 +913,7 @@ class NativeFleetEventPumpIntegrationTest {
                             assertEquals(ProgramStartResult.Started, assertIs<ProgramRuntimeActorValue.Start>(boot.value).result)
                             assertEquals(1, restores)
                             assertTrue(resets > 0)
-                            assertTrue(service.grantFrame(endpoint, 1, 100))
+                            assertTrue(service.configureFrame(endpoint, 1, 100))
                         } finally {
                             carrier.closeAsync().get(5, TimeUnit.SECONDS)
                         }
@@ -848,20 +927,21 @@ class NativeFleetEventPumpIntegrationTest {
     }
 
     private fun awaitBootstrapFrame(
-        service: NativeFleetActorRuntimeService,
+        service: NativeFrameFixture,
         endpoint: VmActorEndpoint,
         tick: Long,
     ) {
         val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10)
-        while (!service.grantFrame(endpoint, tick, 100_000)) {
-            check(System.nanoTime() < deadline) { "previous native frame did not settle" }
+        while (!service.previousFrameObserved(endpoint)) {
+            check(System.nanoTime() < deadline) { "previous native frame was not observed" }
             service.pump(32, 32)
             Thread.yield()
         }
+        check(service.configureFrame(endpoint, tick, 100_000))
     }
 
     private fun <T> awaitBootstrap(
-        service: NativeFleetActorRuntimeService,
+        service: NativeFrameFixture,
         future: CompletableFuture<T>,
     ): T {
         val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10)
@@ -895,7 +975,7 @@ class NativeFleetEventPumpIntegrationTest {
     }
 
     @Test
-    fun `native hibernation drains a physical world confirmation before capture without advancing Guest`() {
+    fun `native hibernation drains a physical world confirmation before capture`() {
         installFfmRuntime()
         VmRuntime.loadNativeLibrary(Path.of(requireNotNull(System.getProperty("compukters.ffi.library"))))
         val artifact = Path.of(requireNotNull(System.getProperty("compukters.fleet.redstone.fixture"))).readBytes()
@@ -917,11 +997,22 @@ class NativeFleetEventPumpIntegrationTest {
                 val factory = NativeProgramVmSessionFactory(ProgramFileSystemLaunchContext(store, id, image))
                 val host = ProgramRuntimeHost(factory)
                 assertEquals(ProgramStartResult.Started, host.start(artifact))
-                val config = ExperimentalFleetConfig(1, 32, 32, 4096, 64, 64, 32, coordinatedTurns = true)
+                val config = ExperimentalFleetConfig(1, 32, 32, 4096, 64, 64, 32, executionMode = FleetExecutionMode.AUTONOMOUS_FRAMES)
                 VmRuntime.openExperimentalFleet(config).use { fleet ->
                     val machine = host.transferToFleet(fleet, 0)
                     fleet.redstoneInput(machine, RedstoneWire.packInput(63, IntArray(6) { 15 }))
-                    NativeFleetActorRuntimeService(fleet, 2, 4, 1, {}, {}, { _, _ -> }, onActorClosing = {}).use { service ->
+                    NativeFrameFixture(
+                        NativeFleetActorRuntimeService(
+                            fleet,
+                            2,
+                            4,
+                            1,
+                            {},
+                            {},
+                            { _, _ -> },
+                            onActorClosing = {},
+                        ),
+                    ).use { service ->
                         val endpoint = VmActorEndpoint(id, 1)
                         val lease = checkNotNull(service.attach(endpoint, machine, host))
                         val active =
@@ -945,7 +1036,7 @@ class NativeFleetEventPumpIntegrationTest {
                             })
                         try {
                             carrier.turnOn().join()
-                            assertTrue(service.grantFrame(endpoint, 1, 100_000))
+                            assertTrue(service.configureFrame(endpoint, 1, 100_000))
                             carrier.serverTick(1)
                             val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5)
                             while (writes.isEmpty()) {
@@ -953,10 +1044,14 @@ class NativeFleetEventPumpIntegrationTest {
                                 service.pump(1, 1)
                                 Thread.yield()
                             }
-                            // One slot accepts the confirmation; the reply remains in the live carrier.
-                            assertNull(carrier.tryHibernateAsync(2))
-                            service.pump(0, 1)
-                            checkNotNull(carrier.tryHibernateAsync(2)).get(5, TimeUnit.SECONDS)
+                            // A one-entry outbox can accept each prefix as pumping makes room.
+                            var closing = carrier.tryHibernateAsync(2)
+                            while (closing == null) {
+                                check(System.nanoTime() < deadline) { "physical confirmation did not drain" }
+                                service.pump(0, 1)
+                                closing = carrier.tryHibernateAsync(2)
+                            }
+                            closing.get(5, TimeUnit.SECONDS)
                             assertEquals(1, writes.size)
                             val restored = ProgramRuntimeHost(factory)
                             try {
@@ -986,18 +1081,20 @@ class NativeFleetEventPumpIntegrationTest {
                     val artifact = Path.of(requireNotNull(System.getProperty("compukters.fleet.$kind.fixture"))).readBytes()
                     val host = ProgramRuntimeHost(NativeProgramVmSessionFactory())
                     assertEquals(ProgramStartResult.Started, host.start(artifact))
-                    val config = ExperimentalFleetConfig(1, 32, 32, 4096, 64, 64, 32, coordinatedTurns = true)
+                    val config = ExperimentalFleetConfig(1, 32, 32, 4096, 64, 64, 32, executionMode = FleetExecutionMode.AUTONOMOUS_FRAMES)
                     VmRuntime.openExperimentalFleet(config).use { fleet ->
                         val machine = host.transferToFleet(fleet, 0)
                         // Fixture input is part of setup; this scenario isolates bounded world reply delivery.
                         fleet.redstoneInput(machine, RedstoneWire.packInput(63, IntArray(6) { 15 }))
-                        NativeFleetActorRuntimeService(fleet, 4, 16, capacity, {}, {}, { _, event ->
-                            if (event is ExperimentalFleetEvent.Outcome) {
-                                check(
-                                    event.outcome !is VmOutcome.HostRequestBatch,
-                                ) { "world request escaped carrier" }
-                            }
-                        }, onActorClosing = {}).use { service ->
+                        NativeFrameFixture(
+                            NativeFleetActorRuntimeService(fleet, 4, 16, capacity, {}, {}, { _, event ->
+                                if (event is ExperimentalFleetEvent.Outcome) {
+                                    check(
+                                        event.outcome !is VmOutcome.HostRequestBatch,
+                                    ) { "world request escaped carrier" }
+                                }
+                            }, onActorClosing = {}),
+                        ).use { service ->
                             val endpoint = VmActorEndpoint(ComputerId.fromLongs(41, 42), 1)
                             val lease = checkNotNull(service.attach(endpoint, machine, host))
                             // The host is already started/transferred. Automatic bootstrap remains outside this backend.
@@ -1056,7 +1153,7 @@ class NativeFleetEventPumpIntegrationTest {
                                         System.nanoTime() < deadline,
                                     ) { "world continuation stalled: $kind, capacity=$capacity, state=${carrier.state}" }
                                     service.pump(32, 32)
-                                    if (service.grantFrame(endpoint, tick, 100_000)) {
+                                    if (service.configureFrame(endpoint, tick, 100_000)) {
                                         carrier.serverTick(tick)
                                         tick++
                                     }
@@ -1108,16 +1205,31 @@ class NativeFleetEventPumpIntegrationTest {
                 val host = ProgramRuntimeHost(factory)
                 assertEquals(ProgramStartResult.Started, host.start(artifact))
                 assertEquals(ProgramRuntimeState.Running, host.serverTick(1))
-                VmRuntime.openExperimentalFleet(ExperimentalFleetConfig(1, 32, 32, 128, 64, 64, 32, coordinatedTurns = true)).use { fleet ->
-                    val machine = host.transferToFleet(fleet, 1)
-                    val runtime = NativeFleetActorRuntimeService(fleet, 1, 8, 8, {}, {}, { _, _ -> }, onActorClosing = {})
-                    runtime.use {
-                        val lease = checkNotNull(runtime.attach(VmActorEndpoint(id, 1), machine, host))
-                        val carrier = ActorProgramComputer(runtime, lease, { RedstoneCommitResult.Committed })
-                        val generation = carrier.hibernateAsync(2, byteArrayOf(6)).get(5, TimeUnit.SECONDS)
-                        assertEquals(host.lastClosedFileSystemGeneration, generation)
+                VmRuntime
+                    .openExperimentalFleet(
+                        ExperimentalFleetConfig(1, 32, 32, 128, 64, 64, 32, executionMode = FleetExecutionMode.AUTONOMOUS_FRAMES),
+                    ).use { fleet ->
+                        val machine = host.transferToFleet(fleet, 1)
+                        val runtime =
+                            NativeFrameFixture(
+                                NativeFleetActorRuntimeService(
+                                    fleet,
+                                    1,
+                                    8,
+                                    8,
+                                    {},
+                                    {},
+                                    { _, _ -> },
+                                    onActorClosing = {},
+                                ),
+                            )
+                        runtime.use {
+                            val lease = checkNotNull(runtime.attach(VmActorEndpoint(id, 1), machine, host))
+                            val carrier = ActorProgramComputer(runtime, lease, { RedstoneCommitResult.Committed })
+                            val generation = carrier.hibernateAsync(2, byteArrayOf(6)).get(5, TimeUnit.SECONDS)
+                            assertEquals(host.lastClosedFileSystemGeneration, generation)
+                        }
                     }
-                }
                 val restored = ProgramRuntimeHost(factory)
                 val checkpoint = checkNotNull(restored.prepareRestoreBoot(100))
                 assertContentEquals(byteArrayOf(6), checkpoint.addonState)
@@ -1157,20 +1269,25 @@ class NativeFleetEventPumpIntegrationTest {
                 assertTrue(saved.hibernate(1, byteArrayOf(5)))
                 val running = ProgramRuntimeHost(factory)
                 assertEquals(ProgramStartResult.Started, running.start(artifact))
-                VmRuntime.openExperimentalFleet(ExperimentalFleetConfig(1, 32, 1, 128, 64, 64, 32, coordinatedTurns = true)).use { fleet ->
-                    val machine = running.transferToFleet(fleet, 2)
-                    NativeFleetActorRuntimeService(fleet, 1, 4, 4, {}, {}, { _, _ ->
-                        error("discard must not pump ordinary events")
-                    }, onActorClosing = {}).use { service ->
-                        val endpoint = VmActorEndpoint(id, 1)
-                        val lease = checkNotNull(service.attach(endpoint, machine, running))
-                        val carrier = ActorProgramComputer(service, lease, { RedstoneCommitResult.Committed })
-                        val closedGeneration = carrier.hibernateAsync(3, byteArrayOf(), saveExecution = false).get(5, TimeUnit.SECONDS)
-                        assertEquals(running.lastClosedFileSystemGeneration, closedGeneration)
-                        store.flush(id, checkNotNull(closedGeneration))
-                        assertNull(factory.restoreBoot())
+                VmRuntime
+                    .openExperimentalFleet(
+                        ExperimentalFleetConfig(1, 32, 1, 128, 64, 64, 32, executionMode = FleetExecutionMode.AUTONOMOUS_FRAMES),
+                    ).use { fleet ->
+                        val machine = running.transferToFleet(fleet, 2)
+                        NativeFrameFixture(
+                            NativeFleetActorRuntimeService(fleet, 1, 4, 4, {}, {}, { _, _ ->
+                                error("discard must not pump ordinary events")
+                            }, onActorClosing = {}),
+                        ).use { service ->
+                            val endpoint = VmActorEndpoint(id, 1)
+                            val lease = checkNotNull(service.attach(endpoint, machine, running))
+                            val carrier = ActorProgramComputer(service, lease, { RedstoneCommitResult.Committed })
+                            val closedGeneration = carrier.hibernateAsync(3, byteArrayOf(), saveExecution = false).get(5, TimeUnit.SECONDS)
+                            assertEquals(running.lastClosedFileSystemGeneration, closedGeneration)
+                            store.flush(id, checkNotNull(closedGeneration))
+                            assertNull(factory.restoreBoot())
+                        }
                     }
-                }
             }
             WorldFileSystemStore.open(root).use { reopened ->
                 val factory = NativeProgramVmSessionFactory(ProgramFileSystemLaunchContext(reopened, id, image))
@@ -1203,64 +1320,69 @@ class NativeFleetEventPumpIntegrationTest {
                 val factory = NativeProgramVmSessionFactory(ProgramFileSystemLaunchContext(store, id, image))
                 val host = ProgramRuntimeHost(factory)
                 assertEquals(ProgramStartResult.Started, host.start(artifact))
-                VmRuntime.openExperimentalFleet(ExperimentalFleetConfig(1, 32, 1, 128, 64, 64, 32, coordinatedTurns = true)).use { fleet ->
-                    val machine = host.transferToFleet(fleet, 0)
-                    val observer = VmSession.open(artifact)
-                    val other = observer.transferToFleet(fleet)
-                    val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5)
+                VmRuntime
+                    .openExperimentalFleet(
+                        ExperimentalFleetConfig(1, 32, 1, 128, 64, 64, 32, executionMode = FleetExecutionMode.AUTONOMOUS_FRAMES),
+                    ).use { fleet ->
+                        val machine = host.transferToFleet(fleet, 0)
+                        val observer = VmSession.open(artifact)
+                        val other = observer.transferToFleet(fleet)
+                        val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5)
 
-                    fun next(target: Long? = null): ExperimentalFleetEvent {
-                        while (System.nanoTime() < deadline) {
-                            (if (target == null) fleet.poll() else fleet.pollLifecycle(target))?.let { return it }
-                            Thread.yield()
+                        fun next(target: Long? = null): ExperimentalFleetEvent {
+                            while (System.nanoTime() < deadline) {
+                                (if (target == null) fleet.poll() else fleet.pollLifecycle(target))?.let { return it }
+                                Thread.yield()
+                            }
+                            error("checkpoint event timed out")
                         }
-                        error("checkpoint event timed out")
+                        fleet.grantFrame(machine, 1, 512, 1_000_000_000L, System.nanoTime() + 5_000_000_000L)
+                        assertTrue(assertIs<ExperimentalFleetEvent.Quiescent>(next()).timersPending)
+                        val generation = fleet.eventGeneration()
+                        fleet.resourceSnapshot(other, 41)
+                        assertTrue(fleet.waitEvents(generation, 5_000))
+                        // The JVM host never observes this accepted output confirmation.
+                        fleet.confirmRedstoneOutput(machine, 0x123456)
+                        val addon = byteArrayOf(3, 4)
+                        val owner = Thread.currentThread()
+                        NativeFrameFixture(
+                            NativeFleetActorRuntimeService(
+                                fleet,
+                                2,
+                                4,
+                                4,
+                                { check(Thread.currentThread() === owner) },
+                                {},
+                                { _, _ -> error("checkpoint must not pump ordinary world output") },
+                                onActorClosing = {},
+                            ),
+                        ).use { service ->
+                            val endpoint = VmActorEndpoint(id, 1)
+                            val lease = checkNotNull(service.attach(endpoint, machine, host))
+                            val carrier = ActorProgramComputer(service, lease, { RedstoneCommitResult.Committed })
+                            val saved = carrier.hibernateAsync(2, addon)
+                            addon[0] = 99
+                            val savedGeneration = saved.get(5, TimeUnit.SECONDS)
+                            assertEquals(host.lastClosedFileSystemGeneration, savedGeneration)
+                        }
+                        assertEquals(ProgramRuntimeState.Closed, host.state)
+                        val preserved = assertIs<ExperimentalFleetEvent.Resources>(next())
+                        assertEquals(other, preserved.machine)
+                        assertEquals(41L, preserved.request)
+                        val restored = ProgramRuntimeHost(factory)
+                        val checkpoint = checkNotNull(restored.prepareRestoreBoot(100))
+                        assertEquals(0x123456, checkpoint.confirmedRedstoneOutput)
+                        assertEquals(listOf(0L), checkpoint.programScopes)
+                        assertEquals(1L, checkpoint.timers.single().remainingTicks)
+                        assertContentEquals(byteArrayOf(3, 4), checkpoint.addonState)
+                        restored.completeRestoration(100)
+                        assertEquals(ProgramRuntimeState.Running, restored.serverTick(100))
+                        assertIs<ProgramRuntimeState.Halted>(restored.serverTick(101))
+                        restored.close()
+                        fleet.stop(other, independent = true)
+                        while (next(other) !is ExperimentalFleetEvent.Stopped) { }
+                        observer.close()
                     }
-                    fleet.grant(machine, 1, 512)
-                    assertTrue(assertIs<ExperimentalFleetEvent.Quiescent>(next()).timersPending)
-                    val generation = fleet.eventGeneration()
-                    fleet.resourceSnapshot(other, 41)
-                    assertTrue(fleet.waitEvents(generation, 5_000))
-                    // The JVM host never observes this accepted output confirmation.
-                    fleet.confirmRedstoneOutput(machine, 0x123456)
-                    val addon = byteArrayOf(3, 4)
-                    val owner = Thread.currentThread()
-                    NativeFleetActorRuntimeService(
-                        fleet,
-                        2,
-                        4,
-                        4,
-                        { check(Thread.currentThread() === owner) },
-                        {},
-                        { _, _ -> error("checkpoint must not pump ordinary world output") },
-                        onActorClosing = {},
-                    ).use { service ->
-                        val endpoint = VmActorEndpoint(id, 1)
-                        val lease = checkNotNull(service.attach(endpoint, machine, host))
-                        val carrier = ActorProgramComputer(service, lease, { RedstoneCommitResult.Committed })
-                        val saved = carrier.hibernateAsync(2, addon)
-                        addon[0] = 99
-                        val savedGeneration = saved.get(5, TimeUnit.SECONDS)
-                        assertEquals(host.lastClosedFileSystemGeneration, savedGeneration)
-                    }
-                    assertEquals(ProgramRuntimeState.Closed, host.state)
-                    val preserved = assertIs<ExperimentalFleetEvent.Resources>(next())
-                    assertEquals(other, preserved.machine)
-                    assertEquals(41L, preserved.request)
-                    val restored = ProgramRuntimeHost(factory)
-                    val checkpoint = checkNotNull(restored.prepareRestoreBoot(100))
-                    assertEquals(0x123456, checkpoint.confirmedRedstoneOutput)
-                    assertEquals(listOf(0L), checkpoint.programScopes)
-                    assertEquals(1L, checkpoint.timers.single().remainingTicks)
-                    assertContentEquals(byteArrayOf(3, 4), checkpoint.addonState)
-                    restored.completeRestoration(100)
-                    assertEquals(ProgramRuntimeState.Running, restored.serverTick(100))
-                    assertIs<ProgramRuntimeState.Halted>(restored.serverTick(101))
-                    restored.close()
-                    fleet.stop(other, independent = true)
-                    while (next(other) !is ExperimentalFleetEvent.Stopped) { }
-                    observer.close()
-                }
             }
         } finally {
             root.toFile().deleteRecursively()
@@ -1275,50 +1397,55 @@ class NativeFleetEventPumpIntegrationTest {
         val host = ProgramRuntimeHost(NativeProgramVmSessionFactory())
         assertEquals(ProgramStartResult.Started, host.start(artifact))
         val owner = Thread.currentThread()
-        VmRuntime.openExperimentalFleet(ExperimentalFleetConfig(1, 32, 1, 128, 64, 64, 32, coordinatedTurns = true)).use { fleet ->
-            val machine = host.transferToFleet(fleet, 0)
-            VmSession.open(artifact).use { observer ->
-                val other = observer.transferToFleet(fleet)
-                val generation = fleet.eventGeneration()
-                fleet.resourceSnapshot(other, 42)
-                assertTrue(fleet.waitEvents(generation, 5_000))
-                val endpoint = VmActorEndpoint(ComputerId.fromLongs(41, 42), 1)
-                var canceled = false
-                NativeFleetActorRuntimeService(
-                    fleet,
-                    2,
-                    1,
-                    1,
-                    { check(Thread.currentThread() === owner) },
-                    {},
-                    { _, _ -> error("ordinary output must not be pumped") },
-                    onActorClosing = { address ->
-                        check(Thread.currentThread() === owner)
-                        assertEquals(endpoint, address)
-                        canceled = true
-                    },
-                ).use { service ->
-                    assertTrue(service.register(endpoint, machine, host))
-                    val query = service.request(endpoint, ProgramRuntimeActorCommand::FileSystemGeneration)
-                    // No pump at all: even the accepted query has not reached Rust yet.
-                    val stopped = checkNotNull(service.stop(endpoint))
-                    assertTrue(canceled && query.isCompletedExceptionally)
-                    assertEquals(0L, stopped.get(5, TimeUnit.SECONDS))
-                    assertEquals(ProgramRuntimeState.Closed, host.state)
-                    val preserved = assertIs<ExperimentalFleetEvent.Resources>(fleet.poll())
-                    assertEquals(other, preserved.machine)
-                    assertEquals(42L, preserved.request)
-                    fleet.stop(other, independent = true)
-                    val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5)
-                    while (true) {
-                        check(System.nanoTime() < deadline)
-                        val event = fleet.pollLifecycle(other)
-                        if (event is ExperimentalFleetEvent.Stopped) break
-                        Thread.yield()
+        VmRuntime
+            .openExperimentalFleet(
+                ExperimentalFleetConfig(1, 32, 1, 128, 64, 64, 32, executionMode = FleetExecutionMode.AUTONOMOUS_FRAMES),
+            ).use { fleet ->
+                val machine = host.transferToFleet(fleet, 0)
+                VmSession.open(artifact).use { observer ->
+                    val other = observer.transferToFleet(fleet)
+                    val generation = fleet.eventGeneration()
+                    fleet.resourceSnapshot(other, 42)
+                    assertTrue(fleet.waitEvents(generation, 5_000))
+                    val endpoint = VmActorEndpoint(ComputerId.fromLongs(41, 42), 1)
+                    var canceled = false
+                    NativeFrameFixture(
+                        NativeFleetActorRuntimeService(
+                            fleet,
+                            2,
+                            1,
+                            1,
+                            { check(Thread.currentThread() === owner) },
+                            {},
+                            { _, _ -> error("ordinary output must not be pumped") },
+                            onActorClosing = { address ->
+                                check(Thread.currentThread() === owner)
+                                assertEquals(endpoint, address)
+                                canceled = true
+                            },
+                        ),
+                    ).use { service ->
+                        assertTrue(service.register(endpoint, machine, host))
+                        val query = service.request(endpoint, ProgramRuntimeActorCommand::FileSystemGeneration)
+                        // No pump at all: even the accepted query has not reached Rust yet.
+                        val stopped = checkNotNull(service.stop(endpoint))
+                        assertTrue(canceled && query.isCompletedExceptionally)
+                        assertEquals(0L, stopped.get(5, TimeUnit.SECONDS))
+                        assertEquals(ProgramRuntimeState.Closed, host.state)
+                        val preserved = assertIs<ExperimentalFleetEvent.Resources>(fleet.poll())
+                        assertEquals(other, preserved.machine)
+                        assertEquals(42L, preserved.request)
+                        fleet.stop(other, independent = true)
+                        val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5)
+                        while (true) {
+                            check(System.nanoTime() < deadline)
+                            val event = fleet.pollLifecycle(other)
+                            if (event is ExperimentalFleetEvent.Stopped) break
+                            Thread.yield()
+                        }
                     }
                 }
             }
-        }
     }
 
     @Test
@@ -1382,27 +1509,30 @@ class NativeFleetEventPumpIntegrationTest {
             })
         assertEquals(ProgramStartResult.Started, host.start(artifact))
         assertEquals(ProgramRuntimeState.Running, host.serverTick(1))
-        VmRuntime.openExperimentalFleet(ExperimentalFleetConfig(1, 32, 32, 128, 64, 64, 32, coordinatedTurns = true)).use { fleet ->
-            val machine = host.transferToFleet(fleet, 1)
-            assertFailsWith<IllegalStateException> { host.observeFleetLifecycle(fleet, machine + 1, VmOutcome.ProcessEntered(1)) }
-            host.observeFleetLifecycle(fleet, machine, VmOutcome.ProcessEntered(1))
-            host.observeFleetLifecycle(fleet, machine, VmOutcome.ProcessExited(1))
-            assertEquals(listOf(ProgramAddonAction.Started(1), ProgramAddonAction.Stopped(1)), actions)
-            assertFailsWith<IllegalStateException> { host.serverTick(2) }
-            assertFailsWith<IllegalStateException> { host.shutdown() }
-            fleet.detachWithTimers(machine, 2)
-            val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5)
-            var detached: ExperimentalFleetEvent.Detached? = null
-            while (detached == null) {
-                check(System.nanoTime() < deadline)
-                detached = fleet.poll() as? ExperimentalFleetEvent.Detached
-                if (detached == null) Thread.yield()
+        VmRuntime
+            .openExperimentalFleet(
+                ExperimentalFleetConfig(1, 32, 32, 128, 64, 64, 32, executionMode = FleetExecutionMode.AUTONOMOUS_FRAMES),
+            ).use { fleet ->
+                val machine = host.transferToFleet(fleet, 1)
+                assertFailsWith<IllegalStateException> { host.observeFleetLifecycle(fleet, machine + 1, VmOutcome.ProcessEntered(1)) }
+                host.observeFleetLifecycle(fleet, machine, VmOutcome.ProcessEntered(1))
+                host.observeFleetLifecycle(fleet, machine, VmOutcome.ProcessExited(1))
+                assertEquals(listOf(ProgramAddonAction.Started(1), ProgramAddonAction.Stopped(1)), actions)
+                assertFailsWith<IllegalStateException> { host.serverTick(2) }
+                assertFailsWith<IllegalStateException> { host.shutdown() }
+                fleet.detachWithTimers(machine, 2)
+                val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5)
+                var detached: ExperimentalFleetEvent.Detached? = null
+                while (detached == null) {
+                    check(System.nanoTime() < deadline)
+                    detached = fleet.poll() as? ExperimentalFleetEvent.Detached
+                    if (detached == null) Thread.yield()
+                }
+                assertEquals(1L, detached.timers.single().remaining)
+                host.recoverFromFleet(fleet, machine, 2, detached.timers)
+                assertEquals(ProgramRuntimeState.Running, host.serverTick(2))
+                assertTrue(host.serverTick(3) is ProgramRuntimeState.Halted)
             }
-            assertEquals(1L, detached.timers.single().remaining)
-            host.recoverFromFleet(fleet, machine, 2, detached.timers)
-            assertEquals(ProgramRuntimeState.Running, host.serverTick(2))
-            assertTrue(host.serverTick(3) is ProgramRuntimeState.Halted)
-        }
         host.close()
     }
 
@@ -1426,46 +1556,49 @@ class NativeFleetEventPumpIntegrationTest {
             WorldFileSystemStore.open(root).use { store ->
                 val id = ComputerId.fromLongs(99, 100)
                 val factory = NativeProgramVmSessionFactory(ProgramFileSystemLaunchContext(store, id, image))
-                VmRuntime.openExperimentalFleet(ExperimentalFleetConfig(1, 32, 32, 128, 64, 64, 32, coordinatedTurns = true)).use { fleet ->
-                    fun next(): ExperimentalFleetEvent {
-                        val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5)
-                        while (System.nanoTime() < deadline) {
-                            fleet.poll()?.let { return it }
-                            Thread.yield()
+                VmRuntime
+                    .openExperimentalFleet(
+                        ExperimentalFleetConfig(1, 32, 32, 128, 64, 64, 32, executionMode = FleetExecutionMode.AUTONOMOUS_FRAMES),
+                    ).use { fleet ->
+                        fun next(): ExperimentalFleetEvent {
+                            val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5)
+                            while (System.nanoTime() < deadline) {
+                                fleet.poll()?.let { return it }
+                                Thread.yield()
+                            }
+                            error("timed out waiting for fleet event")
                         }
-                        error("timed out waiting for fleet event")
+                        val session = factory.open(artifact)
+                        val invalidTimer = ExperimentalFleetTimer(VmHostRequestIdentity(1, 1), 0, 1, 1)
+                        assertFailsWith<VmBridgeException> { session.transferToFleet(fleet, 0, listOf(invalidTimer)) }
+                        assertTrue(session.resourceSnapshot().executedInstructions >= 0)
+                        val machine = session.transferToFleet(fleet, 0, emptyList())
+                        assertFailsWith<IllegalStateException> { session.close() }
+                        assertFailsWith<IllegalStateException> { session.recoverFromFleet(fleet, machine + 1) }
+                        fleet.grantFrame(machine, 1, 512, 1_000_000_000L, System.nanoTime() + 5_000_000_000L)
+                        assertTrue((next() as ExperimentalFleetEvent.Quiescent).timersPending)
+                        fleet.detachWithTimers(machine, 2)
+                        val detached = next() as ExperimentalFleetEvent.Detached
+                        val timer = detached.timers.single()
+                        assertEquals(1L, timer.remaining)
+                        session.recoverFromFleet(fleet, machine)
+                        val host = byteArrayOf(1, 2, 3)
+                        session.checkpoint(host)
+                        session.close()
+                        val restored = requireNotNull(factory.restoreBoot())
+                        assertContentEquals(host, restored.hostState)
+                        factory.discardCheckpoint()
+                        val restoredMachine = restored.session.transferToFleet(fleet, 100, listOf(timer))
+                        fleet.grantFrame(restoredMachine, 100, 512, 1_000_000_000L, System.nanoTime() + 5_000_000_000L)
+                        assertTrue(next() is ExperimentalFleetEvent.Quiescent)
+                        fleet.grantFrame(restoredMachine, 101, 512, 1_000_000_000L, System.nanoTime() + 5_000_000_000L)
+                        assertTrue((next() as ExperimentalFleetEvent.Outcome).outcome is VmOutcome.Halted)
+                        assertTrue(!(next() as ExperimentalFleetEvent.Quiescent).timersPending)
+                        fleet.stop(restoredMachine)
+                        assertTrue(next() is ExperimentalFleetEvent.Stopped)
+                        restored.session.acknowledgeFleetStop(fleet, restoredMachine)
+                        restored.session.close()
                     }
-                    val session = factory.open(artifact)
-                    val invalidTimer = ExperimentalFleetTimer(VmHostRequestIdentity(1, 1), 0, 1, 1)
-                    assertFailsWith<VmBridgeException> { session.transferToFleet(fleet, 0, listOf(invalidTimer)) }
-                    assertTrue(session.resourceSnapshot().executedInstructions >= 0)
-                    val machine = session.transferToFleet(fleet, 0, emptyList())
-                    assertFailsWith<IllegalStateException> { session.close() }
-                    assertFailsWith<IllegalStateException> { session.recoverFromFleet(fleet, machine + 1) }
-                    fleet.grant(machine, 1, 512)
-                    assertTrue((next() as ExperimentalFleetEvent.Quiescent).timersPending)
-                    fleet.detachWithTimers(machine, 2)
-                    val detached = next() as ExperimentalFleetEvent.Detached
-                    val timer = detached.timers.single()
-                    assertEquals(1L, timer.remaining)
-                    session.recoverFromFleet(fleet, machine)
-                    val host = byteArrayOf(1, 2, 3)
-                    session.checkpoint(host)
-                    session.close()
-                    val restored = requireNotNull(factory.restoreBoot())
-                    assertContentEquals(host, restored.hostState)
-                    factory.discardCheckpoint()
-                    val restoredMachine = restored.session.transferToFleet(fleet, 100, listOf(timer))
-                    fleet.grant(restoredMachine, 100, 512)
-                    assertTrue(next() is ExperimentalFleetEvent.Quiescent)
-                    fleet.grant(restoredMachine, 101, 512)
-                    assertTrue((next() as ExperimentalFleetEvent.Outcome).outcome is VmOutcome.Halted)
-                    assertTrue(!(next() as ExperimentalFleetEvent.Quiescent).timersPending)
-                    fleet.stop(restoredMachine)
-                    assertTrue(next() is ExperimentalFleetEvent.Stopped)
-                    restored.session.acknowledgeFleetStop(fleet, restoredMachine)
-                    restored.session.close()
-                }
             }
         } finally {
             root.toFile().deleteRecursively()
@@ -1473,7 +1606,7 @@ class NativeFleetEventPumpIntegrationTest {
     }
 
     @Test
-    fun `native continuation charges only the newly retired instructions`() {
+    fun `native autonomous reply preserves cumulative retirement accounting without another grant`() {
         installFfmRuntime()
         VmRuntime.loadNativeLibrary(Path.of(requireNotNull(System.getProperty("compukters.ffi.library"))))
         val artifact = Path.of(requireNotNull(System.getProperty("compukters.fleet.host.fixture"))).readBytes()
@@ -1485,70 +1618,68 @@ class NativeFleetEventPumpIntegrationTest {
         val notifications = LinkedBlockingQueue<Unit>()
         val events = mutableListOf<ExperimentalFleetEvent>()
         val owner = Thread.currentThread()
-        VmRuntime.openExperimentalFleet(ExperimentalFleetConfig(1, 32, 32, 128, 64, 64, 32, coordinatedTurns = true)).use { fleet ->
-            val session = VmSession.open(artifact, listOf(schema))
-            val machine = session.transferToFleet(fleet)
-            val credit = ProgramRuntimeFrameCredit(4, 256, Long.MAX_VALUE, true)
-            NativeFleetDispatcher(
-                fleet,
-                8,
-                8,
-                { check(Thread.currentThread() === owner) },
-                { notifications.offer(Unit) },
-                events::add,
-            ).use { pump ->
-                fun await(predicate: (ExperimentalFleetEvent) -> Boolean): ExperimentalFleetEvent {
-                    val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5)
-                    while (true) {
-                        pump.pumpLifecycle(32, 32, deliver = events::add)
-                        pump.pump(32, 32)
-                        val index = events.indexOfFirst(predicate)
-                        if (index >= 0) return events.removeAt(index)
-                        val remaining = deadline - System.nanoTime()
-                        check(remaining > 0) { "timed out awaiting fleet event" }
-                        assertNotNull(notifications.poll(remaining, TimeUnit.NANOSECONDS))
+        VmRuntime
+            .openExperimentalFleet(
+                ExperimentalFleetConfig(1, 32, 32, 128, 64, 64, 32, executionMode = FleetExecutionMode.AUTONOMOUS_FRAMES),
+            ).use { fleet ->
+                val session = VmSession.open(artifact, listOf(schema))
+                val machine = session.transferToFleet(fleet)
+                NativeFleetDispatcher(
+                    fleet,
+                    8,
+                    8,
+                    { check(Thread.currentThread() === owner) },
+                    { notifications.offer(Unit) },
+                    events::add,
+                ).use { pump ->
+                    fun await(predicate: (ExperimentalFleetEvent) -> Boolean): ExperimentalFleetEvent {
+                        val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5)
+                        while (true) {
+                            pump.pumpLifecycle(32, 32, deliver = events::add)
+                            pump.pump(32, 32)
+                            val index = events.indexOfFirst(predicate)
+                            if (index >= 0) return events.removeAt(index)
+                            val remaining = deadline - System.nanoTime()
+                            check(remaining > 0) { "timed out awaiting fleet event" }
+                            assertNotNull(notifications.poll(remaining, TimeUnit.NANOSECONDS))
+                        }
                     }
-                }
-                fleet.grant(machine, 4, 256)
-                val request =
-                    (
+                    fleet.grantFrame(machine, 4, 256, 1_000_000_000L, System.nanoTime() + 5_000_000_000L)
+                    val request =
                         (
-                            await {
-                                it is ExperimentalFleetEvent.Outcome
-                            } as ExperimentalFleetEvent.Outcome
-                        ).outcome as VmOutcome.HostRequestBatch
-                    ).requests.single()
-                val first = await { it is ExperimentalFleetEvent.Quiescent } as ExperimentalFleetEvent.Quiescent
-                val firstDelta = credit.finishCumulative(first.retired, 256)
-                val remaining = credit.remaining
-                // The unresolved host request prevents detachment. The machine must become
-                // available for commands again once the rejection reaches the owner.
-                assertTrue(pump.outbox.offer(machine, listOf(NativeFleetOutbox.Command.DetachWithTimers(4))))
-                pump.pump(0, 1)
-                await { it is ExperimentalFleetEvent.DetachRejected }
-                assertTrue(
-                    pump.outbox.offer(
-                        machine,
-                        listOf(
-                            NativeFleetOutbox.Command.Reply(request.identity, HostResponse.UnitSuccess),
-                            NativeFleetOutbox.Command.Grant(4, remaining.toInt(), Long.MAX_VALUE),
+                            (
+                                await {
+                                    it is ExperimentalFleetEvent.Outcome
+                                } as ExperimentalFleetEvent.Outcome
+                            ).outcome as VmOutcome.HostRequestBatch
+                        ).requests.single()
+                    val first = await { it is ExperimentalFleetEvent.Quiescent } as ExperimentalFleetEvent.Quiescent
+                    assertTrue(first.retired > 0)
+                    // The unresolved host request prevents detachment. The machine must become
+                    // available for commands again once the rejection reaches the owner.
+                    assertTrue(pump.outbox.offer(machine, listOf(NativeFleetOutbox.Command.DetachWithTimers(4))))
+                    pump.pump(0, 1)
+                    await { it is ExperimentalFleetEvent.DetachRejected }
+                    assertTrue(
+                        pump.outbox.offer(
+                            machine,
+                            listOf(
+                                NativeFleetOutbox.Command.Reply(request.identity, HostResponse.UnitSuccess),
+                            ),
                         ),
-                    ),
-                )
-                credit.inFlight = true
-                pump.pump(0, 2)
-                val halted = await { it is ExperimentalFleetEvent.Outcome } as ExperimentalFleetEvent.Outcome
-                assertEquals(VmOutcome.Halted(null), halted.outcome)
-                val second = await { it is ExperimentalFleetEvent.Quiescent } as ExperimentalFleetEvent.Quiescent
-                val secondDelta = credit.finishCumulative(second.retired, remaining)
-                assertEquals(second.retired, firstDelta + secondDelta)
-                assertEquals(256 - second.retired, credit.remaining)
-                assertTrue(pump.outbox.offer(machine, listOf(NativeFleetOutbox.Command.Stop)))
-                pump.pump(0, 1)
-                await { it is ExperimentalFleetEvent.Stopped }
+                    )
+                    pump.pump(0, 2)
+                    val halted = await { it is ExperimentalFleetEvent.Outcome } as ExperimentalFleetEvent.Outcome
+                    assertEquals(VmOutcome.Halted(null), halted.outcome)
+                    val second = await { it is ExperimentalFleetEvent.Quiescent } as ExperimentalFleetEvent.Quiescent
+                    assertTrue(second.retired > first.retired)
+                    assertEquals(256 - second.retired, checkNotNull(second.frame).instructionsLeft.toLong())
+                    assertTrue(pump.outbox.offer(machine, listOf(NativeFleetOutbox.Command.Stop)))
+                    pump.pump(0, 1)
+                    await { it is ExperimentalFleetEvent.Stopped }
+                }
+                session.close()
             }
-            session.close()
-        }
     }
 
     @Test
@@ -1622,70 +1753,75 @@ class NativeFleetEventPumpIntegrationTest {
         val host = ProgramRuntimeHost(NativeProgramVmSessionFactory())
         assertEquals(ProgramStartResult.Started, host.start(artifact))
         val owner = Thread.currentThread()
-        VmRuntime.openExperimentalFleet(ExperimentalFleetConfig(1, 32, 32, 128, 64, 64, 32, coordinatedTurns = true)).use { fleet ->
-            val machine = host.transferToFleet(fleet, 0)
-            val endpoint = VmActorEndpoint(ComputerId.fromLongs(31, 32), 1)
-            NativeFleetActorRuntimeService(
-                fleet,
-                4,
-                16,
-                16,
-                { check(Thread.currentThread() === owner) },
-                {},
-                { _, _ -> },
-                onActorClosing = {},
-            ).use { service ->
-                assertTrue(service.register(endpoint, machine, host))
-                val runtime: ActorRuntimeService = service
+        VmRuntime
+            .openExperimentalFleet(
+                ExperimentalFleetConfig(1, 32, 32, 128, 64, 64, 32, executionMode = FleetExecutionMode.AUTONOMOUS_FRAMES),
+            ).use { fleet ->
+                val machine = host.transferToFleet(fleet, 0)
+                val endpoint = VmActorEndpoint(ComputerId.fromLongs(31, 32), 1)
+                NativeFrameFixture(
+                    NativeFleetActorRuntimeService(
+                        fleet,
+                        4,
+                        16,
+                        16,
+                        { check(Thread.currentThread() === owner) },
+                        {},
+                        { _, _ -> },
+                        onActorClosing = {},
+                    ),
+                ).use { service ->
+                    assertTrue(service.register(endpoint, machine, host))
+                    val runtime: ActorRuntimeService = service
 
-                fun <T> await(future: CompletableFuture<T>): T {
-                    val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5)
-                    while (!future.isDone) {
-                        check(System.nanoTime() < deadline) { "native actor turn stalled" }
-                        service.pump(32, 32)
-                        Thread.yield()
+                    fun <T> await(future: CompletableFuture<T>): T {
+                        val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5)
+                        while (!future.isDone) {
+                            check(System.nanoTime() < deadline) { "native actor turn stalled" }
+                            service.pump(32, 32)
+                            Thread.yield()
+                        }
+                        return future.join()
                     }
-                    return future.join()
+                    val replies =
+                        (1L..3L).map { tick ->
+                            assertTrue(service.configureFrame(endpoint, tick, 512))
+                            val result = CompletableFuture<ProgramRuntimeActorReply>()
+                            assertEquals(
+                                VmActorSubmission.ACCEPTED,
+                                runtime.submitFrame(endpoint, tick, emptyList()) { reply, failure ->
+                                    check(Thread.currentThread() === owner)
+                                    if (failure == null) result.complete(checkNotNull(reply)) else result.completeExceptionally(failure)
+                                },
+                            )
+                            await(result).also { assertTrue(!service.configureFrame(endpoint, tick, 512)) }
+                        }
+                    assertEquals(ProgramRuntimeState.Running, replies[0].state)
+                    assertEquals(0L, replies[1].retiredInstructions)
+                    assertEquals(ProgramRuntimeState.Halted(null), replies[2].state)
+                    // The same artifact and tick sequence produce the same retirement count on
+                    // the existing host path, although only Rust workers execute in this service.
+                    ProgramRuntimeHost(NativeProgramVmSessionFactory()).use { baseline ->
+                        assertEquals(ProgramStartResult.Started, baseline.start(artifact))
+                        var retired = 0L
+                        for (tick in 1L..3L) {
+                            baseline.serverTick(tick, 512)
+                            retired += baseline.retiredInstructionsLastTick
+                        }
+                        assertEquals(replies.sumOf { it.retiredInstructions }, retired)
+                        assertEquals(baseline.state, host.state)
+                    }
+                    val generation = await(runtime.request(endpoint, ProgramRuntimeActorCommand::FileSystemGeneration))
+                    val stopped = await(checkNotNull(service.stop(endpoint)))
+                    assertEquals(generation.fileSystemGeneration, stopped)
+                    assertEquals(stopped, host.lastClosedFileSystemGeneration)
+                    assertEquals(ProgramRuntimeState.Closed, host.state)
                 }
-                val replies =
-                    (1L..3L).map { tick ->
-                        assertTrue(service.grantFrame(endpoint, tick, 512))
-                        val result = CompletableFuture<ProgramRuntimeActorReply>()
-                        assertEquals(
-                            VmActorSubmission.ACCEPTED,
-                            runtime.submitTurn(endpoint, tick, emptyList()) { reply, failure ->
-                                check(Thread.currentThread() === owner)
-                                if (failure == null) result.complete(checkNotNull(reply)) else result.completeExceptionally(failure)
-                            },
-                        )
-                        await(result).also { assertTrue(!service.grantFrame(endpoint, tick, 512)) }
-                    }
-                assertEquals(ProgramRuntimeState.Running, replies[0].state)
-                assertEquals(0L, replies[1].retiredInstructions)
-                assertEquals(ProgramRuntimeState.Halted(null), replies[2].state)
-                // The same artifact and tick sequence produce the same retirement count on
-                // the existing host path, although only Rust workers execute in this service.
-                ProgramRuntimeHost(NativeProgramVmSessionFactory()).use { baseline ->
-                    assertEquals(ProgramStartResult.Started, baseline.start(artifact))
-                    var retired = 0L
-                    for (tick in 1L..3L) {
-                        baseline.serverTick(tick, 512)
-                        retired += baseline.retiredInstructionsLastTick
-                    }
-                    assertEquals(replies.sumOf { it.retiredInstructions }, retired)
-                    assertEquals(baseline.state, host.state)
-                }
-                val generation = await(runtime.request(endpoint, ProgramRuntimeActorCommand::FileSystemGeneration))
-                val stopped = await(checkNotNull(service.stop(endpoint)))
-                assertEquals(generation.fileSystemGeneration, stopped)
-                assertEquals(stopped, host.lastClosedFileSystemGeneration)
-                assertEquals(ProgramRuntimeState.Closed, host.state)
             }
-        }
     }
 
     @Test
-    fun `native actor streams addon request and continues within the original frame`() {
+    fun `native actor resumes after a streamed reply without another frame or free grant slot`() {
         installFfmRuntime()
         VmRuntime.loadNativeLibrary(Path.of(requireNotNull(System.getProperty("compukters.ffi.library"))))
         val artifact = Path.of(requireNotNull(System.getProperty("compukters.fleet.host.fixture"))).readBytes()
@@ -1701,41 +1837,37 @@ class NativeFleetEventPumpIntegrationTest {
                     addonCapabilitySchemas = listOf(schema),
                 )
             assertEquals(ProgramStartResult.Started, host.start(artifact))
-            VmRuntime.openExperimentalFleet(ExperimentalFleetConfig(1, 32, 32, 128, 64, 64, 32, coordinatedTurns = true)).use { fleet ->
-                val machine = host.transferToFleet(fleet, 0)
-                val endpoint = VmActorEndpoint(ComputerId.fromLongs(33, 34), 1)
-                var request: VmHostRequestIdentity? = null
-                NativeFleetActorRuntimeService(fleet, 4, 16, capacity, {}, {}, { address, event ->
-                    assertEquals(endpoint, address)
-                    if (event is ExperimentalFleetEvent.Outcome) {
-                        val outcome = event.outcome
-                        check(outcome !is VmOutcome.HostRequestBatch) { "managed addon request delivered twice" }
-                    }
-                }, onActorClosing = {}).use { service ->
-                    assertTrue(service.register(endpoint, machine, host))
-
-                    fun <T> await(future: CompletableFuture<T>): T {
-                        val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5)
-                        while (!future.isDone) {
-                            check(System.nanoTime() < deadline)
-                            service.pump(32, 32)
-                            Thread.yield()
-                        }
-                        return future.join()
-                    }
-                    assertTrue(service.grantFrame(endpoint, 4, 256))
-                    val first = CompletableFuture<ProgramRuntimeActorReply>()
-                    assertEquals(
-                        VmActorSubmission.ACCEPTED,
-                        service.submitTurn(
-                            endpoint,
-                            4,
-                            emptyList(),
-                            object : ProgramRuntimeTurnObserver {
+            VmRuntime
+                .openExperimentalFleet(
+                    ExperimentalFleetConfig(
+                        1,
+                        32,
+                        32,
+                        128,
+                        64,
+                        64,
+                        32,
+                        executionMode = FleetExecutionMode.AUTONOMOUS_FRAMES,
+                    ),
+                ).use { fleet ->
+                    val machine = host.transferToFleet(fleet, 0)
+                    val endpoint = VmActorEndpoint(ComputerId.fromLongs(33, 34), 1)
+                    var request: VmHostRequestIdentity? = null
+                    NativeFrameFixture(
+                        NativeFleetActorRuntimeService(fleet, 4, 16, capacity, {}, {}, { _, event ->
+                            check(
+                                event !is ExperimentalFleetEvent.Outcome || event.outcome !is VmOutcome.HostRequestBatch,
+                            ) { "request delivered twice" }
+                        }, onActorClosing = {}),
+                    ).use { service ->
+                        assertTrue(service.register(endpoint, machine, host))
+                        val first = CompletableFuture<ProgramRuntimeActorReply>()
+                        val halted = CompletableFuture<ProgramRuntimeActorReply>()
+                        val observer =
+                            object : RecordingActorObserver() {
                                 override fun addonAction(action: ProgramAddonAction) {
                                     val addon = assertIs<ProgramAddonAction.Request>(action).request
                                     assertEquals(0L, addon.programId)
-                                    assertTrue(!first.isDone)
                                     check(request == null)
                                     request = addon.identity
                                 }
@@ -1744,50 +1876,32 @@ class NativeFleetEventPumpIntegrationTest {
                                     reply: ProgramRuntimeActorReply?,
                                     failure: Throwable?,
                                 ) {
-                                    if (failure == null) first.complete(checkNotNull(reply)) else first.completeExceptionally(failure)
+                                    if (failure != null) {
+                                        first.completeExceptionally(failure)
+                                        halted.completeExceptionally(failure)
+                                    } else {
+                                        first.complete(checkNotNull(reply))
+                                        if (reply?.state is ProgramRuntimeState.Halted) halted.complete(reply)
+                                    }
                                 }
-                            },
-                        ),
-                    )
-                    val before = await(first)
-                    val runtime: ActorRuntimeService = service
-                    // Streaming does not settle credit; only the final report permits this continuation.
-                    val completion =
-                        ProgramRuntimeActorEffect.CompleteAddons(
-                            listOf(
-                                ProgramAddonCompletion(checkNotNull(request), HostResponse.UnitSuccess),
+                            }
+                        assertTrue(service.configureFrame(endpoint, 4, 256))
+                        assertEquals(VmActorSubmission.ACCEPTED, service.submitFrame(endpoint, 4, emptyList(), observer))
+                        val before = awaitBootstrap(service, first)
+                        assertEquals(
+                            1,
+                            service.submitHostCompletions(
+                                endpoint,
+                                listOf(ProgramRuntimeHostCompletion.Reply(checkNotNull(request), HostResponse.UnitSuccess)),
                             ),
                         )
-                    val second = CompletableFuture<ProgramRuntimeActorReply>()
-                    val effects =
-                        if (capacity == 1) {
-                            assertEquals(
-                                1,
-                                runtime.submitHostCompletions(
-                                    endpoint,
-                                    completion.completions.map {
-                                        ProgramRuntimeHostCompletion.Reply(it.identity, it.response)
-                                    },
-                                ),
-                            )
-                            assertFalse(runtime.continueTurn(endpoint, 4, emptyList()) { _, _ -> error("refused grant completed") })
-                            service.pump(0, 1) // Deliver the reply before the one-entry queue can admit a grant.
-                            emptyList()
-                        } else {
-                            listOf(completion, completion)
-                        }
-                    assertTrue(
-                        runtime.continueTurn(endpoint, 4, effects) { reply, failure ->
-                            if (failure == null) second.complete(checkNotNull(reply)) else second.completeExceptionally(failure)
-                        },
-                    )
-                    val after = await(second)
-                    assertEquals(ProgramRuntimeState.Halted(null), after.state)
-                    assertTrue(before.retiredInstructions > 0 && after.retiredInstructions > 0)
-                    assertTrue(before.retiredInstructions + after.retiredInstructions <= 256)
-                    await(checkNotNull(service.stop(endpoint)))
+                        val after = awaitBootstrap(service, halted)
+                        assertEquals(ProgramRuntimeState.Halted(null), after.state)
+                        assertTrue(before.retiredInstructions > 0 && after.retiredInstructions > before.retiredInstructions)
+                        assertTrue(after.retiredInstructions <= 256)
+                        awaitBootstrap(service, checkNotNull(service.stop(endpoint)))
+                    }
                 }
-            }
         }
     }
 
@@ -1799,99 +1913,111 @@ class NativeFleetEventPumpIntegrationTest {
         for (canonical in listOf(false, true)) {
             val host = ProgramRuntimeHost(NativeProgramVmSessionFactory())
             assertEquals(ProgramStartResult.Started, host.start(artifact))
-            VmRuntime.openExperimentalFleet(ExperimentalFleetConfig(1, 32, 32, 1024, 64, 64, 32, coordinatedTurns = true)).use { fleet ->
-                val machine = host.transferToFleet(fleet, 0)
-                val endpoint = VmActorEndpoint(ComputerId.fromLongs(35, 36), 1)
-                val owner = Thread.currentThread()
-                val checkOwner = { check(Thread.currentThread() === owner) }
-                NativeFleetActorRuntimeService(fleet, 4, 16, 16, checkOwner, {}, { _, _ -> }, onActorClosing = {}).use { service ->
-                    assertTrue(service.register(endpoint, machine, host))
-                    val runtime: ActorRuntimeService = service
+            VmRuntime
+                .openExperimentalFleet(
+                    ExperimentalFleetConfig(1, 32, 32, 1024, 64, 64, 32, executionMode = FleetExecutionMode.AUTONOMOUS_FRAMES),
+                ).use { fleet ->
+                    val machine = host.transferToFleet(fleet, 0)
+                    val endpoint = VmActorEndpoint(ComputerId.fromLongs(35, 36), 1)
+                    val owner = Thread.currentThread()
+                    val checkOwner = { check(Thread.currentThread() === owner) }
+                    NativeFrameFixture(
+                        NativeFleetActorRuntimeService(fleet, 4, 16, 16, checkOwner, {}, { _, _ -> }, onActorClosing = {}),
+                    ).use { service ->
+                        assertTrue(service.register(endpoint, machine, host))
+                        val runtime: ActorRuntimeService = service
 
-                    fun <T> await(future: CompletableFuture<T>): T {
+                        fun <T> await(future: CompletableFuture<T>): T {
+                            val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5)
+                            while (!future.isDone) {
+                                check(System.nanoTime() < deadline) { "terminal request stalled" }
+                                service.pump(32, 32)
+                                Thread.yield()
+                            }
+                            return future.join()
+                        }
+
+                        fun turn(tick: Long): ProgramRuntimeActorReply {
+                            assertTrue(service.configureFrame(endpoint, tick, 100_000))
+                            val result = CompletableFuture<ProgramRuntimeActorReply>()
+                            assertEquals(
+                                VmActorSubmission.ACCEPTED,
+                                runtime.submitFrame(endpoint, tick, emptyList()) { reply, failure ->
+                                    if (failure == null) result.complete(checkNotNull(reply)) else result.completeExceptionally(failure)
+                                },
+                            )
+                            return await(result)
+                        }
+                        val premature =
+                            await(runtime.request(endpoint) { ProgramRuntimeActorCommand.SubmitCanonicalLine(it, "hello".toCharArray()) })
+                        assertEquals(
+                            ProgramRuntimeActorValue.Rejected(
+                                ProgramRuntimeActorFailure.CanonicalLine(VmCanonicalLineFailure.NO_PENDING_READ),
+                            ),
+                            premature.value,
+                        )
+                        assertEquals(ProgramRuntimeState.WaitingForInput, turn(1).state)
+                        val full =
+                            assertIs<ProgramRuntimeActorValue.TerminalStateValue>(
+                                await(runtime.request(endpoint, ProgramRuntimeActorCommand::TerminalFullState)).value,
+                            ).state!!
+                        assertEquals(
+                            TerminalUpdate.Unchanged(full.revision),
+                            assertIs<ProgramRuntimeActorValue.TerminalUpdateValue>(
+                                await(
+                                    runtime.request(endpoint) { ProgramRuntimeActorCommand.TerminalChangesSince(it, full.revision) },
+                                ).value,
+                            ).update,
+                        )
+                        if (canonical) {
+                            val accepted =
+                                await(
+                                    runtime.request(endpoint) { ProgramRuntimeActorCommand.SubmitCanonicalLine(it, "hello".toCharArray()) },
+                                )
+                            assertEquals(ProgramRuntimeActorValue.Accepted(true), accepted.value)
+                            assertEquals(ProgramRuntimeState.Running, accepted.state)
+                        } else {
+                            assertEquals(
+                                ProgramRuntimeActorValue.Accepted(true),
+                                await(
+                                    runtime.request(endpoint) {
+                                        ProgramRuntimeActorCommand.SendTerminalText(it, "hello")
+                                    },
+                                ).value,
+                            )
+                            assertEquals(
+                                ProgramRuntimeActorValue.Accepted(true),
+                                await(
+                                    runtime.request(endpoint) {
+                                        ProgramRuntimeActorCommand.SendTerminalKey(
+                                            it,
+                                            TerminalKey.ENTER,
+                                            TerminalKeyAction.PRESS,
+                                            emptySet(),
+                                        )
+                                    },
+                                ).value,
+                            )
+                        }
+                        // Input wakes the existing native frame without a second Grant.
                         val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5)
-                        while (!future.isDone) {
-                            check(System.nanoTime() < deadline) { "terminal request stalled" }
+                        while (host.state !is ProgramRuntimeState.Halted) {
+                            check(System.nanoTime() < deadline) { "input did not resume the native frame" }
                             service.pump(32, 32)
                             Thread.yield()
                         }
-                        return future.join()
-                    }
-
-                    fun turn(tick: Long): ProgramRuntimeActorReply {
-                        assertTrue(service.grantFrame(endpoint, tick, 512))
-                        val result = CompletableFuture<ProgramRuntimeActorReply>()
+                        assertEquals(ProgramRuntimeState.Halted(VmValue.I32("hello".hashCode())), host.state)
                         assertEquals(
-                            VmActorSubmission.ACCEPTED,
-                            runtime.submitTurn(endpoint, tick, emptyList()) { reply, failure ->
-                                if (failure == null) result.complete(checkNotNull(reply)) else result.completeExceptionally(failure)
-                            },
-                        )
-                        return await(result)
-                    }
-                    val premature =
-                        await(runtime.request(endpoint) { ProgramRuntimeActorCommand.SubmitCanonicalLine(it, "hello".toCharArray()) })
-                    assertEquals(
-                        ProgramRuntimeActorValue.Rejected(ProgramRuntimeActorFailure.CanonicalLine(VmCanonicalLineFailure.NO_PENDING_READ)),
-                        premature.value,
-                    )
-                    assertEquals(ProgramRuntimeState.WaitingForInput, turn(1).state)
-                    val full =
-                        assertIs<ProgramRuntimeActorValue.TerminalStateValue>(
-                            await(runtime.request(endpoint, ProgramRuntimeActorCommand::TerminalFullState)).value,
-                        ).state!!
-                    assertEquals(
-                        TerminalUpdate.Unchanged(full.revision),
-                        assertIs<ProgramRuntimeActorValue.TerminalUpdateValue>(
-                            await(runtime.request(endpoint) { ProgramRuntimeActorCommand.TerminalChangesSince(it, full.revision) }).value,
-                        ).update,
-                    )
-                    if (canonical) {
-                        val accepted =
-                            await(runtime.request(endpoint) { ProgramRuntimeActorCommand.SubmitCanonicalLine(it, "hello".toCharArray()) })
-                        assertEquals(ProgramRuntimeActorValue.Accepted(true), accepted.value)
-                        assertEquals(ProgramRuntimeState.Running, accepted.state)
-                    } else {
-                        assertEquals(
-                            ProgramRuntimeActorValue.Accepted(true),
+                            ProgramRuntimeActorValue.Accepted(false),
                             await(
                                 runtime.request(endpoint) {
-                                    ProgramRuntimeActorCommand.SendTerminalText(it, "hello")
+                                    ProgramRuntimeActorCommand.SendTerminalText(it, "after halt")
                                 },
                             ).value,
                         )
-                        assertEquals(
-                            ProgramRuntimeActorValue.Accepted(true),
-                            await(
-                                runtime.request(endpoint) {
-                                    ProgramRuntimeActorCommand.SendTerminalKey(it, TerminalKey.ENTER, TerminalKeyAction.PRESS, emptySet())
-                                },
-                            ).value,
-                        )
+                        await(checkNotNull(service.stop(endpoint)))
                     }
-                    // Input acknowledgements update observations but coordinated mode does not
-                    // execute the resumed Guest task until another capacity-owner grant arrives.
-                    assertEquals(
-                        ProgramRuntimeState.Running,
-                        await(runtime.request(endpoint, ProgramRuntimeActorCommand::FileSystemGeneration)).state,
-                    )
-                    var state: ProgramRuntimeState = host.state
-                    for (tick in 2L..128L) {
-                        state = turn(tick).state
-                        if (state is ProgramRuntimeState.Halted) break
-                    }
-                    assertEquals(ProgramRuntimeState.Halted(VmValue.I32("hello".hashCode())), state)
-                    assertEquals(
-                        ProgramRuntimeActorValue.Accepted(false),
-                        await(
-                            runtime.request(endpoint) {
-                                ProgramRuntimeActorCommand.SendTerminalText(it, "after halt")
-                            },
-                        ).value,
-                    )
-                    await(checkNotNull(service.stop(endpoint)))
                 }
-            }
         }
     }
 
@@ -1930,67 +2056,81 @@ class NativeFleetEventPumpIntegrationTest {
                 val stat = host.fileStat(path)!!
                 val listing = host.fileList(VmVirtualPath.of("/bin"), null, 256)!!
                 val chunk = host.fileRead(path, 0, 32, stat.metadata.generation)!!
-                VmRuntime.openExperimentalFleet(ExperimentalFleetConfig(1, 32, 32, 128, 64, 64, 32, coordinatedTurns = true)).use { fleet ->
-                    val machine = host.transferToFleet(fleet, 0)
-                    val endpoint = VmActorEndpoint(id, 1)
-                    NativeFleetActorRuntimeService(fleet, 4, 16, 16, {}, {}, { _, _ -> }, onActorClosing = {}).use { service ->
-                        assertTrue(service.register(endpoint, machine, host))
-
-                        fun <T> await(future: CompletableFuture<T>): T {
-                            val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5)
-                            while (!future.isDone) {
-                                check(System.nanoTime() < deadline) { "filesystem request stalled" }
-                                service.pump(32, 32)
-                                Thread.yield()
-                            }
-                            return future.join()
-                        }
-                        val runtime: ActorRuntimeService = service
-                        repeat(2) {
-                            val reply = await(runtime.request(endpoint, ProgramRuntimeActorCommand::ResourceSnapshot))
-                            val snapshot = assertIs<ProgramRuntimeActorValue.ResourceSnapshotValue>(reply.value).snapshot
-                            assertEquals(resources.copy(grantedGuestUnits = null, grantedMaintenanceUnits = null), snapshot)
-                        }
-                        val statReply = runtime.request(endpoint) { ProgramRuntimeActorCommand.FileStat(it, path) }
-                        val listReply =
-                            runtime.request(
-                                endpoint,
-                            ) { ProgramRuntimeActorCommand.FileList(it, VmVirtualPath.of("/bin"), null, 256) }
-                        val readReply =
-                            runtime.request(
-                                endpoint,
-                            ) { ProgramRuntimeActorCommand.FileRead(it, path, 0, 32, stat.metadata.generation) }
-                        val stale =
-                            runtime.request(endpoint) {
-                                ProgramRuntimeActorCommand.FileRead(
-                                    it,
-                                    path,
-                                    0,
-                                    32,
-                                    stat.metadata.generation + 1,
-                                )
-                            }
-                        val missing =
-                            runtime.request(
-                                endpoint,
-                            ) { ProgramRuntimeActorCommand.FileStat(it, VmVirtualPath.of("/home/missing")) }
-                        assertEquals(stat, assertIs<ProgramRuntimeActorValue.FileStatValue>(await(statReply).value).stat)
-                        assertEquals(listing, assertIs<ProgramRuntimeActorValue.FileListValue>(await(listReply).value).listing)
-                        assertEquals(chunk, assertIs<ProgramRuntimeActorValue.FileChunkValue>(await(readReply).value).chunk)
-                        assertEquals(
-                            ProgramRuntimeActorValue.Rejected(
-                                ProgramRuntimeActorFailure.FileSystem(VmFileSystemReadFailure.STALE_GENERATION),
+                VmRuntime
+                    .openExperimentalFleet(
+                        ExperimentalFleetConfig(1, 32, 32, 128, 64, 64, 32, executionMode = FleetExecutionMode.AUTONOMOUS_FRAMES),
+                    ).use { fleet ->
+                        val machine = host.transferToFleet(fleet, 0)
+                        val endpoint = VmActorEndpoint(id, 1)
+                        NativeFrameFixture(
+                            NativeFleetActorRuntimeService(
+                                fleet,
+                                4,
+                                16,
+                                16,
+                                {},
+                                {},
+                                { _, _ -> },
+                                onActorClosing = {},
                             ),
-                            await(stale).value,
-                        )
-                        assertEquals(
-                            ProgramRuntimeActorValue.Rejected(ProgramRuntimeActorFailure.FileSystem(VmFileSystemReadFailure.NOT_FOUND)),
-                            await(missing).value,
-                        )
-                        assertEquals(ProgramRuntimeState.Running, host.state)
-                        await(checkNotNull(service.stop(endpoint)))
+                        ).use { service ->
+                            assertTrue(service.register(endpoint, machine, host))
+
+                            fun <T> await(future: CompletableFuture<T>): T {
+                                val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5)
+                                while (!future.isDone) {
+                                    check(System.nanoTime() < deadline) { "filesystem request stalled" }
+                                    service.pump(32, 32)
+                                    Thread.yield()
+                                }
+                                return future.join()
+                            }
+                            val runtime: ActorRuntimeService = service
+                            repeat(2) {
+                                val reply = await(runtime.request(endpoint, ProgramRuntimeActorCommand::ResourceSnapshot))
+                                val snapshot = assertIs<ProgramRuntimeActorValue.ResourceSnapshotValue>(reply.value).snapshot
+                                assertEquals(resources.copy(grantedGuestUnits = null, grantedMaintenanceUnits = null), snapshot)
+                            }
+                            val statReply = runtime.request(endpoint) { ProgramRuntimeActorCommand.FileStat(it, path) }
+                            val listReply =
+                                runtime.request(
+                                    endpoint,
+                                ) { ProgramRuntimeActorCommand.FileList(it, VmVirtualPath.of("/bin"), null, 256) }
+                            val readReply =
+                                runtime.request(
+                                    endpoint,
+                                ) { ProgramRuntimeActorCommand.FileRead(it, path, 0, 32, stat.metadata.generation) }
+                            val stale =
+                                runtime.request(endpoint) {
+                                    ProgramRuntimeActorCommand.FileRead(
+                                        it,
+                                        path,
+                                        0,
+                                        32,
+                                        stat.metadata.generation + 1,
+                                    )
+                                }
+                            val missing =
+                                runtime.request(
+                                    endpoint,
+                                ) { ProgramRuntimeActorCommand.FileStat(it, VmVirtualPath.of("/home/missing")) }
+                            assertEquals(stat, assertIs<ProgramRuntimeActorValue.FileStatValue>(await(statReply).value).stat)
+                            assertEquals(listing, assertIs<ProgramRuntimeActorValue.FileListValue>(await(listReply).value).listing)
+                            assertEquals(chunk, assertIs<ProgramRuntimeActorValue.FileChunkValue>(await(readReply).value).chunk)
+                            assertEquals(
+                                ProgramRuntimeActorValue.Rejected(
+                                    ProgramRuntimeActorFailure.FileSystem(VmFileSystemReadFailure.STALE_GENERATION),
+                                ),
+                                await(stale).value,
+                            )
+                            assertEquals(
+                                ProgramRuntimeActorValue.Rejected(ProgramRuntimeActorFailure.FileSystem(VmFileSystemReadFailure.NOT_FOUND)),
+                                await(missing).value,
+                            )
+                            assertEquals(ProgramRuntimeState.Running, host.state)
+                            await(checkNotNull(service.stop(endpoint)))
+                        }
                     }
-                }
             }
         } finally {
             root.toFile().deleteRecursively()

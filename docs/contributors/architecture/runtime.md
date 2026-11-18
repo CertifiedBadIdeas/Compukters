@@ -34,74 +34,78 @@ Increasing queue limits trades bounded memory for burst tolerance.
 The service reports registered actors, pending requests, pump work, capacity, throttling, retirement,
 world-request and input observations. It does not fabricate JVM command-queue or execution-latency histograms
 for Rust workers. These are service-lifetime observations, not an equal-CPU or delivery-latency contract.
-Pending redstone transitions retain their sampled order while a VM turn is in flight, up to the configured
+Pending redstone transitions retain their sampled order while native admission is busy, up to the configured
 mailbox capacity; overflow coalesces the newest retained packet and increments the diagnostic counter.
 
-## Actor continuations
+## Actor observations and resumption
 
-`ActorProgramComputer` is the asynchronous carrier implementation for the actor scheduler. Its server-side state is an
-observation from actor replies, and terminal, filesystem, deployment, and input requests return futures. The service admits at most one pending turn per actor. Completed observations settle its credit on the owner
-pump before a later turn is admitted. The carrier suppresses obsolete lifecycle replies and
-performs redstone and sound world actions on its owning server thread. A completed world action may submit a typed
-continuation in the same world tick using the remaining instruction credit from that computer's original frame grant.
-The original deadline is retained, continuations are capped, and host-request and advance quotas are cumulative for
-the world tick. Re-reporting an already parked request does not consume new-call credit; a zero-progress repeat
-yields to its owner instead of exhausting the frame through polling. Credit that is still in flight cannot be borrowed; expired credits cannot refill a newer frame.
-Ordinary turns outside a collecting frame wait for a new frame instead of receiving an unbounded allowance.
-The actor validates and applies each completion before the next bounded advance; its single reply both completes
-the old deferred request and may publish the next one. When credit, deadline, or admission is exhausted, the carrier
-retains the exact continuation for a later tick without repeating the world mutation.
-Its close future reports the final filesystem generation after accepted work drains and native resources close; this
-barrier does not depend on server result pumping and may complete on a worker thread.
+`ActorProgramComputer` performs redstone, sound and addon world actions on its owning server thread.
+A persistent observer belongs to one carrier lifecycle, independently of frame admission. It streams
+requests, lifecycle actions and cumulative native progress. Lifecycle invalidation is checked again after
+publishing state, because a state observer may synchronously close or replace the carrier. Callback failures
+fence the offending actor without interrupting delivery for other computers. Explicit commands and lifecycle
+operations retain their future and cancellation contracts.
 
-Routine carrier turns use internal completions rather than a chain of request and observation futures. Both forms
-share one pending-request registry, frame reservations and bounded result lanes. Admission refusal is synchronous;
-the carrier retains its exact world completions and input until accepted. Each accepted turn captures its lifecycle
-version independently, so a later admission cannot overwrite the identity of an older queued result. The owner pump
-removes pending ownership before invoking its completion and polls one event at a time, checking its event and time
-allowance between callbacks. Callback failures are isolated from other computers. Lifecycle invalidation is checked
-again after publishing state, because a state observer may synchronously close or replace the carrier before world
-effects are applied. Explicit commands and lifecycle operations retain their future and cancellation contracts.
+Host replies and cost results enter a bounded ordered outbox independently of the next frame grant.
+The carrier acknowledges only the accepted prefix and retains the remainder without repeating world
+mutations. Rust accepts a reply even if execution credit is exhausted, retaining its result until a fresh
+Grant makes the actor runnable. With credit available, a reply resumes Guest execution without a JVM
+continuation grant. An idle actor stays off the runnable queue; workers sleep until signaled when no
+other work is available. Native progress distinguishes quota waits from input idle, so a retained reply
+cannot strand a computer that needs the next tick's grant.
+
+The close future reports the final filesystem generation after accepted work drains and native resources
+close. This barrier does not depend on server result pumping and may complete on a worker thread.
 
 ## Rust actor scheduler
 
-`NativeProgramRuntimeService` is the only production execution service. It collects submitted turns and uses
+`NativeProgramRuntimeService` is the only production execution service. It collects submitted frames and uses
 one per-computer allocator and capacity governor; Rust owns the worker pool, Guest execution, timers and
-original frame credit used by continuations. Pending admission retains at most one turn per registered computer.
+all remaining frame credit. Pending admission retains at most one frame per registered computer and ends
+as soon as the bounded outbox accepts it. Observations do not reserve or authorize execution.
 The server registry depends only on `ProgramRuntimeLifecycle` for frame admission, bounded event delivery,
-calibration and close; the computer carrier uses the machine request/turn contract.
+calibration and close; the computer carrier uses the machine request/frame contract.
 
 There is no JVM execution scheduler or backend selection. Calibration opens a separate native fleet. Both
 supported Minecraft versions require fleet support in their native runtime, using FFM or JNI respectively;
 a runtime missing that capability fails explicitly instead of falling back. Both fleet transports decode events
 from a reusable buffer limited to the current response length. Decoding consumes that view synchronously;
 returned events own their variable payloads and remain valid after the next poll or fleet close.
-The Cargo feature and low-level transport symbols retain their existing `experimental` names; this source
-migration does not change wire layouts.
+The Cargo feature and low-level transport symbols retain their existing `experimental` names. ABI 29 adds
+explicit autonomous frame grants and progress reports; legacy grants retain their low-level meaning.
 
-`NativeFleetActorRuntimeService` implements active turns of `ActorRuntimeService` for hosts already started or
-restored and transferred to a coordinated native fleet. Rust workers own execution and timers; the owner grants
-frame credit and delivers observations. Same-tick continuations consume the original reservation and deadline.
-Uncoordinated fleets are rejected before dispatch starts, so external replies cannot resume execution without a grant.
-The owner retains bounded actor and request registries; query maps are allocated only while needed, and future
-cancellation does not release admission until the native response arrives or the actor is fenced for stop.
-One fleet waiter serves the service.
+`NativeFleetActorRuntimeService` admits frames for hosts already started or restored and transferred to
+an autonomous native fleet. The capacity owner grants instruction, request and advance quotas once per
+computer/tick. Rust consumes those quotas across slices and host interactions; duplicate or stale grants
+cannot refill them. New ticks replace unused credit without accumulation.
+
+Execution time is a monotonic duration accumulated around native advances, shared by all machines assigned
+to one worker in that tick. Host, queue and input waits do not spend it. GC and response materialization
+inside an advance do count, as can OS descheduling. One bounded slice may overrun the allowance and is
+charged in full. An old actor frame cannot borrow a newer worker frame's time. A separate short execution
+authorization expires if server ticks stop, independently of how much compute credit remains.
+
+The owner retains bounded actor and request registries; query maps are allocated only while needed, and
+future cancellation does not release admission until the native response arrives or the actor is fenced
+for stop. One fleet waiter serves the service. Cumulative Quiescent reports inform statistics and the
+capacity governor; they do not gate native continuation.
 
 Native owner pumping alternates one bounded group of up to 16 scalar command attempts with one observation, retaining the other
 lane's turn when the shared deadline expires. A busy attempt consumes transport allowance without
 discarding its command. Observation count and transport progress are independent: after the tick's
 observation quota is spent, a native service can still send queued commands with zero event allowance
 within the remaining owner time. Each pump bounds transport attempts by the configured outbox capacity;
-the server does not extend its shared time allowance.
+the server does not extend its shared time allowance. Cost preparation has its own bounded attempt
+allowance, so an inspection observed during a pump can send its cost in that pump without recursive
+pumping or starving commands when the outbox is full.
 Result notifications coalesce until an owner pump has observation allowance again. Command readiness
 remains independent, so a full result quota neither creates empty owner wakeups for every publication
 nor prevents an admitted command from requesting delivery.
 
 Redstone input is acknowledged into the bounded outbox before the next grant, independently of Guest credit,
 so even a one-entry mailbox can deliver input followed by a grant. Refusal retains the carrier's input in order;
-input cannot enter while that actor has a turn in flight. Host replies use the same independently acknowledged
-prefix principle. A past ordinary frame deadline still allows accepted effects to settle and produces a zero-work
-final report; it cannot admit a Guest continuation.
+host replies use the same independently acknowledged prefix principle. Expired execution authorization still
+allows accepted replies to settle but prevents a new Guest slice until a fresh authorized frame arrives.
 
 Idle native hosts use the bootstrap-only `RestoreOrBoot`, `CompleteRestoration` and `AbortRestoration` handler. One lazy bootstrap worker handles storage operations and closes; it never advances Guest and waits for an
 explicit signal when idle. The carrier performs addon restoration on its owner thread before completing restoration.

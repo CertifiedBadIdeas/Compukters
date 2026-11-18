@@ -19,6 +19,8 @@ import ru.lazyhat.compukters.lang.runtime.vm.ExperimentalFleet
 import ru.lazyhat.compukters.lang.runtime.vm.ExperimentalFleetCommandTransport
 import ru.lazyhat.compukters.lang.runtime.vm.ExperimentalFleetConfig
 import ru.lazyhat.compukters.lang.runtime.vm.ExperimentalFleetEvent
+import ru.lazyhat.compukters.lang.runtime.vm.FleetExecutionMode
+import ru.lazyhat.compukters.lang.runtime.vm.FleetWaitReason
 import ru.lazyhat.compukters.lang.runtime.vm.VmOutcome
 import ru.lazyhat.compukters.lang.runtime.vm.VmRuntime
 import java.util.ArrayDeque
@@ -43,10 +45,10 @@ class NativeProgramRuntimeService(
     private val maximumCommandAttempts = Math.multiplyExact(config.resultCapacityPerWorker, config.workerCount)
     private val owner = Thread.currentThread()
     private val registered = mutableMapOf<VmActorEndpoint, Registration>()
-    private val turns = mutableMapOf<VmActorEndpoint, Turn>()
-    private val waiting = ArrayDeque<Turn>()
-    private val retries = ArrayDeque<Turn>()
-    private var collecting: MutableList<Turn>? = null
+    private val frames = mutableMapOf<VmActorEndpoint, Frame>()
+    private val waiting = ArrayDeque<Frame>()
+    private val retries = ArrayDeque<Frame>()
+    private var collecting: MutableList<Frame>? = null
     private var latestTick = -1L
     private var closed = false
     private var closing: CompletableFuture<Void>? = null
@@ -80,7 +82,7 @@ class NativeProgramRuntimeService(
                 tickBudget.hostRequestsPerTick,
                 tickBudget.maximumAdvancesPerTick,
                 NativeFleetCommandRequests.INSPECTION,
-                coordinatedTurns = true,
+                executionMode = FleetExecutionMode.AUTONOMOUS_FRAMES,
             )
         fleet = VmRuntime.openExperimentalFleet(fleetConfig)
         runtime =
@@ -96,6 +98,7 @@ class NativeProgramRuntimeService(
                     ::externalEvent,
                     nanoTime,
                     onActorClosing = ::actorClosing,
+                    onFrameProgress = ::observeProgress,
                 )
             } catch (failure: Throwable) {
                 fleet.close()
@@ -122,51 +125,28 @@ class NativeProgramRuntimeService(
                 packet: Int,
             ): Boolean {
                 checkOwner()
-                if (closed || endpoint in turns) return false
+                if (closed) return false
                 return runtime.submitRedstoneInput(endpoint, packet)
             }
 
-            override fun submitTurn(
+            override fun submitFrame(
                 endpoint: VmActorEndpoint,
                 worldTick: Long,
                 effects: List<ProgramRuntimeActorEffect>,
-                completion: ProgramRuntimeTurnCompletion,
+                observer: ProgramRuntimeActorObserver,
             ): VmActorSubmission {
                 checkOwner()
                 require(worldTick >= 0)
                 require(effects.all { it is ProgramRuntimeActorEffect.RedstoneInput || it is ProgramRuntimeActorEffect.CompleteAddons })
                 if (closed) return VmActorSubmission.CLOSED
                 val registration = registered[endpoint] ?: return VmActorSubmission.STALE_ENDPOINT
-                if (endpoint in turns || worldTick <= registration.lastSubmittedTick) return VmActorSubmission.PERMIT_PENDING
+                if (endpoint in frames || worldTick <= registration.lastSubmittedTick) return VmActorSubmission.PERMIT_PENDING
                 registration.lastSubmittedTick = worldTick
-                val turn = Turn(endpoint, effects.toList(), completion)
-                turns[endpoint] = turn
-                val frame = collecting
-                if (frame == null) waiting.addLast(turn) else frame.add(turn)
+                val frame = Frame(endpoint, effects.toList(), observer(endpoint, observer))
+                frames[endpoint] = frame
+                val collecting = collecting
+                if (collecting == null) waiting.addLast(frame) else collecting.add(frame)
                 return VmActorSubmission.ACCEPTED
-            }
-
-            override fun continueTurn(
-                endpoint: VmActorEndpoint,
-                worldTick: Long,
-                effects: List<ProgramRuntimeActorEffect>,
-                completion: ProgramRuntimeTurnCompletion,
-            ): Boolean {
-                checkOwner()
-                if (closed || endpoint !in registered || endpoint in turns) return false
-                val usage = accounting[endpoint]?.takeIf { it.tick == worldTick } ?: return false
-                val turn =
-                    Turn(endpoint, effects.toList(), completion).also {
-                        it.tick = worldTick
-                        it.deadline = usage.deadline
-                    }
-                turns[endpoint] = turn
-                return if (runtime.continueTurn(endpoint, worldTick, effects, observer(turn))) {
-                    true
-                } else {
-                    turns.remove(endpoint)
-                    false
-                }
             }
 
             override fun recordHostContinuationDelay(delayTicks: Long) = runtime.recordHostContinuationDelay(delayTicks)
@@ -235,16 +215,8 @@ class NativeProgramRuntimeService(
         checkOwner()
         require(worldTick >= 0 && worldTick > latestTick)
         check(collecting == null) { "previous capacity frame has not been flushed" }
-        val stale = accounting.iterator()
-        while (stale.hasNext()) {
-            val entry = stale.next()
-            if (entry.key !in turns) {
-                unusedTotal = add(unusedTotal, entry.value.granted - entry.value.retired)
-                stale.remove()
-            }
-        }
         latestTick = worldTick
-        collecting = ArrayList<Turn>(waiting.size).also { while (waiting.isNotEmpty()) it.add(waiting.removeFirst()) }
+        collecting = ArrayList<Frame>(waiting.size).also { while (waiting.isNotEmpty()) it.add(waiting.removeFirst()) }
     }
 
     override fun flushCapacityFrame() {
@@ -255,7 +227,12 @@ class NativeProgramRuntimeService(
             PerComputerCapacityAllocator.allocate(
                 frame
                     .filter {
-                        registered[it.endpoint]?.state == ProgramRuntimeState.Running || it.effects.isNotEmpty()
+                        registered[it.endpoint]?.let { registration ->
+                            registration.state == ProgramRuntimeState.Running ||
+                                registration.needsFrame
+                        } ==
+                            true ||
+                            it.effects.isNotEmpty()
                     }.map { it.endpoint },
                 perComputerEntitlement,
                 currentSafeCapacity(),
@@ -264,15 +241,14 @@ class NativeProgramRuntimeService(
         waitingComputers = frame.size - allocation.grants.size
         previousDemand = allocation.grants.isNotEmpty()
         val grants = allocation.grants.associateBy { it.endpoint }
-        val deadline = if (safeInstructionCapacity != null) Long.MAX_VALUE else nanoTime() + capacityGovernor.hostTimeBudgetNanos
-        for (turn in frame) {
-            turn.tick = latestTick
-            turn.allowance = grants[turn.endpoint]?.retiredInstructionLimit?.toInt() ?: 0
-            turn.deadline = deadline
-            accounting[turn.endpoint] = Usage(latestTick, turn.allowance.toLong(), deadline)
-            retries.addLast(turn)
+        val deadline = nanoTime() + 50_000_000L
+        for (frame in frame) {
+            frame.tick = latestTick
+            frame.allowance = grants[frame.endpoint]?.retiredInstructionLimit?.toInt() ?: 0
+            frame.deadline = deadline
+            retries.addLast(frame)
         }
-        retryTurns(frame.size, Long.MAX_VALUE)
+        retryFrames(frame.size, Long.MAX_VALUE)
     }
 
     override fun observePreviousCapacityFrame() {
@@ -282,88 +258,120 @@ class NativeProgramRuntimeService(
         lateTurn = false
     }
 
-    private fun retryTurns(
+    private fun retryFrames(
         maximumAttempts: Int,
         deadline: Long,
     ) {
         repeat(minOf(maximumAttempts, retries.size)) {
             if (deadline != Long.MAX_VALUE && nanoTime() - deadline >= 0) return
-            val turn = retries.removeFirst()
-            if (turns[turn.endpoint] !== turn) return@repeat
-            if (!turn.granted) {
-                if (!runtime.grantFrame(turn.endpoint, turn.tick, turn.allowance, turn.deadline)) {
-                    retries.addLast(turn)
-                    return@repeat
+            val frame = retries.removeFirst()
+            if (frames[frame.endpoint] !== frame) return@repeat
+            when (
+                val admission =
+                    runtime.submitFrame(
+                        frame.endpoint,
+                        frame.tick,
+                        frame.allowance,
+                        if (safeInstructionCapacity != null) Long.MAX_VALUE else capacityGovernor.hostTimeBudgetNanos,
+                        frame.deadline,
+                        frame.effects,
+                        frame.observer,
+                    )
+            ) {
+                VmActorSubmission.ACCEPTED -> {
+                    frames.remove(frame.endpoint)
                 }
-                turn.granted = true
-            }
-            when (val admission = runtime.submitTurn(turn.endpoint, turn.tick, turn.effects, observer(turn))) {
-                VmActorSubmission.ACCEPTED -> Unit
-                VmActorSubmission.MAILBOX_FULL, VmActorSubmission.PERMIT_PENDING -> retries.addLast(turn)
-                else -> finish(turn, null, ProgramRuntimeActorRequestException(admission))
+
+                VmActorSubmission.MAILBOX_FULL, VmActorSubmission.PERMIT_PENDING -> {
+                    retries.addLast(frame)
+                }
+
+                else -> {
+                    frames.remove(frame.endpoint)
+                    frame.observer.failed(ProgramRuntimeActorRequestException(admission))
+                }
             }
         }
     }
 
-    private fun observer(turn: Turn): ProgramRuntimeTurnCompletion =
-        if (turn.completion is ProgramRuntimeTurnObserver) {
-            object : ProgramRuntimeTurnObserver {
-                override fun addonAction(action: ProgramAddonAction) {
-                    if (action is ProgramAddonAction.Request) observeWorld(turn)
-                    turn.completion.addonAction(action)
-                }
+    private fun observer(
+        endpoint: VmActorEndpoint,
+        source: ProgramRuntimeActorObserver,
+    ): ProgramRuntimeActorObserver {
+        val registration = registered.getValue(endpoint)
+        if (registration.observerSource !== source) {
+            registration.observerSource = source
+            registration.observer =
+                object : ProgramRuntimeActorObserver {
+                    private var failed = false
 
-                override fun worldRequest(request: ProgramWorldRequest): ProgramWorldResult? {
-                    observeWorld(turn)
-                    return turn.completion.worldRequest(request)
-                }
+                    override fun addonAction(action: ProgramAddonAction) {
+                        if (failed) return
+                        if (action is ProgramAddonAction.Request) observeWorld(registration)
+                        source.addonAction(action)
+                    }
 
-                override fun complete(
-                    reply: ProgramRuntimeActorReply?,
-                    failure: Throwable?,
-                ) = finish(turn, reply, failure)
-            }
-        } else {
-            ProgramRuntimeTurnCompletion { reply, failure -> finish(turn, reply, failure) }
+                    override fun worldRequest(request: ProgramWorldRequest): ProgramWorldResult? {
+                        if (failed) return null
+                        observeWorld(registration)
+                        return source.worldRequest(request)
+                    }
+
+                    override fun updated(observation: ProgramRuntimeActorObservation) {
+                        if (failed) return
+                        registration.state = observation.state
+                        registration.needsFrame = observation.needsFrame
+                        source.updated(observation)
+                    }
+
+                    override fun failed(failure: Throwable) {
+                        if (failed) return
+                        failed = true
+                        source.failed(failure)
+                    }
+                }
         }
+        return checkNotNull(registration.observer)
+    }
 
-    private fun observeWorld(turn: Turn) {
-        if (!turn.worldObserved) {
-            turn.worldObserved = true
+    private fun observeWorld(registration: Registration) {
+        if (registration.worldObservedTick != latestTick) {
+            registration.worldObservedTick = latestTick
             worldTotal = add(worldTotal, 1)
         }
     }
 
-    private fun finish(
-        turn: Turn,
-        reply: ProgramRuntimeActorReply?,
-        failure: Throwable?,
+    private fun observeProgress(
+        endpoint: VmActorEndpoint,
+        event: ExperimentalFleetEvent.Quiescent,
     ) {
-        if (turns[turn.endpoint] !== turn) return
-        turns.remove(turn.endpoint)
-        if (reply != null) {
-            registered[turn.endpoint]?.state = reply.state
-            retiredTotal = add(retiredTotal, reply.retiredInstructions)
-            accounting[turn.endpoint]?.let { usage ->
-                usage.retired = Math.addExact(usage.retired, reply.retiredInstructions)
-                check(usage.retired <= usage.granted)
-                if (usage.tick < latestTick) {
-                    unusedTotal = add(unusedTotal, usage.granted - usage.retired)
-                    accounting.remove(turn.endpoint)
-                }
-            }
-            if (turn.deadline != Long.MAX_VALUE && nanoTime() - turn.deadline >= 0) lateTurn = true
+        val progress = requireNotNull(event.frame)
+        val previous = accounting[endpoint]
+        if (previous != null && event.tick < previous.tick) return
+        if (previous != null && event.tick == previous.tick) {
+            check(event.retired >= previous.retired) { "native retirement count moved backwards" }
+            retiredTotal = add(retiredTotal, event.retired - previous.retired)
+            previous.retired = event.retired
+        } else {
+            previous?.let { unusedTotal = add(unusedTotal, it.granted - it.retired) }
+            retiredTotal = add(retiredTotal, event.retired)
+            accounting[endpoint] = Usage(event.tick, Math.addExact(event.retired, progress.instructionsLeft.toLong()), event.retired)
         }
-        turn.completion.complete(reply, failure)
+        // Host and queue waiting never count as a compute overrun.
+        if (progress.reason == FleetWaitReason.EXECUTION_TIME ||
+            progress.executionNanos > capacityGovernor.hostTimeBudgetNanos
+        ) {
+            lateTurn = true
+        }
     }
 
     private fun actorClosing(endpoint: VmActorEndpoint) {
         val failure = CancellationException("native actor fenced")
-        turns[endpoint]?.let { turn ->
-            collecting?.remove(turn)
-            waiting.remove(turn)
-            retries.remove(turn)
-            finish(turn, null, failure)
+        frames.remove(endpoint)?.let { frame ->
+            collecting?.remove(frame)
+            waiting.remove(frame)
+            retries.remove(frame)
+            frame.observer.failed(failure)
         }
         accounting.remove(endpoint)?.let { unusedTotal = add(unusedTotal, it.granted - it.retired) }
         if (!runtime.contains(endpoint)) registered.remove(endpoint) else registered[endpoint]?.state = ProgramRuntimeState.Idle
@@ -386,7 +394,7 @@ class NativeProgramRuntimeService(
         checkOwner()
         require(maximumEvents >= 0)
         val started = nanoTime()
-        retryTurns(maximumEvents, deadlineNanos)
+        retryFrames(maximumEvents, deadlineNanos)
         val events = runtime.pump(maximumEvents, maximumCommandAttempts, deadlineNanos)
         lastPumpEvents = events
         lastPumpNanos = (nanoTime() - started).coerceAtLeast(0)
@@ -412,7 +420,7 @@ class NativeProgramRuntimeService(
     override fun runtimeMetrics(): ProgramRuntimeActorMetrics {
         checkOwner()
         return ProgramRuntimeActorMetrics(
-            pendingRequests = runtime.pendingRequestCount + turns.size,
+            pendingRequests = runtime.pendingRequestCount + frames.size,
             deferredWorldRequests = null,
             totalDeferredWorldRequests = worldTotal,
             hostContinuationSamples = runtime.hostContinuationSamples,
@@ -471,24 +479,26 @@ class NativeProgramRuntimeService(
         val lease: ProgramRuntimeActorLease,
         var state: ProgramRuntimeState = ProgramRuntimeState.Idle,
         var lastSubmittedTick: Long = -1,
-    )
+    ) {
+        var observerSource: ProgramRuntimeActorObserver? = null
+        var observer: ProgramRuntimeActorObserver? = null
+        var needsFrame = false
+        var worldObservedTick = -1L
+    }
 
     private class Usage(
         val tick: Long,
         val granted: Long,
-        val deadline: Long,
         var retired: Long = 0,
     )
 
-    private class Turn(
+    private class Frame(
         val endpoint: VmActorEndpoint,
         val effects: List<ProgramRuntimeActorEffect>,
-        val completion: ProgramRuntimeTurnCompletion,
+        val observer: ProgramRuntimeActorObserver,
     ) {
         var tick = -1L
         var allowance = 0
         var deadline = Long.MAX_VALUE
-        var granted = false
-        var worldObserved = false
     }
 }

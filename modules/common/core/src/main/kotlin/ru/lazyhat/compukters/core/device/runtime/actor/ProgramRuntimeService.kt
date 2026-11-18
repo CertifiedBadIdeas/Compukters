@@ -5,6 +5,7 @@
  */
 package ru.lazyhat.compukters.core.device.runtime.actor
 
+import ru.lazyhat.compukters.api.addon.ProgramAddonAction
 import ru.lazyhat.compukters.api.addon.ProgramAddonHost
 import ru.lazyhat.compukters.core.device.runtime.compiler.CompilerCompletionRouter
 import ru.lazyhat.compukters.core.device.runtime.program.ProgramTickBudget
@@ -41,16 +42,31 @@ abstract class ProgramRuntimeService : ProgramRuntimeLifecycle {
         command: (ProgramRuntimeRequestId) -> ProgramRuntimeActorCommand,
     ): CompletableFuture<ProgramRuntimeActorReply>
 
-    open fun turn(
+    open fun frame(
         endpoint: VmActorEndpoint,
         worldTick: Long,
         effects: List<ProgramRuntimeActorEffect> = emptyList(),
-    ): CompletableFuture<ProgramRuntimeActorReply> {
-        val future = CompletableFuture<ProgramRuntimeActorReply>()
+    ): CompletableFuture<ProgramRuntimeActorObservation> {
+        val future = CompletableFuture<ProgramRuntimeActorObservation>()
         val admission =
-            carrierRuntime.submitTurn(endpoint, worldTick, effects) { reply, failure ->
-                if (failure == null) future.complete(checkNotNull(reply)) else future.completeExceptionally(failure)
-            }
+            carrierRuntime.submitFrame(
+                endpoint,
+                worldTick,
+                effects,
+                object : ProgramRuntimeActorObserver {
+                    override fun addonAction(action: ProgramAddonAction) {
+                        check(action !is ProgramAddonAction.Request) { "host requests require a carrier observer" }
+                    }
+
+                    override fun updated(observation: ProgramRuntimeActorObservation) {
+                        if (observation.worldTick >= worldTick) future.complete(observation)
+                    }
+
+                    override fun failed(failure: Throwable) {
+                        future.completeExceptionally(failure)
+                    }
+                },
+            )
         if (admission != VmActorSubmission.ACCEPTED) future.completeExceptionally(ProgramRuntimeActorRequestException(admission))
         return future
     }

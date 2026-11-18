@@ -141,7 +141,7 @@ class NativeFleetActorRuntimeServiceTest {
             assertTrue(refused.isCompletedExceptionally)
             assertTrue(h.closedMachines.isEmpty())
             assertEquals(ProgramRuntimeState.Running, h.hosts.getValue(1).state)
-            assertTrue(h.service.grantFrame(endpoint, 1, 100))
+            assertTrue(h.configureFrame(endpoint, 1, 100))
             val query = h.service.request(endpoint, ProgramRuntimeActorCommand::FileSystemGeneration)
             h.service.pump(0, 1)
             h.events += ExperimentalFleetEvent.FilesystemGeneration(1, h.queries.last(), 7)
@@ -376,10 +376,10 @@ class NativeFleetActorRuntimeServiceTest {
                 }
             h.service.pump(0, 1)
             val request = h.queries.single()
-            assertTrue(h.service.grantFrame(endpoint, 1, 30))
+            assertTrue(h.configureFrame(endpoint, 1, 30))
             assertEquals(
                 VmActorSubmission.ACCEPTED,
-                h.service.submitTurn(
+                h.submitFrame(
                     endpoint,
                     1,
                     listOf(ProgramRuntimeActorEffect.RedstoneInput(0)),
@@ -434,17 +434,17 @@ class NativeFleetActorRuntimeServiceTest {
         }
 
     @Test
-    fun `world observations preserve successive output updates before final credit settlement`() =
+    fun `world observations preserve successive output updates within one frame`() =
         Harness().use { h ->
             val endpoint = h.register(1)
             val actions = mutableListOf<ProgramWorldRequest>()
             var done = false
-            h.service.grantFrame(endpoint, 1, 30)
-            h.service.submitTurn(
+            h.configureFrame(endpoint, 1, 30)
+            h.submitFrame(
                 endpoint,
                 1,
                 emptyList(),
-                object : ProgramRuntimeTurnObserver {
+                object : RecordingActorObserver() {
                     override fun addonAction(action: ProgramAddonAction) = error("unexpected addon")
 
                     override fun worldRequest(request: ProgramWorldRequest): ProgramWorldResult {
@@ -487,13 +487,13 @@ class NativeFleetActorRuntimeServiceTest {
             val second = h.register(2)
             var failed: Throwable? = null
             var done = false
-            h.service.grantFrame(first, 1, 30)
-            h.service.grantFrame(second, 1, 30)
-            h.service.submitTurn(
+            h.configureFrame(first, 1, 30)
+            h.configureFrame(second, 1, 30)
+            h.submitFrame(
                 first,
                 1,
                 emptyList(),
-                object : ProgramRuntimeTurnObserver {
+                object : RecordingActorObserver() {
                     override fun addonAction(action: ProgramAddonAction) = Unit
 
                     override fun worldRequest(request: ProgramWorldRequest): ProgramWorldResult = error("invalid request reached world")
@@ -506,7 +506,7 @@ class NativeFleetActorRuntimeServiceTest {
                     }
                 },
             )
-            h.service.submitTurn(second, 1, emptyList()) { _, failure -> done = failure == null }
+            h.submitFrame(second, 1, emptyList()) { _, failure -> done = failure == null }
             h.events +=
                 ExperimentalFleetEvent.Outcome(
                     1,
@@ -516,7 +516,7 @@ class NativeFleetActorRuntimeServiceTest {
             h.events += ExperimentalFleetEvent.Quiescent(1, 1, 3, false)
             h.events += ExperimentalFleetEvent.Quiescent(2, 1, 3, false)
             h.service.pump(8, 0)
-            assertIs<IllegalArgumentException>(failed)
+            assertIs<ProgramRuntimeActorFailedException>(failed)
             assertTrue(done)
             assertTrue(h.observedEvents.isEmpty())
         }
@@ -526,12 +526,12 @@ class NativeFleetActorRuntimeServiceTest {
         Harness(maximumRequests = 2).use { h ->
             val endpoint = h.register(1)
             val replies = (1L..3L).map { ProgramAddonCompletion(VmHostRequestIdentity(1, it), HostResponse.UnitSuccess) }
-            assertTrue(h.service.grantFrame(endpoint, 1, 20))
+            assertTrue(h.configureFrame(endpoint, 1, 20))
             assertEquals(
                 2,
                 h.service.submitHostCompletions(endpoint, replies.map { ProgramRuntimeHostCompletion.Reply(it.identity, it.response) }),
             )
-            assertEquals(VmActorSubmission.MAILBOX_FULL, h.service.submitTurn(endpoint, 1, emptyList()) { _, _ -> })
+            assertEquals(VmActorSubmission.MAILBOX_FULL, h.submitFrame(endpoint, 1, emptyList()) { _, _ -> })
             h.service.pump(0, 2)
             assertEquals(
                 1,
@@ -545,7 +545,7 @@ class NativeFleetActorRuntimeServiceTest {
             var completed = false
             assertEquals(
                 VmActorSubmission.ACCEPTED,
-                h.service.submitTurn(endpoint, 1, emptyList()) { _, failure -> completed = failure == null },
+                h.submitFrame(endpoint, 1, emptyList()) { _, failure -> completed = failure == null },
             )
             h.service.pump(0, 2)
             h.events += ExperimentalFleetEvent.Quiescent(1, 1, 3, false)
@@ -561,10 +561,10 @@ class NativeFleetActorRuntimeServiceTest {
             val second = h.register(2)
             var failed: Throwable? = null
             var completed = false
-            assertTrue(h.service.grantFrame(first, 1, 20))
-            assertTrue(h.service.grantFrame(second, 1, 20))
-            h.service.submitTurn(first, 1, emptyList()) { _, failure -> failed = failure }
-            h.service.submitTurn(second, 1, emptyList()) { reply, failure -> completed = reply != null && failure == null }
+            assertTrue(h.configureFrame(first, 1, 20))
+            assertTrue(h.configureFrame(second, 1, 20))
+            h.submitFrame(first, 1, emptyList()) { _, failure -> failed = failure }
+            h.submitFrame(second, 1, emptyList()) { reply, failure -> completed = reply != null && failure == null }
             val query = h.service.request(first, ProgramRuntimeActorCommand::FileSystemGeneration)
             h.events += ExperimentalFleetEvent.Error(1, "invalid host response")
             h.events += ExperimentalFleetEvent.Quiescent(2, 1, 3, false)
@@ -572,8 +572,8 @@ class NativeFleetActorRuntimeServiceTest {
             assertIs<ProgramRuntimeActorFailedException>(failed)
             assertTrue(query.isCompletedExceptionally)
             assertTrue(completed)
-            assertFalse(h.service.grantFrame(first, 2, 20))
-            assertTrue(h.service.grantFrame(second, 2, 20))
+            assertFalse(h.configureFrame(first, 2, 20))
+            assertTrue(h.configureFrame(second, 2, 20))
             assertEquals(7L, checkNotNull(h.leases[1]).closeAsync().get(5, TimeUnit.SECONDS))
             h.service.pump(8, 0) // Reap completed close entries, then join the original lease again.
             assertEquals(7L, checkNotNull(h.leases[1]).closeAsync().get(5, TimeUnit.SECONDS))
@@ -629,7 +629,7 @@ class NativeFleetActorRuntimeServiceTest {
             assertFailsWith<ProgramActorCloseDeferredException> { lease.reserveClose(request) }
             h.service.pump(0, 10)
             assertTrue(h.replies.isEmpty())
-            assertTrue(h.service.grantFrame(endpoint, 10, 8))
+            assertTrue(h.configureFrame(endpoint, 10, 8))
             assertEquals(7L, lease.closeAsync().get(5, TimeUnit.SECONDS))
             assertTrue(h.captured.isEmpty())
         }
@@ -668,11 +668,13 @@ class NativeFleetActorRuntimeServiceTest {
     fun `checkpoint admission refusal preserves actor and stale ticks refuse before fencing`() =
         Harness(byteLimits = NativeFleetOutboxLimits(128, 128)).use { h ->
             val endpoint = h.register(1)
-            assertTrue(h.service.grantFrame(endpoint, 10, 8))
+            assertTrue(h.configureFrame(endpoint, 10, 8))
+            assertEquals(VmActorSubmission.ACCEPTED, h.submitFrame(endpoint, 10, emptyList()) { _, _ -> })
+            h.service.pump(0, 8)
             assertFailsWith<IllegalArgumentException> { h.service.hibernate(endpoint, 9, byteArrayOf()) }
             val refused = checkNotNull(h.service.hibernate(endpoint, 10, ByteArray(128)))
             assertFailsWith<ExecutionException> { refused.get(5, TimeUnit.SECONDS) }
-            assertTrue(h.service.grantFrame(endpoint, 11, 8))
+            assertTrue(h.configureFrame(endpoint, 11, 8))
             assertEquals(7L, checkNotNull(h.service.stop(endpoint)).get(5, TimeUnit.SECONDS))
             assertTrue(h.captured.isEmpty())
         }
@@ -705,36 +707,27 @@ class NativeFleetActorRuntimeServiceTest {
         }
 
     @Test
-    fun `frame is not refilled and continuation reports only newly retired instructions`() =
+    fun `progress remains observable after quiescence without another grant`() =
         Harness().use { h ->
             val endpoint = h.register(1)
             val replies = mutableListOf<ProgramRuntimeActorReply>()
-            val completion =
-                ProgramRuntimeTurnCompletion { reply, error ->
-                    check(error == null)
+            val observer =
+                testObserver { reply, failure ->
+                    check(failure == null)
                     replies += checkNotNull(reply)
                 }
-            assertTrue(h.service.grantFrame(endpoint, 4, 20))
-            val runtime: ActorRuntimeService = h.service
-            assertEquals(VmActorSubmission.ACCEPTED, runtime.submitTurn(endpoint, 4, emptyList(), completion))
-            assertFalse(h.service.grantFrame(endpoint, 5, 100))
-            assertEquals(VmActorSubmission.PERMIT_PENDING, runtime.submitTurn(endpoint, 4, emptyList(), completion))
+            assertTrue(h.configureFrame(endpoint, 4, 20))
+            assertEquals(VmActorSubmission.ACCEPTED, h.submitFrame(endpoint, 4, emptyList(), observer))
+            assertEquals(VmActorSubmission.PERMIT_PENDING, h.submitFrame(endpoint, 4, emptyList(), observer))
             h.service.pump(0, 10)
             h.events += ExperimentalFleetEvent.Quiescent(1, 4, 6, false)
             h.service.pump(10, 10)
-            assertFalse(h.service.grantFrame(endpoint, 4, 100))
-            assertTrue(runtime.continueTurn(endpoint, 4, emptyList(), completion))
-            h.service.pump(0, 10)
             h.events += ExperimentalFleetEvent.Quiescent(1, 4, 10, false)
             h.service.pump(10, 10)
-            assertEquals(listOf(20, 14), h.grants.map { it.second })
-            assertEquals(listOf(6L, 4L), replies.map { it.retiredInstructions })
-            // A duplicate report after settlement completes nothing and creates no new grant.
-            h.events += ExperimentalFleetEvent.Quiescent(1, 4, 10, false)
-            h.service.pump(10, 10)
-            assertEquals(2, replies.size)
-            assertTrue(h.service.grantFrame(endpoint, 5, 3))
-            assertEquals(VmActorSubmission.ACCEPTED, runtime.submitTurn(endpoint, 5, emptyList(), completion))
+            assertEquals(listOf(20), h.grants.map { it.second })
+            assertEquals(listOf(6L, 10L), replies.map { it.retiredInstructions })
+            assertTrue(h.configureFrame(endpoint, 5, 3))
+            assertEquals(VmActorSubmission.ACCEPTED, h.submitFrame(endpoint, 5, emptyList(), observer))
         }
 
     @Test
@@ -765,15 +758,15 @@ class NativeFleetActorRuntimeServiceTest {
             val original = h.register(1)
             val query = h.service.request(original, ProgramRuntimeActorCommand::FileSystemGeneration)
             val reply = CompletableFuture<ProgramRuntimeActorReply>()
-            assertTrue(h.service.grantFrame(original, 1, 20))
+            assertTrue(h.configureFrame(original, 1, 20))
             assertEquals(
                 VmActorSubmission.ACCEPTED,
-                h.service.submitTurn(original, 1, emptyList()) { value, failure ->
+                h.submitFrame(original, 1, emptyList()) { value, failure ->
                     if (failure == null) reply.complete(value) else reply.completeExceptionally(failure)
                 },
             )
             val stopped = checkNotNull(h.service.stop(original))
-            assertEquals(VmActorSubmission.CLOSED, h.service.submitTurn(original, 1, emptyList()) { _, _ -> error("not accepted") })
+            assertEquals(VmActorSubmission.CLOSED, h.submitFrame(original, 1, emptyList()) { _, _ -> error("not accepted") })
             h.service.pump(0, 10)
             h.service.pump(10, 10)
             assertEquals(7L, stopped.join())
@@ -786,8 +779,8 @@ class NativeFleetActorRuntimeServiceTest {
             h.events += ExperimentalFleetEvent.FilesystemGeneration(1, h.queries.first(), 999)
             h.service.pump(10, 10)
             assertTrue(h.observed.isEmpty())
-            assertTrue(h.service.grantFrame(replacement, 2, 10))
-            assertFalse(h.service.grantFrame(original, 2, 10))
+            assertTrue(h.configureFrame(replacement, 2, 10))
+            assertFalse(h.configureFrame(original, 2, 10))
         }
 
     @Test
@@ -795,11 +788,11 @@ class NativeFleetActorRuntimeServiceTest {
         Harness().use { h ->
             val a = h.register(1)
             val b = h.register(2)
-            assertTrue(h.service.grantFrame(a, 1, 10, 100))
+            assertTrue(h.configureFrame(a, 1, 10, 100))
             var expiredCompleted = false
             assertEquals(
                 VmActorSubmission.ACCEPTED,
-                h.service.submitTurn(a, 1, emptyList()) { reply, failure ->
+                h.submitFrame(a, 1, emptyList()) { reply, failure ->
                     assertNull(failure)
                     assertEquals(0L, checkNotNull(reply).retiredInstructions)
                     expiredCompleted = true
@@ -809,14 +802,13 @@ class NativeFleetActorRuntimeServiceTest {
             h.events += ExperimentalFleetEvent.Quiescent(1, 1, 0, false)
             h.service.pump(1, 0)
             assertTrue(expiredCompleted)
-            assertFalse(h.service.continueTurn(a, 1, emptyList()) { _, _ -> error("expired continuation") })
-            assertTrue(h.service.grantFrame(a, 2, 10))
-            assertTrue(h.service.grantFrame(b, 2, 10))
-            assertEquals(VmActorSubmission.ACCEPTED, h.service.submitTurn(a, 2, emptyList()) { _, _ -> error("observer failed") })
+            assertTrue(h.configureFrame(a, 2, 10))
+            assertTrue(h.configureFrame(b, 2, 10))
+            assertEquals(VmActorSubmission.ACCEPTED, h.submitFrame(a, 2, emptyList()) { _, _ -> error("observer failed") })
             var completed = false
             assertEquals(
                 VmActorSubmission.ACCEPTED,
-                h.service.submitTurn(b, 2, emptyList()) { _, error ->
+                h.submitFrame(b, 2, emptyList()) { _, error ->
                     check(error == null)
                     completed =
                         true
@@ -835,9 +827,9 @@ class NativeFleetActorRuntimeServiceTest {
     fun `stop drains a full outbox without owner pumping and cancellation cannot cancel its barrier`() {
         Harness(maximumRequests = 1).use { h ->
             val endpoint = h.register(1)
-            assertTrue(h.service.grantFrame(endpoint, 1, 10))
+            assertTrue(h.configureFrame(endpoint, 1, 10))
             val query = h.service.request(endpoint, ProgramRuntimeActorCommand::FileSystemGeneration)
-            assertEquals(VmActorSubmission.MAILBOX_FULL, h.service.submitTurn(endpoint, 1, emptyList()) { _, _ -> error("rejected") })
+            assertEquals(VmActorSubmission.MAILBOX_FULL, h.submitFrame(endpoint, 1, emptyList()) { _, _ -> error("rejected") })
             h.holdLifecycle = true
             val second =
                 try {
@@ -877,17 +869,17 @@ class NativeFleetActorRuntimeServiceTest {
         Harness().use { h ->
             val endpoint = h.register(1)
             val states = mutableListOf<ProgramRuntimeState>()
-            val completion = ProgramRuntimeTurnCompletion { reply, failure -> if (failure == null) states += checkNotNull(reply).state }
-            assertTrue(h.service.grantFrame(endpoint, 1, 10))
-            assertEquals(VmActorSubmission.ACCEPTED, h.service.submitTurn(endpoint, 1, emptyList(), completion))
+            val completion = testObserver { reply, failure -> if (failure == null) states += checkNotNull(reply).state }
+            assertTrue(h.configureFrame(endpoint, 1, 10))
+            assertEquals(VmActorSubmission.ACCEPTED, h.submitFrame(endpoint, 1, emptyList(), completion))
             h.service.pump(0, 8)
             h.events += ExperimentalFleetEvent.Outcome(1, 1, VmOutcome.WaitingForTerminalEvent)
             h.events += ExperimentalFleetEvent.Quiescent(1, 1, 0, false)
             h.service.pump(8, 8)
-            assertTrue(h.service.grantFrame(endpoint, 2, 10))
+            assertTrue(h.configureFrame(endpoint, 2, 10))
             assertEquals(
                 VmActorSubmission.ACCEPTED,
-                h.service.submitTurn(endpoint, 2, listOf(ProgramRuntimeActorEffect.RedstoneInput(0)), completion),
+                h.submitFrame(endpoint, 2, listOf(ProgramRuntimeActorEffect.RedstoneInput(0)), completion),
             )
             h.service.pump(0, 8)
             h.events += ExperimentalFleetEvent.Quiescent(1, 2, 0, false)
@@ -913,15 +905,15 @@ class NativeFleetActorRuntimeServiceTest {
             val identity = VmHostRequestIdentity(1, 1)
             val effects =
                 listOf(ProgramRuntimeActorEffect.CompleteAddons(listOf(ProgramAddonCompletion(identity, HostResponse.UnitSuccess))))
-            assertTrue(h.service.grantFrame(endpoint, 4, 20))
+            assertTrue(h.configureFrame(endpoint, 4, 20))
             h.service.request(endpoint, ProgramRuntimeActorCommand::FileSystemGeneration)
             val results = mutableListOf<ProgramRuntimeActorReply>()
-            val completion = ProgramRuntimeTurnCompletion { reply, failure -> if (failure == null) results += checkNotNull(reply) }
-            assertEquals(VmActorSubmission.MAILBOX_FULL, h.service.submitTurn(endpoint, 4, effects, completion))
+            val completion = testObserver { reply, failure -> if (failure == null) results += checkNotNull(reply) }
+            assertEquals(VmActorSubmission.MAILBOX_FULL, h.submitFrame(endpoint, 4, effects, completion))
             assertTrue(h.replies.isEmpty() && h.grants.isEmpty())
             h.service.pump(0, 8)
             h.busyReplies = true
-            assertEquals(VmActorSubmission.ACCEPTED, h.service.submitTurn(endpoint, 4, effects, completion))
+            assertEquals(VmActorSubmission.ACCEPTED, h.submitFrame(endpoint, 4, effects, completion))
             h.service.pump(0, 8)
             assertTrue(h.replies.isEmpty() && h.grants.isEmpty())
             h.busyReplies = false
@@ -933,9 +925,8 @@ class NativeFleetActorRuntimeServiceTest {
             h.events += ExperimentalFleetEvent.Quiescent(1, 4, 6, false)
             h.service.pump(8, 0)
             assertEquals(6L, results.single().retiredInstructions)
-            assertTrue(h.service.continueTurn(endpoint, 4, emptyList(), completion))
             h.service.pump(0, 8)
-            assertEquals(listOf(1L to 20, 1L to 14), h.grants)
+            assertEquals(listOf(1L to 20), h.grants)
         }
     }
 
@@ -944,13 +935,13 @@ class NativeFleetActorRuntimeServiceTest {
         Harness().use { h ->
             val endpoint = h.register(1)
             val identity = VmHostRequestIdentity(1, 1)
-            assertTrue(h.service.grantFrame(endpoint, 1, 10))
+            assertTrue(h.configureFrame(endpoint, 1, 10))
             val turn = CompletableFuture<ProgramRuntimeActorReply>()
             val effects =
                 listOf(ProgramRuntimeActorEffect.CompleteAddons(listOf(ProgramAddonCompletion(identity, HostResponse.UnitSuccess))))
             assertEquals(
                 VmActorSubmission.ACCEPTED,
-                h.service.submitTurn(endpoint, 1, effects) { reply, failure ->
+                h.submitFrame(endpoint, 1, effects) { reply, failure ->
                     if (failure == null) turn.complete(reply) else turn.completeExceptionally(failure)
                 },
             )
@@ -976,7 +967,7 @@ class NativeFleetActorRuntimeServiceTest {
     fun `flattened completion count and invalid payload cannot consume a frame on refusal`() {
         Harness(maximumRequests = 2).use { h ->
             val endpoint = h.register(1)
-            assertTrue(h.service.grantFrame(endpoint, 1, 10))
+            assertTrue(h.configureFrame(endpoint, 1, 10))
             val tooMany =
                 listOf(
                     ProgramRuntimeActorEffect.CompleteAddons(
@@ -986,7 +977,7 @@ class NativeFleetActorRuntimeServiceTest {
                         ),
                     ),
                 )
-            assertEquals(VmActorSubmission.MAILBOX_FULL, h.service.submitTurn(endpoint, 1, tooMany) { _, _ -> error("rejected") })
+            assertEquals(VmActorSubmission.MAILBOX_FULL, h.submitFrame(endpoint, 1, tooMany) { _, _ -> error("rejected") })
             val invalid =
                 listOf(
                     ProgramRuntimeActorEffect.CompleteAddons(
@@ -995,8 +986,8 @@ class NativeFleetActorRuntimeServiceTest {
                         ),
                     ),
                 )
-            assertFailsWith<IllegalArgumentException> { h.service.submitTurn(endpoint, 1, invalid) { _, _ -> error("invalid") } }
-            assertEquals(VmActorSubmission.ACCEPTED, h.service.submitTurn(endpoint, 1, emptyList()) { _, _ -> })
+            assertFailsWith<IllegalArgumentException> { h.submitFrame(endpoint, 1, invalid) { _, _ -> error("invalid") } }
+            assertEquals(VmActorSubmission.ACCEPTED, h.submitFrame(endpoint, 1, emptyList()) { _, _ -> })
             h.service.pump(0, 8)
             assertTrue(h.replies.isEmpty())
             assertEquals(listOf(1L to 10), h.grants)
@@ -1004,11 +995,11 @@ class NativeFleetActorRuntimeServiceTest {
     }
 
     @Test
-    fun `automatic native execution is rejected before allocating a dispatcher`() {
+    fun `legacy scheduling mode is rejected before allocating a dispatcher`() {
         val uncoordinated =
             Proxy.newProxyInstance(ExperimentalFleet::class.java.classLoader, arrayOf(ExperimentalFleet::class.java)) { _, method, _ ->
-                check(method.name == "getCoordinatedTurns") { "uncoordinated fleet must not start a dispatcher" }
-                false
+                check(method.name == "getExecutionMode") { "legacy fleet must not start a dispatcher" }
+                ru.lazyhat.compukters.lang.runtime.vm.FleetExecutionMode.COORDINATED_TURNS
             } as ExperimentalFleet
         assertFailsWith<IllegalArgumentException> {
             NativeFleetActorRuntimeService(uncoordinated, 4, 16, 16, {}, {}, { _, _ -> }, onActorClosing = {})
@@ -1047,8 +1038,8 @@ class NativeFleetActorRuntimeServiceTest {
     fun `only acknowledged terminal input wakes host and cancelled input still reconciles state`() {
         Harness().use { h ->
             val endpoint = h.register(1)
-            assertTrue(h.service.grantFrame(endpoint, 1, 10))
-            assertEquals(VmActorSubmission.ACCEPTED, h.service.submitTurn(endpoint, 1, emptyList()) { _, _ -> })
+            assertTrue(h.configureFrame(endpoint, 1, 10))
+            assertEquals(VmActorSubmission.ACCEPTED, h.submitFrame(endpoint, 1, emptyList()) { _, _ -> })
             h.service.pump(0, 8)
             h.events += ExperimentalFleetEvent.Outcome(1, 1, VmOutcome.WaitingForTerminalEvent)
             h.events += ExperimentalFleetEvent.Quiescent(1, 1, 0, false)
@@ -1129,7 +1120,7 @@ class NativeFleetActorRuntimeServiceTest {
             val actions = mutableListOf<ProgramAddonAction>()
             val replies = mutableListOf<ProgramRuntimeActorReply>()
             val observer =
-                object : ProgramRuntimeTurnObserver {
+                object : RecordingActorObserver() {
                     override fun addonAction(action: ProgramAddonAction) {
                         actions += action
                     }
@@ -1142,8 +1133,8 @@ class NativeFleetActorRuntimeServiceTest {
                         replies += checkNotNull(reply)
                     }
                 }
-            assertTrue(h.service.grantFrame(endpoint, 4, 20))
-            assertEquals(VmActorSubmission.ACCEPTED, h.service.submitTurn(endpoint, 4, emptyList(), observer))
+            assertTrue(h.configureFrame(endpoint, 4, 20))
+            assertEquals(VmActorSubmission.ACCEPTED, h.submitFrame(endpoint, 4, emptyList(), observer))
             val request = VmHostRequest(1, capability, 0, emptyList())
             h.events += ExperimentalFleetEvent.Outcome(1, 4, VmOutcome.ProcessEntered(1))
             h.events += ExperimentalFleetEvent.Outcome(1, 4, VmOutcome.HostRequestBatch(listOf(request)))
@@ -1152,8 +1143,6 @@ class NativeFleetActorRuntimeServiceTest {
             h.events += ExperimentalFleetEvent.Outcome(1, 4, VmOutcome.ProcessExited(2))
             h.service.pump(10, 10)
             assertTrue(replies.isEmpty())
-            assertFalse(h.service.grantFrame(endpoint, 5, 20))
-            assertFalse(h.service.continueTurn(endpoint, 4, emptyList(), observer))
             assertTrue(h.observed.isEmpty())
             assertEquals(listOf(1L, 2L), actions.filterIsInstance<ProgramAddonAction.Request>().map { it.request.programId })
             assertEquals(
@@ -1170,9 +1159,8 @@ class NativeFleetActorRuntimeServiceTest {
             h.events += ExperimentalFleetEvent.Quiescent(1, 4, 6, false)
             h.service.pump(10, 10)
             assertEquals(listOf(6L), replies.map { it.retiredInstructions })
-            assertTrue(h.service.continueTurn(endpoint, 4, emptyList(), observer))
             h.service.pump(0, 10)
-            assertEquals(listOf(20, 14), h.grants.map { it.second })
+            assertEquals(listOf(20), h.grants.map { it.second })
         }
     }
 
@@ -1185,7 +1173,7 @@ class NativeFleetActorRuntimeServiceTest {
             var deliveries = 0
             var canceled = false
             val observer =
-                object : ProgramRuntimeTurnObserver {
+                object : RecordingActorObserver() {
                     override fun addonAction(action: ProgramAddonAction) {
                         deliveries++
                         checkNotNull(h.service.stop(endpoint))
@@ -1199,8 +1187,8 @@ class NativeFleetActorRuntimeServiceTest {
                         canceled = failure is java.util.concurrent.CancellationException
                     }
                 }
-            assertTrue(h.service.grantFrame(endpoint, 4, 20))
-            h.service.submitTurn(endpoint, 4, emptyList(), observer)
+            assertTrue(h.configureFrame(endpoint, 4, 20))
+            h.submitFrame(endpoint, 4, emptyList(), observer)
             h.events +=
                 ExperimentalFleetEvent.Outcome(
                     1,
@@ -1227,7 +1215,7 @@ class NativeFleetActorRuntimeServiceTest {
             var failed = false
             var otherCompleted = false
             val observer =
-                object : ProgramRuntimeTurnObserver {
+                object : RecordingActorObserver() {
                     override fun addonAction(action: ProgramAddonAction) {
                         deliveries++
                         error("handler failed")
@@ -1240,10 +1228,10 @@ class NativeFleetActorRuntimeServiceTest {
                         failed = failure is IllegalStateException
                     }
                 }
-            assertTrue(h.service.grantFrame(a, 4, 20))
-            assertTrue(h.service.grantFrame(b, 4, 20))
-            h.service.submitTurn(a, 4, emptyList(), observer)
-            h.service.submitTurn(b, 4, emptyList()) { _, failure ->
+            assertTrue(h.configureFrame(a, 4, 20))
+            assertTrue(h.configureFrame(b, 4, 20))
+            h.submitFrame(a, 4, emptyList(), observer)
+            h.submitFrame(b, 4, emptyList()) { _, failure ->
                 check(failure == null)
                 otherCompleted = true
             }
@@ -1260,12 +1248,12 @@ class NativeFleetActorRuntimeServiceTest {
             h.service.pump(10, 10)
             assertEquals(1, deliveries)
             assertTrue(failed && otherCompleted)
-            assertTrue(h.service.grantFrame(a, 5, 20))
+            assertFalse(h.configureFrame(a, 5, 20))
         }
     }
 
     @Test
-    fun `mixed batches forward only unmanaged requests and final-only callers retain the raw hook`() {
+    fun `mixed batches forward unmanaged requests while managed requests stream to the observer`() {
         for (streaming in listOf(false, true)) {
             Harness().use { h ->
                 val capability = CapabilityIdentity("test", "device", 1, 0)
@@ -1278,9 +1266,9 @@ class NativeFleetActorRuntimeServiceTest {
                         VmHostRequest(3, capability.copy(abiMinor = 1), 0, emptyList()),
                     )
                 var delivered = 0
-                val completion: ProgramRuntimeTurnCompletion =
+                val completion: ProgramRuntimeActorObserver =
                     if (streaming) {
-                        object : ProgramRuntimeTurnObserver {
+                        object : RecordingActorObserver() {
                             override fun addonAction(action: ProgramAddonAction) {
                                 delivered++
                                 assertEquals(requests[1].identity, assertIs<ProgramAddonAction.Request>(action).request.identity)
@@ -1292,16 +1280,16 @@ class NativeFleetActorRuntimeServiceTest {
                             ) = Unit
                         }
                     } else {
-                        ProgramRuntimeTurnCompletion { _, _ -> }
+                        testObserver { _, _ -> }
                     }
-                assertTrue(h.service.grantFrame(endpoint, 4, 20))
-                h.service.submitTurn(endpoint, 4, emptyList(), completion)
+                assertTrue(h.configureFrame(endpoint, 4, 20))
+                h.submitFrame(endpoint, 4, emptyList(), completion)
                 h.events += ExperimentalFleetEvent.Outcome(1, 4, VmOutcome.HostRequestBatch(requests))
                 h.service.pump(10, 10)
                 assertEquals(if (streaming) 1 else 0, delivered)
                 val forwarded =
                     assertIs<VmOutcome.HostRequestBatch>(assertIs<ExperimentalFleetEvent.Outcome>(h.observedEvents.single()).outcome)
-                assertEquals(if (streaming) listOf(requests[0], requests[2]) else requests, forwarded.requests)
+                assertEquals(listOf(requests[0], requests[2]), forwarded.requests)
             }
         }
     }
@@ -1312,7 +1300,7 @@ class NativeFleetActorRuntimeServiceTest {
             val endpoint = h.register(1)
             val actions = mutableListOf<ProgramAddonAction>()
             val observer =
-                object : ProgramRuntimeTurnObserver {
+                object : RecordingActorObserver() {
                     override fun addonAction(action: ProgramAddonAction) {
                         actions += action
                         checkNotNull(h.service.stop(endpoint))
@@ -1324,8 +1312,8 @@ class NativeFleetActorRuntimeServiceTest {
                         failure: Throwable?,
                     ) = Unit
                 }
-            assertTrue(h.service.grantFrame(endpoint, 4, 20))
-            h.service.submitTurn(endpoint, 4, emptyList(), observer)
+            assertTrue(h.configureFrame(endpoint, 4, 20))
+            h.submitFrame(endpoint, 4, emptyList(), observer)
             h.events += ExperimentalFleetEvent.Outcome(1, 4, VmOutcome.ProcessReplaced(0, 1))
             h.service.pump(10, 10)
             assertEquals(listOf<ProgramAddonAction>(ProgramAddonAction.Stopped(0)), actions)
@@ -1387,8 +1375,8 @@ class NativeFleetActorRuntimeServiceTest {
         private val fleet =
             Proxy.newProxyInstance(ExperimentalFleet::class.java.classLoader, arrayOf(ExperimentalFleet::class.java)) { _, method, args ->
                 when (method.name.substringBefore('-')) {
-                    "getCoordinatedTurns" -> {
-                        true
+                    "getExecutionMode" -> {
+                        ru.lazyhat.compukters.lang.runtime.vm.FleetExecutionMode.AUTONOMOUS_FRAMES
                     }
 
                     "redstoneInput" -> {
@@ -1414,10 +1402,25 @@ class NativeFleetActorRuntimeServiceTest {
                     }
 
                     "poll" -> {
-                        events.poll()
+                        events.poll()?.let { event ->
+                            if (event is ExperimentalFleetEvent.Quiescent && event.frame == null) {
+                                event.copy(
+                                    frame =
+                                        ru.lazyhat.compukters.lang.runtime.vm.FleetFrameProgress(
+                                            0,
+                                            0,
+                                            0,
+                                            0,
+                                            ru.lazyhat.compukters.lang.runtime.vm.FleetWaitReason.HOST,
+                                        ),
+                                )
+                            } else {
+                                event
+                            }
+                        }
                     }
 
-                    "grant" -> {
+                    "grantFrame" -> {
                         grants += (args!![0] as Long) to (args[2] as Int)
                         null
                     }
@@ -1516,6 +1519,50 @@ class NativeFleetActorRuntimeServiceTest {
                 handleClosing()
                 check(endpoint.computerId != cancellationFailureFor?.let { ComputerId.fromLongs(0, it) }) { "cancellation failed" }
             })
+
+        private data class FramePlan(
+            val tick: Long,
+            val retirements: Int,
+            val authorization: Long,
+        )
+
+        private val frames = mutableMapOf<VmActorEndpoint, FramePlan>()
+
+        fun configureFrame(
+            endpoint: VmActorEndpoint,
+            tick: Long,
+            retirements: Int,
+            authorization: Long = Long.MAX_VALUE,
+        ): Boolean {
+            if (!service.contains(endpoint) || tick <= (frames[endpoint]?.tick ?: -1L)) return false
+            frames[endpoint] = FramePlan(tick, retirements, authorization)
+            return true
+        }
+
+        fun submitFrame(
+            endpoint: VmActorEndpoint,
+            tick: Long,
+            effects: List<ProgramRuntimeActorEffect>,
+            observer: ProgramRuntimeActorObserver,
+        ): VmActorSubmission {
+            val frame = frames[endpoint]?.takeIf { it.tick == tick } ?: return VmActorSubmission.MAILBOX_FULL
+            return service.submitFrame(
+                endpoint,
+                tick,
+                frame.retirements,
+                Long.MAX_VALUE,
+                frame.authorization,
+                effects,
+                observer,
+            )
+        }
+
+        fun submitFrame(
+            endpoint: VmActorEndpoint,
+            tick: Long,
+            effects: List<ProgramRuntimeActorEffect>,
+            completion: (ProgramRuntimeActorReply?, Throwable?) -> Unit,
+        ): VmActorSubmission = submitFrame(endpoint, tick, effects, testObserver(completion))
 
         private fun handleClosing() {
             check(Thread.currentThread() === owner)

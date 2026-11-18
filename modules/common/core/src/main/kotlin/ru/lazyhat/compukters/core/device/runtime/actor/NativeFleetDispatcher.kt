@@ -25,6 +25,7 @@ internal class NativeFleetDispatcher(
     deliver: (ExperimentalFleetEvent) -> Unit,
     byteLimits: NativeFleetOutboxLimits = NativeFleetOutboxLimits(),
     private val nanoTime: () -> Long = System::nanoTime,
+    private val prepareCommands: (Int, Long) -> Int = { _, _ -> 0 },
 ) : AutoCloseable {
     private var closed = false
     private var commandTurn = true
@@ -54,17 +55,23 @@ internal class NativeFleetDispatcher(
         outbox.beginFlush()
         var delivered = 0
         var attempted = 0
+        var prepared = 0
         var idleLanes = 0
         while (!closed && idleLanes < 2 && (deadlineNanos == Long.MAX_VALUE || nanoTime() - deadlineNanos < 0)) {
             val send = commandTurn
             // Retain the other lane's turn if this operation exhausts the deadline or fails.
             commandTurn = !commandTurn
             if (send) {
+                // Cost results observed on the previous event lane can be sent in this pump.
+                // Preparation has its own bounded allowance, so a full outbox cannot starve sends.
+                val preparations = if (prepared < maximumCommandAttempts) prepareCommands(1, deadlineNanos) else 0
+                check(preparations in 0..1)
+                prepared += preparations
                 if (attempted < maximumCommandAttempts && outbox.hasPendingCommands) {
                     attempted += outbox.sendNextGroup(maximumCommandAttempts - attempted, deadlineNanos)
                     idleLanes = 0
                 } else {
-                    idleLanes++
+                    idleLanes = if (preparations > 0) 0 else idleLanes + 1
                 }
             } else {
                 val count = if (delivered < maximumEvents && events.pollNext()) 1 else 0

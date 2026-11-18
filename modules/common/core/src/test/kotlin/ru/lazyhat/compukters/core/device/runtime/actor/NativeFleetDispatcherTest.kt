@@ -42,7 +42,7 @@ class NativeFleetDispatcherTest {
                         null
                     }
 
-                    "grant" -> {
+                    "grantFrame" -> {
                         if (busy) throw VmFleetBusyException("full")
                         assertTrue(now < args!![3] as Long, "grant must arrive before its deadline")
                         sent += args[0] as Long
@@ -58,7 +58,7 @@ class NativeFleetDispatcherTest {
         try {
             assertTrue(waiterEntered.await(5, TimeUnit.SECONDS))
             notifications.set(0) // Initial waiter notification has finished; no native events will arrive.
-            val grant = NativeFleetOutbox.Command.Grant(1, 4096, 2_500_000)
+            val grant = NativeFleetOutbox.Command.FrameGrant(1, 4096, Long.MAX_VALUE, 2_500_000)
             assertTrue(dispatcher.outbox.offer(1, listOf(grant)))
             assertTrue(dispatcher.outbox.offer(2, listOf(grant)))
             assertEquals(1, notifications.get(), "accepted commands must schedule owner work without a native event")
