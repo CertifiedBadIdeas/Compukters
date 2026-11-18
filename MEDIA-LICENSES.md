@@ -33,6 +33,12 @@ The single white pixel used by the configurator outline renderer is an original 
 covered by the Apache-2.0 contribution terms. Its [provenance record](licenses/media/Configurator-outline-PROVENANCE.md)
 identifies the introducing commit and the canonical license text.
 
+## Guest Kotlin source-root icons
+
+The IntelliJ adapter's light and dark purple folder icons are original Compukters resources covered by the
+Apache-2.0 contribution terms. Their [provenance record](licenses/media/Guest-source-root-icons-PROVENANCE.md)
+identifies the introducing commit. They are not part of the Minecraft mod archive.
+
 ## Boiler showcase screenshot
 
 The [boiler showcase screenshot](docs/assets/images/boiler_showcase.png) was captured by lazyhat for the documentation
