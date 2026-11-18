@@ -427,7 +427,11 @@ internal class NativeFleetOutbox(
                 ready.addLast(machine)
             }
         queue.add(first)
-        for (index in fromIndex until commands.size) queue.add(commands[index], commands.size - index)
+        NativeRuntimePerformanceTrace.command("queued", machine, first, nanoTime)
+        for (index in fromIndex until commands.size) {
+            queue.add(commands[index], commands.size - index)
+            NativeRuntimePerformanceTrace.command("queued", machine, commands[index], nanoTime)
+        }
         if (lifecycle != null) closing[machine] = lifecycle
         // Notify only; the owner runs native work later within its shared pump budget.
         if (!notificationPending) {
@@ -475,6 +479,7 @@ internal class NativeFleetOutbox(
             try {
                 checkNotNull(queue.first()).send(fleet, machine)
                 val accepted = queue.removeFirst()
+                NativeRuntimePerformanceTrace.command("sent", machine, accepted, nanoTime)
                 if (accepted is Command.Lifecycle) awaitingLifecycle.addLast(machine)
                 budget.release(1, accepted.retainedBytes)
                 true
@@ -548,6 +553,7 @@ internal class NativeFleetOutbox(
             val status = batch.wire.result(index)
             if (status == 0) {
                 val accepted = queue.removeFirst()
+                NativeRuntimePerformanceTrace.command("sent", machine, accepted, nanoTime)
                 budget.release(1, accepted.retainedBytes)
                 if (queue.size == 0) queues.remove(machine) else ready.addLast(machine)
             } else {

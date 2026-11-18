@@ -664,11 +664,20 @@ internal class NativeFleetActorRuntimeService(
         when (event) {
             is ExperimentalFleetEvent.Outcome -> {
                 val actor = machines[event.machine] ?: return
+                val outcome = event.outcome
+                if (outcome is VmOutcome.HostRequestBatch) {
+                    for (request in outcome.requests) NativeRuntimePerformanceTrace.request("request", event.machine, event.tick, request)
+                }
                 observeOutcome(actor, event)
             }
 
             is ExperimentalFleetEvent.Quiescent -> {
                 val actor = machines[event.machine] ?: return
+                NativeRuntimePerformanceTrace.begin("quiescent", event.machine)?.apply {
+                    tick = event.tick
+                    units = event.retired
+                    commit()
+                }
                 finishTurn(actor, event)
             }
 
@@ -714,6 +723,7 @@ internal class NativeFleetActorRuntimeService(
             is ExperimentalFleetEvent.Inspection -> {
                 val actor = machines[event.machine] ?: return
                 actor.host.requireFleetOwnership(fleet, actor.machine)
+                NativeRuntimePerformanceTrace.request("inspect", event.machine, event.tick, event.request)
                 val prepared = prepareCommandRequest(event.request, actor.host.currentProgramScope)
                 if (prepared != null) commandRequests.inspect(actor.machine, prepared) else onExternalEvent(actor.endpoint, event)
             }
