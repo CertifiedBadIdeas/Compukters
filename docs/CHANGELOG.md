@@ -15,6 +15,8 @@ headings so this page has one stable URL that can be shared outside the reposito
 
 - Guest execution uses the Rust worker pool on both supported Minecraft versions. The JVM execution scheduler
   and `vm.backend` selection are removed; world actions and persistence keep their existing owner boundaries.
+  Garbage collection and response preparation can continue within the same bounded frame even when a slice
+  retires no Guest instructions; genuinely idle slices still yield.
 
 - Guest Kotlin tooling can be prepared for independent compilation and execution without rebuilding the mod.
 
