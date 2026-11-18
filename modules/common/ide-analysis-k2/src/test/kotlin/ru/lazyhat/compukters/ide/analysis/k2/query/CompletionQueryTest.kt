@@ -1111,15 +1111,19 @@ class CompletionQueryTest {
     }
 
     @Test
-    fun `completion exposes generated declarative device methods and Unit command factories`() {
+    fun `completion exposes generated declarative device methods and typed command factories`() {
         val bundle = Path.of(requireNotNull(System.getProperty("compukters.test.declarativeAddonGuestApiFixture")))
         val source = "import declarative.Engine\nfun use(engine: Engine) { engine. }"
         for (attached in listOf(false, true)) {
             K2QueryFixture.sourceWithGuestApi(attached, "main.kt" to source, addonBundlePath = bundle).use { fixture ->
                 val items = fixture.complete("main.kt", source.indexOf("engine.") + "engine.".length).items
                 val names = items.map { it.insertText }.toSet()
-                assertTrue(names.containsAll(setOf("speed", "aim", "aimCommand", "close")), items.toString())
-                assertTrue("speedCommand" !in names && "closeCommand" !in names, items.toString())
+                assertTrue(
+                    names.containsAll(setOf("speed", "speedCommand", "aim", "aimCommand", "close", "closeCommand")),
+                    items.toString(),
+                )
+                assertEquals("Command<Float>", items.single { it.insertText == "speedCommand" }.callablePresentation?.returnType)
+                assertEquals("Command<Unit>", items.single { it.insertText == "closeCommand" }.callablePresentation?.returnType)
                 assertTrue(items.single { it.insertText == "aim" }.label.contains("Vector3d"), items.toString())
                 assertTrue(items.single { it.insertText == "aimCommand" }.label.contains("Vector3d"), items.toString())
             }

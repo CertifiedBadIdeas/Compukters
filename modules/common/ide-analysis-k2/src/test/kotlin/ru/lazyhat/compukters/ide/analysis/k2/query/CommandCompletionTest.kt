@@ -56,7 +56,7 @@ class CommandCompletionTest {
                         ?.returnType
                 assertEquals("Command<Unit>", returns("engine.setThrottleC", "setThrottleCommand"))
                 val awaited = returns("pending.aw", "await")
-                assertTrue(awaited == "List<CommandResult<Unit>>", "await returned $awaited")
+                assertTrue(awaited == "BatchResults<Unit>", "await returned $awaited")
                 assertEquals("Unit", returns("results[0].getOrT", "getOrThrow"))
             }
         }
