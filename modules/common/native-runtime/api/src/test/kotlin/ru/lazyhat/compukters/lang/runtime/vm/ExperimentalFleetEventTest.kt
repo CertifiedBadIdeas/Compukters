@@ -13,6 +13,22 @@ import kotlin.test.assertFails
 
 class ExperimentalFleetEventTest {
     @Test
+    fun `autonomous accounting preserves execution costs and rejects malformed limits and reasons`() {
+        val wire = ByteBuffer.allocate(47).order(ByteOrder.LITTLE_ENDIAN)
+            .put(19).putLong(7).putLong(12).putLong(3).put(0)
+            .putLong(1234).putInt(97).putInt(15).putInt(31).put(7).array()
+        assertEquals(ExperimentalFleetEvent.Quiescent(7, 12, 3, false,
+            FleetFrameProgress(1234, 97, 15, 31, FleetWaitReason.INSPECTION)), ExperimentalFleetEventWire.decode(wire))
+        for (end in 0 until wire.size) assertFails { ExperimentalFleetEventWire.decode(wire.copyOf(end)) }
+        assertFails { ExperimentalFleetEventWire.decode(wire + byteArrayOf(0)) }
+        for (offset in listOf(37, 41, 45, 46)) {
+            val malformed = wire.copyOf()
+            malformed[offset] = 255.toByte()
+            assertFails { ExperimentalFleetEventWire.decode(malformed) }
+        }
+    }
+
+    @Test
     fun `buffer decoder honors position limit and tags for heap direct and read only views`() {
         val wires =
             listOf(

@@ -27,7 +27,12 @@ including maintenance and possible OS descheduling; queue and host waiting charg
 slice can overrun and is charged in full. Expiring execution authorization remains independent of this
 compute allowance so server pause cannot leave Guest execution indefinitely authorized. Quiescent
 reports are observations in this mode and do not require another Grant before a reply/cost result can
-resume eligible execution. Coordinated low-level entrypoints retain their explicit turn boundary.
+resume eligible execution. Autonomous reports use fleet wire tag 19: the tag-8 fields are followed by
+cumulative execution nanoseconds u64, remaining instruction/request/advance quotas (three u32s), and a
+wait-reason u8. Reasons 0..11 are runnable, instructions, requests, advances, execution time,
+authorization, host, inspection, input, compilation, stopped, and replaced frame. Lifecycle reports
+preserve these fields. The Kotlin decoder rejects unknown reasons, negative signed counters and
+trailing or truncated records. Coordinated low-level entrypoints retain their explicit turn boundary.
 
 ## Native fleet scalar command batches
 

@@ -84,6 +84,19 @@ data class ExperimentalFleetTimer(
 }
 
 /** Events from the opt-in native fleet transport. Machine identities are local to a fleet. */
+enum class FleetWaitReason {
+    RUNNABLE, INSTRUCTIONS, REQUESTS, ADVANCES, EXECUTION_TIME, AUTHORIZATION,
+    HOST, INSPECTION, INPUT, COMPILATION, STOPPED, FRAME_REPLACED,
+}
+
+data class FleetFrameProgress(
+    val executionNanos: Long,
+    val instructionsLeft: Int,
+    val requestsLeft: Int,
+    val advancesLeft: Int,
+    val reason: FleetWaitReason,
+)
+
 sealed interface ExperimentalFleetEvent {
     data class Deployment(
         val machine: Long,
@@ -145,6 +158,7 @@ sealed interface ExperimentalFleetEvent {
         val tick: Long,
         val retired: Long,
         val timersPending: Boolean,
+        val frame: FleetFrameProgress? = null,
     ) : ExperimentalFleetEvent
 
     data class Compilation(
@@ -376,7 +390,7 @@ object ExperimentalFleetEventWire {
                 ExperimentalFleetEvent.Compilation(machine, tick, request)
             }
 
-            8 -> {
+            8, 19 -> {
                 val machine = long()
                 val tick = long()
                 val retired = long()
@@ -386,8 +400,17 @@ object ExperimentalFleetEventWire {
                         1 -> true
                         else -> throw IllegalArgumentException("invalid fleet timer state")
                     }
+                val frame = if (tag == 19) {
+                    val executionNanos = long()
+                    val instructions = input.int.also { require(it >= 0) }
+                    val requests = input.int.also { require(it >= 0) }
+                    val advances = input.int.also { require(it >= 0) }
+                    val reason = FleetWaitReason.entries.getOrNull(input.get().toInt() and 255)
+                        ?: throw IllegalArgumentException("invalid fleet wait reason")
+                    FleetFrameProgress(executionNanos, instructions, requests, advances, reason)
+                } else null
                 require(!input.hasRemaining()) { "trailing fleet accounting bytes" }
-                ExperimentalFleetEvent.Quiescent(machine, tick, retired, timersPending)
+                ExperimentalFleetEvent.Quiescent(machine, tick, retired, timersPending, frame)
             }
 
             0, 1 -> {

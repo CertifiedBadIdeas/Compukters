@@ -54,7 +54,9 @@ class JniExperimentalFleetIntegrationTest {
             fleet.grantFrame(machine, 1, 256, 1_000_000_000L, deadline)
             val inspection = nextEvent() as ExperimentalFleetEvent.Inspection
             // Waiting reports are observations; consuming them does not revoke credit.
-            assertTrue(nextEvent() is ExperimentalFleetEvent.Quiescent)
+            val waiting = nextEvent() as ExperimentalFleetEvent.Quiescent
+            assertEquals(FleetWaitReason.INSPECTION, waiting.frame?.reason)
+            assertTrue(requireNotNull(waiting.frame).instructionsLeft > 0)
             fleet.resolveCost(machine, inspection.request.identity, 1)
             var event = nextEvent()
             while (event is ExperimentalFleetEvent.Quiescent) event = nextEvent()
