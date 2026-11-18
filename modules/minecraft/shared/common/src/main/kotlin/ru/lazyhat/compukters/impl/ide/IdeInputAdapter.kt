@@ -515,10 +515,15 @@ class IdeInputAdapter(
                     if (entry.entry.kind !is ProjectFileKind.Directory) sink.dispatch(IdeCommand.OpenFile(entry.entry.path))
                 }
 
+                is IdeExplorerRow.ComputerRoot -> {
+                    val available = entry.state as? ru.lazyhat.compukters.ide.client.files.IdeComputerTreeState.Available
+                    if (available != null) sink.dispatch(IdeCommand.ToggleComputerDirectory(available.root.path))
+                }
+
                 is IdeExplorerRow.ComputerEntry -> {
                     when (entry.node) {
                         is IdeComputerNode.Directory -> {
-                            sink.dispatch(IdeCommand.ExpandComputerDirectory(entry.node.path))
+                            sink.dispatch(IdeCommand.ToggleComputerDirectory(entry.node.path))
                         }
 
                         is IdeComputerNode.File -> {
@@ -600,10 +605,6 @@ class IdeInputAdapter(
 
             IdeHitAction.MethodUsages -> {
                 false
-            }
-
-            IdeHitAction.Resolve -> {
-                dispatch(IdeCommand.Resolve)
             }
 
             IdeHitAction.Build -> {

@@ -143,7 +143,6 @@ enum class IdeHitAction {
     Rename,
     RenameSymbol,
     Delete,
-    Resolve,
     Format,
     Build,
     Cancel,

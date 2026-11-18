@@ -58,7 +58,7 @@ class IdeComputerFileCoordinatorTest {
         assertEquals(setOf(path("/")), available.expanded)
         assertIs<IdeComputerChildren.Unloaded>(available.root.childDirectory("home").children)
 
-        coordinator.expand(path("/home"))
+        coordinator.toggleDirectory(path("/home"))
         assertIs<IdeComputerChildren.Loading>(availableNow(coordinator).root.childDirectory("home").children)
         access.completeList("/home", listing(2, entry("hello", file(4))))
         coordinator.tick()
@@ -74,11 +74,64 @@ class IdeComputerFileCoordinatorTest {
     }
 
     @Test
+    fun `loaded directory collapses and reopens without another listing`() {
+        val access = ControlledAccess()
+        val coordinator = IdeComputerFileCoordinator(access)
+        loadRoot(coordinator, access)
+        coordinator.toggleDirectory(path("/home"))
+        access.completeList("/home", listing(2, entry("hello", file(4))))
+        coordinator.tick()
+        coordinator.toggleDirectory(path("/home"))
+        assertEquals(setOf(path("/")), availableNow(coordinator).expanded)
+        coordinator.toggleDirectory(path("/home"))
+        assertEquals(setOf(path("/"), path("/home")), availableNow(coordinator).expanded)
+        assertEquals(emptyList(), access.pendingListPaths())
+        assertEquals(
+            "hello",
+            availableNow(coordinator)
+                .root
+                .childDirectory("home")
+                .loadedChildren()
+                .single()
+                .name,
+        )
+    }
+
+    @Test
+    fun `directory collapsed while loading stays collapsed when response arrives`() {
+        val access = ControlledAccess()
+        val coordinator = IdeComputerFileCoordinator(access)
+        loadRoot(coordinator, access)
+        coordinator.toggleDirectory(path("/home"))
+        coordinator.toggleDirectory(path("/home"))
+        access.completeList("/home", listing(2, entry("hello", file(4))))
+        coordinator.tick()
+        assertEquals(setOf(path("/")), availableNow(coordinator).expanded)
+        assertIs<IdeComputerChildren.Loaded>(availableNow(coordinator).root.childDirectory("home").children)
+    }
+
+    @Test
+    fun `refresh preserves a collapsed computer root`() {
+        val access = ControlledAccess()
+        val coordinator = IdeComputerFileCoordinator(access)
+        loadRoot(coordinator, access)
+        coordinator.toggleDirectory(path("/"))
+        assertEquals(emptySet(), availableNow(coordinator).expanded)
+        coordinator.refresh()
+        access.completeStat("/", directory(1))
+        coordinator.tick()
+        access.completeList("/", listing(1, entry("home", directory(2))))
+        coordinator.tick()
+        assertEquals(emptySet(), availableNow(coordinator).expanded)
+        assertEquals(emptyList(), access.pendingListPaths())
+    }
+
+    @Test
     fun `refresh preserves surviving expansions and discards stale completions`() {
         val access = ControlledAccess()
         val coordinator = IdeComputerFileCoordinator(access)
         loadRoot(coordinator, access)
-        coordinator.expand(path("/home"))
+        coordinator.toggleDirectory(path("/home"))
         access.completeList("/home", listing(2, entry("old", file(4))))
         coordinator.tick()
 

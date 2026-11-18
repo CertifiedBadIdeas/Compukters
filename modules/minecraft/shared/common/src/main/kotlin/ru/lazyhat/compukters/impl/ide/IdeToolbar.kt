@@ -119,7 +119,6 @@ internal object IdeToolbar {
             selected = formatBusy,
         )
         action(IdeIconKind.Resolve, IdeHitAction.Peripherals, tooltip = "Named peripherals")
-        action(IdeIconKind.Resolve, IdeHitAction.Resolve, toolingReady, toolingUnavailable ?: "Resolve dependencies")
         if (IdeBusyOperation.Clone in busy || IdeBusyOperation.Git in busy) {
             action(IdeIconKind.Cancel, IdeHitAction.GitCancel, tooltip = "Cancel Git operation")
         } else if (build is IdeBuildState.Compiling || build is IdeBuildState.Saving) {

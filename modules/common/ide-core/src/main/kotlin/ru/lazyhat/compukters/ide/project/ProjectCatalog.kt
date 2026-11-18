@@ -360,8 +360,8 @@ class ProjectCatalog private constructor(
         private const val MAIN_FILENAME = "main.kt"
         private val DEFAULT_MAIN =
             """
-            // First use Resolve Dependencies to create compukter.lock, then wait for success.
-            // Save with Ctrl+S, then build with Ctrl+F9 (or the Build button).
+            // Build with Ctrl+F9 (or the Build button); changed files are saved automatically.
+            // Build resolves dependencies and asks before updating an existing compukter.lock.
             // With a computer attached, Run builds, deploys and starts this program.
 
             // main is the entry point: the computer starts executing here.

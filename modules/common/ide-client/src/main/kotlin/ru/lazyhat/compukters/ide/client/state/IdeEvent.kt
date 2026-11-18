@@ -93,6 +93,7 @@ sealed interface IdeEvent {
         val action: IdeBuildAction,
         val input: IdeBuildInput,
         val target: IdeAttachedTarget?,
+        val phase: IdeBuildPhase = IdeBuildPhase.Resolve,
     ) : IdeEvent
 
     data class BuildStateChanged(
@@ -105,6 +106,8 @@ sealed interface IdeEvent {
         val generation: Long,
         val operationId: Long,
         val result: IdeResolveResult,
+        val action: IdeBuildAction = IdeBuildAction.Resolve,
+        val target: IdeAttachedTarget? = null,
     ) : IdeEvent
 
     data class CompletionModuleEnabled(
@@ -296,11 +299,16 @@ internal fun IdeEvent.copyForQueue(): IdeEvent =
         -> this
     }
 
+enum class IdeBuildPhase {
+    Resolve,
+    UpdateLock,
+    Compile,
+}
+
 enum class IdeBuildAction {
     Build,
     Verify,
     Deploy,
     Run,
     Resolve,
-    UpdateLock,
 }

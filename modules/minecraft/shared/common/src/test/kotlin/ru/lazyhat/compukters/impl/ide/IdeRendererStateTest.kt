@@ -89,6 +89,7 @@ import kotlin.io.path.createTempDirectory
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
@@ -865,6 +866,36 @@ class IdeRendererStateTest {
             },
         )
         assertTrue(model.hitTargets.any { it.gitCommand is ru.lazyhat.compukters.ide.client.state.IdeCommand.GitCommitDraft && it.enabled })
+        val noAuthor =
+            IdeRenderer.extract(
+                state.copy(
+                    page =
+                        IdePageState.Workspace(
+                            page.value.copy(
+                                git =
+                                    git.copy(
+                                        draft =
+                                            git.draft.copy(
+                                                authorName =
+                                                    ru.lazyhat.compukters.ide.client.git
+                                                        .IdeGitFieldView(),
+                                                authorEmail =
+                                                    ru.lazyhat.compukters.ide.client.git
+                                                        .IdeGitFieldView(),
+                                            ),
+                                    ),
+                            ),
+                        ),
+                ),
+                geometry(),
+            )
+        assertTrue(
+            noAuthor.hitTargets.any {
+                it.gitCommand is IdeCommand.GitCommitDraft && it.enabled &&
+                    it.tooltip?.contains("author") == true
+            },
+        )
+
         assertFalse(
             model.hitTargets.any {
                 it.gitOperation is ru.lazyhat.compukters.ide.git.GitOperation.Stage ||
@@ -2093,7 +2124,6 @@ class IdeRendererStateTest {
             listOf(
                 IdeIconKind.Format,
                 IdeIconKind.Resolve,
-                IdeIconKind.Resolve,
                 IdeIconKind.Build,
                 IdeIconKind.Verify,
                 IdeIconKind.Deploy,
@@ -2166,7 +2196,6 @@ class IdeRendererStateTest {
 
         listOf(
             IdeHitAction.Format,
-            IdeHitAction.Resolve,
             IdeHitAction.Build,
             IdeHitAction.Verify,
             IdeHitAction.Deploy,
@@ -2620,10 +2649,23 @@ class IdeRendererStateTest {
         val rows = model.text.filter { it.kind == IdeTextKind.TreeRow }
 
         assertTrue(rows.any { it.value == "Project · Demo" })
-        assertTrue(rows.any { it.value == "Computer" })
+        assertTrue(rows.any { it.value == "▾ Computer" })
         assertTrue(rows.any { it.value.contains("home") })
         assertTrue(rows.any { it.value.contains("readme.txt") })
         assertTrue(model.hitTargets.any { it.action == IdeHitAction.RefreshComputer && it.enabled })
+        val page = assertIs<IdePageState.Workspace>(state.page)
+        val collapsed =
+            IdeRenderer.extract(
+                state.copy(
+                    page =
+                        IdePageState.Workspace(
+                            page.value.copy(computerTree = IdeComputerTreeState.Available(root, setOf(IdeTargetVirtualPath.of("/")))),
+                        ),
+                ),
+                geometry(),
+            )
+        assertTrue(collapsed.text.any { it.kind == IdeTextKind.TreeRow && "▸ home" in it.value })
+        assertFalse(collapsed.text.any { it.kind == IdeTextKind.TreeRow && "readme.txt" in it.value && it.color == IdeColors.COMPUTER })
     }
 
     @Test
@@ -2770,7 +2812,6 @@ private fun IdeDrawModel.sourceStyle(value: String): IdeTextStyle = sourceDraw(v
 private val WORKSPACE_ACTIONS =
     setOf(
         IdeHitAction.Format,
-        IdeHitAction.Resolve,
         IdeHitAction.Build,
         IdeHitAction.Cancel,
         IdeHitAction.Verify,

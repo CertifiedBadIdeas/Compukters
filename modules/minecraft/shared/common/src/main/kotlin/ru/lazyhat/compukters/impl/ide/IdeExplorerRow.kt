@@ -22,6 +22,7 @@ import ru.lazyhat.compukters.ide.client.files.IdeComputerChildren
 import ru.lazyhat.compukters.ide.client.files.IdeComputerNode
 import ru.lazyhat.compukters.ide.client.files.IdeComputerTreeState
 import ru.lazyhat.compukters.ide.client.state.IdeWorkspaceView
+import ru.lazyhat.compukters.ide.client.target.IdeTargetVirtualPath
 import ru.lazyhat.compukters.ide.project.tree.ProjectTreeEntry
 
 sealed interface IdeExplorerRow {
@@ -49,16 +50,18 @@ fun IdeWorkspaceView.explorerRows(): List<IdeExplorerRow> =
         tree.flatten().forEach { add(IdeExplorerRow.ProjectEntry(it)) }
         add(IdeExplorerRow.ComputerRoot(computerTree))
         val available = computerTree as? IdeComputerTreeState.Available ?: return@buildList
-        appendComputerChildren(available.root, depth = 1)
+        appendComputerChildren(available.root, depth = 1, available.expanded)
     }
 
 private fun MutableList<IdeExplorerRow>.appendComputerChildren(
     directory: IdeComputerNode.Directory,
     depth: Int,
+    expanded: Set<IdeTargetVirtualPath>,
 ) {
+    if (directory.path !in expanded) return
     val children = (directory.children as? IdeComputerChildren.Loaded)?.nodes ?: return
     children.forEach { node ->
         add(IdeExplorerRow.ComputerEntry(node, depth))
-        if (node is IdeComputerNode.Directory) appendComputerChildren(node, depth + 1)
+        if (node is IdeComputerNode.Directory) appendComputerChildren(node, depth + 1, expanded)
     }
 }

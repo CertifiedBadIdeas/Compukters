@@ -122,19 +122,19 @@ class IdeBuildFlowTest {
         )
         fixture.tickUntil { compilation.inputs.isNotEmpty() }
         assertTrue(root.resolve("compukter.lock").toFile().exists())
-        assertEquals(1, fixture.workspace.buildInputRequests)
+        assertEquals(2, fixture.workspace.buildInputRequests)
         fixture.controller.close()
     }
 
     @Test
-    fun `opening a project preserves an existing incompatible lock`() {
+    fun `build asks before updating an incompatible lock and resumes after confirmation`() {
         val compilation = FlowCompilationService()
         val fixture = fixture(compilation)
         val stale = ProjectLockCodec.encode(ProjectLock.of(toolchain().copy(compilerVersion = "old"), emptyList())).encodeToByteArray()
         fixture.workspace.installLock(stale)
         fixture.startAndTick()
         fixture.controller.dispatch(IdeCommand.Build)
-        fixture.tickUntil { fixture.workspaceView().build is IdeBuildState.Failed }
+        fixture.tickUntil { fixture.controller.viewState().dialog is IdeDialogState.LockUpdate }
         assertContentEquals(
             stale,
             fixture.workspace.descriptor.handle.canonicalPath
@@ -143,6 +143,89 @@ class IdeBuildFlowTest {
                 .readBytes(),
         )
         assertTrue(compilation.inputs.isEmpty())
+        fixture.controller.dispatch(IdeCommand.ConfirmLockUpdate)
+        fixture.tickUntil { compilation.inputs.isNotEmpty() }
+        assertContentEquals(
+            canonicalLock(),
+            compilation.inputs
+                .single()
+                .lockBytes
+                .toByteArray(),
+        )
+        fixture.controller.close()
+    }
+
+    @Test
+    fun `declining lock update leaves lock intact and does not compile`() {
+        val compilation = FlowCompilationService()
+        val fixture = fixture(compilation)
+        val stale = ProjectLockCodec.encode(ProjectLock.of(toolchain().copy(compilerVersion = "old"), emptyList())).encodeToByteArray()
+        fixture.workspace.installLock(stale)
+        fixture.startAndTick()
+        fixture.controller.dispatch(IdeCommand.Build)
+        fixture.tickUntil { fixture.controller.viewState().dialog is IdeDialogState.LockUpdate }
+        fixture.controller.dispatch(IdeCommand.CancelDialog)
+        repeat(10) { fixture.controller.tick() }
+        assertContentEquals(
+            stale,
+            fixture.workspace.descriptor.handle.canonicalPath
+                .resolve("compukter.lock")
+                .toFile()
+                .readBytes(),
+        )
+        assertTrue(compilation.inputs.isEmpty())
+        assertTrue(
+            fixture.controller
+                .viewState()
+                .busy
+                .isEmpty(),
+        )
+        fixture.controller.close()
+    }
+
+    @Test
+    fun `build recreates a removed lock without a separate resolve action`() {
+        val compilation = FlowCompilationService()
+        val fixture = fixture(compilation)
+        fixture.workspace.installLock(canonicalLock())
+        fixture.startAndTick()
+        fixture.tickUntil { compilation.preparations.isNotEmpty() }
+        fixture.workspace.descriptor.handle.canonicalPath
+            .resolve("compukter.lock")
+            .toFile()
+            .delete()
+        fixture.controller.dispatch(IdeCommand.Build)
+        fixture.tickUntil { compilation.inputs.isNotEmpty() }
+        assertContentEquals(
+            canonicalLock(),
+            compilation.inputs
+                .single()
+                .lockBytes
+                .toByteArray(),
+        )
+        fixture.controller.close()
+    }
+
+    @Test
+    fun `cancelling build during dependency setup ignores late completion`() {
+        val compilation = FlowCompilationService()
+        val fixture = fixture(compilation)
+        fixture.workspace.installLock(canonicalLock())
+        fixture.startAndTick()
+        fixture.tickUntil { compilation.preparations.isNotEmpty() }
+        fixture.controller.dispatch(IdeCommand.Build)
+        fixture.controller.dispatch(IdeCommand.CancelBuild)
+        repeat(10) { fixture.controller.tick() }
+        assertIs<IdeBuildState.Failed>(fixture.workspaceView().build).also {
+            assertEquals(IdeBuildFailureKind.Cancelled, it.kind)
+        }
+        assertTrue(compilation.inputs.isEmpty())
+        assertTrue(
+            fixture.controller
+                .viewState()
+                .busy
+                .isEmpty(),
+        )
         fixture.controller.close()
     }
 
@@ -162,9 +245,9 @@ class IdeBuildFlowTest {
         fixture.workspace.completeSave()
         fixture.controller.tick()
         assertEquals(1, fixture.workspace.buildInputRequests)
-        fixture.controller.tick()
+        fixture.tickUntil { compilation.inputs.isNotEmpty() }
         val submitted = compilation.awaitInput()
-        fixture.controller.tick()
+        fixture.tickUntil { fixture.workspaceView().build is IdeBuildState.Compiling }
         val compiling = assertIs<IdeBuildState.Compiling>(fixture.workspaceView().build)
         assertTrue(
             submitted.sources.sources
@@ -251,9 +334,9 @@ class IdeBuildFlowTest {
         fixture.workspace.installLock(canonicalLock())
         fixture.startAndTick()
         fixture.controller.dispatch(IdeCommand.Build)
-        fixture.controller.tick()
+        fixture.tickUntil { compilation.inputs.isNotEmpty() }
         compilation.awaitInput()
-        fixture.controller.tick()
+        fixture.tickUntil { fixture.workspaceView().build is IdeBuildState.Compiling }
 
         fixture.controller.close()
 

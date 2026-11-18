@@ -120,6 +120,8 @@ sealed interface IdeDialogState {
 
     data class LockUpdate(
         val projectDirectory: String,
+        val action: IdeBuildAction = IdeBuildAction.Resolve,
+        val target: ru.lazyhat.compukters.ide.client.target.IdeAttachedTarget? = null,
     ) : IdeDialogState
 
     data class TargetOverwrite(

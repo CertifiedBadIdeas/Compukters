@@ -39,7 +39,12 @@ data class IdeGitDraftView(
     val authorEmail: IdeGitFieldView = IdeGitFieldView(),
     val focused: IdeGitField? = null,
 ) {
-    val canCommit: Boolean get() = message.text.isNotBlank() && authorName.text.isNotBlank() && authorEmail.text.isNotBlank()
+    val hasValidAuthor: Boolean
+        get() {
+            val email = authorEmail.text.trim()
+            return authorName.text.isNotBlank() && '@' in email && email.none { it.isWhitespace() || it == '<' || it == '>' }
+        }
+    val canCommit: Boolean get() = message.text.isNotBlank() && hasValidAuthor
 
     fun field(field: IdeGitField): IdeGitFieldView =
         when (field) {

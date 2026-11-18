@@ -461,6 +461,40 @@ class IdeClientControllerTest {
     }
 
     @Test
+    fun `commit with missing author opens settings and preserves the prepared commit`() {
+        val fixture = ControllerFixture(preferences = preferences("demo", "src/main.kt"))
+        fixture.startAndTick()
+        val main = ProjectPath.file("src/main.kt")
+        fixture.controller.dispatch(IdeCommand.GitVisible(true))
+        fixture.workspace.completeGit(
+            GitResult(
+                GitStatus(
+                    true,
+                    branch = "main",
+                    changes =
+                        listOf(
+                            ru.lazyhat.compukters.ide.git
+                                .GitChange(main, null, "modified"),
+                        ),
+                ),
+            ),
+        )
+        fixture.controller.tick()
+        fixture.controller.dispatch(IdeCommand.GitCheck(main))
+        fixture.controller.dispatch(IdeCommand.GitFocusField(ru.lazyhat.compukters.ide.client.git.IdeGitField.Message))
+        fixture.controller.dispatch(IdeCommand.EditGitDraft(IdeEditorInput.Type("Initial program")))
+        val requests = fixture.workspace.gitRequests.size
+        fixture.controller.dispatch(IdeCommand.GitCommitDraft())
+        val view = fixture.workspaceView().git
+        assertEquals(ru.lazyhat.compukters.ide.client.state.IdeGitMenu.Settings, view.menu)
+        assertEquals(ru.lazyhat.compukters.ide.client.git.IdeGitField.AuthorName, view.draft.focused)
+        assertEquals("Initial program", view.draft.message.text)
+        assertEquals(setOf(main), view.checkedPaths)
+        assertEquals(requests, fixture.workspace.gitRequests.size)
+        fixture.controller.close()
+    }
+
+    @Test
     fun `checkbox commit preserves draft on failure and pushes only after successful selected commit`() {
         val fixture = ControllerFixture(preferences = preferences("demo", "src/main.kt"), additionalProject = true)
         fixture.startAndTick()

@@ -23,8 +23,22 @@ import ru.lazyhat.compukters.ide.client.state.IdeMoveDirection
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertTrue
 
 class IdeGitDraftSessionTest {
+    @Test
+    fun `commit requires a valid explicit author identity`() {
+        val message = IdeGitFieldView("Initial program")
+        val draft = IdeGitDraftView(message = message)
+        assertFalse(draft.hasValidAuthor)
+        assertFalse(draft.canCommit)
+        val named = draft.copy(authorName = IdeGitFieldView("Player"))
+        for (email in listOf("", "invalid", "player @example.invalid", "<player@example.invalid>")) {
+            assertFalse(named.copy(authorEmail = IdeGitFieldView(email)).canCommit)
+        }
+        assertTrue(named.copy(authorEmail = IdeGitFieldView("player@example.invalid")).canCommit)
+    }
+
     @Test
     fun `draft supports selection unicode editing history and multiline message independently of author`() {
         IdeGitDraftSession().use { draft ->

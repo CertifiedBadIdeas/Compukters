@@ -164,11 +164,8 @@ internal class SnapshotAdmission(
                 environment.session.modulesWithFiles.values
                     .flatten()
                     .filterIsInstance<KtFile>()
-                    .filter { file -> file.virtualFilePath.startsWith(sourceRoot.toString()) && "!/" !in file.virtualFilePath }
-                    .associateBy { file ->
-                        val physical = Path.of(file.virtualFilePath).toAbsolutePath().normalize()
-                        VirtualSourcePath.kotlin(sourceRoot.relativize(physical).toString().replace('\\', '/'))
-                    }
+                    .mapNotNull { file -> projectSourcePath(sourceRoot.toString(), file.virtualFilePath)?.let { it to file } }
+                    .toMap()
             require(files.keys == sourceLengths.keys) { "standalone K2 source mapping differs from admitted snapshot" }
             val projectCompletionIndex = GlobalCompletionIndex.project(files)
             val addonIdentities =
@@ -283,4 +280,16 @@ internal class SnapshotAdmission(
         require(components.size == 2) { "invalid analysis platform module ID: $value" }
         return PlatformModuleId(components[0], components[1])
     }
+}
+
+/** IntelliJ virtual paths use forward slashes even when the host filesystem is Windows. */
+internal fun projectSourcePath(
+    sourceRoot: String,
+    virtualFilePath: String,
+): VirtualSourcePath? {
+    if ("!/" in virtualFilePath) return null
+    val prefix = sourceRoot.replace('\\', '/').trimEnd('/') + "/"
+    val normalized = virtualFilePath.replace('\\', '/')
+    if (!normalized.startsWith(prefix)) return null
+    return VirtualSourcePath.kotlin(normalized.removePrefix(prefix))
 }

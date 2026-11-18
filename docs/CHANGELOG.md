@@ -13,6 +13,11 @@ headings so this page has one stable URL that can be shared outside the reposito
 
 ## 0.7.0 — In development
 
+- IDE Build resolves project dependencies, asks before replacing an existing lock, and continues compiling
+  after confirmation. The separate Resolve Dependencies toolbar button is removed. Computer filesystem
+  folders collapse and reopen without reloading their contents; Git commits guide first-time users to author
+  settings. Standalone analysis and formatting accept Windows source paths consistently.
+
 - Guest execution uses the Rust worker pool on both supported Minecraft versions. The JVM execution scheduler
   and `vm.backend` selection are removed; world actions and persistence keep their existing owner boundaries.
   Garbage collection and response preparation can continue within the same bounded frame even when a slice
@@ -314,7 +319,7 @@ headings so this page has one stable URL that can be shared outside the reposito
   including atomic all-face writes with `Side.ALL` as the default port-level output selection;
   its transient outputs clear when control is released.
 
-- All main, addon, development-stand and API-documentation builds use Gradle 9.8.1, with the binary distribution
+- All main, addon, development-stand and API-documentation builds use Gradle 9.9.1, with the binary distribution
   verified against its published SHA-256.
 
 - The IDE has a named peripheral selection window with shared window controls, block item icons and project-style cards.

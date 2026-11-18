@@ -121,7 +121,7 @@ sealed interface IdeCommand {
         val path: ProjectPath,
     ) : IdeCommand
 
-    data class ExpandComputerDirectory(
+    data class ToggleComputerDirectory(
         val path: IdeTargetVirtualPath,
     ) : IdeCommand
 

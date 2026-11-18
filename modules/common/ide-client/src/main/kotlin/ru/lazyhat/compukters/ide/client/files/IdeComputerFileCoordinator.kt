@@ -137,18 +137,26 @@ class IdeComputerFileCoordinator(
             failTransfer("Target filesystem was refreshed during transfer")
         }
         restoreExpanded = (current as? IdeComputerTreeState.Available)?.expanded ?: restoreExpanded
-        if (ROOT !in restoreExpanded) restoreExpanded = restoreExpanded + ROOT
         advanceEpoch()
         beginRootLoad()
     }
 
-    fun expand(path: IdeTargetVirtualPath) {
+    fun toggleDirectory(path: IdeTargetVirtualPath) {
         checkOwner()
         val state = current as? IdeComputerTreeState.Available ?: return
         val directory = find(state.root, path) as? IdeComputerNode.Directory ?: return
-        if (directory.children !is IdeComputerChildren.Unloaded) return
-        current = state.copy(root = replace(state.root, path) { it.copy(children = IdeComputerChildren.Loading) })
-        requestDirectory(path, directory.metadata, epoch, restore = false)
+        if (path in state.expanded) {
+            current = state.copy(expanded = state.expanded - path)
+        } else if (directory.children is IdeComputerChildren.Unloaded) {
+            current =
+                state.copy(
+                    root = replace(state.root, path) { it.copy(children = IdeComputerChildren.Loading) },
+                    expanded = state.expanded + path,
+                )
+            requestDirectory(path, directory.metadata, epoch, restore = false)
+        } else {
+            current = state.copy(expanded = state.expanded + path)
+        }
     }
 
     fun open(path: IdeTargetVirtualPath) {
@@ -631,14 +639,13 @@ class IdeComputerFileCoordinator(
         val nodes = entries.map { entry -> entry.toNode(child(load.path, entry.name)) }
         if (load.path == ROOT) {
             val root = IdeComputerNode.Directory(ROOT, load.metadata, IdeComputerChildren.Loaded(nodes))
-            current = IdeComputerTreeState.Available(root, setOf(ROOT))
+            current = IdeComputerTreeState.Available(root, setOf(ROOT).intersect(restoreExpanded))
         } else {
             val state = current as? IdeComputerTreeState.Available ?: return
             if (find(state.root, load.path) !is IdeComputerNode.Directory) return
             current =
                 state.copy(
                     root = replace(state.root, load.path) { it.copy(children = IdeComputerChildren.Loaded(nodes)) },
-                    expanded = state.expanded + load.path,
                 )
         }
         if (load.restore) restoreChildren(load.path)
@@ -646,6 +653,7 @@ class IdeComputerFileCoordinator(
 
     private fun restoreChildren(parent: IdeTargetVirtualPath) {
         val state = current as? IdeComputerTreeState.Available ?: return
+        if (parent !in state.expanded) return
         val directory = find(state.root, parent) as? IdeComputerNode.Directory ?: return
         val children = (directory.children as? IdeComputerChildren.Loaded)?.nodes.orEmpty()
         children
@@ -653,7 +661,11 @@ class IdeComputerFileCoordinator(
             .filter { it.path in restoreExpanded }
             .forEach { child ->
                 val latest = current as? IdeComputerTreeState.Available ?: return
-                current = latest.copy(root = replace(latest.root, child.path) { it.copy(children = IdeComputerChildren.Loading) })
+                current =
+                    latest.copy(
+                        root = replace(latest.root, child.path) { it.copy(children = IdeComputerChildren.Loading) },
+                        expanded = latest.expanded + child.path,
+                    )
                 requestDirectory(child.path, child.metadata, epoch, restore = true)
             }
     }

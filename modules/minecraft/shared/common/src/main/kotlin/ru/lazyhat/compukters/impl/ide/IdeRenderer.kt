@@ -498,10 +498,11 @@ object IdeRenderer {
                 top: Int,
                 command: IdeCommand,
                 enabled: Boolean = idle,
+                tooltip: String = label,
             ) {
                 val rect = IdeRect(left, top, right, top + 20)
                 if (!bounds.contains(rect)) return
-                target(IdeHitAction.GitOperation, rect, enabled, label, gitCommand = command)
+                target(IdeHitAction.GitOperation, rect, enabled, tooltip, gitCommand = command)
                 centeredUi(IdeTextKind.Toolbar, label, rect.left + 6, rect, if (enabled) IdeColors.TEXT else IdeColors.DISABLED)
             }
             ui(IdeTextKind.ToolWindow, "Commit", left, originTop + 7, clip = bounds)
@@ -586,9 +587,19 @@ object IdeRenderer {
                 )
                 gitFieldFocusScroll[IdeGitField.Message] =
                     if (compact) ((formTop + view.scroll * 20 + 18 - bounds.top - 6) / 20).coerceIn(0, gitScrollMaximum ?: 0) else 0
-                val canCommit = idle && view.checkedPaths.isNotEmpty() && view.draft.canCommit
-                button("Commit", formTop + 72, IdeCommand.GitCommitDraft(), canCommit)
-                button("Commit & Push", formTop + 96, IdeCommand.GitCommitDraft(push = true), canCommit)
+                val canSubmit =
+                    idle && view.checkedPaths.isNotEmpty() &&
+                        view.draft.message.text
+                            .isNotBlank()
+                val authorHint = if (view.draft.hasValidAuthor) null else "Set commit author name and email in Settings"
+                button("Commit", formTop + 72, IdeCommand.GitCommitDraft(), canSubmit, authorHint ?: "Commit selected files")
+                button(
+                    "Commit & Push",
+                    formTop + 96,
+                    IdeCommand.GitCommitDraft(push = true),
+                    canSubmit,
+                    authorHint ?: "Commit and push selected files",
+                )
             }
         }
 
@@ -953,8 +964,19 @@ object IdeRenderer {
                         is IdeExplorerRow.ComputerEntry -> {
                             val marker =
                                 when (val node = row.node) {
-                                    is IdeComputerNode.File -> "  "
-                                    is IdeComputerNode.Directory -> if (node.children is IdeComputerChildren.Unloaded) "▸ " else "▾ "
+                                    is IdeComputerNode.File -> {
+                                        "  "
+                                    }
+
+                                    is IdeComputerNode.Directory -> {
+                                        if (node.path in
+                                            (workspace.computerTree as? IdeComputerTreeState.Available)?.expanded.orEmpty()
+                                        ) {
+                                            "▾ "
+                                        } else {
+                                            "▸ "
+                                        }
+                                    }
                                 }
                             Triple(marker + row.node.name, row.depth, IdeColors.COMPUTER)
                         }
@@ -990,7 +1012,7 @@ object IdeRenderer {
             when (state) {
                 IdeComputerTreeState.NoTarget -> "Computer · No target"
                 IdeComputerTreeState.Loading -> "Computer · Loading…"
-                is IdeComputerTreeState.Available -> "Computer"
+                is IdeComputerTreeState.Available -> if (state.root.path in state.expanded) "▾ Computer" else "▸ Computer"
                 is IdeComputerTreeState.Unavailable -> "Computer · Unavailable"
                 is IdeComputerTreeState.TargetLost -> "Computer · Target lost"
             }

@@ -54,6 +54,7 @@ import ru.lazyhat.compukters.ide.client.search.IdeFindSession
 import ru.lazyhat.compukters.ide.client.search.IdeSelectionOccurrences
 import ru.lazyhat.compukters.ide.client.state.BoundedIdeEventQueue
 import ru.lazyhat.compukters.ide.client.state.IdeBuildAction
+import ru.lazyhat.compukters.ide.client.state.IdeBuildPhase
 import ru.lazyhat.compukters.ide.client.state.IdeBusyOperation
 import ru.lazyhat.compukters.ide.client.state.IdeCommand
 import ru.lazyhat.compukters.ide.client.state.IdeConflictAction
@@ -440,10 +441,19 @@ class IdeClientController(
             is IdeCommand.GitCommitDraft -> {
                 val draft = gitDraft.view()
                 val email = draft.authorEmail.text.trim()
-                if (!draft.canCommit || '@' !in email || email.any { it.isWhitespace() || it == '<' || it == '>' } ||
-                    gitView.checkedPaths.isEmpty()
-                ) {
+                if (!draft.canCommit || gitView.checkedPaths.isEmpty()) {
                     publishStatus("Select files and enter a commit message, author name and email", IdeProblemSeverity.Warning)
+                    if (!draft.hasValidAuthor) {
+                        gitView = gitView.copy(menu = ru.lazyhat.compukters.ide.client.state.IdeGitMenu.Settings)
+                        gitDraft.focus(
+                            if (draft.authorName.text.isBlank()) {
+                                ru.lazyhat.compukters.ide.client.git.IdeGitField.AuthorName
+                            } else {
+                                ru.lazyhat.compukters.ide.client.git.IdeGitField.AuthorEmail
+                            },
+                        )
+                    }
+                    publishWorkspace()
                 } else {
                     pushAfterCommit = command.push
                     persistGitAuthor()
@@ -547,8 +557,8 @@ class IdeClientController(
                 requestTabClose(command.path)
             }
 
-            is IdeCommand.ExpandComputerDirectory -> {
-                computerFiles?.expand(command.path)
+            is IdeCommand.ToggleComputerDirectory -> {
+                computerFiles?.toggleDirectory(command.path)
                 publishWorkspace()
             }
 
@@ -719,9 +729,14 @@ class IdeClientController(
             }
 
             IdeCommand.ConfirmLockUpdate -> {
-                if (state.dialog is IdeDialogState.LockUpdate) {
+                val dialog = state.dialog as? IdeDialogState.LockUpdate
+                if (dialog != null) {
                     state = state.copy(dialog = null)
-                    requestBuildAction(IdeBuildAction.UpdateLock)
+                    if (dialog.target != targetCoordinator?.attachedTarget()) {
+                        publishProblem("Target changed; start the build again")
+                    } else {
+                        requestBuildAction(dialog.action, IdeBuildPhase.UpdateLock)
+                    }
                 }
             }
 
@@ -757,7 +772,13 @@ class IdeClientController(
             }
 
             IdeCommand.CancelBuild -> {
-                activeBuild?.cancel()
+                latestBuildOperation = nextOperationId++
+                pendingBuildAction = null
+                deferredLocalAction = null
+                cancelBuildJobs()
+                buildState = IdeBuildState.Failed(IdeBuildFailureKind.Cancelled, "build cancelled")
+                state = state.copy(busy = state.busy - IdeBusyOperation.Build - IdeBusyOperation.Resolve)
+                publishWorkspace()
             }
 
             IdeCommand.ShowImportFixes -> {
@@ -1987,11 +2008,14 @@ class IdeClientController(
         }
     }
 
-    private fun requestBuildAction(action: IdeBuildAction) {
+    private fun requestBuildAction(
+        action: IdeBuildAction,
+        phase: IdeBuildPhase = IdeBuildPhase.Resolve,
+    ) {
         if (IdeBusyOperation.Git in state.busy) return
         val selected = project ?: return
         if (localConfigurationPending) {
-            if (action == IdeBuildAction.Resolve || action == IdeBuildAction.UpdateLock) {
+            if (action == IdeBuildAction.Resolve || phase == IdeBuildPhase.UpdateLock) {
                 cancelLibraryPreparation()
             } else {
                 deferredLocalAction = action
@@ -2010,7 +2034,7 @@ class IdeClientController(
         }
         val operationId = nextOperationId++
         latestBuildOperation = operationId
-        pendingBuildAction = PendingBuildAction(operationId, action, target)
+        pendingBuildAction = PendingBuildAction(operationId, action, target, phase)
         buildState = IdeBuildState.Saving(operationId)
         val busy = if (action.isCompilation) IdeBusyOperation.Build else IdeBusyOperation.Resolve
         state = state.copy(busy = state.busy + busy)
@@ -2024,7 +2048,7 @@ class IdeClientController(
             }
             return
         }
-        loadBuildInput(selected, operationId, action, target)
+        loadBuildInput(selected, operationId, action, target, phase)
     }
 
     private fun loadBuildInput(
@@ -2032,11 +2056,12 @@ class IdeClientController(
         operationId: Long,
         action: IdeBuildAction,
         target: IdeAttachedTarget?,
+        phase: IdeBuildPhase = IdeBuildPhase.Resolve,
     ) {
         val requestGeneration = generation
         workspace.buildInput(selected.handle).whenComplete { input, failure ->
             if (failure == null) {
-                enqueue(IdeEvent.BuildInputLoaded(requestGeneration, operationId, action, input, target))
+                enqueue(IdeEvent.BuildInputLoaded(requestGeneration, operationId, action, input, target, phase))
             } else {
                 val detail = failure.message ?: "failed to load build input"
                 if (action.isCompilation) {
@@ -2482,50 +2507,32 @@ class IdeClientController(
         if (event.operationId != latestBuildOperation) return
         val coordinator = buildCoordinator ?: return
         pendingBuildAction = null
-        when (event.action) {
-            IdeBuildAction.Build,
-            IdeBuildAction.Verify,
-            IdeBuildAction.Deploy,
-            IdeBuildAction.Run,
-            -> {
-                val job = coordinator.build(event.operationId, event.input, event.target?.compileProfile)
-                if (event.action.isTargetAction) {
-                    targetBuildActions[event.operationId] = PendingBuildAction(event.operationId, event.action, event.target)
+        if (event.phase != IdeBuildPhase.Compile) {
+            coordinator
+                .resolve(
+                    event.input,
+                    updateExisting = event.phase == IdeBuildPhase.UpdateLock,
+                    target = event.target?.compileProfile,
+                ).whenComplete { result, failure ->
+                    val mapped = result ?: IdeResolveResult.Failed(failure?.message ?: "resolve failed")
+                    enqueue(IdeEvent.ResolveCompleted(event.generation, event.operationId, mapped, event.action, event.target))
                 }
-                activeBuild = job
-                buildJobs[event.operationId] = job
-                job.started.whenComplete { compiling, failure ->
-                    if (failure == null) {
-                        enqueue(IdeEvent.BuildStateChanged(event.generation, event.operationId, compiling))
-                    }
-                }
-                job.result.whenComplete { result, failure ->
-                    val mapped =
-                        if (failure == null) {
-                            result
-                        } else {
-                            IdeBuildState.Failed(IdeBuildFailureKind.Platform, failure.message ?: "build failed")
-                        }
-                    enqueue(IdeEvent.BuildStateChanged(event.generation, event.operationId, mapped))
-                }
+            return
+        }
+        val job = coordinator.build(event.operationId, event.input, event.target?.compileProfile)
+        if (event.action.isTargetAction) {
+            targetBuildActions[event.operationId] = PendingBuildAction(event.operationId, event.action, event.target)
+        }
+        activeBuild = job
+        buildJobs[event.operationId] = job
+        job.started.whenComplete { compiling, failure ->
+            if (failure == null) {
+                enqueue(IdeEvent.BuildStateChanged(event.generation, event.operationId, compiling))
             }
-
-            IdeBuildAction.Resolve,
-            IdeBuildAction.UpdateLock,
-            -> {
-                coordinator
-                    .resolve(
-                        event.input,
-                        updateExisting = event.action == IdeBuildAction.UpdateLock,
-                        target = event.target?.compileProfile,
-                    ).whenComplete {
-                        result,
-                        failure,
-                        ->
-                        val mapped = if (failure == null) result else IdeResolveResult.Failed(failure.message ?: "resolve failed")
-                        enqueue(IdeEvent.ResolveCompleted(event.generation, event.operationId, mapped))
-                    }
-            }
+        }
+        job.result.whenComplete { result, failure ->
+            val mapped = result ?: IdeBuildState.Failed(IdeBuildFailureKind.Platform, failure?.message ?: "build failed")
+            enqueue(IdeEvent.BuildStateChanged(event.generation, event.operationId, mapped))
         }
     }
 
@@ -2550,7 +2557,7 @@ class IdeClientController(
 
     private fun acceptResolve(event: IdeEvent.ResolveCompleted) {
         if (event.operationId != latestBuildOperation) return
-        state = state.copy(busy = state.busy - IdeBusyOperation.Resolve)
+        state = state.copy(busy = state.busy - IdeBusyOperation.Resolve - IdeBusyOperation.Build)
         buildState = IdeBuildState.Idle
         when (val result = event.result) {
             IdeResolveResult.Created -> {
@@ -2571,17 +2578,24 @@ class IdeClientController(
 
             IdeResolveResult.ConfirmationRequired -> {
                 val selected = project ?: return
-                state = state.copy(dialog = IdeDialogState.LockUpdate(selected.directoryName))
+                state = state.copy(dialog = IdeDialogState.LockUpdate(selected.directoryName, event.action, event.target))
             }
 
             is IdeResolveResult.Failed -> {
+                if (event.action.isCompilation) buildState = IdeBuildState.Failed(IdeBuildFailureKind.UnsatisfiedProfile, result.detail)
                 publishStatus(result.detail, IdeProblemSeverity.Error)
             }
         }
         if (event.result == IdeResolveResult.Created || event.result == IdeResolveResult.Updated ||
             event.result == IdeResolveResult.UpToDate
         ) {
-            requestLibraryPreparation()
+            if (event.result != IdeResolveResult.UpToDate || !event.action.isCompilation) requestLibraryPreparation()
+            if (event.action.isCompilation) {
+                val selected = project ?: return
+                buildState = IdeBuildState.Saving(event.operationId)
+                state = state.copy(busy = state.busy + IdeBusyOperation.Build)
+                loadBuildInput(selected, event.operationId, event.action, event.target, IdeBuildPhase.Compile)
+            }
         }
         publishWorkspace()
     }
@@ -3244,7 +3258,7 @@ class IdeClientController(
             return
         }
         val selected = project ?: return
-        loadBuildInput(selected, pending.operationId, pending.action, pending.target)
+        loadBuildInput(selected, pending.operationId, pending.action, pending.target, pending.phase)
     }
 
     private fun failPendingBuild(
@@ -4531,6 +4545,7 @@ class IdeClientController(
         val operationId: Long,
         val action: IdeBuildAction,
         val target: IdeAttachedTarget?,
+        val phase: IdeBuildPhase = IdeBuildPhase.Resolve,
     )
 
     private companion object {
