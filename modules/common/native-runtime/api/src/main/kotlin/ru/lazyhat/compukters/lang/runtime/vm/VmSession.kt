@@ -348,7 +348,11 @@ class VmSession private constructor(
 
     /** Transfers a restored session together with its pending timer state. */
     @Synchronized
-    fun transferToFleet(fleet: ExperimentalFleetSessionOwner, tick: Long, timers: List<ExperimentalFleetTimer>): Long {
+    fun transferToFleet(
+        fleet: ExperimentalFleetSessionOwner,
+        tick: Long,
+        timers: List<ExperimentalFleetTimer>,
+    ): Long {
         require(terminalTransport is FleetTransferableTerminalWireTransport) { "fleet transfer requires a transferable terminal transport" }
         val active = requireHandle()
         val machine = fleet.adoptWithTimers(bridge, active, tick, timers)
@@ -382,7 +386,10 @@ class VmSession private constructor(
     companion object {
         private const val CLOSED = 0L
 
-        fun restoreFromFleet(fleet: ExperimentalFleetSessionOwner, machine: Long): VmSession {
+        fun restoreFromFleet(
+            fleet: ExperimentalFleetSessionOwner,
+            machine: Long,
+        ): VmSession {
             val restored = fleet.recover(machine)
             return admitted(restored.handle, restored.bridge)
         }
