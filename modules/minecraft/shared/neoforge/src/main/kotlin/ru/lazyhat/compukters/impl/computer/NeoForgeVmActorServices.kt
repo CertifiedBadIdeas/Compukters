@@ -25,12 +25,11 @@ import net.neoforged.neoforge.event.tick.ServerTickEvent
 import ru.lazyhat.compukters.core.LOGGER
 import ru.lazyhat.compukters.core.device.runtime.actor.NativeProgramRuntimeService
 import ru.lazyhat.compukters.core.device.runtime.actor.ProgramRuntimeActorMetrics
-import ru.lazyhat.compukters.core.device.runtime.actor.ProgramRuntimeActorService
+import ru.lazyhat.compukters.core.device.runtime.actor.ProgramRuntimeLifecycle
 import ru.lazyhat.compukters.core.device.runtime.actor.ProgramRuntimeService
 import ru.lazyhat.compukters.core.device.runtime.actor.VmActorSchedulerConfig
 import ru.lazyhat.compukters.core.device.runtime.actor.VmCapacityCalibration
 import ru.lazyhat.compukters.core.device.runtime.actor.VmCapacityGovernor
-import ru.lazyhat.compukters.core.device.runtime.actor.VmExecutionBackend
 import ru.lazyhat.compukters.impl.benchmark.VmCapacityCalibrator
 import ru.lazyhat.compukters.impl.compat.enqueueCompuktersTask
 import ru.lazyhat.compukters.impl.config.CompuktersServerConfig
@@ -39,12 +38,10 @@ import java.util.concurrent.CompletableFuture
 import java.util.concurrent.atomic.AtomicBoolean
 
 /** Server-thread-owned lifecycle; a started server allocates workers only on first use. */
-internal class VmActorServiceRegistry<S : Any>(
+internal class VmActorServiceRegistry<S : Any, R : ProgramRuntimeLifecycle>(
     private val checkOwner: (S) -> Unit,
-    private val opener: (() -> Unit) -> ProgramRuntimeService = { ready ->
-        ProgramRuntimeActorService(onResultsReady = ready, capacityFramesRequired = true)
-    },
-    private val calibrator: (ProgramRuntimeService) -> CompletableFuture<VmCapacityCalibration>? = { null },
+    private val opener: (() -> Unit) -> R,
+    private val calibrator: (R) -> CompletableFuture<VmCapacityCalibration>? = { null },
     private val maximumEventsPerTick: Int = 1_024,
     private val enqueueOnOwner: ((S, Runnable) -> Unit)? = null,
     private val maximumPumpNanosPerTick: Long = 2_000_000,
@@ -63,7 +60,7 @@ internal class VmActorServiceRegistry<S : Any>(
         servers[server] = Entry()
     }
 
-    fun service(server: S): ProgramRuntimeService {
+    fun service(server: S): R {
         checkOwner(server)
         val entry = checkNotNull(servers[server]) { "VM service requires a running server" }
         return entry.service ?: opener { resultsReady(server, entry) }.also { service ->
@@ -164,8 +161,8 @@ internal class VmActorServiceRegistry<S : Any>(
         }
     }
 
-    private class Entry {
-        var service: ProgramRuntimeService? = null
+    private inner class Entry {
+        var service: R? = null
         var frameTick: Long? = null
         val closed = AtomicBoolean()
         val pumpQueued = AtomicBoolean()
@@ -178,20 +175,19 @@ internal class VmActorServiceRegistry<S : Any>(
 
 internal object NeoForgeVmActorServices {
     private val registry =
-        VmActorServiceRegistry<MinecraftServer>(
+        VmActorServiceRegistry<MinecraftServer, ProgramRuntimeService>(
             checkOwner = { server ->
                 check(server.isSameThread) { "VM service lifecycle must run on the server thread" }
             },
             opener = { ready ->
                 openServerVmRuntime(
-                    CompuktersServerConfig.executionBackend(),
                     CompuktersServerConfig.schedulerConfig(),
                     VmCapacityGovernor(CompuktersServerConfig.capacityGovernorConfig()),
                     ready,
                 )
             },
-            calibrator = { service ->
-                VmCapacityCalibrator.start(CompuktersServerConfig.schedulerConfig().workerCount, service.runtimeMetrics().backend)
+            calibrator = { _ ->
+                VmCapacityCalibrator.start(CompuktersServerConfig.schedulerConfig().workerCount)
             },
             enqueueOnOwner = { server, task -> server.enqueueCompuktersTask(task) },
         )
@@ -214,70 +210,23 @@ internal object NeoForgeVmActorServices {
     fun onServerStopping(event: ServerStoppingEvent) = registry.stop(event.server)
 
     private fun logMetrics(metrics: ProgramRuntimeActorMetrics) {
-        val scheduler = metrics.scheduler
-        if (scheduler == null) {
-            LOGGER.debug {
-                "VM backend=${metrics.backend}, actors=${metrics.nativeActors}/${metrics.nativeMaximumActors}, " +
-                    "pending=${metrics.pendingRequests}, pumpLastUs=${metrics.lastPumpNanos / 1_000}, " +
-                    "capacity=${metrics.currentInstructionCapacity}, schedulerLatency=unavailable"
-            }
-            return
-        }
-        val processed = (scheduler.processedMessages + scheduler.processedPermits).coerceAtLeast(1)
-        val drained = scheduler.drainedEvents.coerceAtLeast(1)
-        val continuationSamples = metrics.hostContinuationSamples.coerceAtLeast(1)
         LOGGER.debug {
-            "VM actors: registered=${scheduler.registeredActors}/${scheduler.maximumActors}, " +
-                "runnable=${scheduler.scheduledActors}, " +
-                "mailbox=${scheduler.queuedMessages}, permits=${scheduler.pendingPermits}, " +
-                "results=${scheduler.queuedResults}, workers=${scheduler.busyWorkers}, " +
-                "queueAvgUs=${scheduler.totalQueueLatencyNanos / processed / 1_000}, " +
-                "queueMaxUs=${scheduler.maximumQueueLatencyNanos / 1_000}, " +
-                "executionAvgUs=${scheduler.totalExecutionNanos / processed / 1_000}, " +
-                "executionMaxUs=${scheduler.maximumExecutionNanos / 1_000}, " +
-                "resultAvgUs=${scheduler.totalResultLatencyNanos / drained / 1_000}, " +
-                "resultMaxUs=${scheduler.maximumResultLatencyNanos / 1_000}, " +
-                "queueP95Us=${scheduler.queueLatencyP95Nanos / 1_000}, " +
-                "executionP95Us=${scheduler.executionLatencyP95Nanos / 1_000}, " +
-                "resultP95Us=${scheduler.resultLatencyP95Nanos / 1_000}, " +
-                "drainedLast=${metrics.lastPumpEvents}, pumpLastUs=${metrics.lastPumpNanos / 1_000}, " +
-                "worldDeferred=${metrics.deferredWorldRequests}, worldTotal=${metrics.totalDeferredWorldRequests}, " +
-                "hostToAdvance=n=${metrics.hostContinuationSamples}/" +
-                "avg=${metrics.totalHostContinuationDelayTicks / continuationSamples}/" +
-                "max=${metrics.maximumHostContinuationDelayTicks} ticks, " +
-                "inputRejected=${metrics.rejectedInputRequests}, inputCoalesced=${metrics.coalescedRedstoneInputs}, " +
-                "mailboxRejected=${scheduler.mailboxFullRejections}, " +
-                "permitRejected=${scheduler.permitPendingRejections}, " +
+            "VM actors=${metrics.nativeActors}/${metrics.nativeMaximumActors}, " +
+                "pending=${metrics.pendingRequests}, pumpLastUs=${metrics.lastPumpNanos / 1_000}, " +
                 "capacity=${metrics.currentInstructionCapacity}/${metrics.calibratedInstructionCapacity}, " +
-                "runnableComputers=${metrics.runnableComputersLastFrame}, waitingComputers=${metrics.waitingComputersLastFrame}, " +
-                "throttled=${metrics.throttledComputersLastFrame}, " +
-                "requested=${metrics.requestedInstructionsLastFrame}, reserved=${metrics.reservedInstructionsLastFrame}, " +
-                "missed=${metrics.missedInstructionsLastFrame}, retiredTotal=${metrics.retiredInstructionsTotal}, " +
-                "unusedTotal=${metrics.unusedReservationsTotal}"
+                "runnable=${metrics.runnableComputersLastFrame}, waiting=${metrics.waitingComputersLastFrame}, " +
+                "throttled=${metrics.throttledComputersLastFrame}, retiredTotal=${metrics.retiredInstructionsTotal}, " +
+                "worldTotal=${metrics.totalDeferredWorldRequests}, " +
+                "inputRejected=${metrics.rejectedInputRequests}, inputCoalesced=${metrics.coalescedRedstoneInputs}"
         }
     }
 
     private const val METRICS_LOG_INTERVAL_TICKS = 100
 }
 
-/** One backend for a service lifetime; carriers and world actions use the same owner boundary. */
+/** Rust owns execution; the server carrier owns admission and world actions. */
 internal fun openServerVmRuntime(
-    backend: VmExecutionBackend,
     config: VmActorSchedulerConfig,
     governor: VmCapacityGovernor = VmCapacityGovernor(),
     ready: () -> Unit = {},
-): ProgramRuntimeService =
-    when (backend) {
-        VmExecutionBackend.JVM -> {
-            ProgramRuntimeActorService(
-                config,
-                capacityGovernor = governor,
-                onResultsReady = ready,
-                capacityFramesRequired = true,
-            )
-        }
-
-        VmExecutionBackend.NATIVE -> {
-            NativeProgramRuntimeService(config, capacityGovernor = governor, onResultsReady = ready)
-        }
-    }
+): ProgramRuntimeService = NativeProgramRuntimeService(config, capacityGovernor = governor, onResultsReady = ready)

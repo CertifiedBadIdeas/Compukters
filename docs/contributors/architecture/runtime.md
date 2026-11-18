@@ -24,29 +24,24 @@ Production computers attach one actor identified by `ComputerId` and a machine e
 attachment without blocking or failing the server tick; the block remains powered off and retries on a later tick.
 Minecraft runtime epochs come from one process-wide monotonic allocator, so replacing a block entity cannot reuse
 the old actor address even when its persisted `ComputerId` is retained. Epochs are runtime identities and are not saved.
-The server config exposes `vm.workers`, `vm.maximum_actors`, `vm.mailbox_capacity`, `vm.messages_per_turn`, and
+The server config exposes `vm.workers`, `vm.maximum_actors`, `vm.mailbox_capacity`, and
 `vm.result_capacity_per_worker`; defaults are half of the available processors clamped to 2..8, 4096 actors, 64
-commands, 4 commands per turn, and 256 replies per worker. Operators may explicitly configure up to 64 workers.
-Increasing queue limits trades bounded memory for burst tolerance; increasing messages per turn trades inter-actor
-latency for locality.
+commands and a result/transport capacity contribution of 256 entries per worker. Operators may explicitly configure up to 64 workers.
+Increasing queue limits trades bounded memory for burst tolerance.
 
 ## Scheduler observations
 
-Scheduler snapshots read atomic counters and bounded lane sizes without scanning registered actors. Every five seconds
-the debug log reports registered actors together with configured capacity, runnable actors, mailbox and result depths,
-worker occupancy, average/maximum command-queue latency, average/maximum execution time, completed-result latency, the
-last server pump size and duration, deferred world requests, host-completion-to-next-advance delay in server ticks,
-and rejected or capacity-coalesced redstone input submissions. Pending redstone transitions retain their sampled order
-while a VM turn is in flight, up to the configured mailbox capacity; overflow coalesces only the newest retained packet
-and increments the diagnostic counter. These are lifetime counters and gauges for the current server service rather
-than an equal-CPU or delivery-latency contract.
+The service reports registered actors, pending requests, pump work, capacity, throttling, retirement,
+world-request and input observations. It does not fabricate JVM command-queue or execution-latency histograms
+for Rust workers. These are service-lifetime observations, not an equal-CPU or delivery-latency contract.
+Pending redstone transitions retain their sampled order while a VM turn is in flight, up to the configured
+mailbox capacity; overflow coalesces the newest retained packet and increments the diagnostic counter.
 
 ## Actor continuations
 
 `ActorProgramComputer` is the asynchronous carrier implementation for the actor scheduler. Its server-side state is an
-observation from actor replies, and terminal, filesystem, deployment, and input requests return futures. The scheduler
-admits at most one pending or executing tick permit per actor, while completed replies may remain queued for the next
-server-thread pump without blocking admission of a later tick. The carrier suppresses obsolete lifecycle replies and
+observation from actor replies, and terminal, filesystem, deployment, and input requests return futures. The service admits at most one pending turn per actor. Completed observations settle its credit on the owner
+pump before a later turn is admitted. The carrier suppresses obsolete lifecycle replies and
 performs redstone and sound world actions on its owning server thread. A completed world action may submit a typed
 continuation in the same world tick using the remaining instruction credit from that computer's original frame grant.
 The original deadline is retained, continuations are capped, and host-request and advance quotas are cumulative for
@@ -68,23 +63,18 @@ allowance between callbacks. Callback failures are isolated from other computers
 again after publishing state, because a state observer may synchronously close or replace the carrier before world
 effects are applied. Explicit commands and lifecycle operations retain their future and cancellation contracts.
 
-The standalone fleet probe waits using lightweight observations of the existing pending, scheduling, execution and
-queue state, and reads the existing retirement counter for frame progress. These observations collect no latency
-histograms and are valid for its serialized admission/pump loop; they are not an admission barrier for concurrent
-callers. Production diagnostic snapshots retain their full histograms and logging cadence.
+## Rust actor scheduler
 
-## Experimental native actor backend
-
-The server selects `vm.backend` once when its lazy runtime service opens: `JVM` by default or explicitly
-`NATIVE`. Changing this setting requires a server restart. Both implement `ProgramRuntimeService` and use the
-same carrier, world callbacks and persistence lifecycle. `NativeProgramRuntimeService` collects submitted turns
-and uses the existing per-computer allocator and capacity governor; Rust owns Guest execution, timers and the
+`NativeProgramRuntimeService` is the only production execution service. It collects submitted turns and uses
+one per-computer allocator and capacity governor; Rust owns the worker pool, Guest execution, timers and
 original frame credit used by continuations. Pending admission retains at most one turn per registered computer.
-No JVM worker advances a native actor. Calibration uses the selected backend on a separate owner and execution pool.
-Development native libraries include dormant fleet support; runtime bundles without that feature reject explicit
-native selection instead of silently falling back. JVM queue and latency metrics are unavailable on native;
-semantic work, capacity, pump, admission and program memory observations remain distinct from those metrics.
+The server registry depends only on `ProgramRuntimeLifecycle` for frame admission, bounded event delivery,
+calibration and close; the computer carrier uses the machine request/turn contract.
 
+There is no JVM execution scheduler or backend selection. Calibration opens a separate native fleet. Both
+supported Minecraft versions require fleet support in their native runtime, using FFM or JNI respectively;
+a runtime missing that capability fails explicitly instead of falling back. The Cargo feature and low-level
+transport symbols retain their existing `experimental` names; this source migration does not change wire layouts.
 
 `NativeFleetActorRuntimeService` implements active turns of `ActorRuntimeService` for hosts already started or
 restored and transferred to a coordinated native fleet. Rust workers own execution and timers; the owner grants
@@ -99,7 +89,7 @@ lane's turn when the shared deadline expires. A busy attempt consumes transport 
 discarding its command. Observation count and transport progress are independent: after the tick's
 observation quota is spent, a native service can still send queued commands with zero event allowance
 within the remaining owner time. Each pump bounds transport attempts by the configured outbox capacity;
-the server does not extend its shared time allowance. JVM services stop when their observation quota is spent.
+the server does not extend its shared time allowance.
 Result notifications coalesce until an owner pump has observation allowance again. Command readiness
 remains independent, so a full result quota neither creates empty owner wakeups for every publication
 nor prevents an admitted command from requesting delivery.
@@ -110,12 +100,11 @@ input cannot enter while that actor has a turn in flight. Host replies use the s
 prefix principle. A past ordinary frame deadline still allows accepted effects to settle and produces a zero-work
 final report; it cannot admit a Guest continuation.
 
-Idle native hosts use the same `RestoreOrBoot`, `CompleteRestoration` and `AbortRestoration` handler as the JVM
-backend. One lazy bootstrap worker handles storage operations and closes; it never advances Guest and waits for an
+Idle native hosts use the bootstrap-only `RestoreOrBoot`, `CompleteRestoration` and `AbortRestoration` handler. One lazy bootstrap worker handles storage operations and closes; it never advances Guest and waits for an
 explicit signal when idle. The carrier performs addon restoration on its owner thread before completing restoration.
 Only then does owner-side nonblocking fleet admission transfer the session and timers to Rust. Transfer pressure
 retains the completed bootstrap result instead of repeating boot or checkpoint decoding. Active actors retain no
-bootstrap entry, processor or per-machine completion slot. Fresh boot and restore do not change backend selection.
+bootstrap entry, processor or per-machine completion slot. Fresh boot and restore use the same native execution service.
 
 Bootstrap holds at most one command/result per preparing actor and shares actor/request limits with active execution.
 Before work starts, it reserves one outbox entry and a conservative byte charge for four maximum checkpoint envelopes
@@ -193,7 +182,7 @@ unused cache entries remain bounded until eviction or scope/machine cancellation
 classifications and matching prepared packets; actor fencing clears both before off-thread handoff. Accepted scalar
 cost commands may finish after cancellation; Rust ignores their obsolete request identities.
 
-Native compiler events use the same host submission rules and `CompilerCompletionRouter` as the JVM actor backend.
+Native compiler events use the host submission rules and shared `CompilerCompletionRouter`.
 Addresses bind computer identity, VM epoch and native transaction token. The shared router admits at most 64 pending
 or unconsumed completed requests and charges at most 64 MiB for retained completions, including 256 bytes reserved per
 active request for a bounded failure response. It converts one backend result at a time; an oversized result becomes
@@ -254,9 +243,7 @@ Stop barriers complete after native destruction, final filesystem generation rec
 owner result pumping. Canceling a returned future does not cancel the close. Closing metadata and one control operation
 are bounded by the actor admission limit, with no per-idle-machine reservation. Ordinary output from other machines
 remains untouched. Shutdown waits for both the event waiter and the lifecycle worker before allowing fleet destruction.
-Transport errors retain the charged head for retry; cleanup errors fail the individual barrier. Broader command parity and production selection
-still need integration; production backend selection
-remains unchanged.
+Transport errors retain the charged head for retry; cleanup errors fail the individual barrier.
 
 The native checkpoint-detach primitive is available through both experimental transports. It drains accepted
 commands, validates the capture tick, settles remaining external routes with Unavailable without advancing Guest,
@@ -278,7 +265,7 @@ checkpoint failure discards stale saved execution, closes the recovered host and
 are returned on either terminal path. Actor/query cancellation and reentrant ownership handoff follow the same rules
 as stop. No owner pumping is required.
 
-The common `ProgramRuntimeActorLease` separates admission from commit for both backends. Before native close
+The common `ProgramRuntimeActorLease` separates admission from commit for bootstrap and active native hosts. Before native close
 reservation, the carrier may drain ordered final host completion prefixes without advancing Guest. A refused reservation
 retains no additional close commands or checkpoint payload. Already accepted replies remain owned and charged by the
 outbox and drain before capture. Carrier lifecycle state, remaining replies and addon resources stay live after refusal.
@@ -294,7 +281,8 @@ generation after discard. StoreBusy keeps exclusive recovered ownership for retr
 the discarded execution. Native final addon and world replies use the streamed completion path; legacy raw
 redstone/sound completion effects still reject before admission. The carrier exposes pre-fence pressure as a null close attempt to the world
 lifecycle registry, which retains and retries that operation on the owner; accepted failures remain terminal barriers.
-Broader workload parity and comparative CPU, latency and memory validation remain required before making the native backend the default.
+Bootstrap close uses the same deferred-admission signal as active close, so the registry retries queue pressure
+without recording it as an accepted persistence failure.
 
 ## Addon host boundary
 
@@ -444,8 +432,8 @@ An explicit actor request can also compose one immutable resource snapshot from 
 native machine's semantic work, Guest heap, admitted mutable execution-resident, and filesystem quota counters. The
 host counts Guest and maintenance budgets only when it actually invokes native advancement; both host and native
 counters saturate explicitly instead of overflowing. These values describe VM work and granted capacity, not host CPU
-percentage. Grant counters are nullable: the JVM executor reports its own advancement grants, while the native
-fleet currently exports semantic work and memory counters without scheduler grant counters. Its explicit resource
+percentage. Grant counters are nullable: direct host advancement reports its grants, while the native fleet
+exports semantic work and memory counters without scheduler grant counters. Its explicit resource
 request composes the native response with host state/configuration without executing Guest or retaining a per-machine
 snapshot. The terminal keeps heap/disk observations and displays an unknown budget ratio when grant counters are absent.
 No sampling loop, history buffer, heap-content scan, or unsolicited FFM call runs for unobserved computers.

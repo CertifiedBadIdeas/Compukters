@@ -19,9 +19,10 @@
 package ru.lazyhat.compukters.impl.benchmark
 
 import ru.lazyhat.compukters.core.device.runtime.actor.ProgramRuntimeActorMetrics
+import ru.lazyhat.compukters.core.device.runtime.actor.ProgramRuntimeActorRequestException
 import ru.lazyhat.compukters.core.device.runtime.actor.VmActorEndpoint
 import ru.lazyhat.compukters.core.device.runtime.actor.VmActorSchedulerConfig
-import ru.lazyhat.compukters.core.device.runtime.actor.VmActorSchedulerMetrics
+import ru.lazyhat.compukters.core.device.runtime.actor.VmActorSubmission
 import ru.lazyhat.compukters.core.device.runtime.program.ProgramFailure
 import ru.lazyhat.compukters.core.device.runtime.program.ProgramResourceSnapshot
 import ru.lazyhat.compukters.core.device.runtime.program.ProgramRuntimeState
@@ -32,6 +33,28 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 
 class HeadlessVmBenchmarkFleetTest {
+    @Test
+    fun `refused startup retries once per tick and never duplicates an accepted request`() {
+        val runtime = FakeRuntime(capacity = 1, delayedStart = true)
+        val fleet = HeadlessVmBenchmarkFleet(runtime, byteArrayOf(1), maximumActors = 1)
+        fleet.startCapacity(1, 7, 10)
+        val actor = runtime.actors.single()
+        actor.starts.single().completeExceptionally(ProgramRuntimeActorRequestException(VmActorSubmission.MAILBOX_FULL))
+        assertEquals(0, fleet.snapshot(0.0).failedActors)
+        assertEquals(0, actor.closeCalls)
+        assertEquals(1, actor.starts.size)
+        fleet.tick(11)
+        assertEquals(2, actor.starts.size)
+        fleet.tick(12)
+        assertEquals(2, actor.starts.size)
+        assertEquals(HeadlessVmBenchmarkPhase.SETTLING, fleet.snapshot(0.0).phase)
+        actor.starts.last().complete(ProgramRuntimeState.Running)
+        fleet.tick(13)
+        assertEquals(1, actor.advances.size)
+        assertEquals(2, actor.starts.size)
+        fleet.stop()
+    }
+
     @Test
     fun `capacity fleet settles stays quiescent samples once and wakes through terminal text`() {
         val runtime = FakeRuntime(capacity = 2)
@@ -167,12 +190,13 @@ class HeadlessVmBenchmarkFleetTest {
     private class FakeRuntime(
         private val capacity: Int,
         private val delayedClose: Boolean = false,
+        private val delayedStart: Boolean = false,
     ) : HeadlessVmBenchmarkRuntime {
         val actors = mutableListOf<FakeActor>()
 
         override fun attach(endpoint: VmActorEndpoint): HeadlessVmBenchmarkActor? {
             if (actors.count { !it.closed } >= capacity) return null
-            return FakeActor(delayedClose).also(actors::add)
+            return FakeActor(delayedClose, delayedStart).also(actors::add)
         }
 
         override fun metrics(): ProgramRuntimeActorMetrics = metrics(actors.count { !it.closed })
@@ -180,7 +204,9 @@ class HeadlessVmBenchmarkFleetTest {
 
     private class FakeActor(
         delayedClose: Boolean,
+        private val delayedStart: Boolean,
     ) : HeadlessVmBenchmarkActor {
+        val starts = mutableListOf<CompletableFuture<ProgramRuntimeState>>()
         val advances = mutableListOf<CompletableFuture<ProgramRuntimeState>>()
         val close = if (delayedClose) CompletableFuture<Unit>() else CompletableFuture.completedFuture(Unit)
         var rounds = 0
@@ -189,7 +215,15 @@ class HeadlessVmBenchmarkFleetTest {
         var resourceCalls = 0
 
         override fun start(artifact: ByteArray): CompletableFuture<ProgramRuntimeState> =
-            CompletableFuture.completedFuture(ProgramRuntimeState.Running)
+            (
+                if (delayedStart) {
+                    CompletableFuture<ProgramRuntimeState>()
+                } else {
+                    CompletableFuture.completedFuture<ProgramRuntimeState>(
+                        ProgramRuntimeState.Running,
+                    )
+                }
+            ).also(starts::add)
 
         override fun sendRounds(rounds: Int): CompletableFuture<Boolean> {
             this.rounds = rounds
@@ -239,31 +273,8 @@ class HeadlessVmBenchmarkFleetTest {
 
         fun metrics(registered: Int) =
             ProgramRuntimeActorMetrics(
-                scheduler =
-                    VmActorSchedulerMetrics(
-                        maximumActors = VmActorSchedulerConfig.DEFAULT_MAXIMUM_ACTORS,
-                        registeredActors = registered,
-                        scheduledActors = 0,
-                        queuedMessages = 0,
-                        pendingPermits = 0,
-                        busyWorkers = 0,
-                        queuedResults = 0,
-                        acceptedMessages = 0,
-                        processedMessages = 0,
-                        acceptedPermits = 0,
-                        processedPermits = 0,
-                        totalQueueLatencyNanos = 0,
-                        maximumQueueLatencyNanos = 0,
-                        totalExecutionNanos = 0,
-                        maximumExecutionNanos = 0,
-                        mailboxFullRejections = 0,
-                        permitPendingRejections = 0,
-                        staleEndpointRejections = 0,
-                        closedRejections = 0,
-                        drainedEvents = 0,
-                        totalResultLatencyNanos = 0,
-                        maximumResultLatencyNanos = 0,
-                    ),
+                nativeActors = registered,
+                nativeMaximumActors = VmActorSchedulerConfig.DEFAULT_MAXIMUM_ACTORS,
                 pendingRequests = 0,
                 deferredWorldRequests = 0,
                 totalDeferredWorldRequests = 0,

@@ -18,9 +18,9 @@
 
 package ru.lazyhat.compukters.core.device.runtime.program.integration
 
+import ru.lazyhat.compukters.core.device.runtime.actor.NativeProgramRuntimeService
 import ru.lazyhat.compukters.core.device.runtime.actor.ProgramRuntimeActorCommand
 import ru.lazyhat.compukters.core.device.runtime.actor.ProgramRuntimeActorReply
-import ru.lazyhat.compukters.core.device.runtime.actor.ProgramRuntimeActorService
 import ru.lazyhat.compukters.core.device.runtime.actor.ProgramRuntimeActorValue
 import ru.lazyhat.compukters.core.device.runtime.actor.VmActorEndpoint
 import ru.lazyhat.compukters.core.device.runtime.actor.VmActorSchedulerConfig
@@ -45,21 +45,21 @@ class ProgramRuntimeActorIntegrationTest {
     }
 
     @Test
-    fun `compiled Kotlin artifact runs through a worker-owned actor`() {
+    fun `compiled Kotlin artifact runs through the Rust-owned scheduler`() {
         VmRuntime.loadNativeLibrary(Path.of(requiredProperty("compukters.ffi.library")))
         val artifact = Path.of(requiredProperty("compukters.programRuntime.artifact")).readBytes()
         val endpoint = VmActorEndpoint(ComputerId.fromLongs(30, 40), 1)
-        ProgramRuntimeActorService(
+        NativeProgramRuntimeService(
             VmActorSchedulerConfig(
                 workerCount = 1,
                 maximumActors = 1,
                 mailboxCapacity = 8,
-                messagesPerTurn = 1,
                 resultCapacityPerWorker = 8,
             ),
+            tickBudget = ProgramTickBudget(128, 64, 4),
         ).use { scheduler ->
             // Path constructor validation gives the shell a minimum slice above 64.
-            assertEquals(true, scheduler.registerStandalone(endpoint, ProgramTickBudget(128, 64, 4)))
+            val lease = checkNotNull(scheduler.attachStandalone(endpoint, ProgramTickBudget(128, 64, 4)))
             val started =
                 scheduler.awaitRequest(
                     endpoint,
@@ -85,7 +85,7 @@ class ProgramRuntimeActorIntegrationTest {
                     assertIs<ProgramRuntimeActorValue.ResourceSnapshotValue>(resources.value).snapshot,
                 )
             assertEquals(ProgramRuntimeState.WaitingForInput, snapshot.state)
-            assertTrue(requireNotNull(snapshot.grantedGuestUnits) > 0)
+            assertTrue(snapshot.fixedGuestUnits + snapshot.dynamicGuestUnits > 0)
             assertTrue(snapshot.executedInstructions > 0)
             assertTrue(snapshot.heapCapacityBytes > 0)
             assertTrue(snapshot.filesystemLogicalCapacityBytes > 0)
@@ -95,7 +95,8 @@ class ProgramRuntimeActorIntegrationTest {
                     endpoint,
                 ) { requestId -> ProgramRuntimeActorCommand.TerminalFullState(requestId) }
             assertEquals(">\n", terminalText(requireNotNull(assertIs<ProgramRuntimeActorValue.TerminalStateValue>(terminal.value).state)))
-            assertEquals(true, scheduler.unregister(endpoint).get(TIMEOUT_SECONDS, TimeUnit.SECONDS))
+            lease.closeAsync().get(TIMEOUT_SECONDS, TimeUnit.SECONDS)
+            assertEquals(0, scheduler.runtimeMetrics().nativeActors)
         }
     }
 
@@ -122,7 +123,7 @@ class ProgramRuntimeActorIntegrationTest {
         substeps: Int,
     ): NativeBaseline {
         val endpoint = VmActorEndpoint(ComputerId.fromLongs(686, substeps.toLong()), 1)
-        ProgramRuntimeActorService(
+        NativeProgramRuntimeService(
             VmActorSchedulerConfig(workerCount = 1, maximumActors = 1),
             safeInstructionCapacity = 131_072,
         ).use { scheduler ->
@@ -164,14 +165,14 @@ class ProgramRuntimeActorIntegrationTest {
             val output = terminalText(requireNotNull(assertIs<ProgramRuntimeActorValue.TerminalStateValue>(terminal.value).state))
             assertTrue(output.startsWith("vmbench agent: rounds=200\nvmbench agent: checksum="))
             assertTrue(snapshot.executedInstructions > 131_072, "workload spans multiple capacity-limited turns")
-            assertEquals(tick, scheduler.metrics().acceptedPermits)
+            assertEquals(snapshot.executedInstructions, scheduler.runtimeMetrics().retiredInstructionsTotal)
             return NativeBaseline(
                 substeps,
                 latestStep,
                 tick,
                 snapshot.executedInstructions,
-                requireNotNull(snapshot.grantedGuestUnits),
-                requireNotNull(snapshot.grantedMaintenanceUnits),
+                snapshot.fixedGuestUnits + snapshot.dynamicGuestUnits,
+                snapshot.maintenanceUnits,
                 scheduler.runtimeMetrics().retiredInstructionsTotal,
                 output,
             )
@@ -189,7 +190,7 @@ class ProgramRuntimeActorIntegrationTest {
         val output: String,
     )
 
-    private fun ProgramRuntimeActorService.awaitRequest(
+    private fun NativeProgramRuntimeService.awaitRequest(
         endpoint: VmActorEndpoint,
         command: (ru.lazyhat.compukters.core.device.runtime.actor.ProgramRuntimeRequestId) -> ProgramRuntimeActorCommand,
     ): ProgramRuntimeActorReply {
@@ -203,11 +204,13 @@ class ProgramRuntimeActorIntegrationTest {
         error("runtime actor reply timed out")
     }
 
-    private fun ProgramRuntimeActorService.awaitTurn(
+    private fun NativeProgramRuntimeService.awaitTurn(
         endpoint: VmActorEndpoint,
         worldTick: Long,
     ): ProgramRuntimeActorReply {
+        beginCapacityFrame(worldTick)
         val future = turn(endpoint, worldTick)
+        flushCapacityFrame()
         val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(TIMEOUT_SECONDS)
         while (System.nanoTime() < deadline) {
             pump(1)

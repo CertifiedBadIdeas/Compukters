@@ -109,6 +109,7 @@ internal object ComputerLifecycleGameTestScenario {
         helper
             .startSequence()
             .thenWaitUntil {
+                helper.assertTrue(entity.runtimeState == ProgramComputerState.WaitingForInput, "computer boot is still pending")
                 initialTerminal?.takeIf { it.isDone }?.let { completed ->
                     val observed = completed.getNow(null)
                     if (observed == null || observed.revision <= 0 || observed.cells.none { it.codePoint != ' '.code }) {

@@ -410,7 +410,6 @@ class NativeProgramRuntimeService(
     override fun runtimeMetrics(): ProgramRuntimeActorMetrics {
         checkOwner()
         return ProgramRuntimeActorMetrics(
-            scheduler = null,
             pendingRequests = runtime.pendingRequestCount + turns.size,
             deferredWorldRequests = null,
             totalDeferredWorldRequests = worldTotal,
@@ -434,7 +433,6 @@ class NativeProgramRuntimeService(
             retiredInstructionsTotal = retiredTotal,
             unusedReservationsTotal = unusedTotal,
             countersSaturated = saturated,
-            backend = VmExecutionBackend.NATIVE,
             nativeActors = registered.size,
             nativeMaximumActors = config.maximumActors,
         )

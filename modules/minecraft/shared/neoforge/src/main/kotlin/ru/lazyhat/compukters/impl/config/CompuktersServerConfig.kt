@@ -21,22 +21,14 @@ package ru.lazyhat.compukters.impl.config
 import net.neoforged.neoforge.common.ModConfigSpec
 import ru.lazyhat.compukters.core.device.runtime.actor.VmActorSchedulerConfig
 import ru.lazyhat.compukters.core.device.runtime.actor.VmCapacityGovernorConfig
-import ru.lazyhat.compukters.core.device.runtime.actor.VmExecutionBackend
 
 object CompuktersServerConfig {
     private val builder = ModConfigSpec.Builder()
     private val defaultWorkers = VmActorSchedulerConfig.defaultWorkerCount()
 
-    private val backend =
-        builder
-            .comment("VM execution backend; NATIVE is experimental and requires a runtime built with fleet support. Restart required.")
-            .defineEnum("vm.backend", VmExecutionBackend.JVM)
-
-    fun executionBackend(): VmExecutionBackend = backend.get()
-
     private val workerCount =
         builder
-            .comment("Number of platform threads used to execute VM actors")
+            .comment("Number of Rust worker threads used to execute VM actors")
             .defineInRange("vm.workers", defaultWorkers, 1, MAXIMUM_WORKERS)
     private val maximumActors =
         builder
@@ -51,13 +43,9 @@ object CompuktersServerConfig {
         builder
             .comment("Maximum accepted commands waiting for one VM actor")
             .defineInRange("vm.mailbox_capacity", 64, 1, 1_024)
-    private val messagesPerTurn =
-        builder
-            .comment("Maximum commands processed when a worker leases one VM actor")
-            .defineInRange("vm.messages_per_turn", 4, 1, 64)
     private val resultCapacityPerWorker =
         builder
-            .comment("Maximum undelivered actor replies retained by each VM worker")
+            .comment("Per-worker contribution to the bounded fleet result and transport capacity")
             .defineInRange("vm.result_capacity_per_worker", 256, 1, 4_096)
     private val hostSharePercent =
         builder
@@ -83,7 +71,6 @@ object CompuktersServerConfig {
             workerCount = workerCount.get(),
             maximumActors = maximumActors(),
             mailboxCapacity = mailboxCapacity.get(),
-            messagesPerTurn = messagesPerTurn.get(),
             resultCapacityPerWorker = resultCapacityPerWorker.get(),
         )
 

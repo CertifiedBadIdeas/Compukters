@@ -888,7 +888,7 @@ class ProgramRuntimeHost internal constructor(
         }
     }
 
-    /** Shared compiler addressing/admission for the JVM actor and native carrier. No Guest execution. */
+    /** Compiler addressing/admission shared by direct hosts and the native carrier. No Guest execution. */
     internal fun beginCompilation(request: VmCompilationRequest): ComputerCompilationOutcome.Failure? {
         check(pendingCompilation == null) { "compilation is already pending" }
         check(isNewCompilation(request.token)) { "obsolete compilation token" }

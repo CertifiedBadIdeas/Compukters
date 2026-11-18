@@ -19,10 +19,12 @@
 package ru.lazyhat.compukters.impl.computer
 
 import ru.lazyhat.compukters.core.device.runtime.actor.ProgramRuntimeActorCommand
-import ru.lazyhat.compukters.core.device.runtime.actor.ProgramRuntimeActorService
+import ru.lazyhat.compukters.core.device.runtime.actor.ProgramRuntimeActorMetrics
+import ru.lazyhat.compukters.core.device.runtime.actor.ProgramRuntimeLifecycle
 import ru.lazyhat.compukters.core.device.runtime.actor.VmActorEndpoint
 import ru.lazyhat.compukters.core.device.runtime.actor.VmActorSchedulerConfig
 import ru.lazyhat.compukters.core.device.runtime.actor.VmCapacityCalibration
+import ru.lazyhat.compukters.core.device.runtime.actor.VmCapacityGovernor
 import ru.lazyhat.compukters.lang.runtime.fs.ComputerId
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.ConcurrentLinkedQueue
@@ -43,12 +45,11 @@ class VmActorServiceRegistryTest {
         val queued = ConcurrentLinkedQueue<Runnable>()
         var now = 0L
         val registry =
-            VmActorServiceRegistry<Any>(
+            VmActorServiceRegistry<Any, FakeRuntime>(
                 checkOwner = {},
                 opener = { ready ->
-                    ProgramRuntimeActorService(
-                        VmActorSchedulerConfig(workerCount = 1, resultCapacityPerWorker = 4),
-                        onResultsReady = ready,
+                    FakeRuntime(
+                        ready = ready,
                         nanoTime = { now },
                     )
                 },
@@ -60,12 +61,11 @@ class VmActorServiceRegistryTest {
         val server = Any()
         registry.start(server)
         registry.tick(server, 0)
-        val runtime = assertIs<ProgramRuntimeActorService>(registry.service(server))
+        val runtime = assertIs<FakeRuntime>(registry.service(server))
         val endpoint = VmActorEndpoint(ComputerId.fromLongs(11, 12), 1)
-        assertTrue(runtime.registerStandalone(endpoint))
-        val first = runtime.request(endpoint, ProgramRuntimeActorCommand::TerminalFullState)
+        val first = runtime.request()
         first.thenRun { now += 1_000 }
-        val second = runtime.request(endpoint, ProgramRuntimeActorCommand::ResourceSnapshot)
+        val second = runtime.request()
         awaitResults(runtime, 2)
         queued.remove().run()
         assertTrue(first.isDone)
@@ -82,7 +82,7 @@ class VmActorServiceRegistryTest {
         val owner = Thread.currentThread()
         val queued = ConcurrentLinkedQueue<Runnable>()
         val registry =
-            VmActorServiceRegistry<Any>(
+            VmActorServiceRegistry<Any, FakeRuntime>(
                 checkOwner = { check(Thread.currentThread() === owner) },
                 opener = ::service,
                 maximumEventsPerTick = 1,
@@ -92,17 +92,16 @@ class VmActorServiceRegistryTest {
         val server = Any()
         registry.start(server)
         registry.tick(server, 0)
-        val runtime = assertIs<ProgramRuntimeActorService>(registry.service(server))
+        val runtime = assertIs<FakeRuntime>(registry.service(server))
         val endpoint = VmActorEndpoint(ComputerId.fromLongs(7, 8), 1)
-        assertTrue(runtime.registerStandalone(endpoint))
-        val first = runtime.request(endpoint, ProgramRuntimeActorCommand::TerminalFullState)
-        val second = runtime.request(endpoint, ProgramRuntimeActorCommand::ResourceSnapshot)
+        val first = runtime.request()
+        val second = runtime.request()
         awaitResults(runtime, 2)
         assertEquals(1, queued.size)
         queued.remove().run()
         assertTrue(first.isDone)
         assertFalse(second.isDone)
-        assertEquals(1, runtime.metrics().queuedResults)
+        assertEquals(1, runtime.queuedResults)
         registry.afterTick(server)
         registry.tick(server, 1)
         assertTrue(second.isDone)
@@ -116,7 +115,7 @@ class VmActorServiceRegistryTest {
         val wakeupScheduled = CountDownLatch(1)
         var opened = 0
         val registry =
-            VmActorServiceRegistry<Any>(
+            VmActorServiceRegistry<Any, FakeRuntime>(
                 checkOwner = {},
                 opener = { ready ->
                     opened++
@@ -131,10 +130,9 @@ class VmActorServiceRegistryTest {
         val server = Any()
         registry.start(server)
         registry.tick(server, 0)
-        val runtime = assertIs<ProgramRuntimeActorService>(registry.service(server))
+        val runtime = assertIs<FakeRuntime>(registry.service(server))
         val endpoint = VmActorEndpoint(ComputerId.fromLongs(9, 10), 1)
-        assertTrue(runtime.registerStandalone(endpoint))
-        runtime.request(endpoint, ProgramRuntimeActorCommand::TerminalFullState)
+        runtime.request()
         awaitResults(runtime, 1)
         assertTrue(wakeupScheduled.await(5, TimeUnit.SECONDS), "worker must schedule the owner wakeup")
         assertEquals(1, queued.size)
@@ -150,13 +148,13 @@ class VmActorServiceRegistryTest {
     @Test
     fun `completed startup calibration replaces fallback and failure keeps it bounded`() {
         val successful =
-            VmActorServiceRegistry<Any>(
+            VmActorServiceRegistry<Any, FakeRuntime>(
                 checkOwner = {},
                 opener = ::service,
                 calibrator = { CompletableFuture.completedFuture(VmCapacityCalibration(1_000_000, 100_000_000, 2)) },
             )
         val failed =
-            VmActorServiceRegistry<Any>(
+            VmActorServiceRegistry<Any, FakeRuntime>(
                 checkOwner = {},
                 opener = ::service,
                 calibrator = { CompletableFuture.failedFuture(IllegalStateException("sample failed")) },
@@ -184,7 +182,7 @@ class VmActorServiceRegistryTest {
     fun `idle server ticks allocate no worker service and stop forbids reopening`() {
         var opened = 0
         val registry =
-            VmActorServiceRegistry<Any>({}, {
+            VmActorServiceRegistry<Any, FakeRuntime>({}, {
                 opened++
                 service(it)
             })
@@ -203,7 +201,7 @@ class VmActorServiceRegistryTest {
     fun `each server owns one service and ticks deliver at most the configured budget`() {
         val owner = Thread.currentThread()
         val registry =
-            VmActorServiceRegistry<Any>(
+            VmActorServiceRegistry<Any, FakeRuntime>(
                 { check(Thread.currentThread() === owner) },
                 ::service,
                 maximumEventsPerTick = 1,
@@ -213,13 +211,12 @@ class VmActorServiceRegistryTest {
         registry.start(first)
         registry.start(second)
         try {
-            val runtime = assertIs<ProgramRuntimeActorService>(registry.service(first))
+            val runtime = assertIs<FakeRuntime>(registry.service(first))
             assertSame(runtime, registry.service(first))
             assertEquals(runtime.runtimeMetrics(), registry.metrics(first))
             val endpoint = VmActorEndpoint(ComputerId.fromLongs(1, 1), 1)
-            assertTrue(runtime.registerStandalone(endpoint))
-            val firstReply = runtime.request(endpoint, ProgramRuntimeActorCommand::TerminalFullState)
-            val secondReply = runtime.request(endpoint, ProgramRuntimeActorCommand::TerminalFullState)
+            val firstReply = runtime.request()
+            val secondReply = runtime.request()
             var callbackThread: Thread? = null
             firstReply.thenRun { callbackThread = Thread.currentThread() }
             awaitResults(runtime, 2)
@@ -240,13 +237,12 @@ class VmActorServiceRegistryTest {
 
     @Test
     fun `stop completes pending requests and rejects callback reopening`() {
-        val registry = VmActorServiceRegistry<Any>({}, ::service)
+        val registry = VmActorServiceRegistry<Any, FakeRuntime>({}, ::service)
         val server = Any()
         registry.start(server)
-        val runtime = assertIs<ProgramRuntimeActorService>(registry.service(server))
+        val runtime = assertIs<FakeRuntime>(registry.service(server))
         val endpoint = VmActorEndpoint(ComputerId.fromLongs(2, 2), 1)
-        assertTrue(runtime.registerStandalone(endpoint))
-        val reply = runtime.request(endpoint, ProgramRuntimeActorCommand::TerminalFullState)
+        val reply = runtime.request()
         awaitResults(runtime, 1)
         var reopenRejected = false
         reply.whenComplete { _, _ ->
@@ -255,21 +251,83 @@ class VmActorServiceRegistryTest {
         registry.stop(server)
         assertTrue(reply.isCompletedExceptionally)
         assertTrue(reopenRejected)
-        assertEquals(0, runtime.metrics().registeredActors)
+        assertEquals(0, if (runtime.closed) 0 else 1)
     }
 
-    private fun service(ready: () -> Unit = {}) =
-        ProgramRuntimeActorService(
-            VmActorSchedulerConfig(workerCount = 1, resultCapacityPerWorker = 4),
-            onResultsReady = ready,
-        )
+    private fun service(ready: () -> Unit = {}) = FakeRuntime(ready)
 
     private fun awaitResults(
-        service: ProgramRuntimeActorService,
+        service: FakeRuntime,
         count: Int,
     ) {
         val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5)
-        while (service.metrics().queuedResults < count && System.nanoTime() < deadline) Thread.onSpinWait()
-        assertEquals(count, service.metrics().queuedResults)
+        while (service.queuedResults < count && System.nanoTime() < deadline) Thread.onSpinWait()
+        assertEquals(count, service.queuedResults)
+    }
+
+    /** Ready-result test double: no threads, actors, native sessions or Guest execution. */
+    private class FakeRuntime(
+        private val ready: () -> Unit,
+        private val nanoTime: () -> Long = System::nanoTime,
+    ) : ProgramRuntimeLifecycle {
+        private val governor = VmCapacityGovernor()
+        private val results = ArrayDeque<CompletableFuture<Unit>>()
+        var closed = false
+            private set
+        val queuedResults: Int get() = results.size
+
+        fun request(): CompletableFuture<Unit> =
+            CompletableFuture<Unit>().also {
+                check(!closed)
+                results.addLast(it)
+                ready()
+            }
+
+        override fun beginCapacityFrame(worldTick: Long) = Unit
+
+        override fun flushCapacityFrame() = Unit
+
+        override fun observePreviousCapacityFrame() = Unit
+
+        override fun pump(
+            maximumEvents: Int,
+            deadlineNanos: Long,
+        ): Int {
+            var delivered = 0
+            while (delivered < maximumEvents && results.isNotEmpty() && (deadlineNanos == Long.MAX_VALUE || nanoTime() < deadlineNanos)) {
+                results.removeFirst().complete(Unit)
+                delivered++
+            }
+            return delivered
+        }
+
+        override fun runtimeMetrics() =
+            ProgramRuntimeActorMetrics(
+                pendingRequests = results.size,
+                deferredWorldRequests = 0,
+                totalDeferredWorldRequests = 0,
+                hostContinuationSamples = 0,
+                totalHostContinuationDelayTicks = 0,
+                maximumHostContinuationDelayTicks = 0,
+                rejectedInputRequests = 0,
+                coalescedRedstoneInputs = 0,
+                lastPumpEvents = 0,
+                lastPumpNanos = 0,
+            )
+
+        override fun calibratedCapacity() = governor.calibratedCapacity
+
+        override fun currentSafeCapacity() = governor.currentCapacity
+
+        override fun capacityFallbackReason() = governor.fallbackReason
+
+        override fun acceptCapacityCalibration(measurement: VmCapacityCalibration) = governor.calibrated(measurement)
+
+        override fun rejectCapacityCalibration(reason: String) = governor.calibrationFailed(reason)
+
+        override fun close() {
+            closed = true
+            while (results.isNotEmpty()) results.removeFirst().completeExceptionally(IllegalStateException("closed"))
+        }
     }
 }

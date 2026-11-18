@@ -23,9 +23,9 @@ import net.minecraft.server.MinecraftServer
 import ru.lazyhat.compukters.core.device.computer.ActorProgramComputer
 import ru.lazyhat.compukters.core.device.runtime.actor.ProgramRuntimeActorCommand
 import ru.lazyhat.compukters.core.device.runtime.actor.ProgramRuntimeActorValue
+import ru.lazyhat.compukters.core.device.runtime.actor.ProgramRuntimeService
 import ru.lazyhat.compukters.core.device.runtime.actor.VmActorEndpoint
 import ru.lazyhat.compukters.core.device.runtime.actor.VmActorSchedulerConfig
-import ru.lazyhat.compukters.core.device.runtime.actor.VmExecutionBackend
 import ru.lazyhat.compukters.core.device.runtime.program.ProgramRuntimeState
 import ru.lazyhat.compukters.core.device.runtime.program.RedstoneCommitResult
 import ru.lazyhat.compukters.impl.benchmark.VmCapacityCalibrator
@@ -61,19 +61,18 @@ internal object VmActorServiceGameTestScenario {
             drainCalls++
             if (drainCalls == 1) null else computer.closeAsync()
         }
-        // Exercise the same registry and backend factory with an explicitly selected native service.
+        // Exercise the production registry and Rust service factory with a single observation slot.
         // Its world effects and callbacks still belong to the GameTest server's owner thread.
         val nativeRegistry =
-            VmActorServiceRegistry<MinecraftServer>(
+            VmActorServiceRegistry<MinecraftServer, ProgramRuntimeService>(
                 checkOwner = { check(it.isSameThread) },
                 opener = { ready ->
                     openServerVmRuntime(
-                        VmExecutionBackend.NATIVE,
                         VmActorSchedulerConfig(workerCount = 1, maximumActors = 4),
                         ready = ready,
                     )
                 },
-                calibrator = { VmCapacityCalibrator.start(1, it.runtimeMetrics().backend) },
+                calibrator = { VmCapacityCalibrator.start(1) },
                 // Command delivery must remain live after the single observation slot is spent.
                 maximumEventsPerTick = 1,
                 enqueueOnOwner = { owner, task ->

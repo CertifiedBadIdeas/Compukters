@@ -56,7 +56,7 @@ The IDE compiles bounded multi-file snapshots through the same compiler contract
 
 The Rust VM owns verified execution, managed heap and GC, frames, task scheduling, quotas, capability suspension, terminal state and the Guest filesystem. Kotlin owns typed host requests and native-session lifetime; it must not implement a second interpreter or mirror mutable Guest machine state.
 
-A server-scoped actor scheduler serializes each computer’s native work. The Minecraft carrier owns its actor endpoint and machine epoch, submits bounded tick permits, and applies world effects on the server thread. Eligible host continuations reuse remaining frame credit and cumulative quotas; they do not receive a fresh unlimited advance.
+A server-scoped Rust actor scheduler serializes each computer’s native work. The Minecraft carrier owns its actor endpoint and machine epoch, submits bounded tick permits, and applies world effects on the server thread. Eligible host continuations reuse remaining frame credit and cumulative quotas; they do not receive a fresh unlimited advance.
 
 Only one cooperative Guest task executes instructions at a time. Waiting transfers execution to another runnable task; host replies retain their task/request identity. Each live foreground program owns its lazily created addon hosts, so exiting a child releases its resources while a suspended parent keeps its own.
 

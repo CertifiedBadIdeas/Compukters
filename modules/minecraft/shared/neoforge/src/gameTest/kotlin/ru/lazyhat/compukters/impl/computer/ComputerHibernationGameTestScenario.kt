@@ -81,7 +81,7 @@ internal object ComputerHibernationGameTestScenario {
                     snapshot!!.isDone,
                     "hibernation terminal snapshot pending for $expected; state=${computer.runtimeState}; epoch=${computer.terminalMachineId}",
                 )
-                val state = snapshot!!.join()
+                val state = ComputerGameTestFixtures.awaitObservation(helper, snapshot!!) { snapshot = null }
                 snapshot = null
                 val text =
                     state?.let { terminal ->

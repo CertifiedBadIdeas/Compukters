@@ -52,7 +52,7 @@ internal object PhysicalVmMemoryProbe {
         var nextAdmissionNanos = 0L
         var baselineReadyNanos = 0L
 
-        fun actors() = NeoForgeVmActorServices.metrics(server)?.scheduler?.registeredActors ?: 0
+        fun actors() = NeoForgeVmActorServices.metrics(server)?.nativeActors ?: 0
 
         fun waiting(): Int =
             positions.count { position ->

@@ -22,7 +22,6 @@ import ru.lazyhat.compukters.core.device.runtime.actor.ProgramRuntimeActorComman
 import ru.lazyhat.compukters.core.device.runtime.actor.ProgramRuntimeActorEffect
 import ru.lazyhat.compukters.core.device.runtime.actor.ProgramRuntimeActorFailure
 import ru.lazyhat.compukters.core.device.runtime.actor.ProgramRuntimeActorReply
-import ru.lazyhat.compukters.core.device.runtime.actor.ProgramRuntimeActorService
 import ru.lazyhat.compukters.core.device.runtime.actor.ProgramRuntimeActorValue
 import ru.lazyhat.compukters.core.device.runtime.actor.ProgramRuntimeFrameCredit
 import ru.lazyhat.compukters.core.device.runtime.actor.ProgramRuntimeHostCompletion
@@ -1087,7 +1086,7 @@ class NativeFleetEventPumpIntegrationTest {
     }
 
     @Test
-    fun `JVM actor lease hibernates without owner pumping and restores its native timer`() {
+    fun `native actor lease hibernates without owner pumping and restores its timer`() {
         installFfmRuntime()
         VmRuntime.loadNativeLibrary(Path.of(requireNotNull(System.getProperty("compukters.ffi.library"))))
         val artifact = Path.of(requireNotNull(System.getProperty("compukters.fleet.timer.fixture"))).readBytes()
@@ -1109,11 +1108,15 @@ class NativeFleetEventPumpIntegrationTest {
                 val host = ProgramRuntimeHost(factory)
                 assertEquals(ProgramStartResult.Started, host.start(artifact))
                 assertEquals(ProgramRuntimeState.Running, host.serverTick(1))
-                ProgramRuntimeActorService(VmActorSchedulerConfig(workerCount = 1, maximumActors = 1)).use { service ->
-                    val lease = checkNotNull(service.attach(VmActorEndpoint(id, 1), host))
-                    val carrier = ActorProgramComputer(service, lease, { RedstoneCommitResult.Committed })
-                    val generation = carrier.hibernateAsync(2, byteArrayOf(6)).get(5, TimeUnit.SECONDS)
-                    assertEquals(host.lastClosedFileSystemGeneration, generation)
+                VmRuntime.openExperimentalFleet(ExperimentalFleetConfig(1, 32, 32, 128, 64, 64, 32, coordinatedTurns = true)).use { fleet ->
+                    val machine = host.transferToFleet(fleet, 1)
+                    val runtime = NativeFleetActorRuntimeService(fleet, 1, 8, 8, {}, {}, { _, _ -> }, onActorClosing = {})
+                    runtime.use {
+                        val lease = checkNotNull(runtime.attach(VmActorEndpoint(id, 1), machine, host))
+                        val carrier = ActorProgramComputer(runtime, lease, { RedstoneCommitResult.Committed })
+                        val generation = carrier.hibernateAsync(2, byteArrayOf(6)).get(5, TimeUnit.SECONDS)
+                        assertEquals(host.lastClosedFileSystemGeneration, generation)
+                    }
                 }
                 val restored = ProgramRuntimeHost(factory)
                 val checkpoint = checkNotNull(restored.prepareRestoreBoot(100))

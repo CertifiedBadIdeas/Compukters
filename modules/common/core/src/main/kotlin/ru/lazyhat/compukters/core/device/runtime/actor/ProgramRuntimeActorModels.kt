@@ -59,9 +59,7 @@ value class ProgramDeploymentToken(
     }
 }
 
-sealed interface ProgramRuntimeActorMessage
-
-sealed interface ProgramRuntimeActorCommand : ProgramRuntimeActorMessage {
+sealed interface ProgramRuntimeActorCommand {
     val requestId: ProgramRuntimeRequestId
 
     class Start(
@@ -209,7 +207,7 @@ sealed interface ProgramRuntimeActorCommand : ProgramRuntimeActorMessage {
     ) : ProgramRuntimeActorCommand
 }
 
-sealed interface ProgramRuntimeActorEffect : ProgramRuntimeActorMessage {
+sealed interface ProgramRuntimeActorEffect {
     data class RedstoneInput(
         val packet: Int,
     ) : ProgramRuntimeActorEffect
@@ -250,18 +248,6 @@ sealed interface ProgramRuntimeActorEffect : ProgramRuntimeActorMessage {
                 "addon completion batch contains duplicate identities"
             }
         }
-    }
-}
-
-data class ProgramRuntimeTickPermit(
-    val requestId: ProgramRuntimeRequestId,
-    val worldTick: Long,
-    val retirementAllowance: Int = Int.MAX_VALUE,
-    val deadlineNanos: Long = Long.MAX_VALUE,
-) {
-    init {
-        require(worldTick >= 0) { "world tick must not be negative" }
-        require(retirementAllowance >= 0) { "retirement allowance must not be negative" }
     }
 }
 

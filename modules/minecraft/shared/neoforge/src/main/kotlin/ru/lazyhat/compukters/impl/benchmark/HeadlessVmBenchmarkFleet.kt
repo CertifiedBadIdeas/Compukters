@@ -21,15 +21,18 @@ package ru.lazyhat.compukters.impl.benchmark
 import ru.lazyhat.compukters.core.device.runtime.actor.ProgramRuntimeActorCommand
 import ru.lazyhat.compukters.core.device.runtime.actor.ProgramRuntimeActorLease
 import ru.lazyhat.compukters.core.device.runtime.actor.ProgramRuntimeActorMetrics
+import ru.lazyhat.compukters.core.device.runtime.actor.ProgramRuntimeActorRequestException
 import ru.lazyhat.compukters.core.device.runtime.actor.ProgramRuntimeActorValue
 import ru.lazyhat.compukters.core.device.runtime.actor.ProgramRuntimeService
 import ru.lazyhat.compukters.core.device.runtime.actor.VmActorEndpoint
 import ru.lazyhat.compukters.core.device.runtime.actor.VmActorSchedulerConfig
+import ru.lazyhat.compukters.core.device.runtime.actor.VmActorSubmission
 import ru.lazyhat.compukters.core.device.runtime.program.ProgramResourceSnapshot
 import ru.lazyhat.compukters.core.device.runtime.program.ProgramRuntimeState
 import ru.lazyhat.compukters.lang.runtime.fs.ComputerId
 import java.util.UUID
 import java.util.concurrent.CompletableFuture
+import java.util.concurrent.CompletionException
 
 internal class HeadlessVmBenchmarkFleet(
     private val runtime: HeadlessVmBenchmarkRuntime,
@@ -93,6 +96,10 @@ internal class HeadlessVmBenchmarkFleet(
         current.lastTick = worldTick
         if (current.stopping) return
         current.actors.forEach { actor ->
+            if (actor.phase == ActorPhase.START_RETRY) {
+                startActor(current, actor)
+                return@forEach
+            }
             if (actor.phase != ActorPhase.READY) return@forEach
             actor.phase = ActorPhase.ADVANCING
             actor.runtime.advance(worldTick).whenComplete { state, failure ->
@@ -182,9 +189,14 @@ internal class HeadlessVmBenchmarkFleet(
         current: Run,
         actor: Actor,
     ) {
+        actor.phase = ActorPhase.STARTING
         actor.runtime.start(artifact).whenComplete { state, failure ->
             if (run !== current || current.stopping) return@whenComplete
-            if (failure != null || state != ProgramRuntimeState.Running) {
+            var cause = failure
+            while (cause is CompletionException && cause.cause != null) cause = cause.cause
+            if (cause is ProgramRuntimeActorRequestException && cause.submission == VmActorSubmission.MAILBOX_FULL) {
+                actor.phase = ActorPhase.START_RETRY
+            } else if (failure != null || state != ProgramRuntimeState.Running) {
                 finishActor(actor, failed = true)
             } else if (current.mode == HeadlessVmBenchmarkMode.CAPACITY) {
                 actor.phase = ActorPhase.READY
@@ -325,6 +337,7 @@ internal class HeadlessVmBenchmarkFleet(
 
     private enum class ActorPhase {
         STARTING,
+        START_RETRY,
         READY,
         ADVANCING,
         WAITING,
@@ -334,7 +347,7 @@ internal class HeadlessVmBenchmarkFleet(
         FAILED,
         ;
 
-        fun isStartingOrRunnable(): Boolean = this == STARTING || this == READY || this == ADVANCING
+        fun isStartingOrRunnable(): Boolean = this == STARTING || this == START_RETRY || this == READY || this == ADVANCING
 
         fun isTerminal(): Boolean = this == COMPLETED || this == FAILED
     }

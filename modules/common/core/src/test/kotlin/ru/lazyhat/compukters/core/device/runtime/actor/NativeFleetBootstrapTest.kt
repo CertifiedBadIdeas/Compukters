@@ -17,10 +17,46 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class NativeFleetBootstrapTest {
+    @Test
+    fun `hibernate admission pressure preserves bootstrap lease for owner retry`() {
+        var admissionAvailable = false
+        val reservations = AtomicInteger()
+        lateinit var bootstrap: NativeFleetBootstrap
+        bootstrap =
+            NativeFleetBootstrap(
+                {},
+                {},
+                {
+                    if (admissionAvailable) {
+                        reservations.incrementAndGet()
+                        AutoCloseable { reservations.decrementAndGet() }
+                    } else {
+                        null
+                    }
+                },
+                { _, _ -> error("idle host must not activate") },
+                {},
+                System::nanoTime,
+                { endpoint, request -> bootstrap.prepareClose(endpoint, request) },
+            )
+        val endpoint = endpoint(1)
+        val lease = bootstrap.attach(endpoint, host(AtomicInteger(), AtomicInteger()) {})
+        val request = ProgramActorHibernation(1, byteArrayOf(), emptyList(), saveExecution = false)
+        assertFailsWith<ProgramActorCloseDeferredException> { lease.hibernateAsync(request) }
+        assertTrue(bootstrap.contains(endpoint))
+        assertEquals(0, reservations.get())
+        admissionAvailable = true
+        lease.hibernateAsync(request).get(5, TimeUnit.SECONDS)
+        assertFalse(bootstrap.contains(endpoint))
+        bootstrap.closeAsync().get(5, TimeUnit.SECONDS)
+        assertEquals(0, reservations.get())
+    }
+
     @Test
     fun `transition close and service shutdown wait for predecessor without owner pumping`() {
         val owner = Thread.currentThread()
@@ -142,6 +178,9 @@ class NativeFleetBootstrapTest {
         val request = bootstrap.request(endpoint, ProgramRuntimeActorCommand.RestoreOrBoot(ProgramRuntimeRequestId(1), 7))
         assertTrue(bootstrap.request(endpoint, ProgramRuntimeActorCommand.StartBoot(ProgramRuntimeRequestId(2))).isCompletedExceptionally)
         assertTrue(ready.await(5, TimeUnit.SECONDS))
+        val observation = bootstrap.request(endpoint, ProgramRuntimeActorCommand.TerminalFullState(ProgramRuntimeRequestId(3)))
+        assertTrue(observation.isCompletedExceptionally)
+        assertFalse(request.isDone, "refused observation must not complete or cancel the accepted boot")
         assertEquals(0, bootstrap.pump(1, Long.MAX_VALUE, 0))
         assertEquals(0, attempts)
         assertFalse(request.isDone)

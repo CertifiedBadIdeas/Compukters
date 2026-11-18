@@ -18,11 +18,36 @@
 
 package ru.lazyhat.compukters.impl.computer
 
+import net.minecraft.gametest.framework.GameTestHelper
+import ru.lazyhat.compukters.core.device.runtime.actor.ProgramRuntimeActorRequestException
+import ru.lazyhat.compukters.core.device.runtime.actor.VmActorSubmission
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.security.MessageDigest
+import java.util.concurrent.CompletableFuture
+import java.util.concurrent.CompletionException
 
 internal object ComputerGameTestFixtures {
+    /** Keep one observation in flight; a refused admission may be attempted on the next test tick. */
+    fun <T> awaitObservation(
+        helper: GameTestHelper,
+        future: CompletableFuture<T>,
+        onRefused: () -> Unit,
+    ): T {
+        helper.assertTrue(future.isDone, "computer observation is pending")
+        try {
+            return future.join()
+        } catch (failure: CompletionException) {
+            var cause: Throwable = failure
+            while (cause is CompletionException && cause.cause != null) cause = checkNotNull(cause.cause)
+            if (cause is ProgramRuntimeActorRequestException && cause.submission == VmActorSubmission.MAILBOX_FULL) {
+                onRefused()
+                helper.fail("computer observation admission is busy; retrying on the next tick")
+            }
+            throw failure
+        }
+    }
+
     fun processTestRom(): ByteArray {
         val programs =
             listOf(

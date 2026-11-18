@@ -162,12 +162,6 @@ tasks.register("prepareJvmMemoryProbe") {
     }
 }
 
-tasks.register("prepareJvmFleetProbe") {
-    description = "Prepares the opt-in production-carrier fleet probe; measurements run in standalone JVMs."
-    group = "verification"
-    dependsOn("prepareJvmMemoryProbe")
-}
-
 // Exercises owner-thread event delivery against the opt-in native scheduler.
 tasks.register<Test>("experimentalFleetEventIntegrationTest") {
     group = "verification"

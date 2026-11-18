@@ -838,11 +838,20 @@ class NativeFleetActorRuntimeServiceTest {
             assertTrue(h.service.grantFrame(endpoint, 1, 10))
             val query = h.service.request(endpoint, ProgramRuntimeActorCommand::FileSystemGeneration)
             assertEquals(VmActorSubmission.MAILBOX_FULL, h.service.submitTurn(endpoint, 1, emptyList()) { _, _ -> error("rejected") })
-            val first = checkNotNull(h.service.stop(endpoint))
-            first.cancel(false)
-            val second = checkNotNull(h.service.stop(endpoint))
+            h.holdLifecycle = true
+            val second =
+                try {
+                    val first = checkNotNull(h.service.stop(endpoint))
+                    assertTrue(first.cancel(false))
+                    checkNotNull(h.service.stop(endpoint)).also {
+                        assertFalse(it.isDone)
+                        assertTrue(first.isCancelled)
+                    }
+                } finally {
+                    h.holdLifecycle = false
+                }
             assertEquals(7L, second.get(5, TimeUnit.SECONDS))
-            assertTrue(first.isCancelled && query.isCompletedExceptionally)
+            assertTrue(query.isCompletedExceptionally)
             assertEquals(1, h.queries.size)
             assertEquals(listOf(1L), h.closedMachines)
         }
@@ -1349,6 +1358,8 @@ class NativeFleetActorRuntimeServiceTest {
 
         @Volatile var busyCompilation = false
 
+        @Volatile var holdLifecycle = false
+
         @Volatile var busyCosts = false
         val costs = CopyOnWriteArrayList<Triple<Long, VmHostRequestIdentity, Int>>()
         val queries = CopyOnWriteArrayList<Long>()
@@ -1485,7 +1496,7 @@ class NativeFleetActorRuntimeServiceTest {
                     }
 
                     "pollLifecycle" -> {
-                        checkpointPrefixes.remove(args!![0] as Long) ?: stops.remove(args[0] as Long)
+                        if (holdLifecycle) null else checkpointPrefixes.remove(args!![0] as Long) ?: stops.remove(args[0] as Long)
                     }
 
                     else -> {

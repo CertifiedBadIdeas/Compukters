@@ -446,6 +446,35 @@ class ActorProgramComputerStreamingTest {
         carrier.closeAsync().join()
     }
 
+    @Test
+    fun `state observer closing the carrier fences final world effects`() {
+        val service = Service()
+        val endpoint = VmActorEndpoint(ComputerId.fromLongs(830, 1), 1)
+        val lease =
+            ProgramRuntimeActorLease(endpoint, CompletableFuture.completedFuture(7L), {}, { CompletableFuture.completedFuture(true) })
+        var closeOnRunning = false
+        var writes = 0
+        lateinit var carrier: ActorProgramComputer
+        carrier =
+            ActorProgramComputer(
+                service,
+                lease,
+                {
+                    writes++
+                    RedstoneCommitResult.Committed
+                },
+                stateSink = { if (closeOnRunning && it == ProgramRuntimeState.Running) carrier.closeAsync() },
+            )
+        carrier.turnOn().join()
+        carrier.serverTick(0)
+        checkNotNull(service.completion).complete(reply().copy(state = ProgramRuntimeState.WaitingForInput), null)
+        closeOnRunning = true
+        carrier.serverTick(1, 1)
+        checkNotNull(service.completion).complete(reply().copy(value = ProgramRuntimeActorValue.RedstoneOutputRequested(7)), null)
+        assertEquals(ProgramRuntimeState.Closed, carrier.state)
+        assertEquals(0, writes)
+    }
+
     private fun computer(
         service: Service,
         addon: ProgramAddonHost,

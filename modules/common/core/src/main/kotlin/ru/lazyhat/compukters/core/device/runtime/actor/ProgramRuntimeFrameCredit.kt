@@ -17,7 +17,7 @@ internal class ProgramRuntimeFrameCredit(
 ) {
     private var retired = 0L
 
-    /** JVM workers report the retirements for this turn. */
+    /** Settle the retirements consumed by one turn. */
     fun finishTurn(
         delta: Long,
         allowance: Long,

@@ -8,9 +8,12 @@ package ru.lazyhat.compukters.core.device.runtime.actor
 import ru.lazyhat.compukters.core.device.runtime.program.ProgramRuntimeHost
 import ru.lazyhat.compukters.core.device.runtime.program.ProgramRuntimeState
 import ru.lazyhat.compukters.core.device.runtime.program.ProgramStartResult
+import ru.lazyhat.compukters.core.device.runtime.program.ProgramVmRestoration
 import ru.lazyhat.compukters.core.device.runtime.program.ProgramVmSession
 import ru.lazyhat.compukters.core.device.runtime.program.ProgramVmSessionFactory
 import ru.lazyhat.compukters.lang.runtime.vm.VmBridgeException
+import ru.lazyhat.compukters.lang.runtime.vm.VmCheckpointException
+import ru.lazyhat.compukters.lang.runtime.vm.VmCheckpointFailure
 import ru.lazyhat.compukters.lang.runtime.vm.VmStoreBusyException
 import java.lang.reflect.Proxy
 import java.util.concurrent.ExecutionException
@@ -68,9 +71,63 @@ class ProgramRuntimeBootstrapProcessorTest {
         assertIs<VmBridgeException>(assertFailsWith<ExecutionException> { processor.closed.get() }.cause)
     }
 
+    @Test
+    fun `busy restoration keeps the saved execution retryable and does not cold boot`() {
+        var restores = 0
+        var boots = 0
+        var discarded = 0
+        processor(
+            beforeBoot = { boots++ },
+            beforeRestore = { if (++restores == 1) throw VmStoreBusyException("busy restore") },
+            onDiscard = { discarded++ },
+        ).use {
+            val first = it.process(ProgramRuntimeActorCommand.RestoreOrBoot(id, 10))
+            assertEquals(ProgramRuntimeActorFailure.StoreBusy, assertIs<ProgramRuntimeActorValue.Rejected>(first.value).failure)
+            assertEquals(0, boots)
+            assertEquals(0, discarded)
+            val second = it.process(ProgramRuntimeActorCommand.RestoreOrBoot(id, 11))
+            assertEquals(ProgramStartResult.Started, assertIs<ProgramRuntimeActorValue.Start>(second.value).result)
+            assertEquals(2, restores)
+            assertEquals(1, boots)
+        }
+    }
+
+    @Test
+    fun `corrupt restoration discards the checkpoint before cold boot`() {
+        val events = mutableListOf<String>()
+        processor(
+            beforeBoot = { events += "boot" },
+            beforeRestore = { throw VmCheckpointException(VmCheckpointFailure.CORRUPT) },
+            onDiscard = { events += "discard" },
+        ).use {
+            val reply = it.process(ProgramRuntimeActorCommand.RestoreOrBoot(id, 10))
+            assertEquals(ProgramStartResult.Started, assertIs<ProgramRuntimeActorValue.Start>(reply.value).result)
+            assertEquals(listOf("discard", "boot"), events)
+        }
+    }
+
+    @Test
+    fun `system installation is explicit and occurs only after old execution closes`() {
+        val events = mutableListOf<String>()
+        processor(
+            beforeBoot = { events += "boot" },
+            onClose = { events += "close" },
+            onInstall = { events += "install" },
+        ).use {
+            it.process(ProgramRuntimeActorCommand.StartBoot(id))
+            it.process(ProgramRuntimeActorCommand.Reboot(id))
+            assertEquals(listOf("boot", "close", "boot"), events)
+            it.process(ProgramRuntimeActorCommand.Reboot(id, installSystem = true))
+            assertEquals(listOf("boot", "close", "boot", "close", "install", "boot"), events)
+        }
+    }
+
     private fun processor(
         beforeBoot: () -> Unit = {},
         onClose: () -> Unit = {},
+        beforeRestore: () -> Unit = {},
+        onDiscard: () -> Unit = {},
+        onInstall: () -> Unit = {},
     ): ProgramRuntimeBootstrapProcessor {
         val session =
             Proxy.newProxyInstance(javaClass.classLoader, arrayOf(ProgramVmSession::class.java)) { _, method, _ ->
@@ -85,6 +142,15 @@ class ProgramRuntimeBootstrapProcessorTest {
             ProgramRuntimeHost(
                 object : ProgramVmSessionFactory {
                     override fun open(artifact: ByteArray): ProgramVmSession = error("not an artifact start")
+
+                    override fun restoreBoot(): ProgramVmRestoration? {
+                        beforeRestore()
+                        return null
+                    }
+
+                    override fun discardCheckpoint() = onDiscard()
+
+                    override fun installSystem() = onInstall()
 
                     override fun boot(): ProgramVmSession {
                         beforeBoot()

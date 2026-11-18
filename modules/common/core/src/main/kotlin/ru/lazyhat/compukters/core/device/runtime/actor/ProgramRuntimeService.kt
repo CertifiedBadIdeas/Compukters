@@ -12,14 +12,9 @@ import ru.lazyhat.compukters.lang.runtime.fs.VmSystemImage
 import ru.lazyhat.compukters.lang.runtime.fs.WorldFileSystemStore
 import java.util.concurrent.CompletableFuture
 
-enum class VmExecutionBackend { JVM, NATIVE }
-
 /** Server lifetime and capacity boundary. World effects remain on the carrier's owner thread. */
-abstract class ProgramRuntimeService : AutoCloseable {
+abstract class ProgramRuntimeService : ProgramRuntimeLifecycle {
     internal abstract val carrierRuntime: ActorRuntimeService
-
-    /** Can progress queued transport with maximumEvents = 0, without delivering observations. */
-    open val supportsCommandOnlyPump: Boolean get() = false
 
     abstract fun attachStandalone(
         endpoint: VmActorEndpoint,
@@ -59,27 +54,4 @@ abstract class ProgramRuntimeService : AutoCloseable {
         if (admission != VmActorSubmission.ACCEPTED) future.completeExceptionally(ProgramRuntimeActorRequestException(admission))
         return future
     }
-
-    abstract fun beginCapacityFrame(worldTick: Long)
-
-    abstract fun flushCapacityFrame()
-
-    abstract fun observePreviousCapacityFrame()
-
-    abstract fun pump(
-        maximumEvents: Int,
-        deadlineNanos: Long = Long.MAX_VALUE,
-    ): Int
-
-    abstract fun runtimeMetrics(): ProgramRuntimeActorMetrics
-
-    abstract fun calibratedCapacity(): Long
-
-    abstract fun currentSafeCapacity(): Long
-
-    abstract fun capacityFallbackReason(): String?
-
-    abstract fun acceptCapacityCalibration(measurement: VmCapacityCalibration)
-
-    abstract fun rejectCapacityCalibration(reason: String)
 }

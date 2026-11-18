@@ -227,7 +227,7 @@ internal class NativeFleetBootstrap(
         check(entries[entry.endpoint] === entry)
         require(request == null || request.effects.isEmpty()) { "bootstrapping host cannot own world completions" }
         if (request != null && entry.reservation == null) {
-            entry.reservation = reserve(0) ?: throw ProgramRuntimeActorRequestException(VmActorSubmission.MAILBOX_FULL)
+            entry.reservation = reserve(0) ?: throw ProgramActorCloseDeferredException()
         }
         return ProgramActorCloseReservation {
             // Fence and reserve worker ownership before any callback may reenter service shutdown.

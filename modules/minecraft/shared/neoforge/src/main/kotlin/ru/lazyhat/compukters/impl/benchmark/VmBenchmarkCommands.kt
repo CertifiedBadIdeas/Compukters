@@ -302,52 +302,14 @@ internal object VmBenchmarkCommands {
     internal fun areaSnapshot(server: MinecraftServer): VmBenchmarkAreaSnapshot? =
         areaRuns[server]?.run?.snapshot(server.tickCount.toLong())
 
-    private fun HeadlessVmBenchmarkSnapshot.describe(): String {
-        if (metrics.scheduler == null || baseline.scheduler == null) {
-            return "Headless VM benchmark: $status; backend=${metrics.backend}, " +
-                "actors=$activeActors active/$completedActors completed/$failedActors failed, " +
-                "admitted=$admittedActors/$requestedActors, closing=$closingActors, mode=$mode, phase=$phase, rounds=$rounds, " +
-                "waiting=$waitingActors, ticks=$elapsedTicks, MSPT=$currentMspt, pending=${metrics.pendingRequests}, " +
-                "pumpLastUs=${metrics.lastPumpNanos / 1_000}, schedulerLatency=unavailable, " +
-                "settle=${settleTicks.describe()}, wake=${wakeTicks.describe()}, completion=${completionTicks.describe()}, " +
-                "memory=${memory.describe()}" + metrics.capacitySummary()
-        }
-        val scheduler = checkNotNull(metrics.scheduler)
-        val baselineScheduler = checkNotNull(baseline.scheduler)
-        val processed =
-            (
-                scheduler.processedMessages - baselineScheduler.processedMessages +
-                    scheduler.processedPermits - baselineScheduler.processedPermits
-            ).coerceAtLeast(1)
-        val drained = (scheduler.drainedEvents - baselineScheduler.drainedEvents).coerceAtLeast(1)
-        val queueNanos = (scheduler.totalQueueLatencyNanos - baselineScheduler.totalQueueLatencyNanos).coerceAtLeast(0)
-        val executionNanos = (scheduler.totalExecutionNanos - baselineScheduler.totalExecutionNanos).coerceAtLeast(0)
-        val resultNanos =
-            (scheduler.totalResultLatencyNanos - baselineScheduler.totalResultLatencyNanos).coerceAtLeast(0)
-        val phaseDetails = if (mode == HeadlessVmBenchmarkMode.CAPACITY) "mode=$mode, phase=$phase, " else ""
-        val waitingDetails = if (mode == HeadlessVmBenchmarkMode.CAPACITY) "/$waitingActors waiting" else ""
-        val capacityDetails =
-            if (mode == HeadlessVmBenchmarkMode.CAPACITY) {
-                ", settle=${settleTicks.describe()}, wake=${wakeTicks.describe()}, " +
-                    "completion=${completionTicks.describe()}, memory=${memory.describe()}"
-            } else {
-                ""
-            }
-        return "Headless VM benchmark: $status; $phaseDetails" +
-            "actors=$activeActors active$waitingDetails/$completedActors completed/$failedActors failed/" +
-            "$admittedActors admitted ($requestedActors requested), closing=$closingActors, rounds=$rounds, " +
-            "ticks=$elapsedTicks, MSPT=${"%.3f".format(Locale.ROOT, currentMspt)}, " +
-            "mailbox=${scheduler.queuedMessages}, permits=${scheduler.pendingPermits}, " +
-            "results=${scheduler.queuedResults}, workers=${scheduler.busyWorkers}, " +
-            "queueAvgUs=${queueNanos / processed / 1_000}, executionAvgUs=${executionNanos / processed / 1_000}, " +
-            "resultAvgUs=${resultNanos / drained / 1_000}, drainedLast=${metrics.lastPumpEvents}, " +
-            "pumpLastUs=${metrics.lastPumpNanos / 1_000}, " +
-            "mailboxRejected=${scheduler.mailboxFullRejections - baselineScheduler.mailboxFullRejections}, " +
-            "permitRejected=${scheduler.permitPendingRejections - baselineScheduler.permitPendingRejections}" +
-            metrics.latencyPercentiles() +
-            metrics.capacitySummary() +
-            capacityDetails
-    }
+    private fun HeadlessVmBenchmarkSnapshot.describe(): String =
+        "Headless VM benchmark: $status; scheduler=Rust, " +
+            "actors=$activeActors active/$completedActors completed/$failedActors failed, " +
+            "admitted=$admittedActors/$requestedActors, closing=$closingActors, mode=$mode, phase=$phase, rounds=$rounds, " +
+            "waiting=$waitingActors, ticks=$elapsedTicks, MSPT=$currentMspt, pending=${metrics.pendingRequests}, " +
+            "pumpLastUs=${metrics.lastPumpNanos / 1_000}, schedulerLatency=unavailable, " +
+            "settle=${settleTicks.describe()}, wake=${wakeTicks.describe()}, completion=${completionTicks.describe()}, " +
+            "memory=${memory.describe()}" + metrics.capacitySummary()
 
     private fun VmBenchmarkTickDistribution.describe(): String =
         if (samples == 0) "n=0" else "n=$samples/median=$medianTicks/p95=$p95Ticks/max=$maximumTicks ticks"
@@ -361,70 +323,15 @@ internal object VmBenchmarkCommands {
         baseline: ProgramRuntimeActorMetrics,
     ): String {
         val metrics = NeoForgeVmActorServices.metrics(server) ?: baseline
-        if (metrics.scheduler == null || baseline.scheduler == null) {
-            return "Physical VM area benchmark: $status; backend=${metrics.backend}, " +
-                "actors=${metrics.nativeActors}/${metrics.nativeMaximumActors}, " +
-                "computers=$activeComputers active/$completedComputers completed/$unavailableComputers unavailable, " +
-                "workload=$workload, rounds=$rounds, " +
-                "delivery=$acceptedComputers accepted/$pendingComputers pending/$rejectedComputers rejected, " +
-                "ticks=$elapsedTicks, MSPT=${server.currentMspt()}, " +
-                "world=${(metrics.totalDeferredWorldRequests - baseline.totalDeferredWorldRequests).coerceAtLeast(0)}, " +
-                "pending=${metrics.pendingRequests}, pumpLastUs=${metrics.lastPumpNanos / 1_000}, schedulerLatency=unavailable" +
-                metrics.capacitySummary()
-        }
-        val scheduler = checkNotNull(metrics.scheduler)
-        val baselineScheduler = checkNotNull(baseline.scheduler)
-        val processed =
-            (
-                scheduler.processedMessages - baselineScheduler.processedMessages +
-                    scheduler.processedPermits - baselineScheduler.processedPermits
-            ).coerceAtLeast(1)
-        val drained = (scheduler.drainedEvents - baselineScheduler.drainedEvents).coerceAtLeast(1)
-        val queueNanos =
-            (scheduler.totalQueueLatencyNanos - baselineScheduler.totalQueueLatencyNanos).coerceAtLeast(0)
-        val resultNanos =
-            (scheduler.totalResultLatencyNanos - baselineScheduler.totalResultLatencyNanos).coerceAtLeast(0)
-        val worldRequests = (metrics.totalDeferredWorldRequests - baseline.totalDeferredWorldRequests).coerceAtLeast(0)
-        val continuationSamples =
-            (metrics.hostContinuationSamples - baseline.hostContinuationSamples).coerceAtLeast(0)
-        val continuationTicks =
-            (metrics.totalHostContinuationDelayTicks - baseline.totalHostContinuationDelayTicks).coerceAtLeast(0)
-        val pulseProgress =
-            if (expectedWorldRequests == 0L) {
-                ""
-            } else {
-                val percent = (worldRequests.toDouble() * 100.0 / expectedWorldRequests).coerceAtMost(100.0)
-                ", pulseProgress=${"%.1f".format(Locale.ROOT, percent)}%"
-            }
-        return "Physical VM area benchmark: $status; workload=$workload, " +
-            "delivery=$acceptedComputers accepted/$pendingComputers pending/$rejectedComputers rejected, " +
+        return "Physical VM area benchmark: $status; scheduler=Rust, " +
+            "actors=${metrics.nativeActors}/${metrics.nativeMaximumActors}, " +
             "computers=$activeComputers active/$completedComputers completed/$unavailableComputers unavailable, " +
-            "actors=${scheduler.registeredActors}/${scheduler.maximumActors} registered/capacity, " +
-            "rounds=$rounds, ticks=$elapsedTicks, MSPT=${"%.3f".format(Locale.ROOT, server.currentMspt())}, " +
-            "world=$worldRequests, worldDeferred=${metrics.deferredWorldRequests}$pulseProgress, " +
-            "hostToAdvance=n=$continuationSamples/" +
-            "avg=${continuationTicks / continuationSamples.coerceAtLeast(1)} ticks, " +
-            "mailbox=${scheduler.queuedMessages}, permits=${scheduler.pendingPermits}, " +
-            "results=${scheduler.queuedResults}, " +
-            "workers=${scheduler.busyWorkers}, queueAvgUs=${queueNanos / processed / 1_000}, " +
-            "resultAvgUs=${resultNanos / drained / 1_000}, drainedLast=${metrics.lastPumpEvents}, " +
-            "pumpLastUs=${metrics.lastPumpNanos / 1_000}, " +
-            "inputRejected=${metrics.rejectedInputRequests - baseline.rejectedInputRequests}, " +
-            "inputCoalesced=${metrics.coalescedRedstoneInputs - baseline.coalescedRedstoneInputs}, " +
-            "mailboxRejected=${scheduler.mailboxFullRejections - baselineScheduler.mailboxFullRejections}, " +
-            "permitRejected=${scheduler.permitPendingRejections - baselineScheduler.permitPendingRejections}" +
-            metrics.latencyPercentiles() +
+            "workload=$workload, rounds=$rounds, " +
+            "delivery=$acceptedComputers accepted/$pendingComputers pending/$rejectedComputers rejected, " +
+            "ticks=$elapsedTicks, MSPT=${server.currentMspt()}, " +
+            "world=${(metrics.totalDeferredWorldRequests - baseline.totalDeferredWorldRequests).coerceAtLeast(0)}, " +
+            "pending=${metrics.pendingRequests}, pumpLastUs=${metrics.lastPumpNanos / 1_000}, schedulerLatency=unavailable" +
             metrics.capacitySummary()
-    }
-
-    private fun ProgramRuntimeActorMetrics.latencyPercentiles(): String {
-        val scheduler = scheduler ?: return ", schedulerLatency=unavailable"
-        return ", queueP50Us=${scheduler.queueLatencyMedianNanos / 1_000}, " +
-            "queueP95Us=${scheduler.queueLatencyP95Nanos / 1_000}, " +
-            "executionP50Us=${scheduler.executionLatencyMedianNanos / 1_000}, " +
-            "executionP95Us=${scheduler.executionLatencyP95Nanos / 1_000}, " +
-            "resultP50Us=${scheduler.resultLatencyMedianNanos / 1_000}, " +
-            "resultP95Us=${scheduler.resultLatencyP95Nanos / 1_000}"
     }
 
     private fun ProgramRuntimeActorMetrics.capacitySummary(): String =

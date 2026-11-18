@@ -37,37 +37,18 @@ enum class VmActorSubmission {
     CLOSED,
 }
 
-sealed interface VmActorEvent<out R : Any> {
-    val endpoint: VmActorEndpoint
-
-    data class Result<R : Any>(
-        override val endpoint: VmActorEndpoint,
-        val sequence: Long,
-        val value: R,
-    ) : VmActorEvent<R>
-
-    data class Failed(
-        override val endpoint: VmActorEndpoint,
-        val cause: Throwable,
-    ) : VmActorEvent<Nothing>
-}
-
 data class VmActorSchedulerConfig(
     val workerCount: Int = defaultWorkerCount(),
     val maximumActors: Int = DEFAULT_MAXIMUM_ACTORS,
     val mailboxCapacity: Int = 64,
-    val messagesPerTurn: Int = 4,
     val resultCapacityPerWorker: Int = 256,
-    val idlePollMillis: Long = 25,
     val shutdownTimeoutMillis: Long = 5_000,
 ) {
     init {
         require(workerCount > 0) { "worker count must be positive" }
         require(maximumActors > 0) { "maximum actors must be positive" }
         require(mailboxCapacity > 0) { "mailbox capacity must be positive" }
-        require(messagesPerTurn > 0) { "messages per turn must be positive" }
         require(resultCapacityPerWorker > 0) { "result capacity must be positive" }
-        require(idlePollMillis > 0) { "idle poll duration must be positive" }
         require(shutdownTimeoutMillis > 0) { "shutdown timeout must be positive" }
     }
 
@@ -84,39 +65,7 @@ data class VmActorSchedulerConfig(
     }
 }
 
-data class VmActorSchedulerMetrics(
-    val maximumActors: Int,
-    val registeredActors: Int,
-    val scheduledActors: Int,
-    val queuedMessages: Int,
-    val pendingPermits: Int,
-    val busyWorkers: Int,
-    val queuedResults: Int,
-    val acceptedMessages: Long,
-    val processedMessages: Long,
-    val acceptedPermits: Long,
-    val processedPermits: Long,
-    val totalQueueLatencyNanos: Long,
-    val maximumQueueLatencyNanos: Long,
-    val totalExecutionNanos: Long,
-    val maximumExecutionNanos: Long,
-    val mailboxFullRejections: Long,
-    val permitPendingRejections: Long,
-    val staleEndpointRejections: Long,
-    val closedRejections: Long,
-    val drainedEvents: Long,
-    val totalResultLatencyNanos: Long,
-    val maximumResultLatencyNanos: Long,
-    val queueLatencyMedianNanos: Long = 0,
-    val queueLatencyP95Nanos: Long = 0,
-    val executionLatencyMedianNanos: Long = 0,
-    val executionLatencyP95Nanos: Long = 0,
-    val resultLatencyMedianNanos: Long = 0,
-    val resultLatencyP95Nanos: Long = 0,
-)
-
 data class ProgramRuntimeActorMetrics(
-    val scheduler: VmActorSchedulerMetrics?,
     val pendingRequests: Int,
     val deferredWorldRequests: Int?,
     val totalDeferredWorldRequests: Long,
@@ -140,15 +89,6 @@ data class ProgramRuntimeActorMetrics(
     val retiredInstructionsTotal: Long = 0,
     val unusedReservationsTotal: Long = 0,
     val countersSaturated: Boolean = false,
-    val backend: VmExecutionBackend = VmExecutionBackend.JVM,
     val nativeActors: Int? = null,
     val nativeMaximumActors: Int? = null,
 )
-
-interface VmActorProcessor<in C : Any, in P : Any, out R : Any> : AutoCloseable {
-    fun process(command: C): R?
-
-    fun advance(permit: P): R?
-
-    override fun close() = Unit
-}

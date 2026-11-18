@@ -40,7 +40,12 @@ internal object ComputerCommands {
                                 0
                             } else {
                                 computer.reboot(installSystem)
-                                val message = if (installSystem) "Compukter system update and restart requested; /home retained" else "Compukter restart requested; files retained"
+                                val message =
+                                    if (installSystem) {
+                                        "Compukter system update and restart requested; /home retained"
+                                    } else {
+                                        "Compukter restart requested; files retained"
+                                    }
                                 context.source.sendSuccess({ Component.literal(message) }, true)
                                 1
                             }

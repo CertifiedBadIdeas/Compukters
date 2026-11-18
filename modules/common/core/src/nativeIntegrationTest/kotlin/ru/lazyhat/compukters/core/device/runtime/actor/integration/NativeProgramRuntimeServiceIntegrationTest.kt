@@ -13,7 +13,6 @@ import ru.lazyhat.compukters.core.device.runtime.actor.ProgramRuntimeActorReply
 import ru.lazyhat.compukters.core.device.runtime.actor.ProgramRuntimeActorValue
 import ru.lazyhat.compukters.core.device.runtime.actor.VmActorEndpoint
 import ru.lazyhat.compukters.core.device.runtime.actor.VmActorSchedulerConfig
-import ru.lazyhat.compukters.core.device.runtime.actor.VmExecutionBackend
 import ru.lazyhat.compukters.core.device.runtime.program.ProgramRuntimeState
 import ru.lazyhat.compukters.core.device.runtime.program.ProgramStartResult
 import ru.lazyhat.compukters.core.device.runtime.program.RedstoneCommitResult
@@ -120,8 +119,6 @@ class NativeProgramRuntimeServiceIntegrationTest {
             assertEquals(ProgramRuntimeState.Halted(null), third.state)
             assertTrue(before.retiredInstructions == 0L)
             assertEquals(first.retiredInstructions + third.retiredInstructions, service.runtimeMetrics().retiredInstructionsTotal)
-            assertEquals(VmExecutionBackend.NATIVE, service.runtimeMetrics().backend)
-            assertNull(service.runtimeMetrics().scheduler)
             lease.closeAsync().get(5, TimeUnit.SECONDS)
             assertEquals(0, service.runtimeMetrics().nativeActors)
         }

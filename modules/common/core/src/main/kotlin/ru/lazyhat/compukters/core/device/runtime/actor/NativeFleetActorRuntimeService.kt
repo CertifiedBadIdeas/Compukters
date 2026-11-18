@@ -31,12 +31,12 @@ import java.util.concurrent.CancellationException
 import java.util.concurrent.CompletableFuture
 
 /**
- * Experimental native backend. A lazy bootstrap worker prepares idle hosts using the existing
+ * Native execution service. A lazy bootstrap worker prepares idle hosts using the
  * boot/restoration handler. Resource rebinding precedes transfer; Rust then owns the session until stop.
  * No JVM worker advances Guest instructions. Frame grants come from the capacity owner.
  *
  * Callers configure [NativeFleetCommandRequests.INSPECTION] for batch quota accounting.
- * Production backend selection and broader command parity are not wired here yet. The carrier streams
+ * The carrier streams
  * addon replies, redstone confirmations and world replies into one bounded ordered outbox,
  * independently of the next execution grant. Legacy deferred world effects reject before admission.
  * Addon/world requests and program lifecycle actions stream to a turn observer on the owner thread;

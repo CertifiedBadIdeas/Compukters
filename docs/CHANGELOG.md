@@ -13,8 +13,8 @@ headings so this page has one stable URL that can be shared outside the reposito
 
 ## 0.7.0 — In development
 
-- Servers can explicitly select an experimental Rust VM scheduling backend with `vm.backend = "NATIVE"` when the
-  runtime includes fleet support. The default remains `JVM`; both use the same world and persistence adapters.
+- Guest execution uses the Rust worker pool on both supported Minecraft versions. The JVM execution scheduler
+  and `vm.backend` selection are removed; world actions and persistence keep their existing owner boundaries.
 
 - Guest Kotlin tooling can be prepared for independent compilation and execution without rebuilding the mod.
 
